@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "at": "2026-09-11T21:06:16.190Z",
+  "environment": {
+    "browser": "Chrome 152",
+    "os": "Windows 10/11 x64",
+    "hardwareConcurrency": 24,
+    "devicePixelRatio": 1,
+    "viewport": [1280, 720],
+    "canvas": [1200, 700]
+  },
+  "catalog": {
+    "count": 50000,
+    "generationMs": 28.9,
+    "searches": [
+      {"query": "", "count": 50000, "samples": 30, "p50": 0.3, "p95": 0.6, "max": 0.6},
+      {"query": "провод", "count": 12500, "samples": 30, "p50": 0.9, "p95": 1.1, "max": 1.2},
+      {"query": "DEMO-049999", "count": 1, "samples": 30, "p50": 1.2, "p95": 1.6, "max": 1.8},
+      {"query": "терминал серия 42", "count": 592, "samples": 30, "p50": 1.8, "p95": 2.1, "max": 2.6},
+      {"query": "несуществующий", "count": 0, "samples": 30, "p50": 1.2, "p95": 1.4, "max": 1.5},
+      {"query": "0.75", "count": 8333, "samples": 30, "p50": 2.1, "p95": 2.7, "max": 2.8}
+    ]
+  },
+  "canvas": [
+    {"wires": 20, "mode": "direct", "coldMs": 8.9, "samples": 30, "p50": 12.0, "p95": 15.2, "max": 15.3},
+    {"wires": 20, "mode": "cached", "coldMs": 5.0, "samples": 30, "p50": 5.3, "p95": 6.1, "max": 6.2},
+    {"wires": 300, "mode": "direct", "coldMs": 42.2, "samples": 30, "p50": 80.9, "p95": 126.5, "max": 143.7},
+    {"wires": 300, "mode": "cached", "coldMs": 9.2, "samples": 30, "p50": 7.3, "p95": 11.3, "max": 11.6}
+  ],
+  "method": "5 warmups, 30 measured; canvas draw plus 1px readback; not display FPS"
+}
