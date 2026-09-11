@@ -2,6 +2,11 @@ tmp/
 node_modules/
 dist/
 build/
+publish/
+bin/
+obj/
+.dotnet-cli-home/
+.appdata/
 .env
 .env.*
 !.env.example
