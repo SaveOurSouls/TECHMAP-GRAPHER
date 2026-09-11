@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TECHMAP · Оплётка вдоль направляющей</title>
+<link rel="stylesheet" href="style.css">
+<body>
+<header><b>TECHMAP <span>/ M0-02</span></b><span>Оплётка вдоль направляющей</span><button id="reset">Сбросить</button></header>
+<main>
+<aside>
+<h1>Материал и форма</h1>
+<label>Материал<select id="material"><option value="metal">Лужёная оплётка</option><option value="nylon">Нейлоновая оплётка</option><option value="tube">Гофрированная трубка</option></select></label>
+<label>Участок<select id="preset"><option value="branch">Ответвление</option><option value="straight">Прямой</option><option value="tight">Тесный изгиб</option></select></label>
+<label for="rise">Высота ответвления <output id="riseOut"></output><input id="rise" type="range" min="40" max="160" value="110"></label>
+<label for="radius">Радиус изгиба, усл. ед. <output id="radiusOut"></output><input id="radius" type="range" min="4" max="100" value="60"></label>
+<hr>
+<label class="check"><input id="attached" type="checkbox" checked> Привязать к проводу</label>
+<p id="hint">Оплётка следует за формой провода.</p>
+<label for="start">Начало покрытия <output id="startOut"></output><input id="start" type="range" min="0" max="60" value="8"></label>
+<label for="end">Конец покрытия <output id="endOut"></output><input id="end" type="range" min="65" max="100" value="89"></label>
+<label for="width">Ширина на рисунке <output id="widthOut"></output><input id="width" type="range" min="14" max="70" value="38"></label>
+<label for="pitch">Масштаб текстуры <output id="pitchOut"></output><input id="pitch" type="range" min="12" max="50" value="24"></label>
+<label for="opacity">Прозрачность материала <output id="opacityOut"></output><input id="opacity" type="range" min="0" max="90" value="12"></label>
+<label>Направление текстуры<select id="direction"><option value="1">Прямое</option><option value="-1">Обратное</option></select></label>
+<hr>
+<label>Длина материала, мм<input id="length" type="number" min="0" step="any" value="950" placeholder="Укажите длину"></label>
+<p>Размер задаётся отдельно от условного масштаба рисунка.</p>
+</aside>
+<section class="workspace">
+<div class="bar"><div><b>Жгут · пробный участок</b><small id="binding">Привязка включена</small></div><span class="tag">Эксперимент</span></div>
+<div class="drawing"><canvas id="canvas" width="1000" height="600" tabindex="0" aria-label="Чертёж провода с оплёткой. При отключённой привязке оплётку можно перетаскивать мышью или двигать стрелками."></canvas></div>
+<div id="warning" role="status" aria-live="polite"></div>
+<footer><div><small>В материалы</small><strong id="quantity"></strong></div><div><small>Узор вдоль участка</small><strong id="repeats"></strong></div><div><small>Изменение формы</small><strong id="mode">Вслед за проводом</strong></div></footer>
+<p class="caption">Меняйте форму и покрытие. Отключите привязку, чтобы переместить оплётку мышью или стрелками на поле. Сохранение проекта в этот эксперимент не входит.</p>
+</section>
+</main>
+<script src="geometry.js"></script><script src="app.js"></script>
+</body></html>
