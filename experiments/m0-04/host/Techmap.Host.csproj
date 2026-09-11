@@ -3,8 +3,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <InvariantGlobalization>true</InvariantGlobalization>
     <DefaultItemExcludes>$(DefaultItemExcludes);publish/**;.appdata/**;.dotnet-cli-home/**</DefaultItemExcludes>
+    <AssemblyName>Techmap.Server</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <Content Remove="NuGet.Config" />

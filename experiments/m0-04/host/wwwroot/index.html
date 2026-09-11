@@ -2,31 +2,14 @@
 <html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TECHMAP · M0-04 Windows host</title>
-<style>
-  body{margin:0;background:#edf2f5;color:#183243;font:16px "Segoe UI",sans-serif}
-  main{max-width:760px;margin:9vh auto;padding:32px;background:white;border:1px solid #cedbe3;border-radius:10px}
-  h1{margin-top:0}code{display:block;margin:8px 0;padding:12px;background:#f3f6f8;border-radius:5px;overflow-wrap:anywhere}
-  .ok{color:#087d87;font-weight:700}.bad{color:#b33b32;font-weight:700}
-</style>
+<title>TECHMAP · M0-04 Portable Web</title>
+<link rel="stylesheet" href="/app.css">
 <main>
-  <h1>TECHMAP / M0-04</h1>
-  <p>Минимальный Windows-хост обслуживает локальный веб-интерфейс без сетевого доступа извне.</p>
+  <h1>TECHMAP / Portable Web</h1>
+  <p>Это обычный web-интерфейс. В локальном режиме переносимый сервер обслуживает его только на этом компьютере.</p>
   <p>Файлы программы:<code id="program">загрузка…</code></p>
   <p>Пользовательские данные:<code id="data">загрузка…</code></p>
   <p id="status">Проверка разделения каталогов…</p>
 </main>
-<script>
-fetch('/runtime-info').then(r=>r.json()).then(info=>{
-  document.getElementById('program').textContent=info.programRoot;
-  document.getElementById('data').textContent=info.dataRoot;
-  const status=document.getElementById('status');
-  status.textContent=info.separated?'Каталоги разделены':'Ошибка: данные находятся внутри программы';
-  status.className=info.separated?'ok':'bad';
-}).catch(error=>{
-  const status=document.getElementById('status');
-  status.textContent='Ошибка: '+error.message;
-  status.className='bad';
-});
-</script>
+<script src="/app.js"></script>
 </html>

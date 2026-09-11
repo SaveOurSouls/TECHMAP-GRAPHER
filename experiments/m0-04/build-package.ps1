@@ -27,12 +27,43 @@ if (Test-Path -LiteralPath $archive) {
 }
 
 dotnet restore (Join-Path $hostRoot "Techmap.Host.csproj") `
-    --configfile (Join-Path $hostRoot "NuGet.Config")
+    --configfile (Join-Path $hostRoot "NuGet.Config") `
+    --runtime win-x64
+if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with code $LASTEXITCODE" }
 dotnet publish (Join-Path $hostRoot "Techmap.Host.csproj") `
     --configuration $Configuration `
-    --self-contained false `
+    --runtime win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:DebugType=None `
     --no-restore `
     --output $packageRoot
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with code $LASTEXITCODE" }
+
+# Standalone Kestrel does not use IIS integration artifacts.
+Remove-Item -LiteralPath (Join-Path $packageRoot "web.config") -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $packageRoot "aspnetcorev2_inprocess.dll") -Force -ErrorAction SilentlyContinue
+
+Copy-Item -LiteralPath (Join-Path $experimentRoot "package\\README-START.html") -Destination $packageRoot
+Copy-Item -LiteralPath (Join-Path $experimentRoot "package\\VERSION.json") -Destination $packageRoot
+
+$resolvedPackageRoot = (Resolve-Path -LiteralPath $packageRoot).Path
+$checksums = Get-ChildItem -LiteralPath $resolvedPackageRoot -Recurse -File |
+    Sort-Object FullName |
+    ForEach-Object {
+        [pscustomobject]@{
+            file = $_.FullName.Substring($resolvedPackageRoot.Length + 1).Replace('\', '/')
+            sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            bytes = $_.Length
+        }
+    }
+$checksumDocument = [pscustomobject]@{
+    format = 1
+    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    files = $checksums
+}
+$checksumDocument | ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath (Join-Path $packageRoot "SHA256SUMS.json") -Encoding utf8
 
 Compress-Archive -LiteralPath $packageRoot -DestinationPath $archive
 
@@ -43,5 +74,5 @@ $bytes = ($files | Measure-Object -Property Length -Sum).Sum
     Archive = $archive
     Files = $files.Count
     MiB = [math]::Round($bytes / 1MB, 2)
-    Runtime = "Requires installed .NET 8 ASP.NET Core runtime"
+    Runtime = "Self-contained Windows x64"
 }
