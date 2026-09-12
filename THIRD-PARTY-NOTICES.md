@@ -1,6 +1,6 @@
 # TECHMAP-GRAPHER third-party notices
 
-This inventory applies to the locked M1-03 dependency set. `pnpm-lock.yaml` and
+This inventory applies to the locked M1-04 dependency set. `pnpm-lock.yaml` and
 the committed `packages.lock.json` files are the authoritative version sources.
 The release SBOM is generated from those files by `scripts/generate-sbom.ps1`.
 

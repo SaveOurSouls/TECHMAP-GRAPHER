@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Techmap.Contracts;
+using Techmap.Infrastructure.Sqlite;
 using Xunit;
 
 namespace Techmap.Web.Tests;
@@ -37,11 +38,13 @@ public sealed class WebHostTests
         Assert.Equal("/", runtime.BasePath);
         Assert.Equal("/api/v1/", runtime.ApiBasePath);
         Assert.Equal("1", runtime.ApiVersion);
-        Assert.Equal("1", runtime.SchemaVersion);
+        Assert.Equal(
+            SqliteStorage.CurrentSchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            runtime.SchemaVersion);
         Assert.Equal(HttpStatusCode.OK, diagnosticsResponse.StatusCode);
         Assert.NotNull(diagnostics);
         Assert.Equal("ready", diagnostics.Status);
-        Assert.Equal(1, diagnostics.SchemaVersion);
+        Assert.Equal(SqliteStorage.CurrentSchemaVersion, diagnostics.SchemaVersion);
         Assert.True(Version.TryParse(diagnostics.SqliteVersion, out _));
         Assert.True(diagnostics.ForeignKeysEnabled);
         Assert.Equal(5_000, diagnostics.BusyTimeoutMilliseconds);

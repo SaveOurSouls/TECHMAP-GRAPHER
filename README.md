@@ -10,8 +10,8 @@
 пересмотренная M0-04R (переносимый web-хост, упаковка и безопасное хранение) и
 M0-05 (архитектура, кандидатный стек, бюджеты и карточки M1).
 M1-01 создала запускаемый product-каркас и переносимый web-ZIP, M1-02 защитила
-локальную сессию, а M1-03 добавила SQLite и атомарный unit of work. Предметного
-редактора и таблиц проектов пока нет. Ожидаются формы документов.
+локальную сессию, M1-03 добавила SQLite и атомарный unit of work, а M1-04 — проекты
+и до 100 независимых жгутов. Предметного редактора пока нет. Ожидаются формы документов.
 Рабочие решения находятся в [docs/requirements-notes.md](docs/requirements-notes.md),
 макеты — в `design/mockups/`, предоставленные примеры — в `design/references/`.
 
@@ -41,12 +41,13 @@ M0-05: [архитектурное решение и инженерные бюд
 M1-01: [product-каркас и переносимый web-ZIP](docs/m1-01-product-skeleton.md).
 M1-02: [владение каталогом данных и локальная HTTP-сессия](docs/m1-02-local-session.md).
 M1-03: [SQLite, поколения и транзакционный каркас](docs/m1-03-sqlite-storage.md).
+M1-04: [проекты и независимые жгуты](docs/m1-04-projects-harnesses.md).
 Выпуск ТЗ и инструкции требует отдельной команды владельца.
 
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-03.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-04.ps1
 ```
 
 Готовый локальный артефакт создаётся в

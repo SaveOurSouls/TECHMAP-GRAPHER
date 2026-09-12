@@ -131,7 +131,8 @@ function Test-HostMode {
         [Parameter(Mandatory = $true)][string]$ExecutablePath,
         [Parameter(Mandatory = $true)][string]$DataRoot,
         [Parameter(Mandatory = $true)][string]$PathBase,
-        [Parameter(Mandatory = $true)][string]$RunName
+        [Parameter(Mandatory = $true)][string]$RunName,
+        $ExpectedProject
     )
 
     $stdout = Join-Path $artifactsRoot "$RunName.stdout.log"
@@ -140,6 +141,7 @@ function Test-HostMode {
     $oldDotnetRoot = $env:DOTNET_ROOT
     $oldMultilevelLookup = $env:DOTNET_MULTILEVEL_LOOKUP
     $process = $null
+    $projectSnapshot = $null
     try {
         $env:DOTNET_MULTILEVEL_LOOKUP = "0"
         $env:DOTNET_ROOT = Join-Path $artifactsRoot "несуществующий runtime"
@@ -183,7 +185,7 @@ function Test-HostMode {
         $expectedApiBase = if ($PathBase -eq "/") { "/api/v1/" } else { "$PathBase/api/v1/" }
         Assert-Equal $runtime.basePath $expectedBasePath "Runtime basePath is incorrect."
         Assert-Equal $runtime.apiBasePath $expectedApiBase "Runtime apiBasePath is incorrect."
-        Assert-Equal ([int]$runtime.schemaVersion) 1 "Runtime schema version is incorrect."
+        Assert-Equal ([int]$runtime.schemaVersion) 2 "Runtime schema version is incorrect."
 
         $diagnosticsResponse = Invoke-WebRequest `
             -UseBasicParsing `
@@ -192,7 +194,7 @@ function Test-HostMode {
         Assert-JsonContentType $diagnosticsResponse "Diagnostics content type is incorrect."
         $diagnostics = $diagnosticsResponse.Content | ConvertFrom-Json
         Assert-Equal $diagnostics.status "ready" "Storage diagnostics status is incorrect."
-        Assert-Equal ([int]$diagnostics.schemaVersion) 1 "Live SQLite schema version is incorrect."
+        Assert-Equal ([int]$diagnostics.schemaVersion) 2 "Live SQLite schema version is incorrect."
         Assert-Equal $diagnostics.foreignKeysEnabled $true "SQLite foreign keys are not enabled."
         Assert-Equal $diagnostics.journalMode "wal" "SQLite journal mode is incorrect."
         if ([string]::IsNullOrWhiteSpace($diagnostics.sqliteVersion)) {
@@ -210,6 +212,78 @@ function Test-HostMode {
         Assert-Equal $healthJson.status "ok" "Health status is incorrect."
         if ([string]::IsNullOrWhiteSpace($healthJson.instanceId)) {
             throw "Health response does not contain an instance ID."
+        }
+
+        $sessionResponse = Invoke-WebRequest `
+            -UseBasicParsing `
+            -WebSession $webSession `
+            -Uri "$origin$routePrefix/api/v1/session"
+        Assert-JsonContentType $sessionResponse "Session content type is incorrect."
+        $sessionJson = $sessionResponse.Content | ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace($sessionJson.csrfNonce)) {
+            throw "Session response does not contain a CSRF nonce."
+        }
+        $mutationHeaders = @{
+            Origin = $origin
+            "X-Techmap-CSRF" = $sessionJson.csrfNonce
+        }
+        $projectListResponse = Invoke-WebRequest `
+            -UseBasicParsing `
+            -WebSession $webSession `
+            -Uri "$origin$routePrefix/api/v1/projects"
+        Assert-JsonContentType $projectListResponse "Project list content type is incorrect."
+        $projectList = $projectListResponse.Content | ConvertFrom-Json
+        if ($null -eq $ExpectedProject) {
+            Assert-Equal @($projectList.projects).Count 0 "A fresh portable data root contains projects."
+            $createBody = @{
+                designation = "ПР-ПЕРЕНОС"
+                name = "Проверка переносимого проекта"
+                batchQuantity = 20
+                status = "draft"
+            } | ConvertTo-Json -Compress
+            $createdResponse = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Method Post `
+                -Headers $mutationHeaders `
+                -ContentType "application/json" `
+                -Body $createBody `
+                -Uri "$origin$routePrefix/api/v1/projects"
+            $projectSnapshot = $createdResponse.Content | ConvertFrom-Json
+            foreach ($harnessDesignation in @("ЖГУТ-А", "ЖГУТ-Б")) {
+                $harnessBody = @{ designation = $harnessDesignation } | ConvertTo-Json -Compress
+                $harnessResponse = Invoke-WebRequest `
+                    -UseBasicParsing `
+                    -WebSession $webSession `
+                    -Method Post `
+                    -Headers $mutationHeaders `
+                    -ContentType "application/json" `
+                    -Body $harnessBody `
+                    -Uri "$origin$routePrefix/api/v1/projects/$($projectSnapshot.projectId)/harnesses"
+                $projectSnapshot = $harnessResponse.Content | ConvertFrom-Json
+            }
+            Assert-Equal @($projectSnapshot.harnesses).Count 2 "Portable project did not store two harnesses."
+        } else {
+            Assert-Equal @($projectList.projects).Count 1 "Restart did not list the persisted project."
+            Assert-Equal $projectList.projects[0].projectId $ExpectedProject.projectId `
+                "Restart changed the project UUID."
+            $projectResponse = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Uri "$origin$routePrefix/api/v1/projects/$($ExpectedProject.projectId)"
+            $projectSnapshot = $projectResponse.Content | ConvertFrom-Json
+            Assert-Equal $projectSnapshot.increment $ExpectedProject.increment `
+                "Restart changed the project increment."
+            Assert-Equal @($projectSnapshot.harnesses).Count 2 `
+                "Restart did not preserve both harnesses."
+            Assert-Equal $projectSnapshot.harnesses[0].harnessId $ExpectedProject.harnesses[0].harnessId `
+                "Restart changed the first harness UUID."
+            Assert-Equal $projectSnapshot.harnesses[1].harnessId $ExpectedProject.harnesses[1].harnessId `
+                "Restart changed the second harness UUID."
+            Assert-Equal $projectSnapshot.harnesses[0].sortOrder 0 `
+                "Restart changed the first harness order."
+            Assert-Equal $projectSnapshot.harnesses[1].sortOrder 1 `
+                "Restart changed the second harness order."
         }
 
         $secondaryStdout = Join-Path $artifactsRoot "$RunName.secondary.stdout.log"
@@ -289,6 +363,7 @@ function Test-HostMode {
         !(Test-Path -LiteralPath (Join-Path $generationPath "app.db") -PathType Leaf)) {
         throw "The active SQLite generation is incomplete: $generationPath"
     }
+    return $projectSnapshot
 }
 
 if (!(Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
@@ -783,7 +858,7 @@ if ($executables.Count -ne 1) {
     throw "Package must contain exactly one Techmap.Server.exe; found $($executables.Count)."
 }
 
-Test-HostMode `
+$rootProject = Test-HostMode `
     -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Корневой режим") `
     -PathBase "/" `
@@ -792,12 +867,13 @@ Test-HostMode `
     -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Корневой режим") `
     -PathBase "/" `
-    -RunName "root-restart-after-forced-stop"
+    -RunName "root-restart-after-forced-stop" `
+    -ExpectedProject $rootProject | Out-Null
 Test-HostMode `
     -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Режим с префиксом") `
     -PathBase "/techmap" `
-    -RunName "prefix"
+    -RunName "prefix" | Out-Null
 
 Test-DataRootAliases `
     -ExecutablePath $executables[0].FullName `

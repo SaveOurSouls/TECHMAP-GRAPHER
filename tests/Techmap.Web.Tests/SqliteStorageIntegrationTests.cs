@@ -42,20 +42,27 @@ public sealed class SqliteStorageIntegrationTests
             Directory.GetFiles(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName, SearchOption.AllDirectories));
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
-        var history = storage.ExecuteInTransaction(ReadSchemaHistory);
-        var row = Assert.Single(history);
-        Assert.Equal(SqliteStorage.CurrentSchemaVersion, row.Version);
-        Assert.Equal("M1-03-initial-storage", row.MigrationId);
-        Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
-        Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
-        Assert.StartsWith("0.1.0-m1.3", row.AppVersion, StringComparison.Ordinal);
-        Assert.True(DateTimeOffset.TryParseExact(
-            row.AppliedUtc,
-            "O",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.RoundtripKind,
-            out _));
-        Assert.False(string.IsNullOrWhiteSpace(row.Description));
+        var history = storage.ExecuteRead(ReadSchemaHistory);
+        Assert.Equal([1, 2], history.Select(row => row.Version));
+        Assert.Equal(
+            ["M1-03-initial-storage", "M1-04-projects-and-harnesses"],
+            history.Select(row => row.MigrationId));
+        Assert.Equal(
+            "06cd209eb54cb85cfbe7d0682917044b0dd15f1990c1963c2dac41544ec87fb8",
+            history[0].ScriptSha256);
+        foreach (var row in history)
+        {
+            Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
+            Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
+            Assert.StartsWith("0.1.0-", row.AppVersion, StringComparison.Ordinal);
+            Assert.True(DateTimeOffset.TryParseExact(
+                row.AppliedUtc,
+                "O",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out _));
+            Assert.False(string.IsNullOrWhiteSpace(row.Description));
+        }
         Assert.Equal(SqliteStorage.CurrentSchemaVersion, ExecuteScalarInt32(storage, "PRAGMA user_version;"));
 
         Assert.Equal(SqliteStorage.CurrentSchemaVersion, storage.Diagnostics.SchemaVersion);
@@ -103,7 +110,50 @@ public sealed class SqliteStorageIntegrationTests
                     "SELECT value FROM integration_items WHERE id = 1;");
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
-        Assert.Single(reopened.ExecuteInTransaction(ReadSchemaHistory));
+        Assert.Equal(
+            [1, 2],
+            reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
+    }
+
+    [Fact]
+    public void Version_one_database_is_migrated_without_rewriting_its_history_row()
+    {
+        using var fixture = StorageFixture.Create();
+        SchemaHistoryRow originalVersionOne;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            originalVersionOne = storage.ExecuteRead(ReadSchemaHistory).Single(row => row.Version == 1);
+        }
+
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DROP TRIGGER enforce_project_harness_limit;
+                DROP TABLE harnesses;
+                DROP TABLE projects;
+                DROP TABLE project_counter;
+                DELETE FROM schema_history WHERE version = 2;
+                PRAGMA user_version = 1;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        var history = migrated.ExecuteRead(ReadSchemaHistory);
+
+        Assert.Equal(2, migrated.Diagnostics.SchemaVersion);
+        Assert.Equal(originalVersionOne, history[0]);
+        Assert.Equal(2, history[1].Version);
+        Assert.Equal("M1-04-projects-and-harnesses", history[1].MigrationId);
+        Assert.Equal(
+            1,
+            migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
+                unitOfWork,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects';")));
     }
 
     [Fact]

@@ -23,6 +23,54 @@ public sealed record StorageDiagnosticsResponse(
     int BusyTimeoutMilliseconds,
     string JournalMode);
 
-public sealed record ApiErrorResponse(string Error);
+public sealed record ApiErrorResponse(
+    string Error,
+    string? Field = null,
+    string? Message = null);
 
 public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);
+
+public sealed record CreateProjectRequest(
+    string? Designation,
+    string? Name,
+    long BatchQuantity,
+    string? Status);
+
+public sealed record UpdateProjectRequest(
+    string? Designation = null,
+    string? Name = null,
+    long? BatchQuantity = null,
+    string? Status = null);
+
+public sealed record AddHarnessRequest(string? Designation);
+
+public sealed record ProjectListResponse(IReadOnlyList<ProjectSummaryResponse> Projects);
+
+public sealed record ProjectSummaryResponse(
+    Guid ProjectId,
+    string Designation,
+    long Increment,
+    string Name,
+    long BatchQuantity,
+    string Status,
+    int HarnessCount,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record HarnessResponse(
+    Guid HarnessId,
+    string Designation,
+    int SortOrder,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ProjectDetailsResponse(
+    Guid ProjectId,
+    string Designation,
+    long Increment,
+    string Name,
+    long BatchQuantity,
+    string Status,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc,
+    IReadOnlyList<HarnessResponse> Harnesses);

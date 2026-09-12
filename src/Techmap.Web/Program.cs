@@ -88,6 +88,7 @@ if (!int.TryParse(
 
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, options.Port));
 builder.Services.AddSingleton<IApplicationBoundary, StorageBoundary>();
+builder.Services.AddSingleton<IProjectCatalog, SqliteProjectCatalog>();
 builder.Services.AddSingleton(storage);
 builder.Services.AddSingleton<LocalHttpSession>();
 
@@ -181,6 +182,7 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
         : Results.Json(
             new ApiErrorResponse("invalid_session"),
             statusCode: StatusCodes.Status401Unauthorized));
+app.MapProjectEndpoints();
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),
     statusCode: StatusCodes.Status404NotFound));

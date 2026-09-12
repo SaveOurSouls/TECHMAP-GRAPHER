@@ -16,7 +16,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -30,6 +30,47 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             applied_utc TEXT NOT NULL,
             description TEXT NOT NULL CHECK (length(description) > 0)
         ) STRICT;
+        """;
+    private const string ProjectMigrationId = "M1-04-projects-and-harnesses";
+    private const string ProjectSchemaSql =
+        """
+        CREATE TABLE project_counter (
+            counter_id INTEGER NOT NULL PRIMARY KEY CHECK (counter_id = 1),
+            next_increment INTEGER NOT NULL CHECK (next_increment > 0)
+        ) STRICT;
+
+        INSERT INTO project_counter (counter_id, next_increment) VALUES (1, 1);
+
+        CREATE TABLE projects (
+            project_id TEXT NOT NULL PRIMARY KEY CHECK (length(project_id) = 36),
+            designation TEXT NOT NULL CHECK (length(designation) BETWEEN 1 AND 128),
+            project_increment INTEGER NOT NULL UNIQUE CHECK (project_increment > 0),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 256),
+            batch_quantity INTEGER NOT NULL CHECK (batch_quantity > 0),
+            status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'completed')),
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE harnesses (
+            harness_id TEXT NOT NULL PRIMARY KEY CHECK (length(harness_id) = 36),
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            designation TEXT NOT NULL CHECK (length(designation) BETWEEN 1 AND 128),
+            sort_order INTEGER NOT NULL CHECK (sort_order >= 0),
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL,
+            UNIQUE (project_id, sort_order)
+        ) STRICT;
+
+        CREATE INDEX ix_harnesses_project_order
+            ON harnesses (project_id, sort_order, harness_id);
+
+        CREATE TRIGGER enforce_project_harness_limit
+        BEFORE INSERT ON harnesses
+        WHEN (SELECT COUNT(*) FROM harnesses WHERE project_id = NEW.project_id) >= 100
+        BEGIN
+            SELECT RAISE(ABORT, 'harness_limit_reached');
+        END;
         """;
 
     private readonly string connectionString;
@@ -129,6 +170,40 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
     }
 
+    public T ExecuteRead<T>(Func<SqliteUnitOfWork, T> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ThrowIfDisposed();
+        ThrowIfNestedTransaction();
+        transactionScope.Value = true;
+        try
+        {
+            using var connection = OpenConfiguredConnection();
+            using var transaction = connection.BeginTransaction(deferred: true);
+            using var context = CreateDbContext(connection, transaction);
+            var unitOfWork = new SqliteUnitOfWork(connection, transaction, context);
+            try
+            {
+                var result = operation(unitOfWork);
+                transaction.Commit();
+                return result;
+            }
+            catch
+            {
+                TryRollback(transaction);
+                throw;
+            }
+            finally
+            {
+                unitOfWork.Complete();
+            }
+        }
+        finally
+        {
+            transactionScope.Value = false;
+        }
+    }
+
     public Task ExecuteInTransactionAsync(
         Func<SqliteUnitOfWork, CancellationToken, Task> operation,
         CancellationToken cancellationToken = default)
@@ -222,6 +297,12 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
 
         var version = ValidateSchema(connection);
+        while (version < CurrentSchemaVersion)
+        {
+            version = ApplyNextMigration(connection, version);
+        }
+
+        version = ValidateSchema(connection);
         var foreignKeysEnabled = ExecuteScalarInt32(connection, "PRAGMA foreign_keys;") == 1;
         var effectiveBusyTimeout = ExecuteScalarInt32(connection, "PRAGMA busy_timeout;");
         var journalMode = ExecuteScalarString(connection, "PRAGMA journal_mode;");
@@ -267,16 +348,14 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 VALUES (
                     $version, $migrationId, $scriptHash, $appVersion, $appliedUtc, $description);
                 """;
-            insertInitial.Parameters.AddWithValue("$version", CurrentSchemaVersion);
+            insertInitial.Parameters.AddWithValue("$version", 1);
             insertInitial.Parameters.AddWithValue("$migrationId", InitialMigrationId);
             insertInitial.Parameters.AddWithValue(
                 "$scriptHash",
-                Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(InitialSchemaSql))));
+                HashMigrationSql(InitialSchemaSql));
             insertInitial.Parameters.AddWithValue(
                 "$appVersion",
-                typeof(SqliteStorage).Assembly
-                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                    .InformationalVersion ?? "unknown");
+                ApplicationInformationalVersion());
             insertInitial.Parameters.AddWithValue(
                 "$appliedUtc",
                 DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
@@ -285,7 +364,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
             using var setUserVersion = connection.CreateCommand();
             setUserVersion.Transaction = transaction;
-            setUserVersion.CommandText = $"PRAGMA user_version = {CurrentSchemaVersion};";
+            setUserVersion.CommandText = "PRAGMA user_version = 1;";
             setUserVersion.ExecuteNonQuery();
             transaction.Commit();
         }
@@ -306,35 +385,115 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             throw new InvalidDataException("The SQLite schema history is missing.");
         }
 
-        var count = ExecuteScalarInt32(connection, "SELECT COUNT(*) FROM schema_history;");
         var userVersion = ExecuteScalarInt32(connection, "PRAGMA user_version;");
         using var historyCommand = connection.CreateCommand();
         historyCommand.CommandText =
-            "SELECT version, migration_id, script_sha256 FROM schema_history;";
+            "SELECT version, migration_id, script_sha256 FROM schema_history ORDER BY version;";
         using var reader = historyCommand.ExecuteReader();
-        if (!reader.Read())
+        var rows = new List<(int Version, string MigrationId, string ScriptHash)>();
+        while (reader.Read())
         {
-            throw new InvalidDataException("The SQLite schema history is empty.");
+            rows.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2)));
         }
 
-        var version = reader.GetInt32(0);
-        var migrationId = reader.GetString(1);
-        var scriptHash = reader.GetString(2);
-        var expectedScriptHash = Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(InitialSchemaSql)));
-        if (version != CurrentSchemaVersion ||
-            count != 1 ||
-            userVersion != version ||
-            !string.Equals(migrationId, InitialMigrationId, StringComparison.Ordinal) ||
-            !string.Equals(scriptHash, expectedScriptHash, StringComparison.Ordinal))
+        if (rows.Count == 0 ||
+            userVersion <= 0 ||
+            userVersion > CurrentSchemaVersion ||
+            rows.Count != userVersion)
         {
             throw new InvalidDataException(
                 $"The database schema version is inconsistent or unsupported: " +
-                $"history={version}, rows={count}, user_version={userVersion}.");
+                $"rows={rows.Count}, user_version={userVersion}.");
         }
 
-        return version;
+        var expected = new[]
+        {
+            (Version: 1, MigrationId: InitialMigrationId, Sql: InitialSchemaSql),
+            (Version: 2, MigrationId: ProjectMigrationId, Sql: ProjectSchemaSql),
+        };
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            var migration = expected[index];
+            var expectedHash = HashMigrationSql(migration.Sql);
+            if (row.Version != migration.Version ||
+                !string.Equals(row.MigrationId, migration.MigrationId, StringComparison.Ordinal) ||
+                !string.Equals(row.ScriptHash, expectedHash, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"The database schema history is inconsistent at version {index + 1}.");
+            }
+        }
+
+        return userVersion;
     }
+
+    private static int ApplyNextMigration(SqliteConnection connection, int currentVersion)
+    {
+        if (currentVersion != 1)
+        {
+            throw new InvalidDataException(
+                $"No supported migration follows storage schema {currentVersion}.");
+        }
+
+        using var transaction = connection.BeginTransaction(deferred: false);
+        try
+        {
+            using (var migrate = connection.CreateCommand())
+            {
+                migrate.Transaction = transaction;
+                migrate.CommandText = ProjectSchemaSql;
+                migrate.ExecuteNonQuery();
+            }
+
+            using (var appendHistory = connection.CreateCommand())
+            {
+                appendHistory.Transaction = transaction;
+                appendHistory.CommandText =
+                    """
+                    INSERT INTO schema_history
+                        (version, migration_id, script_sha256, app_version, applied_utc, description)
+                    VALUES (
+                        $version, $migrationId, $scriptHash, $appVersion, $appliedUtc, $description);
+                    """;
+                appendHistory.Parameters.AddWithValue("$version", 2);
+                appendHistory.Parameters.AddWithValue("$migrationId", ProjectMigrationId);
+                appendHistory.Parameters.AddWithValue(
+                    "$scriptHash",
+                    HashMigrationSql(ProjectSchemaSql));
+                appendHistory.Parameters.AddWithValue("$appVersion", ApplicationInformationalVersion());
+                appendHistory.Parameters.AddWithValue(
+                    "$appliedUtc",
+                    DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                appendHistory.Parameters.AddWithValue("$description", "Projects and harnesses");
+                appendHistory.ExecuteNonQuery();
+            }
+
+            using (var setUserVersion = connection.CreateCommand())
+            {
+                setUserVersion.Transaction = transaction;
+                setUserVersion.CommandText = "PRAGMA user_version = 2;";
+                setUserVersion.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            return 2;
+        }
+        catch
+        {
+            TryRollback(transaction);
+            throw;
+        }
+    }
+
+    private static string ApplicationInformationalVersion() =>
+        typeof(SqliteStorage).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion ?? "unknown";
+
+    private static string HashMigrationSql(string sql) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+            sql.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))));
 
     private SqliteConnection OpenConfiguredConnection()
     {

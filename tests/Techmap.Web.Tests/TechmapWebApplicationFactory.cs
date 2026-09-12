@@ -18,7 +18,13 @@ public sealed class TechmapWebApplicationFactory(params string[] arguments)
         builder.UseEnvironment("Testing");
         builder.UseSetting("NoBrowser", "true");
         builder.UseSetting("Port", TestPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        builder.UseSetting("DataRoot", Path.Combine(Path.GetTempPath(), "techmap-web-tests", Guid.NewGuid().ToString("N")));
+        var dataRootArgument = arguments.SingleOrDefault(argument =>
+            argument.StartsWith("--data-root=", StringComparison.OrdinalIgnoreCase));
+        builder.UseSetting(
+            "DataRoot",
+            dataRootArgument is null
+                ? Path.Combine(Path.GetTempPath(), "techmap-web-tests", Guid.NewGuid().ToString("N"))
+                : dataRootArgument["--data-root=".Length..]);
         var pathBaseArgument = arguments.SingleOrDefault(argument =>
             argument.StartsWith("--path-base=", StringComparison.OrdinalIgnoreCase));
         if (pathBaseArgument is not null)
