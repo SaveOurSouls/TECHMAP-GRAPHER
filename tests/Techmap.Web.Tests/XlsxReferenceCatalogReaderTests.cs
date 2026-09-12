@@ -226,6 +226,87 @@ public sealed class XlsxReferenceCatalogReaderTests
     }
 
     [Fact]
+    public async Task Composite_profile_preserves_duplicate_variants_and_materializes_only_present_layers()
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .WithHeaders("Series", "Cable", "D1", "D2", "D3", "L1", "L2", "L3")
+            .AddRow("BNC", "RG58", "1.0", "-", "3.5", "5", "0", "12")
+            .AddRow("BNC", "RG58", "1.0", "-", "3.5", "5", "0", "12")
+            .Build();
+        var mapping = new XlsxCatalogMapping(
+            "Catalog", 1, 2, "coax-termination", "Cable",
+            [
+                new XlsxFieldMapping("Series", "series", XlsxFieldValueKind.TextScalar),
+                new XlsxFieldMapping("Cable", "cable", XlsxFieldValueKind.TextScalar),
+                new XlsxFieldMapping("D1", "layerD1", SkipBlank: true),
+                new XlsxFieldMapping("D2", "layerD2", SkipBlank: true),
+                new XlsxFieldMapping("D3", "layerD3", SkipBlank: true),
+                new XlsxFieldMapping("L1", "layerL1", SkipBlank: true),
+                new XlsxFieldMapping("L2", "layerL2", SkipBlank: true),
+                new XlsxFieldMapping("L3", "layerL3", SkipBlank: true),
+            ],
+            CompositeKeyColumns: ["Series", "Cable", "L1", "L2", "L3"],
+            PreserveDuplicateRows: true,
+            LayerArray: new XlsxLayerArrayMapping(
+                "layers",
+                [
+                    new XlsxLayerMemberMapping(1, "layerD1", "layerL1"),
+                    new XlsxLayerMemberMapping(2, "layerD2", "layerL2"),
+                    new XlsxLayerMemberMapping(3, "layerD3", "layerL3"),
+                ],
+                ["-", "—"]));
+
+        var preview = await PreviewAsync(bytes, mapping);
+
+        Assert.True(preview.Validation.IsValid);
+        Assert.Equal(2, preview.RecordCount);
+        Assert.EndsWith(" #1", preview.Records[0].SourceKey, StringComparison.Ordinal);
+        Assert.EndsWith(" #2", preview.Records[1].SourceKey, StringComparison.Ordinal);
+        Assert.NotEqual(preview.Records[0].SourceKey, preview.Records[1].SourceKey);
+        var layers = preview.Records[0].Payload.GetProperty("layers");
+        Assert.Equal(2, layers.GetArrayLength());
+        Assert.Equal(1, layers[0].GetProperty("index").GetInt32());
+        Assert.Equal("5", layers[0].GetProperty("stripLengthMm").GetString());
+        Assert.Equal(3, layers[1].GetProperty("index").GetInt32());
+        Assert.Equal("12", layers[1].GetProperty("stripLengthMm").GetString());
+        Assert.False(preview.Records[0].Payload.TryGetProperty("layerD1", out _));
+        Assert.Contains(preview.Validation.Diagnostics, item =>
+            item.Code == "xlsx_duplicate_rows_preserved" &&
+            item.Severity == ReferenceCatalogDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public async Task SprKab_known_profiles_read_their_independent_table_layouts()
+    {
+        var coaxBytes = new XlsxTestFixtureBuilder()
+            .WithWorksheetName("СПР.КАБ")
+            .WithHeaders("Кабель", "D1", "D2", "D3")
+            .AddRow("RG-58", "0.9", "3.0", "5.0")
+            .Build();
+        var awgHeaders = new[]
+        {
+            "AWG", "ГОСТ", "Ø жилы", "МГТФ", "МС", "M22759", "PTFE", "UL1061", "UL1571",
+            "UL1007", "UL1015", "МГШВ", "НВ-4", "Силикон", "РКГМ", "ПВАМ", "ПГВА", "FLRY", "TXL", "GXL",
+        };
+        var awgBytes = new XlsxTestFixtureBuilder()
+            .WithWorksheetName("СПР.КАБ")
+            .WithHeaderRow(28)
+            .WithHeaders(awgHeaders)
+            .AddRow("36", "0.01", "0.127", "0.45", "—", "0.5", "0.45")
+            .WithNumber("A29", "36")
+            .Build();
+
+        var coax = await PreviewAsync(coaxBytes, XlsxKnownProfiles.Get("technology.coax-cables").Mapping);
+        var awg = await PreviewAsync(awgBytes, XlsxKnownProfiles.Get("technology.awg-reference").Mapping);
+
+        Assert.True(coax.Validation.IsValid);
+        Assert.Equal(3, Assert.Single(coax.Records).Payload.GetProperty("layers").GetArrayLength());
+        Assert.True(awg.Validation.IsValid);
+        Assert.Equal("36", Assert.Single(awg.Records).SourceKey);
+        Assert.Equal("0.01", awg.Records[0].Payload.GetProperty("sectionMm2").GetString());
+    }
+
+    [Fact]
     public async Task External_relationship_and_corrupt_zip_are_rejected_before_candidate_creation()
     {
         var external = await Assert.ThrowsAsync<XlsxImportException>(() =>

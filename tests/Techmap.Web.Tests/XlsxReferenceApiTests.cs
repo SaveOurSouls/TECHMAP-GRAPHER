@@ -196,6 +196,37 @@ public sealed class XlsxReferenceApiTests
             (await mismatch.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
     }
 
+    [Fact]
+    public async Task Known_profile_preview_uses_server_mapping_and_returns_materialized_layers()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var bytes = new XlsxTestFixtureBuilder()
+            .WithWorksheetName("СПР.КАБ")
+            .WithHeaders("Кабель", "D1", "D2", "D3")
+            .AddRow("RG-58", "0.9", "3.0", "5.0")
+            .Build();
+        var request = new XlsxProfilePreviewRequest(
+            "technology.xlsx",
+            Convert.ToBase64String(bytes),
+            "technology.coax-cables");
+
+        using var response = await SendAsync(
+            client,
+            "/api/v1/reference-sources/technology-coax-cables/xlsx-profile-previews",
+            request,
+            csrf);
+
+        response.EnsureSuccessStatusCode();
+        var preview = Assert.IsType<XlsxReferencePreviewResponse>(
+            await response.Content.ReadFromJsonAsync<XlsxReferencePreviewResponse>(
+                TestContext.Current.CancellationToken));
+        Assert.True(preview.CanPublish);
+        Assert.Equal(1, preview.RecordCount);
+        Assert.Equal(3, Assert.Single(preview.Records).Payload.GetProperty("layers").GetArrayLength());
+    }
+
     private static async Task<XlsxReferencePreviewResponse> PreviewAsync(
         HttpClient client,
         string csrf,

@@ -16,6 +16,7 @@ public enum XlsxFieldValueKind
 {
     RawScalar,
     Text,
+    TextScalar,
     Int64,
     Decimal,
     Boolean,
@@ -30,7 +31,18 @@ public sealed record XlsxFieldMapping(
     bool AllowBlank = false,
     bool AllowNotApplicable = false,
     bool AllowFormulaCachedValue = false,
-    bool SkipBlank = false);
+    bool SkipBlank = false,
+    bool WarnWhenMissing = false);
+
+public sealed record XlsxLayerMemberMapping(
+    int Index,
+    string? DiameterProperty = null,
+    string? LengthProperty = null);
+
+public sealed record XlsxLayerArrayMapping(
+    string TargetProperty,
+    IReadOnlyList<XlsxLayerMemberMapping> Members,
+    IReadOnlyList<string>? AbsentTokens = null);
 
 public sealed record XlsxCatalogMapping(
     string? SheetName,
@@ -42,7 +54,12 @@ public sealed record XlsxCatalogMapping(
     uint? LastDataRow = null,
     bool IgnoreUnmappedFormulas = false,
     bool StopAtFirstMissingKey = false,
-    string? ProfileId = null);
+    string? ProfileId = null,
+    IReadOnlyList<string>? CompositeKeyColumns = null,
+    bool AllowNonTextKey = false,
+    bool PreserveDuplicateRows = false,
+    XlsxLayerArrayMapping? LayerArray = null,
+    IReadOnlyList<string>? BoundaryColumns = null);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -155,6 +172,54 @@ public sealed class XlsxReferenceCatalogReader
             writer.WriteBoolean("ignoreUnmappedFormulas", mapping.IgnoreUnmappedFormulas);
             writer.WriteBoolean("stopAtFirstMissingKey", mapping.StopAtFirstMissingKey);
             if (mapping.ProfileId is null) writer.WriteNull("profileId"); else writer.WriteString("profileId", mapping.ProfileId.Normalize(NormalizationForm.FormC));
+            writer.WriteBoolean("allowNonTextKey", mapping.AllowNonTextKey);
+            writer.WriteBoolean("preserveDuplicateRows", mapping.PreserveDuplicateRows);
+            writer.WritePropertyName("boundaryColumns");
+            if (mapping.BoundaryColumns is null) writer.WriteNullValue();
+            else
+            {
+                writer.WriteStartArray();
+                foreach (var column in mapping.BoundaryColumns) writer.WriteStringValue(NormalizeHeader(column));
+                writer.WriteEndArray();
+            }
+            writer.WritePropertyName("compositeKeyColumns");
+            if (mapping.CompositeKeyColumns is null)
+            {
+                writer.WriteNullValue();
+            }
+            else
+            {
+                writer.WriteStartArray();
+                foreach (var keyColumn in mapping.CompositeKeyColumns)
+                    writer.WriteStringValue(NormalizeHeader(keyColumn));
+                writer.WriteEndArray();
+            }
+            writer.WritePropertyName("layerArray");
+            if (mapping.LayerArray is null)
+            {
+                writer.WriteNullValue();
+            }
+            else
+            {
+                writer.WriteStartObject();
+                writer.WriteString("targetProperty", mapping.LayerArray.TargetProperty.Normalize(NormalizationForm.FormC));
+                writer.WritePropertyName("absentTokens");
+                writer.WriteStartArray();
+                foreach (var token in mapping.LayerArray.AbsentTokens ?? []) writer.WriteStringValue(token.Normalize(NormalizationForm.FormC));
+                writer.WriteEndArray();
+                writer.WritePropertyName("members");
+                writer.WriteStartArray();
+                foreach (var member in mapping.LayerArray.Members.OrderBy(item => item.Index))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("index", member.Index);
+                    if (member.DiameterProperty is null) writer.WriteNull("diameterProperty"); else writer.WriteString("diameterProperty", member.DiameterProperty);
+                    if (member.LengthProperty is null) writer.WriteNull("lengthProperty"); else writer.WriteString("lengthProperty", member.LengthProperty);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+            }
             writer.WriteString("entityType", mapping.EntityType.Normalize(NormalizationForm.FormC));
             writer.WriteString("keyColumn", mapping.KeyColumn.Normalize(NormalizationForm.FormC));
             writer.WritePropertyName("fields");
@@ -172,6 +237,7 @@ public sealed class XlsxReferenceCatalogReader
                     writer.WriteBoolean("allowNotApplicable", field.AllowNotApplicable);
                     writer.WriteBoolean("allowFormulaCachedValue", field.AllowFormulaCachedValue);
                     writer.WriteBoolean("skipBlank", field.SkipBlank);
+                    writer.WriteBoolean("warnWhenMissing", field.WarnWhenMissing);
                     writer.WritePropertyName("notApplicableTokens");
                     writer.WriteStartArray();
                     foreach (var token in (field.NotApplicableTokens ?? [])
@@ -305,6 +371,36 @@ public sealed class XlsxReferenceCatalogReader
                 field: mapping.KeyColumn,
                 location: Location(sheets[selectedIndex].Name, mapping.HeaderRow)));
         }
+        var compositeKeyColumns = new List<HeaderCell>();
+        foreach (var sourceColumn in mapping.CompositeKeyColumns ?? [])
+        {
+            var normalizedSource = NormalizeHeader(sourceColumn);
+            if (headers.TryGetValue(normalizedSource, out var header))
+            {
+                compositeKeyColumns.Add(header);
+            }
+            else
+            {
+                AddDiagnostic(diagnostics, Error(
+                    "xlsx_required_column_missing",
+                    $"Не найден столбец составного ключа «{sourceColumn}».",
+                    field: sourceColumn,
+                location: Location(selectedSheetName, mapping.HeaderRow)));
+            }
+        }
+        var boundaryColumns = new List<HeaderCell>();
+        foreach (var sourceColumn in mapping.BoundaryColumns ?? [])
+        {
+            var normalizedSource = NormalizeHeader(sourceColumn);
+            if (headers.TryGetValue(normalizedSource, out var header))
+                boundaryColumns.Add(header);
+            else
+                AddDiagnostic(diagnostics, Error(
+                    "xlsx_required_column_missing",
+                    $"Не найден граничный столбец «{sourceColumn}».",
+                    field: sourceColumn,
+                    location: Location(selectedSheetName, mapping.HeaderRow)));
+        }
 
         var requestedFields = mapping.Fields is not null
             ? mapping.Fields
@@ -326,11 +422,17 @@ public sealed class XlsxReferenceCatalogReader
         var resolved = ResolveFields(headers, requestedFields, sheets[selectedIndex].Name, mapping.HeaderRow, diagnostics);
         var consumedColumns = resolved.Select(item => item.ColumnIndex).ToHashSet();
         if (keyColumn is not null) consumedColumns.Add(keyColumn.ColumnIndex);
+        foreach (var compositeKeyColumn in compositeKeyColumns)
+            consumedColumns.Add(compositeKeyColumn.ColumnIndex);
+        foreach (var boundaryColumn in boundaryColumns)
+            consumedColumns.Add(boundaryColumn.ColumnIndex);
         var headersByColumn = headers.Values.ToDictionary(item => item.ColumnIndex);
 
         var records = new List<ReferenceCatalogRecordInput>();
         var previewRecords = new List<XlsxPreviewRecord>();
         var cachedFormulaFields = new Dictionary<string, (int Count, string FirstLocation)>(StringComparer.Ordinal);
+        var missingFields = new Dictionary<string, (int Count, string FirstLocation)>(StringComparer.Ordinal);
+        var compositeKeyOccurrences = new Dictionary<string, int>(StringComparer.Ordinal);
         var sourceRows = 0;
         long candidateBytes = 0;
         foreach (var parsedRow in EnumerateRows(
@@ -342,8 +444,7 @@ public sealed class XlsxReferenceCatalogReader
             var cells = parsedRow.Cells;
             cancellationToken.ThrowIfCancellationRequested();
             if (mapping.StopAtFirstMissingKey && keyColumn is not null &&
-                (!cells.TryGetValue(keyColumn.ColumnIndex, out var boundaryKey) ||
-                 boundaryKey.State is ParsedCellState.Missing or ParsedCellState.Blank))
+                !HasBoundaryValue(cells, boundaryColumns.Count > 0 ? boundaryColumns : [keyColumn]))
                 break;
             sourceRows++;
             if (sourceRows > MaximumRows)
@@ -371,7 +472,7 @@ public sealed class XlsxReferenceCatalogReader
                     location: keyColumn is null ? rowLocation : Location(selectedSheetName, CellReference(keyColumn.ColumnIndex, rowNumber))));
                 continue;
             }
-            if (keyCell.State == ParsedCellState.Formula)
+            if (keyCell.State == ParsedCellState.Formula && mapping.CompositeKeyColumns is null)
             {
                 AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в ключах и импортируемых полях.", field: mapping.KeyColumn, location: keyCell.Reference));
                 continue;
@@ -381,10 +482,31 @@ public sealed class XlsxReferenceCatalogReader
                 AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка ключа содержит ошибку Excel.", field: mapping.KeyColumn, location: keyCell.Reference));
                 continue;
             }
-            if (keyCell.Kind != ParsedValueKind.Text || string.IsNullOrEmpty(keyCell.Text))
+            if ((!mapping.AllowNonTextKey && keyCell.Kind != ParsedValueKind.Text) || string.IsNullOrEmpty(keyCell.Text))
             {
                 AddDiagnostic(diagnostics, Error("xlsx_key_must_be_text", "Ключ записи должен быть непустым текстом, чтобы сохранить ведущие нули.", field: mapping.KeyColumn, location: keyCell.Reference));
                 continue;
+            }
+
+            var sourceKey = mapping.CompositeKeyColumns is { Count: > 0 }
+                ? MaterializeCompositeKey(compositeKeyColumns, cells, selectedSheetName, rowNumber, diagnostics)
+                : keyCell.Text;
+            if (sourceKey is null)
+                continue;
+            var sourceKeyOccurrence = compositeKeyOccurrences.TryGetValue(sourceKey, out var previousOccurrences)
+                ? previousOccurrences + 1
+                : 1;
+            compositeKeyOccurrences[sourceKey] = sourceKeyOccurrence;
+            if (mapping.PreserveDuplicateRows)
+                sourceKey = $"{sourceKey} #{sourceKeyOccurrence}";
+            else if (sourceKeyOccurrence > 1)
+            {
+                AddDiagnostic(diagnostics, Error(
+                    "xlsx_duplicate_materialized_key",
+                    "Составной ключ повторяется. Добавьте в профиль различающий столбец.",
+                    mapping.EntityType,
+                    sourceKey,
+                    location: rowLocation));
             }
 
             var payloadValues = new SortedDictionary<string, object?>(StringComparer.Ordinal);
@@ -395,21 +517,26 @@ public sealed class XlsxReferenceCatalogReader
                     if (field.Mapping.Required)
                         AddDiagnostic(diagnostics, Error(
                             "xlsx_required_value_missing", $"Не заполнено обязательное поле «{field.Mapping.SourceColumn}».",
-                            mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty,
+                            mapping.EntityType, sourceKey, field.Mapping.TargetProperty,
                             Location(selectedSheetName, CellReference(field.ColumnIndex, rowNumber))));
+                    else if (field.Mapping.WarnWhenMissing)
+                        TrackField(missingFields, field.Mapping.TargetProperty,
+                            Location(selectedSheetName, CellReference(field.ColumnIndex, rowNumber)));
                     continue;
                 }
                 if (cell.State == ParsedCellState.Formula)
                 {
                     if (!field.Mapping.AllowFormulaCachedValue)
                     {
-                        AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в импортируемых полях.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                        AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в импортируемых полях.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                         continue;
                     }
                     if (cell.Text.Length == 0)
                     {
                         if (field.Mapping.Required)
-                            AddDiagnostic(diagnostics, Error("xlsx_formula_cached_value_missing", "У формулы отсутствует сохранённый результат.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                            AddDiagnostic(diagnostics, Error("xlsx_formula_cached_value_missing", "У формулы отсутствует сохранённый результат.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
+                        else if (field.Mapping.WarnWhenMissing)
+                            TrackField(missingFields, field.Mapping.TargetProperty, cell.Reference);
                         continue;
                     }
                     cachedFormulaFields[field.Mapping.TargetProperty] = cachedFormulaFields.TryGetValue(field.Mapping.TargetProperty, out var usage)
@@ -418,17 +545,21 @@ public sealed class XlsxReferenceCatalogReader
                 }
                 if (cell.State == ParsedCellState.Error)
                 {
-                    AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка содержит ошибку Excel.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                    AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка содержит ошибку Excel.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                     continue;
                 }
                 if (cell.State == ParsedCellState.Blank && !field.Mapping.AllowBlank)
                 {
                     if (field.Mapping.SkipBlank)
+                    {
+                        if (field.Mapping.WarnWhenMissing)
+                            TrackField(missingFields, field.Mapping.TargetProperty, cell.Reference);
                         continue;
+                    }
                     AddDiagnostic(diagnostics, Error(
                         field.Mapping.Required ? "xlsx_required_value_blank" : "xlsx_blank_not_allowed",
                         $"Поле «{field.Mapping.SourceColumn}» не допускает пустую ячейку.",
-                        mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                        mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                     continue;
                 }
                 if (cell.Kind == ParsedValueKind.Text && field.Mapping.NotApplicableTokens?.Any(token =>
@@ -441,7 +572,7 @@ public sealed class XlsxReferenceCatalogReader
                     {
                         AddDiagnostic(diagnostics, Error(
                             "xlsx_not_applicable_not_allowed", $"Поле «{field.Mapping.SourceColumn}» не допускает неприменимое значение.",
-                            mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                            mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                         continue;
                     }
                     payloadValues[field.Mapping.TargetProperty] = null;
@@ -449,23 +580,26 @@ public sealed class XlsxReferenceCatalogReader
                 }
                 if (!TryConvert(cell, field.Mapping.ValueKind, out var value))
                 {
-                    AddDiagnostic(diagnostics, Error("xlsx_value_type_invalid", $"Значение не соответствует типу {field.Mapping.ValueKind}.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                    AddDiagnostic(diagnostics, Error("xlsx_value_type_invalid", $"Значение не соответствует типу {field.Mapping.ValueKind}.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                     continue;
                 }
                 payloadValues[field.Mapping.TargetProperty] = value;
             }
 
+            if (mapping.LayerArray is not null)
+                ApplyLayerArray(payloadValues, mapping.LayerArray);
+
             using var payloadDocument = JsonDocument.Parse(JsonSerializer.Serialize(payloadValues));
             var payload = payloadDocument.RootElement.Clone();
             var recordLocation = Location(sheets[selectedIndex].Name, rowNumber);
             candidateBytes = checked(candidateBytes + Encoding.UTF8.GetByteCount(payload.GetRawText()) +
-                                     Encoding.UTF8.GetByteCount(keyCell.Text) +
+                                     Encoding.UTF8.GetByteCount(sourceKey) +
                                      Encoding.UTF8.GetByteCount(recordLocation) + 256L);
             if (candidateBytes > MaximumCandidateBytes)
                 throw new XlsxImportException("xlsx_candidate_too_large", "Импортируемые данные слишком велики для одного снимка.");
-            records.Add(new ReferenceCatalogRecordInput(mapping.EntityType, keyCell.Text, payload, recordLocation));
+            records.Add(new ReferenceCatalogRecordInput(mapping.EntityType, sourceKey, payload, recordLocation));
             if (previewRecords.Count < MaximumPreviewRows)
-                previewRecords.Add(new XlsxPreviewRecord(rowNumber, keyCell.Text, payload, recordLocation));
+                previewRecords.Add(new XlsxPreviewRecord(rowNumber, sourceKey, payload, recordLocation));
         }
 
         foreach (var (field, usage) in cachedFormulaFields.OrderBy(item => item.Key, StringComparer.Ordinal))
@@ -476,6 +610,26 @@ public sealed class XlsxReferenceCatalogReader
                 mapping.EntityType,
                 field: field,
                 location: usage.FirstLocation));
+        }
+        foreach (var (field, usage) in missingFields.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            AddDiagnostic(diagnostics, Warning(
+                "xlsx_profile_field_incomplete",
+                $"Поле «{field}» не заполнено в {usage.Count} строках профиля.",
+                mapping.EntityType,
+                field: field,
+                location: usage.FirstLocation));
+        }
+        if (mapping.PreserveDuplicateRows)
+        {
+            foreach (var duplicate in compositeKeyOccurrences.Where(item => item.Value > 1).OrderBy(item => item.Key, StringComparer.Ordinal))
+            {
+                AddDiagnostic(diagnostics, Warning(
+                    "xlsx_duplicate_rows_preserved",
+                    $"Совпадающие строки сохранены раздельно ({duplicate.Value}); к материализованному ключу добавлен номер варианта.",
+                    mapping.EntityType,
+                    duplicate.Key));
+            }
         }
 
         var draft = ReferenceCatalogDraft.Create(
@@ -585,6 +739,9 @@ public sealed class XlsxReferenceCatalogReader
             case XlsxFieldValueKind.Text when cell.Kind == ParsedValueKind.Text:
                 value = cell.Text;
                 return true;
+            case XlsxFieldValueKind.TextScalar:
+                value = cell.Text;
+                return true;
             case XlsxFieldValueKind.Int64 when cell.Kind == ParsedValueKind.Number &&
                                                long.TryParse(cell.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer):
                 value = integer;
@@ -610,6 +767,123 @@ public sealed class XlsxReferenceCatalogReader
 
     private static string NormalizeHeader(string value) =>
         Regex.Replace(value.Normalize(NormalizationForm.FormC).Trim(), @"\s+", " ");
+
+    private static string? MaterializeCompositeKey(
+        IReadOnlyList<HeaderCell> keyColumns,
+        IReadOnlyDictionary<int, ParsedCell> cells,
+        string sheetName,
+        uint rowNumber,
+        ICollection<ReferenceCatalogDiagnosticInput> diagnostics)
+    {
+        var components = new List<string>(keyColumns.Count);
+        foreach (var column in keyColumns)
+        {
+            if (!cells.TryGetValue(column.ColumnIndex, out var cell) ||
+                cell.State is ParsedCellState.Missing or ParsedCellState.Blank)
+            {
+                components.Add("0:");
+                continue;
+            }
+            if (cell.State == ParsedCellState.Error)
+            {
+                AddDiagnostic(diagnostics, Error(
+                    "xlsx_composite_key_cell_error",
+                    "Ячейка составного ключа содержит ошибку Excel.",
+                    field: column.Header,
+                    location: cell.Reference));
+                return null;
+            }
+            if (cell.State == ParsedCellState.Formula)
+            {
+                AddDiagnostic(diagnostics, Error(
+                    "xlsx_formula_not_allowed",
+                    "Формулы нельзя использовать в составном ключе.",
+                    field: column.Header,
+                    location: cell.Reference));
+                return null;
+            }
+            var value = NormalizeKeyComponent(cell.Text);
+            components.Add($"{value.Length}:{value}");
+        }
+        if (components.All(component => component == "0:"))
+        {
+            AddDiagnostic(diagnostics, Error(
+                "xlsx_composite_key_missing",
+                "Все поля составного ключа пусты.",
+                location: Location(sheetName, rowNumber)));
+            return null;
+        }
+        return string.Join('|', components);
+    }
+
+    private static string NormalizeKeyComponent(string value) =>
+        Regex.Replace(value.Normalize(NormalizationForm.FormC).Trim(), @"\s+", " ");
+
+    private static bool HasBoundaryValue(
+        IReadOnlyDictionary<int, ParsedCell> cells,
+        IReadOnlyList<HeaderCell> boundaryColumns) =>
+        boundaryColumns.Any(column =>
+            cells.TryGetValue(column.ColumnIndex, out var cell) &&
+            cell.State is not (ParsedCellState.Missing or ParsedCellState.Blank));
+
+    private static void TrackField(
+        IDictionary<string, (int Count, string FirstLocation)> fields,
+        string field,
+        string location)
+    {
+        fields[field] = fields.TryGetValue(field, out var usage)
+            ? (usage.Count + 1, usage.FirstLocation)
+            : (1, location);
+    }
+
+    private static void ApplyLayerArray(
+        IDictionary<string, object?> payload,
+        XlsxLayerArrayMapping mapping)
+    {
+        var layers = new List<SortedDictionary<string, object?>>();
+        foreach (var member in mapping.Members.OrderBy(item => item.Index))
+        {
+            var diameter = TakeLayerValue(payload, member.DiameterProperty, mapping.AbsentTokens);
+            var length = TakeLayerValue(payload, member.LengthProperty, mapping.AbsentTokens);
+            if (!diameter.HasValue && !length.HasValue)
+                continue;
+            var layer = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["index"] = member.Index,
+            };
+            if (diameter.HasValue) layer["diameterMm"] = diameter.Value;
+            if (length.HasValue) layer["stripLengthMm"] = length.Value;
+            layers.Add(layer);
+        }
+        payload[mapping.TargetProperty] = layers;
+    }
+
+    private static (bool HasValue, object? Value) TakeLayerValue(
+        IDictionary<string, object?> payload,
+        string? property,
+        IReadOnlyList<string>? absentTokens)
+    {
+        if (property is null || !payload.Remove(property, out var value) || IsAbsentLayerValue(value, absentTokens))
+            return (false, null);
+        return (true, value);
+    }
+
+    private static bool IsAbsentLayerValue(object? value, IReadOnlyList<string>? absentTokens)
+    {
+        if (value is null)
+            return true;
+        if (value is long integer)
+            return integer == 0;
+        if (value is decimal number)
+            return number == 0;
+        if (value is not string text)
+            return false;
+        var normalized = text.Normalize(NormalizationForm.FormC).Trim();
+        if (normalized.Length == 0 || normalized == "0")
+            return true;
+        return (absentTokens ?? []).Any(token =>
+            string.Equals(token.Normalize(NormalizationForm.FormC).Trim(), normalized, StringComparison.Ordinal));
+    }
 
     private static IEnumerable<ParsedRow> EnumerateRows(
         WorksheetPart worksheetPart,
@@ -946,6 +1220,15 @@ public sealed class XlsxReferenceCatalogReader
         }
         if (mapping.Fields is { Count: 0 } or { Count: > MaximumMappedFields })
             throw new XlsxImportException("xlsx_mapping_invalid", $"Укажите от 1 до {MaximumMappedFields} импортируемых полей либо используйте автоматическое сопоставление.");
+        if (mapping.CompositeKeyColumns is { Count: 0 } or { Count: > 16 } ||
+            mapping.CompositeKeyColumns?.Any(string.IsNullOrWhiteSpace) == true ||
+            mapping.CompositeKeyColumns?.Select(NormalizeHeader).Distinct(StringComparer.Ordinal).Count() != mapping.CompositeKeyColumns?.Count ||
+            mapping.PreserveDuplicateRows && mapping.CompositeKeyColumns is null)
+            throw new XlsxImportException("xlsx_mapping_invalid", "Составной ключ профиля XLSX задан некорректно.");
+        if (mapping.BoundaryColumns is { Count: 0 } or { Count: > 16 } ||
+            mapping.BoundaryColumns?.Any(string.IsNullOrWhiteSpace) == true ||
+            mapping.BoundaryColumns?.Select(NormalizeHeader).Distinct(StringComparer.Ordinal).Count() != mapping.BoundaryColumns?.Count)
+            throw new XlsxImportException("xlsx_mapping_invalid", "Граница профильной таблицы XLSX задана некорректно.");
         foreach (var field in mapping.Fields ?? [])
         {
             if (field is null ||
@@ -963,6 +1246,19 @@ public sealed class XlsxReferenceCatalogReader
             {
                 throw new XlsxImportException("xlsx_mapping_invalid", "Маркеры неприменимого значения заданы некорректно.");
             }
+        }
+        if (mapping.LayerArray is { } layers)
+        {
+            var mappedTargets = (mapping.Fields ?? []).Select(field => field.TargetProperty).ToHashSet(StringComparer.Ordinal);
+            if (string.IsNullOrWhiteSpace(layers.TargetProperty) || layers.TargetProperty.Any(char.IsControl) ||
+                layers.Members.Count is < 1 or > 64 ||
+                layers.Members.Select(member => member.Index).Distinct().Count() != layers.Members.Count ||
+                layers.Members.Any(member => member.Index <= 0 ||
+                    member.DiameterProperty is null && member.LengthProperty is null ||
+                    member.DiameterProperty is not null && !mappedTargets.Contains(member.DiameterProperty) ||
+                    member.LengthProperty is not null && !mappedTargets.Contains(member.LengthProperty)) ||
+                layers.AbsentTokens is { Count: > 16 })
+                throw new XlsxImportException("xlsx_mapping_invalid", "Массив слоёв профиля XLSX задан некорректно.");
         }
     }
 

@@ -16,6 +16,10 @@ public static class XlsxKnownProfiles
     [
         CreateOperations(),
         CreateEquipment(),
+        CreateTerminals(),
+        CreateCoaxTerminations(),
+        CreateCoaxCableDimensions(),
+        CreateAwgReference(),
     ];
 
     public static IReadOnlyList<XlsxKnownProfile> All => Profiles;
@@ -108,19 +112,156 @@ public static class XlsxKnownProfiles
             mapping);
     }
 
+    private static XlsxKnownProfile CreateTerminals()
+    {
+        const string id = "technology.terminals";
+        const string sourceId = "technology-terminals";
+        var fields = new[]
+        {
+            Text("Тип разъема", "connectorType", required: true),
+            Text("Производитель", "manufacturer"), Text("Product Name", "productName"),
+            Text("Series", "series"), Raw("Шаг разьема", "pitchMm"),
+            Text("Тип контакта", "contactType"), Text("Артикул контакта (REEL)", "reelArticle", required: true),
+            Text("Артикул контакта (BAG)", "bagArticle"), Text("Аппликатор", "applicator"),
+            Text("Пневма Автомат", "pneumaticAutomatic"), Raw("ОТР", "otr"),
+            Raw("С зачисткой", "withStripping"), Text("Длина зачистки, мм", "stripLengthMm", warnWhenMissing: true),
+            Raw("L+", "lengthPlusMm"), Raw("L-", "lengthMinusMm"),
+            Text("Высота обжима проводника , мм", "conductorCrimpHeightMm"),
+            Text("Высота обжима изоляции, мм", "insulationCrimpHeightMm"),
+            Raw("Усилие обрыва контакта от, N", "pullForceMinN"), Raw("Усилие обрыва контакта до, N", "pullForceMaxN"),
+            Raw("От AWG", "awgFrom"), Raw("До AWG", "awgTo"),
+            Raw("От мм2", "sectionFromMm2", allowFormula: true, warnWhenMissing: true),
+            Raw("До мм2", "sectionToMm2", allowFormula: true, warnWhenMissing: true),
+            Raw("Диаметр изоляции от, мм", "insulationDiameterFromMm", warnWhenMissing: true),
+            Raw("Диаметр изоляции до, мм", "insulationDiameterToMm", warnWhenMissing: true),
+            Text("Материал контакта", "contactMaterial"), Raw("Максисмальная сила тока, А", "maximumCurrentA"),
+            Text("Ссылка на DATASHEET на сайте производителя", "datasheetUrl"),
+        };
+        var mapping = new XlsxCatalogMapping(
+            "БД.ТЕР", 1, 2, "terminal", "Артикул контакта (REEL)", fields,
+            LastDataRow: 280,
+            IgnoreUnmappedFormulas: true,
+            ProfileId: id,
+            CompositeKeyColumns: ["Производитель", "Артикул контакта (REEL)", "Артикул контакта (BAG)", "Series"],
+            BoundaryColumns: ["Тип разъема", "Производитель", "Product Name", "Series", "Артикул контакта (REEL)"]);
+        return new XlsxKnownProfile(
+            id, "БД.ТЕР — терминалы", sourceId, "БД.ТЕР", "terminal", "составной ключ",
+            "Терминалы и совместимость сечений/изоляции; одинаковые артикулы разных серий остаются отдельными.", mapping);
+    }
+
+    private static XlsxKnownProfile CreateCoaxTerminations()
+    {
+        const string id = "technology.coax-terminations";
+        const string sourceId = "technology-coax-terminations";
+        var fields = new[]
+        {
+            Text("Артикул", "legacyArticle", allowFormula: true), Text("Тип/Серия", "typeSeries", required: true),
+            Text("Провод", "cable", required: true), Text("Производитель", "manufacturer", required: true),
+            Text("Программа", "program"),
+            Raw("D1", "layerD1", allowFormula: true), Raw("D2", "layerD2"), Raw("D3", "layerD3"),
+            Raw("L1", "layerL1", warnWhenMissing: true), Raw("L2", "layerL2", warnWhenMissing: true),
+            Raw("L3", "layerL3", warnWhenMissing: true), Raw("L+", "lengthPlusMm"), Raw("L-", "lengthMinusMm"),
+            Text("Тип пина", "pinType"), Text("Тип экрана", "shieldType"),
+        };
+        var mapping = new XlsxCatalogMapping(
+            "БД.КОАКС", 2, 3, "coax-termination", "Провод", fields,
+            LastDataRow: 61,
+            IgnoreUnmappedFormulas: true,
+            ProfileId: id,
+            CompositeKeyColumns: ["Тип/Серия", "Провод", "Производитель", "L1", "L2", "L3", "Тип пина", "Тип экрана"],
+            PreserveDuplicateRows: true,
+            LayerArray: ThreeLayers(),
+            BoundaryColumns: ["Тип/Серия", "Провод", "Производитель"]);
+        return new XlsxKnownProfile(
+            id, "БД.КОАКС — разделка коаксиала", sourceId, "БД.КОАКС", "coax-termination", "составной ключ",
+            "Разделка коаксиала. Полностью совпадающие строки сохраняются отдельными вариантами с предупреждением.", mapping);
+    }
+
+    private static XlsxKnownProfile CreateCoaxCableDimensions()
+    {
+        const string id = "technology.coax-cables";
+        const string sourceId = "technology-coax-cables";
+        var fields = new[]
+        {
+            Raw("D1", "layerD1"), Raw("D2", "layerD2"), Raw("D3", "layerD3"),
+        };
+        var mapping = new XlsxCatalogMapping(
+            "СПР.КАБ", 1, 2, "coax-cable", "Кабель", fields,
+            LastDataRow: 25,
+            IgnoreUnmappedFormulas: true,
+            ProfileId: id,
+            CompositeKeyColumns: ["Кабель", "D1", "D2", "D3"],
+            PreserveDuplicateRows: true,
+            LayerArray: ThreeDiameterLayers(),
+            BoundaryColumns: ["Кабель"]);
+        return new XlsxKnownProfile(
+            id, "СПР.КАБ — диаметры коаксиальных кабелей", sourceId, "СПР.КАБ", "coax-cable", "составной ключ",
+            "Первая таблица СПР.КАБ: диаметры слоёв коаксиального кабеля от центральной жилы наружу.", mapping);
+    }
+
+    private static XlsxKnownProfile CreateAwgReference()
+    {
+        const string id = "technology.awg-reference";
+        const string sourceId = "technology-awg-reference";
+        var fields = new[]
+        {
+            Raw("ГОСТ", "sectionMm2"), Raw("Ø жилы", "conductorDiameterMm"), Raw("МГТФ", "mgtfDiameterMm"),
+            Raw("МС", "msDiameterMm"), Raw("M22759", "m22759DiameterMm"), Raw("PTFE", "ptfeDiameterMm"),
+            Raw("UL1061", "ul1061DiameterMm"), Raw("UL1571", "ul1571DiameterMm"), Raw("UL1007", "ul1007DiameterMm"),
+            Raw("UL1015", "ul1015DiameterMm"), Raw("МГШВ", "mgshvDiameterMm"), Raw("НВ-4", "nv4DiameterMm"),
+            Raw("Силикон", "siliconeDiameterMm"), Raw("РКГМ", "rkgmDiameterMm"), Raw("ПВАМ", "pvamDiameterMm"),
+            Raw("ПГВА", "pgvaDiameterMm"), Raw("FLRY", "flryDiameterMm"), Raw("TXL", "txlDiameterMm"),
+            Raw("GXL", "gxlDiameterMm"),
+        };
+        var mapping = new XlsxCatalogMapping(
+            "СПР.КАБ", 28, 29, "awg-reference", "AWG", fields,
+            LastDataRow: 50,
+            IgnoreUnmappedFormulas: true,
+            ProfileId: id,
+            AllowNonTextKey: true,
+            BoundaryColumns: ["AWG"]);
+        return new XlsxKnownProfile(
+            id, "СПР.КАБ — соответствие AWG и диаметров", sourceId, "СПР.КАБ", "awg-reference", "AWG",
+            "Вторая таблица СПР.КАБ: AWG, сечение по ГОСТ, диаметр жилы и наружные диаметры марок проводов.", mapping);
+    }
+
+    private static XlsxLayerArrayMapping ThreeLayers() => new(
+        "layers",
+        [
+            new XlsxLayerMemberMapping(1, "layerD1", "layerL1"),
+            new XlsxLayerMemberMapping(2, "layerD2", "layerL2"),
+            new XlsxLayerMemberMapping(3, "layerD3", "layerL3"),
+        ],
+        ["-", "—"]);
+
+    private static XlsxLayerArrayMapping ThreeDiameterLayers() => new(
+        "layers",
+        [
+            new XlsxLayerMemberMapping(1, "layerD1"),
+            new XlsxLayerMemberMapping(2, "layerD2"),
+            new XlsxLayerMemberMapping(3, "layerD3"),
+        ],
+        ["-", "—"]);
+
     private static XlsxFieldMapping Text(
         string source,
         string target,
         bool required = false,
-        bool allowFormula = false) =>
-        new(source, target, XlsxFieldValueKind.Text, required, AllowBlank: true,
-            AllowFormulaCachedValue: allowFormula);
+        bool allowFormula = false,
+        bool warnWhenMissing = false) =>
+        new(source, target, XlsxFieldValueKind.TextScalar, required,
+            AllowBlank: !required && !warnWhenMissing,
+            AllowFormulaCachedValue: allowFormula,
+            SkipBlank: !required && warnWhenMissing,
+            WarnWhenMissing: warnWhenMissing);
 
     private static XlsxFieldMapping Raw(
         string source,
         string target,
-        bool allowFormula = false) =>
+        bool allowFormula = false,
+        bool warnWhenMissing = false) =>
         new(source, target, XlsxFieldValueKind.RawScalar,
             AllowFormulaCachedValue: allowFormula,
-            SkipBlank: true);
+            SkipBlank: true,
+            WarnWhenMissing: warnWhenMissing);
 }
