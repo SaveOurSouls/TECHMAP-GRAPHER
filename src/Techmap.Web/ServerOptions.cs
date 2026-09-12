@@ -11,6 +11,14 @@ public sealed record ServerOptions(
     Guid? ExportProjectId,
     string? ExportDestination,
     string? ImportProjectArchive,
+    bool CreateBackup,
+    string? DryRunRestoreBackup,
+    string? RecoveryRoot,
+    string? PrepareFullRestoreBackup,
+    string? RestorePlanPath,
+    string? ExecuteFullRestorePlan,
+    string? ConfirmationFile,
+    string? PreRestoreBackupRoot,
     bool NoBrowser,
     bool VerifyPackage)
 {
@@ -73,16 +81,59 @@ public sealed record ServerOptions(
         var importProjectArchive = importProjectValue is null
             ? null
             : Path.GetFullPath(importProjectValue, programRoot);
-        if (importProjectArchive is not null && exportProjectId is not null)
+
+        var createBackup = HasSwitch(args, "--create-backup");
+        var dryRunRestoreValue = ReadSingleValue(args, "--dry-run-restore=");
+        var recoveryRootValue = ReadSingleValue(args, "--recovery-root=");
+        if ((dryRunRestoreValue is null) != (recoveryRootValue is null))
         {
-            throw new ArgumentException("Project import and export modes are mutually exclusive.");
+            throw new ArgumentException(
+                "--dry-run-restore and --recovery-root must be specified together.");
+        }
+
+        var prepareFullRestoreValue = ReadSingleValue(args, "--prepare-full-restore=");
+        var restorePlanValue = ReadSingleValue(args, "--restore-plan=");
+        if ((prepareFullRestoreValue is null) != (restorePlanValue is null))
+        {
+            throw new ArgumentException(
+                "--prepare-full-restore and --restore-plan must be specified together.");
+        }
+
+        var executeFullRestoreValue = ReadSingleValue(args, "--execute-full-restore=");
+        var confirmationFileValue = ReadSingleValue(args, "--confirmation-file=");
+        var preRestoreBackupRootValue = ReadSingleValue(args, "--pre-restore-backup-root=");
+        var executeParts = new[]
+        {
+            executeFullRestoreValue,
+            confirmationFileValue,
+            preRestoreBackupRootValue,
+        };
+        if (executeParts.Any(value => value is not null) && executeParts.Any(value => value is null))
+        {
+            throw new ArgumentException(
+                "--execute-full-restore, --confirmation-file and --pre-restore-backup-root " +
+                "must be specified together.");
+        }
+
+        var modeCount = new[]
+        {
+            exportProjectId is not null,
+            importProjectArchive is not null,
+            createBackup,
+            dryRunRestoreValue is not null,
+            prepareFullRestoreValue is not null,
+            executeFullRestoreValue is not null,
+        }.Count(active => active);
+        if (modeCount > 1)
+        {
+            throw new ArgumentException("Offline maintenance modes are mutually exclusive.");
         }
 
         var noBrowser = HasSwitch(args, "--no-browser") || configuration.GetValue("NoBrowser", false);
         var verifyPackage = HasSwitch(args, "--verify-package");
-        if ((exportProjectId is not null || importProjectArchive is not null) && verifyPackage)
+        if (modeCount > 0 && verifyPackage)
         {
-            throw new ArgumentException("Project import/export mode cannot be combined with --verify-package.");
+            throw new ArgumentException("An offline maintenance mode cannot be combined with --verify-package.");
         }
 
         return new ServerOptions(
@@ -93,9 +144,28 @@ public sealed record ServerOptions(
             exportProjectId,
             exportDestination,
             importProjectArchive,
-            exportProjectId is not null || importProjectArchive is not null || noBrowser,
+            createBackup,
+            ResolveOptionalPath(dryRunRestoreValue, programRoot),
+            ResolveOptionalPath(recoveryRootValue, programRoot),
+            ResolveOptionalPath(prepareFullRestoreValue, programRoot),
+            ResolveOptionalPath(restorePlanValue, programRoot),
+            ResolveOptionalPath(executeFullRestoreValue, programRoot),
+            ResolveOptionalPath(confirmationFileValue, programRoot),
+            ResolveOptionalPath(preRestoreBackupRootValue, programRoot),
+            modeCount > 0 || noBrowser,
             verifyPackage);
     }
+
+    public bool HasOfflineMaintenanceMode =>
+        ExportProjectId is not null ||
+        ImportProjectArchive is not null ||
+        CreateBackup ||
+        DryRunRestoreBackup is not null ||
+        PrepareFullRestoreBackup is not null ||
+        ExecuteFullRestorePlan is not null;
+
+    private static string? ResolveOptionalPath(string? value, string programRoot) =>
+        value is null ? null : Path.GetFullPath(value, programRoot);
 
     private static string? ReadSingleValue(string[] args, string prefix)
     {

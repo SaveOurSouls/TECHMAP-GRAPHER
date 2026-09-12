@@ -35,8 +35,12 @@ public sealed class StartupFailureReporterTests : IDisposable
     [InlineData("--no-error-dialog")]
     [InlineData("--no-browser")]
     [InlineData("--verify-package")]
+    [InlineData("--create-backup")]
     [InlineData("--export-project=11111111-1111-1111-1111-111111111111")]
     [InlineData("--import-project=source.techmap-project.zip")]
+    [InlineData("--dry-run-restore=backup")]
+    [InlineData("--prepare-full-restore=backup")]
+    [InlineData("--execute-full-restore=plan.json")]
     public void Automated_modes_suppress_the_dialog(string argument)
     {
         Assert.False(StartupFailureReporter.ShouldShowDialog([argument]));

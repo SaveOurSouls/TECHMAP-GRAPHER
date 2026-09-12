@@ -81,8 +81,12 @@ public static class StartupFailureReporter
             argument.Equals(NoDialogSwitch, StringComparison.OrdinalIgnoreCase) ||
                 argument.Equals("--no-browser", StringComparison.OrdinalIgnoreCase) ||
                 argument.Equals("--verify-package", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--create-backup", StringComparison.OrdinalIgnoreCase) ||
                 argument.StartsWith("--export-project=", StringComparison.OrdinalIgnoreCase) ||
-                argument.StartsWith("--import-project=", StringComparison.OrdinalIgnoreCase));
+                argument.StartsWith("--import-project=", StringComparison.OrdinalIgnoreCase) ||
+                argument.StartsWith("--dry-run-restore=", StringComparison.OrdinalIgnoreCase) ||
+                argument.StartsWith("--prepare-full-restore=", StringComparison.OrdinalIgnoreCase) ||
+                argument.StartsWith("--execute-full-restore=", StringComparison.OrdinalIgnoreCase));
 
     internal static IReadOnlyList<string> SafeLogRoots(
         IReadOnlyCollection<string> arguments,

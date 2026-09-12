@@ -1,5 +1,8 @@
 using System.Net;
+using System.Text;
 using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Techmap.Application;
 using Techmap.Contracts;
 using Techmap.Infrastructure.Sqlite;
@@ -50,6 +53,67 @@ if (!int.TryParse(
     throw new InvalidDataException("The packaged and application storage schema versions do not match.");
 }
 
+if (options.ExecuteFullRestorePlan is not null)
+{
+    var plan = ReadRestorePlan(options.ExecuteFullRestorePlan);
+    var offlineDataRoot = RequireExistingDataRoot(options.DataRoot);
+    var offlineDatabasePath = ResolveCurrentDatabasePath(offlineDataRoot);
+    using var offlineBackupService = new SqliteStorageBackupService(offlineDataRoot, offlineDatabasePath);
+    using var offlineRestoreService = new SqliteStorageRestoreService(offlineDataRoot, offlineBackupService);
+    var confirmation = ReadSmallTextFile(
+        options.ConfirmationFile!,
+        maximumBytes: 4 * 1024,
+        "The restore confirmation file");
+    var restored = await offlineRestoreService.RestoreAsync(
+        new StorageFullRestoreRequest(
+            plan,
+            confirmation,
+            options.PreRestoreBackupRoot!,
+            productVersion.AppVersion),
+        CancellationToken.None);
+    Console.WriteLine("TECHMAP_STORAGE_FULL_RESTORE_STATUS=ok");
+    Console.WriteLine($"TECHMAP_STORAGE_FULL_RESTORE_PRE_RESTORE_BACKUP_PATH={restored.PreRestoreBackup.BackupPath}");
+    Console.WriteLine($"TECHMAP_STORAGE_FULL_RESTORE_RESTORED_GENERATION={restored.RestoredGenerationName}");
+    return;
+}
+
+if (options.DryRunRestoreBackup is not null || options.PrepareFullRestoreBackup is not null)
+{
+    var requestedMaintenanceDataRoot = RequireExistingDataRoot(options.DataRoot);
+    await using var maintenanceLease = DataRootLease.Acquire(requestedMaintenanceDataRoot);
+    var maintenanceDataRoot = RequireExistingDataRoot(maintenanceLease.CanonicalPath);
+    var maintenanceDatabasePath = ResolveCurrentDatabasePath(maintenanceDataRoot);
+    using var maintenanceBackupService = new SqliteStorageBackupService(
+        maintenanceDataRoot,
+        maintenanceDatabasePath);
+    using var maintenanceRestoreService = new SqliteStorageRestoreService(
+        maintenanceDataRoot,
+        maintenanceBackupService);
+    if (options.DryRunRestoreBackup is not null)
+    {
+        var dryRun = await maintenanceRestoreService.DryRunAsync(
+            new StorageDryRunRestoreRequest(
+                options.DryRunRestoreBackup,
+                options.RecoveryRoot!),
+            CancellationToken.None);
+        Console.WriteLine("TECHMAP_STORAGE_DRY_RUN_RESTORE_STATUS=ok");
+        Console.WriteLine($"TECHMAP_STORAGE_DRY_RUN_RESTORE_RECOVERY_ROOT={dryRun.RecoveryRoot}");
+        Console.WriteLine($"TECHMAP_STORAGE_DRY_RUN_RESTORE_DATABASE_SHA256={dryRun.DatabaseSha256}");
+    }
+    else
+    {
+        var plan = await maintenanceRestoreService.PrepareFullRestoreAsync(
+            options.PrepareFullRestoreBackup!,
+            CancellationToken.None);
+        var writtenPlanPath = WriteNewRestorePlan(options.RestorePlanPath!, maintenanceDataRoot, plan);
+        Console.WriteLine("TECHMAP_STORAGE_FULL_RESTORE_PREPARE_STATUS=confirmation_required");
+        Console.WriteLine($"TECHMAP_STORAGE_FULL_RESTORE_PLAN={writtenPlanPath}");
+        Console.WriteLine($"TECHMAP_STORAGE_FULL_RESTORE_REQUIRED_CONFIRMATION={plan.RequiredConfirmation}");
+    }
+
+    return;
+}
+
 DataRootLease? dataRootLease = null;
 try
 {
@@ -57,10 +121,10 @@ try
 }
 catch (DataRootLeaseUnavailableException error)
 {
-    if (options.ExportProjectId is not null || options.ImportProjectArchive is not null)
+    if (options.HasOfflineMaintenanceMode)
     {
         throw new InvalidOperationException(
-            "Offline project export/import requires exclusive access to the data root.",
+            "Offline maintenance requires exclusive access to the data root.",
             error);
     }
 
@@ -175,6 +239,22 @@ if (options.ImportProjectArchive is not null)
     Console.WriteLine($"TECHMAP_PROJECT_IMPORT_PROJECT_ID={projectImport.ProjectId.Value:D}");
     Console.WriteLine($"TECHMAP_PROJECT_IMPORT_INCREMENT={projectImport.ProjectIncrement}");
     Console.WriteLine($"TECHMAP_PROJECT_IMPORT_SHA256={projectImport.ArchiveSha256}");
+    return;
+}
+
+if (options.CreateBackup)
+{
+    var backup = await storageBackupService.CreateAsync(
+        new StorageBackupRequest(
+            options.BackupRoot,
+            productVersion.AppVersion,
+            StorageBackupKind.Regular),
+        CancellationToken.None);
+    Console.WriteLine("TECHMAP_STORAGE_BACKUP_STATUS=ok");
+    Console.WriteLine($"TECHMAP_STORAGE_BACKUP_ID={backup.BackupId:D}");
+    Console.WriteLine($"TECHMAP_STORAGE_BACKUP_PATH={backup.BackupPath}");
+    Console.WriteLine($"TECHMAP_STORAGE_BACKUP_MANIFEST_SHA256={backup.ManifestSha256}");
+    Console.WriteLine($"TECHMAP_STORAGE_BACKUP_DATABASE_SHA256={backup.DatabaseSha256}");
     return;
 }
 
@@ -354,5 +434,129 @@ catch (Exception exception)
 {
     Environment.ExitCode = StartupFailureReporter.Report(exception, args);
 }
+
+static string RequireExistingDataRoot(string requestedDataRoot)
+{
+    var dataRoot = DataRootLease.ResolveProspectiveDirectoryPath(requestedDataRoot);
+    var markerPath = Path.Combine(dataRoot, DataRootLayout.MarkerFileName);
+    if (!Directory.Exists(dataRoot) ||
+        !File.Exists(markerPath) ||
+        (File.GetAttributes(markerPath) & FileAttributes.ReparsePoint) != 0)
+    {
+        throw new DirectoryNotFoundException("The TECHMAP data root does not exist.");
+    }
+
+    return DataRootLayout.Initialize(dataRoot);
+}
+
+static string ResolveCurrentDatabasePath(string dataRoot)
+{
+    var root = Path.GetFullPath(dataRoot).TrimEnd(Path.DirectorySeparatorChar);
+    var currentPath = Path.Combine(root, StorageGenerationLayout.CurrentPointerFileName);
+    if (!File.Exists(currentPath) ||
+        (File.GetAttributes(currentPath) & FileAttributes.ReparsePoint) != 0)
+    {
+        throw new InvalidDataException("The CURRENT pointer is missing or invalid.");
+    }
+
+    var value = File.ReadAllText(currentPath, Encoding.UTF8);
+    if (!value.EndsWith('\n') ||
+        value.AsSpan(0, value.Length - 1).IndexOfAny('\r', '\n') >= 0)
+    {
+        throw new InvalidDataException("The CURRENT pointer has an invalid format.");
+    }
+
+    var generationName = value.TrimEnd('\r', '\n');
+    if (generationName.Length != "generation-00000000".Length ||
+        !generationName.StartsWith("generation-", StringComparison.Ordinal) ||
+        generationName.AsSpan("generation-".Length).IndexOfAnyExceptInRange('0', '9') >= 0)
+    {
+        throw new InvalidDataException("The CURRENT pointer contains an invalid generation name.");
+    }
+
+    var generationPath = Path.Combine(root, StorageGenerationLayout.GenerationsDirectoryName, generationName);
+    var generationsPath = Path.GetDirectoryName(generationPath)
+        ?? throw new InvalidDataException("The generations directory is invalid.");
+    var readyPath = Path.Combine(generationPath, StorageGenerationLayout.ReadyMarkerFileName);
+    var databasePath = Path.Combine(generationPath, StorageGenerationLayout.DatabaseFileName);
+    foreach (var path in new[] { generationsPath, generationPath, readyPath, databasePath })
+    {
+        if ((!Directory.Exists(path) && !File.Exists(path)) ||
+            (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidDataException("The active storage generation is incomplete or unsafe.");
+        }
+    }
+
+    return databasePath;
+}
+
+static StorageFullRestorePlan ReadRestorePlan(string planPath)
+{
+    var plan = JsonSerializer.Deserialize<StorageFullRestorePlan>(
+        ReadSmallTextFile(planPath, maximumBytes: 64 * 1024, "The full-restore plan"),
+        RestorePlanJsonOptions());
+    return plan ?? throw new InvalidDataException("The full-restore plan is empty.");
+}
+
+static string ReadSmallTextFile(string path, long maximumBytes, string description)
+{
+    var fullPath = Path.GetFullPath(path);
+    if (!File.Exists(fullPath) ||
+        (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0)
+    {
+        throw new FileNotFoundException($"{description} is missing or unsafe.", fullPath);
+    }
+
+    var length = new FileInfo(fullPath).Length;
+    if (length is <= 0 || length > maximumBytes)
+    {
+        throw new InvalidDataException($"{description} has an invalid size.");
+    }
+
+    return File.ReadAllText(fullPath, Encoding.UTF8);
+}
+
+static string WriteNewRestorePlan(
+    string planPath,
+    string dataRoot,
+    StorageFullRestorePlan plan)
+{
+    var requestedPlanPath = Path.GetFullPath(planPath);
+    var requestedPlanParent = Path.GetDirectoryName(requestedPlanPath)
+        ?? throw new InvalidDataException("The restore plan path has no parent directory.");
+    if (!Directory.Exists(requestedPlanParent))
+    {
+        throw new DirectoryNotFoundException("The restore plan parent directory does not exist.");
+    }
+
+    var planParent = DataRootLease.ResolveProspectiveDirectoryPath(requestedPlanParent);
+    var fullPlanPath = Path.Combine(planParent, Path.GetFileName(requestedPlanPath));
+    var root = Path.GetFullPath(dataRoot).TrimEnd(Path.DirectorySeparatorChar);
+    if (string.Equals(fullPlanPath, root, StringComparison.OrdinalIgnoreCase) ||
+        fullPlanPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidDataException("The restore plan must be stored outside the live data root.");
+    }
+
+    var bytes = JsonSerializer.SerializeToUtf8Bytes(plan, RestorePlanJsonOptions());
+    using var stream = new FileStream(
+        fullPlanPath,
+        FileMode.CreateNew,
+        FileAccess.Write,
+        FileShare.None,
+        bufferSize: 4096,
+        FileOptions.WriteThrough);
+    stream.Write(bytes);
+    stream.Flush(flushToDisk: true);
+    return fullPlanPath;
+}
+
+static JsonSerializerOptions RestorePlanJsonOptions() => new(JsonSerializerDefaults.Web)
+{
+    PropertyNameCaseInsensitive = false,
+    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    WriteIndented = true,
+};
 
 public partial class Program;

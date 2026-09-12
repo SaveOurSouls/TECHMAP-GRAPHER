@@ -1,5 +1,6 @@
 ﻿param(
-    [string]$ArchivePath
+    [string]$ArchivePath,
+    [string]$ArtifactsRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,7 +55,11 @@ $ArchivePath = if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
     $ArchivePath
 }
 $resolvedArchive = (Resolve-Path -LiteralPath $ArchivePath).Path
-$artifactsRoot = Join-Path $repositoryRoot "artifacts\portable-package-test"
+$artifactsRoot = if ([string]::IsNullOrWhiteSpace($ArtifactsRoot)) {
+    Join-Path $repositoryRoot "artifacts\portable-package-test"
+} else {
+    [IO.Path]::GetFullPath($ArtifactsRoot)
+}
 $extractionParent = Join-Path $artifactsRoot "Проверка пакета с пробелом"
 $dataRootsParent = Join-Path $artifactsRoot "Данные проверки"
 $verifyScript = Join-Path $PSScriptRoot "verify-package.ps1"
@@ -253,7 +258,6 @@ function Test-HostMode {
             $createBody = @{
                 designation = "ПР-ПЕРЕНОС"
                 name = "Проверка переносимого проекта"
-                batchQuantity = 20
                 status = "draft"
             } | ConvertTo-Json -Compress
             $createdResponse = Invoke-WebRequest `
@@ -265,11 +269,15 @@ function Test-HostMode {
                 -Body $createBody `
                 -Uri "$origin$routePrefix/api/v1/projects"
             $projectSnapshot = $createdResponse.Content | ConvertFrom-Json
-            foreach ($harnessDesignation in @("ЖГУТ-А", "ЖГУТ-Б")) {
+            foreach ($harnessInput in @(
+                [pscustomobject]@{ Designation = "ЖГУТ-А"; Quantity = 5 },
+                [pscustomobject]@{ Designation = "ЖГУТ-Б"; Quantity = 12 }
+            )) {
                 $harnessBody = @{
                     commandId = [Guid]::NewGuid().ToString("D")
                     expectedRevision = [long]$projectSnapshot.revision
-                    designation = $harnessDesignation
+                    designation = $harnessInput.Designation
+                    quantity = $harnessInput.Quantity
                 } | ConvertTo-Json -Compress
                 $harnessResponse = Invoke-WebRequest `
                     -UseBasicParsing `
@@ -282,6 +290,21 @@ function Test-HostMode {
                 $projectSnapshot = ($harnessResponse.Content | ConvertFrom-Json).project
             }
             Assert-Equal @($projectSnapshot.harnesses).Count 2 "Portable project did not store two harnesses."
+            Assert-Equal ([long]$projectSnapshot.harnesses[0].quantity) 5 `
+                "Portable project did not store the first harness quantity."
+            Assert-Equal ([long]$projectSnapshot.harnesses[1].quantity) 12 `
+                "Portable project did not store the second harness quantity."
+            $documentIds = @($projectSnapshot.harnesses | ForEach-Object {
+                Assert-Equal @($_.documents).Count 3 `
+                    "A new harness did not receive exactly three documents."
+                Assert-Equal (@($_.documents.kind | Sort-Object) -join ",") "drawing,e4,route" `
+                    "A new harness did not receive the required document kinds."
+                Assert-Equal (@($_.documents.status | Select-Object -Unique) -join ",") "empty" `
+                    "A new harness document was not empty."
+                @($_.documents.documentId)
+            })
+            Assert-Equal @($documentIds | Select-Object -Unique).Count 6 `
+                "Harness document UUIDs are not unique within the project."
             $attachmentText = "Вложение переносимого проекта"
             $attachmentBody = @{
                 commandId = [Guid]::NewGuid().ToString("D")
@@ -328,6 +351,31 @@ function Test-HostMode {
                 "Restart changed the first harness order."
             Assert-Equal $projectSnapshot.harnesses[1].sortOrder 1 `
                 "Restart changed the second harness order."
+            Assert-Equal ([long]$projectSnapshot.harnesses[0].quantity) 5 `
+                "Restart changed the first harness quantity."
+            Assert-Equal ([long]$projectSnapshot.harnesses[1].quantity) 12 `
+                "Restart changed the second harness quantity."
+            $restartedDocumentIds = @()
+            foreach ($index in 0..1) {
+                $actualDocuments = @($projectSnapshot.harnesses[$index].documents)
+                $expectedDocuments = @($ExpectedProject.harnesses[$index].documents)
+                Assert-Equal $actualDocuments.Count 3 `
+                    "Restart did not preserve all harness documents."
+                Assert-Equal (@($actualDocuments.kind | Sort-Object) -join ",") "drawing,e4,route" `
+                    "Restart changed the harness document kinds."
+                foreach ($document in $actualDocuments) {
+                    $expectedDocument = @($expectedDocuments | Where-Object kind -eq $document.kind)
+                    Assert-Equal $expectedDocument.Count 1 `
+                        "Restart returned a duplicate or unknown harness document kind."
+                    Assert-Equal $document.documentId $expectedDocument[0].documentId `
+                        "Restart changed a harness document UUID."
+                    Assert-Equal $document.status "empty" `
+                        "Restart changed an empty harness document status."
+                    $restartedDocumentIds += $document.documentId
+                }
+            }
+            Assert-Equal @($restartedDocumentIds | Select-Object -Unique).Count 6 `
+                "Restart returned duplicate harness document UUIDs."
             $attachmentsResponse = Invoke-WebRequest `
                 -UseBasicParsing `
                 -WebSession $webSession `

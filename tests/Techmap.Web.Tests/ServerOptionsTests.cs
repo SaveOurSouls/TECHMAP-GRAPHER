@@ -24,6 +24,10 @@ public sealed class ServerOptionsTests
         Assert.Null(options.ExportProjectId);
         Assert.Null(options.ExportDestination);
         Assert.Null(options.ImportProjectArchive);
+        Assert.False(options.CreateBackup);
+        Assert.Null(options.DryRunRestoreBackup);
+        Assert.Null(options.PrepareFullRestoreBackup);
+        Assert.Null(options.ExecuteFullRestorePlan);
     }
 
     [Fact]
@@ -99,6 +103,75 @@ public sealed class ServerOptionsTests
         Assert.Equal("/techmap", options.PathBase.Value);
         Assert.True(options.NoBrowser);
         Assert.True(options.VerifyPackage);
+    }
+
+    [Fact]
+    public void Accepts_backup_and_restore_maintenance_modes_with_absolute_paths()
+    {
+        var root = Path.GetFullPath("program-root");
+        var backup = Techmap.Web.ServerOptions.Parse(
+            ["--create-backup", "--data-root=../data", "--backup-root=../backup"],
+            EmptyConfiguration(),
+            root);
+        Assert.True(backup.CreateBackup);
+        Assert.True(backup.HasOfflineMaintenanceMode);
+        Assert.True(backup.NoBrowser);
+
+        var dryRun = Techmap.Web.ServerOptions.Parse(
+            ["--dry-run-restore=../backup/item", "--recovery-root=../recovery"],
+            EmptyConfiguration(),
+            root);
+        Assert.Equal(Path.GetFullPath("../backup/item", root), dryRun.DryRunRestoreBackup);
+        Assert.Equal(Path.GetFullPath("../recovery", root), dryRun.RecoveryRoot);
+
+        var prepare = Techmap.Web.ServerOptions.Parse(
+            ["--prepare-full-restore=../backup/item", "--restore-plan=../plan.json"],
+            EmptyConfiguration(),
+            root);
+        Assert.Equal(Path.GetFullPath("../backup/item", root), prepare.PrepareFullRestoreBackup);
+        Assert.Equal(Path.GetFullPath("../plan.json", root), prepare.RestorePlanPath);
+
+        var execute = Techmap.Web.ServerOptions.Parse(
+            [
+                "--execute-full-restore=../plan.json",
+                "--confirmation-file=../confirmation.txt",
+                "--pre-restore-backup-root=../pre-restore",
+            ],
+            EmptyConfiguration(),
+            root);
+        Assert.Equal(Path.GetFullPath("../plan.json", root), execute.ExecuteFullRestorePlan);
+        Assert.Equal(Path.GetFullPath("../confirmation.txt", root), execute.ConfirmationFile);
+        Assert.Equal(Path.GetFullPath("../pre-restore", root), execute.PreRestoreBackupRoot);
+    }
+
+    [Theory]
+    [InlineData("--dry-run-restore=backup")]
+    [InlineData("--recovery-root=recovery")]
+    [InlineData("--prepare-full-restore=backup")]
+    [InlineData("--restore-plan=plan.json")]
+    [InlineData("--execute-full-restore=plan.json")]
+    [InlineData("--execute-full-restore=plan.json", "--confirmation-file=confirmation.txt")]
+    [InlineData("--confirmation-file=confirmation.txt", "--pre-restore-backup-root=pre-restore")]
+    public void Rejects_incomplete_restore_modes(params string[] arguments)
+    {
+        Assert.Throws<ArgumentException>(() => Techmap.Web.ServerOptions.Parse(
+            arguments,
+            EmptyConfiguration(),
+            Path.GetFullPath("program-root")));
+    }
+
+    [Theory]
+    [InlineData("--create-backup", "--verify-package")]
+    [InlineData("--create-backup", "--import-project=project.zip")]
+    [InlineData("--create-backup", "--export-project=11111111-1111-1111-1111-111111111111", "--export-destination=project.zip")]
+    [InlineData("--dry-run-restore=backup", "--recovery-root=recovery", "--create-backup")]
+    [InlineData("--prepare-full-restore=backup", "--restore-plan=plan.json", "--execute-full-restore=other-plan.json", "--confirmation-file=confirmation.txt", "--pre-restore-backup-root=pre-restore")]
+    public void Rejects_conflicting_maintenance_modes(params string[] arguments)
+    {
+        Assert.Throws<ArgumentException>(() => Techmap.Web.ServerOptions.Parse(
+            arguments,
+            EmptyConfiguration(),
+            Path.GetFullPath("program-root")));
     }
 
     [Theory]
