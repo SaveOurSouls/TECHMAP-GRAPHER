@@ -81,6 +81,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly catalogHasMore?: boolean;
   readonly selectedObjectId?: string | null;
   readonly saveState?: EditorSaveState;
+  readonly onSaveRequest?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
   readonly onObjectsChange?: (objects: readonly EditorSceneObject[]) => void;
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
@@ -130,6 +131,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   saveState = "saved",
+  onSaveRequest,
   onViewChange,
   onObjectsChange,
   onLayersChange,
@@ -243,9 +245,15 @@ export function HarnessEditorWorkspace({
             >15°</button>
           )}
         </div>
-        <div className={`he-save-state ${saveState}`} role="status">
+        <button
+          className={`he-save-state ${saveState}`}
+          type="button"
+          onClick={onSaveRequest}
+          disabled={!onSaveRequest || saveState === "saved" || saveState === "saving"}
+          title={saveState === "error" ? "Повторить сохранение" : "Сохранить сейчас"}
+        >
           <span aria-hidden="true" />{saveLabels[saveState]}
-        </div>
+        </button>
       </header>
 
       <div className="he-workspace">

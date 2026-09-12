@@ -455,7 +455,10 @@ export function CanvasViewport({
         worldPoint,
         camera.zoom,
       );
-      onObjectSelect(objectId);
+      const selectedObject = objects.find((item) => item.id === selectedObjectId);
+      const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
+        selectedObject?.kind === "wire" && onCanvasDoubleClick !== undefined;
+      if (!preserveWireForRoutePoint) onObjectSelect(objectId);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if (object && object.kind === "connector" && layer?.locked !== true && onObjectMove) {

@@ -41,7 +41,10 @@
 .he-view-tabs button:hover { color: #23546c; }
 .he-view-tabs button.active { background: #fff; color: #076f9e; box-shadow: 0 1px 5px rgb(41 71 87 / 13%); }
 
-.he-save-state { justify-self: end; display: flex; align-items: center; gap: 7px; color: #607480; font-size: 11px; font-weight: 650; }
+.he-save-state { justify-self: end; padding: 6px 8px; display: flex; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: transparent; color: #607480; font-size: 11px; font-weight: 650; }
+.he-save-state:not(:disabled) { cursor: pointer; }
+.he-save-state:not(:disabled):hover { background: #eef5f7; }
+.he-save-state:disabled { opacity: 1; }
 .he-view-options { display: grid; place-items: center; }
 .he-angle-snap { width: 42px; height: 28px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; color: #617681; font-size: 10px; font-weight: 800; cursor: pointer; }
 .he-angle-snap.active { border-color: #8fc4da; background: #e3f3f9; color: #0875a3; }

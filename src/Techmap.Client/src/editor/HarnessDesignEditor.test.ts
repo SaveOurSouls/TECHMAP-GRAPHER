@@ -21,6 +21,8 @@ describe("harness design scene adapter", () => {
     expect(drawing.find((item) => item.id === "x1")).toMatchObject({ x: 100, y: 120 });
     expect(e4.find((item) => item.id === "w1")?.metadata?.lengthMm).toBe("350");
     expect(drawing.find((item) => item.id === "dimension:w1")?.label).toBe("350 мм");
+    expect(drawing.find((item) => item.id === "w1")?.points?.[0]?.x).toBe(218);
+    expect(drawing.find((item) => item.id === "dimension:w1")?.points?.[0]?.x).toBe(218);
   });
 
   it("snaps an added route point to a 15 degree direction", () => {

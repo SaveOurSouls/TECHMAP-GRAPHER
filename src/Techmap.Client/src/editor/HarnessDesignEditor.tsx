@@ -89,8 +89,10 @@ export function designToScene(
     }];
   });
   const dimensions: EditorSceneObject[] = view === "drawing" ? document.wires.flatMap((wire) => {
-    const start = findWireEndpoint(document, wire.from, view);
-    const end = findWireEndpoint(document, wire.to, view);
+    const start = contactPointForWire(
+      document, wire.from.connectorId, wire.from.contactId, wire.to.connectorId, view);
+    const end = contactPointForWire(
+      document, wire.to.connectorId, wire.to.contactId, wire.from.connectorId, view);
     if (!start || !end) return [];
     const y = Math.max(start.y, end.y) + 70;
     return [{
@@ -153,6 +155,7 @@ export function HarnessDesignEditor({
   const resourceRef = useRef<HarnessDesignResource | null>(null);
   const savedJsonRef = useRef("");
   const savingRef = useRef(false);
+  const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const queuedRef = useRef(false);
   const loadGeneration = useRef(0);
 
@@ -180,34 +183,44 @@ export function HarnessDesignEditor({
     return () => { loadGeneration.current += 1; };
   }, [api, harnessId, projectId]);
 
-  const flushSave = useCallback(async () => {
-    if (savingRef.current) {
+  const flushSave = useCallback((): Promise<boolean> => {
+    if (savePromiseRef.current) {
       queuedRef.current = true;
-      return;
+      return savePromiseRef.current;
     }
-    savingRef.current = true;
-    try {
-      do {
-        queuedRef.current = false;
-        const currentHistory = historyRef.current;
-        const currentResource = resourceRef.current;
-        if (!currentHistory || !currentResource) break;
-        const content = currentHistory.present;
-        const serialized = JSON.stringify(content);
-        if (serialized === savedJsonRef.current) break;
-        setSaveState("saving");
-        const saved = await api.save(projectId, harnessId, currentResource.revision, content);
-        savedJsonRef.current = serialized;
-        resourceRef.current = saved;
-        setResource(saved);
-      } while (queuedRef.current || (historyRef.current && JSON.stringify(historyRef.current.present) !== savedJsonRef.current));
-      setSaveState("saved");
-    } catch (error: unknown) {
-      setSaveState("error");
-      setMessage(error instanceof Error ? error.message : "Не удалось сохранить документ жгута.");
-    } finally {
-      savingRef.current = false;
-    }
+    const promise = (async () => {
+      savingRef.current = true;
+      try {
+        do {
+          queuedRef.current = false;
+          const currentHistory = historyRef.current;
+          const currentResource = resourceRef.current;
+          if (!currentHistory || !currentResource) break;
+          const content = currentHistory.present;
+          const serialized = JSON.stringify(content);
+          if (serialized === savedJsonRef.current) break;
+          setSaveState("saving");
+          const saved = await api.save(projectId, harnessId, currentResource.revision, content);
+          savedJsonRef.current = serialized;
+          resourceRef.current = saved;
+          setResource(saved);
+        } while (queuedRef.current || (historyRef.current && JSON.stringify(historyRef.current.present) !== savedJsonRef.current));
+        setSaveState("saved");
+        setMessage("");
+        return true;
+      } catch (error: unknown) {
+        setSaveState("error");
+        setMessage(error instanceof Error ? error.message : "Не удалось сохранить документ жгута.");
+        return false;
+      } finally {
+        savingRef.current = false;
+      }
+    })();
+    savePromiseRef.current = promise;
+    void promise.finally(() => {
+      if (savePromiseRef.current === promise) savePromiseRef.current = null;
+    });
+    return promise;
   }, [api, harnessId, projectId]);
 
   useEffect(() => {
@@ -221,8 +234,30 @@ export function HarnessDesignEditor({
     return () => window.clearTimeout(timer);
   }, [flushSave, history]);
 
-  const run = useCallback((command: EditorCommand) => {
-    setHistory((current) => current ? executeEditorCommand(current, command) : current);
+  const run = useCallback((command: EditorCommand): boolean => {
+    const current = historyRef.current;
+    if (!current) return false;
+    try {
+      const next = executeEditorCommand(current, command);
+      historyRef.current = next;
+      setHistory(next);
+      setMessage("");
+      return true;
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : "Не удалось изменить документ жгута.");
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      const current = historyRef.current;
+      if (!current || JSON.stringify(current.present) === savedJsonRef.current) return;
+      event.preventDefault();
+      event.returnValue = true;
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
   }, []);
 
   useEffect(() => {
@@ -282,7 +317,9 @@ export function HarnessDesignEditor({
     if (view !== "drawing" || !selectedObjectId) return;
     const wire = history.present.wires.find((item) => item.id === selectedObjectId);
     if (!wire) return;
-    const start = wire.drawingRoute.at(-1) ?? findWireEndpoint(history.present, wire.from, "drawing");
+    const renderedWire = scene.find((item) => item.id === wire.id);
+    const start = wire.drawingRoute.at(-1) ?? renderedWire?.points?.[0] ??
+      findWireEndpoint(history.present, wire.from, "drawing");
     if (!start) return;
     const next = snapRoutePoint(start, point, drawingSnapEnabled);
     run({ type: "set-wire-route", wireId: wire.id, route: [...wire.drawingRoute, next] });
@@ -306,6 +343,7 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         saveState={saveState}
+        onSaveRequest={() => void flushSave()}
         onViewChange={(nextView) => {
           setView(nextView);
           onViewChange?.(nextView);
@@ -394,7 +432,9 @@ export function HarnessDesignEditor({
           view,
           layers: fromUiLayers(nextLayers, history.present.views[view].layers),
         })}
-        onClose={onClose}
+        onClose={onClose ? async () => {
+          if (await flushSave()) onClose();
+        } : undefined}
       />
     </div>
   );

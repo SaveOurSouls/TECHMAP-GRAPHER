@@ -116,7 +116,7 @@ export function connectorContactPosition(
   if (index < 0) return null;
   const origin = connector.positions[view];
   const spacing = view === "e4" ? 22 : 16;
-  return { x: origin.x + 88, y: origin.y + 28 + index * spacing };
+  return { x: origin.x + 118, y: origin.y + 28 + index * spacing };
 }
 
 export function findWireEndpoint(
