@@ -12,6 +12,7 @@ public static class ProjectRules
     public const int MaximumHarnesses = 100;
     public const int MaximumDesignationLength = 128;
     public const int MaximumNameLength = 256;
+    public const long MaximumHarnessQuantity = 9_007_199_254_740_991;
 
     public static string NormalizeDesignation(string value, string parameterName)
     {
@@ -32,6 +33,18 @@ public static class ProjectRules
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 "The project batch quantity must be greater than zero.");
+        }
+
+        return value;
+    }
+
+    public static long ValidateHarnessQuantity(long value, string parameterName)
+    {
+        if (value <= 0 || value > MaximumHarnessQuantity)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                $"The harness quantity must be between 1 and {MaximumHarnessQuantity}.");
         }
 
         return value;

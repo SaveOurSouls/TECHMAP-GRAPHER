@@ -1,4 +1,8 @@
 using Microsoft.Data.Sqlite;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Techmap.Application;
 using Techmap.Domain;
 using Techmap.Infrastructure.Sqlite;
@@ -61,6 +65,112 @@ public sealed class ProjectCommandIntegrationTests
                 Assert.Equal(commandId, version.CommandId);
                 Assert.Equal("add_harness", version.CommandType);
             });
+    }
+
+    [Fact]
+    public void Version_one_add_harness_command_replays_its_historical_result_after_later_mutations()
+    {
+        using var fixture = CommandFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var catalog = new SqliteProjectCatalog(storage);
+        var project = CreateProject(catalog);
+        var envelope = new ProjectCommandEnvelope(Guid.NewGuid(), 0);
+        var accepted = catalog.AddHarness(project.ProjectId, envelope, "Жгут до обновления", 1);
+        var legacyRequest = JsonSerializer.Serialize(
+            new { designation = "Жгут до обновления" },
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using (var disableImmutableTrigger = unitOfWork.CreateCommand(
+                "DROP TRIGGER prevent_project_command_update;"))
+            {
+                disableImmutableTrigger.ExecuteNonQuery();
+            }
+
+            string resultJson;
+            using (var read = unitOfWork.CreateCommand(
+                "SELECT result_json FROM project_commands WHERE command_id = $commandId;"))
+            {
+                read.Parameters.AddWithValue("$commandId", envelope.CommandId.ToString("D"));
+                resultJson = Assert.IsType<string>(read.ExecuteScalar());
+            }
+
+            var legacyResult = JsonNode.Parse(resultJson)!.AsObject();
+            foreach (var harness in legacyResult["harnesses"]!.AsArray())
+            {
+                harness!.AsObject().Remove("quantity");
+                harness.AsObject().Remove("documents");
+            }
+            legacyResult["batchQuantity"] = long.MaxValue;
+
+            var legacyResultJson = legacyResult.ToJsonString();
+            using var update = unitOfWork.CreateCommand(
+                """
+                UPDATE project_commands
+                SET request_schema_version = 1,
+                    request_json = $requestJson,
+                    request_sha256 = $requestHash,
+                    result_schema_version = 1,
+                    result_json = $resultJson,
+                    result_sha256 = $resultHash
+                WHERE command_id = $commandId;
+                """);
+            update.Parameters.AddWithValue("$requestJson", legacyRequest);
+            update.Parameters.AddWithValue("$requestHash", Hash(legacyRequest));
+            update.Parameters.AddWithValue("$resultJson", legacyResultJson);
+            update.Parameters.AddWithValue("$resultHash", Hash(legacyResultJson));
+            update.Parameters.AddWithValue("$commandId", envelope.CommandId.ToString("D"));
+            Assert.Equal(1, update.ExecuteNonQuery());
+        });
+
+        var legacyRow = storage.ExecuteRead(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                SELECT project_id, expected_revision, command_type,
+                       request_schema_version, request_json
+                FROM project_commands WHERE command_id = $commandId;
+                """);
+            command.Parameters.AddWithValue("$commandId", envelope.CommandId.ToString("D"));
+            using var reader = command.ExecuteReader();
+            Assert.True(reader.Read());
+            return (reader.GetString(0), reader.GetInt64(1), reader.GetString(2),
+                reader.GetInt32(3), reader.GetString(4));
+        });
+        Assert.Equal(project.ProjectId.Value.ToString("D"), legacyRow.Item1);
+        Assert.Equal(0, legacyRow.Item2);
+        Assert.Equal("add_harness", legacyRow.Item3);
+        Assert.Equal(1, legacyRow.Item4);
+        Assert.Equal(legacyRequest, legacyRow.Item5);
+
+        var addedLater = catalog.AddHarness(
+            project.ProjectId,
+            new ProjectCommandEnvelope(Guid.NewGuid(), 1),
+            "Жгут после обновления",
+            4);
+        _ = catalog.DeleteHarness(
+            project.ProjectId,
+            new ProjectCommandEnvelope(Guid.NewGuid(), 2),
+            accepted.Value.Harnesses.Single().HarnessId);
+
+        var replay = catalog.AddHarness(project.ProjectId, envelope, "Жгут до обновления", quantity: null);
+        var secondReplay = catalog.AddHarness(project.ProjectId, envelope, "Жгут до обновления", quantity: null);
+
+        Assert.Equal(accepted.CommandId, replay.CommandId);
+        Assert.Equal(accepted.ResultingRevision, replay.ResultingRevision);
+        Assert.Equal(replay.ResultingRevision, replay.Value.Revision);
+        Assert.Equal(ProjectRules.MaximumHarnessQuantity, replay.Value.BatchQuantity);
+        var harness = Assert.Single(replay.Value.Harnesses);
+        Assert.Equal(ProjectRules.MaximumHarnessQuantity, harness.Quantity);
+        Assert.Equal(["e4", "drawing", "route"], harness.Documents.Select(item => item.Kind));
+        Assert.Equal(3, harness.Documents.Select(item => item.DocumentId).Distinct().Count());
+        Assert.Equal(harness.Documents, Assert.Single(secondReplay.Value.Harnesses).Documents);
+        var current = catalog.GetProject(project.ProjectId);
+        Assert.Equal(3, current.Revision);
+        Assert.Equal(addedLater.Value.Harnesses.Single(item => item.Designation == "Жгут после обновления").HarnessId,
+            Assert.Single(current.Harnesses).HarnessId);
+        Assert.Equal(3, catalog.ListVersions(project.ProjectId).Count);
     }
 
     [Fact]
@@ -304,6 +414,9 @@ public sealed class ProjectCommandIntegrationTests
             command.Parameters.AddWithValue("$projectId", projectId.Value.ToString("D"));
             return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
         });
+
+    private static string Hash(string value) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private static void AssertAckEqual(
         ProjectMutationResult<ProjectDetails> expected,

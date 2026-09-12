@@ -11,6 +11,58 @@ namespace Techmap.Web.Tests;
 
 public sealed class SqliteStorageIntegrationTests
 {
+    [Theory]
+    [InlineData(23L, 23L)]
+    [InlineData(long.MaxValue, 9_007_199_254_740_991L)]
+    public async Task Version_five_migration_copies_or_clamps_legacy_quantity_and_seeds_documents(
+        long legacyQuantity,
+        long expectedQuantity)
+    {
+        using var fixture = StorageFixture.Create();
+        Techmap.Domain.ProjectIdentity projectId;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            var catalog = new SqliteProjectCatalog(storage);
+            var project = catalog.CreateProject(new Techmap.Application.CreateProjectCommand(
+                "ПР-V5", "Проект v5", legacyQuantity, Techmap.Domain.ProjectStatus.Draft));
+            projectId = project.ProjectId;
+            catalog.AddHarness(projectId, "Жгут А", 4);
+            catalog.AddHarness(projectId, "Жгут Б", 8);
+        }
+
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DROP TABLE harness_documents;
+                ALTER TABLE harnesses DROP COLUMN quantity;
+                DELETE FROM schema_history WHERE version = 6;
+                PRAGMA user_version = 5;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            new Techmap.Application.StorageMigrationRequest(
+                fixture.BackupRoot, "0.1.0-m1.15", SqliteStorage.CurrentSchemaVersion),
+            TestContext.Current.CancellationToken);
+
+        using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        var restored = new SqliteProjectCatalog(migrated).GetProject(projectId);
+        Assert.True(migration.Migrated);
+        Assert.Equal(expectedQuantity, restored.BatchQuantity);
+        Assert.Equal([expectedQuantity, expectedQuantity],
+            restored.Harnesses.Select(harness => harness.Quantity));
+        Assert.All(restored.Harnesses, harness =>
+            Assert.Equal(["e4", "drawing", "route"], harness.Documents.Select(document => document.Kind)));
+        Assert.Equal(6, restored.Harnesses.SelectMany(harness => harness.Documents)
+            .Select(document => document.DocumentId).Distinct().Count());
+    }
+
     [Fact]
     public void Bootstrap_publishes_one_generation_with_schema_history_and_diagnostics()
     {
@@ -45,7 +97,7 @@ public sealed class SqliteStorageIntegrationTests
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
         var history = storage.ExecuteRead(ReadSchemaHistory);
-        Assert.Equal([1, 2, 3, 4, 5], history.Select(row => row.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6], history.Select(row => row.Version));
         Assert.Equal(
             [
                 "M1-03-initial-storage",
@@ -53,6 +105,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M1-05-attachments-and-pinned-data",
                 "M1-06-project-command-journal",
                 "M1-14-project-import-provenance",
+                "M1-04R-harness-workspaces",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -126,7 +179,7 @@ public sealed class SqliteStorageIntegrationTests
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(
-            [1, 2, 3, 4, 5],
+            [1, 2, 3, 4, 5, 6],
             reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
     }
 
@@ -156,6 +209,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TRIGGER prevent_project_import_delete;
                 DROP TRIGGER prevent_project_import_update;
                 DROP TABLE project_imports;
+                DROP TABLE harness_documents;
                 ALTER TABLE projects DROP COLUMN revision;
                 DROP TRIGGER prevent_pinned_characteristic_update;
                 DROP TABLE pinned_characteristics;
@@ -165,7 +219,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5);
+                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -226,12 +280,14 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TRIGGER prevent_project_import_delete;
                 DROP TRIGGER prevent_project_import_update;
                 DROP TABLE project_imports;
+                DROP TABLE harness_documents;
+                ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
                 DROP TRIGGER prevent_pinned_characteristic_update;
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
-                DELETE FROM schema_history WHERE version IN (3, 4, 5);
+                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -293,7 +349,9 @@ public sealed class SqliteStorageIntegrationTests
                 using var insert = unitOfWork.CreateCommand(
                     """
                     INSERT INTO projects VALUES ($projectId, 'ПР-V3', 1, 'Проект v3', 2, 'draft', $now, $now, 0);
-                    INSERT INTO harnesses VALUES ($harnessId, $projectId, 'ЖГУТ-V3', 0, $now, $now);
+                    INSERT INTO harnesses
+                        (harness_id, project_id, designation, quantity, sort_order, created_utc, updated_utc)
+                    VALUES ($harnessId, $projectId, 'ЖГУТ-V3', 2, 0, $now, $now);
                     INSERT INTO attachment_blobs VALUES ($hash, 0, $now);
                     INSERT INTO project_attachments VALUES ($attachmentId, $projectId, $hash, 'v3.txt', 'text/plain', 'test', $now);
                     INSERT INTO pinned_characteristics VALUES (
@@ -326,8 +384,10 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TRIGGER prevent_project_import_delete;
                 DROP TRIGGER prevent_project_import_update;
                 DROP TABLE project_imports;
+                DROP TABLE harness_documents;
+                ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
-                DELETE FROM schema_history WHERE version IN (4, 5);
+                DELETE FROM schema_history WHERE version IN (4, 5, 6);
                 PRAGMA user_version = 3;
                 """;
             command.ExecuteNonQuery();
@@ -353,7 +413,7 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         Assert.True(migration.Migrated);
         Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
-        Assert.Equal([1, 2, 3, 4, 5], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
         var catalog = new SqliteProjectCatalog(migrated);
         var project = catalog.GetProject(new Techmap.Domain.ProjectIdentity(projectId));
         Assert.Equal(0, project.Revision);
@@ -390,7 +450,9 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TRIGGER prevent_project_import_delete;
                 DROP TRIGGER prevent_project_import_update;
                 DROP TABLE project_imports;
-                DELETE FROM schema_history WHERE version = 5;
+                DROP TABLE harness_documents;
+                ALTER TABLE harnesses DROP COLUMN quantity;
+                DELETE FROM schema_history WHERE version IN (5, 6);
                 PRAGMA user_version = 4;
                 """;
             command.ExecuteNonQuery();

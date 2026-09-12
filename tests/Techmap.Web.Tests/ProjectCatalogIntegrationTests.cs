@@ -18,8 +18,8 @@ public sealed class ProjectCatalogIntegrationTests
             var catalog = new SqliteProjectCatalog(storage);
             var project = catalog.CreateProject(CreateCommand("КС-01", batchQuantity: 24));
             projectId = project.ProjectId;
-            catalog.AddHarness(projectId, "Жгут силовой");
-            expectedHarnesses = catalog.AddHarness(projectId, "Жгут сигнальный")
+            catalog.AddHarness(projectId, "Жгут силовой", 4);
+            expectedHarnesses = catalog.AddHarness(projectId, "Жгут сигнальный", 19)
                 .Harnesses
                 .ToArray();
         }
@@ -32,8 +32,46 @@ public sealed class ProjectCatalogIntegrationTests
             harness => AssertHarnessEqual(expectedHarnesses[0], harness),
             harness => AssertHarnessEqual(expectedHarnesses[1], harness));
         Assert.Equal([0, 1], reopened.Harnesses.Select(harness => harness.SortOrder));
+        Assert.Equal([4L, 19L], reopened.Harnesses.Select(harness => harness.Quantity));
+        Assert.All(reopened.Harnesses, harness =>
+        {
+            Assert.Equal(["e4", "drawing", "route"], harness.Documents.Select(document => document.Kind));
+            Assert.All(harness.Documents, document => Assert.Equal("empty", document.Status));
+        });
+        Assert.Equal(6, reopened.Harnesses.SelectMany(harness => harness.Documents)
+            .Select(document => document.DocumentId).Distinct().Count());
         Assert.Equal(24, reopened.BatchQuantity);
         Assert.Equal(ProjectStatus.Draft, reopened.Status);
+    }
+
+    [Fact]
+    public void Updating_quantity_changes_only_the_selected_harness_and_survives_restart()
+    {
+        using var fixture = ProjectCatalogFixture.Create();
+        ProjectIdentity projectId;
+        HarnessIdentity changedId;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            var catalog = new SqliteProjectCatalog(storage);
+            var project = catalog.CreateProject(CreateCommand("КС-КОЛ"));
+            project = catalog.AddHarness(project.ProjectId, "Жгут А", 2);
+            project = catalog.AddHarness(project.ProjectId, "Жгут Б", 8);
+            projectId = project.ProjectId;
+            changedId = project.Harnesses[0].HarnessId;
+
+            var updated = catalog.UpdateHarnessQuantity(projectId, changedId, 31);
+
+            Assert.Equal([31L, 8L], updated.Harnesses.Select(harness => harness.Quantity));
+            Assert.Equal(project.Harnesses[1].UpdatedUtc, updated.Harnesses[1].UpdatedUtc);
+            Assert.Equal(
+                project.Harnesses.SelectMany(harness => harness.Documents).Select(document => document.DocumentId),
+                updated.Harnesses.SelectMany(harness => harness.Documents).Select(document => document.DocumentId));
+        }
+
+        using var reopenedStorage = SqliteStorage.Open(fixture.DataRoot);
+        var reopened = new SqliteProjectCatalog(reopenedStorage).GetProject(projectId);
+        Assert.Equal(31, reopened.Harnesses.Single(harness => harness.HarnessId == changedId).Quantity);
+        Assert.Equal(8, reopened.Harnesses.Single(harness => harness.HarnessId != changedId).Quantity);
     }
 
     [Fact]
@@ -123,8 +161,8 @@ public sealed class ProjectCatalogIntegrationTests
             "Повторный выпуск",
             33,
             ProjectStatus.Completed));
-        catalog.AddHarness(source.ProjectId, "Жгут А");
-        var before = catalog.AddHarness(source.ProjectId, "Жгут Б");
+        catalog.AddHarness(source.ProjectId, "Жгут А", 9);
+        var before = catalog.AddHarness(source.ProjectId, "Жгут Б", 14);
 
         var copy = catalog.CopyProject(source.ProjectId);
         var sourceAfter = catalog.GetProject(source.ProjectId);
@@ -136,11 +174,15 @@ public sealed class ProjectCatalogIntegrationTests
         Assert.Equal(before.Name, copy.Name);
         Assert.Equal(before.BatchQuantity, copy.BatchQuantity);
         Assert.Equal(
-            before.Harnesses.Select(harness => (harness.Designation, harness.SortOrder)),
-            copy.Harnesses.Select(harness => (harness.Designation, harness.SortOrder)));
+            before.Harnesses.Select(harness => (harness.Designation, harness.Quantity, harness.SortOrder)),
+            copy.Harnesses.Select(harness => (harness.Designation, harness.Quantity, harness.SortOrder)));
         Assert.Empty(
             before.Harnesses.Select(harness => harness.HarnessId)
                 .Intersect(copy.Harnesses.Select(harness => harness.HarnessId)));
+        Assert.Empty(
+            before.Harnesses.SelectMany(harness => harness.Documents).Select(document => document.DocumentId)
+                .Intersect(copy.Harnesses.SelectMany(harness => harness.Documents)
+                    .Select(document => document.DocumentId)));
         AssertProjectEqual(before, sourceAfter);
     }
 
@@ -209,6 +251,7 @@ public sealed class ProjectCatalogIntegrationTests
         {
             harness.HarnessId,
             harness.Designation,
+            harness.Quantity,
             harness.SortOrder,
             harness.CreatedUtc,
             harness.UpdatedUtc,
@@ -218,9 +261,11 @@ public sealed class ProjectCatalogIntegrationTests
     {
         Assert.Equal(expected.HarnessId, actual.HarnessId);
         Assert.Equal(expected.Designation, actual.Designation);
+        Assert.Equal(expected.Quantity, actual.Quantity);
         Assert.Equal(expected.SortOrder, actual.SortOrder);
         Assert.Equal(expected.CreatedUtc, actual.CreatedUtc);
         Assert.Equal(expected.UpdatedUtc, actual.UpdatedUtc);
+        Assert.Equal(expected.Documents, actual.Documents);
     }
 
     private static void AssertProjectEqual(ProjectDetails expected, ProjectDetails actual)

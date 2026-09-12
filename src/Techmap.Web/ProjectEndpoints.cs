@@ -22,13 +22,14 @@ public static class ProjectEndpoints
             IProjectCatalog catalog) =>
             Execute(() =>
             {
+                RejectProjectQuantity(request.BatchQuantity);
                 var status = request.Status is null
                     ? ProjectStatus.Draft
                     : ParseStatus(request.Status);
                 var project = catalog.CreateProject(new CreateProjectCommand(
                     request.Designation!,
                     request.Name!,
-                    request.BatchQuantity,
+                    BatchQuantity: 1,
                     status));
                 return Results.Created(ProjectLocation(context, project.ProjectId), ToResponse(project));
             }));
@@ -48,6 +49,7 @@ public static class ProjectEndpoints
             (HttpContext context, Guid projectId, UpdateProjectRequest request, IProjectCatalog catalog) =>
                 Execute(() =>
                 {
+                    RejectProjectQuantity(request.BatchQuantity);
                     ProjectStatus? status = request.Status is null
                         ? null
                         : ParseStatus(request.Status);
@@ -57,7 +59,7 @@ public static class ProjectEndpoints
                         new UpdateProjectCommand(
                             request.Designation,
                             request.Name,
-                            request.BatchQuantity,
+                            BatchQuantity: null,
                             status));
                     return Results.Ok(ToResponse(project));
                 }));
@@ -76,11 +78,34 @@ public static class ProjectEndpoints
             Guid projectId,
             AddHarnessRequest request,
             IProjectCatalog catalog) =>
-            Execute(() => Results.Ok(ToResponse(
-                catalog.AddHarness(
+            Execute(() =>
+            {
+                var envelope = Envelope(request.CommandId, request.ExpectedRevision);
+                var result = catalog.AddHarness(
                     new ProjectIdentity(projectId),
-                    Envelope(request.CommandId, request.ExpectedRevision),
-                    request.Designation!)))));
+                    envelope,
+                    request.Designation!,
+                    request.Quantity);
+                return Results.Ok(ToResponse(result));
+            }));
+
+        app.MapMethods(
+            "/api/v1/projects/{projectId:guid}/harnesses/{harnessId:guid}",
+            [HttpMethods.Patch],
+            (Guid projectId, Guid harnessId, UpdateHarnessQuantityRequest request, IProjectCatalog catalog) =>
+                Execute(() =>
+                {
+                    var quantity = request.Quantity ?? throw new ProjectCatalogException(
+                        "invalid_harness_quantity",
+                        "The harness quantity is required.",
+                        "quantity");
+                    var result = catalog.UpdateHarnessQuantity(
+                        new ProjectIdentity(projectId),
+                        new HarnessIdentity(harnessId),
+                        Envelope(request.CommandId, request.ExpectedRevision),
+                        quantity);
+                    return Results.Ok(ToResponse(result));
+                }));
 
         app.MapDelete("/api/v1/projects/{projectId:guid}/harnesses/{harnessId:guid}", (
             Guid projectId,
@@ -157,6 +182,17 @@ public static class ProjectEndpoints
         return status;
     }
 
+    private static void RejectProjectQuantity(long? quantity)
+    {
+        if (quantity is not null)
+        {
+            throw new ProjectCatalogException(
+                "project_quantity_obsolete",
+                "Quantity belongs to an individual harness and cannot be set on a project.",
+                "batchQuantity");
+        }
+    }
+
     private static ProjectCommandEnvelope Envelope(Guid commandId, long? expectedRevision)
     {
         if (expectedRevision is null)
@@ -198,9 +234,16 @@ public static class ProjectEndpoints
         project.Harnesses.Select(harness => new HarnessResponse(
             harness.HarnessId.Value,
             harness.Designation,
+            harness.Quantity,
             harness.SortOrder,
             harness.CreatedUtc,
-            harness.UpdatedUtc)).ToArray());
+            harness.UpdatedUtc,
+            harness.Documents.Select(document => new HarnessDocumentResponse(
+                document.DocumentId.Value,
+                document.Kind,
+                document.Status,
+                document.CreatedUtc,
+                document.UpdatedUtc)).ToArray())).ToArray());
 
     private static ProjectCommandResponse ToResponse(ProjectMutationResult<ProjectDetails> result) => new(
         result.CommandId,

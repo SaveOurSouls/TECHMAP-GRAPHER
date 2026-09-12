@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
 using Techmap.Domain;
@@ -14,6 +15,26 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectImportIntegrationTests
 {
     [Fact]
+    public async Task Version_one_archive_uses_legacy_project_quantity_for_each_harness()
+    {
+        using var fixture = ImportFixture.Create();
+        var archive = await fixture.CreateMinimalArchiveAsync();
+        ConvertArchiveToSnapshotVersionOne(archive);
+        await using var lease = DataRootLease.Acquire(fixture.DestinationDataRoot);
+        using var storage = SqliteStorage.Open(lease.CanonicalPath);
+
+        var result = await new SqliteProjectImportService(lease, storage).ImportAsync(
+            new ProjectImportRequest(archive, "0.1.0-m1.15"),
+            TestContext.Current.CancellationToken);
+
+        var imported = new SqliteProjectCatalog(storage).GetProject(result.ProjectId);
+        var harness = Assert.Single(imported.Harnesses);
+        Assert.Equal(3, harness.Quantity);
+        Assert.Equal(["e4", "drawing", "route"], harness.Documents.Select(document => document.Kind));
+        Assert.Equal(3, harness.Documents.Select(document => document.DocumentId).Distinct().Count());
+    }
+
+    [Fact]
     public async Task Valid_archive_imports_independent_project_and_remaps_owned_ids()
     {
         using var fixture = ImportFixture.Create();
@@ -22,9 +43,11 @@ public sealed class ProjectImportIntegrationTests
         var sourceProjects = new SqliteProjectCatalog(sourceStorage);
         var source = sourceProjects.CreateProject(new CreateProjectCommand(
             "ПР-ИМП-01", "Переносимый проект", 12, ProjectStatus.Active));
-        source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-01");
-        source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-02");
+        source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-01", 6);
+        source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-02", 21);
         var sourceHarnessIds = source.Harnesses.Select(item => item.HarnessId.Value).ToHashSet();
+        var sourceDocumentIds = source.Harnesses.SelectMany(item => item.Documents)
+            .Select(item => item.DocumentId.Value).ToHashSet();
         var attachments = new SqliteProjectAttachmentCatalog(
             sourceStorage,
             new ContentAddressedAttachmentStore(fixture.SourceDataRoot),
@@ -72,7 +95,12 @@ public sealed class ProjectImportIntegrationTests
         Assert.Equal(source.Revision, result.RestoredFromRevision);
         Assert.Equal(0, imported.Revision);
         Assert.Equal(2, imported.Harnesses.Count);
+        Assert.Equal([6L, 21L], imported.Harnesses.Select(item => item.Quantity));
         Assert.DoesNotContain(imported.Harnesses, item => sourceHarnessIds.Contains(item.HarnessId.Value));
+        Assert.DoesNotContain(imported.Harnesses.SelectMany(item => item.Documents),
+            item => sourceDocumentIds.Contains(item.DocumentId.Value));
+        Assert.Equal(6, imported.Harnesses.SelectMany(item => item.Documents)
+            .Select(item => item.DocumentId).Distinct().Count());
         Assert.Single(importedPinned);
         Assert.NotEqual(pinned.SnapshotId, importedPinned[0].SnapshotId);
         var ids = QueryStrings(destinationStorage, "SELECT attachment_id FROM project_attachments;");
@@ -575,6 +603,33 @@ public sealed class ProjectImportIntegrationTests
                 break;
         }
 
+        WriteArchive(path, entries);
+    }
+
+    private static void ConvertArchiveToSnapshotVersionOne(string path)
+    {
+        var entries = ReadArchive(path);
+        var snapshot = JsonNode.Parse(entries[SqliteProjectExportService.SnapshotPath])!.AsObject();
+        snapshot["snapshotFormat"] = 1;
+        foreach (var harness in snapshot["harnesses"]!.AsArray())
+        {
+            harness!.AsObject().Remove("quantity");
+            harness.AsObject().Remove("documents");
+        }
+
+        var snapshotBytes = Encoding.UTF8.GetBytes(snapshot.ToJsonString());
+        entries[SqliteProjectExportService.SnapshotPath] = snapshotBytes;
+        var manifest = JsonNode.Parse(entries[SqliteProjectExportService.ManifestPath])!.AsObject();
+        manifest["snapshotFormat"] = 1;
+        var payload = manifest["files"]!.AsArray()
+            .Select(item => item!.AsObject())
+            .Single(item => item["path"]!.GetValue<string>() == SqliteProjectExportService.SnapshotPath);
+        payload["sizeBytes"] = snapshotBytes.LongLength;
+        payload["sha256"] = Convert.ToHexStringLower(SHA256.HashData(snapshotBytes));
+        var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        entries[SqliteProjectExportService.ManifestPath] = manifestBytes;
+        entries[SqliteProjectExportService.ManifestChecksumPath] = Encoding.ASCII.GetBytes(
+            Convert.ToHexStringLower(SHA256.HashData(manifestBytes)) + "\n");
         WriteArchive(path, entries);
     }
 

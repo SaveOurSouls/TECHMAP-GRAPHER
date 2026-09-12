@@ -2,6 +2,8 @@ import { createMutationHeaders, type LocalSession } from "./local-session";
 import { buildApiUrl, type RuntimeConfig } from "./runtime-config";
 
 export type ProjectStatus = "draft" | "active" | "completed";
+export type HarnessDocumentKind = "e4" | "drawing" | "route";
+export type HarnessDocumentStatus = "empty";
 
 export interface ProjectSummary {
   readonly projectId: string;
@@ -19,9 +21,17 @@ export interface ProjectSummary {
 export interface HarnessSummary {
   readonly harnessId: string;
   readonly designation: string;
+  readonly quantity: number;
   readonly sortOrder: number;
+  readonly documents: readonly HarnessDocumentSummary[];
   readonly createdUtc: string;
   readonly updatedUtc: string;
+}
+
+export interface HarnessDocumentSummary {
+  readonly documentId: string;
+  readonly kind: HarnessDocumentKind;
+  readonly status: HarnessDocumentStatus;
 }
 
 export interface ProjectDetails extends Omit<ProjectSummary, "harnessCount"> {
@@ -31,14 +41,21 @@ export interface ProjectDetails extends Omit<ProjectSummary, "harnessCount"> {
 export interface CreateProjectRequest {
   readonly designation: string;
   readonly name: string;
-  readonly batchQuantity: number;
   readonly status: ProjectStatus;
 }
 
 export interface UpdateProjectRequest {
   readonly name?: string;
-  readonly batchQuantity?: number;
   readonly status?: ProjectStatus;
+}
+
+export interface CreateHarnessRequest {
+  readonly designation: string;
+  readonly quantity: number;
+}
+
+export interface UpdateHarnessRequest {
+  readonly quantity: number;
 }
 
 export interface ProjectCommandEnvelope {
@@ -66,7 +83,13 @@ export interface ProjectApi {
   addHarness(
     projectId: string,
     envelope: ProjectCommandEnvelope,
-    designation: string,
+    request: CreateHarnessRequest,
+  ): Promise<ProjectCommandResult>;
+  updateHarness(
+    projectId: string,
+    harnessId: string,
+    envelope: ProjectCommandEnvelope,
+    request: UpdateHarnessRequest,
   ): Promise<ProjectCommandResult>;
   deleteHarness(
     projectId: string,
@@ -90,11 +113,14 @@ export class ProjectApiError extends Error {
 type ProjectFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const statuses = new Set<ProjectStatus>(["draft", "active", "completed"]);
+const documentKinds = new Set<HarnessDocumentKind>(["e4", "drawing", "route"]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const apiErrorMessages: Readonly<Record<string, string>> = {
   invalid_designation: "Проверьте обозначение: поле не заполнено или содержит недопустимое значение.",
   invalid_name: "Проверьте название проекта.",
-  invalid_batch_quantity: "Количество в партии должно быть положительным целым числом.",
+  invalid_quantity: "Количество для жгута должно быть положительным целым числом.",
+  invalid_harness_quantity: "Количество для жгута должно быть положительным целым числом.",
+  project_quantity_obsolete: "Количество задаётся отдельно для каждого жгута.",
   invalid_status: "Выбран неизвестный статус проекта.",
   invalid_request: "Запрос не содержит изменений.",
   project_not_found: "Проект не найден. Обновите список проектов.",
@@ -117,7 +143,7 @@ function requireString(record: Record<string, unknown>, key: string): string {
 
 function requireInteger(record: Record<string, unknown>, key: string, minimum: number): number {
   const value = record[key];
-  if (!Number.isInteger(value) || (value as number) < minimum) {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum) {
     throw new Error(`Поле ответа «${key}» задано неверно.`);
   }
   return value as number;
@@ -149,15 +175,44 @@ function parseProjectSummary(value: unknown): ProjectSummary {
 }
 
 function parseHarness(value: unknown): HarnessSummary {
-  if (!isRecord(value)) throw new Error("Сервер вернул повреждённые данные жгута.");
+  if (!isRecord(value) || !Array.isArray(value.documents)) {
+    throw new Error("Сервер вернул повреждённые данные жгута.");
+  }
   const harnessId = requireString(value, "harnessId");
   if (!uuidPattern.test(harnessId)) throw new Error("Поле ответа «harnessId» задано неверно.");
+  const documents = value.documents.map(parseHarnessDocument);
+  if (
+    documents.length !== documentKinds.size ||
+    new Set(documents.map((document) => document.documentId.toLocaleLowerCase())).size !== documents.length ||
+    new Set(documents.map((document) => document.kind)).size !== documentKinds.size
+  ) {
+    throw new Error("Комплект документов жгута задан неверно.");
+  }
   return Object.freeze({
     harnessId,
     designation: requireString(value, "designation"),
+    quantity: requireInteger(value, "quantity", 1),
     sortOrder: requireInteger(value, "sortOrder", 0),
+    documents: Object.freeze(documents),
     createdUtc: requireString(value, "createdUtc"),
     updatedUtc: requireString(value, "updatedUtc"),
+  });
+}
+
+function parseHarnessDocument(value: unknown): HarnessDocumentSummary {
+  if (!isRecord(value)) throw new Error("Сервер вернул повреждённые данные документа жгута.");
+  const documentId = requireString(value, "documentId");
+  if (!uuidPattern.test(documentId)) throw new Error("Поле ответа «documentId» задано неверно.");
+  const kind = requireString(value, "kind");
+  if (!documentKinds.has(kind as HarnessDocumentKind)) {
+    throw new Error("Поле ответа «kind» задано неверно.");
+  }
+  const status = requireString(value, "status");
+  if (status !== "empty") throw new Error("Поле ответа «status» задано неверно.");
+  return Object.freeze({
+    documentId,
+    kind: kind as HarnessDocumentKind,
+    status,
   });
 }
 
@@ -167,6 +222,13 @@ function parseProjectDetails(value: unknown): ProjectDetails {
   }
   const projectId = requireString(value, "projectId");
   if (!uuidPattern.test(projectId)) throw new Error("Поле ответа «projectId» задано неверно.");
+  const harnesses = value.harnesses.map(parseHarness);
+  const documentIds = harnesses.flatMap((harness) => (
+    harness.documents.map((document) => document.documentId.toLocaleLowerCase())
+  ));
+  if (new Set(documentIds).size !== documentIds.length) {
+    throw new Error("Идентификаторы документов проекта должны быть уникальны.");
+  }
   return Object.freeze({
     projectId,
     designation: requireString(value, "designation"),
@@ -177,7 +239,7 @@ function parseProjectDetails(value: unknown): ProjectDetails {
     revision: requireInteger(value, "revision", 0),
     createdUtc: requireString(value, "createdUtc"),
     updatedUtc: requireString(value, "updatedUtc"),
-    harnesses: Object.freeze(value.harnesses.map(parseHarness)),
+    harnesses: Object.freeze(harnesses),
   });
 }
 
@@ -304,11 +366,21 @@ export function createProjectApi(
     addHarness: (
       projectId: string,
       envelope: ProjectCommandEnvelope,
-      designation: string,
+      body: CreateHarnessRequest,
     ) => request(`${projectResource(projectId)}/harnesses`, {
       method: "POST",
       headers: mutationHeaders,
-      body: JSON.stringify({ ...envelope, designation }),
+      body: JSON.stringify({ ...envelope, ...body }),
+    }, value => parseCommandResult(value, envelope)),
+    updateHarness: (
+      projectId: string,
+      harnessId: string,
+      envelope: ProjectCommandEnvelope,
+      body: UpdateHarnessRequest,
+    ) => request(`${projectResource(projectId)}/harnesses/${encodeURIComponent(harnessId)}`, {
+      method: "PATCH",
+      headers: mutationHeaders,
+      body: JSON.stringify({ ...envelope, ...body }),
     }, value => parseCommandResult(value, envelope)),
     deleteHarness: (
       projectId: string,

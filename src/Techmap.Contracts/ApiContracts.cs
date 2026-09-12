@@ -34,8 +34,8 @@ public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceI
 public sealed record CreateProjectRequest(
     string? Designation,
     string? Name,
-    long BatchQuantity,
-    string? Status);
+    long? BatchQuantity = null,
+    string? Status = null);
 
 public sealed record UpdateProjectRequest(
     Guid CommandId,
@@ -48,7 +48,13 @@ public sealed record UpdateProjectRequest(
 public sealed record AddHarnessRequest(
     Guid CommandId,
     long? ExpectedRevision,
-    string? Designation);
+    string? Designation,
+    long? Quantity = null);
+
+public sealed record UpdateHarnessQuantityRequest(
+    Guid CommandId,
+    long? ExpectedRevision,
+    long? Quantity);
 
 public sealed record DeleteHarnessRequest(Guid CommandId, long? ExpectedRevision);
 
@@ -69,7 +75,16 @@ public sealed record ProjectSummaryResponse(
 public sealed record HarnessResponse(
     Guid HarnessId,
     string Designation,
+    long Quantity,
     int SortOrder,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc,
+    IReadOnlyList<HarnessDocumentResponse> Documents);
+
+public sealed record HarnessDocumentResponse(
+    Guid DocumentId,
+    string Kind,
+    string Status,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
 

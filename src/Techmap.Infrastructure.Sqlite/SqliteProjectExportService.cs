@@ -12,7 +12,7 @@ namespace Techmap.Infrastructure.Sqlite;
 public sealed class SqliteProjectExportService : IProjectExportService
 {
     public const int ArchiveFormat = 1;
-    public const int SnapshotFormat = 1;
+    public const int SnapshotFormat = 2;
     public const int MaximumArchiveEntries = 4_096;
     public const long MaximumSnapshotBytes = 64L * 1024 * 1024;
     public const long MaximumTotalPayloadBytes = 4L * 1024 * 1024 * 1024;
@@ -30,6 +30,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private readonly string dataRoot;
@@ -268,7 +269,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
             reader.GetString(1),
             reader.GetInt64(2),
             reader.GetString(3),
-            reader.GetInt64(4),
+            Math.Min(reader.GetInt64(4), ProjectRules.MaximumHarnessQuantity),
             status,
             reader.GetInt64(6),
             NormalizeUtc(reader.GetString(7)),
@@ -279,9 +280,39 @@ public sealed class SqliteProjectExportService : IProjectExportService
         SqliteUnitOfWork unitOfWork,
         ProjectIdentity projectId)
     {
+        using var documentsCommand = unitOfWork.CreateCommand(
+            """
+            SELECT d.harness_id, d.document_id, d.section_kind, d.status,
+                   d.created_utc, d.updated_utc
+            FROM harness_documents d
+            INNER JOIN harnesses h ON h.harness_id = d.harness_id
+            WHERE h.project_id = $projectId
+            ORDER BY d.harness_id,
+                     CASE d.section_kind WHEN 'e4' THEN 0 WHEN 'drawing' THEN 1 ELSE 2 END;
+            """);
+        documentsCommand.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        using var documentReader = documentsCommand.ExecuteReader();
+        var documents = new Dictionary<string, List<ExportHarnessDocument>>(StringComparer.Ordinal);
+        while (documentReader.Read())
+        {
+            var harnessId = ParseGuid(documentReader.GetString(0));
+            if (!documents.TryGetValue(harnessId, out var list))
+            {
+                list = [];
+                documents.Add(harnessId, list);
+            }
+
+            list.Add(new ExportHarnessDocument(
+                ParseGuid(documentReader.GetString(1)),
+                documentReader.GetString(2),
+                documentReader.GetString(3),
+                NormalizeUtc(documentReader.GetString(4)),
+                NormalizeUtc(documentReader.GetString(5))));
+        }
+
         using var command = unitOfWork.CreateCommand(
             """
-            SELECT harness_id, designation, sort_order, created_utc, updated_utc
+            SELECT harness_id, designation, quantity, sort_order, created_utc, updated_utc
             FROM harnesses
             WHERE project_id = $projectId
             ORDER BY sort_order, harness_id;
@@ -291,12 +322,17 @@ public sealed class SqliteProjectExportService : IProjectExportService
         var result = new List<ExportHarness>();
         while (reader.Read())
         {
+            var harnessId = ParseGuid(reader.GetString(0));
             result.Add(new ExportHarness(
-                ParseGuid(reader.GetString(0)),
+                harnessId,
                 reader.GetString(1),
-                reader.GetInt32(2),
-                NormalizeUtc(reader.GetString(3)),
-                NormalizeUtc(reader.GetString(4))));
+                reader.GetInt64(2),
+                reader.GetInt32(3),
+                NormalizeUtc(reader.GetString(4)),
+                NormalizeUtc(reader.GetString(5)),
+                documents.TryGetValue(harnessId, out var harnessDocuments)
+                    ? harnessDocuments
+                    : throw new InvalidDataException("A harness document workspace is incomplete.")));
         }
 
         if (result.Count > ProjectRules.MaximumHarnesses)
@@ -701,6 +737,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
         foreach (var harness in snapshot.Harnesses)
         {
             if (ParseGuid(harness.HarnessId) != harness.HarnessId ||
+                harness.Quantity is <= 0 or > ProjectRules.MaximumHarnessQuantity ||
                 harness.SortOrder < 0 ||
                 !IsCanonicalText(harness.Designation, ProjectRules.MaximumDesignationLength, allowEmpty: false) ||
                 !harnessIds.Add(harness.HarnessId) ||
@@ -708,7 +745,16 @@ public sealed class SqliteProjectExportService : IProjectExportService
                 previousHarness is { } priorHarness &&
                     Compare(priorHarness.SortOrder, priorHarness.HarnessId, harness.SortOrder, harness.HarnessId) >= 0 ||
                 NormalizeUtc(harness.CreatedUtc) != harness.CreatedUtc ||
-                NormalizeUtc(harness.UpdatedUtc) != harness.UpdatedUtc)
+                NormalizeUtc(harness.UpdatedUtc) != harness.UpdatedUtc ||
+                harness.Documents.Count != 3 ||
+                !harness.Documents.Select(document => document.Kind)
+                    .SequenceEqual(new[] { "e4", "drawing", "route" }) ||
+                harness.Documents.Select(document => document.DocumentId).Distinct().Count() != 3 ||
+                harness.Documents.Any(document =>
+                    ParseGuid(document.DocumentId) != document.DocumentId ||
+                    document.Status != "empty" ||
+                    NormalizeUtc(document.CreatedUtc) != document.CreatedUtc ||
+                    NormalizeUtc(document.UpdatedUtc) != document.UpdatedUtc))
             {
                 throw new InvalidDataException("A project export harness is invalid.");
             }
@@ -1146,7 +1192,15 @@ public sealed class SqliteProjectExportService : IProjectExportService
     private sealed record ExportHarness(
         string HarnessId,
         string Designation,
+        long Quantity,
         int SortOrder,
+        string CreatedUtc,
+        string UpdatedUtc,
+        IReadOnlyList<ExportHarnessDocument> Documents);
+    private sealed record ExportHarnessDocument(
+        string DocumentId,
+        string Kind,
+        string Status,
         string CreatedUtc,
         string UpdatedUtc);
     private sealed record ExportAttachment(

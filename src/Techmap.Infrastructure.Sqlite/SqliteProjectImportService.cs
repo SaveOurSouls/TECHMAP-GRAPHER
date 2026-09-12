@@ -30,6 +30,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ImportGates =
         new(StringComparer.OrdinalIgnoreCase);
@@ -418,17 +419,38 @@ public sealed class SqliteProjectImportService : IProjectImportService
             using var insert = unitOfWork.CreateCommand(
                 """
                 INSERT INTO harnesses
-                    (harness_id, project_id, designation, sort_order, created_utc, updated_utc)
-                VALUES ($harnessId, $projectId, $designation, $sortOrder, $utc, $utc);
+                    (harness_id, project_id, designation, quantity, sort_order, created_utc, updated_utc)
+                VALUES ($harnessId, $projectId, $designation, $quantity, $sortOrder, $utc, $utc);
                 """);
             insert.Parameters.AddWithValue(
                 "$harnessId",
                 Format(DeterministicGuid(journal.OperationGuid, "harness", harness.HarnessId)));
             insert.Parameters.AddWithValue("$projectId", journal.DestinationProjectId);
             insert.Parameters.AddWithValue("$designation", harness.Designation);
+            insert.Parameters.AddWithValue("$quantity", harness.Quantity!.Value);
             insert.Parameters.AddWithValue("$sortOrder", harness.SortOrder);
             insert.Parameters.AddWithValue("$utc", journal.ImportedUtc);
             RequireSingle(insert.ExecuteNonQuery(), "harness");
+
+            foreach (var document in harness.Documents!)
+            {
+                using var insertDocument = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO harness_documents
+                        (document_id, harness_id, section_kind, status, created_utc, updated_utc)
+                    VALUES ($documentId, $harnessId, $kind, $status, $utc, $utc);
+                    """);
+                insertDocument.Parameters.AddWithValue(
+                    "$documentId",
+                    Format(DeterministicGuid(journal.OperationGuid, "document", document.DocumentId)));
+                insertDocument.Parameters.AddWithValue(
+                    "$harnessId",
+                    Format(DeterministicGuid(journal.OperationGuid, "harness", harness.HarnessId)));
+                insertDocument.Parameters.AddWithValue("$kind", document.Kind);
+                insertDocument.Parameters.AddWithValue("$status", document.Status);
+                insertDocument.Parameters.AddWithValue("$utc", journal.ImportedUtc);
+                RequireSingle(insertDocument.ExecuteNonQuery(), "harness document");
+            }
         }
 
         foreach (var blob in journal.Blobs)
@@ -690,6 +712,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
         {
             snapshot = ReadCanonicalJson<ProjectSnapshot>(snapshotBytes);
             ValidateSnapshot(manifest, snapshot);
+            snapshot = MigrateSnapshotToCurrent(snapshot);
         }
         catch (ProjectImportException)
         {
@@ -765,7 +788,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
         if (manifest.ManifestFormat != SqliteProjectExportService.ArchiveFormat ||
             manifest.ProductId != ProductId ||
             manifest.ArchiveKind != ArchiveKind ||
-            manifest.SnapshotFormat != SqliteProjectExportService.SnapshotFormat ||
+            manifest.SnapshotFormat is not (1 or SqliteProjectExportService.SnapshotFormat) ||
             manifest.SourceStorageSchemaVersion is <= 0 or > 1_000_000 ||
             !IsCanonicalText(manifest.SourceAppVersion, 128, allowEmpty: false) ||
             ParseGuid(manifest.SourceProjectId) != manifest.SourceProjectId ||
@@ -816,6 +839,8 @@ public sealed class SqliteProjectImportService : IProjectImportService
             snapshot.Project.ProjectId != manifest.SourceProjectId ||
             snapshot.Project.Revision != manifest.SourceProjectRevision ||
             snapshot.Project.Increment <= 0 || snapshot.Project.BatchQuantity <= 0 ||
+            snapshot.SnapshotFormat == 1 && snapshot.Harnesses.Count > 0 &&
+                snapshot.Project.BatchQuantity > ProjectRules.MaximumHarnessQuantity ||
             snapshot.Project.Revision < 0 ||
             !IsCanonicalText(snapshot.Project.Designation, ProjectRules.MaximumDesignationLength, false) ||
             !IsCanonicalText(snapshot.Project.Name, ProjectRules.MaximumNameLength, false) ||
@@ -844,12 +869,29 @@ public sealed class SqliteProjectImportService : IProjectImportService
         foreach (var item in snapshot.Harnesses)
         {
             if (ParseGuid(item.HarnessId) != item.HarnessId || item.SortOrder < 0 ||
+                (snapshot.SnapshotFormat == SqliteProjectExportService.SnapshotFormat &&
+                    (item.Quantity is null or <= 0 or > ProjectRules.MaximumHarnessQuantity ||
+                     item.Documents is null || item.Documents.Count != 3)) ||
+                (snapshot.SnapshotFormat == 1 && (item.Quantity is not null || item.Documents is not null)) ||
                 !IsCanonicalText(item.Designation, ProjectRules.MaximumDesignationLength, false) ||
                 !harnessIds.Add(item.HarnessId) || !orders.Add(item.SortOrder) ||
                 previousHarness is { } previous && Compare(previous.Item1, previous.Item2, item.SortOrder, item.HarnessId) >= 0 ||
                 NormalizeUtc(item.CreatedUtc) != item.CreatedUtc || NormalizeUtc(item.UpdatedUtc) != item.UpdatedUtc)
             {
                 throw Invalid("import_snapshot_invalid", "A project harness is invalid.");
+            }
+
+            if (item.Documents is not null &&
+                (!item.Documents.Select(document => document.Kind)
+                    .SequenceEqual(new[] { "e4", "drawing", "route" }) ||
+                 item.Documents.Select(document => document.DocumentId).Distinct().Count() != 3 ||
+                 item.Documents.Any(document =>
+                     ParseGuid(document.DocumentId) != document.DocumentId ||
+                     document.Status != "empty" ||
+                     NormalizeUtc(document.CreatedUtc) != document.CreatedUtc ||
+                     NormalizeUtc(document.UpdatedUtc) != document.UpdatedUtc)))
+            {
+                throw Invalid("import_snapshot_invalid", "A harness document workspace is invalid.");
             }
 
             previousHarness = (item.SortOrder, item.HarnessId);
@@ -920,12 +962,34 @@ public sealed class SqliteProjectImportService : IProjectImportService
         }
     }
 
-    private static ProjectSnapshot MigrateSnapshotToCurrent(ProjectSnapshot snapshot) =>
-        snapshot.SnapshotFormat switch
+    private static ProjectSnapshot MigrateSnapshotToCurrent(ProjectSnapshot snapshot)
+    {
+        if (snapshot.SnapshotFormat == SqliteProjectExportService.SnapshotFormat)
         {
-            SqliteProjectExportService.SnapshotFormat => snapshot,
-            _ => throw Invalid("import_snapshot_version_unsupported", "The project snapshot version is unsupported."),
+            return snapshot;
+        }
+
+        if (snapshot.SnapshotFormat != 1)
+        {
+            throw Invalid("import_snapshot_version_unsupported", "The project snapshot version is unsupported.");
+        }
+
+        return snapshot with
+        {
+            SnapshotFormat = SqliteProjectExportService.SnapshotFormat,
+            Harnesses = snapshot.Harnesses.Select(harness => harness with
+            {
+                Quantity = snapshot.Project.BatchQuantity,
+                Documents = new[] { "e4", "drawing", "route" }.Select(kind =>
+                    new ExportHarnessDocument(
+                        Format(DeterministicGuid(Guid.ParseExact(harness.HarnessId, "D"), "document", kind)),
+                        kind,
+                        "empty",
+                        harness.CreatedUtc,
+                        harness.UpdatedUtc)).ToArray(),
+            }).ToArray(),
         };
+    }
 
     private async Task<ProjectSnapshot> ReadStagedSnapshotAsync(
         ImportJournal journal,
@@ -952,8 +1016,9 @@ public sealed class SqliteProjectImportService : IProjectImportService
 
         var manifest = ReadCanonicalJson<ExportManifest>(manifestBytes);
         ValidateManifest(manifest);
-        var snapshot = MigrateSnapshotToCurrent(ReadCanonicalJson<ProjectSnapshot>(bytes));
+        var snapshot = ReadCanonicalJson<ProjectSnapshot>(bytes);
         ValidateSnapshot(manifest, snapshot);
+        snapshot = MigrateSnapshotToCurrent(snapshot);
         var manifestBlobs = manifest.Files
             .Where(item => item.Path != SnapshotPath)
             .Select(item => (item.Sha256, item.SizeBytes))
@@ -990,7 +1055,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
             !IsCanonicalText(journal.SourceAppVersion, 128, false) ||
             !IsCanonicalText(journal.ImportAppVersion, 128, false) ||
             NormalizeUtc(journal.ImportedUtc) != journal.ImportedUtc ||
-            journal.SnapshotFormat != SqliteProjectExportService.SnapshotFormat ||
+            journal.SnapshotFormat is not (1 or SqliteProjectExportService.SnapshotFormat) ||
             journal.HarnessCount is < 0 or > ProjectRules.MaximumHarnesses ||
             journal.AttachmentCount is < 0 or > MaximumArchiveEntries - 2 ||
             journal.PinnedCharacteristicCount is < 0 or > MaximumArchiveEntries ||
@@ -1874,7 +1939,15 @@ public sealed class SqliteProjectImportService : IProjectImportService
     private sealed record ExportHarness(
         string HarnessId,
         string Designation,
+        long? Quantity,
         int SortOrder,
+        string CreatedUtc,
+        string UpdatedUtc,
+        IReadOnlyList<ExportHarnessDocument>? Documents);
+    private sealed record ExportHarnessDocument(
+        string DocumentId,
+        string Kind,
+        string Status,
         string CreatedUtc,
         string UpdatedUtc);
     private sealed record ExportAttachment(

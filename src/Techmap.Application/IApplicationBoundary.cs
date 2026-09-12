@@ -34,7 +34,16 @@ public sealed record ProjectSummary(
 public sealed record HarnessSummary(
     HarnessIdentity HarnessId,
     string Designation,
+    long Quantity,
     int SortOrder,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc,
+    IReadOnlyList<HarnessDocumentSummary> Documents);
+
+public sealed record HarnessDocumentSummary(
+    HarnessDocumentIdentity DocumentId,
+    string Kind,
+    string Status,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
 
@@ -67,12 +76,24 @@ public interface IProjectCatalog
 
     ProjectDetails CopyProject(ProjectIdentity sourceProjectId);
 
-    ProjectDetails AddHarness(ProjectIdentity projectId, string designation);
+    ProjectDetails AddHarness(ProjectIdentity projectId, string designation, long quantity = 1);
 
     ProjectMutationResult<ProjectDetails> AddHarness(
         ProjectIdentity projectId,
         ProjectCommandEnvelope envelope,
-        string designation);
+        string designation,
+        long? quantity = 1);
+
+    ProjectDetails UpdateHarnessQuantity(
+        ProjectIdentity projectId,
+        HarnessIdentity harnessId,
+        long quantity);
+
+    ProjectMutationResult<ProjectDetails> UpdateHarnessQuantity(
+        ProjectIdentity projectId,
+        HarnessIdentity harnessId,
+        ProjectCommandEnvelope envelope,
+        long quantity);
 
     ProjectDetails DeleteHarness(ProjectIdentity projectId, HarnessIdentity harnessId);
 

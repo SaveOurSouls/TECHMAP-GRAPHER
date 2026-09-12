@@ -289,7 +289,7 @@ public sealed class ProjectAttachmentApiTests
             client,
             HttpMethod.Post,
             $"{pathBase}/api/v1/projects",
-            new CreateProjectRequest("ПР-ATT", "Вложения", 1, null),
+            new CreateProjectRequest("ПР-ATT", "Вложения", null, null),
             csrf);
         return project;
     }

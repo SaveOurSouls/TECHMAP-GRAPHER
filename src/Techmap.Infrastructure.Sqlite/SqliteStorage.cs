@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -241,6 +241,39 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         BEGIN
             SELECT RAISE(ABORT, 'project_import_is_immutable');
         END;
+        """;
+
+    private const string HarnessWorkspaceMigrationId = "M1-04R-harness-workspaces";
+    private const string HarnessWorkspaceSchemaSql =
+        """
+        ALTER TABLE harnesses
+            ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1
+                CHECK (quantity > 0 AND quantity <= 9007199254740991);
+
+        UPDATE harnesses
+        SET quantity = MIN(
+            (SELECT batch_quantity FROM projects WHERE projects.project_id = harnesses.project_id),
+            9007199254740991);
+
+        CREATE TABLE harness_documents (
+            document_id TEXT NOT NULL PRIMARY KEY CHECK (length(document_id) = 36),
+            harness_id TEXT NOT NULL REFERENCES harnesses(harness_id) ON UPDATE CASCADE ON DELETE CASCADE,
+            section_kind TEXT NOT NULL CHECK (section_kind IN ('e4', 'drawing', 'route')),
+            status TEXT NOT NULL CHECK (status IN ('empty')),
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL,
+            UNIQUE (harness_id, section_kind)
+        ) STRICT;
+
+        CREATE INDEX ix_harness_documents_harness
+            ON harness_documents (harness_id, section_kind, document_id);
+
+        INSERT INTO harness_documents
+            (document_id, harness_id, section_kind, status, created_utc, updated_utc)
+        SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-a'||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),
+               harness_id, kind, 'empty', created_utc, updated_utc
+        FROM harnesses
+        CROSS JOIN (SELECT 'e4' AS kind UNION ALL SELECT 'drawing' UNION ALL SELECT 'route');
         """;
 
     private readonly string connectionString;
@@ -610,6 +643,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 3, MigrationId: ProjectDataMigrationId, Sql: ProjectDataSchemaSql),
             (Version: 4, MigrationId: ProjectCommandMigrationId, Sql: ProjectCommandSchemaSql),
             (Version: 5, MigrationId: ProjectImportMigrationId, Sql: ProjectImportSchemaSql),
+            (Version: 6, MigrationId: HarnessWorkspaceMigrationId, Sql: HarnessWorkspaceSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -682,6 +716,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ProjectImportSchemaSql);
         }
 
+        if (schemaVersion >= 6)
+        {
+            ExecuteSchemaSql(expected, HarnessWorkspaceSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -750,6 +789,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ProjectImportMigrationId,
                 Sql: ProjectImportSchemaSql,
                 Description: "Project import provenance"),
+            5 => (
+                Version: 6,
+                MigrationId: HarnessWorkspaceMigrationId,
+                Sql: HarnessWorkspaceSchemaSql,
+                Description: "Harness quantities and document workspaces"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -821,7 +865,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4))
+            if (version is not (1 or 2 or 3 or 4 or 5))
             {
                 return false;
             }

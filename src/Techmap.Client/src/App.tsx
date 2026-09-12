@@ -11,6 +11,7 @@ import {
   createProjectApi,
   ProjectApiError,
   type ProjectDetails,
+  type HarnessSummary,
   type ProjectStatus,
   type ProjectSummary,
 } from "./project-api";
@@ -25,17 +26,21 @@ interface AppProps {
 interface ProjectFormState {
   readonly designation: string;
   readonly name: string;
-  readonly batchQuantity: string;
   readonly status: ProjectStatus;
 }
 
 interface ProjectEditDraft {
   readonly name: string;
-  readonly batchQuantity: string;
   readonly status: ProjectStatus;
 }
 
-const sections = ["Проекты", "Схема Э4", "Чертёж", "Маршрут", "Справочники"] as const;
+const sections = ["Проекты", "Справочники"] as const;
+const harnessTabs = [
+  { id: "e4", label: "Схема Э4", description: "Соединения и электрическая схема жгута" },
+  { id: "drawing", label: "Чертёж", description: "Геометрия, размеры и технические требования" },
+  { id: "route", label: "Маршрут", description: "Последовательность операций изготовления" },
+] as const;
+export type HarnessTab = typeof harnessTabs[number]["id"];
 const statusLabels: Readonly<Record<ProjectStatus, string>> = {
   draft: "Черновик",
   active: "В работе",
@@ -44,9 +49,9 @@ const statusLabels: Readonly<Record<ProjectStatus, string>> = {
 const emptyCreateForm: ProjectFormState = {
   designation: "",
   name: "",
-  batchQuantity: "1",
   status: "draft",
 };
+const maximumHarnessQuantity = Number.MAX_SAFE_INTEGER;
 
 function projectSummary(details: ProjectDetails): ProjectSummary {
   return {
@@ -69,7 +74,62 @@ function errorText(error: unknown): string {
 
 function positiveInteger(value: string): number | null {
   const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : null;
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+export function rememberHarnessTab(
+  current: Readonly<Record<string, HarnessTab>>,
+  harnessId: string,
+  tab: HarnessTab,
+): Readonly<Record<string, HarnessTab>> {
+  return { ...current, [harnessId]: tab };
+}
+
+interface HarnessDocumentTabsProps {
+  readonly harness: HarnessSummary;
+  readonly activeTab: HarnessTab;
+  readonly onTabChange: (tab: HarnessTab) => void;
+}
+
+export function HarnessDocumentTabs({
+  harness,
+  activeTab,
+  onTabChange,
+}: HarnessDocumentTabsProps) {
+  const activeDefinition = harnessTabs.find((tab) => tab.id === activeTab)!;
+  const document = harness.documents.find((item) => item.kind === activeTab)!;
+  return (
+    <>
+      <div className="harness-tabs" role="tablist" aria-label={`Документация жгута ${harness.designation}`}>
+        {harnessTabs.map((tab) => (
+          <button
+            id={`harness-tab-${harness.harnessId}-${tab.id}`}
+            className={activeTab === tab.id ? "harness-tab active" : "harness-tab"}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`harness-panel-${harness.harnessId}`}
+            onClick={() => onTabChange(tab.id)}
+            key={tab.id}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div
+        id={`harness-panel-${harness.harnessId}`}
+        className="document-empty-state"
+        role="tabpanel"
+        aria-labelledby={`harness-tab-${harness.harnessId}-${activeTab}`}
+      >
+        <span className={`document-icon ${activeTab}`} aria-hidden="true" />
+        <strong>{activeDefinition.label}</strong>
+        <p>{activeDefinition.description}</p>
+        <span>{document.status === "empty" && "Документ пока пуст. Редактор появится на следующем этапе."}</span>
+      </div>
+    </>
+  );
 }
 
 export function App({ config, session }: AppProps) {
@@ -82,9 +142,11 @@ export function App({ config, session }: AppProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<ProjectFormState>(emptyCreateForm);
   const [editName, setEditName] = useState("");
-  const [editBatchQuantity, setEditBatchQuantity] = useState("1");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("draft");
   const [newHarnessDesignation, setNewHarnessDesignation] = useState("");
+  const [newHarnessQuantity, setNewHarnessQuantity] = useState("1");
+  const [editHarnessQuantity, setEditHarnessQuantity] = useState("1");
+  const [activeHarnessTabs, setActiveHarnessTabs] = useState<Readonly<Record<string, HarnessTab>>>({});
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
   const [navigationPending, setNavigationPending] = useState(false);
@@ -108,7 +170,6 @@ export function App({ config, session }: AppProps) {
     setSelectedProject(details);
     if (synchronizeEditor) {
       setEditName(details.name);
-      setEditBatchQuantity(String(details.batchQuantity));
       setEditStatus(details.status);
     }
     setSelectedHarnessId((current) => (
@@ -127,17 +188,10 @@ export function App({ config, session }: AppProps) {
         `techmap.autosave.project.${details.projectId}`,
       ),
       send: async command => {
-        const request: { name?: string; batchQuantity?: number; status?: ProjectStatus } = {};
+        const request: { name?: string; status?: ProjectStatus } = {};
         if (command.draft.name !== undefined) {
           if (!command.draft.name.trim()) throw new AutosaveDraftError("Название проекта не может быть пустым.");
           request.name = command.draft.name.trim();
-        }
-        if (command.draft.batchQuantity !== undefined) {
-          const batchQuantity = positiveInteger(command.draft.batchQuantity);
-          if (batchQuantity === null) {
-            throw new AutosaveDraftError("Количество в партии должно быть положительным целым числом.");
-          }
-          request.batchQuantity = batchQuantity;
         }
         if (command.draft.status !== undefined) request.status = command.draft.status;
 
@@ -272,9 +326,8 @@ export function App({ config, session }: AppProps) {
       setError("Сначала завершите сохранение открытого проекта или закройте его карточку.");
       return;
     }
-    const batchQuantity = positiveInteger(createForm.batchQuantity);
-    if (!createForm.designation.trim() || !createForm.name.trim() || batchQuantity === null) {
-      setError("Заполните обозначение, название и положительное количество в партии.");
+    if (!createForm.designation.trim() || !createForm.name.trim()) {
+      setError("Заполните обозначение и название проекта.");
       return;
     }
     discreteMutationRef.current = true;
@@ -284,7 +337,6 @@ export function App({ config, session }: AppProps) {
       const details = await api.createProject({
         designation: createForm.designation.trim(),
         name: createForm.name.trim(),
-        batchQuantity,
         status: createForm.status,
       });
       replaceProject(details);
@@ -378,20 +430,49 @@ export function App({ config, session }: AppProps) {
   const addHarness = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canStartMutation()) return;
-    if (!selectedProject || !newHarnessDesignation.trim()) {
-      setError("Укажите обозначение нового жгута.");
+    const quantity = positiveInteger(newHarnessQuantity);
+    if (!selectedProject || !newHarnessDesignation.trim() || quantity === null) {
+      setError("Укажите обозначение и положительное целое количество для жгута.");
       return;
     }
     const designation = newHarnessDesignation.trim();
     const previousIds = new Set(selectedProject.harnesses.map((item) => item.harnessId));
     const details = await commitHarnessChange("add-harness", async (project, expectedRevision, commandId) => (
-      await api.addHarness(project.projectId, { commandId, expectedRevision }, designation)
+      await api.addHarness(
+        project.projectId,
+        { commandId, expectedRevision },
+        { designation, quantity },
+      )
     ).project);
     if (details) {
       const added = details.harnesses.find((item) => !previousIds.has(item.harnessId));
       if (added) setSelectedHarnessId(added.harnessId);
       setNewHarnessDesignation("");
+      setNewHarnessQuantity("1");
     }
+  };
+
+  const saveHarnessQuantity = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProject) return;
+    const harness = selectedProject.harnesses.find((item) => item.harnessId === selectedHarnessId);
+    const quantity = positiveInteger(editHarnessQuantity);
+    if (!harness || quantity === null) {
+      setError("Количество для жгута должно быть положительным целым числом.");
+      return;
+    }
+    if (quantity === harness.quantity) return;
+    await commitHarnessChange(
+      `quantity-${harness.harnessId}`,
+      async (project, expectedRevision, commandId) => (
+        await api.updateHarness(
+          project.projectId,
+          harness.harnessId,
+          { commandId, expectedRevision },
+          { quantity },
+        )
+      ).project,
+    );
   };
 
   const deleteHarness = async (harnessId: string, designation: string) => {
@@ -417,6 +498,9 @@ export function App({ config, session }: AppProps) {
   const selectedHarness = selectedProject?.harnesses.find(
     (harness) => harness.harnessId === selectedHarnessId,
   );
+  const activeHarnessTab = selectedHarness
+    ? activeHarnessTabs[selectedHarness.harnessId] ?? "e4"
+    : "e4";
   const isBusy = busyAction !== null;
   const isEditorLocked = navigationPending || isBusy || autosave?.status === "conflict" || autosave?.interruptedDraft === true;
 
@@ -436,12 +520,6 @@ export function App({ config, session }: AppProps) {
     autosaveRef.current?.edit({ name: value });
   };
 
-  const changeEditBatchQuantity = (value: string) => {
-    if (!transitionGateRef.current.allowMutation() || discreteMutationRef.current) return;
-    setEditBatchQuantity(value);
-    autosaveRef.current?.edit({ batchQuantity: value });
-  };
-
   const changeEditStatus = (value: ProjectStatus) => {
     if (!transitionGateRef.current.allowMutation() || discreteMutationRef.current) return;
     setEditStatus(value);
@@ -454,6 +532,19 @@ export function App({ config, session }: AppProps) {
     autosaveRef.current.discardPendingDraft(selectedProject.revision);
     void openProject(selectedProject.projectId);
   };
+
+  useEffect(() => {
+    if (!selectedProject) return;
+    setSelectedHarnessId((current) => (
+      current && selectedProject.harnesses.some((item) => item.harnessId === current)
+        ? current
+        : selectedProject.harnesses[0]?.harnessId ?? null
+    ));
+  }, [selectedProject]);
+
+  useEffect(() => {
+    if (selectedHarness) setEditHarnessQuantity(String(selectedHarness.quantity));
+  }, [selectedHarness]);
 
   return (
     <div className="app-shell">
@@ -482,8 +573,8 @@ export function App({ config, session }: AppProps) {
           <div className="content-heading">
             <div>
               <p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p>
-              <h1>Проекты жгутов</h1>
-              <p>В одном проекте можно вести до 100 независимых жгутов.</p>
+              <h1>Проекты</h1>
+              <p>Проект объединяет жгуты, их параметры и комплект документации.</p>
             </div>
             <button className="primary-action" type="button" onClick={() => {
               if (canStartMutation()) setShowCreate(true);
@@ -516,10 +607,6 @@ export function App({ config, session }: AppProps) {
                 <label className="wide-field">
                   Название
                   <input value={createForm.name} onChange={(event) => changeCreateForm({ name: event.target.value })} disabled={navigationPending || isBusy} required />
-                </label>
-                <label>
-                  Количество в партии
-                  <input type="number" min="1" step="1" value={createForm.batchQuantity} onChange={(event) => changeCreateForm({ batchQuantity: event.target.value })} disabled={navigationPending || isBusy} required />
                 </label>
                 <label>
                   Статус
@@ -572,7 +659,7 @@ export function App({ config, session }: AppProps) {
                         <span className={`status-pill ${project.status}`}>{statusLabels[project.status]}</span>
                       </span>
                       <span className="project-row-name">{project.name}</span>
-                      <span className="project-row-meta">Партия: {project.batchQuantity} шт. · жгутов: {project.harnessCount} · версия {project.increment}</span>
+                      <span className="project-row-meta">Жгутов в проекте: {project.harnessCount} · версия {project.increment}</span>
                       {openingProjectId === project.projectId && <span className="opening-label">Открываем…</span>}
                     </button>
                   ))}
@@ -628,20 +715,16 @@ export function App({ config, session }: AppProps) {
                       {Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
                     </select>
                   </label>
-                  <label>
-                    Количество в партии
-                    <input type="number" min="1" step="1" value={editBatchQuantity} onChange={(event) => changeEditBatchQuantity(event.target.value)} disabled={isEditorLocked} required />
-                  </label>
                   <div className="form-actions wide-field">
                     <button className="primary-action" type="submit" disabled={navigationPending || isBusy || autosave?.status === "acknowledged"}>{busyAction === "save" ? "Сохраняем…" : "Сохранить сейчас"}</button>
                     <button className="secondary-action" type="button" onClick={() => void copyProject()} disabled={navigationPending || isBusy}>{busyAction === "copy" ? "Копирование…" : "Создать копию"}</button>
                   </div>
                 </form>
 
-                <div className="harness-section">
+                <div className="harness-section" aria-label="Состав проекта">
                   <div className="harness-heading">
                     <div>
-                      <h3>Жгуты проекта</h3>
+                      <h3>Жгуты</h3>
                       <span>{selectedProject.harnesses.length} из 100</span>
                     </div>
                     <label className="compact-search">
@@ -655,34 +738,80 @@ export function App({ config, session }: AppProps) {
                       <span className="visually-hidden">Обозначение нового жгута</span>
                       <input placeholder="Обозначение нового жгута" value={newHarnessDesignation} onChange={(event) => changeNewHarnessDesignation(event.target.value)} disabled={navigationPending || isBusy || selectedProject.harnesses.length >= 100} />
                     </label>
+                    <label className="quantity-field">
+                      <span className="visually-hidden">Количество нового жгута</span>
+                      <input type="number" min="1" max={maximumHarnessQuantity} step="1" aria-label="Количество нового жгута" value={newHarnessQuantity} onChange={(event) => setNewHarnessQuantity(event.target.value)} disabled={navigationPending || isBusy || selectedProject.harnesses.length >= 100} />
+                      <span aria-hidden="true">шт.</span>
+                    </label>
                     <button className="secondary-action" type="submit" disabled={navigationPending || isBusy || selectedProject.harnesses.length >= 100}>
                       {busyAction === "add-harness" ? "Добавление…" : "+ Добавить"}
                     </button>
                   </form>
 
                   {selectedProject.harnesses.length >= 100 && <p className="limit-message">Достигнут предел: 100 жгутов в проекте.</p>}
-                  <div className="harness-list" role="list" aria-label="Жгуты проекта">
-                    {filteredHarnesses.length === 0 ? (
-                      <p className="panel-message">{selectedProject.harnesses.length === 0 ? "В проекте пока нет жгутов." : "Жгуты не найдены."}</p>
-                    ) : filteredHarnesses.map((harness) => (
-                      <div className={selectedHarnessId === harness.harnessId ? "harness-row selected" : "harness-row"} role="listitem" key={harness.harnessId}>
-                        <button type="button" className="harness-select" onClick={() => setSelectedHarnessId(harness.harnessId)}>
-                          <span className="harness-order">{String(harness.sortOrder + 1).padStart(2, "0")}</span>
-                          <strong>{harness.designation}</strong>
-                        </button>
-                        <button className="delete-button" type="button" aria-label={`Удалить жгут ${harness.designation}`} onClick={() => void deleteHarness(harness.harnessId, harness.designation)} disabled={navigationPending || isBusy}>
-                          {busyAction === `delete-${harness.harnessId}` ? "…" : "Удалить"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedHarness && (
-                    <div className="selected-harness-note">
-                      <span>Выбран жгут</span>
-                      <strong>{selectedHarness.designation}</strong>
-                      <button type="button" className="link-button" onClick={() => setSelectedHarnessId(null)}>Снять выбор</button>
+                  <div className="harness-workspace">
+                    <div className="harness-list" role="list" aria-label="Жгуты проекта">
+                      {filteredHarnesses.length === 0 ? (
+                        <p className="panel-message">{selectedProject.harnesses.length === 0 ? "Добавьте первый жгут, чтобы начать работу с его документацией." : "Жгуты не найдены."}</p>
+                      ) : filteredHarnesses.map((harness) => (
+                        <div className={selectedHarnessId === harness.harnessId ? "harness-row selected" : "harness-row"} role="listitem" key={harness.harnessId}>
+                          <button
+                            type="button"
+                            className="harness-select"
+                            onClick={() => setSelectedHarnessId(harness.harnessId)}
+                            aria-current={selectedHarnessId === harness.harnessId ? "true" : undefined}
+                          >
+                            <span className="harness-order">{String(harness.sortOrder + 1).padStart(2, "0")}</span>
+                            <span className="harness-label">
+                              <strong>{harness.designation}</strong>
+                              <span>{harness.quantity} шт.</span>
+                            </span>
+                          </button>
+                          <button className="delete-button" type="button" aria-label={`Удалить жгут ${harness.designation}`} onClick={() => void deleteHarness(harness.harnessId, harness.designation)} disabled={navigationPending || isBusy}>
+                            {busyAction === `delete-${harness.harnessId}` ? "…" : "Удалить"}
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  )}
+
+                    {selectedHarness ? (
+                      <section className="harness-detail" aria-labelledby="selected-harness-title">
+                        <div className="harness-detail-heading">
+                          <div>
+                            <p className="eyebrow">ВЫБРАННЫЙ ЖГУТ</p>
+                            <h3 id="selected-harness-title">{selectedHarness.designation}</h3>
+                          </div>
+                          <span className="harness-position">позиция {selectedHarness.sortOrder + 1}</span>
+                        </div>
+
+                        <form className="harness-parameters" onSubmit={saveHarnessQuantity}>
+                          <label>
+                            Количество
+                            <span className="quantity-control">
+                              <input type="number" min="1" max={maximumHarnessQuantity} step="1" value={editHarnessQuantity} onChange={(event) => setEditHarnessQuantity(event.target.value)} disabled={navigationPending || isBusy} required />
+                              <span>шт.</span>
+                            </span>
+                          </label>
+                          <button className="secondary-action" type="submit" disabled={navigationPending || isBusy || editHarnessQuantity === String(selectedHarness.quantity)}>
+                            {busyAction === `quantity-${selectedHarness.harnessId}` ? "Сохранение…" : "Сохранить количество"}
+                          </button>
+                        </form>
+
+                        <HarnessDocumentTabs
+                          harness={selectedHarness}
+                          activeTab={activeHarnessTab}
+                          onTabChange={(tab) => setActiveHarnessTabs((current) => (
+                            rememberHarnessTab(current, selectedHarness.harnessId, tab)
+                          ))}
+                        />
+                      </section>
+                    ) : (
+                      <div className="harness-detail-empty">
+                        <strong>Выберите жгут</strong>
+                        <span>Здесь будут его количество, параметры и документация.</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
             ) : (

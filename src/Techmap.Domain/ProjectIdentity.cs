@@ -9,3 +9,8 @@ public readonly record struct HarnessIdentity(Guid Value)
 {
     public static HarnessIdentity New() => new(Guid.NewGuid());
 }
+
+public readonly record struct HarnessDocumentIdentity(Guid Value)
+{
+    public static HarnessDocumentIdentity New() => new(Guid.NewGuid());
+}

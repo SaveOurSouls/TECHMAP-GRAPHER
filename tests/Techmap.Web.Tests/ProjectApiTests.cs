@@ -27,12 +27,13 @@ public sealed class ProjectApiTests
             client,
             HttpMethod.Post,
             "/api/v1/projects",
-            new CreateProjectRequest("ПР-HTTP", "Проект через API", 12, "draft"),
+            new CreateProjectRequest("ПР-HTTP", "Проект через API", null, "draft"),
             csrf);
         using (createResponse)
         {
             Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
             Assert.Equal($"/api/v1/projects/{created.ProjectId:D}", createResponse.Headers.Location?.OriginalString);
+            Assert.Equal(1, created.BatchQuantity);
         }
 
         var firstCommandId = Guid.NewGuid();
@@ -40,20 +41,32 @@ public sealed class ProjectApiTests
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses",
-            new AddHarnessRequest(firstCommandId, 0, "Жгут А"),
+            new AddHarnessRequest(firstCommandId, 0, "Жгут А", 5),
             csrf);
         Assert.Equal(firstCommandId, firstHarnessCommand.CommandId);
         Assert.Equal(1, firstHarnessCommand.ResultingRevision);
         var firstHarness = Assert.Single(firstHarnessCommand.Project.Harnesses);
+        Assert.Equal(5, firstHarness.Quantity);
+        Assert.Equal(["e4", "drawing", "route"], firstHarness.Documents.Select(document => document.Kind));
+        Assert.All(firstHarness.Documents, document => Assert.Equal("empty", document.Status));
         var (_, secondHarnessCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses",
-            new AddHarnessRequest(Guid.NewGuid(), 1, "Жгут Б"),
+            new AddHarnessRequest(Guid.NewGuid(), 1, "Жгут Б", 7),
             csrf);
         var withTwoHarnesses = secondHarnessCommand.Project;
         Assert.Equal(2, secondHarnessCommand.ResultingRevision);
         Assert.Equal([0, 1], withTwoHarnesses.Harnesses.Select(harness => harness.SortOrder));
+        Assert.Equal([5L, 7L], withTwoHarnesses.Harnesses.Select(harness => harness.Quantity));
+
+        var (_, quantityCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
+            client,
+            HttpMethod.Patch,
+            $"/api/v1/projects/{created.ProjectId:D}/harnesses/{firstHarness.HarnessId:D}",
+            new UpdateHarnessQuantityRequest(Guid.NewGuid(), 2, 11),
+            csrf);
+        Assert.Equal([11L, 7L], quantityCommand.Project.Harnesses.Select(harness => harness.Quantity));
 
         var (_, updateCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
@@ -61,15 +74,14 @@ public sealed class ProjectApiTests
             $"/api/v1/projects/{created.ProjectId:D}",
             new UpdateProjectRequest(
                 Guid.NewGuid(),
-                2,
+                3,
                 Name: "Проект обновлён",
-                BatchQuantity: 48,
                 Status: "completed"),
             csrf);
         var updated = updateCommand.Project;
-        Assert.Equal(3, updateCommand.ResultingRevision);
+        Assert.Equal(4, updateCommand.ResultingRevision);
         Assert.Equal("Проект обновлён", updated.Name);
-        Assert.Equal(48, updated.BatchQuantity);
+        Assert.Equal(1, updated.BatchQuantity);
         Assert.Equal("completed", updated.Status);
 
         var (copyResponse, copy) = await SendProjectCommandAsync<ProjectDetailsResponse>(
@@ -92,10 +104,10 @@ public sealed class ProjectApiTests
             client,
             HttpMethod.Delete,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses/{firstHarness.HarnessId:D}",
-            new DeleteHarnessRequest(Guid.NewGuid(), 3),
+            new DeleteHarnessRequest(Guid.NewGuid(), 4),
             csrf);
         var afterDelete = deleteCommand.Project;
-        Assert.Equal(4, deleteCommand.ResultingRevision);
+        Assert.Equal(5, deleteCommand.ResultingRevision);
         var remaining = Assert.Single(afterDelete.Harnesses);
         Assert.Equal("Жгут Б", remaining.Designation);
         Assert.Equal(1, remaining.SortOrder);
@@ -164,6 +176,46 @@ public sealed class ProjectApiTests
         Assert.Equal("api_route_not_found", Assert.IsType<ApiErrorResponse>(malformedError).Error);
     }
 
+    [Fact]
+    public async Task Obsolete_project_quantity_is_rejected_without_creating_or_revising_a_project()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+
+        using var create = await SendCommandAsync(
+            client,
+            HttpMethod.Post,
+            "/api/v1/projects",
+            new CreateProjectRequest("ПР-OLD", "Старый клиент", 12, "draft"),
+            csrf);
+        var createError = await create.Content.ReadFromJsonAsync<ApiErrorResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, create.StatusCode);
+        Assert.Equal("project_quantity_obsolete", createError?.Error);
+
+        var project = (await SendProjectCommandAsync<ProjectDetailsResponse>(
+            client,
+            HttpMethod.Post,
+            "/api/v1/projects",
+            new CreateProjectRequest("ПР-NEW", "Новый клиент", null, "draft"),
+            csrf)).Body;
+        using var update = await SendCommandAsync(
+            client,
+            HttpMethod.Patch,
+            $"/api/v1/projects/{project.ProjectId:D}",
+            new UpdateProjectRequest(Guid.NewGuid(), 0, BatchQuantity: 12),
+            csrf);
+        var updateError = await update.Content.ReadFromJsonAsync<ApiErrorResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, update.StatusCode);
+        Assert.Equal("project_quantity_obsolete", updateError?.Error);
+        var unchanged = await client.GetFromJsonAsync<ProjectDetailsResponse>(
+            $"/api/v1/projects/{project.ProjectId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(0, unchanged?.Revision);
+        Assert.Equal(1, unchanged?.BatchQuantity);
+    }
+
     [Theory]
     [InlineData("/api/v1/projects")]
     [InlineData("/api/v1/projects/ef9b26e0-daa6-4f2e-9cee-cb7bb95fb0dc")]
@@ -187,7 +239,7 @@ public sealed class ProjectApiTests
         using var client = factory.CreateLocalClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/projects")
         {
-            Content = JsonContent.Create(new CreateProjectRequest("ПР", "Проект", 1, null)),
+            Content = JsonContent.Create(new CreateProjectRequest("ПР", "Проект", null, null)),
         };
         request.Headers.TryAddWithoutValidation("Origin", CanonicalOrigin);
         request.Headers.TryAddWithoutValidation(LocalHttpSession.CsrfHeaderName, "missing-session");
@@ -211,7 +263,7 @@ public sealed class ProjectApiTests
             client,
             HttpMethod.Post,
             "/techmap/api/v1/projects",
-            new CreateProjectRequest("ПР-PREFIX", "Префикс", 1, null),
+            new CreateProjectRequest("ПР-PREFIX", "Префикс", null, null),
             csrf);
         using (response)
         {
@@ -228,20 +280,18 @@ public sealed class ProjectApiTests
 
     public static TheoryData<CreateProjectRequest, string> InvalidCreateRequests => new()
     {
-        { new CreateProjectRequest(null, "Имя", 1, null), "invalid_designation" },
-        { new CreateProjectRequest("   ", "Имя", 1, null), "invalid_designation" },
+        { new CreateProjectRequest(null, "Имя", null, null), "invalid_designation" },
+        { new CreateProjectRequest("   ", "Имя", null, null), "invalid_designation" },
         {
             new CreateProjectRequest(
                 new string('D', Techmap.Domain.ProjectRules.MaximumDesignationLength + 1),
                 "Имя",
-                1,
+                null,
                 null),
             "invalid_designation"
         },
-        { new CreateProjectRequest("ПР", null, 1, null), "invalid_name" },
-        { new CreateProjectRequest("ПР", "Имя", 0, null), "invalid_batch_quantity" },
-        { new CreateProjectRequest("ПР", "Имя", -1, null), "invalid_batch_quantity" },
-        { new CreateProjectRequest("ПР", "Имя", 1, "archived"), "invalid_status" },
+        { new CreateProjectRequest("ПР", null, null, null), "invalid_name" },
+        { new CreateProjectRequest("ПР", "Имя", null, "archived"), "invalid_status" },
     };
 
     private static async Task<string> StartSessionAsync(HttpClient client, string pathBase = "")

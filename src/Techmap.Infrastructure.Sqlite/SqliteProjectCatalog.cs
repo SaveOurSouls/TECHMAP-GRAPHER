@@ -10,7 +10,7 @@ namespace Techmap.Infrastructure.Sqlite;
 
 public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatalog
 {
-    private const int JournalPayloadSchemaVersion = 1;
+    private const int JournalPayloadSchemaVersion = 2;
     private static readonly JsonSerializerOptions JournalJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly SqliteStorage storage;
     private readonly Action<string>? commandProgressHook;
@@ -43,7 +43,7 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
                     reader.GetString(1),
                     reader.GetInt64(2),
                     reader.GetString(3),
-                    reader.GetInt64(4),
+                    Math.Min(reader.GetInt64(4), ProjectRules.MaximumHarnessQuantity),
                     ReadStatus(reader.GetString(5)),
                     reader.GetInt64(6),
                     reader.GetInt32(9),
@@ -187,6 +187,7 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
                     HarnessIdentity.New(),
                     destinationId,
                     harness.Designation,
+                    harness.Quantity,
                     harness.SortOrder,
                     now);
             }
@@ -198,7 +199,7 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         });
     }
 
-    public ProjectDetails AddHarness(ProjectIdentity projectId, string designation)
+    public ProjectDetails AddHarness(ProjectIdentity projectId, string designation, long quantity = 1)
     {
         while (true)
         {
@@ -208,7 +209,8 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
                 return AddHarness(
                     projectId,
                     new ProjectCommandEnvelope(Guid.NewGuid(), revision),
-                    designation).Value;
+                    designation,
+                    quantity).Value;
             }
             catch (ProjectCommandException error) when (error.Code == "revision_conflict")
             {
@@ -220,14 +222,23 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
     public ProjectMutationResult<ProjectDetails> AddHarness(
         ProjectIdentity projectId,
         ProjectCommandEnvelope envelope,
-        string designation)
+        string designation,
+        long? quantity = 1)
     {
         ValidateProjectId(projectId);
         var normalizedDesignation = NormalizeDesignation(designation, "designation");
-        var canonicalRequest = JsonSerializer.Serialize(new
+        long? normalizedQuantity = quantity is null ? null : ValidateHarnessQuantity(quantity.Value);
+        var legacyCanonicalRequest = JsonSerializer.Serialize(new
         {
             designation = normalizedDesignation,
         }, JournalJsonOptions);
+        var canonicalRequest = normalizedQuantity is null
+            ? legacyCanonicalRequest
+            : JsonSerializer.Serialize(new
+            {
+                designation = normalizedDesignation,
+                quantity = normalizedQuantity.Value,
+            }, JournalJsonOptions);
         return ExecuteProjectCommand(
             projectId,
             envelope,
@@ -260,11 +271,20 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             reader.Close();
             try
             {
+                if (normalizedQuantity is null)
+                {
+                    throw Invalid(
+                        "invalid_harness_quantity",
+                        "The harness quantity is required.",
+                        "quantity");
+                }
+
                 InsertHarness(
                     unitOfWork,
                     HarnessIdentity.New(),
                     projectId,
                     normalizedDesignation,
+                    normalizedQuantity.Value,
                     sortOrder,
                     now);
             }
@@ -279,7 +299,75 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
 
             TouchProject(unitOfWork, projectId, now);
             return ReadProject(unitOfWork, projectId);
-        });
+        }, normalizedQuantity is null ? legacyCanonicalRequest : null);
+    }
+
+    public ProjectDetails UpdateHarnessQuantity(
+        ProjectIdentity projectId,
+        HarnessIdentity harnessId,
+        long quantity)
+    {
+        while (true)
+        {
+            var revision = GetProject(projectId).Revision;
+            try
+            {
+                return UpdateHarnessQuantity(
+                    projectId,
+                    harnessId,
+                    new ProjectCommandEnvelope(Guid.NewGuid(), revision),
+                    quantity).Value;
+            }
+            catch (ProjectCommandException error) when (error.Code == "revision_conflict")
+            {
+                // Compatibility wrapper for in-process callers.
+            }
+        }
+    }
+
+    public ProjectMutationResult<ProjectDetails> UpdateHarnessQuantity(
+        ProjectIdentity projectId,
+        HarnessIdentity harnessId,
+        ProjectCommandEnvelope envelope,
+        long quantity)
+    {
+        ValidateProjectId(projectId);
+        if (harnessId.Value == Guid.Empty)
+        {
+            throw Invalid("invalid_harness_id", "The harness ID is invalid.", "harnessId");
+        }
+
+        var normalizedQuantity = ValidateHarnessQuantity(quantity);
+        var canonicalRequest = JsonSerializer.Serialize(new
+        {
+            harnessId = Format(harnessId.Value),
+            quantity = normalizedQuantity,
+        }, JournalJsonOptions);
+        return ExecuteProjectCommand(
+            projectId,
+            envelope,
+            "update_harness_quantity",
+            canonicalRequest,
+            (unitOfWork, now) =>
+            {
+                using var update = unitOfWork.CreateCommand(
+                    """
+                    UPDATE harnesses
+                    SET quantity = $quantity, updated_utc = $updatedUtc
+                    WHERE project_id = $projectId AND harness_id = $harnessId;
+                    """);
+                update.Parameters.AddWithValue("$quantity", normalizedQuantity);
+                update.Parameters.AddWithValue("$updatedUtc", now);
+                update.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+                update.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
+                if (update.ExecuteNonQuery() != 1)
+                {
+                    throw NotFound("harness_not_found", "The harness does not exist in this project.");
+                }
+
+                TouchProject(unitOfWork, projectId, now);
+                return ReadProject(unitOfWork, projectId);
+            });
     }
 
     public ProjectDetails DeleteHarness(ProjectIdentity projectId, HarnessIdentity harnessId)
@@ -371,7 +459,8 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         ProjectCommandEnvelope envelope,
         string commandType,
         string canonicalRequest,
-        Func<SqliteUnitOfWork, string, ProjectDetails> mutation)
+        Func<SqliteUnitOfWork, string, ProjectDetails> mutation,
+        string? legacyCanonicalRequest = null)
     {
         ValidateEnvelope(envelope);
         var requestHash = Sha256(canonicalRequest);
@@ -380,11 +469,17 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             var replay = ReadCommand(unitOfWork, envelope.CommandId);
             if (replay is not null)
             {
+                var requestMatches =
+                    replay.RequestSchemaVersion == JournalPayloadSchemaVersion &&
+                        string.Equals(replay.RequestJson, canonicalRequest, StringComparison.Ordinal) ||
+                    replay.RequestSchemaVersion == 1 &&
+                        (string.Equals(replay.RequestJson, canonicalRequest, StringComparison.Ordinal) ||
+                         legacyCanonicalRequest is not null &&
+                            string.Equals(replay.RequestJson, legacyCanonicalRequest, StringComparison.Ordinal));
                 if (replay.ProjectId != projectId.Value ||
                     replay.ExpectedRevision != envelope.ExpectedRevision ||
                     !string.Equals(replay.CommandType, commandType, StringComparison.Ordinal) ||
-                    !string.Equals(replay.RequestSha256, requestHash, StringComparison.Ordinal) ||
-                    !string.Equals(replay.RequestJson, canonicalRequest, StringComparison.Ordinal))
+                    !requestMatches)
                 {
                     throw new ProjectCommandException(
                         "command_id_reused",
@@ -392,10 +487,7 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
                         ReadCurrentRevisionOrNull(unitOfWork, projectId));
                 }
 
-                var storedProject = JsonSerializer.Deserialize<ProjectDetails>(
-                    replay.ResultJson,
-                    JournalJsonOptions)
-                    ?? throw new InvalidDataException("The stored project command result is invalid.");
+                var storedProject = ReadStoredProject(replay);
                 return new ProjectMutationResult<ProjectDetails>(
                     envelope.CommandId,
                     envelope.ExpectedRevision,
@@ -454,7 +546,8 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         using var command = unitOfWork.CreateCommand(
             """
             SELECT project_id, expected_revision, resulting_revision, command_type,
-                   request_json, request_sha256, result_json, result_sha256
+                   request_schema_version, request_json, request_sha256,
+                   result_schema_version, result_json, result_sha256
             FROM project_commands
             WHERE command_id = $commandId;
             """);
@@ -470,10 +563,12 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             reader.GetInt64(1),
             reader.GetInt64(2),
             reader.GetString(3),
-            reader.GetString(4),
+            reader.GetInt32(4),
             reader.GetString(5),
             reader.GetString(6),
-            reader.GetString(7));
+            reader.GetInt32(7),
+            reader.GetString(8),
+            reader.GetString(9));
         if (!string.Equals(stored.RequestSha256, Sha256(stored.RequestJson), StringComparison.Ordinal) ||
             !string.Equals(stored.ResultSha256, Sha256(stored.ResultJson), StringComparison.Ordinal))
         {
@@ -481,6 +576,51 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         }
 
         return stored;
+    }
+
+    private static ProjectDetails ReadStoredProject(StoredCommand replay)
+    {
+        var storedProject = JsonSerializer.Deserialize<ProjectDetails>(
+            replay.ResultJson,
+            JournalJsonOptions)
+            ?? throw new InvalidDataException("The stored project command result is invalid.");
+        if (replay.ResultSchemaVersion == JournalPayloadSchemaVersion)
+        {
+            if (storedProject.Revision != replay.ResultingRevision ||
+                storedProject.Harnesses.Any(harness =>
+                    harness.Quantity <= 0 || harness.Documents is null || harness.Documents.Count != 3))
+            {
+                throw new InvalidDataException("The stored project command result is inconsistent.");
+            }
+
+            return storedProject;
+        }
+
+        if (replay.ResultSchemaVersion != 1)
+        {
+            throw new InvalidDataException("The stored project command result schema is unsupported.");
+        }
+
+        var legacyHarnessQuantity = Math.Min(
+            storedProject.BatchQuantity,
+            ProjectRules.MaximumHarnessQuantity);
+        var harnesses = storedProject.Harnesses.Select(harness => harness with
+        {
+            Quantity = legacyHarnessQuantity,
+            Documents = new[] { "e4", "drawing", "route" }.Select(kind =>
+                new HarnessDocumentSummary(
+                    new HarnessDocumentIdentity(DeterministicGuid(harness.HarnessId.Value, "journal-document", kind)),
+                    kind,
+                    "empty",
+                    harness.CreatedUtc,
+                    harness.UpdatedUtc)).ToArray(),
+        }).ToArray();
+        return storedProject with
+        {
+            BatchQuantity = legacyHarnessQuantity,
+            Revision = replay.ResultingRevision,
+            Harnesses = harnesses,
+        };
     }
 
     private static void InsertCommand(
@@ -600,13 +740,29 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
     private static string Sha256(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
+    private static Guid DeterministicGuid(Guid namespaceId, string kind, string value)
+    {
+        Span<byte> namespaceBytes = stackalloc byte[16];
+        namespaceId.TryWriteBytes(namespaceBytes, bigEndian: true, out _);
+        var nameBytes = Encoding.UTF8.GetBytes($"{kind}/{value}");
+        var input = new byte[namespaceBytes.Length + nameBytes.Length];
+        namespaceBytes.CopyTo(input);
+        nameBytes.CopyTo(input.AsSpan(namespaceBytes.Length));
+        var bytes = SHA1.HashData(input)[..16];
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes, bigEndian: true);
+    }
+
     private sealed record StoredCommand(
         Guid ProjectId,
         long ExpectedRevision,
         long ResultingRevision,
         string CommandType,
+        int RequestSchemaVersion,
         string RequestJson,
         string RequestSha256,
+        int ResultSchemaVersion,
         string ResultJson,
         string ResultSha256);
 
@@ -668,6 +824,18 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         }
     }
 
+    private static long ValidateHarnessQuantity(long value)
+    {
+        try
+        {
+            return ProjectRules.ValidateHarnessQuantity(value, "quantity");
+        }
+        catch (ArgumentOutOfRangeException error)
+        {
+            throw Invalid("invalid_harness_quantity", error.Message, "quantity");
+        }
+    }
+
     private static void ValidateProjectId(ProjectIdentity projectId)
     {
         if (projectId.Value == Guid.Empty)
@@ -723,23 +891,41 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         HarnessIdentity harnessId,
         ProjectIdentity projectId,
         string designation,
+        long quantity,
         int sortOrder,
         string timestamp)
     {
         using var insert = unitOfWork.CreateCommand(
             """
             INSERT INTO harnesses
-                (harness_id, project_id, designation, sort_order, created_utc, updated_utc)
+                (harness_id, project_id, designation, quantity, sort_order, created_utc, updated_utc)
             VALUES
-                ($harnessId, $projectId, $designation, $sortOrder, $createdUtc, $updatedUtc);
+                ($harnessId, $projectId, $designation, $quantity, $sortOrder, $createdUtc, $updatedUtc);
             """);
         insert.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
         insert.Parameters.AddWithValue("$projectId", Format(projectId.Value));
         insert.Parameters.AddWithValue("$designation", designation);
+        insert.Parameters.AddWithValue("$quantity", quantity);
         insert.Parameters.AddWithValue("$sortOrder", sortOrder);
         insert.Parameters.AddWithValue("$createdUtc", timestamp);
         insert.Parameters.AddWithValue("$updatedUtc", timestamp);
         insert.ExecuteNonQuery();
+
+        foreach (var kind in new[] { "e4", "drawing", "route" })
+        {
+            using var document = unitOfWork.CreateCommand(
+                """
+                INSERT INTO harness_documents
+                    (document_id, harness_id, section_kind, status, created_utc, updated_utc)
+                VALUES ($documentId, $harnessId, $kind, 'empty', $createdUtc, $updatedUtc);
+                """);
+            document.Parameters.AddWithValue("$documentId", Format(Guid.NewGuid()));
+            document.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
+            document.Parameters.AddWithValue("$kind", kind);
+            document.Parameters.AddWithValue("$createdUtc", timestamp);
+            document.Parameters.AddWithValue("$updatedUtc", timestamp);
+            document.ExecuteNonQuery();
+        }
     }
 
     private static ProjectDetails ReadProject(
@@ -772,16 +958,17 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             designation = reader.GetString(0);
             increment = reader.GetInt64(1);
             name = reader.GetString(2);
-            batchQuantity = reader.GetInt64(3);
+            batchQuantity = Math.Min(reader.GetInt64(3), ProjectRules.MaximumHarnessQuantity);
             status = ReadStatus(reader.GetString(4));
             revision = reader.GetInt64(5);
             createdUtc = ReadTimestamp(reader.GetString(6));
             updatedUtc = ReadTimestamp(reader.GetString(7));
         }
 
+        var documents = ReadHarnessDocuments(unitOfWork, projectId);
         using var harnessesCommand = unitOfWork.CreateCommand(
             """
-            SELECT harness_id, designation, sort_order, created_utc, updated_utc
+            SELECT harness_id, designation, quantity, sort_order, created_utc, updated_utc
             FROM harnesses
             WHERE project_id = $projectId
             ORDER BY sort_order, harness_id;
@@ -791,12 +978,17 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         var harnesses = new List<HarnessSummary>();
         while (harnessReader.Read())
         {
+            var harnessId = ReadHarnessId(harnessReader, 0);
             harnesses.Add(new HarnessSummary(
-                ReadHarnessId(harnessReader, 0),
+                harnessId,
                 harnessReader.GetString(1),
-                harnessReader.GetInt32(2),
-                ReadTimestamp(harnessReader.GetString(3)),
-                ReadTimestamp(harnessReader.GetString(4))));
+                harnessReader.GetInt64(2),
+                harnessReader.GetInt32(3),
+                ReadTimestamp(harnessReader.GetString(4)),
+                ReadTimestamp(harnessReader.GetString(5)),
+                documents.TryGetValue(harnessId, out var harnessDocuments)
+                    ? harnessDocuments
+                    : throw new InvalidDataException("A harness document workspace is incomplete.")));
         }
 
         return new ProjectDetails(
@@ -810,6 +1002,50 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             createdUtc,
             updatedUtc,
             harnesses);
+    }
+
+    private static IReadOnlyDictionary<HarnessIdentity, IReadOnlyList<HarnessDocumentSummary>>
+        ReadHarnessDocuments(SqliteUnitOfWork unitOfWork, ProjectIdentity projectId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT d.harness_id, d.document_id, d.section_kind, d.status,
+                   d.created_utc, d.updated_utc
+            FROM harness_documents d
+            INNER JOIN harnesses h ON h.harness_id = d.harness_id
+            WHERE h.project_id = $projectId
+            ORDER BY d.harness_id,
+                     CASE d.section_kind WHEN 'e4' THEN 0 WHEN 'drawing' THEN 1 ELSE 2 END;
+            """);
+        command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        using var reader = command.ExecuteReader();
+        var documents = new Dictionary<HarnessIdentity, List<HarnessDocumentSummary>>();
+        while (reader.Read())
+        {
+            var harnessId = new HarnessIdentity(ReadGuid(reader.GetString(0), "harness"));
+            if (!documents.TryGetValue(harnessId, out var list))
+            {
+                list = [];
+                documents.Add(harnessId, list);
+            }
+
+            list.Add(new HarnessDocumentSummary(
+                new HarnessDocumentIdentity(ReadGuid(reader.GetString(1), "harness document")),
+                reader.GetString(2),
+                reader.GetString(3),
+                ReadTimestamp(reader.GetString(4)),
+                ReadTimestamp(reader.GetString(5))));
+        }
+
+        if (documents.Any(pair => pair.Value.Count != 3 ||
+                !pair.Value.Select(item => item.Kind).SequenceEqual(new[] { "e4", "drawing", "route" })))
+        {
+            throw new InvalidDataException("A harness document workspace is incomplete.");
+        }
+
+        return documents.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<HarnessDocumentSummary>)pair.Value);
     }
 
     private static void EnsureProjectExists(SqliteUnitOfWork unitOfWork, ProjectIdentity projectId)

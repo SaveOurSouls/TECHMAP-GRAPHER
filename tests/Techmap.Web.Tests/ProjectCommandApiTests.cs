@@ -16,7 +16,7 @@ public sealed class ProjectCommandApiTests
         using var client = factory.CreateLocalClient();
         var csrf = await StartSessionAsync(client);
         var project = await CreateProjectAsync(client, csrf);
-        var originalRequest = new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут А");
+        var originalRequest = new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут А", 2);
         using var firstResponse = await SendAsync(
             client,
             HttpMethod.Post,
@@ -108,7 +108,7 @@ public sealed class ProjectCommandApiTests
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{project.ProjectId:D}/harnesses",
-            new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут А"),
+            new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут А", 2),
             csrf);
         Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
 
@@ -116,7 +116,7 @@ public sealed class ProjectCommandApiTests
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{project.ProjectId:D}/harnesses",
-            new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут Б"),
+            new AddHarnessRequest(Guid.NewGuid(), 0, "Жгут Б", 3),
             csrf);
         var error = await stale.Content.ReadFromJsonAsync<ApiErrorResponse>(
             TestContext.Current.CancellationToken);
@@ -136,8 +136,8 @@ public sealed class ProjectCommandApiTests
         var project = await CreateProjectAsync(client, csrf);
         var commandId = Guid.NewGuid();
         var route = $"/api/v1/projects/{project.ProjectId:D}";
-        var firstJson = $"{{\"commandId\":\"{commandId:D}\",\"expectedRevision\":0,\"name\":\"New name\",\"batchQuantity\":17}}";
-        var secondJson = $"{{\"batchQuantity\":17,\"name\":\"New name\",\"expectedRevision\":0,\"commandId\":\"{commandId:D}\"}}";
+        var firstJson = $"{{\"commandId\":\"{commandId:D}\",\"expectedRevision\":0,\"name\":\"New name\",\"status\":\"active\"}}";
+        var secondJson = $"{{\"status\":\"active\",\"name\":\"New name\",\"expectedRevision\":0,\"commandId\":\"{commandId:D}\"}}";
 
         using var firstResponse = await SendRawAsync(client, HttpMethod.Patch, route, firstJson, csrf);
         var first = await ReadCommandAsync(firstResponse);
@@ -193,7 +193,7 @@ public sealed class ProjectCommandApiTests
             client,
             HttpMethod.Post,
             "/api/v1/projects",
-            new CreateProjectRequest("ПР-КОМ-API", "Command API", 10, "draft"),
+            new CreateProjectRequest("ПР-КОМ-API", "Command API", null, "draft"),
             csrf);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var project = await response.Content.ReadFromJsonAsync<ProjectDetailsResponse>(

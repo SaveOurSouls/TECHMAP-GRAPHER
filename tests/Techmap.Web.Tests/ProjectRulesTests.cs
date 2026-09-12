@@ -57,6 +57,18 @@ public sealed class ProjectRulesTests
             ProjectRules.ValidateBatchQuantity(value, "batchQuantity"));
     }
 
+    [Fact]
+    public void Harness_quantity_is_limited_to_the_exact_javascript_integer_range()
+    {
+        Assert.Equal(
+            ProjectRules.MaximumHarnessQuantity,
+            ProjectRules.ValidateHarnessQuantity(ProjectRules.MaximumHarnessQuantity, "quantity"));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ProjectRules.ValidateHarnessQuantity(ProjectRules.MaximumHarnessQuantity + 1, "quantity"));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ProjectRules.ValidateHarnessQuantity(0, "quantity"));
+    }
+
     [Theory]
     [InlineData(ProjectStatus.Draft, "draft")]
     [InlineData(ProjectStatus.Active, "active")]
