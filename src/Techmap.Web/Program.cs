@@ -273,6 +273,7 @@ builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
     new ContentAddressedAttachmentStore(dataRoot));
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
+builder.Services.AddSingleton<IHarnessDesignDocumentStore, SqliteHarnessDesignDocumentStore>();
 builder.Services.AddSingleton<IReferenceCatalogSnapshotStore, SqliteReferenceCatalogSnapshotStore>();
 builder.Services.AddSingleton<IReferenceCatalogSearchStore, SqliteReferenceCatalogSearchStore>();
 builder.Services.AddSingleton<IReferenceCatalogSavedFilterStore, SqliteReferenceCatalogSavedFilterStore>();
@@ -378,6 +379,7 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
             statusCode: StatusCodes.Status401Unauthorized));
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
+app.MapHarnessDesignEndpoints();
 app.MapReferenceCatalogEndpoints();
 app.MapReferenceCatalogSavedFilterEndpoints();
 app.MapXlsxReferenceEndpoints();

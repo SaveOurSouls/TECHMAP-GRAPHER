@@ -147,6 +147,19 @@ public sealed record ProjectAttachmentListResponse(
 
 public sealed record AttachmentValidationResponse(Guid AttachmentId, string Status);
 
+public sealed record PutHarnessDesignRequest(
+    long? ExpectedRevision,
+    int SchemaVersion,
+    JsonElement Content);
+
+public sealed record HarnessDesignResponse(
+    Guid HarnessId,
+    int SchemaVersion,
+    long Revision,
+    JsonElement Content,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
 public sealed record ReferenceCatalogRecordInputRequest(
     string? EntityType,
     string? SourceKey,

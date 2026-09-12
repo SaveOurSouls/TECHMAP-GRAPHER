@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -622,6 +622,37 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         """;
 
+    internal const string EmptyHarnessDesignJson =
+        "{\"schemaVersion\":1,\"connectors\":[],\"wires\":[],\"views\":{\"e4\":{\"layers\":[{\"id\":\"dimensions\",\"name\":\"Размеры\",\"order\":2,\"visible\":true,\"locked\":false},{\"id\":\"connectors\",\"name\":\"Соединители\",\"order\":1,\"visible\":true,\"locked\":false},{\"id\":\"wires\",\"name\":\"Провода\",\"order\":0,\"visible\":true,\"locked\":false}]},\"drawing\":{\"layers\":[{\"id\":\"dimensions\",\"name\":\"Размеры\",\"order\":2,\"visible\":true,\"locked\":false},{\"id\":\"connectors\",\"name\":\"Соединители\",\"order\":1,\"visible\":true,\"locked\":false},{\"id\":\"wires\",\"name\":\"Провода\",\"order\":0,\"visible\":true,\"locked\":false}]}}}";
+    private const string HarnessDesignMigrationId = "E-01-harness-design-documents";
+    private static readonly string HarnessDesignSchemaSql =
+        $$"""
+        CREATE TABLE harness_design_documents (
+            harness_id TEXT NOT NULL PRIMARY KEY
+                REFERENCES harnesses(harness_id) ON UPDATE CASCADE ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision >= 0),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+            content_json TEXT NOT NULL
+                CHECK (length(content_json) BETWEEN 2 AND 1048576)
+                CHECK (json_valid(content_json)),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            updated_utc TEXT NOT NULL CHECK (length(updated_utc) BETWEEN 1 AND 64)
+        ) STRICT;
+
+        INSERT INTO harness_design_documents
+            (harness_id, revision, schema_version, content_json, created_utc, updated_utc)
+        SELECT harness_id, 0, 1, '{{EmptyHarnessDesignJson}}', created_utc, updated_utc
+        FROM harnesses;
+
+        CREATE TRIGGER create_harness_design_document
+        AFTER INSERT ON harnesses
+        BEGIN
+            INSERT INTO harness_design_documents
+                (harness_id, revision, schema_version, content_json, created_utc, updated_utc)
+            VALUES (NEW.harness_id, 0, 1, '{{EmptyHarnessDesignJson}}', NEW.created_utc, NEW.updated_utc);
+        END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1028,6 +1059,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 6, MigrationId: HarnessWorkspaceMigrationId, Sql: HarnessWorkspaceSchemaSql),
             (Version: 7, MigrationId: ReferenceSnapshotMigrationId, Sql: ReferenceSnapshotSchemaSql),
             (Version: 8, MigrationId: ReferenceSearchMigrationId, Sql: ReferenceSearchSchemaSql),
+            (Version: 9, MigrationId: HarnessDesignMigrationId, Sql: HarnessDesignSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1115,6 +1147,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ReferenceSearchSchemaSql);
         }
 
+        if (schemaVersion >= 9)
+        {
+            ExecuteSchemaSql(expected, HarnessDesignSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1198,6 +1235,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ReferenceSearchMigrationId,
                 Sql: ReferenceSearchSchemaSql,
                 Description: "Indexed reference catalog search"),
+            8 => (
+                Version: 9,
+                MigrationId: HarnessDesignMigrationId,
+                Sql: HarnessDesignSchemaSql,
+                Description: "Shared harness design documents"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1274,7 +1316,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8))
             {
                 return false;
             }
