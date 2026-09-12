@@ -133,12 +133,49 @@ export interface ReferenceCatalogPublication {
   readonly snapshot: ReferenceCatalogSnapshot;
 }
 
+export interface ReferenceCatalogSearchRequest {
+  readonly text: string | null;
+  readonly exactSourceKey: string | null;
+  readonly entityTypes: readonly string[];
+  readonly filters: readonly ReferenceCatalogSearchFilter[];
+  readonly filterLogic: "all" | "any";
+  readonly sort: "relevance" | "source-key-asc" | "source-key-desc" | "entity-type-asc";
+  readonly pageSize: number;
+  readonly cursor: string | null;
+}
+
+export interface ReferenceCatalogSearchFilter {
+  readonly field: string;
+  readonly operator: "eq" | "prefix" | "exists" | "missing" | "null" | "blank";
+  readonly value?: string | null;
+}
+
+export interface ReferenceCatalogSearchRecord {
+  readonly recordId: string;
+  readonly entityType: string;
+  readonly sourceKey: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly sourceLocation: string | null;
+}
+
+export interface ReferenceCatalogSearchPage {
+  readonly snapshotId: string;
+  readonly snapshotSha256: string;
+  readonly items: readonly ReferenceCatalogSearchRecord[];
+  readonly nextCursor: string | null;
+}
+
 export interface ReferenceCatalogApi {
   getXlsxProfiles(): Promise<readonly XlsxImportProfile[]>;
   getActive(sourceId: string): Promise<ReferenceCatalogSnapshot | null>;
   previewXlsx(sourceId: string, request: XlsxPreviewRequest): Promise<XlsxReferencePreview>;
   previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest): Promise<XlsxReferencePreview>;
   publishXlsx(sourceId: string, request: PublishXlsxPreviewRequest): Promise<ReferenceCatalogPublication>;
+  searchCatalog(
+    sourceId: string,
+    request: ReferenceCatalogSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<ReferenceCatalogSearchPage>;
 }
 
 export class ReferenceCatalogApiError extends Error {
@@ -186,6 +223,9 @@ const errorMessages: Readonly<Record<string, string>> = {
   xlsx_preview_expired: "Предварительный просмотр истёк. Проверьте файл ещё раз.",
   xlsx_preview_active_mismatch: "Активная версия изменилась. Проверьте файл ещё раз.",
   xlsx_publication_invalid: "Данные предварительного просмотра неполны. Проверьте файл ещё раз.",
+  catalog_search_invalid: "Параметры поиска справочника заданы неверно.",
+  catalog_cursor_invalid: "Страница поиска устарела. Запустите поиск повторно.",
+  catalog_cursor_snapshot_changed: "Справочник обновился. Результаты поиска будут загружены заново.",
   catalog_active_snapshot_changed: "Активная версия изменилась. Проверьте файл ещё раз.",
   catalog_validation_failed: "В файле остались блокирующие ошибки.",
   catalog_validation_changed: "Результат проверки изменился. Проверьте файл ещё раз.",
@@ -307,6 +347,27 @@ function parseXlsxProfiles(value: unknown): readonly XlsxImportProfile[] {
     throw new Error("Сервер вернул повторяющиеся профили импорта XLSX.");
   }
   return Object.freeze(profiles);
+}
+
+function parseSearchRecord(value: unknown): ReferenceCatalogSearchRecord {
+  const record = requireRecord(value, "Сервер вернул повреждённую запись поиска.");
+  return Object.freeze({
+    recordId: requireString(record, "recordId"),
+    entityType: requireString(record, "entityType"),
+    sourceKey: requireString(record, "sourceKey"),
+    payload: parsePayload(record.payload),
+    sourceLocation: optionalString(record, "sourceLocation"),
+  });
+}
+
+function parseSearchPage(value: unknown): ReferenceCatalogSearchPage {
+  const record = requireRecord(value, "Сервер вернул повреждённую страницу поиска.");
+  return Object.freeze({
+    snapshotId: requireUuid(record, "snapshotId"),
+    snapshotSha256: requireHash(record, "snapshotSha256"),
+    items: Object.freeze(requireArray(record, "items").map(parseSearchRecord)),
+    nextCursor: optionalString(record, "nextCursor"),
+  });
 }
 
 function parsePayload(value: unknown): Readonly<Record<string, unknown>> {
@@ -519,6 +580,15 @@ export function createReferenceCatalogApi(
       resource(sourceId, "xlsx-publications"),
       { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
       parsePublication,
+    ),
+    searchCatalog: (
+      sourceId: string,
+      body: ReferenceCatalogSearchRequest,
+      signal?: AbortSignal,
+    ) => request(
+      resource(sourceId, "catalog-searches"),
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
+      parseSearchPage,
     ),
   });
 }

@@ -159,6 +159,45 @@ describe("reference catalog API", () => {
     );
   });
 
+  it("searches an active reference source with server pagination and cancellation", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn(async () => jsonResponse({
+      snapshotId,
+      snapshotSha256: hash,
+      items: [{
+        recordId: hash,
+        entityType: "terminal",
+        sourceKey: "TER-001",
+        payload: { productName: "Контакт", sectionFromMm2: 0.35 },
+        sourceLocation: "'БД.ТЕР'!2",
+      }],
+      nextCursor: "opaque-cursor",
+    }));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+    const body = {
+      text: "контакт",
+      exactSourceKey: null,
+      entityTypes: ["terminal"],
+      filters: [] as const,
+      filterLogic: "all" as const,
+      sort: "relevance" as const,
+      pageSize: 30,
+      cursor: null,
+    };
+
+    await expect(api.searchCatalog("technology-terminals", body, controller.signal)).resolves.toEqual(
+      expect.objectContaining({ nextCursor: "opaque-cursor", items: [expect.objectContaining({ sourceKey: "TER-001" })] }),
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-sources/technology-terminals/catalog-searches",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      }),
+    );
+  });
+
   it("rejects duplicate profile identities from a malformed response", async () => {
     const fetcher = vi.fn(async () => jsonResponse([profiles()[0], profiles()[0]]));
     const api = createReferenceCatalogApi(config, session, fetcher);

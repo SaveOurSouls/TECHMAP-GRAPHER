@@ -40,7 +40,42 @@ describe("harness editor workspace", () => {
     expect(markup).toContain("Объекты и материалы");
     expect(markup).toContain("Артикул, название или характеристика");
     expect(markup).toContain("Соединители");
+    expect(markup).toContain("XS-04");
+    expect(markup).toContain("XS-10");
     expect(markup).not.toContain("Размер, клавиша D");
+  });
+
+  it("renders server-backed catalog navigation, loading state and pagination action", () => {
+    const markup = renderToStaticMarkup(createElement(HarnessEditorWorkspace, {
+      harnessId: "harness-a",
+      harnessDesignation: "ЖГ-01",
+      objects,
+      layers,
+      catalogSources: [
+        { id: "terminals", label: "Терминалы", description: "БД.ТЕР" },
+        { id: "cables", label: "Кабели", description: "СПР.КАБ" },
+      ],
+      selectedCatalogSourceId: "terminals",
+      catalogQuery: "M39029",
+      catalogLoadState: "ready",
+      catalogHasMore: true,
+      catalogItems: [{
+        id: "reference:terminals:1",
+        title: "M39029/57-354",
+        subtitle: "Сигнальный контакт · 0,35–0,5 мм²",
+        category: "Терминалы",
+        accent: "#8a6635",
+        placement: "reference-only",
+      }],
+    }));
+
+    expect(markup).toContain("Терминалы");
+    expect(markup).toContain("Кабели");
+    expect(markup).toContain('value="M39029"');
+    expect(markup).toContain("M39029/57-354");
+    expect(markup).toContain("0,35–0,5 мм²");
+    expect(markup).toContain("Показать ещё");
+    expect(markup).toContain('draggable="false"');
   });
 
   it("keeps the world point under the cursor while zooming and reverses transforms", () => {

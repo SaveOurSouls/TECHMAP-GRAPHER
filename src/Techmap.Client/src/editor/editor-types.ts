@@ -42,6 +42,16 @@ export interface EditorCatalogItem {
   readonly subtitle: string;
   readonly category: string;
   readonly accent: string;
+  readonly placement?: "connector" | "reference-only";
+  readonly sourceId?: string;
+  readonly sourceKey?: string;
+  readonly entityType?: string;
+}
+
+export interface EditorCatalogSource {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
 }
 
 export interface EditorCamera {
@@ -49,4 +59,3 @@ export interface EditorCamera {
   readonly offsetY: number;
   readonly zoom: number;
 }
-

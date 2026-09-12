@@ -6,6 +6,7 @@ import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject }
 import type {
   EditorCamera,
   EditorCatalogItem,
+  EditorCatalogSource,
   EditorLayer,
   EditorPoint,
   EditorSceneObject,
@@ -72,6 +73,12 @@ export interface HarnessEditorWorkspaceProps {
   readonly objects?: readonly EditorSceneObject[];
   readonly layers?: readonly EditorLayer[];
   readonly catalogItems?: readonly EditorCatalogItem[];
+  readonly catalogSources?: readonly EditorCatalogSource[];
+  readonly selectedCatalogSourceId?: string;
+  readonly catalogQuery?: string;
+  readonly catalogLoadState?: "idle" | "loading" | "loading-more" | "ready" | "unpublished" | "error";
+  readonly catalogMessage?: string | null;
+  readonly catalogHasMore?: boolean;
   readonly selectedObjectId?: string | null;
   readonly saveState?: EditorSaveState;
   readonly onViewChange?: (view: HarnessEditorView) => void;
@@ -79,6 +86,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
   readonly onSelectedObjectChange?: (objectId: string | null) => void;
   readonly onCatalogItemActivate?: (item: EditorCatalogItem, point?: EditorPoint) => void;
+  readonly onCatalogSourceChange?: (sourceId: string) => void;
+  readonly onCatalogQueryChange?: (query: string) => void;
+  readonly onCatalogLoadMore?: () => void;
+  readonly onCatalogRetry?: () => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   readonly onWireConnect?: (
     from: { readonly connectorId: string; readonly contactIndex: number },
@@ -111,6 +122,12 @@ export function HarnessEditorWorkspace({
   objects: controlledObjects,
   layers: controlledLayers,
   catalogItems = defaultCatalog,
+  catalogSources,
+  selectedCatalogSourceId,
+  catalogQuery,
+  catalogLoadState,
+  catalogMessage,
+  catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   saveState = "saved",
   onViewChange,
@@ -118,6 +135,10 @@ export function HarnessEditorWorkspace({
   onLayersChange,
   onSelectedObjectChange,
   onCatalogItemActivate,
+  onCatalogSourceChange,
+  onCatalogQueryChange,
+  onCatalogLoadMore,
+  onCatalogRetry,
   onObjectMove,
   onWireConnect,
   onWireReconnect,
@@ -280,9 +301,19 @@ export function HarnessEditorWorkspace({
 
         <CatalogDock
           items={catalogItems}
+          sources={catalogSources}
+          selectedSourceId={selectedCatalogSourceId}
+          query={catalogQuery}
+          loadState={catalogLoadState}
+          message={catalogMessage}
+          hasMore={catalogHasMore}
           expanded={catalogExpanded}
           onExpandedChange={setCatalogExpanded}
           onActivate={activateCatalogItem}
+          onSourceChange={onCatalogSourceChange}
+          onQueryChange={onCatalogQueryChange}
+          onLoadMore={onCatalogLoadMore}
+          onRetry={onCatalogRetry}
         />
       </div>
     </section>

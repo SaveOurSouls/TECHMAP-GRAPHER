@@ -3,6 +3,7 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createConnector, createWire, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
+import { useEditorReferenceCatalog } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
@@ -140,6 +141,7 @@ export function HarnessDesignEditor({
   onViewChange,
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
+  const catalog = useEditorReferenceCatalog(config, session);
   const [view, setView] = useState<HarnessEditorView>(initialView);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
@@ -295,6 +297,13 @@ export function HarnessDesignEditor({
         view={view}
         objects={scene}
         layers={layers}
+        catalogItems={catalog.items}
+        catalogSources={catalog.sources}
+        selectedCatalogSourceId={catalog.selectedSourceId}
+        catalogQuery={catalog.query}
+        catalogLoadState={catalog.loadState}
+        catalogMessage={catalog.message}
+        catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         saveState={saveState}
         onViewChange={(nextView) => {
@@ -303,6 +312,10 @@ export function HarnessDesignEditor({
         }}
         onSelectedObjectChange={setSelectedObjectId}
         onCatalogItemActivate={addCatalogItem}
+        onCatalogSourceChange={catalog.selectSource}
+        onCatalogQueryChange={catalog.changeQuery}
+        onCatalogLoadMore={catalog.loadMore}
+        onCatalogRetry={catalog.retry}
         onObjectMove={(objectId, point) => run({
           type: "move-connector",
           connectorId: objectId,
