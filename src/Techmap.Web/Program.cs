@@ -5,6 +5,7 @@ using Techmap.Contracts;
 using Techmap.Infrastructure.Sqlite;
 using Techmap.Web;
 
+WindowsProcessErrorMode.Apply();
 var programRoot = Path.GetFullPath(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
