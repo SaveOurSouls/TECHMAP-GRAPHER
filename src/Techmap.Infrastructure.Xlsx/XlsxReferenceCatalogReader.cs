@@ -28,7 +28,9 @@ public sealed record XlsxFieldMapping(
     bool Required = false,
     IReadOnlyList<string>? NotApplicableTokens = null,
     bool AllowBlank = false,
-    bool AllowNotApplicable = false);
+    bool AllowNotApplicable = false,
+    bool AllowFormulaCachedValue = false,
+    bool SkipBlank = false);
 
 public sealed record XlsxCatalogMapping(
     string? SheetName,
@@ -36,7 +38,11 @@ public sealed record XlsxCatalogMapping(
     uint FirstDataRow,
     string EntityType,
     string KeyColumn,
-    IReadOnlyList<XlsxFieldMapping>? Fields = null);
+    IReadOnlyList<XlsxFieldMapping>? Fields = null,
+    uint? LastDataRow = null,
+    bool IgnoreUnmappedFormulas = false,
+    bool StopAtFirstMissingKey = false,
+    string? ProfileId = null);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -145,6 +151,10 @@ public sealed class XlsxReferenceCatalogReader
             writer.WriteString("sheetName", mapping.SheetName?.Normalize(NormalizationForm.FormC));
             writer.WriteNumber("headerRow", mapping.HeaderRow);
             writer.WriteNumber("firstDataRow", mapping.FirstDataRow);
+            if (mapping.LastDataRow is uint lastDataRow) writer.WriteNumber("lastDataRow", lastDataRow); else writer.WriteNull("lastDataRow");
+            writer.WriteBoolean("ignoreUnmappedFormulas", mapping.IgnoreUnmappedFormulas);
+            writer.WriteBoolean("stopAtFirstMissingKey", mapping.StopAtFirstMissingKey);
+            if (mapping.ProfileId is null) writer.WriteNull("profileId"); else writer.WriteString("profileId", mapping.ProfileId.Normalize(NormalizationForm.FormC));
             writer.WriteString("entityType", mapping.EntityType.Normalize(NormalizationForm.FormC));
             writer.WriteString("keyColumn", mapping.KeyColumn.Normalize(NormalizationForm.FormC));
             writer.WritePropertyName("fields");
@@ -160,6 +170,8 @@ public sealed class XlsxReferenceCatalogReader
                     writer.WriteStartObject();
                     writer.WriteBoolean("allowBlank", field.AllowBlank);
                     writer.WriteBoolean("allowNotApplicable", field.AllowNotApplicable);
+                    writer.WriteBoolean("allowFormulaCachedValue", field.AllowFormulaCachedValue);
+                    writer.WriteBoolean("skipBlank", field.SkipBlank);
                     writer.WritePropertyName("notApplicableTokens");
                     writer.WriteStartArray();
                     foreach (var token in (field.NotApplicableTokens ?? [])
@@ -284,7 +296,7 @@ public sealed class XlsxReferenceCatalogReader
 
         var diagnostics = new List<ReferenceCatalogDiagnosticInput>();
         var headers = ResolveHeaders(headerRow, selectedSheetName, mapping.HeaderRow, diagnostics);
-        var normalizedKey = mapping.KeyColumn.Normalize(NormalizationForm.FormC);
+        var normalizedKey = NormalizeHeader(mapping.KeyColumn);
         if (!headers.TryGetValue(normalizedKey, out var keyColumn))
         {
             AddDiagnostic(diagnostics, Error(
@@ -300,7 +312,7 @@ public sealed class XlsxReferenceCatalogReader
                 .Select(item => new XlsxFieldMapping(item.Key, item.Key))
                 .ToArray();
         var duplicateSources = requestedFields
-            .Select(item => item.SourceColumn.Normalize(NormalizationForm.FormC))
+            .Select(item => NormalizeHeader(item.SourceColumn))
             .GroupBy(value => value, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
@@ -318,22 +330,29 @@ public sealed class XlsxReferenceCatalogReader
 
         var records = new List<ReferenceCatalogRecordInput>();
         var previewRecords = new List<XlsxPreviewRecord>();
+        var cachedFormulaFields = new Dictionary<string, (int Count, string FirstLocation)>(StringComparer.Ordinal);
         var sourceRows = 0;
         long candidateBytes = 0;
         foreach (var parsedRow in EnumerateRows(
                      worksheetPart, sharedStrings, selectedSheetName,
-                     mapping.FirstDataRow, MaximumRows, cancellationToken,
-                     rejectRowsAfterMaximum: true))
+                     mapping.FirstDataRow, mapping.LastDataRow ?? MaximumRows, cancellationToken,
+                     rejectRowsAfterMaximum: mapping.LastDataRow is null))
         {
             var rowNumber = parsedRow.RowNumber;
             var cells = parsedRow.Cells;
             cancellationToken.ThrowIfCancellationRequested();
+            if (mapping.StopAtFirstMissingKey && keyColumn is not null &&
+                (!cells.TryGetValue(keyColumn.ColumnIndex, out var boundaryKey) ||
+                 boundaryKey.State is ParsedCellState.Missing or ParsedCellState.Blank))
+                break;
             sourceRows++;
             if (sourceRows > MaximumRows)
                 throw new XlsxImportException("xlsx_row_limit", $"Лист содержит более {MaximumRows} строк данных.");
             var rowLocation = Location(sheets[selectedIndex].Name, rowNumber);
             foreach (var (column, formulaCell) in cells.Where(item =>
-                         item.Value.State == ParsedCellState.Formula && !consumedColumns.Contains(item.Key)))
+                         item.Value.State == ParsedCellState.Formula &&
+                         !consumedColumns.Contains(item.Key) &&
+                         !mapping.IgnoreUnmappedFormulas))
             {
                 AddDiagnostic(diagnostics, Error(
                     "xlsx_formula_not_allowed",
@@ -344,7 +363,8 @@ public sealed class XlsxReferenceCatalogReader
             }
             if (keyColumn is null)
                 continue;
-            if (!cells.TryGetValue(keyColumn.ColumnIndex, out var keyCell) || keyCell.State == ParsedCellState.Missing)
+            if (!cells.TryGetValue(keyColumn.ColumnIndex, out var keyCell) ||
+                keyCell.State is ParsedCellState.Missing or ParsedCellState.Blank)
             {
                 AddDiagnostic(diagnostics, Error(
                     "xlsx_key_missing", "В строке отсутствует ключ записи.", field: mapping.KeyColumn,
@@ -381,8 +401,20 @@ public sealed class XlsxReferenceCatalogReader
                 }
                 if (cell.State == ParsedCellState.Formula)
                 {
-                    AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в импортируемых полях.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
-                    continue;
+                    if (!field.Mapping.AllowFormulaCachedValue)
+                    {
+                        AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в импортируемых полях.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                        continue;
+                    }
+                    if (cell.Text.Length == 0)
+                    {
+                        if (field.Mapping.Required)
+                            AddDiagnostic(diagnostics, Error("xlsx_formula_cached_value_missing", "У формулы отсутствует сохранённый результат.", mapping.EntityType, keyCell.Text, field.Mapping.TargetProperty, cell.Reference));
+                        continue;
+                    }
+                    cachedFormulaFields[field.Mapping.TargetProperty] = cachedFormulaFields.TryGetValue(field.Mapping.TargetProperty, out var usage)
+                        ? (usage.Count + 1, usage.FirstLocation)
+                        : (1, cell.Reference);
                 }
                 if (cell.State == ParsedCellState.Error)
                 {
@@ -391,6 +423,8 @@ public sealed class XlsxReferenceCatalogReader
                 }
                 if (cell.State == ParsedCellState.Blank && !field.Mapping.AllowBlank)
                 {
+                    if (field.Mapping.SkipBlank)
+                        continue;
                     AddDiagnostic(diagnostics, Error(
                         field.Mapping.Required ? "xlsx_required_value_blank" : "xlsx_blank_not_allowed",
                         $"Поле «{field.Mapping.SourceColumn}» не допускает пустую ячейку.",
@@ -432,6 +466,16 @@ public sealed class XlsxReferenceCatalogReader
             records.Add(new ReferenceCatalogRecordInput(mapping.EntityType, keyCell.Text, payload, recordLocation));
             if (previewRecords.Count < MaximumPreviewRows)
                 previewRecords.Add(new XlsxPreviewRecord(rowNumber, keyCell.Text, payload, recordLocation));
+        }
+
+        foreach (var (field, usage) in cachedFormulaFields.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            AddDiagnostic(diagnostics, Warning(
+                "xlsx_cached_formula_values_used",
+                $"Для поля «{field}» использованы сохранённые в XLSX результаты формул ({usage.Count}). Проверьте, что книга была пересчитана перед загрузкой.",
+                mapping.EntityType,
+                field: field,
+                location: usage.FirstLocation));
         }
 
         var draft = ReferenceCatalogDraft.Create(
@@ -491,7 +535,7 @@ public sealed class XlsxReferenceCatalogReader
             }
             if (cell.Kind != ParsedValueKind.Text || string.IsNullOrWhiteSpace(cell.Text))
                 continue;
-            var header = cell.Text.Normalize(NormalizationForm.FormC);
+            var header = NormalizeHeader(cell.Text);
             if (!result.TryAdd(header, new HeaderCell(header, column)))
                 AddDiagnostic(diagnostics, Error("xlsx_duplicate_header", $"Заголовок «{header}» встречается несколько раз.", field: header, location: cell.Reference));
         }
@@ -511,7 +555,7 @@ public sealed class XlsxReferenceCatalogReader
         var targets = new HashSet<string>(StringComparer.Ordinal);
         foreach (var mapping in requested)
         {
-            var source = mapping.SourceColumn.Normalize(NormalizationForm.FormC);
+            var source = NormalizeHeader(mapping.SourceColumn);
             var target = mapping.TargetProperty.Normalize(NormalizationForm.FormC);
             if (string.IsNullOrWhiteSpace(target) || !targets.Add(target))
             {
@@ -563,6 +607,9 @@ public sealed class XlsxReferenceCatalogReader
                 return false;
         }
     }
+
+    private static string NormalizeHeader(string value) =>
+        Regex.Replace(value.Normalize(NormalizationForm.FormC).Trim(), @"\s+", " ");
 
     private static IEnumerable<ParsedRow> EnumerateRows(
         WorksheetPart worksheetPart,
@@ -631,8 +678,6 @@ public sealed class XlsxReferenceCatalogReader
         string reference,
         string sourceLocation)
     {
-        if (cell.CellFormula is not null)
-            return new ParsedCell(sourceLocation, ParsedCellState.Formula, ParsedValueKind.Text, cell.CellFormula.Text ?? "");
         var dataType = cell.DataType?.Value;
         if (dataType == CellValues.Error)
             return new ParsedCell(sourceLocation, ParsedCellState.Error, ParsedValueKind.Text, cell.CellValue?.Text ?? "");
@@ -670,7 +715,13 @@ public sealed class XlsxReferenceCatalogReader
         }
         if (text.Length > MaximumCellCharacters)
             throw new XlsxImportException("xlsx_cell_text_limit", "Текст ячейки XLSX слишком длинный.", sourceLocation);
-        return new ParsedCell(sourceLocation, text.Length == 0 ? ParsedCellState.Blank : ParsedCellState.Value, kind, text);
+        return new ParsedCell(
+            sourceLocation,
+            cell.CellFormula is not null
+                ? ParsedCellState.Formula
+                : text.Length == 0 ? ParsedCellState.Blank : ParsedCellState.Value,
+            kind,
+            text);
     }
 
     private static IReadOnlyList<string> ReadSharedStrings(
@@ -885,9 +936,11 @@ public sealed class XlsxReferenceCatalogReader
     {
         if (mapping.HeaderRow is < 1 or > MaximumRows ||
             mapping.FirstDataRow <= mapping.HeaderRow || mapping.FirstDataRow > MaximumRows ||
+            mapping.LastDataRow is uint lastDataRow && (lastDataRow < mapping.FirstDataRow || lastDataRow > MaximumRows) ||
             string.IsNullOrWhiteSpace(mapping.EntityType) || mapping.EntityType.Length > 128 ||
             string.IsNullOrWhiteSpace(mapping.KeyColumn) || mapping.KeyColumn.Length > 256 ||
-            mapping.SheetName is { Length: > 31 })
+            mapping.SheetName is { Length: > 31 } ||
+            mapping.ProfileId is { Length: > 128 })
         {
             throw new XlsxImportException("xlsx_mapping_invalid", "Параметры сопоставления XLSX недопустимы.");
         }
@@ -952,6 +1005,21 @@ public sealed class XlsxReferenceCatalogReader
         string? field = null,
         string? location = null) => new(
         ReferenceCatalogDiagnosticSeverity.Error,
+        code,
+        message,
+        entityType,
+        sourceKey,
+        field,
+        location);
+
+    private static ReferenceCatalogDiagnosticInput Warning(
+        string code,
+        string message,
+        string? entityType = null,
+        string? sourceKey = null,
+        string? field = null,
+        string? location = null) => new(
+        ReferenceCatalogDiagnosticSeverity.Warning,
         code,
         message,
         entityType,

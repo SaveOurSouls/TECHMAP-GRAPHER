@@ -11,6 +11,50 @@ public static class XlsxReferenceEndpoints
     private const int MaximumEncodedBytes = 35 * 1024 * 1024;
     public static void MapXlsxReferenceEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/v1/reference-import/xlsx-profiles", () => Results.Ok(
+            XlsxKnownProfiles.All.Select(profile => new XlsxKnownProfileResponse(
+                profile.Id,
+                profile.DisplayName,
+                profile.SourceId,
+                profile.SheetName,
+                profile.EntityType,
+                profile.KeyColumn,
+                profile.Description)).ToArray()));
+
+        app.MapPost("/api/v1/reference-sources/{sourceId}/xlsx-profile-previews", async (
+            string sourceId,
+            XlsxProfilePreviewRequest request,
+            XlsxPreviewCatalog previews,
+            IReferenceCatalogSnapshotStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            using var importLease = previews.TryBeginImport();
+            if (importLease is null)
+                throw new XlsxEndpointException("xlsx_import_busy", "Дождитесь завершения текущей проверки XLSX.");
+            if (string.IsNullOrWhiteSpace(request.FileName))
+                throw new XlsxEndpointException("xlsx_mapping_invalid", "Выберите файл XLSX.");
+            var profile = XlsxKnownProfiles.Get(request.ProfileId ?? "");
+            if (!string.Equals(sourceId, profile.SourceId, StringComparison.Ordinal))
+            {
+                throw new XlsxEndpointException(
+                    "xlsx_profile_source_mismatch",
+                    $"Для профиля «{profile.DisplayName}» используйте источник «{profile.SourceId}».");
+            }
+            var bytes = Decode(request.ContentBase64);
+            var snapshotId = ReferenceCatalogSnapshotIdentity.New();
+            var preview = await new XlsxReferenceCatalogReader().PreviewAsync(
+                new MemoryStream(bytes, writable: false),
+                request.FileName,
+                sourceId,
+                profile.Mapping,
+                snapshotId,
+                DateTimeOffset.UtcNow,
+                cancellationToken);
+            var active = store.GetActive(sourceId)?.SnapshotId.Value;
+            var stored = previews.Add(sourceId, preview, active);
+            return Results.Ok(ToResponse(stored.Id, stored.ExpiresUtc, active, sourceId, preview));
+        }));
+
         app.MapPost("/api/v1/reference-sources/{sourceId}/xlsx-previews", async (
             string sourceId,
             XlsxReferencePreviewRequest request,

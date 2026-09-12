@@ -169,6 +169,33 @@ public sealed class XlsxReferenceApiTests
         Assert.Equal("TER-001", Assert.Single(preview.Records).SourceKey);
     }
 
+    [Fact]
+    public async Task Known_profiles_are_discoverable_and_require_their_source_id()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var profiles = await client.GetFromJsonAsync<XlsxKnownProfileResponse[]>(
+            "/api/v1/reference-import/xlsx-profiles",
+            TestContext.Current.CancellationToken);
+        Assert.Contains(profiles!, item =>
+            item.ProfileId == "technology.operations" &&
+            item.SourceId == "technology-operations" &&
+            item.SheetName == "БД.ОП");
+
+        var bytes = XlsxTestFixtureBuilder.MinimalValidWorkbook();
+        var request = new XlsxProfilePreviewRequest(
+            "catalog.xlsx",
+            Convert.ToBase64String(bytes),
+            "technology.operations");
+        using var mismatch = await SendAsync(client, SourcePath + "/xlsx-profile-previews", request, csrf);
+
+        Assert.Equal(HttpStatusCode.BadRequest, mismatch.StatusCode);
+        Assert.Equal(
+            "xlsx_profile_source_mismatch",
+            (await mismatch.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
+    }
+
     private static async Task<XlsxReferencePreviewResponse> PreviewAsync(
         HttpClient client,
         string csrf,

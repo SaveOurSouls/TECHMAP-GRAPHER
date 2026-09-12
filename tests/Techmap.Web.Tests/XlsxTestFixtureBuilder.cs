@@ -22,6 +22,7 @@ internal sealed class XlsxTestFixtureBuilder
     private readonly List<string> sharedStrings = [];
     private readonly List<WorksheetHyperlink> worksheetHyperlinks = [];
     private string worksheetName = "Catalog";
+    private int headerRowNumber = 1;
     private Uri? externalReference;
 
     public static byte[] MinimalValidWorkbook() =>
@@ -118,6 +119,17 @@ internal sealed class XlsxTestFixtureBuilder
 
         headers.Clear();
         headers.AddRange(values);
+        return this;
+    }
+
+    public XlsxTestFixtureBuilder WithHeaderRow(int rowNumber)
+    {
+        if (rowNumber is < 1 or > 1_048_575)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowNumber));
+        }
+
+        headerRowNumber = rowNumber;
         return this;
     }
 
@@ -349,10 +361,10 @@ internal sealed class XlsxTestFixtureBuilder
     {
         XNamespace spreadsheet = SpreadsheetNamespace;
         var cells = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
-        AddTextRow(cells, 1, headers);
+        AddTextRow(cells, headerRowNumber, headers);
         for (var index = 0; index < rows.Count; index++)
         {
-            AddTextRow(cells, index + 2, rows[index]);
+            AddTextRow(cells, headerRowNumber + index + 1, rows[index]);
         }
 
         foreach (var formula in formulas)

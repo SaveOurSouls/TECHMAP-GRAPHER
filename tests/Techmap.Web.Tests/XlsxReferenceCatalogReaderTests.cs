@@ -188,6 +188,44 @@ public sealed class XlsxReferenceCatalogReaderTests
     }
 
     [Fact]
+    public async Task Known_profile_uses_only_its_table_and_imports_acknowledged_cached_formula_values()
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .WithWorksheetName("БД.ОП")
+            .WithHeaderRow(2)
+            .WithHeaders(
+                "Номер", "Название", "Апликаторы / модули", "Программа", "Машина", "Полуфабрикат",
+                "Провод", "Разъем", "Инструмент", "Время Операции", "Время подготовки, сек",
+                "Расход на настройку м; шт;", "Время Чел, сек/оп; сек/м", "Время машины, сек/оп; сек/м",
+                "Уд.Цена ЧЛ, сек", "Уд.Цена ЧЛ_МАГ, сек", "Уд.Цена МШ, сек", "Тип операции",
+                "Время ручных работ для взятия полуфабриката", "Время ручных работ",
+                "Время ручных работ для снятия полуфабриката", "Скорость проката, сек/м",
+                "Скорость работы инструмента", "Кол-во операций инструмента", "Время доп.операции",
+                "Инструкция", "Отказы")
+            .AddRow("CUT_WIRE_auto", "Резка", null, null, "EW-05F", null, null, null, null, null,
+                "180", "2", "0", null, "0.4", "0.4", "0.1", "Погонный", null, null, null,
+                "3", "0.5", "1", null, "word", "word")
+            .WithFormula("J3", "MAX(M3,N3)", "3.5")
+            .WithFormula("N3", "V3+W3*X3", "3.5")
+            .WithFormula("AA4", "1+1", "2")
+            .Build();
+        var profile = XlsxKnownProfiles.Get("technology.operations");
+
+        var preview = await PreviewAsync(bytes, profile.Mapping);
+
+        Assert.True(preview.Validation.IsValid);
+        var record = Assert.Single(preview.Records);
+        Assert.Equal("CUT_WIRE_auto", record.SourceKey);
+        Assert.Equal(3.5m, record.Payload.GetProperty("legacyOperationTime").GetDecimal());
+        Assert.Equal(3.5m, record.Payload.GetProperty("legacyMachineTime").GetDecimal());
+        Assert.Contains(preview.Validation.Diagnostics, item =>
+            item.Code == "xlsx_cached_formula_values_used" &&
+            item.Field == "legacyOperationTime" &&
+            item.Severity == ReferenceCatalogDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(preview.Validation.Diagnostics, item => item.SourceLocation == "'БД.ОП'!AA4");
+    }
+
+    [Fact]
     public async Task External_relationship_and_corrupt_zip_are_rejected_before_candidate_creation()
     {
         var external = await Assert.ThrowsAsync<XlsxImportException>(() =>
