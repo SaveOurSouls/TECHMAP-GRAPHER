@@ -223,3 +223,65 @@ public sealed record ReferenceCatalogRecordListResponse(
     Guid SnapshotId,
     string SnapshotSha256,
     IReadOnlyList<ReferenceCatalogRecordResponse> Records);
+
+public sealed record XlsxSheetResponse(string Name, bool Hidden);
+
+public sealed record XlsxResolvedColumnResponse(
+    string Header,
+    int ColumnIndex,
+    string TargetProperty,
+    string ValueKind);
+
+public sealed record XlsxPreviewRecordResponse(
+    int RowNumber,
+    string SourceKey,
+    JsonElement Payload,
+    string SourceLocation);
+
+public sealed record XlsxReferencePreviewResponse(
+    Guid PreviewId,
+    DateTimeOffset ExpiresUtc,
+    Guid? ActiveSnapshotId,
+    Guid SnapshotId,
+    string SourceId,
+    string FileName,
+    string SourceSha256,
+    IReadOnlyList<XlsxSheetResponse> Sheets,
+    string SelectedSheet,
+    int HeaderRow,
+    int FirstDataRow,
+    string EntityType,
+    string KeyColumn,
+    IReadOnlyList<XlsxResolvedColumnResponse> Columns,
+    int SourceRowCount,
+    int RecordCount,
+    bool IsTruncated,
+    string? ValidationSha256,
+    bool CanPublish,
+    IReadOnlyList<XlsxPreviewRecordResponse> Records,
+    IReadOnlyList<ReferenceCatalogDiagnosticResponse> Diagnostics);
+
+public sealed record PublishXlsxReferencePreviewRequest(
+    Guid PreviewId,
+    string? ExpectedValidationSha256,
+    Guid? ExpectedActiveSnapshotId,
+    IReadOnlyList<string>? AcknowledgedWarningIds);
+
+public sealed record XlsxFieldMappingRequest(
+    string? SourceColumn,
+    string? TargetProperty,
+    string? ValueKind,
+    bool Required = false,
+    IReadOnlyList<string>? NotApplicableTokens = null,
+    bool AllowBlank = false,
+    bool AllowNotApplicable = false);
+
+public sealed record XlsxReferencePreviewRequest(
+    string? FileName,
+    string? ContentBase64,
+    string? SheetName,
+    int HeaderRow,
+    int FirstDataRow,
+    string? EntityType,
+    string? KeyColumn,
+    IReadOnlyList<XlsxFieldMappingRequest>? Fields);

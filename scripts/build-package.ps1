@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$artifactsRoot = Join-Path $repositoryRoot "artifacts\m1-01"
+$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-02"
 $clientRoot = Join-Path $repositoryRoot "src\Techmap.Client"
 $webRoot = Join-Path $repositoryRoot "src\Techmap.Web"
 $staticRoot = Join-Path $webRoot "wwwroot"
@@ -17,7 +17,7 @@ function Assert-WithinArtifacts([string]$Path) {
     $candidate = [IO.Path]::GetFullPath($Path)
     $allowed = [IO.Path]::GetFullPath($artifactsRoot).TrimEnd('\') + '\'
     if (!$candidate.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to modify a path outside the M1-01 artifacts directory: $candidate"
+        throw "Refusing to modify a path outside the package artifacts directory: $candidate"
     }
 }
 
@@ -111,8 +111,8 @@ $packagedFiles = Get-ChildItem -LiteralPath $packageRoot -Recurse -File
 $packageBytes = ($packagedFiles | Measure-Object -Property Length -Sum).Sum
 $archiveBytes = (Get-Item -LiteralPath $archivePath).Length
 
-if ($archiveBytes -gt 75MB) { throw "M1 ZIP budget exceeded: $archiveBytes bytes" }
-if ($packageBytes -gt 200MB) { throw "M1 unpacked budget exceeded: $packageBytes bytes" }
+if ($archiveBytes -gt 75MB) { throw "Portable ZIP budget exceeded: $archiveBytes bytes" }
+if ($packageBytes -gt 200MB) { throw "Portable package unpacked budget exceeded: $packageBytes bytes" }
 
 [pscustomobject]@{
     Package = $packageRoot

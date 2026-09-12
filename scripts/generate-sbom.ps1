@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 if ([string]::IsNullOrWhiteSpace($PackageRoot)) {
-    $PackageRoot = Join-Path $repo "artifacts\m1-01\TECHMAP-GRAPHER"
+    $PackageRoot = Join-Path $repo "artifacts\m2-02\TECHMAP-GRAPHER"
 }
 if (-not (Test-Path -LiteralPath $PackageRoot -PathType Container)) { throw "Package root does not exist: $PackageRoot" }
 $package = (Resolve-Path -LiteralPath $PackageRoot).Path
@@ -52,6 +52,7 @@ function Get-PnpmLicense([string]$Name) {
 }
 
 function Get-NuGetLicense([string]$Name) {
+    if ($Name.StartsWith("DocumentFormat.OpenXml", [StringComparison]::OrdinalIgnoreCase)) { return "MIT" }
     if ($Name.StartsWith("SQLitePCLRaw.", [StringComparison]::OrdinalIgnoreCase)) { return "Apache-2.0" }
     if ($Name.StartsWith("xunit.", [StringComparison]::OrdinalIgnoreCase)) { return "Apache-2.0" }
     if ($Name.StartsWith("Microsoft.", [StringComparison]::OrdinalIgnoreCase) -or $Name.StartsWith("System.", [StringComparison]::OrdinalIgnoreCase)) { return "MIT" }

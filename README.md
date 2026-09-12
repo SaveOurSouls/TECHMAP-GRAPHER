@@ -73,7 +73,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-15.ps1
 ```
 
 Готовый локальный артефакт создаётся в
-`artifacts/m1-01/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
+`artifacts/m2-02/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
 
 Первая версия: web-приложение в обычном браузере с локальным сервером и
 самодостаточным Windows ZIP, локальными данными,

@@ -1,6 +1,6 @@
 # TECHMAP-GRAPHER third-party notices
 
-This inventory applies to the locked M1-04 dependency set. `pnpm-lock.yaml` and
+This inventory applies to the locked portable Web dependency set. `pnpm-lock.yaml` and
 the committed `packages.lock.json` files are the authoritative version sources.
 The release SBOM is generated from those files by `scripts/generate-sbom.ps1`.
 
@@ -14,6 +14,8 @@ The release SBOM is generated from those files by `scripts/generate-sbom.ps1`.
 | Microsoft.EntityFrameworkCore.Sqlite and EF Core dependencies | 10.0.12 | MIT | Persistence mapping foundation for product data |
 | SQLite | 3.53.3 | Public Domain | Bundled native database engine |
 | SQLitePCLRaw.bundle_e_sqlite3, core, lib.e_sqlite3 and provider.e_sqlite3 | 2.1.12 | Apache-2.0 | Native packaging and .NET interop |
+| DocumentFormat.OpenXml and DocumentFormat.OpenXml.Framework | 3.3.0 | MIT | Safe read-only parsing of XLSX workbooks |
+| System.IO.Packaging | 8.0.1 | MIT | Open Packaging Convention support for XLSX |
 | React | 19.3.0 | MIT | Bundled browser UI |
 | React DOM | 19.3.0 | MIT | Bundled browser UI |
 | Scheduler | 0.28.0 | MIT | React runtime dependency bundled in the UI |
@@ -76,7 +78,7 @@ expands every exact package ID and version. The reviewed license families are:
 | License | Locked packages |
 |---|---|
 | Apache-2.0 | `SQLitePCLRaw.* 2.1.12`; `xunit.analyzers 2.0.0`; `xunit.v3* 4.0.0` |
-| MIT | `Microsoft.Data.Sqlite* 10.0.12`; `Microsoft.EntityFrameworkCore* 10.0.12`; other locked `Microsoft.*` and `System.*` packages; exact IDs and versions are in the SPDX document |
+| MIT | `DocumentFormat.OpenXml* 3.3.0`; `Microsoft.Data.Sqlite* 10.0.12`; `Microsoft.EntityFrameworkCore* 10.0.12`; `System.IO.Packaging 8.0.1`; other locked `Microsoft.*` and `System.*` packages; exact IDs and versions are in the SPDX document |
 
 ## License texts
 

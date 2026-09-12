@@ -43,6 +43,14 @@
           "xunit.v3.mtp-v2": "[4.0.0]"
         }
       },
+      "DocumentFormat.OpenXml.Framework": {
+        "type": "Transitive",
+        "resolved": "3.3.0",
+        "contentHash": "R5CLzEoeyr7XDB7g3NTxRobcU19agaxVAhGZm+fZUShJGiU4bw8oUgnA2BNFepigJckfFMayOBMAbV3kDXNInA==",
+        "dependencies": {
+          "System.IO.Packaging": "8.0.1"
+        }
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -501,6 +509,11 @@
         "resolved": "10.0.12",
         "contentHash": "sOZM+VyRj1pg/ItlHsvrSbjws6oGqZveTzTNBGZ9ziwRDyKsOF3ub6vhvOdxotCIqtlnyHAIwP5sLNvgiZC+pQ=="
       },
+      "System.IO.Packaging": {
+        "type": "Transitive",
+        "resolved": "8.0.1",
+        "contentHash": "KYkIOAvPexQOLDxPO2g0BVoWInnQhPpkFzRqvNrNrMhVT6kqhVr0zEb6KCHlptLFukxnZrjuMVAnxK7pOGUYrw=="
+      },
       "System.Security.AccessControl": {
         "type": "Transitive",
         "resolved": "6.0.1",
@@ -595,12 +608,29 @@
           "Techmap.Application": "[0.1.0, )"
         }
       },
+      "techmap.infrastructure.xlsx": {
+        "type": "Project",
+        "dependencies": {
+          "DocumentFormat.OpenXml": "[3.3.0, )",
+          "Techmap.Application": "[0.1.0, )"
+        }
+      },
       "Techmap.Server": {
         "type": "Project",
         "dependencies": {
           "Techmap.Application": "[0.1.0, )",
           "Techmap.Contracts": "[0.1.0, )",
-          "Techmap.Infrastructure.Sqlite": "[0.1.0, )"
+          "Techmap.Infrastructure.Sqlite": "[0.1.0, )",
+          "Techmap.Infrastructure.Xlsx": "[0.1.0, )"
+        }
+      },
+      "DocumentFormat.OpenXml": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.0, )",
+        "resolved": "3.3.0",
+        "contentHash": "JogRPJNiE6kKvbuCqVRX691pPWeGMqdQgjrUwRYkdpfkMmtElfqAgcRR73geYj7OtBeEpstldZXXzJw27LUI9w==",
+        "dependencies": {
+          "DocumentFormat.OpenXml.Framework": "3.3.0"
         }
       },
       "Microsoft.EntityFrameworkCore.Sqlite": {

@@ -157,6 +157,16 @@
           "xunit.v3.runner.common": "[4.0.0]"
         }
       },
+      "techmap.application": {
+        "type": "Project",
+        "dependencies": {
+          "Techmap.Contracts": "[0.1.0, )",
+          "Techmap.Domain": "[0.1.0, )"
+        }
+      },
+      "techmap.contracts": {
+        "type": "Project"
+      },
       "techmap.domain": {
         "type": "Project"
       }

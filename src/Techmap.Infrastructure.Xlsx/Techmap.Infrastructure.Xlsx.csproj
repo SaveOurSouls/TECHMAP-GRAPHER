@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Techmap.Application/Techmap.Application.csproj" />
+  </ItemGroup>
+</Project>

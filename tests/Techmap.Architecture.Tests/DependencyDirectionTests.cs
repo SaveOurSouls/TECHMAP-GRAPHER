@@ -26,6 +26,9 @@ public sealed class DependencyDirectionTests
         AssertOnlyProductReferences<Techmap.Infrastructure.Sqlite.StorageBoundary>(
             "Techmap.Application",
             "Techmap.Domain");
+        AssertOnlyProductReferences<Techmap.Infrastructure.Xlsx.XlsxInfrastructureBoundary>(
+            "Techmap.Application",
+            "Techmap.Domain");
     }
 
     private static void AssertOnlyProductReferences<T>(params string[] allowed)

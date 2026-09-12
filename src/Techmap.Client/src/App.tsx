@@ -7,6 +7,7 @@ import {
   type AutosaveSnapshot,
 } from "./autosave-controller";
 import type { LocalSession } from "./local-session";
+import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import {
   createProjectApi,
   ProjectApiError,
@@ -34,7 +35,11 @@ interface ProjectEditDraft {
   readonly status: ProjectStatus;
 }
 
-const sections = ["Проекты", "Справочники"] as const;
+const sections = [
+  { id: "projects", label: "Проекты" },
+  { id: "references", label: "Справочники" },
+] as const;
+export type AppSection = typeof sections[number]["id"];
 const harnessTabs = [
   { id: "e4", label: "Схема Э4", description: "Соединения и электрическая схема жгута" },
   { id: "drawing", label: "Чертёж", description: "Геометрия, размеры и технические требования" },
@@ -83,6 +88,30 @@ export function rememberHarnessTab(
   tab: HarnessTab,
 ): Readonly<Record<string, HarnessTab>> {
   return { ...current, [harnessId]: tab };
+}
+
+interface AppNavigationProps {
+  readonly activeSection: AppSection;
+  readonly onSectionChange: (section: AppSection) => void;
+}
+
+export function AppNavigation({ activeSection, onSectionChange }: AppNavigationProps) {
+  return (
+    <nav className="sidebar" aria-label="Разделы приложения">
+      {sections.map((section, index) => (
+        <button
+          className={activeSection === section.id ? "nav-item active" : "nav-item"}
+          type="button"
+          key={section.id}
+          onClick={() => onSectionChange(section.id)}
+          aria-current={activeSection === section.id ? "page" : undefined}
+        >
+          <span className="nav-index">{String(index + 1).padStart(2, "0")}</span>
+          {section.label}
+        </button>
+      ))}
+    </nav>
+  );
 }
 
 interface HarnessDocumentTabsProps {
@@ -134,6 +163,7 @@ export function HarnessDocumentTabs({
 
 export function App({ config, session }: AppProps) {
   const api = useMemo(() => createProjectApi(config, session), [config, session]);
+  const [activeSection, setActiveSection] = useState<AppSection>("projects");
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectDetails | null>(null);
   const [selectedHarnessId, setSelectedHarnessId] = useState<string | null>(null);
@@ -560,16 +590,11 @@ export function App({ config, session }: AppProps) {
       </header>
 
       <div className="workspace">
-        <nav className="sidebar" aria-label="Разделы приложения">
-          {sections.map((section, index) => (
-            <button className={index === 0 ? "nav-item active" : "nav-item"} type="button" key={section}>
-              <span className="nav-index">{String(index + 1).padStart(2, "0")}</span>
-              {section}
-            </button>
-          ))}
-        </nav>
+        <AppNavigation activeSection={activeSection} onSectionChange={setActiveSection} />
 
         <main className="content">
+          {activeSection === "projects" ? (
+            <>
           <div className="content-heading">
             <div>
               <p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p>
@@ -822,6 +847,10 @@ export function App({ config, session }: AppProps) {
               </section>
             )}
           </div>
+            </>
+          ) : (
+            <ReferenceImportPanel config={config} session={session} />
+          )}
         </main>
       </div>
     </div>

@@ -9,5 +9,6 @@
     <ProjectReference Include="../Techmap.Application/Techmap.Application.csproj" />
     <ProjectReference Include="../Techmap.Contracts/Techmap.Contracts.csproj" />
     <ProjectReference Include="../Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
+    <ProjectReference Include="../Techmap.Infrastructure.Xlsx/Techmap.Infrastructure.Xlsx.csproj" />
   </ItemGroup>
 </Project>

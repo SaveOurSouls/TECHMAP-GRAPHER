@@ -647,10 +647,13 @@ public sealed class SqliteReferenceCatalogSnapshotStore(SqliteStorage storage)
     internal static string SourceContentHash(string versionFingerprint)
     {
         const string prefix = "sha256:";
-        if (versionFingerprint.StartsWith(prefix, StringComparison.Ordinal) &&
-            IsHash(versionFingerprint[prefix.Length..]))
+        if (versionFingerprint.StartsWith(prefix, StringComparison.Ordinal))
         {
-            return versionFingerprint[prefix.Length..];
+            var separator = versionFingerprint.IndexOf(';', prefix.Length);
+            var sourceHash = separator < 0
+                ? versionFingerprint[prefix.Length..]
+                : versionFingerprint[prefix.Length..separator];
+            if (IsHash(sourceHash)) return sourceHash;
         }
 
         return Hash(versionFingerprint);
