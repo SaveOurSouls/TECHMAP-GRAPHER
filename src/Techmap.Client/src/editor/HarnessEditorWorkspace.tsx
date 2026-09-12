@@ -79,6 +79,11 @@ export interface HarnessEditorWorkspaceProps {
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
   readonly onSelectedObjectChange?: (objectId: string | null) => void;
   readonly onCatalogItemActivate?: (item: EditorCatalogItem, point?: EditorPoint) => void;
+  readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onWireConnect?: (
+    from: { readonly connectorId: string; readonly contactIndex: number },
+    to: { readonly connectorId: string; readonly contactIndex: number },
+  ) => void;
   readonly onClose?: () => void;
 }
 
@@ -103,6 +108,8 @@ export function HarnessEditorWorkspace({
   onLayersChange,
   onSelectedObjectChange,
   onCatalogItemActivate,
+  onObjectMove,
+  onWireConnect,
   onClose,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
@@ -211,6 +218,8 @@ export function HarnessEditorWorkspace({
           selectedObjectId={selectedObjectId}
           onCameraChange={setCamera}
           onObjectSelect={selectObject}
+          onObjectMove={onObjectMove}
+          onWireConnect={onWireConnect}
           onCatalogDrop={droppedCatalogItem}
         />
 
@@ -250,4 +259,3 @@ export function HarnessEditorWorkspace({
 }
 
 export { defaultCatalog as harnessEditorDemoCatalog, defaultLayers as harnessEditorDemoLayers, defaultObjects as harnessEditorDemoObjects };
-

@@ -8,6 +8,7 @@ import {
 } from "./autosave-controller";
 import type { LocalSession } from "./local-session";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { HarnessDesignEditor } from "./editor/HarnessDesignEditor";
 import {
   createProjectApi,
   ProjectApiError,
@@ -118,12 +119,14 @@ interface HarnessDocumentTabsProps {
   readonly harness: HarnessSummary;
   readonly activeTab: HarnessTab;
   readonly onTabChange: (tab: HarnessTab) => void;
+  readonly onOpen?: (tab: Exclude<HarnessTab, "route">) => void;
 }
 
 export function HarnessDocumentTabs({
   harness,
   activeTab,
   onTabChange,
+  onOpen,
 }: HarnessDocumentTabsProps) {
   const activeDefinition = harnessTabs.find((tab) => tab.id === activeTab)!;
   const document = harness.documents.find((item) => item.kind === activeTab)!;
@@ -155,7 +158,13 @@ export function HarnessDocumentTabs({
         <span className={`document-icon ${activeTab}`} aria-hidden="true" />
         <strong>{activeDefinition.label}</strong>
         <p>{activeDefinition.description}</p>
-        <span>{document.status === "empty" && "Документ пока пуст. Редактор появится на следующем этапе."}</span>
+        {activeTab === "route" ? (
+          <span>{document.status === "empty" && "Маршрут пока пуст. Его редактор будет подключён после сквозного Э4 и Чертежа."}</span>
+        ) : (
+          <button className="primary-action document-open-action" type="button" onClick={() => onOpen?.(activeTab)}>
+            Открыть {activeTab === "e4" ? "схему Э4" : "чертёж"}
+          </button>
+        )}
       </div>
     </>
   );
@@ -177,6 +186,7 @@ export function App({ config, session }: AppProps) {
   const [newHarnessQuantity, setNewHarnessQuantity] = useState("1");
   const [editHarnessQuantity, setEditHarnessQuantity] = useState("1");
   const [activeHarnessTabs, setActiveHarnessTabs] = useState<Readonly<Record<string, HarnessTab>>>({});
+  const [editorOpen, setEditorOpen] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
   const [navigationPending, setNavigationPending] = useState(false);
@@ -576,6 +586,20 @@ export function App({ config, session }: AppProps) {
     if (selectedHarness) setEditHarnessQuantity(String(selectedHarness.quantity));
   }, [selectedHarness]);
 
+  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab !== "route") {
+    return (
+      <HarnessDesignEditor
+        config={config}
+        session={session}
+        projectId={selectedProject.projectId}
+        harnessId={selectedHarness.harnessId}
+        harnessDesignation={selectedHarness.designation}
+        initialView={activeHarnessTab}
+        onClose={() => setEditorOpen(false)}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -828,6 +852,14 @@ export function App({ config, session }: AppProps) {
                           onTabChange={(tab) => setActiveHarnessTabs((current) => (
                             rememberHarnessTab(current, selectedHarness.harnessId, tab)
                           ))}
+                          onOpen={(tab) => {
+                            setActiveHarnessTabs((current) => rememberHarnessTab(
+                              current,
+                              selectedHarness.harnessId,
+                              tab,
+                            ));
+                            setEditorOpen(true);
+                          }}
                         />
                       </section>
                     ) : (

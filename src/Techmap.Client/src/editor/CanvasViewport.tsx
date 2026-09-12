@@ -1,4 +1,4 @@
-import { useEffect, useRef, type DragEvent, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type PointerEvent, type WheelEvent } from "react";
 import {
   panEditorCamera,
   screenToWorld,
@@ -22,14 +22,30 @@ export interface CanvasViewportProps {
   readonly selectedObjectId: string | null;
   readonly onCameraChange: (camera: EditorCamera) => void;
   readonly onObjectSelect: (objectId: string | null) => void;
+  readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onWireConnect?: (
+    from: { readonly connectorId: string; readonly contactIndex: number },
+    to: { readonly connectorId: string; readonly contactIndex: number },
+  ) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
 
 interface PointerDrag {
+  readonly kind: "pan";
   readonly pointerId: number;
   readonly clientX: number;
   readonly clientY: number;
   readonly camera: EditorCamera;
+}
+
+interface ObjectPointerDrag {
+  readonly kind: "object";
+  readonly pointerId: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly objectId: string;
+  readonly objectX: number;
+  readonly objectY: number;
 }
 
 function pointToSegmentDistance(point: EditorPoint, start: EditorPoint, end: EditorPoint): number {
@@ -52,6 +68,44 @@ function containsPoint(object: EditorSceneObject, point: EditorPoint, tolerance:
   }
   return point.x >= object.x - tolerance && point.x <= object.x + object.width + tolerance &&
     point.y >= object.y - tolerance && point.y <= object.y + object.height + tolerance;
+}
+
+function contactCount(object: EditorSceneObject): number {
+  const value = Number(object.metadata?.contactCount ?? "0");
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+function connectorContactPoints(object: EditorSceneObject): readonly EditorPoint[] {
+  const count = contactCount(object);
+  if (object.kind !== "connector" || count === 0) return [];
+  const spacing = (object.height - 44) / count;
+  return Array.from({ length: count }, (_, index) => ({
+    x: object.x + object.width,
+    y: object.y + 28 + index * spacing,
+  }));
+}
+
+export function hitTestConnectorContact(
+  objects: readonly EditorSceneObject[],
+  layers: readonly EditorLayer[],
+  point: EditorPoint,
+  zoom: number,
+): { readonly connectorId: string; readonly contactIndex: number } | null {
+  const layerMap = new Map(layers.map((layer) => [layer.id, layer]));
+  const tolerance = 10 / zoom;
+  for (const object of [...objects].reverse()) {
+    if (object.kind !== "connector" || layerMap.get(object.layerId)?.visible !== true) continue;
+    const points = connectorContactPoints(object);
+    for (let index = 0; index < points.length; index += 1) {
+      const candidate = points[index]!;
+      const left = { x: object.x, y: candidate.y };
+      if (Math.hypot(point.x - candidate.x, point.y - candidate.y) <= tolerance ||
+          Math.hypot(point.x - left.x, point.y - left.y) <= tolerance) {
+        return { connectorId: object.id, contactIndex: index };
+      }
+    }
+  }
+  return null;
 }
 
 export function objectsInPaintOrder(
@@ -178,10 +232,19 @@ function drawObject(context: CanvasRenderingContext2D, object: EditorSceneObject
     context.font = "700 13px Inter, Arial, sans-serif";
     context.fillText(object.label, object.x + 12, object.y + 22);
     context.fillStyle = object.color;
-    for (let index = 0; index < 4; index += 1) {
+    const points = connectorContactPoints(object);
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index]!;
       context.beginPath();
-      context.arc(object.x + object.width, object.y + 17 + index * 13, 3, 0, Math.PI * 2);
+      context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
       context.fill();
+      context.beginPath();
+      context.arc(object.x, point.y, 3.5, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#55717f";
+      context.font = "500 9px Inter, Arial, sans-serif";
+      context.fillText(String(index + 1), object.x + 9, point.y + 3);
+      context.fillStyle = object.color;
     }
   } else {
     context.fillStyle = object.color;
@@ -234,10 +297,17 @@ export function CanvasViewport({
   selectedObjectId,
   onCameraChange,
   onObjectSelect,
+  onObjectMove,
+  onWireConnect,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<PointerDrag | null>(null);
+  const dragRef = useRef<PointerDrag | ObjectPointerDrag | null>(null);
+  const [wireStart, setWireStart] = useState<{ readonly connectorId: string; readonly contactIndex: number } | null>(null);
+
+  useEffect(() => {
+    if (tool !== "wire") setWireStart(null);
+  }, [tool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -259,11 +329,31 @@ export function CanvasViewport({
     if (shouldPan) {
       event.currentTarget.setPointerCapture(event.pointerId);
       dragRef.current = {
+        kind: "pan",
         pointerId: event.pointerId,
         clientX: event.clientX,
         clientY: event.clientY,
         camera,
       };
+      return;
+    }
+    if (tool === "wire") {
+      const endpoint = hitTestConnectorContact(
+        objects,
+        layers,
+        screenToWorld(camera, localPoint(event.clientX, event.clientY)),
+        camera.zoom,
+      );
+      if (!endpoint) return;
+      if (!wireStart) {
+        setWireStart(endpoint);
+        onObjectSelect(endpoint.connectorId);
+      } else {
+        if (wireStart.connectorId !== endpoint.connectorId || wireStart.contactIndex !== endpoint.contactIndex) {
+          onWireConnect?.(wireStart, endpoint);
+        }
+        setWireStart(null);
+      }
       return;
     }
     if (tool === "select") {
@@ -274,17 +364,40 @@ export function CanvasViewport({
         camera.zoom,
       );
       onObjectSelect(objectId);
+      const object = objects.find((item) => item.id === objectId);
+      const layer = object ? layers.find((item) => item.id === object.layerId) : null;
+      if (object && object.kind === "connector" && layer?.locked !== true && onObjectMove) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = {
+          kind: "object",
+          pointerId: event.pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          objectId: object.id,
+          objectX: object.x,
+          objectY: object.y,
+        };
+      }
     }
   };
 
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
+    if (drag.kind === "pan") {
+      onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
+    }
   };
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
+    if (dragRef.current?.kind === "object") {
+      const drag = dragRef.current;
+      onObjectMove?.(drag.objectId, {
+        x: drag.objectX + (event.clientX - drag.clientX) / camera.zoom,
+        y: drag.objectY + (event.clientY - drag.clientY) / camera.zoom,
+      });
+    }
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -325,7 +438,9 @@ export function CanvasViewport({
       />
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
-        <span>{tool === "pan" ? "Тяните поле мышью" : "Колесо — масштаб"}</span>
+        <span>{tool === "wire"
+          ? wireStart ? "Выберите второй контакт" : "Выберите первый контакт"
+          : tool === "pan" ? "Тяните поле мышью" : "Колесо — масштаб"}</span>
       </div>
       <ul className="visually-hidden" aria-label="Объекты на поле">
         {objectsInPaintOrder(objects, layers).map((object) => <li key={object.id}>{object.label}</li>)}
@@ -333,4 +448,3 @@ export function CanvasViewport({
     </div>
   );
 }
-

@@ -3,7 +3,7 @@ import type { EditorLayer, EditorSceneObject } from "./editor-types";
 export function updateEditorObject(
   objects: readonly EditorSceneObject[],
   objectId: string,
-  patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color">>,
+  patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color" | "metadata">>,
 ): readonly EditorSceneObject[] {
   return objects.map((object) => object.id === objectId ? { ...object, ...patch } : object);
 }
@@ -32,4 +32,3 @@ export function moveLayer(
   next.splice(targetIndex, 0, moved);
   return next;
 }
-

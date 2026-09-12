@@ -13,12 +13,14 @@ import {
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
+  | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string }
   | { readonly type: "remove-connector"; readonly connectorId: string }
   | { readonly type: "add-wire"; readonly wire: WireInstance }
   | { readonly type: "remove-wire"; readonly wireId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
   | { readonly type: "update-layer"; readonly view: EditorView; readonly layerId: string; readonly visible?: boolean; readonly locked?: boolean }
+  | { readonly type: "replace-layers"; readonly view: EditorView; readonly layers: readonly EditorLayer[] }
   | { readonly type: "move-layer"; readonly view: EditorView; readonly layerId: string; readonly direction: -1 | 1 };
 
 export function createConnector(
@@ -86,6 +88,17 @@ export function applyEditorCommand(
           positions: { ...connector.positions, [command.view]: command.position },
         }), "Соединитель не найден."),
       };
+    case "update-connector": {
+      const designation = command.designation.trim();
+      if (!designation) throw new Error("Укажите обозначение соединителя.");
+      return {
+        ...document,
+        connectors: replaceRequired(document.connectors, command.connectorId, (connector) => ({
+          ...connector,
+          designation,
+        }), "Соединитель не найден."),
+      };
+    }
     case "remove-connector": {
       if (!document.connectors.some((item) => item.id === command.connectorId)) {
         throw new Error("Соединитель не найден.");
@@ -134,8 +147,18 @@ export function applyEditorCommand(
           visible: command.visible ?? layer.visible,
           locked: command.locked ?? layer.locked,
         }), "Слой не найден."));
+    case "replace-layers":
+      validateLayers(command.layers);
+      return updateLayers(document, command.view, () => command.layers.map((layer) => ({ ...layer })));
     case "move-layer":
       return updateLayers(document, command.view, (layers) => moveLayer(layers, command.layerId, command.direction));
+  }
+}
+
+function validateLayers(layers: readonly EditorLayer[]): void {
+  if (layers.length < 1 || new Set(layers.map((layer) => layer.id)).size !== layers.length ||
+      new Set(layers.map((layer) => layer.order)).size !== layers.length) {
+    throw new Error("Слои должны иметь уникальные ID и порядок.");
   }
 }
 

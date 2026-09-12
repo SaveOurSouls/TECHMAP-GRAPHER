@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { hitTestEditorScene, objectsInPaintOrder } from "./CanvasViewport";
+import { hitTestConnectorContact, hitTestEditorScene, objectsInPaintOrder } from "./CanvasViewport";
 import { panEditorCamera, screenToWorld, worldToScreen, zoomEditorCameraAt } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
@@ -68,6 +68,18 @@ describe("harness editor workspace", () => {
     expect(hitTestEditorScene(objects, reordered, { x: 20, y: 20 }, 1)).toBe("lower");
   });
 
+  it("finds a numbered connector contact for the wire tool", () => {
+    const connector: EditorSceneObject = {
+      id: "X1", layerId: "top", kind: "connector", label: "X1",
+      x: 100, y: 100, width: 118, height: 132, color: "#123456",
+      metadata: { contactCount: "4" },
+    };
+    expect(hitTestConnectorContact([connector], layers, { x: 218, y: 150 }, 1)).toEqual({
+      connectorId: "X1",
+      contactIndex: 1,
+    });
+  });
+
   it("updates immutable scene and layer state without changing unrelated entries", () => {
     const edited = updateEditorObject(objects, "upper", { label: "XP1", x: 45 });
     expect(edited).not.toBe(objects);
@@ -80,4 +92,3 @@ describe("harness editor workspace", () => {
     expect(moveLayer(layers, "missing", 0)).toBe(layers);
   });
 });
-

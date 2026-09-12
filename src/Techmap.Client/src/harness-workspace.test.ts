@@ -19,7 +19,7 @@ const harness: HarnessSummary = {
 };
 
 describe("harness workspace", () => {
-  it("renders three harness-scoped tabs and the honest empty state", () => {
+  it("renders three harness-scoped tabs and opens the selected editor", () => {
     const markup = renderToStaticMarkup(createElement(HarnessDocumentTabs, {
       harness,
       activeTab: "drawing",
@@ -32,7 +32,7 @@ describe("harness workspace", () => {
     expect(markup).toContain('role="tab"');
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain("Геометрия, размеры и технические требования");
-    expect(markup).toContain("Документ пока пуст");
+    expect(markup).toContain("Открыть чертёж");
     expect(markup).not.toContain(harness.documents[1]!.documentId);
   });
 

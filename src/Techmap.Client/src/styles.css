@@ -10,6 +10,7 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, select { font: inherit; }
 button:disabled { cursor: not-allowed; opacity: .58; }
+.document-open-action { margin-top: 8px; }
 
 .app-shell { min-height: 100vh; background: #f5f7f9; }
 .topbar {

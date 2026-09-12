@@ -6,7 +6,7 @@ export interface ObjectInspectorProps {
   readonly disabled: boolean;
   readonly onChange: (
     objectId: string,
-    patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color">>,
+    patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color" | "metadata">>,
   ) => void;
 }
 
@@ -43,13 +43,28 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
         </div>
       </div>
       <label>
-        Обозначение
+        {selectedObject.kind === "wire" ? "Цепь / обозначение" : "Обозначение"}
         <input
           value={selectedObject.label}
           disabled={disabled}
           onChange={(event) => onChange(selectedObject.id, { label: event.target.value })}
         />
       </label>
+      {selectedObject.kind === "wire" && (
+        <label>
+          Абсолютная длина, мм
+          <input
+            type="number"
+            min="0.001"
+            step="0.1"
+            value={selectedObject.metadata?.lengthMm ?? ""}
+            disabled={disabled}
+            onChange={(event) => onChange(selectedObject.id, {
+              metadata: { ...selectedObject.metadata, lengthMm: event.target.value },
+            })}
+          />
+        </label>
+      )}
       <div className="he-field-pair">
         <label>
           X
@@ -94,4 +109,3 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
     </form>
   );
 }
-
