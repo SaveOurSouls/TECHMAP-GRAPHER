@@ -32,6 +32,39 @@ public sealed class ProjectImportIntegrationTests
         Assert.Equal(3, harness.Quantity);
         Assert.Equal(["e4", "drawing", "route"], harness.Documents.Select(document => document.Kind));
         Assert.Equal(3, harness.Documents.Select(document => document.DocumentId).Distinct().Count());
+        var design = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System)
+            .Get(imported.ProjectId, harness.HarnessId);
+        Assert.Equal(0, design.Revision);
+        Assert.Equal(SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, design.SchemaVersion);
+        using var content = JsonDocument.Parse(design.ContentJson);
+        Assert.Empty(content.RootElement.GetProperty("connectors").EnumerateArray());
+        Assert.Equal(3, content.RootElement.GetProperty("views").GetProperty("drawing")
+            .GetProperty("layers").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Version_two_archive_gets_a_valid_empty_harness_design()
+    {
+        using var fixture = ImportFixture.Create();
+        var archive = await fixture.CreateMinimalArchiveAsync();
+        ConvertArchiveToSnapshotVersionTwo(archive);
+        await using var lease = DataRootLease.Acquire(fixture.DestinationDataRoot);
+        using var storage = SqliteStorage.Open(lease.CanonicalPath);
+
+        var result = await new SqliteProjectImportService(lease, storage).ImportAsync(
+            new ProjectImportRequest(archive, "0.1.0-m1.15"),
+            TestContext.Current.CancellationToken);
+
+        var imported = new SqliteProjectCatalog(storage).GetProject(result.ProjectId);
+        var harness = Assert.Single(imported.Harnesses);
+        var design = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System)
+            .Get(imported.ProjectId, harness.HarnessId);
+        Assert.Equal(0, design.Revision);
+        Assert.Equal(SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, design.SchemaVersion);
+        using var content = JsonDocument.Parse(design.ContentJson);
+        Assert.Empty(content.RootElement.GetProperty("wires").EnumerateArray());
+        Assert.Equal(3, content.RootElement.GetProperty("views").GetProperty("e4")
+            .GetProperty("layers").GetArrayLength());
     }
 
     [Fact]
@@ -45,6 +78,17 @@ public sealed class ProjectImportIntegrationTests
             "ПР-ИМП-01", "Переносимый проект", 12, ProjectStatus.Active));
         source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-01", 6);
         source = sourceProjects.AddHarness(source.ProjectId, "ЖГ-02", 21);
+        var sourceDesignStore = new SqliteHarnessDesignDocumentStore(sourceStorage, TimeProvider.System);
+        var sourceDesigns = source.Harnesses.ToDictionary(
+            harness => harness.Designation,
+            harness => sourceDesignStore.Put(
+                source.ProjectId,
+                harness.HarnessId,
+                0,
+                SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion,
+                "{\"schemaVersion\":1,\"connectors\":[{\"id\":\"" + harness.Designation +
+                "\"}],\"wires\":[{\"id\":\"W-" + harness.SortOrder +
+                "\"}],\"views\":{\"e4\":{\"layers\":[]},\"drawing\":{\"layers\":[]}}}"));
         var sourceHarnessIds = source.Harnesses.Select(item => item.HarnessId.Value).ToHashSet();
         var sourceDocumentIds = source.Harnesses.SelectMany(item => item.Documents)
             .Select(item => item.DocumentId.Value).ToHashSet();
@@ -101,6 +145,17 @@ public sealed class ProjectImportIntegrationTests
             item => sourceDocumentIds.Contains(item.DocumentId.Value));
         Assert.Equal(6, imported.Harnesses.SelectMany(item => item.Documents)
             .Select(item => item.DocumentId).Distinct().Count());
+        var importedDesignStore = new SqliteHarnessDesignDocumentStore(destinationStorage, TimeProvider.System);
+        foreach (var importedHarness in imported.Harnesses)
+        {
+            var importedDesign = importedDesignStore.Get(imported.ProjectId, importedHarness.HarnessId);
+            var sourceDesign = sourceDesigns[importedHarness.Designation];
+            Assert.Equal(0, importedDesign.Revision);
+            Assert.Equal(sourceDesign.SchemaVersion, importedDesign.SchemaVersion);
+            using var sourceContent = JsonDocument.Parse(sourceDesign.ContentJson);
+            using var importedContent = JsonDocument.Parse(importedDesign.ContentJson);
+            Assert.True(JsonElement.DeepEquals(sourceContent.RootElement, importedContent.RootElement));
+        }
         Assert.Single(importedPinned);
         Assert.NotEqual(pinned.SnapshotId, importedPinned[0].SnapshotId);
         var ids = QueryStrings(destinationStorage, "SELECT attachment_id FROM project_attachments;");
@@ -615,12 +670,39 @@ public sealed class ProjectImportIntegrationTests
         {
             harness!.AsObject().Remove("quantity");
             harness.AsObject().Remove("documents");
+            harness.AsObject().Remove("design");
         }
 
         var snapshotBytes = Encoding.UTF8.GetBytes(snapshot.ToJsonString());
         entries[SqliteProjectExportService.SnapshotPath] = snapshotBytes;
         var manifest = JsonNode.Parse(entries[SqliteProjectExportService.ManifestPath])!.AsObject();
         manifest["snapshotFormat"] = 1;
+        var payload = manifest["files"]!.AsArray()
+            .Select(item => item!.AsObject())
+            .Single(item => item["path"]!.GetValue<string>() == SqliteProjectExportService.SnapshotPath);
+        payload["sizeBytes"] = snapshotBytes.LongLength;
+        payload["sha256"] = Convert.ToHexStringLower(SHA256.HashData(snapshotBytes));
+        var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        entries[SqliteProjectExportService.ManifestPath] = manifestBytes;
+        entries[SqliteProjectExportService.ManifestChecksumPath] = Encoding.ASCII.GetBytes(
+            Convert.ToHexStringLower(SHA256.HashData(manifestBytes)) + "\n");
+        WriteArchive(path, entries);
+    }
+
+    private static void ConvertArchiveToSnapshotVersionTwo(string path)
+    {
+        var entries = ReadArchive(path);
+        var snapshot = JsonNode.Parse(entries[SqliteProjectExportService.SnapshotPath])!.AsObject();
+        snapshot["snapshotFormat"] = 2;
+        foreach (var harness in snapshot["harnesses"]!.AsArray())
+        {
+            harness!.AsObject().Remove("design");
+        }
+
+        var snapshotBytes = Encoding.UTF8.GetBytes(snapshot.ToJsonString());
+        entries[SqliteProjectExportService.SnapshotPath] = snapshotBytes;
+        var manifest = JsonNode.Parse(entries[SqliteProjectExportService.ManifestPath])!.AsObject();
+        manifest["snapshotFormat"] = 2;
         var payload = manifest["files"]!.AsArray()
             .Select(item => item!.AsObject())
             .Single(item => item["path"]!.GetValue<string>() == SqliteProjectExportService.SnapshotPath);

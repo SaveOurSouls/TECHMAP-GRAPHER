@@ -12,7 +12,7 @@ namespace Techmap.Infrastructure.Sqlite;
 public sealed class SqliteProjectExportService : IProjectExportService
 {
     public const int ArchiveFormat = 1;
-    public const int SnapshotFormat = 2;
+    public const int SnapshotFormat = 3;
     public const int MaximumArchiveEntries = 4_096;
     public const long MaximumSnapshotBytes = 64L * 1024 * 1024;
     public const long MaximumTotalPayloadBytes = 4L * 1024 * 1024 * 1024;
@@ -280,6 +280,34 @@ public sealed class SqliteProjectExportService : IProjectExportService
         SqliteUnitOfWork unitOfWork,
         ProjectIdentity projectId)
     {
+        using var designsCommand = unitOfWork.CreateCommand(
+            """
+            SELECT d.harness_id, d.schema_version, d.content_json
+            FROM harness_design_documents d
+            INNER JOIN harnesses h ON h.harness_id = d.harness_id
+            WHERE h.project_id = $projectId
+            ORDER BY d.harness_id;
+            """);
+        designsCommand.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        using var designReader = designsCommand.ExecuteReader();
+        var designs = new Dictionary<string, ExportHarnessDesign>(StringComparer.Ordinal);
+        while (designReader.Read())
+        {
+            var harnessId = ParseGuid(designReader.GetString(0));
+            var schemaVersion = designReader.GetInt32(1);
+            using var content = JsonDocument.Parse(designReader.GetString(2), new JsonDocumentOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = 128,
+            });
+            var design = new ExportHarnessDesign(schemaVersion, content.RootElement.Clone());
+            if (!IsValidHarnessDesign(design) || !designs.TryAdd(harnessId, design))
+            {
+                throw new InvalidDataException("A harness design document is invalid.");
+            }
+        }
+
         using var documentsCommand = unitOfWork.CreateCommand(
             """
             SELECT d.harness_id, d.document_id, d.section_kind, d.status,
@@ -332,7 +360,10 @@ public sealed class SqliteProjectExportService : IProjectExportService
                 NormalizeUtc(reader.GetString(5)),
                 documents.TryGetValue(harnessId, out var harnessDocuments)
                     ? harnessDocuments
-                    : throw new InvalidDataException("A harness document workspace is incomplete.")));
+                    : throw new InvalidDataException("A harness document workspace is incomplete."),
+                designs.TryGetValue(harnessId, out var harnessDesign)
+                    ? harnessDesign
+                    : throw new InvalidDataException("A harness design document is missing.")));
         }
 
         if (result.Count > ProjectRules.MaximumHarnesses)
@@ -754,7 +785,8 @@ public sealed class SqliteProjectExportService : IProjectExportService
                     ParseGuid(document.DocumentId) != document.DocumentId ||
                     document.Status != "empty" ||
                     NormalizeUtc(document.CreatedUtc) != document.CreatedUtc ||
-                    NormalizeUtc(document.UpdatedUtc) != document.UpdatedUtc))
+                    NormalizeUtc(document.UpdatedUtc) != document.UpdatedUtc) ||
+                !IsValidHarnessDesign(harness.Design))
             {
                 throw new InvalidDataException("A project export harness is invalid.");
             }
@@ -835,6 +867,22 @@ public sealed class SqliteProjectExportService : IProjectExportService
 
             previousPinned = (pinned.CapturedUtc, pinned.SnapshotId);
         }
+    }
+
+    private static bool IsValidHarnessDesign(ExportHarnessDesign design)
+    {
+        if (design.SchemaVersion != SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion ||
+            design.Content.ValueKind != JsonValueKind.Object ||
+            Encoding.UTF8.GetByteCount(design.Content.GetRawText()) >
+                SqliteHarnessDesignDocumentStore.MaximumContentBytes ||
+            !design.Content.TryGetProperty("schemaVersion", out var contentSchemaVersion) ||
+            contentSchemaVersion.ValueKind != JsonValueKind.Number ||
+            !contentSchemaVersion.TryGetInt32(out var parsedSchemaVersion))
+        {
+            return false;
+        }
+
+        return parsedSchemaVersion == design.SchemaVersion;
     }
 
     private static async Task<byte[]> ReadBoundedAsync(
@@ -1196,7 +1244,11 @@ public sealed class SqliteProjectExportService : IProjectExportService
         int SortOrder,
         string CreatedUtc,
         string UpdatedUtc,
-        IReadOnlyList<ExportHarnessDocument> Documents);
+        IReadOnlyList<ExportHarnessDocument> Documents,
+        ExportHarnessDesign Design);
+    private sealed record ExportHarnessDesign(
+        int SchemaVersion,
+        JsonElement Content);
     private sealed record ExportHarnessDocument(
         string DocumentId,
         string Kind,

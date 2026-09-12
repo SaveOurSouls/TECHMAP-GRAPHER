@@ -163,6 +163,16 @@ public sealed class ProjectCatalogIntegrationTests
             ProjectStatus.Completed));
         catalog.AddHarness(source.ProjectId, "Жгут А", 9);
         var before = catalog.AddHarness(source.ProjectId, "Жгут Б", 14);
+        var designs = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System);
+        var sourceDesigns = before.Harnesses.ToDictionary(
+            harness => harness.Designation,
+            harness => designs.Put(
+                before.ProjectId,
+                harness.HarnessId,
+                0,
+                SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion,
+                "{\"schemaVersion\":1,\"connectors\":[{\"id\":\"" + harness.Designation +
+                "\"}],\"wires\":[],\"views\":{\"e4\":{\"layers\":[]},\"drawing\":{\"layers\":[]}}}"));
 
         var copy = catalog.CopyProject(source.ProjectId);
         var sourceAfter = catalog.GetProject(source.ProjectId);
@@ -183,6 +193,17 @@ public sealed class ProjectCatalogIntegrationTests
             before.Harnesses.SelectMany(harness => harness.Documents).Select(document => document.DocumentId)
                 .Intersect(copy.Harnesses.SelectMany(harness => harness.Documents)
                     .Select(document => document.DocumentId)));
+        foreach (var copiedHarness in copy.Harnesses)
+        {
+            var sourceDesign = sourceDesigns[copiedHarness.Designation];
+            var copiedDesign = designs.Get(copy.ProjectId, copiedHarness.HarnessId);
+            Assert.Equal(0, copiedDesign.Revision);
+            Assert.Equal(sourceDesign.SchemaVersion, copiedDesign.SchemaVersion);
+            Assert.Equal(sourceDesign.ContentJson, copiedDesign.ContentJson);
+            Assert.Equal(sourceDesign, designs.Get(
+                source.ProjectId,
+                before.Harnesses.Single(harness => harness.Designation == copiedHarness.Designation).HarnessId));
+        }
         AssertProjectEqual(before, sourceAfter);
     }
 

@@ -182,14 +182,16 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
 
             foreach (var harness in source.Harnesses)
             {
+                var destinationHarnessId = HarnessIdentity.New();
                 InsertHarness(
                     unitOfWork,
-                    HarnessIdentity.New(),
+                    destinationHarnessId,
                     destinationId,
                     harness.Designation,
                     harness.Quantity,
                     harness.SortOrder,
                     now);
+                CopyHarnessDesign(unitOfWork, harness.HarnessId, destinationHarnessId, now);
             }
 
             CopyAttachments(unitOfWork, sourceProjectId, destinationId, now);
@@ -925,6 +927,41 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             document.Parameters.AddWithValue("$createdUtc", timestamp);
             document.Parameters.AddWithValue("$updatedUtc", timestamp);
             document.ExecuteNonQuery();
+        }
+    }
+
+    private static void CopyHarnessDesign(
+        SqliteUnitOfWork unitOfWork,
+        HarnessIdentity sourceHarnessId,
+        HarnessIdentity destinationHarnessId,
+        string timestamp)
+    {
+        using var update = unitOfWork.CreateCommand(
+            """
+            UPDATE harness_design_documents
+            SET schema_version = (
+                    SELECT schema_version
+                    FROM harness_design_documents
+                    WHERE harness_id = $sourceHarnessId),
+                content_json = (
+                    SELECT content_json
+                    FROM harness_design_documents
+                    WHERE harness_id = $sourceHarnessId),
+                revision = 0,
+                created_utc = $timestamp,
+                updated_utc = $timestamp
+            WHERE harness_id = $destinationHarnessId
+              AND EXISTS (
+                  SELECT 1
+                  FROM harness_design_documents
+                  WHERE harness_id = $sourceHarnessId);
+            """);
+        update.Parameters.AddWithValue("$sourceHarnessId", Format(sourceHarnessId.Value));
+        update.Parameters.AddWithValue("$destinationHarnessId", Format(destinationHarnessId.Value));
+        update.Parameters.AddWithValue("$timestamp", timestamp);
+        if (update.ExecuteNonQuery() != 1)
+        {
+            throw new InvalidDataException("The source harness design document is missing.");
         }
     }
 

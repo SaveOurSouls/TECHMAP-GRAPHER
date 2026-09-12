@@ -432,6 +432,26 @@ public sealed class SqliteProjectImportService : IProjectImportService
             insert.Parameters.AddWithValue("$utc", journal.ImportedUtc);
             RequireSingle(insert.ExecuteNonQuery(), "harness");
 
+            using (var updateDesign = unitOfWork.CreateCommand(
+                       """
+                       UPDATE harness_design_documents
+                       SET revision = 0,
+                           schema_version = $schemaVersion,
+                           content_json = $contentJson,
+                           created_utc = $utc,
+                           updated_utc = $utc
+                       WHERE harness_id = $harnessId;
+                       """))
+            {
+                updateDesign.Parameters.AddWithValue("$schemaVersion", harness.Design!.SchemaVersion);
+                updateDesign.Parameters.AddWithValue("$contentJson", harness.Design.Content.GetRawText());
+                updateDesign.Parameters.AddWithValue("$utc", journal.ImportedUtc);
+                updateDesign.Parameters.AddWithValue(
+                    "$harnessId",
+                    Format(DeterministicGuid(journal.OperationGuid, "harness", harness.HarnessId)));
+                RequireSingle(updateDesign.ExecuteNonQuery(), "harness design document");
+            }
+
             foreach (var document in harness.Documents!)
             {
                 using var insertDocument = unitOfWork.CreateCommand(
@@ -788,7 +808,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
         if (manifest.ManifestFormat != SqliteProjectExportService.ArchiveFormat ||
             manifest.ProductId != ProductId ||
             manifest.ArchiveKind != ArchiveKind ||
-            manifest.SnapshotFormat is not (1 or SqliteProjectExportService.SnapshotFormat) ||
+            manifest.SnapshotFormat is not (1 or 2 or SqliteProjectExportService.SnapshotFormat) ||
             manifest.SourceStorageSchemaVersion is <= 0 or > 1_000_000 ||
             !IsCanonicalText(manifest.SourceAppVersion, 128, allowEmpty: false) ||
             ParseGuid(manifest.SourceProjectId) != manifest.SourceProjectId ||
@@ -869,10 +889,14 @@ public sealed class SqliteProjectImportService : IProjectImportService
         foreach (var item in snapshot.Harnesses)
         {
             if (ParseGuid(item.HarnessId) != item.HarnessId || item.SortOrder < 0 ||
-                (snapshot.SnapshotFormat == SqliteProjectExportService.SnapshotFormat &&
+                (snapshot.SnapshotFormat is 2 or SqliteProjectExportService.SnapshotFormat &&
                     (item.Quantity is null or <= 0 or > ProjectRules.MaximumHarnessQuantity ||
                      item.Documents is null || item.Documents.Count != 3)) ||
-                (snapshot.SnapshotFormat == 1 && (item.Quantity is not null || item.Documents is not null)) ||
+                (snapshot.SnapshotFormat == 1 &&
+                    (item.Quantity is not null || item.Documents is not null || item.Design is not null)) ||
+                (snapshot.SnapshotFormat == 2 && item.Design is not null) ||
+                (snapshot.SnapshotFormat == SqliteProjectExportService.SnapshotFormat &&
+                    (item.Design is null || !IsValidHarnessDesign(item.Design))) ||
                 !IsCanonicalText(item.Designation, ProjectRules.MaximumDesignationLength, false) ||
                 !harnessIds.Add(item.HarnessId) || !orders.Add(item.SortOrder) ||
                 previousHarness is { } previous && Compare(previous.Item1, previous.Item2, item.SortOrder, item.HarnessId) >= 0 ||
@@ -969,26 +993,57 @@ public sealed class SqliteProjectImportService : IProjectImportService
             return snapshot;
         }
 
-        if (snapshot.SnapshotFormat != 1)
+        if (snapshot.SnapshotFormat is not (1 or 2))
         {
             throw Invalid("import_snapshot_version_unsupported", "The project snapshot version is unsupported.");
         }
 
+        var legacyFormat = snapshot.SnapshotFormat;
         return snapshot with
         {
             SnapshotFormat = SqliteProjectExportService.SnapshotFormat,
             Harnesses = snapshot.Harnesses.Select(harness => harness with
             {
-                Quantity = snapshot.Project.BatchQuantity,
-                Documents = new[] { "e4", "drawing", "route" }.Select(kind =>
-                    new ExportHarnessDocument(
-                        Format(DeterministicGuid(Guid.ParseExact(harness.HarnessId, "D"), "document", kind)),
-                        kind,
-                        "empty",
-                        harness.CreatedUtc,
-                        harness.UpdatedUtc)).ToArray(),
+                Quantity = legacyFormat == 1 ? snapshot.Project.BatchQuantity : harness.Quantity,
+                Documents = legacyFormat == 1
+                    ? new[] { "e4", "drawing", "route" }.Select(kind =>
+                        new ExportHarnessDocument(
+                            Format(DeterministicGuid(Guid.ParseExact(harness.HarnessId, "D"), "document", kind)),
+                            kind,
+                            "empty",
+                            harness.CreatedUtc,
+                            harness.UpdatedUtc)).ToArray()
+                    : harness.Documents,
+                Design = CreateEmptyHarnessDesign(),
             }).ToArray(),
         };
+    }
+
+    private static ExportHarnessDesign CreateEmptyHarnessDesign()
+    {
+        using var content = JsonDocument.Parse(
+            """
+            {"schemaVersion":1,"connectors":[],"wires":[],"views":{"e4":{"layers":[{"id":"dimensions","name":"Размеры","order":2,"visible":true,"locked":false},{"id":"connectors","name":"Соединители","order":1,"visible":true,"locked":false},{"id":"wires","name":"Провода","order":0,"visible":true,"locked":false}]},"drawing":{"layers":[{"id":"dimensions","name":"Размеры","order":2,"visible":true,"locked":false},{"id":"connectors","name":"Соединители","order":1,"visible":true,"locked":false},{"id":"wires","name":"Провода","order":0,"visible":true,"locked":false}]}}}
+            """);
+        return new ExportHarnessDesign(
+            SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion,
+            content.RootElement.Clone());
+    }
+
+    private static bool IsValidHarnessDesign(ExportHarnessDesign design)
+    {
+        if (design.SchemaVersion != SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion ||
+            design.Content.ValueKind != JsonValueKind.Object ||
+            Encoding.UTF8.GetByteCount(design.Content.GetRawText()) >
+                SqliteHarnessDesignDocumentStore.MaximumContentBytes ||
+            !design.Content.TryGetProperty("schemaVersion", out var contentSchemaVersion) ||
+            contentSchemaVersion.ValueKind != JsonValueKind.Number ||
+            !contentSchemaVersion.TryGetInt32(out var parsedSchemaVersion))
+        {
+            return false;
+        }
+
+        return parsedSchemaVersion == design.SchemaVersion;
     }
 
     private async Task<ProjectSnapshot> ReadStagedSnapshotAsync(
@@ -1055,7 +1110,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
             !IsCanonicalText(journal.SourceAppVersion, 128, false) ||
             !IsCanonicalText(journal.ImportAppVersion, 128, false) ||
             NormalizeUtc(journal.ImportedUtc) != journal.ImportedUtc ||
-            journal.SnapshotFormat is not (1 or SqliteProjectExportService.SnapshotFormat) ||
+            journal.SnapshotFormat is not (1 or 2 or SqliteProjectExportService.SnapshotFormat) ||
             journal.HarnessCount is < 0 or > ProjectRules.MaximumHarnesses ||
             journal.AttachmentCount is < 0 or > MaximumArchiveEntries - 2 ||
             journal.PinnedCharacteristicCount is < 0 or > MaximumArchiveEntries ||
@@ -1943,7 +1998,11 @@ public sealed class SqliteProjectImportService : IProjectImportService
         int SortOrder,
         string CreatedUtc,
         string UpdatedUtc,
-        IReadOnlyList<ExportHarnessDocument>? Documents);
+        IReadOnlyList<ExportHarnessDocument>? Documents,
+        ExportHarnessDesign? Design);
+    private sealed record ExportHarnessDesign(
+        int SchemaVersion,
+        JsonElement Content);
     private sealed record ExportHarnessDocument(
         string DocumentId,
         string Kind,

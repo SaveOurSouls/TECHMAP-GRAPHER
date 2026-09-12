@@ -24,6 +24,17 @@ public sealed class ProjectExportIntegrationTests
             "ПР-ЭКСП-01", "Экспорт без локальных данных", 12, ProjectStatus.Active));
         project = projects.AddHarness(project.ProjectId, "ЖГ-01", 3);
         project = projects.AddHarness(project.ProjectId, "ЖГ-02", 17);
+        var designs = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System);
+        foreach (var harness in project.Harnesses)
+        {
+            _ = designs.Put(
+                project.ProjectId,
+                harness.HarnessId,
+                0,
+                SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion,
+                "{\"schemaVersion\":1,\"connectors\":[{\"id\":\"" + harness.Designation +
+                "\"}],\"wires\":[],\"views\":{\"e4\":{\"layers\":[]},\"drawing\":{\"layers\":[]}}}");
+        }
         var attachments = new SqliteProjectAttachmentCatalog(
             storage,
             new ContentAddressedAttachmentStore(fixture.DataRoot),
@@ -78,6 +89,7 @@ public sealed class ProjectExportIntegrationTests
             archive.Entries.Select(entry => entry.FullName).ToArray());
         Assert.DoesNotContain(archive.Entries, entry => entry.FullName.Contains(unusedHash, StringComparison.Ordinal));
         using var snapshot = await ReadJsonAsync(archive, SqliteProjectExportService.SnapshotPath);
+        Assert.Equal(3, snapshot.RootElement.GetProperty("snapshotFormat").GetInt32());
         Assert.Equal(2, snapshot.RootElement.GetProperty("harnesses").GetArrayLength());
         var exportedHarnesses = snapshot.RootElement.GetProperty("harnesses").EnumerateArray().ToArray();
         Assert.Equal([3L, 17L], exportedHarnesses.Select(item => item.GetProperty("quantity").GetInt64()));
@@ -86,6 +98,11 @@ public sealed class ProjectExportIntegrationTests
             Assert.Equal(3, item.GetProperty("documents").GetArrayLength());
             Assert.All(item.GetProperty("documents").EnumerateArray(), document =>
                 Assert.Equal("empty", document.GetProperty("status").GetString()));
+            var design = item.GetProperty("design");
+            Assert.Equal(1, design.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(
+                item.GetProperty("designation").GetString(),
+                design.GetProperty("content").GetProperty("connectors")[0].GetProperty("id").GetString());
         });
         Assert.Equal(6, exportedHarnesses.SelectMany(item => item.GetProperty("documents").EnumerateArray())
             .Select(document => document.GetProperty("documentId").GetString()).Distinct().Count());
