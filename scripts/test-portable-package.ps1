@@ -200,7 +200,7 @@ function Test-HostMode {
         $expectedApiBase = if ($PathBase -eq "/") { "/api/v1/" } else { "$PathBase/api/v1/" }
         Assert-Equal $runtime.basePath $expectedBasePath "Runtime basePath is incorrect."
         Assert-Equal $runtime.apiBasePath $expectedApiBase "Runtime apiBasePath is incorrect."
-        Assert-Equal ([int]$runtime.schemaVersion) 4 "Runtime schema version is incorrect."
+        Assert-Equal ([int]$runtime.schemaVersion) $expectedSchemaVersion "Runtime schema version is incorrect."
 
         $diagnosticsResponse = Invoke-WebRequest `
             -UseBasicParsing `
@@ -209,7 +209,7 @@ function Test-HostMode {
         Assert-JsonContentType $diagnosticsResponse "Diagnostics content type is incorrect."
         $diagnostics = $diagnosticsResponse.Content | ConvertFrom-Json
         Assert-Equal $diagnostics.status "ready" "Storage diagnostics status is incorrect."
-        Assert-Equal ([int]$diagnostics.schemaVersion) 4 "Live SQLite schema version is incorrect."
+        Assert-Equal ([int]$diagnostics.schemaVersion) $expectedSchemaVersion "Live SQLite schema version is incorrect."
         Assert-Equal $diagnostics.foreignKeysEnabled $true "SQLite foreign keys are not enabled."
         Assert-Equal $diagnostics.journalMode "wal" "SQLite journal mode is incorrect."
         if ([string]::IsNullOrWhiteSpace($diagnostics.sqliteVersion)) {
@@ -466,6 +466,12 @@ if ($topLevel.Count -ne 1 -or
     throw "Archive must contain exactly one top-level TECHMAP-GRAPHER directory."
 }
 $packageRoot = $topLevel[0].FullName
+$packageVersion = Get-Content -Raw -LiteralPath (Join-Path $packageRoot "VERSION.json") |
+    ConvertFrom-Json
+$expectedSchemaVersion = [int]$packageVersion.storage.schema
+if ($expectedSchemaVersion -le 0) {
+    throw "The packaged storage schema version is invalid."
+}
 
 & $verifyScript -PackageRoot $packageRoot | Out-Null
 
