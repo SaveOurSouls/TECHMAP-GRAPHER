@@ -114,6 +114,20 @@ function fromUiLayers(layers: readonly UiLayer[], previous: readonly EditorLayer
   }));
 }
 
+export function snapRoutePoint(
+  start: { readonly x: number; readonly y: number },
+  point: { readonly x: number; readonly y: number },
+  enabled: boolean,
+) {
+  if (!enabled) return point;
+  const dx = point.x - start.x;
+  const dy = point.y - start.y;
+  const distance = Math.hypot(dx, dy);
+  const step = Math.PI / 12;
+  const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+  return { x: start.x + Math.cos(angle) * distance, y: start.y + Math.sin(angle) * distance };
+}
+
 export function HarnessDesignEditor({
   config,
   session,
@@ -131,6 +145,7 @@ export function HarnessDesignEditor({
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
+  const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
   const [message, setMessage] = useState("Загружаем документ жгута…");
   const historyRef = useRef<EditorHistory | null>(null);
   const resourceRef = useRef<HarnessDesignResource | null>(null);
@@ -257,6 +272,16 @@ export function HarnessDesignEditor({
     setSelectedObjectId(id);
   };
 
+  const addRoutePoint = (point: { readonly x: number; readonly y: number }) => {
+    if (view !== "drawing" || !selectedObjectId) return;
+    const wire = history.present.wires.find((item) => item.id === selectedObjectId);
+    if (!wire) return;
+    const start = wire.drawingRoute.at(-1) ?? findWireEndpoint(history.present, wire.from, "drawing");
+    if (!start) return;
+    const next = snapRoutePoint(start, point, drawingSnapEnabled);
+    run({ type: "set-wire-route", wireId: wire.id, route: [...wire.drawingRoute, next] });
+  };
+
   return (
     <div className="he-host">
       {message && <div className="he-save-message" role="alert">{message}</div>}
@@ -298,6 +323,9 @@ export function HarnessDesignEditor({
           });
           setSelectedObjectId(id);
         }}
+        drawingSnapEnabled={drawingSnapEnabled}
+        onDrawingSnapChange={setDrawingSnapEnabled}
+        onCanvasDoubleClick={addRoutePoint}
         onObjectsChange={(objects) => {
           const selected = selectedObjectId ? objects.find((item) => item.id === selectedObjectId) : null;
           if (!selected || selected.id.startsWith("dimension:")) return;

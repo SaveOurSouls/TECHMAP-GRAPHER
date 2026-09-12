@@ -84,6 +84,9 @@ export interface HarnessEditorWorkspaceProps {
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
   ) => void;
+  readonly drawingSnapEnabled?: boolean;
+  readonly onDrawingSnapChange?: (enabled: boolean) => void;
+  readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onClose?: () => void;
 }
 
@@ -110,6 +113,9 @@ export function HarnessEditorWorkspace({
   onCatalogItemActivate,
   onObjectMove,
   onWireConnect,
+  drawingSnapEnabled = true,
+  onDrawingSnapChange,
+  onCanvasDoubleClick,
   onClose,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
@@ -195,6 +201,15 @@ export function HarnessEditorWorkspace({
           <button type="button" role="tab" aria-selected={view === "e4"} className={view === "e4" ? "active" : ""} onClick={() => changeView("e4")}>Схема Э4</button>
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
         </div>
+        {view === "drawing" && (
+          <button
+            className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
+            type="button"
+            aria-pressed={drawingSnapEnabled}
+            title="Фиксировать направление нового участка с шагом 15 градусов"
+            onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
+          >15°</button>
+        )}
         <div className={`he-save-state ${saveState}`} role="status">
           <span aria-hidden="true" />{saveLabels[saveState]}
         </div>
@@ -220,6 +235,7 @@ export function HarnessEditorWorkspace({
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
           onWireConnect={onWireConnect}
+          onCanvasDoubleClick={onCanvasDoubleClick}
           onCatalogDrop={droppedCatalogItem}
         />
 

@@ -27,6 +27,7 @@ export interface CanvasViewportProps {
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
   ) => void;
+  readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
 
@@ -299,6 +300,7 @@ export function CanvasViewport({
   onObjectSelect,
   onObjectMove,
   onWireConnect,
+  onCanvasDoubleClick,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -435,6 +437,9 @@ export function CanvasViewport({
         onWheel={zoomWheel}
         onDragOver={allowDrop}
         onDrop={drop}
+        onDoubleClick={(event) => onCanvasDoubleClick?.(
+          screenToWorld(camera, localPoint(event.clientX, event.clientY)),
+        )}
       />
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>

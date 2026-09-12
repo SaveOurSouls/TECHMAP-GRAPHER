@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire, applyEditorCommand } from "./commands";
-import { designToScene } from "./HarnessDesignEditor";
+import { designToScene, snapRoutePoint } from "./HarnessDesignEditor";
 import { createEmptyHarnessDesign } from "./model";
 
 describe("harness design scene adapter", () => {
@@ -21,5 +21,12 @@ describe("harness design scene adapter", () => {
     expect(drawing.find((item) => item.id === "x1")).toMatchObject({ x: 100, y: 120 });
     expect(e4.find((item) => item.id === "w1")?.metadata?.lengthMm).toBe("350");
     expect(drawing.find((item) => item.id === "dimension:w1")?.label).toBe("350 мм");
+  });
+
+  it("snaps an added route point to a 15 degree direction", () => {
+    const snapped = snapRoutePoint({ x: 0, y: 0 }, { x: 100, y: 23 }, true);
+    const angleDegrees = Math.atan2(snapped.y, snapped.x) * 180 / Math.PI;
+    expect(angleDegrees).toBeCloseTo(15, 8);
+    expect(snapRoutePoint({ x: 0, y: 0 }, { x: 100, y: 23 }, false)).toEqual({ x: 100, y: 23 });
   });
 });
