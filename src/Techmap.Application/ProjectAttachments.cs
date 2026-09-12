@@ -35,6 +35,17 @@ public interface IAttachmentContentStore
 
 public interface IProjectAttachmentCatalog
 {
+    Task<ProjectMutationResult<ProjectAttachment>> AddAsync(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        Stream source,
+        string fileName,
+        string mediaType,
+        string purpose,
+        CancellationToken cancellationToken = default);
+
+    // Compatibility entry point for pre-M1-06 in-process callers. HTTP mutations
+    // must supply an explicit command envelope through the overload above.
     Task<ProjectAttachment> AddAsync(
         ProjectIdentity projectId,
         Stream source,

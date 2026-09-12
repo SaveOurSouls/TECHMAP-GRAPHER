@@ -53,6 +53,7 @@ public static class ProjectEndpoints
                         : ParseStatus(request.Status);
                     var project = catalog.UpdateProject(
                         new ProjectIdentity(projectId),
+                        Envelope(request.CommandId, request.ExpectedRevision),
                         new UpdateProjectCommand(
                             request.Designation,
                             request.Name,
@@ -76,15 +77,35 @@ public static class ProjectEndpoints
             AddHarnessRequest request,
             IProjectCatalog catalog) =>
             Execute(() => Results.Ok(ToResponse(
-                catalog.AddHarness(new ProjectIdentity(projectId), request.Designation!)))));
+                catalog.AddHarness(
+                    new ProjectIdentity(projectId),
+                    Envelope(request.CommandId, request.ExpectedRevision),
+                    request.Designation!)))));
 
         app.MapDelete("/api/v1/projects/{projectId:guid}/harnesses/{harnessId:guid}", (
             Guid projectId,
             Guid harnessId,
+            [Microsoft.AspNetCore.Mvc.FromBody] DeleteHarnessRequest request,
             IProjectCatalog catalog) =>
             Execute(() => Results.Ok(ToResponse(catalog.DeleteHarness(
                 new ProjectIdentity(projectId),
+                Envelope(request.CommandId, request.ExpectedRevision),
                 new HarnessIdentity(harnessId))))));
+
+        app.MapGet("/api/v1/projects/{projectId:guid}/versions", (
+            HttpContext context,
+            Guid projectId,
+            LocalHttpSession session,
+            IProjectVersionCatalog versions) =>
+            WithReadSession(context, session, () => Execute(() =>
+                Results.Ok(new ProjectVersionListResponse(
+                    versions.ListVersions(new ProjectIdentity(projectId))
+                        .Select(version => new ProjectVersionResponse(
+                            version.Revision,
+                            version.CommandId,
+                            version.CommandType,
+                            version.AcceptedUtc))
+                        .ToArray())))));
     }
 
     private static IResult WithReadSession(
@@ -115,6 +136,12 @@ public static class ProjectEndpoints
                 new ApiErrorResponse(error.Code, error.Field, error.Message),
                 statusCode: statusCode);
         }
+        catch (ProjectCommandException error)
+        {
+            return Results.Json(
+                new ApiErrorResponse(error.Code, error.Field, error.Message, error.CurrentRevision),
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     private static ProjectStatus ParseStatus(string value)
@@ -130,6 +157,19 @@ public static class ProjectEndpoints
         return status;
     }
 
+    private static ProjectCommandEnvelope Envelope(Guid commandId, long? expectedRevision)
+    {
+        if (expectedRevision is null)
+        {
+            throw new ProjectCatalogException(
+                "invalid_expected_revision",
+                "The expected revision is required.",
+                "expectedRevision");
+        }
+
+        return new ProjectCommandEnvelope(commandId, expectedRevision.Value);
+    }
+
     private static string ProjectLocation(HttpContext context, ProjectIdentity projectId) =>
         $"{context.Request.PathBase}/api/v1/projects/{projectId.Value:D}";
 
@@ -140,6 +180,7 @@ public static class ProjectEndpoints
         project.Name,
         project.BatchQuantity,
         ProjectRules.ToCode(project.Status),
+        project.Revision,
         project.HarnessCount,
         project.CreatedUtc,
         project.UpdatedUtc);
@@ -151,6 +192,7 @@ public static class ProjectEndpoints
         project.Name,
         project.BatchQuantity,
         ProjectRules.ToCode(project.Status),
+        project.Revision,
         project.CreatedUtc,
         project.UpdatedUtc,
         project.Harnesses.Select(harness => new HarnessResponse(
@@ -159,4 +201,10 @@ public static class ProjectEndpoints
             harness.SortOrder,
             harness.CreatedUtc,
             harness.UpdatedUtc)).ToArray());
+
+    private static ProjectCommandResponse ToResponse(ProjectMutationResult<ProjectDetails> result) => new(
+        result.CommandId,
+        result.ExpectedRevision,
+        result.ResultingRevision,
+        ToResponse(result.Value));
 }

@@ -59,7 +59,7 @@ public static class ProjectRules
 
     private static string NormalizeText(string value, int maximumLength, string parameterName)
     {
-        var normalized = value.Trim();
+        var normalized = value.Trim().Normalize(System.Text.NormalizationForm.FormC);
         if (normalized.Length == 0)
         {
             throw new ArgumentException("The value must not be blank.", parameterName);

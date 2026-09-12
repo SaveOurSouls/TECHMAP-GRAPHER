@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Techmap.Infrastructure.Sqlite;
@@ -43,12 +45,13 @@ public sealed class SqliteStorageIntegrationTests
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
         var history = storage.ExecuteRead(ReadSchemaHistory);
-        Assert.Equal([1, 2, 3], history.Select(row => row.Version));
+        Assert.Equal([1, 2, 3, 4], history.Select(row => row.Version));
         Assert.Equal(
             [
                 "M1-03-initial-storage",
                 "M1-04-projects-and-harnesses",
                 "M1-05-attachments-and-pinned-data",
+                "M1-06-project-command-journal",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -115,7 +118,7 @@ public sealed class SqliteStorageIntegrationTests
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(
-            [1, 2, 3],
+            [1, 2, 3, 4],
             reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
     }
 
@@ -136,6 +139,13 @@ public sealed class SqliteStorageIntegrationTests
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
+                DROP TRIGGER prevent_project_version_delete;
+                DROP TRIGGER prevent_project_version_update;
+                DROP TRIGGER prevent_project_command_delete;
+                DROP TRIGGER prevent_project_command_update;
+                DROP TABLE project_versions;
+                DROP TABLE project_commands;
+                ALTER TABLE projects DROP COLUMN revision;
                 DROP TRIGGER prevent_pinned_characteristic_update;
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
@@ -144,7 +154,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version IN (2, 3);
+                DELETE FROM schema_history WHERE version IN (2, 3, 4);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -153,12 +163,14 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         var history = migrated.ExecuteRead(ReadSchemaHistory);
 
-        Assert.Equal(3, migrated.Diagnostics.SchemaVersion);
+        Assert.Equal(4, migrated.Diagnostics.SchemaVersion);
         Assert.Equal(originalVersionOne, history[0]);
         Assert.Equal(2, history[1].Version);
         Assert.Equal("M1-04-projects-and-harnesses", history[1].MigrationId);
         Assert.Equal(3, history[2].Version);
         Assert.Equal("M1-05-attachments-and-pinned-data", history[2].MigrationId);
+        Assert.Equal(4, history[3].Version);
+        Assert.Equal("M1-06-project-command-journal", history[3].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -183,11 +195,18 @@ public sealed class SqliteStorageIntegrationTests
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
+                DROP TRIGGER prevent_project_version_delete;
+                DROP TRIGGER prevent_project_version_update;
+                DROP TRIGGER prevent_project_command_delete;
+                DROP TRIGGER prevent_project_command_update;
+                DROP TABLE project_versions;
+                DROP TABLE project_commands;
+                ALTER TABLE projects DROP COLUMN revision;
                 DROP TRIGGER prevent_pinned_characteristic_update;
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
-                DELETE FROM schema_history WHERE version = 3;
+                DELETE FROM schema_history WHERE version IN (3, 4);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -196,10 +215,12 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         var history = migrated.ExecuteRead(ReadSchemaHistory);
 
-        Assert.Equal(3, migrated.Diagnostics.SchemaVersion);
+        Assert.Equal(4, migrated.Diagnostics.SchemaVersion);
         Assert.Equal(originalHistory, history.Take(2));
         Assert.Equal(3, history[2].Version);
         Assert.Equal("M1-05-attachments-and-pinned-data", history[2].MigrationId);
+        Assert.Equal(4, history[3].Version);
+        Assert.Equal("M1-06-project-command-journal", history[3].MigrationId);
         Assert.Equal(
             3,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -209,6 +230,87 @@ public sealed class SqliteStorageIntegrationTests
                 WHERE type = 'table'
                   AND name IN ('attachment_blobs', 'project_attachments', 'pinned_characteristics');
                 """)));
+    }
+
+    [Fact]
+    public async Task Version_three_project_data_is_preserved_and_receives_revision_zero()
+    {
+        using var fixture = StorageFixture.Create();
+        Guid projectId;
+        Guid harnessId;
+        Guid attachmentId;
+        Guid snapshotId;
+        const string hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            projectId = Guid.NewGuid();
+            harnessId = Guid.NewGuid();
+            attachmentId = Guid.NewGuid();
+            snapshotId = Guid.NewGuid();
+            storage.ExecuteInTransaction(unitOfWork =>
+            {
+                var now = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                const string payload = "{}";
+                var payloadHash = Convert.ToHexStringLower(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
+                using var insert = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO projects VALUES ($projectId, 'ПР-V3', 1, 'Проект v3', 2, 'draft', $now, $now, 0);
+                    INSERT INTO harnesses VALUES ($harnessId, $projectId, 'ЖГУТ-V3', 0, $now, $now);
+                    INSERT INTO attachment_blobs VALUES ($hash, 0, $now);
+                    INSERT INTO project_attachments VALUES ($attachmentId, $projectId, $hash, 'v3.txt', 'text/plain', 'test', $now);
+                    INSERT INTO pinned_characteristics VALUES (
+                        $snapshotId, $projectId, 'mock', 'terminal:T-V3', 'v3',
+                        'Длина зачистки', '4', 'мм', $payload, $payloadHash, $now);
+                    """);
+                insert.Parameters.AddWithValue("$projectId", projectId.ToString("D"));
+                insert.Parameters.AddWithValue("$harnessId", harnessId.ToString("D"));
+                insert.Parameters.AddWithValue("$attachmentId", attachmentId.ToString("D"));
+                insert.Parameters.AddWithValue("$snapshotId", snapshotId.ToString("D"));
+                insert.Parameters.AddWithValue("$hash", hash);
+                insert.Parameters.AddWithValue("$payload", payload);
+                insert.Parameters.AddWithValue("$payloadHash", payloadHash);
+                insert.Parameters.AddWithValue("$now", now);
+                insert.ExecuteNonQuery();
+            });
+        }
+
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DROP TRIGGER prevent_project_version_delete;
+                DROP TRIGGER prevent_project_version_update;
+                DROP TRIGGER prevent_project_command_delete;
+                DROP TRIGGER prevent_project_command_update;
+                DROP TABLE project_versions;
+                DROP TABLE project_commands;
+                ALTER TABLE projects DROP COLUMN revision;
+                DELETE FROM schema_history WHERE version = 4;
+                PRAGMA user_version = 3;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        Assert.Equal([1, 2, 3, 4], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
+        var catalog = new SqliteProjectCatalog(migrated);
+        var project = catalog.GetProject(new Techmap.Domain.ProjectIdentity(projectId));
+        Assert.Equal(0, project.Revision);
+        Assert.Equal(harnessId, Assert.Single(project.Harnesses).HarnessId.Value);
+        var blob = migrated.ExecuteRead(unitOfWork =>
+            ExecuteScalarString(unitOfWork,
+                $"SELECT content_sha256 FROM project_attachments WHERE attachment_id = '{attachmentId:D}';"));
+        Assert.Equal(hash, blob);
+        var pinned = migrated.ExecuteRead(unitOfWork =>
+            ExecuteScalarString(unitOfWork,
+                $"SELECT snapshot_id FROM pinned_characteristics WHERE project_id = '{projectId:D}';"));
+        Assert.Equal(snapshotId.ToString("D"), pinned);
+        Assert.Empty(catalog.ListVersions(project.ProjectId));
+        await Task.CompletedTask;
     }
 
     [Fact]

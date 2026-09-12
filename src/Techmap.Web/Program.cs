@@ -92,7 +92,11 @@ builder.WebHost.ConfigureKestrel(kestrel =>
     kestrel.Listen(IPAddress.Loopback, options.Port);
 });
 builder.Services.AddSingleton<IApplicationBoundary, StorageBoundary>();
-builder.Services.AddSingleton<IProjectCatalog, SqliteProjectCatalog>();
+builder.Services.AddSingleton<SqliteProjectCatalog>();
+builder.Services.AddSingleton<IProjectCatalog>(services =>
+    services.GetRequiredService<SqliteProjectCatalog>());
+builder.Services.AddSingleton<IProjectVersionCatalog>(services =>
+    services.GetRequiredService<SqliteProjectCatalog>());
 builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
     new ContentAddressedAttachmentStore(dataRoot));
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();

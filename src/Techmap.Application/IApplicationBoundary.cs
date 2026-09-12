@@ -26,6 +26,7 @@ public sealed record ProjectSummary(
     string Name,
     long BatchQuantity,
     ProjectStatus Status,
+    long Revision,
     int HarnessCount,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
@@ -44,6 +45,7 @@ public sealed record ProjectDetails(
     string Name,
     long BatchQuantity,
     ProjectStatus Status,
+    long Revision,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc,
     IReadOnlyList<HarnessSummary> Harnesses);
@@ -58,11 +60,66 @@ public interface IProjectCatalog
 
     ProjectDetails UpdateProject(ProjectIdentity projectId, UpdateProjectCommand command);
 
+    ProjectMutationResult<ProjectDetails> UpdateProject(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        UpdateProjectCommand command);
+
     ProjectDetails CopyProject(ProjectIdentity sourceProjectId);
 
     ProjectDetails AddHarness(ProjectIdentity projectId, string designation);
 
+    ProjectMutationResult<ProjectDetails> AddHarness(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        string designation);
+
     ProjectDetails DeleteHarness(ProjectIdentity projectId, HarnessIdentity harnessId);
+
+    ProjectMutationResult<ProjectDetails> DeleteHarness(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        HarnessIdentity harnessId);
+}
+
+public readonly record struct ProjectCommandEnvelope(Guid CommandId, long ExpectedRevision);
+
+public sealed record ProjectMutationResult<T>(
+    Guid CommandId,
+    long ExpectedRevision,
+    long ResultingRevision,
+    T Value);
+
+public sealed record ProjectVersionEntry(
+    long Revision,
+    Guid CommandId,
+    string CommandType,
+    DateTimeOffset AcceptedUtc);
+
+public interface IProjectVersionCatalog
+{
+    IReadOnlyList<ProjectVersionEntry> ListVersions(ProjectIdentity projectId);
+}
+
+public sealed class ProjectCommandException : Exception
+{
+    public ProjectCommandException(
+        string code,
+        string message,
+        long? currentRevision = null,
+        string? field = null)
+        : base(message)
+    {
+        Code = code;
+        CurrentRevision = currentRevision;
+        Field = field;
+    }
+
+    public string Code { get; }
+
+    public long? CurrentRevision { get; }
+
+    public string? Field { get; }
 }
 
 public sealed class ProjectCatalogException : Exception

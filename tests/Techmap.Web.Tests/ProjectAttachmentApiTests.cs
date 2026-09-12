@@ -27,11 +27,14 @@ public sealed class ProjectAttachmentApiTests
         var project = await CreateProjectAsync(client, csrf);
         var bytes = Encoding.UTF8.GetBytes("фото этапа");
 
-        var (createResponse, attachment) = await SendAsync<ProjectAttachmentResponse>(
+        var commandId = Guid.NewGuid();
+        var (createResponse, command) = await SendAsync<ProjectAttachmentCommandResponse>(
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{project.ProjectId:D}/attachments",
             new CreateAttachmentRequest(
+                commandId,
+                project.Revision,
                 "этап.txt",
                 "text/plain",
                 "route-photo",
@@ -39,11 +42,12 @@ public sealed class ProjectAttachmentApiTests
             csrf);
         using (createResponse)
         {
-            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
-            Assert.Equal(
-                $"/api/v1/projects/{project.ProjectId:D}/attachments/{attachment.AttachmentId:D}",
-                createResponse.Headers.Location?.OriginalString);
+            Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+            Assert.Equal(commandId, command.CommandId);
+            Assert.Equal(project.Revision, command.ExpectedRevision);
+            Assert.Equal(project.Revision + 1, command.ResultingRevision);
         }
+        var attachment = command.Attachment;
 
         using var listResponse = await client.GetAsync(
             $"/api/v1/projects/{project.ProjectId:D}/attachments",
@@ -85,7 +89,12 @@ public sealed class ProjectAttachmentApiTests
         var project = await CreateProjectAsync(client, csrf);
         var path = $"/api/v1/projects/{project.ProjectId:D}/attachments";
         var body = new CreateAttachmentRequest(
-            "a.txt", "text/plain", "note", Convert.ToBase64String([1, 2, 3]));
+            Guid.NewGuid(),
+            project.Revision,
+            "a.txt",
+            "text/plain",
+            "note",
+            Convert.ToBase64String([1, 2, 3]));
 
         using var missingCsrf = await client.PostAsJsonAsync(
             path,
@@ -129,7 +138,8 @@ public sealed class ProjectAttachmentApiTests
             client,
             HttpMethod.Post,
             path,
-            new CreateAttachmentRequest("a.txt", "text/plain", "note", "%%%"),
+            new CreateAttachmentRequest(
+                Guid.NewGuid(), project.Revision, "a.txt", "text/plain", "note", "%%%"),
             csrf);
         using (response)
         {
@@ -145,26 +155,119 @@ public sealed class ProjectAttachmentApiTests
     }
 
     [Fact]
-    public async Task Attachment_location_respects_path_base()
+    public async Task Attachment_command_respects_path_base()
     {
         await using var fixture = new ApiFixture("--path-base=/techmap");
         using var client = fixture.Factory.CreateLocalClient();
         var csrf = await StartSessionAsync(client, "/techmap");
         var project = await CreateProjectAsync(client, csrf, "/techmap");
 
-        var (response, attachment) = await SendAsync<ProjectAttachmentResponse>(
+        var (response, command) = await SendAsync<ProjectAttachmentCommandResponse>(
             client,
             HttpMethod.Post,
             $"/techmap/api/v1/projects/{project.ProjectId:D}/attachments",
-            new CreateAttachmentRequest("a.bin", "application/octet-stream", "source", "AA=="),
+            new CreateAttachmentRequest(
+                Guid.NewGuid(),
+                project.Revision,
+                "a.bin",
+                "application/octet-stream",
+                "source",
+                "AA=="),
             csrf);
         using (response)
         {
-            Assert.Equal(
-                $"/techmap/api/v1/projects/{project.ProjectId:D}/attachments/" +
-                $"{attachment.AttachmentId:D}",
-                response.Headers.Location?.OriginalString);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(project.ProjectId, command.Attachment.ProjectId);
         }
+    }
+
+    [Fact]
+    public async Task Attachment_command_replays_exact_body_before_stale_revision_check()
+    {
+        await using var fixture = new ApiFixture();
+        using var client = fixture.Factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var project = await CreateProjectAsync(client, csrf);
+        var path = $"/api/v1/projects/{project.ProjectId:D}/attachments";
+        var request = new CreateAttachmentRequest(
+            Guid.NewGuid(), project.Revision, "a.txt", "text/plain", "note", "AQID");
+
+        var (firstResponse, first) = await SendAsync<ProjectAttachmentCommandResponse>(
+            client, HttpMethod.Post, path, request, csrf);
+        using (firstResponse)
+        {
+            Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        }
+
+        var (editResponse, _) = await SendAsync<ProjectCommandResponse>(
+            client,
+            HttpMethod.Patch,
+            $"/api/v1/projects/{project.ProjectId:D}",
+            new UpdateProjectRequest(Guid.NewGuid(), first.ResultingRevision, Name: "Позже"),
+            csrf);
+        editResponse.Dispose();
+
+        var (retryResponse, retry) = await SendAsync<ProjectAttachmentCommandResponse>(
+            client, HttpMethod.Post, path, request, csrf);
+        using (retryResponse)
+        {
+            Assert.Equal(HttpStatusCode.OK, retryResponse.StatusCode);
+            Assert.Equal(first, retry);
+        }
+
+        var details = await client.GetFromJsonAsync<ProjectDetailsResponse>(
+            $"/api/v1/projects/{project.ProjectId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(2, Assert.IsType<ProjectDetailsResponse>(details).Revision);
+        var list = await client.GetFromJsonAsync<ProjectAttachmentListResponse>(
+            path, TestContext.Current.CancellationToken);
+        Assert.Single(Assert.IsType<ProjectAttachmentListResponse>(list).Attachments);
+
+        var (staleResponse, stale) = await SendAsync<ApiErrorResponse>(
+            client, HttpMethod.Post, path, request with { CommandId = Guid.NewGuid() }, csrf);
+        using (staleResponse)
+        {
+            Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+            Assert.Equal("revision_conflict", stale.Error);
+            Assert.Equal(2, stale.CurrentRevision);
+        }
+
+        var (reusedResponse, reused) = await SendAsync<ApiErrorResponse>(
+            client, HttpMethod.Post, path, request with { FileName = "different.txt" }, csrf);
+        using (reusedResponse)
+        {
+            Assert.Equal(HttpStatusCode.Conflict, reusedResponse.StatusCode);
+            Assert.Equal("command_id_reused", reused.Error);
+            Assert.Equal(2, reused.CurrentRevision);
+        }
+    }
+
+    [Fact]
+    public async Task Attachment_command_envelope_is_required_and_rejected_before_a_reference()
+    {
+        await using var fixture = new ApiFixture();
+        using var client = fixture.Factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var project = await CreateProjectAsync(client, csrf);
+        var path = $"/api/v1/projects/{project.ProjectId:D}/attachments";
+
+        var (response, error) = await SendAsync<ApiErrorResponse>(
+            client,
+            HttpMethod.Post,
+            path,
+            new { fileName = "a.txt", mediaType = "text/plain", purpose = "note", contentBase64 = "AQID" },
+            csrf);
+        using (response)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_expected_revision", error.Error);
+        }
+
+        var list = await client.GetFromJsonAsync<ProjectAttachmentListResponse>(
+            path, TestContext.Current.CancellationToken);
+        Assert.Empty(Assert.IsType<ProjectAttachmentListResponse>(list).Attachments);
+        var details = await client.GetFromJsonAsync<ProjectDetailsResponse>(
+            $"/api/v1/projects/{project.ProjectId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(0, Assert.IsType<ProjectDetailsResponse>(details).Revision);
     }
 
     private static async Task<string> StartSessionAsync(HttpClient client, string pathBase = "")

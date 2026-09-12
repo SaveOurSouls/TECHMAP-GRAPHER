@@ -1,19 +1,33 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
 using Techmap.Domain;
 
 namespace Techmap.Infrastructure.Sqlite;
 
-public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalog
+public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatalog
 {
+    private const int JournalPayloadSchemaVersion = 1;
+    private static readonly JsonSerializerOptions JournalJsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly SqliteStorage storage;
+    private readonly Action<string>? commandProgressHook;
+
+    public SqliteProjectCatalog(SqliteStorage storage, Action<string>? commandProgressHook = null)
+    {
+        this.storage = storage;
+        this.commandProgressHook = commandProgressHook;
+    }
+
     public IReadOnlyList<ProjectSummary> ListProjects() =>
         storage.ExecuteRead(unitOfWork =>
         {
             using var command = unitOfWork.CreateCommand(
                 """
                 SELECT p.project_id, p.designation, p.project_increment, p.name,
-                       p.batch_quantity, p.status, p.created_utc, p.updated_utc,
+                       p.batch_quantity, p.status, p.revision, p.created_utc, p.updated_utc,
                        COUNT(h.harness_id)
                 FROM projects p
                 LEFT JOIN harnesses h ON h.project_id = p.project_id
@@ -31,9 +45,10 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
                     reader.GetString(3),
                     reader.GetInt64(4),
                     ReadStatus(reader.GetString(5)),
-                    reader.GetInt32(8),
-                    ReadTimestamp(reader.GetString(6)),
-                    ReadTimestamp(reader.GetString(7))));
+                    reader.GetInt64(6),
+                    reader.GetInt32(9),
+                    ReadTimestamp(reader.GetString(7)),
+                    ReadTimestamp(reader.GetString(8))));
             }
 
             return projects;
@@ -61,6 +76,28 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
 
     public ProjectDetails UpdateProject(ProjectIdentity projectId, UpdateProjectCommand command)
     {
+        while (true)
+        {
+            var revision = GetProject(projectId).Revision;
+            try
+            {
+                return UpdateProject(
+                    projectId,
+                    new ProjectCommandEnvelope(Guid.NewGuid(), revision),
+                    command).Value;
+            }
+            catch (ProjectCommandException error) when (error.Code == "revision_conflict")
+            {
+                // Compatibility wrapper for pre-M1-06 in-process callers.
+            }
+        }
+    }
+
+    public ProjectMutationResult<ProjectDetails> UpdateProject(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        UpdateProjectCommand command)
+    {
         ValidateProjectId(projectId);
         ArgumentNullException.ThrowIfNull(command);
         if (command.Designation is null &&
@@ -84,7 +121,19 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
         }
 
         var statusCode = command.Status is null ? null : ProjectRules.ToCode(command.Status.Value);
-        return storage.ExecuteInTransaction(unitOfWork =>
+        var canonicalRequest = JsonSerializer.Serialize(new
+        {
+            designation,
+            name,
+            batchQuantity,
+            status = statusCode,
+        }, JournalJsonOptions);
+        return ExecuteProjectCommand(
+            projectId,
+            envelope,
+            "update_project",
+            canonicalRequest,
+            (unitOfWork, now) =>
         {
             using var update = unitOfWork.CreateCommand(
                 """
@@ -100,7 +149,7 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
             update.Parameters.AddWithValue("$name", DbValue(name));
             update.Parameters.AddWithValue("$batchQuantity", DbValue(batchQuantity));
             update.Parameters.AddWithValue("$status", DbValue(statusCode));
-            update.Parameters.AddWithValue("$updatedUtc", UtcNowText());
+            update.Parameters.AddWithValue("$updatedUtc", now);
             update.Parameters.AddWithValue("$projectId", Format(projectId.Value));
             if (update.ExecuteNonQuery() != 1)
             {
@@ -151,11 +200,41 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
 
     public ProjectDetails AddHarness(ProjectIdentity projectId, string designation)
     {
+        while (true)
+        {
+            var revision = GetProject(projectId).Revision;
+            try
+            {
+                return AddHarness(
+                    projectId,
+                    new ProjectCommandEnvelope(Guid.NewGuid(), revision),
+                    designation).Value;
+            }
+            catch (ProjectCommandException error) when (error.Code == "revision_conflict")
+            {
+                // Compatibility wrapper for pre-M1-06 in-process callers.
+            }
+        }
+    }
+
+    public ProjectMutationResult<ProjectDetails> AddHarness(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        string designation)
+    {
         ValidateProjectId(projectId);
         var normalizedDesignation = NormalizeDesignation(designation, "designation");
-        return storage.ExecuteInTransaction(unitOfWork =>
+        var canonicalRequest = JsonSerializer.Serialize(new
         {
-            EnsureProjectExists(unitOfWork, projectId);
+            designation = normalizedDesignation,
+        }, JournalJsonOptions);
+        return ExecuteProjectCommand(
+            projectId,
+            envelope,
+            "add_harness",
+            canonicalRequest,
+            (unitOfWork, now) =>
+        {
             using var state = unitOfWork.CreateCommand(
                 """
                 SELECT COUNT(*), COALESCE(MAX(sort_order), -1) + 1
@@ -179,7 +258,6 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
             }
 
             reader.Close();
-            var now = UtcNowText();
             try
             {
                 InsertHarness(
@@ -206,15 +284,45 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
 
     public ProjectDetails DeleteHarness(ProjectIdentity projectId, HarnessIdentity harnessId)
     {
+        while (true)
+        {
+            var revision = GetProject(projectId).Revision;
+            try
+            {
+                return DeleteHarness(
+                    projectId,
+                    new ProjectCommandEnvelope(Guid.NewGuid(), revision),
+                    harnessId).Value;
+            }
+            catch (ProjectCommandException error) when (error.Code == "revision_conflict")
+            {
+                // Compatibility wrapper for pre-M1-06 in-process callers.
+            }
+        }
+    }
+
+    public ProjectMutationResult<ProjectDetails> DeleteHarness(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        HarnessIdentity harnessId)
+    {
         ValidateProjectId(projectId);
         if (harnessId.Value == Guid.Empty)
         {
             throw Invalid("invalid_harness_id", "The harness ID is invalid.", "harnessId");
         }
 
-        return storage.ExecuteInTransaction(unitOfWork =>
+        var canonicalRequest = JsonSerializer.Serialize(new
         {
-            EnsureProjectExists(unitOfWork, projectId);
+            harnessId = Format(harnessId.Value),
+        }, JournalJsonOptions);
+        return ExecuteProjectCommand(
+            projectId,
+            envelope,
+            "delete_harness",
+            canonicalRequest,
+            (unitOfWork, now) =>
+        {
             using var delete = unitOfWork.CreateCommand(
                 "DELETE FROM harnesses WHERE project_id = $projectId AND harness_id = $harnessId;");
             delete.Parameters.AddWithValue("$projectId", Format(projectId.Value));
@@ -224,10 +332,283 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
                 throw NotFound("harness_not_found", "The harness does not exist in this project.");
             }
 
-            TouchProject(unitOfWork, projectId, UtcNowText());
+            TouchProject(unitOfWork, projectId, now);
             return ReadProject(unitOfWork, projectId);
         });
     }
+
+    public IReadOnlyList<ProjectVersionEntry> ListVersions(ProjectIdentity projectId)
+    {
+        ValidateProjectId(projectId);
+        return storage.ExecuteRead(unitOfWork =>
+        {
+            EnsureProjectExists(unitOfWork, projectId);
+            using var command = unitOfWork.CreateCommand(
+                """
+                SELECT revision, command_id, cause, committed_utc
+                FROM project_versions
+                WHERE project_id = $projectId
+                ORDER BY revision;
+                """);
+            command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+            using var reader = command.ExecuteReader();
+            var versions = new List<ProjectVersionEntry>();
+            while (reader.Read())
+            {
+                versions.Add(new ProjectVersionEntry(
+                    reader.GetInt64(0),
+                    ReadGuid(reader.GetString(1), "command"),
+                    reader.GetString(2),
+                    ReadTimestamp(reader.GetString(3))));
+            }
+
+            return versions;
+        });
+    }
+
+    private ProjectMutationResult<ProjectDetails> ExecuteProjectCommand(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        string commandType,
+        string canonicalRequest,
+        Func<SqliteUnitOfWork, string, ProjectDetails> mutation)
+    {
+        ValidateEnvelope(envelope);
+        var requestHash = Sha256(canonicalRequest);
+        return storage.ExecuteInTransaction(unitOfWork =>
+        {
+            var replay = ReadCommand(unitOfWork, envelope.CommandId);
+            if (replay is not null)
+            {
+                if (replay.ProjectId != projectId.Value ||
+                    replay.ExpectedRevision != envelope.ExpectedRevision ||
+                    !string.Equals(replay.CommandType, commandType, StringComparison.Ordinal) ||
+                    !string.Equals(replay.RequestSha256, requestHash, StringComparison.Ordinal) ||
+                    !string.Equals(replay.RequestJson, canonicalRequest, StringComparison.Ordinal))
+                {
+                    throw new ProjectCommandException(
+                        "command_id_reused",
+                        "The command ID was already used for a different project mutation.",
+                        ReadCurrentRevisionOrNull(unitOfWork, projectId));
+                }
+
+                var storedProject = JsonSerializer.Deserialize<ProjectDetails>(
+                    replay.ResultJson,
+                    JournalJsonOptions)
+                    ?? throw new InvalidDataException("The stored project command result is invalid.");
+                return new ProjectMutationResult<ProjectDetails>(
+                    envelope.CommandId,
+                    envelope.ExpectedRevision,
+                    replay.ResultingRevision,
+                    storedProject);
+            }
+
+            var currentRevision = ReadCurrentRevision(unitOfWork, projectId);
+            if (currentRevision != envelope.ExpectedRevision)
+            {
+                throw new ProjectCommandException(
+                    "revision_conflict",
+                    $"Expected project revision {envelope.ExpectedRevision}, but current revision is {currentRevision}.",
+                    currentRevision,
+                    "expectedRevision");
+            }
+            if (currentRevision == long.MaxValue)
+            {
+                throw new ProjectCommandException(
+                    "revision_limit_reached",
+                    "The project revision cannot be incremented.",
+                    currentRevision);
+            }
+
+            var now = UtcNowText();
+            var project = mutation(unitOfWork, now);
+            commandProgressHook?.Invoke("after_mutation");
+            var resultingRevision = IncrementRevision(
+                unitOfWork,
+                projectId,
+                envelope.ExpectedRevision,
+                now);
+            project = project with { Revision = resultingRevision, UpdatedUtc = ReadTimestamp(now) };
+            var resultJson = JsonSerializer.Serialize(project, JournalJsonOptions);
+            InsertCommand(
+                unitOfWork,
+                projectId,
+                envelope,
+                resultingRevision,
+                commandType,
+                canonicalRequest,
+                requestHash,
+                resultJson,
+                now);
+            commandProgressHook?.Invoke("after_journal");
+            return new ProjectMutationResult<ProjectDetails>(
+                envelope.CommandId,
+                envelope.ExpectedRevision,
+                resultingRevision,
+                project);
+        });
+    }
+
+    private static StoredCommand? ReadCommand(SqliteUnitOfWork unitOfWork, Guid commandId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT project_id, expected_revision, resulting_revision, command_type,
+                   request_json, request_sha256, result_json, result_sha256
+            FROM project_commands
+            WHERE command_id = $commandId;
+            """);
+        command.Parameters.AddWithValue("$commandId", Format(commandId));
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        var stored = new StoredCommand(
+            ReadGuid(reader.GetString(0), "project"),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetString(7));
+        if (!string.Equals(stored.RequestSha256, Sha256(stored.RequestJson), StringComparison.Ordinal) ||
+            !string.Equals(stored.ResultSha256, Sha256(stored.ResultJson), StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("A stored project command failed integrity validation.");
+        }
+
+        return stored;
+    }
+
+    private static void InsertCommand(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        long resultingRevision,
+        string commandType,
+        string requestJson,
+        string requestHash,
+        string resultJson,
+        string acceptedUtc)
+    {
+        using (var journal = unitOfWork.CreateCommand(
+            """
+            INSERT INTO project_commands (
+                command_id, project_id, expected_revision, resulting_revision,
+                command_type, request_schema_version, request_json, request_sha256,
+                result_schema_version, result_json, result_sha256, accepted_utc)
+            VALUES (
+                $commandId, $projectId, $expectedRevision, $resultingRevision,
+                $commandType, $schemaVersion, $requestJson, $requestSha256,
+                $schemaVersion, $resultJson, $resultSha256, $acceptedUtc);
+            """))
+        {
+            journal.Parameters.AddWithValue("$commandId", Format(envelope.CommandId));
+            journal.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+            journal.Parameters.AddWithValue("$expectedRevision", envelope.ExpectedRevision);
+            journal.Parameters.AddWithValue("$resultingRevision", resultingRevision);
+            journal.Parameters.AddWithValue("$commandType", commandType);
+            journal.Parameters.AddWithValue("$schemaVersion", JournalPayloadSchemaVersion);
+            journal.Parameters.AddWithValue("$requestJson", requestJson);
+            journal.Parameters.AddWithValue("$requestSha256", requestHash);
+            journal.Parameters.AddWithValue("$resultJson", resultJson);
+            journal.Parameters.AddWithValue("$resultSha256", Sha256(resultJson));
+            journal.Parameters.AddWithValue("$acceptedUtc", acceptedUtc);
+            journal.ExecuteNonQuery();
+        }
+
+        using var version = unitOfWork.CreateCommand(
+            """
+            INSERT INTO project_versions (project_id, revision, command_id, cause, committed_utc)
+            VALUES ($projectId, $revision, $commandId, $cause, $committedUtc);
+            """);
+        version.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        version.Parameters.AddWithValue("$revision", resultingRevision);
+        version.Parameters.AddWithValue("$commandId", Format(envelope.CommandId));
+        version.Parameters.AddWithValue("$cause", commandType);
+        version.Parameters.AddWithValue("$committedUtc", acceptedUtc);
+        version.ExecuteNonQuery();
+    }
+
+    private static long IncrementRevision(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity projectId,
+        long expectedRevision,
+        string updatedUtc)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            UPDATE projects
+            SET revision = revision + 1, updated_utc = $updatedUtc
+            WHERE project_id = $projectId AND revision = $expectedRevision
+            RETURNING revision;
+            """);
+        command.Parameters.AddWithValue("$updatedUtc", updatedUtc);
+        command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        command.Parameters.AddWithValue("$expectedRevision", expectedRevision);
+        var value = command.ExecuteScalar();
+        if (value is null)
+        {
+            var currentRevision = ReadCurrentRevision(unitOfWork, projectId);
+            throw new ProjectCommandException(
+                "revision_conflict",
+                "The project changed while the command was being accepted.",
+                currentRevision,
+                "expectedRevision");
+        }
+
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private static long ReadCurrentRevision(SqliteUnitOfWork unitOfWork, ProjectIdentity projectId) =>
+        ReadCurrentRevisionOrNull(unitOfWork, projectId)
+        ?? throw NotFound("project_not_found", "The project does not exist.");
+
+    private static long? ReadCurrentRevisionOrNull(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity projectId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            "SELECT revision FROM projects WHERE project_id = $projectId;");
+        command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        var value = command.ExecuteScalar();
+        return value is null ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private static void ValidateEnvelope(ProjectCommandEnvelope envelope)
+    {
+        if (envelope.CommandId == Guid.Empty)
+        {
+            throw new ProjectCatalogException(
+                "invalid_command_id",
+                "The command ID must be a non-empty UUID.",
+                "commandId");
+        }
+
+        if (envelope.ExpectedRevision < 0)
+        {
+            throw new ProjectCatalogException(
+                "invalid_expected_revision",
+                "The expected revision must not be negative.",
+                "expectedRevision");
+        }
+    }
+
+    private static string Sha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private sealed record StoredCommand(
+        Guid ProjectId,
+        long ExpectedRevision,
+        long ResultingRevision,
+        string CommandType,
+        string RequestJson,
+        string RequestSha256,
+        string ResultJson,
+        string ResultSha256);
 
     private static CreateProjectCommand Normalize(CreateProjectCommand command)
     {
@@ -370,12 +751,13 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
         string name;
         long batchQuantity;
         ProjectStatus status;
+        long revision;
         DateTimeOffset createdUtc;
         DateTimeOffset updatedUtc;
         using (var project = unitOfWork.CreateCommand(
             """
             SELECT designation, project_increment, name, batch_quantity, status,
-                   created_utc, updated_utc
+                   revision, created_utc, updated_utc
             FROM projects
             WHERE project_id = $projectId;
             """))
@@ -392,8 +774,9 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
             name = reader.GetString(2);
             batchQuantity = reader.GetInt64(3);
             status = ReadStatus(reader.GetString(4));
-            createdUtc = ReadTimestamp(reader.GetString(5));
-            updatedUtc = ReadTimestamp(reader.GetString(6));
+            revision = reader.GetInt64(5);
+            createdUtc = ReadTimestamp(reader.GetString(6));
+            updatedUtc = ReadTimestamp(reader.GetString(7));
         }
 
         using var harnessesCommand = unitOfWork.CreateCommand(
@@ -423,6 +806,7 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
             name,
             batchQuantity,
             status,
+            revision,
             createdUtc,
             updatedUtc,
             harnesses);

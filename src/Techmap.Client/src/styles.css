@@ -178,6 +178,13 @@ input::placeholder { color: #8795a3; }
 .card-title-row { padding-bottom: 20px; border-bottom: 1px solid #e3e9ed; }
 .project-edit-form { margin-top: 20px; padding-bottom: 22px; border-bottom: 1px solid #e3e9ed; }
 .project-edit-form .wide-field, .project-edit-form .form-actions { grid-column: 1 / -1; }
+.autosave-state { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #eef7f2; color: #28684d; font-size: 12px; }
+.autosave-state.pending { background: #fff7e8; color: #865d1e; }
+.autosave-state.conflict, .autosave-state.error { background: #fff0f0; color: #9b3333; }
+.autosave-state > div { display: grid; gap: 3px; min-width: 0; }
+.autosave-state > div span { line-height: 1.35; }
+.autosave-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.autosave-state .link-button { margin-left: auto; color: inherit; font-weight: 700; white-space: nowrap; }
 .harness-section { padding-top: 22px; }
 .harness-heading > div { display: flex; align-items: baseline; gap: 10px; }
 .harness-heading span { color: #70808e; font-size: 11px; }

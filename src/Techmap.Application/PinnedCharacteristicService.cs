@@ -22,11 +22,48 @@ public interface IPinnedCharacteristicStore
     IReadOnlyList<ExternalCharacteristicSnapshot> List(ProjectIdentity projectId);
 }
 
+public interface IPinnedCharacteristicCommandStore : IPinnedCharacteristicStore
+{
+    ProjectMutationResult<ExternalCharacteristicSnapshot> AddOrGet(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        string sourceKind,
+        string sourceRecordKey,
+        Func<ExternalCharacteristicSnapshot> snapshotFactory);
+
+    ProjectMutationResult<ExternalCharacteristicSnapshot> AddOrGet(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        ExternalCharacteristicSnapshot snapshot);
+}
+
 public sealed class PinnedCharacteristicService(
     IExternalCharacteristicSource source,
     IPinnedCharacteristicStore store,
     TimeProvider timeProvider)
 {
+    public ProjectMutationResult<ExternalCharacteristicSnapshot> Pin(
+        ProjectIdentity projectId,
+        ProjectCommandEnvelope envelope,
+        string sourceKind,
+        string sourceRecordKey)
+    {
+        if (store is not IPinnedCharacteristicCommandStore commandStore)
+        {
+            throw new InvalidOperationException("The characteristic store does not support project commands.");
+        }
+
+        return commandStore.AddOrGet(projectId, envelope, sourceKind, sourceRecordKey, () =>
+        {
+            var record = source.Read(sourceKind, sourceRecordKey)
+                ?? throw new InvalidDataException("The external characteristic source returned no record.");
+            return ExternalCharacteristicSnapshot.Capture(
+                CharacteristicSnapshotIdentity.New(), sourceKind, sourceRecordKey,
+                record.SourceVersionFingerprint, record.CharacteristicName,
+                record.CharacteristicValue, record.Unit, timeProvider.GetUtcNow());
+        });
+    }
+
     public ExternalCharacteristicSnapshot Pin(
         ProjectIdentity projectId,
         string sourceKind,

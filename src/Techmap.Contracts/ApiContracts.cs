@@ -26,7 +26,8 @@ public sealed record StorageDiagnosticsResponse(
 public sealed record ApiErrorResponse(
     string Error,
     string? Field = null,
-    string? Message = null);
+    string? Message = null,
+    long? CurrentRevision = null);
 
 public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);
 
@@ -37,12 +38,19 @@ public sealed record CreateProjectRequest(
     string? Status);
 
 public sealed record UpdateProjectRequest(
+    Guid CommandId,
+    long? ExpectedRevision,
     string? Designation = null,
     string? Name = null,
     long? BatchQuantity = null,
     string? Status = null);
 
-public sealed record AddHarnessRequest(string? Designation);
+public sealed record AddHarnessRequest(
+    Guid CommandId,
+    long? ExpectedRevision,
+    string? Designation);
+
+public sealed record DeleteHarnessRequest(Guid CommandId, long? ExpectedRevision);
 
 public sealed record ProjectListResponse(IReadOnlyList<ProjectSummaryResponse> Projects);
 
@@ -53,6 +61,7 @@ public sealed record ProjectSummaryResponse(
     string Name,
     long BatchQuantity,
     string Status,
+    long Revision,
     int HarnessCount,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
@@ -71,11 +80,29 @@ public sealed record ProjectDetailsResponse(
     string Name,
     long BatchQuantity,
     string Status,
+    long Revision,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc,
     IReadOnlyList<HarnessResponse> Harnesses);
 
+public sealed record ProjectCommandResponse(
+    Guid CommandId,
+    long ExpectedRevision,
+    long ResultingRevision,
+    ProjectDetailsResponse Project);
+
+public sealed record ProjectVersionResponse(
+    long Revision,
+    Guid CommandId,
+    string CommandType,
+    DateTimeOffset AcceptedUtc);
+
+public sealed record ProjectVersionListResponse(
+    IReadOnlyList<ProjectVersionResponse> Versions);
+
 public sealed record CreateAttachmentRequest(
+    Guid CommandId,
+    long? ExpectedRevision,
     string? FileName,
     string? MediaType,
     string? Purpose,
@@ -90,6 +117,12 @@ public sealed record ProjectAttachmentResponse(
     string MediaType,
     string Purpose,
     DateTimeOffset CreatedUtc);
+
+public sealed record ProjectAttachmentCommandResponse(
+    Guid CommandId,
+    long ExpectedRevision,
+    long ResultingRevision,
+    ProjectAttachmentResponse Attachment);
 
 public sealed record ProjectAttachmentListResponse(
     IReadOnlyList<ProjectAttachmentResponse> Attachments);

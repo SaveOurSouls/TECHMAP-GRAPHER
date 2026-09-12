@@ -59,10 +59,11 @@ try {
         "--no-restore"
     )
     Invoke-Native -Command "dotnet" -Arguments @(
-        "test", $solutionPath,
+        "test", "--solution", $solutionPath,
         "--configuration", $Configuration,
         "--no-restore",
-        "--no-build"
+        "--no-build",
+        "--minimum-expected-tests", "1"
     )
 
     Write-Stage 4 "M0 regression suite (20 tests)"

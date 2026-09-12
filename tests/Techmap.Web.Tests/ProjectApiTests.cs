@@ -35,27 +35,39 @@ public sealed class ProjectApiTests
             Assert.Equal($"/api/v1/projects/{created.ProjectId:D}", createResponse.Headers.Location?.OriginalString);
         }
 
-        var (_, withFirstHarness) = await SendProjectCommandAsync<ProjectDetailsResponse>(
+        var firstCommandId = Guid.NewGuid();
+        var (_, firstHarnessCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses",
-            new AddHarnessRequest("Жгут А"),
+            new AddHarnessRequest(firstCommandId, 0, "Жгут А"),
             csrf);
-        var firstHarness = Assert.Single(withFirstHarness.Harnesses);
-        var (_, withTwoHarnesses) = await SendProjectCommandAsync<ProjectDetailsResponse>(
+        Assert.Equal(firstCommandId, firstHarnessCommand.CommandId);
+        Assert.Equal(1, firstHarnessCommand.ResultingRevision);
+        var firstHarness = Assert.Single(firstHarnessCommand.Project.Harnesses);
+        var (_, secondHarnessCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
             HttpMethod.Post,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses",
-            new AddHarnessRequest("Жгут Б"),
+            new AddHarnessRequest(Guid.NewGuid(), 1, "Жгут Б"),
             csrf);
+        var withTwoHarnesses = secondHarnessCommand.Project;
+        Assert.Equal(2, secondHarnessCommand.ResultingRevision);
         Assert.Equal([0, 1], withTwoHarnesses.Harnesses.Select(harness => harness.SortOrder));
 
-        var (_, updated) = await SendProjectCommandAsync<ProjectDetailsResponse>(
+        var (_, updateCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
             HttpMethod.Patch,
             $"/api/v1/projects/{created.ProjectId:D}",
-            new UpdateProjectRequest(Name: "Проект обновлён", BatchQuantity: 48, Status: "completed"),
+            new UpdateProjectRequest(
+                Guid.NewGuid(),
+                2,
+                Name: "Проект обновлён",
+                BatchQuantity: 48,
+                Status: "completed"),
             csrf);
+        var updated = updateCommand.Project;
+        Assert.Equal(3, updateCommand.ResultingRevision);
         Assert.Equal("Проект обновлён", updated.Name);
         Assert.Equal(48, updated.BatchQuantity);
         Assert.Equal("completed", updated.Status);
@@ -76,12 +88,14 @@ public sealed class ProjectApiTests
                 .Intersect(withTwoHarnesses.Harnesses.Select(harness => harness.HarnessId)));
         }
 
-        var (_, afterDelete) = await SendProjectCommandAsync<ProjectDetailsResponse>(
+        var (_, deleteCommand) = await SendProjectCommandAsync<ProjectCommandResponse>(
             client,
             HttpMethod.Delete,
             $"/api/v1/projects/{created.ProjectId:D}/harnesses/{firstHarness.HarnessId:D}",
-            new { },
+            new DeleteHarnessRequest(Guid.NewGuid(), 3),
             csrf);
+        var afterDelete = deleteCommand.Project;
+        Assert.Equal(4, deleteCommand.ResultingRevision);
         var remaining = Assert.Single(afterDelete.Harnesses);
         Assert.Equal("Жгут Б", remaining.Designation);
         Assert.Equal(1, remaining.SortOrder);

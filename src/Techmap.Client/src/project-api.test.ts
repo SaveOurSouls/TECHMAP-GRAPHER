@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createProjectApi, type ProjectDetails } from "./project-api";
+import { createProjectApi, ProjectApiError, type ProjectDetails } from "./project-api";
 import { parseRuntimeConfig } from "./runtime-config";
 
 const config = parseRuntimeConfig({
@@ -21,6 +21,7 @@ const details: ProjectDetails = {
   name: "Основной проект",
   batchQuantity: 20,
   status: "active",
+  revision: 0,
   createdUtc: "2026-09-12T10:00:00Z",
   updatedUtc: "2026-09-12T10:00:00Z",
   harnesses: [{
@@ -57,10 +58,20 @@ describe("project API", () => {
   });
 
   it("protects mutations with the local session CSRF nonce", async () => {
-    const fetcher = vi.fn(async () => jsonResponse(details));
+    const envelope = {
+      commandId: "32345678-1234-4123-8123-123456789abc",
+      expectedRevision: 0,
+    };
+    const result = {
+      ...envelope,
+      resultingRevision: 1,
+      project: { ...details, revision: 1 },
+    };
+    const fetcher = vi.fn(async () => jsonResponse(result));
     const api = createProjectApi(config, session, fetcher);
 
-    await api.addHarness(details.projectId, "ЖГ-02");
+    await expect(api.addHarness(details.projectId, envelope, "ЖГ-02"))
+      .resolves.toEqual(result);
 
     expect(fetcher).toHaveBeenCalledWith(
       `/techmap/api/v1/projects/${details.projectId}/harnesses`,
@@ -72,7 +83,7 @@ describe("project API", () => {
           "Content-Type": "application/json",
           "X-Techmap-CSRF": session.csrfNonce,
         },
-        body: JSON.stringify({ designation: "ЖГ-02" }),
+        body: JSON.stringify({ ...envelope, designation: "ЖГ-02" }),
       }),
     );
   });
@@ -100,5 +111,42 @@ describe("project API", () => {
       batchQuantity: 1,
       status: "draft",
     })).rejects.toThrow("Обозначение уже существует.");
+  });
+
+  it("exposes the current revision from a command conflict", async () => {
+    const fetcher = vi.fn(async () => jsonResponse({
+      error: "revision_conflict",
+      message: "stale",
+      currentRevision: 12,
+    }, 409));
+    const api = createProjectApi(config, session, fetcher);
+
+    const error = await api.updateProject(details.projectId, {
+      commandId: "32345678-1234-4123-8123-123456789abc",
+      expectedRevision: 7,
+    }, { name: "Конфликт" }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ProjectApiError);
+    expect(error).toMatchObject({ code: "revision_conflict", currentRevision: 12 });
+  });
+
+  it("sends the command envelope in a harness delete body", async () => {
+    const envelope = {
+      commandId: "32345678-1234-4123-8123-123456789abc",
+      expectedRevision: 4,
+    };
+    const fetcher = vi.fn(async () => jsonResponse({
+      ...envelope,
+      resultingRevision: 5,
+      project: { ...details, revision: 5 },
+    }));
+    const api = createProjectApi(config, session, fetcher);
+
+    await api.deleteHarness(details.projectId, details.harnesses[0]!.harnessId, envelope);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      `/techmap/api/v1/projects/${details.projectId}/harnesses/${details.harnesses[0]!.harnessId}`,
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify(envelope) }),
+    );
   });
 });

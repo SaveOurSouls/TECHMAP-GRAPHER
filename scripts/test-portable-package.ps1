@@ -185,7 +185,7 @@ function Test-HostMode {
         $expectedApiBase = if ($PathBase -eq "/") { "/api/v1/" } else { "$PathBase/api/v1/" }
         Assert-Equal $runtime.basePath $expectedBasePath "Runtime basePath is incorrect."
         Assert-Equal $runtime.apiBasePath $expectedApiBase "Runtime apiBasePath is incorrect."
-        Assert-Equal ([int]$runtime.schemaVersion) 3 "Runtime schema version is incorrect."
+        Assert-Equal ([int]$runtime.schemaVersion) 4 "Runtime schema version is incorrect."
 
         $diagnosticsResponse = Invoke-WebRequest `
             -UseBasicParsing `
@@ -194,7 +194,7 @@ function Test-HostMode {
         Assert-JsonContentType $diagnosticsResponse "Diagnostics content type is incorrect."
         $diagnostics = $diagnosticsResponse.Content | ConvertFrom-Json
         Assert-Equal $diagnostics.status "ready" "Storage diagnostics status is incorrect."
-        Assert-Equal ([int]$diagnostics.schemaVersion) 3 "Live SQLite schema version is incorrect."
+        Assert-Equal ([int]$diagnostics.schemaVersion) 4 "Live SQLite schema version is incorrect."
         Assert-Equal $diagnostics.foreignKeysEnabled $true "SQLite foreign keys are not enabled."
         Assert-Equal $diagnostics.journalMode "wal" "SQLite journal mode is incorrect."
         if ([string]::IsNullOrWhiteSpace($diagnostics.sqliteVersion)) {
@@ -251,7 +251,11 @@ function Test-HostMode {
                 -Uri "$origin$routePrefix/api/v1/projects"
             $projectSnapshot = $createdResponse.Content | ConvertFrom-Json
             foreach ($harnessDesignation in @("ЖГУТ-А", "ЖГУТ-Б")) {
-                $harnessBody = @{ designation = $harnessDesignation } | ConvertTo-Json -Compress
+                $harnessBody = @{
+                    commandId = [Guid]::NewGuid().ToString("D")
+                    expectedRevision = [long]$projectSnapshot.revision
+                    designation = $harnessDesignation
+                } | ConvertTo-Json -Compress
                 $harnessResponse = Invoke-WebRequest `
                     -UseBasicParsing `
                     -WebSession $webSession `
@@ -260,11 +264,13 @@ function Test-HostMode {
                     -ContentType "application/json" `
                     -Body $harnessBody `
                     -Uri "$origin$routePrefix/api/v1/projects/$($projectSnapshot.projectId)/harnesses"
-                $projectSnapshot = $harnessResponse.Content | ConvertFrom-Json
+                $projectSnapshot = ($harnessResponse.Content | ConvertFrom-Json).project
             }
             Assert-Equal @($projectSnapshot.harnesses).Count 2 "Portable project did not store two harnesses."
             $attachmentText = "Вложение переносимого проекта"
             $attachmentBody = @{
+                commandId = [Guid]::NewGuid().ToString("D")
+                expectedRevision = [long]$projectSnapshot.revision
                 fileName = "portable-check.txt"
                 mediaType = "text/plain"
                 purpose = "portable-test"
@@ -278,7 +284,9 @@ function Test-HostMode {
                 -ContentType "application/json" `
                 -Body $attachmentBody `
                 -Uri "$origin$routePrefix/api/v1/projects/$($projectSnapshot.projectId)/attachments"
-            $attachmentSnapshot = $attachmentResponse.Content | ConvertFrom-Json
+            $attachmentCommand = $attachmentResponse.Content | ConvertFrom-Json
+            $attachmentSnapshot = $attachmentCommand.attachment
+            $projectSnapshot.revision = [long]$attachmentCommand.resultingRevision
             $projectSnapshot | Add-Member `
                 -NotePropertyName testAttachment `
                 -NotePropertyValue $attachmentSnapshot
@@ -293,6 +301,8 @@ function Test-HostMode {
             $projectSnapshot = $projectResponse.Content | ConvertFrom-Json
             Assert-Equal $projectSnapshot.increment $ExpectedProject.increment `
                 "Restart changed the project increment."
+            Assert-Equal $projectSnapshot.revision $ExpectedProject.revision `
+                "Restart changed the acknowledged project revision."
             Assert-Equal @($projectSnapshot.harnesses).Count 2 `
                 "Restart did not preserve both harnesses."
             Assert-Equal $projectSnapshot.harnesses[0].harnessId $ExpectedProject.harnesses[0].harnessId `

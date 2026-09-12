@@ -21,7 +21,6 @@ public static class ProjectDataEndpoints
                     catalog.List(new ProjectIdentity(projectId)).Select(ToResponse).ToArray())))));
 
         app.MapPost("/api/v1/projects/{projectId:guid}/attachments", async (
-            HttpContext context,
             Guid projectId,
             CreateAttachmentRequest request,
             IProjectAttachmentCatalog catalog,
@@ -30,17 +29,15 @@ public static class ProjectDataEndpoints
             {
                 var content = DecodeContent(request.ContentBase64);
                 await using var source = new MemoryStream(content, writable: false);
-                var attachment = await catalog.AddAsync(
+                var result = await catalog.AddAsync(
                     new ProjectIdentity(projectId),
+                    Envelope(request.CommandId, request.ExpectedRevision),
                     source,
                     request.FileName!,
                     request.MediaType!,
                     request.Purpose!,
                     cancellationToken);
-                return Results.Created(
-                    $"{context.Request.PathBase}/api/v1/projects/{projectId:D}/attachments/" +
-                    $"{attachment.AttachmentId.Value:D}",
-                    ToResponse(attachment));
+                return Results.Ok(ToResponse(result));
             }));
 
         app.MapPost(
@@ -141,6 +138,19 @@ public static class ProjectDataEndpoints
         }
     }
 
+    private static ProjectCommandEnvelope Envelope(Guid commandId, long? expectedRevision)
+    {
+        if (expectedRevision is null)
+        {
+            throw new ProjectCatalogException(
+                "invalid_expected_revision",
+                "The expected revision is required.",
+                "expectedRevision");
+        }
+
+        return new ProjectCommandEnvelope(commandId, expectedRevision.Value);
+    }
+
     private static IResult WithReadSession(
         HttpContext context,
         LocalHttpSession session,
@@ -176,7 +186,7 @@ public static class ProjectDataEndpoints
     }
 
     private static bool IsHandled(Exception error) =>
-        error is ProjectAttachmentException or ProjectCatalogException or
+        error is ProjectAttachmentException or ProjectCatalogException or ProjectCommandException or
             FileNotFoundException or InvalidDataException;
 
     private static IResult Error(Exception error)
@@ -200,6 +210,11 @@ public static class ProjectDataEndpoints
                 project.Code == "project_not_found"
                     ? StatusCodes.Status404NotFound
                     : StatusCodes.Status400BadRequest),
+            ProjectCommandException command => (
+                command.Code,
+                command.Field,
+                command.Message,
+                StatusCodes.Status409Conflict),
             FileNotFoundException => (
                 "attachment_content_missing",
                 (string?)null,
@@ -211,7 +226,12 @@ public static class ProjectDataEndpoints
                 "The attachment content failed integrity validation.",
                 StatusCodes.Status409Conflict),
         };
-        return Results.Json(new ApiErrorResponse(code, field, message), statusCode: status);
+        var currentRevision = error is ProjectCommandException commandError
+            ? commandError.CurrentRevision
+            : null;
+        return Results.Json(
+            new ApiErrorResponse(code, field, message, currentRevision),
+            statusCode: status);
     }
 
     private static ProjectAttachmentResponse ToResponse(ProjectAttachment attachment) => new(
@@ -223,4 +243,11 @@ public static class ProjectDataEndpoints
         attachment.MediaType,
         attachment.Purpose,
         attachment.CreatedUtc);
+
+    private static ProjectAttachmentCommandResponse ToResponse(
+        ProjectMutationResult<ProjectAttachment> result) => new(
+            result.CommandId,
+            result.ExpectedRevision,
+            result.ResultingRevision,
+            ToResponse(result.Value));
 }

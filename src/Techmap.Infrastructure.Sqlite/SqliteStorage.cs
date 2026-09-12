@@ -16,7 +16,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -130,6 +130,72 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         BEFORE UPDATE ON pinned_characteristics
         BEGIN
             SELECT RAISE(ABORT, 'pinned_characteristic_is_immutable');
+        END;
+        """;
+    private const string ProjectCommandMigrationId = "M1-06-project-command-journal";
+    private const string ProjectCommandSchemaSql =
+        """
+        ALTER TABLE projects
+            ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0);
+
+        CREATE TABLE project_commands (
+            command_id TEXT NOT NULL PRIMARY KEY CHECK (length(command_id) = 36),
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            expected_revision INTEGER NOT NULL CHECK (expected_revision >= 0),
+            resulting_revision INTEGER NOT NULL CHECK (resulting_revision = expected_revision + 1),
+            command_type TEXT NOT NULL CHECK (length(command_type) BETWEEN 1 AND 64),
+            request_schema_version INTEGER NOT NULL CHECK (request_schema_version > 0),
+            request_json TEXT NOT NULL CHECK (length(request_json) >= 2),
+            request_sha256 TEXT NOT NULL
+                CHECK (length(request_sha256) = 64)
+                CHECK (request_sha256 = lower(request_sha256))
+                CHECK (request_sha256 NOT GLOB '*[^0-9a-f]*'),
+            result_schema_version INTEGER NOT NULL CHECK (result_schema_version > 0),
+            result_json TEXT NOT NULL CHECK (length(result_json) >= 2),
+            result_sha256 TEXT NOT NULL
+                CHECK (length(result_sha256) = 64)
+                CHECK (result_sha256 = lower(result_sha256))
+                CHECK (result_sha256 NOT GLOB '*[^0-9a-f]*'),
+            accepted_utc TEXT NOT NULL,
+            UNIQUE (project_id, resulting_revision)
+        ) STRICT;
+
+        CREATE INDEX ix_project_commands_project_time
+            ON project_commands (project_id, accepted_utc, command_id);
+
+        CREATE TABLE project_versions (
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            command_id TEXT NOT NULL UNIQUE REFERENCES project_commands(command_id) ON DELETE RESTRICT,
+            cause TEXT NOT NULL CHECK (length(cause) BETWEEN 1 AND 64),
+            committed_utc TEXT NOT NULL,
+            PRIMARY KEY (project_id, revision)
+        ) STRICT;
+
+        CREATE TRIGGER prevent_project_command_update
+        BEFORE UPDATE ON project_commands
+        BEGIN
+            SELECT RAISE(ABORT, 'project_command_is_immutable');
+        END;
+
+        CREATE TRIGGER prevent_project_command_delete
+        BEFORE DELETE ON project_commands
+        WHEN EXISTS (SELECT 1 FROM projects WHERE project_id = OLD.project_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'project_command_is_immutable');
+        END;
+
+        CREATE TRIGGER prevent_project_version_update
+        BEFORE UPDATE ON project_versions
+        BEGIN
+            SELECT RAISE(ABORT, 'project_version_is_immutable');
+        END;
+
+        CREATE TRIGGER prevent_project_version_delete
+        BEFORE DELETE ON project_versions
+        WHEN EXISTS (SELECT 1 FROM projects WHERE project_id = OLD.project_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'project_version_is_immutable');
         END;
         """;
 
@@ -471,6 +537,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 1, MigrationId: InitialMigrationId, Sql: InitialSchemaSql),
             (Version: 2, MigrationId: ProjectMigrationId, Sql: ProjectSchemaSql),
             (Version: 3, MigrationId: ProjectDataMigrationId, Sql: ProjectDataSchemaSql),
+            (Version: 4, MigrationId: ProjectCommandMigrationId, Sql: ProjectCommandSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -503,6 +570,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ProjectDataMigrationId,
                 Sql: ProjectDataSchemaSql,
                 Description: "Attachments and pinned external data"),
+            3 => (
+                Version: 4,
+                MigrationId: ProjectCommandMigrationId,
+                Sql: ProjectCommandSchemaSql,
+                Description: "Project revisions and immutable command journal"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };

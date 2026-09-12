@@ -92,6 +92,85 @@ public sealed class ProjectDataIntegrationTests
     }
 
     [Fact]
+    public async Task Attachment_command_replays_after_restart_without_a_second_reference_or_revision()
+    {
+        using var fixture = Fixture.Create();
+        var commandId = Guid.NewGuid();
+        var bytes = Encoding.UTF8.GetBytes("restart-safe attachment command");
+        ProjectIdentity projectId;
+        ProjectMutationResult<ProjectAttachment> accepted;
+
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            projectId = CreateProject(storage);
+            accepted = await AttachmentCatalog(storage, fixture.DataRoot).AddAsync(
+                projectId,
+                new ProjectCommandEnvelope(commandId, 0),
+                new MemoryStream(bytes),
+                "evidence.txt",
+                "text/plain",
+                "note",
+                TestContext.Current.CancellationToken);
+            Assert.Equal(1, accepted.ResultingRevision);
+        }
+
+        using var reopened = SqliteStorage.Open(fixture.DataRoot);
+        var replay = await AttachmentCatalog(reopened, fixture.DataRoot).AddAsync(
+            projectId,
+            new ProjectCommandEnvelope(commandId, 0),
+            new MemoryStream(bytes),
+            "evidence.txt",
+            "text/plain",
+            "note",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(accepted, replay);
+        Assert.Equal(1, new SqliteProjectCatalog(reopened).GetProject(projectId).Revision);
+        Assert.Equal(1, Count(reopened, "attachment_blobs"));
+        Assert.Equal(1, Count(reopened, "project_attachments"));
+        Assert.Equal(1, Count(reopened, "project_commands"));
+        Assert.Equal(1, Count(reopened, "project_versions"));
+    }
+
+    [Fact]
+    public async Task Attachment_reference_revision_and_journal_roll_back_together()
+    {
+        using var fixture = Fixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var projectId = CreateProject(storage);
+        var catalog = new SqliteProjectAttachmentCatalog(
+            storage,
+            new ContentAddressedAttachmentStore(fixture.DataRoot),
+            new FrozenTimeProvider(CapturedUtc),
+            progress =>
+            {
+                if (progress == "after_journal")
+                {
+                    throw new InvalidOperationException("injected transaction failure");
+                }
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.AddAsync(
+            projectId,
+            new ProjectCommandEnvelope(Guid.NewGuid(), 0),
+            new MemoryStream([1, 2, 3]),
+            "rollback.bin",
+            "application/octet-stream",
+            "source",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, new SqliteProjectCatalog(storage).GetProject(projectId).Revision);
+        Assert.Equal(0, Count(storage, "attachment_blobs"));
+        Assert.Equal(0, Count(storage, "project_attachments"));
+        Assert.Equal(0, Count(storage, "project_commands"));
+        Assert.Equal(0, Count(storage, "project_versions"));
+        Assert.Single(Directory.GetFiles(
+            Path.Combine(fixture.DataRoot, "attachments", "blobs"),
+            "*",
+            SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task Catalog_detects_missing_and_corrupt_attachment_content()
     {
         using var fixture = Fixture.Create();
