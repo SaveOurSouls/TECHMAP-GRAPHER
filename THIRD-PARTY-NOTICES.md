@@ -1,6 +1,6 @@
 # TECHMAP-GRAPHER third-party notices
 
-This inventory applies to the locked M1-01 dependency set. `pnpm-lock.yaml` and
+This inventory applies to the locked M1-03 dependency set. `pnpm-lock.yaml` and
 the committed `packages.lock.json` files are the authoritative version sources.
 The release SBOM is generated from those files by `scripts/generate-sbom.ps1`.
 
@@ -10,6 +10,10 @@ The release SBOM is generated from those files by `scripts/generate-sbom.ps1`.
 |---|---:|---|---|
 | Microsoft .NET Runtime for win-x64 | 10.0.12 | MIT and licenses in `DOTNET-THIRD-PARTY-NOTICES.txt` | Self-contained runtime |
 | Microsoft ASP.NET Core Runtime for win-x64 | 10.0.12 | MIT and licenses in `DOTNET-THIRD-PARTY-NOTICES.txt` | Local web server runtime |
+| Microsoft.Data.Sqlite and Microsoft.Data.Sqlite.Core | 10.0.12 | MIT | SQLite ADO.NET provider |
+| Microsoft.EntityFrameworkCore.Sqlite and EF Core dependencies | 10.0.12 | MIT | Persistence mapping foundation for product data |
+| SQLite | 3.53.3 | Public Domain | Bundled native database engine |
+| SQLitePCLRaw.bundle_e_sqlite3, core, lib.e_sqlite3 and provider.e_sqlite3 | 2.1.12 | Apache-2.0 | Native packaging and .NET interop |
 | React | 19.3.0 | MIT | Bundled browser UI |
 | React DOM | 19.3.0 | MIT | Bundled browser UI |
 | Scheduler | 0.28.0 | MIT | React runtime dependency bundled in the UI |
@@ -63,22 +67,24 @@ The platform wildcards above are presentation-only abbreviations. The generated
 SPDX document expands every exact package ID and version present in the lock file,
 including optional platform packages.
 
-## Locked NuGet test inventory
+## Locked NuGet inventory
 
-The product projects have no external NuGet package dependencies in M1-01. The
-following locked packages are used only to compile or run tests and are not copied
-to the portable package as product libraries.
+NuGet lock files contain both product and test dependencies. The generated SPDX
+document assigns distributed or test scope from the source of each lock entry and
+expands every exact package ID and version. The reviewed license families are:
 
 | License | Locked packages |
 |---|---|
-| Apache-2.0 | `xunit.analyzers 2.0.0`; `xunit.v3 4.0.0`; `xunit.v3.assert 4.0.0`; `xunit.v3.common 4.0.0`; `xunit.v3.core.mtp-v2 4.0.0`; `xunit.v3.extensibility.core 4.0.0`; `xunit.v3.mtp-v2 4.0.0`; `xunit.v3.runner.common 4.0.0`; `xunit.v3.runner.inproc.console 4.0.0` |
-| MIT | `Microsoft.ApplicationInsights 2.23.0`; `Microsoft.AspNetCore.Mvc.Testing 10.0.12`; `Microsoft.AspNetCore.TestHost 10.0.12`; `Microsoft.Bcl.AsyncInterfaces 6.0.0`; `Microsoft.CodeCoverage 18.10.0`; `Microsoft.Extensions.Configuration 10.0.12`; `Microsoft.Extensions.Configuration.Abstractions 10.0.12`; `Microsoft.Extensions.Configuration.Binder 10.0.12`; `Microsoft.Extensions.Configuration.CommandLine 10.0.12`; `Microsoft.Extensions.Configuration.EnvironmentVariables 10.0.12`; `Microsoft.Extensions.Configuration.FileExtensions 10.0.12`; `Microsoft.Extensions.Configuration.Json 10.0.12`; `Microsoft.Extensions.Configuration.UserSecrets 10.0.12`; `Microsoft.Extensions.DependencyInjection 10.0.12`; `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12`; `Microsoft.Extensions.DependencyModel 10.0.12`; `Microsoft.Extensions.Diagnostics 10.0.12`; `Microsoft.Extensions.Diagnostics.Abstractions 10.0.12`; `Microsoft.Extensions.FileProviders.Abstractions 10.0.12`; `Microsoft.Extensions.FileProviders.Physical 10.0.12`; `Microsoft.Extensions.FileSystemGlobbing 10.0.12`; `Microsoft.Extensions.Hosting 10.0.12`; `Microsoft.Extensions.Hosting.Abstractions 10.0.12`; `Microsoft.Extensions.Logging 10.0.12`; `Microsoft.Extensions.Logging.Abstractions 10.0.12`; `Microsoft.Extensions.Logging.Configuration 10.0.12`; `Microsoft.Extensions.Logging.Console 10.0.12`; `Microsoft.Extensions.Logging.Debug 10.0.12`; `Microsoft.Extensions.Logging.EventLog 10.0.12`; `Microsoft.Extensions.Logging.EventSource 10.0.12`; `Microsoft.Extensions.Options 10.0.12`; `Microsoft.Extensions.Options.ConfigurationExtensions 10.0.12`; `Microsoft.Extensions.Primitives 10.0.12`; `Microsoft.NET.Test.Sdk 18.10.0`; `Microsoft.Testing.Extensions.Telemetry 2.3.3`; `Microsoft.Testing.Extensions.TrxReport.Abstractions 2.3.3`; `Microsoft.Testing.Platform 2.3.3`; `Microsoft.Testing.Platform.MSBuild 2.3.3`; `Microsoft.TestPlatform.ObjectModel 18.10.0`; `Microsoft.TestPlatform.TestHost 18.10.0`; `Microsoft.Win32.Registry 5.0.0`; `System.Diagnostics.EventLog 10.0.12`; `System.Security.AccessControl 6.0.1` |
+| Apache-2.0 | `SQLitePCLRaw.* 2.1.12`; `xunit.analyzers 2.0.0`; `xunit.v3* 4.0.0` |
+| MIT | `Microsoft.Data.Sqlite* 10.0.12`; `Microsoft.EntityFrameworkCore* 10.0.12`; other locked `Microsoft.*` and `System.*` packages; exact IDs and versions are in the SPDX document |
 
 ## License texts
 
 MIT: <https://spdx.org/licenses/MIT.html>
 
 Apache-2.0: <https://spdx.org/licenses/Apache-2.0.html>
+
+SQLite public-domain dedication: <https://www.sqlite.org/copyright.html>
 
 BSD-3-Clause: <https://spdx.org/licenses/BSD-3-Clause.html>
 

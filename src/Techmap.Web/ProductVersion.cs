@@ -5,7 +5,7 @@ namespace Techmap.Web;
 
 public sealed record ProductVersion(string AppVersion, string SchemaVersion)
 {
-    public static ProductVersion Read(string programRoot)
+    public static ProductVersion Read(string programRoot, int fallbackSchemaVersion)
     {
         var versionPath = Path.Combine(programRoot, "VERSION.json");
         if (!File.Exists(versionPath))
@@ -13,7 +13,9 @@ public sealed record ProductVersion(string AppVersion, string SchemaVersion)
             var fallback = Assembly.GetEntryAssembly()?
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                 .InformationalVersion ?? "0.1.0-dev";
-            return new ProductVersion(fallback, "0");
+            return new ProductVersion(
+                fallback,
+                fallbackSchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         try

@@ -74,10 +74,21 @@ await using var heldDataRootLease = dataRootLease
     ?? throw new InvalidOperationException("The data-root lease was not acquired.");
 StartupTestHooks.PauseFirstOwnerAfterLease();
 var dataRoot = DataRootLayout.Initialize(dataRootLease.CanonicalPath);
-var productVersion = ProductVersion.Read(programRoot);
+var productVersion = ProductVersion.Read(programRoot, SqliteStorage.CurrentSchemaVersion);
+using var storage = SqliteStorage.Open(dataRoot);
+if (!int.TryParse(
+        productVersion.SchemaVersion,
+        System.Globalization.NumberStyles.None,
+        System.Globalization.CultureInfo.InvariantCulture,
+        out var packagedSchemaVersion) ||
+    packagedSchemaVersion != storage.Diagnostics.SchemaVersion)
+{
+    throw new InvalidDataException("The packaged and live storage schema versions do not match.");
+}
 
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, options.Port));
 builder.Services.AddSingleton<IApplicationBoundary, StorageBoundary>();
+builder.Services.AddSingleton(storage);
 builder.Services.AddSingleton<LocalHttpSession>();
 
 var app = builder.Build();
@@ -143,6 +154,27 @@ app.MapGet("/runtime-config.json", () => Results.Json(runtimeConfig));
 app.MapGet("/api/v1/health", (LocalHttpSession session) => Results.Ok(
     new HealthResponse("ok", ApiContract.MajorVersion, session.InstanceId)));
 app.MapGet("/api/v1/runtime-config", () => Results.Json(runtimeConfig));
+app.MapGet("/api/v1/diagnostics", (
+    HttpContext context,
+    LocalHttpSession session,
+    SqliteStorage sqliteStorage) =>
+{
+    if (!session.HasValidCookie(context.Request))
+    {
+        return Results.Json(
+            new ApiErrorResponse("invalid_session"),
+            statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    var diagnostics = sqliteStorage.Diagnostics;
+    return Results.Ok(new StorageDiagnosticsResponse(
+        "ready",
+        diagnostics.SchemaVersion,
+        diagnostics.SqliteVersion,
+        diagnostics.ForeignKeysEnabled,
+        diagnostics.BusyTimeoutMilliseconds,
+        diagnostics.JournalMode));
+});
 app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
     session.HasValidCookie(context.Request)
         ? Results.Ok(new SessionBootstrapResponse(session.EncodedCsrfNonce, session.InstanceId))

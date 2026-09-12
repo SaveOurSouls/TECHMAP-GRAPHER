@@ -15,6 +15,14 @@ public sealed record RuntimeConfigResponse(
     string ApiVersion,
     string SchemaVersion);
 
+public sealed record StorageDiagnosticsResponse(
+    string Status,
+    int SchemaVersion,
+    string SqliteVersion,
+    bool ForeignKeysEnabled,
+    int BusyTimeoutMilliseconds,
+    string JournalMode);
+
 public sealed record ApiErrorResponse(string Error);
 
 public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);

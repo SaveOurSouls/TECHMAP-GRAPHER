@@ -20,6 +20,9 @@ public sealed class WebHostTests
         var runtime = await client.GetFromJsonAsync<RuntimeConfigResponse>(
             "/runtime-config.json",
             cancellationToken);
+        var diagnosticsResponse = await client.GetAsync("/api/v1/diagnostics", cancellationToken);
+        var diagnostics = await diagnosticsResponse.Content.ReadFromJsonAsync<StorageDiagnosticsResponse>(
+            cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Contains(
@@ -34,7 +37,19 @@ public sealed class WebHostTests
         Assert.Equal("/", runtime.BasePath);
         Assert.Equal("/api/v1/", runtime.ApiBasePath);
         Assert.Equal("1", runtime.ApiVersion);
-        Assert.Equal("0", runtime.SchemaVersion);
+        Assert.Equal("1", runtime.SchemaVersion);
+        Assert.Equal(HttpStatusCode.OK, diagnosticsResponse.StatusCode);
+        Assert.NotNull(diagnostics);
+        Assert.Equal("ready", diagnostics.Status);
+        Assert.Equal(1, diagnostics.SchemaVersion);
+        Assert.True(Version.TryParse(diagnostics.SqliteVersion, out _));
+        Assert.True(diagnostics.ForeignKeysEnabled);
+        Assert.Equal(5_000, diagnostics.BusyTimeoutMilliseconds);
+        Assert.Equal("wal", diagnostics.JournalMode, ignoreCase: true);
+        Assert.DoesNotContain(
+            "dataRoot",
+            await diagnosticsResponse.Content.ReadAsStringAsync(cancellationToken),
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("programRoot", await page.Content.ReadAsStringAsync(cancellationToken));
         AssertSecurityHeaders(page);
     }
@@ -75,6 +90,26 @@ public sealed class WebHostTests
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Diagnostics_requires_the_local_session_cookie()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri($"http://127.0.0.1:{TechmapWebApplicationFactory.TestPort}"),
+            HandleCookies = false,
+        });
+
+        using var response = await client.GetAsync(
+            "/api/v1/diagnostics",
+            TestContext.Current.CancellationToken);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(new ApiErrorResponse("invalid_session"), error);
     }
 
     [Fact]

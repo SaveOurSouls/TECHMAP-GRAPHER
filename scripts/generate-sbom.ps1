@@ -52,6 +52,7 @@ function Get-PnpmLicense([string]$Name) {
 }
 
 function Get-NuGetLicense([string]$Name) {
+    if ($Name.StartsWith("SQLitePCLRaw.", [StringComparison]::OrdinalIgnoreCase)) { return "Apache-2.0" }
     if ($Name.StartsWith("xunit.", [StringComparison]::OrdinalIgnoreCase)) { return "Apache-2.0" }
     if ($Name.StartsWith("Microsoft.", [StringComparison]::OrdinalIgnoreCase) -or $Name.StartsWith("System.", [StringComparison]::OrdinalIgnoreCase)) { return "MIT" }
     throw "No reviewed license mapping for NuGet package: $Name"
@@ -93,8 +94,10 @@ foreach ($line in Get-Content -LiteralPath $pnpmLock) {
 }
 
 $nugetByKey = @{}
+$sourceRoot = [IO.Path]::GetFullPath((Join-Path $repo "src")).TrimEnd('\') + '\'
 $locks = Get-ChildItem -LiteralPath (Join-Path $repo "src"), (Join-Path $repo "tests") -Filter "packages.lock.json" -Recurse -File
 foreach ($path in $locks) {
+    $scope = if ($path.FullName.StartsWith($sourceRoot, [StringComparison]::OrdinalIgnoreCase)) { "distributed" } else { "test" }
     $lock = Get-Content -LiteralPath $path.FullName -Raw | ConvertFrom-Json
     foreach ($framework in $lock.dependencies.PSObject.Properties) {
         foreach ($dependency in $framework.Value.PSObject.Properties) {
@@ -102,7 +105,10 @@ foreach ($path in $locks) {
             $name = $dependency.Name
             $version = [string]$dependency.Value.resolved
             if ([string]::IsNullOrWhiteSpace($version)) { throw "Unresolved NuGet dependency $name" }
-            $nugetByKey["$name@$version"] = New-SpdxPackage "nuget" $name $version (Get-NuGetLicense $name) "test" "pkg:nuget/$([uri]::EscapeDataString($name))@$version"
+            $key = "$name@$version"
+            if (-not $nugetByKey.ContainsKey($key) -or $scope -eq "distributed") {
+                $nugetByKey[$key] = New-SpdxPackage "nuget" $name $version (Get-NuGetLicense $name) $scope "pkg:nuget/$([uri]::EscapeDataString($name))@$version"
+            }
         }
     }
 }

@@ -169,7 +169,8 @@ function Test-HostMode {
 
         $origin = $pageUri.GetLeftPart([UriPartial]::Authority)
         $routePrefix = if ($PathBase -eq "/") { "" } else { $PathBase }
-        $ui = Invoke-WebRequest -UseBasicParsing -Uri "$origin$routePrefix/"
+        $webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $ui = Invoke-WebRequest -UseBasicParsing -WebSession $webSession -Uri "$origin$routePrefix/"
         Assert-Equal ([int]$ui.StatusCode) 200 "UI request failed."
         if ($ui.Content.IndexOf("TECHMAP-GRAPHER", [StringComparison]::Ordinal) -lt 0) {
             throw "UI response does not identify TECHMAP-GRAPHER."
@@ -182,6 +183,25 @@ function Test-HostMode {
         $expectedApiBase = if ($PathBase -eq "/") { "/api/v1/" } else { "$PathBase/api/v1/" }
         Assert-Equal $runtime.basePath $expectedBasePath "Runtime basePath is incorrect."
         Assert-Equal $runtime.apiBasePath $expectedApiBase "Runtime apiBasePath is incorrect."
+        Assert-Equal ([int]$runtime.schemaVersion) 1 "Runtime schema version is incorrect."
+
+        $diagnosticsResponse = Invoke-WebRequest `
+            -UseBasicParsing `
+            -WebSession $webSession `
+            -Uri "$origin$routePrefix/api/v1/diagnostics"
+        Assert-JsonContentType $diagnosticsResponse "Diagnostics content type is incorrect."
+        $diagnostics = $diagnosticsResponse.Content | ConvertFrom-Json
+        Assert-Equal $diagnostics.status "ready" "Storage diagnostics status is incorrect."
+        Assert-Equal ([int]$diagnostics.schemaVersion) 1 "Live SQLite schema version is incorrect."
+        Assert-Equal $diagnostics.foreignKeysEnabled $true "SQLite foreign keys are not enabled."
+        Assert-Equal $diagnostics.journalMode "wal" "SQLite journal mode is incorrect."
+        if ([string]::IsNullOrWhiteSpace($diagnostics.sqliteVersion)) {
+            throw "Diagnostics response does not contain the SQLite runtime version."
+        }
+        if ($diagnosticsResponse.Content.IndexOf("dataRoot", [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+            $diagnosticsResponse.Content.IndexOf("databasePath", [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw "Diagnostics response exposes a storage path."
+        }
 
         $health = Invoke-WebRequest -UseBasicParsing -Uri "$origin$routePrefix/api/v1/health"
         Assert-Equal ([int]$health.StatusCode) 200 "Health request failed."
@@ -255,6 +275,20 @@ function Test-HostMode {
     $marker = Get-Content -Raw -LiteralPath $markerPath | ConvertFrom-Json
     Assert-Equal $marker.ProductId "TECHMAP-GRAPHER" "The data-root marker product is incorrect."
     Assert-Equal ([int]$marker.FormatVersion) 1 "The data-root marker format is incorrect."
+
+    $currentPath = Join-Path $DataRoot "CURRENT"
+    if (!(Test-Path -LiteralPath $currentPath -PathType Leaf)) {
+        throw "The active SQLite generation pointer was not created: $currentPath"
+    }
+    $generationName = (Get-Content -Raw -LiteralPath $currentPath).TrimEnd("`r", "`n")
+    if ($generationName -notmatch '^generation-[0-9]{8}$') {
+        throw "The active SQLite generation name is invalid: $generationName"
+    }
+    $generationPath = Join-Path (Join-Path $DataRoot "generations") $generationName
+    if (!(Test-Path -LiteralPath (Join-Path $generationPath "READY") -PathType Leaf) -or
+        !(Test-Path -LiteralPath (Join-Path $generationPath "app.db") -PathType Leaf)) {
+        throw "The active SQLite generation is incomplete: $generationPath"
+    }
 }
 
 if (!(Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
