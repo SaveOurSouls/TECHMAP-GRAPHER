@@ -236,6 +236,15 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
 
         var prepared = StorageGenerationLayout.Prepare(dataRoot);
+        if (!prepared.Initialize)
+        {
+            var existingVersion = ReadExistingSchemaVersion(prepared.Layout.DatabasePath);
+            if (existingVersion < CurrentSchemaVersion)
+            {
+                throw new StorageMigrationRequiredException(existingVersion, CurrentSchemaVersion);
+            }
+        }
+
         var initializationConnectionString = CreateConnectionString(
             prepared.Layout.DatabasePath,
             prepared.Initialize,
@@ -412,6 +421,19 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             DefaultTimeout = Math.Max(1, (busyTimeoutMilliseconds + 999) / 1000),
         }.ToString();
 
+    private static int ReadExistingSchemaVersion(string databasePath)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Cache = SqliteCacheMode.Private,
+            Pooling = false,
+        }.ToString());
+        connection.Open();
+        return ValidateSchema(connection);
+    }
+
     private static SqliteStorageDiagnostics InitializeOrValidateDatabase(
         string connectionString,
         bool initialize,
@@ -426,7 +448,12 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
 
         var version = ValidateSchema(connection);
-        while (version < CurrentSchemaVersion)
+        if (!initialize && version < CurrentSchemaVersion)
+        {
+            throw new StorageMigrationRequiredException(version, CurrentSchemaVersion);
+        }
+
+        while (initialize && version < CurrentSchemaVersion)
         {
             version = ApplyNextMigration(connection, version);
         }
@@ -649,7 +676,10 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
     private sealed record SchemaObject(string Type, string Name, string TableName, string Sql);
 
-    private static int ApplyNextMigration(SqliteConnection connection, int currentVersion)
+    internal static int ApplyNextMigration(
+        SqliteConnection connection,
+        int currentVersion,
+        Action? beforeCommit = null)
     {
         var migration = currentVersion switch
         {
@@ -711,6 +741,8 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 appendHistory.ExecuteNonQuery();
             }
 
+            beforeCommit?.Invoke();
+
             using (var setUserVersion = connection.CreateCommand())
             {
                 setUserVersion.Transaction = transaction;
@@ -726,6 +758,24 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             TryRollback(transaction);
             throw;
         }
+    }
+
+    internal static bool HasCompleteMigrationPath(int sourceVersion, int targetVersion)
+    {
+        if (sourceVersion <= 0 || targetVersion < sourceVersion || targetVersion > CurrentSchemaVersion)
+        {
+            return false;
+        }
+
+        for (var version = sourceVersion; version < targetVersion; version++)
+        {
+            if (version is not (1 or 2 or 3))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string ApplicationInformationalVersion() =>
@@ -859,4 +909,18 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 "A nested SQLite unit of work is not supported on the same execution context.");
         }
     }
+}
+
+public sealed class StorageMigrationRequiredException : IOException
+{
+    public StorageMigrationRequiredException(int foundSchemaVersion, int requiredSchemaVersion)
+        : base($"Storage schema {foundSchemaVersion} requires offline migration to {requiredSchemaVersion}.")
+    {
+        FoundSchemaVersion = foundSchemaVersion;
+        RequiredSchemaVersion = requiredSchemaVersion;
+    }
+
+    public int FoundSchemaVersion { get; }
+
+    public int RequiredSchemaVersion { get; }
 }

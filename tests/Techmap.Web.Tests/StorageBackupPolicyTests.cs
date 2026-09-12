@@ -61,6 +61,28 @@ public sealed class StorageBackupPolicyTests
     }
 
     [Fact]
+    public async Task Prepared_backup_does_not_commit_version_until_startup_succeeds()
+    {
+        using var fixture = PolicyFixture.Create();
+        var service = new FakeBackupService();
+        var policy = fixture.Policy(service);
+
+        var prepared = await policy.PreparePreUpdateAsync(
+            "B", existingDatabase: true, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(prepared.PreUpdateBackup);
+        Assert.Equal(string.Empty, policy.ReadState().LastRunAppVersion);
+        Assert.Equal(0, service.RetentionCalls);
+
+        var committed = await policy.CommitSuccessfulStartupAsync(
+            "B", prepared.PreUpdateBackup, TestContext.Current.CancellationToken);
+
+        Assert.Equal("B", committed.LastRunAppVersion);
+        Assert.Equal("B", policy.ReadState().LastRunAppVersion);
+        Assert.Equal(1, service.RetentionCalls);
+    }
+
+    [Fact]
     public async Task Regular_policy_checks_due_changes_and_retention()
     {
         using var fixture = PolicyFixture.Create();

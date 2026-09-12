@@ -130,7 +130,7 @@ public sealed class SqliteStorageIntegrationTests
     }
 
     [Fact]
-    public void Version_one_database_is_migrated_without_rewriting_its_history_row()
+    public async Task Version_one_database_is_migrated_without_rewriting_its_history_row()
     {
         using var fixture = StorageFixture.Create();
         SchemaHistoryRow originalVersionOne;
@@ -167,9 +167,18 @@ public sealed class SqliteStorageIntegrationTests
             command.ExecuteNonQuery();
         }
 
+        var sourceHash = HashFile(databasePath);
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            new Techmap.Application.StorageMigrationRequest(
+                fixture.BackupRoot, "0.1.0-m1.12", SqliteStorage.CurrentSchemaVersion),
+            TestContext.Current.CancellationToken);
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         var history = migrated.ExecuteRead(ReadSchemaHistory);
 
+        Assert.True(migration.Migrated);
+        Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
+        Assert.Equal(sourceHash, HashFile(databasePath));
         Assert.Equal(4, migrated.Diagnostics.SchemaVersion);
         Assert.Equal(originalVersionOne, history[0]);
         Assert.Equal(2, history[1].Version);
@@ -186,7 +195,7 @@ public sealed class SqliteStorageIntegrationTests
     }
 
     [Fact]
-    public void Version_two_database_is_migrated_without_rewriting_existing_history()
+    public async Task Version_two_database_is_migrated_without_rewriting_existing_history()
     {
         using var fixture = StorageFixture.Create();
         IReadOnlyList<SchemaHistoryRow> originalHistory;
@@ -219,9 +228,16 @@ public sealed class SqliteStorageIntegrationTests
             command.ExecuteNonQuery();
         }
 
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            new Techmap.Application.StorageMigrationRequest(
+                fixture.BackupRoot, "0.1.0-m1.12", SqliteStorage.CurrentSchemaVersion),
+            TestContext.Current.CancellationToken);
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         var history = migrated.ExecuteRead(ReadSchemaHistory);
 
+        Assert.True(migration.Migrated);
+        Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
         Assert.Equal(4, migrated.Diagnostics.SchemaVersion);
         Assert.Equal(originalHistory, history.Take(2));
         Assert.Equal(3, history[2].Version);
@@ -247,7 +263,8 @@ public sealed class SqliteStorageIntegrationTests
         Guid harnessId;
         Guid attachmentId;
         Guid snapshotId;
-        const string hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var blobBytes = Encoding.UTF8.GetBytes("M1-12 referenced attachment");
+        var hash = Convert.ToHexStringLower(SHA256.HashData(blobBytes));
         string databasePath;
         using (var storage = SqliteStorage.Open(fixture.DataRoot))
         {
@@ -302,7 +319,26 @@ public sealed class SqliteStorageIntegrationTests
             command.ExecuteNonQuery();
         }
 
+        var blobPath = Path.Combine(fixture.DataRoot, "attachments", "blobs", hash[..2], hash);
+        Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
+        await File.WriteAllBytesAsync(blobPath, blobBytes, TestContext.Current.CancellationToken);
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            using var updateSize = connection.CreateCommand();
+            updateSize.CommandText = "UPDATE attachment_blobs SET size_bytes = $size WHERE content_sha256 = $hash;";
+            updateSize.Parameters.AddWithValue("$size", blobBytes.Length);
+            updateSize.Parameters.AddWithValue("$hash", hash);
+            updateSize.ExecuteNonQuery();
+        }
+
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            new Techmap.Application.StorageMigrationRequest(
+                fixture.BackupRoot, "0.1.0-m1.12", SqliteStorage.CurrentSchemaVersion),
+            TestContext.Current.CancellationToken);
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        Assert.True(migration.Migrated);
+        Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
         Assert.Equal([1, 2, 3, 4], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
         var catalog = new SqliteProjectCatalog(migrated);
         var project = catalog.GetProject(new Techmap.Domain.ProjectIdentity(projectId));
@@ -639,6 +675,12 @@ public sealed class SqliteStorageIntegrationTests
         return connection;
     }
 
+    private static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexStringLower(SHA256.HashData(stream));
+    }
+
     private sealed record SchemaHistoryRow(
         int Version,
         string MigrationId,
@@ -665,6 +707,8 @@ public sealed class SqliteStorageIntegrationTests
         public string Root { get; }
 
         public string DataRoot { get; }
+
+        public string BackupRoot => Path.Combine(Root, "backups");
 
         public static StorageFixture Create()
         {

@@ -7,6 +7,7 @@ public sealed record ServerOptions(
     int Port,
     PathString PathBase,
     string DataRoot,
+    string BackupRoot,
     bool NoBrowser,
     bool VerifyPackage)
 {
@@ -35,11 +36,19 @@ public sealed record ServerOptions(
                 "TECHMAP-GRAPHER",
                 "data")
             : Path.GetFullPath(dataRootValue, programRoot);
+        dataRoot = Path.GetFullPath(dataRoot);
+        var backupRootValue = ReadSingleValue(args, "--backup-root=") ?? configuration["BackupRoot"];
+        var dataRootParent = Path.GetDirectoryName(dataRoot)
+            ?? throw new InvalidOperationException("The data root must have a parent directory.");
+        var backupRoot = backupRootValue is null
+            ? Path.Combine(dataRootParent, $"{Path.GetFileName(dataRoot)}-backups")
+            : Path.GetFullPath(backupRootValue, programRoot);
 
         return new ServerOptions(
             port,
             pathBase,
-            Path.GetFullPath(dataRoot),
+            dataRoot,
+            Path.GetFullPath(backupRoot),
             HasSwitch(args, "--no-browser") || configuration.GetValue("NoBrowser", false),
             HasSwitch(args, "--verify-package"));
     }

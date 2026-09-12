@@ -37,6 +37,17 @@ if (options.VerifyPackage)
     return;
 }
 
+var productVersion = ProductVersion.Read(programRoot, SqliteStorage.CurrentSchemaVersion);
+if (!int.TryParse(
+        productVersion.SchemaVersion,
+        System.Globalization.NumberStyles.None,
+        System.Globalization.CultureInfo.InvariantCulture,
+        out var packagedSchemaVersion) ||
+    packagedSchemaVersion != SqliteStorage.CurrentSchemaVersion)
+{
+    throw new InvalidDataException("The packaged and application storage schema versions do not match.");
+}
+
 DataRootLease? dataRootLease = null;
 try
 {
@@ -74,18 +85,58 @@ catch (DataRootLeaseUnavailableException error)
 await using var heldDataRootLease = dataRootLease
     ?? throw new InvalidOperationException("The data-root lease was not acquired.");
 StartupTestHooks.PauseFirstOwnerAfterLease();
-var dataRoot = DataRootLayout.Initialize(dataRootLease.CanonicalPath);
-var productVersion = ProductVersion.Read(programRoot, SqliteStorage.CurrentSchemaVersion);
+var dataRoot = DataRootLayout.Initialize(heldDataRootLease.CanonicalPath);
+var existingDatabase = File.Exists(Path.Combine(dataRoot, StorageGenerationLayout.CurrentPointerFileName));
+var backupPolicyStatePath = Path.Combine(dataRoot, "bootstrap", "backup-policy.json");
+var stateBeforeStartup = StorageBackupPolicy.ReadStateFile(backupPolicyStatePath);
+var previousAppVersion = string.IsNullOrEmpty(stateBeforeStartup.LastRunAppVersion)
+    ? null
+    : stateBeforeStartup.LastRunAppVersion;
+var migrationService = new SqliteStorageMigrationService(heldDataRootLease);
+var migration = await migrationService.MigrateIfRequiredAsync(
+    new StorageMigrationRequest(
+        options.BackupRoot,
+        productVersion.AppVersion,
+        packagedSchemaVersion,
+        previousAppVersion),
+    CancellationToken.None);
+StorageBackupResult? startupBackup = migration.PreUpdateBackup;
+if (startupBackup is null && existingDatabase)
+{
+    var preOpenDatabasePath = Path.Combine(
+        dataRoot,
+        StorageGenerationLayout.GenerationsDirectoryName,
+        migration.CurrentGenerationName,
+        StorageGenerationLayout.DatabaseFileName);
+    using var preOpenBackupService = new SqliteStorageBackupService(dataRoot, preOpenDatabasePath);
+    var preOpenPolicy = new StorageBackupPolicy(
+        preOpenBackupService,
+        new StorageBackupPolicyOptions(options.BackupRoot),
+        backupPolicyStatePath);
+    var preparation = await preOpenPolicy.PreparePreUpdateAsync(
+        productVersion.AppVersion,
+        existingDatabase: true,
+        CancellationToken.None);
+    startupBackup = preparation.PreUpdateBackup;
+}
+
 using var storage = SqliteStorage.Open(dataRoot);
-if (!int.TryParse(
-        productVersion.SchemaVersion,
-        System.Globalization.NumberStyles.None,
-        System.Globalization.CultureInfo.InvariantCulture,
-        out var packagedSchemaVersion) ||
-    packagedSchemaVersion != storage.Diagnostics.SchemaVersion)
+if (packagedSchemaVersion != storage.Diagnostics.SchemaVersion)
 {
     throw new InvalidDataException("The packaged and live storage schema versions do not match.");
 }
+
+var storageBackupService = new SqliteStorageBackupService(dataRoot, storage.Layout.DatabasePath);
+var backupPolicy = new StorageBackupPolicy(
+    storageBackupService,
+    new StorageBackupPolicyOptions(options.BackupRoot),
+    backupPolicyStatePath,
+    failureSink: error => Console.Error.WriteLine($"TECHMAP_BACKUP_ERROR={error.GetType().Name}"));
+await backupPolicy.CommitSuccessfulStartupAsync(
+    productVersion.AppVersion,
+    startupBackup,
+    CancellationToken.None);
+migrationService.CompleteSuccessfulStartup(migration);
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
@@ -104,6 +155,10 @@ builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachment
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(storage);
+builder.Services.AddSingleton(productVersion);
+builder.Services.AddSingleton(storageBackupService);
+builder.Services.AddSingleton(backupPolicy);
+builder.Services.AddHostedService<StorageBackupHostedService>();
 builder.Services.AddSingleton<LocalHttpSession>();
 
 var app = builder.Build();

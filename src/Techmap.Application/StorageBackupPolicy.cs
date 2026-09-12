@@ -40,6 +40,10 @@ public sealed record StorageBackupPolicyState(
     DateTimeOffset? LastSuccessfulRegularBackupUtc,
     string? LastSuccessfulDatabaseSha256);
 
+public sealed record StoragePreUpdatePreparation(
+    StorageBackupPolicyState StateBeforeStartup,
+    StorageBackupResult? PreUpdateBackup);
+
 public sealed class StorageBackupPolicy
 {
     public const int StateFormat = 1;
@@ -69,15 +73,24 @@ public sealed class StorageBackupPolicy
     }
 
     public StorageBackupPolicyState ReadState()
+        => ReadStateFile(statePath);
+
+    public static StorageBackupPolicyState ReadStateFile(string statePath)
     {
-        if (!File.Exists(statePath))
+        ArgumentException.ThrowIfNullOrWhiteSpace(statePath);
+        var resolvedStatePath = Path.GetFullPath(statePath);
+        if (!File.Exists(resolvedStatePath))
         {
             return new StorageBackupPolicyState(StateFormat, string.Empty, null, null, null);
         }
 
         try
         {
-            var state = JsonSerializer.Deserialize<StorageBackupPolicyState>(File.ReadAllText(statePath));
+            var parent = Path.GetDirectoryName(resolvedStatePath)
+                ?? throw new InvalidDataException("The backup policy state must have a parent directory.");
+            RejectReparsePoint(parent);
+            RejectReparsePoint(resolvedStatePath);
+            var state = JsonSerializer.Deserialize<StorageBackupPolicyState>(File.ReadAllText(resolvedStatePath));
             if (state is null || state.Format != StateFormat || state.LastRunAppVersion is null)
             {
                 throw new InvalidDataException("The backup policy state is invalid.");
@@ -98,6 +111,21 @@ public sealed class StorageBackupPolicy
         bool existingDatabase,
         CancellationToken cancellationToken = default)
     {
+        var preparation = await PreparePreUpdateAsync(
+            currentAppVersion,
+            existingDatabase,
+            cancellationToken).ConfigureAwait(false);
+        return await CommitSuccessfulStartupAsync(
+            currentAppVersion,
+            preparation.PreUpdateBackup,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StoragePreUpdatePreparation> PreparePreUpdateAsync(
+        string currentAppVersion,
+        bool existingDatabase,
+        CancellationToken cancellationToken = default)
+    {
         ValidateAppVersion(currentAppVersion);
         await policyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -107,24 +135,50 @@ public sealed class StorageBackupPolicy
                 state.LastRunAppVersion,
                 currentAppVersion,
                 StringComparison.Ordinal);
+            StorageBackupResult? backup = null;
             if (existingDatabase && (versionChanged || string.IsNullOrEmpty(state.LastRunAppVersion)))
             {
-                var backup = await backupService.CreateAsync(
+                backup = await backupService.CreateAsync(
                     new StorageBackupRequest(
                         options.BackupRoot,
                         currentAppVersion,
                         StorageBackupKind.PreUpdate,
                         string.IsNullOrEmpty(state.LastRunAppVersion) ? null : state.LastRunAppVersion),
                     cancellationToken).ConfigureAwait(false);
-                state = state with { LastSuccessfulDatabaseSha256 = backup.DatabaseSha256 };
             }
 
-            if (versionChanged)
+            // Startup is not committed here. A failed migration or database open must leave
+            // LastRunAppVersion unchanged so the mandatory backup is attempted again.
+            return new StoragePreUpdatePreparation(state, backup);
+        }
+        finally
+        {
+            policyGate.Release();
+        }
+    }
+
+    public async Task<StorageBackupPolicyState> CommitSuccessfulStartupAsync(
+        string currentAppVersion,
+        StorageBackupResult? preUpdateBackup,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateAppVersion(currentAppVersion);
+        if (preUpdateBackup is not null && preUpdateBackup.Kind != StorageBackupKind.PreUpdate)
+        {
+            throw new ArgumentException("The startup backup must be a pre-update backup.", nameof(preUpdateBackup));
+        }
+
+        await policyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var previous = ReadState();
+            var state = previous with
             {
-                state = state with { LastRunAppVersion = currentAppVersion };
-                WriteState(state);
-            }
-
+                LastRunAppVersion = currentAppVersion,
+                LastSuccessfulDatabaseSha256 = preUpdateBackup?.DatabaseSha256 ??
+                    previous.LastSuccessfulDatabaseSha256,
+            };
+            WriteState(state);
             backupService.ApplyRetention(options.BackupRoot, options.RetentionCount);
             return state;
         }

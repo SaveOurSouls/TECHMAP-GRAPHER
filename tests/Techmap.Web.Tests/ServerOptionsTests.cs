@@ -16,6 +16,9 @@ public sealed class ServerOptionsTests
             Path.Combine("TECHMAP-GRAPHER", "data"),
             options.DataRoot,
             StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            Path.Combine(Path.GetDirectoryName(options.DataRoot)!, "data-backups"),
+            options.BackupRoot);
         Assert.False(options.PathBase.HasValue);
         Assert.False(options.NoBrowser);
     }
@@ -25,12 +28,13 @@ public sealed class ServerOptionsTests
     {
         var root = Path.GetFullPath("program-root");
         var options = Techmap.Web.ServerOptions.Parse(
-            ["--port=8762", "--data-root=../данные теста", "--path-base=/techmap", "--no-browser", "--verify-package"],
+            ["--port=8762", "--data-root=../данные теста", "--backup-root=../резерв", "--path-base=/techmap", "--no-browser", "--verify-package"],
             EmptyConfiguration(),
             root);
 
         Assert.Equal(8762, options.Port);
         Assert.Equal(Path.GetFullPath("../данные теста", root), options.DataRoot);
+        Assert.Equal(Path.GetFullPath("../резерв", root), options.BackupRoot);
         Assert.Equal("/techmap", options.PathBase.Value);
         Assert.True(options.NoBrowser);
         Assert.True(options.VerifyPackage);

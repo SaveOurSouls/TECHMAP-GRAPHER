@@ -207,6 +207,37 @@ public sealed record StorageGenerationLayout(
         }
     }
 
+    internal static void ReplaceDurableFile(string destinationPath, string content)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        var parent = Path.GetDirectoryName(destinationPath)
+            ?? throw new InvalidOperationException("A durable file must have a parent directory.");
+        var temporaryPath = Path.Combine(
+            parent,
+            $".{Path.GetFileName(destinationPath)}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(content);
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 4096,
+                       FileOptions.WriteThrough))
+            {
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+            }
+
+            MoveReplaceDurably(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            TryDeleteTemporary(temporaryPath);
+        }
+    }
+
     internal static void MoveNewDurably(string sourcePath, string destinationPath)
     {
         if (!MoveFileEx(sourcePath, destinationPath, MoveFileWriteThrough))
