@@ -5,7 +5,7 @@ public static class ApiContract
     public const int MajorVersion = 1;
 }
 
-public sealed record HealthResponse(string Status, int ApiVersion);
+public sealed record HealthResponse(string Status, int ApiVersion, string InstanceId);
 
 public sealed record RuntimeConfigResponse(
     int ConfigVersion,
@@ -16,3 +16,5 @@ public sealed record RuntimeConfigResponse(
     string SchemaVersion);
 
 public sealed record ApiErrorResponse(string Error);
+
+public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);

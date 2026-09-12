@@ -36,28 +36,63 @@ if (options.VerifyPackage)
     return;
 }
 
-var dataRoot = DataRootLayout.Initialize(options.DataRoot);
+DataRootLease? dataRootLease = null;
+try
+{
+    dataRootLease = DataRootLease.Acquire(options.DataRoot);
+}
+catch (DataRootLeaseUnavailableException error)
+{
+    StartupTestHooks.MarkLeaseContended();
+    var ownerResolutionDeadline = DateTime.UtcNow.AddSeconds(10);
+    while (dataRootLease is null)
+    {
+        var remaining = ownerResolutionDeadline - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            Console.Error.WriteLine("TECHMAP_STARTUP_ERROR=instance_owner_unverifiable");
+            Environment.ExitCode = 3;
+            return;
+        }
+
+        try
+        {
+            var existingInstance = await LocalInstanceRecord.ResolveOwnerAsync(
+                error.Identity,
+                error.CanonicalPath,
+                discoveryTimeout: TimeSpan.FromMilliseconds(Math.Min(750, remaining.TotalMilliseconds)));
+            BrowserLauncher.OpenExisting(existingInstance, options.NoBrowser);
+            return;
+        }
+        catch (LocalInstanceUnavailableException)
+        {
+            dataRootLease = DataRootLease.TryAcquireExisting(error);
+        }
+    }
+}
+await using var heldDataRootLease = dataRootLease
+    ?? throw new InvalidOperationException("The data-root lease was not acquired.");
+StartupTestHooks.PauseFirstOwnerAfterLease();
+var dataRoot = DataRootLayout.Initialize(dataRootLease.CanonicalPath);
 var productVersion = ProductVersion.Read(programRoot);
 
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, options.Port));
 builder.Services.AddSingleton<IApplicationBoundary, StorageBoundary>();
+builder.Services.AddSingleton<LocalHttpSession>();
 
 var app = builder.Build();
 var pathBase = options.PathBase;
+var testTransportPort = app.Environment.IsEnvironment("Testing") ? options.Port : (int?)null;
 
 app.Use(async (context, next) =>
 {
-    if (context.Request.Host.Host is not ("127.0.0.1" or "localhost" or "::1"))
+    if (!LocalRequestSecurity.HasExactLoopbackAuthority(context, testTransportPort))
     {
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
         return;
     }
 
-    context.Response.Headers.ContentSecurityPolicy =
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
-        "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'";
-    context.Response.Headers.XContentTypeOptions = "nosniff";
-    context.Response.Headers.CacheControl = "no-store";
+    LocalRequestSecurity.ApplyResponseHeaders(context.Response);
     await next();
 });
 
@@ -76,17 +111,25 @@ if (pathBase.HasValue)
     app.UsePathBase(pathBase);
 }
 
+app.Use((context, next) => LocalRequestSecurity.EnforceApiMutationAsync(
+    context,
+    app.Services.GetRequiredService<LocalHttpSession>(),
+    testTransportPort,
+    next));
 app.UseRouting();
-app.UseStaticFiles(new StaticFileOptions
+var assetPath = Path.Combine(app.Environment.WebRootPath, "assets");
+if (Directory.Exists(assetPath))
 {
-    OnPrepareResponse = context =>
+    app.UseStaticFiles(new StaticFileOptions
     {
-        if (context.Context.Request.Path.StartsWithSegments("/assets"))
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(assetPath),
+        RequestPath = "/assets",
+        OnPrepareResponse = context =>
         {
             context.Context.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
-        }
-    },
-});
+        },
+    });
+}
 
 var runtimeConfig = new RuntimeConfigResponse(
     ConfigVersion: 1,
@@ -97,14 +140,24 @@ var runtimeConfig = new RuntimeConfigResponse(
     SchemaVersion: productVersion.SchemaVersion);
 
 app.MapGet("/runtime-config.json", () => Results.Json(runtimeConfig));
-app.MapGet("/api/v1/health", () => Results.Ok(
-    new HealthResponse("ok", ApiContract.MajorVersion)));
+app.MapGet("/api/v1/health", (LocalHttpSession session) => Results.Ok(
+    new HealthResponse("ok", ApiContract.MajorVersion, session.InstanceId)));
 app.MapGet("/api/v1/runtime-config", () => Results.Json(runtimeConfig));
+app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
+    session.HasValidCookie(context.Request)
+        ? Results.Ok(new SessionBootstrapResponse(session.EncodedCsrfNonce, session.InstanceId))
+        : Results.Json(
+            new ApiErrorResponse("invalid_session"),
+            statusCode: StatusCodes.Status401Unauthorized));
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),
     statusCode: StatusCodes.Status404NotFound));
 
-static IResult ServeIndex(HttpContext context, IWebHostEnvironment environment, PathString configuredPathBase)
+static IResult ServeIndex(
+    HttpContext context,
+    IWebHostEnvironment environment,
+    PathString configuredPathBase,
+    LocalHttpSession session)
 {
     var indexFile = environment.WebRootFileProvider.GetFileInfo("index.html");
     if (!indexFile.Exists)
@@ -117,16 +170,40 @@ static IResult ServeIndex(HttpContext context, IWebHostEnvironment environment, 
     using var reader = new StreamReader(indexFile.CreateReadStream());
     var html = reader.ReadToEnd()
         .Replace("<head>", $"<head><base href=\"{escapedBasePath}\">", StringComparison.Ordinal);
+    session.IssueCookie(context.Response, configuredPathBase);
     context.Response.Headers.CacheControl = "no-store";
     return Results.Content(html, "text/html; charset=utf-8");
 }
 
-app.MapGet("/", (HttpContext context, IWebHostEnvironment environment) =>
-    ServeIndex(context, environment, pathBase));
-app.MapFallback((HttpContext context, IWebHostEnvironment environment) =>
-    ServeIndex(context, environment, pathBase));
+app.MapGet("/", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
+    ServeIndex(context, environment, pathBase, session));
+app.MapGet("/index.html", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
+    ServeIndex(context, environment, pathBase, session));
+app.MapFallback((HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
+    ServeIndex(context, environment, pathBase, session));
 
-BrowserLauncher.Register(app, options);
-await app.RunAsync();
+if (app.Environment.IsEnvironment("Testing"))
+{
+    await app.RunAsync();
+}
+else
+{
+    var instanceId = app.Services.GetRequiredService<LocalHttpSession>().InstanceId;
+    await app.StartAsync();
+    try
+    {
+        await BrowserLauncher.AnnounceOwnerAsync(
+            app,
+            options,
+            dataRootLease.Identity,
+            dataRoot);
+        await app.WaitForShutdownAsync();
+    }
+    finally
+    {
+        LocalInstanceRecord.DeleteIfOwned(dataRootLease.Identity, instanceId);
+        await app.StopAsync();
+    }
+}
 
 public partial class Program;

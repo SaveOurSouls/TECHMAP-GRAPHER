@@ -4,6 +4,34 @@
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Net.Http
+if (-not ("TechmapPortableNativeMethods" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class TechmapPortableNativeMethods
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(
+        string longPath,
+        StringBuilder shortPath,
+        uint bufferLength);
+
+    public static string GetShortPath(string path)
+    {
+        var required = GetShortPathName(path, null, 0);
+        if (required == 0)
+        {
+            return null;
+        }
+
+        var buffer = new StringBuilder((int)required);
+        return GetShortPathName(path, buffer, required) == 0 ? null : buffer.ToString();
+    }
+}
+"@
+}
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $ArchivePath = if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
     Join-Path $repositoryRoot "artifacts\m1-01\TECHMAP-GRAPHER-win-x64.zip"
@@ -160,6 +188,40 @@ function Test-HostMode {
         Assert-JsonContentType $health "Health content type is incorrect."
         $healthJson = $health.Content | ConvertFrom-Json
         Assert-Equal $healthJson.status "ok" "Health status is incorrect."
+        if ([string]::IsNullOrWhiteSpace($healthJson.instanceId)) {
+            throw "Health response does not contain an instance ID."
+        }
+
+        $secondaryStdout = Join-Path $artifactsRoot "$RunName.secondary.stdout.log"
+        $secondaryStderr = Join-Path $artifactsRoot "$RunName.secondary.stderr.log"
+        Remove-Item -LiteralPath $secondaryStdout, $secondaryStderr -Force -ErrorAction SilentlyContinue
+        $secondary = Start-Process `
+            -FilePath $ExecutablePath `
+            -ArgumentList @(
+                "--no-browser",
+                "--data-root=`"$DataRoot`"",
+                "--path-base=/secondary-request-is-ignored"
+            ) `
+            -WorkingDirectory $artifactsRoot `
+            -RedirectStandardOutput $secondaryStdout `
+            -RedirectStandardError $secondaryStderr `
+            -WindowStyle Hidden `
+            -PassThru
+        $null = $secondary.Handle
+        if (!$secondary.WaitForExit(10000)) {
+            Stop-Process -Id $secondary.Id -Force
+            throw "The second launch did not resolve the existing instance."
+        }
+        $secondary.WaitForExit()
+        $secondary.Refresh()
+        Assert-Equal ([int]$secondary.ExitCode) 0 "The second launch failed."
+        $secondaryOutput = Get-Content -Raw -LiteralPath $secondaryStdout
+        if ($secondaryOutput.IndexOf("TECHMAP_INSTANCE_STATUS=existing", [StringComparison]::Ordinal) -lt 0) {
+            throw "The second launch did not report the existing instance."
+        }
+        if ($secondaryOutput.IndexOf("TECHMAP_HOST_URL=$pageUrl", [StringComparison]::Ordinal) -lt 0) {
+            throw "The second launch did not report the original owner URL."
+        }
 
         $deepLink = Invoke-WebRequest -UseBasicParsing -Uri "$origin$routePrefix/projects/demo/harnesses/one"
         Assert-Equal ([int]$deepLink.StatusCode) 200 "SPA deep-link failed."
@@ -254,6 +316,401 @@ try {
 
 & $verifyScript -PackageRoot $packageRoot | Out-Null
 
+function Wait-ForFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Process,
+        [int]$TimeoutSeconds = 15
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            return
+        }
+        if ($Process.HasExited) {
+            throw "Techmap.Server.exe exited before creating the test signal '$Path' (exit $($Process.ExitCode))."
+        }
+        Start-Sleep -Milliseconds 50
+    }
+    throw "Timed out waiting for the test signal '$Path'."
+}
+
+function Start-TechmapProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$DataRoot,
+        [Parameter(Mandatory = $true)][string]$RunName,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [string]$PathBase = "/"
+    )
+
+    $stdout = Join-Path $artifactsRoot "$RunName.stdout.log"
+    $stderr = Join-Path $artifactsRoot "$RunName.stderr.log"
+    Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
+    $process = Start-Process `
+        -FilePath $ExecutablePath `
+        -ArgumentList @(
+            "--no-browser",
+            "--data-root=`"$DataRoot`"",
+            "--path-base=$PathBase"
+        ) `
+        -WorkingDirectory $WorkingDirectory `
+        -RedirectStandardOutput $stdout `
+        -RedirectStandardError $stderr `
+        -WindowStyle Hidden `
+        -PassThru
+    $null = $process.Handle
+    return [pscustomobject]@{
+        Process = $process
+        Stdout = $stdout
+        Stderr = $stderr
+        RunName = $RunName
+    }
+}
+
+function Stop-TechmapProcess {
+    param($Launch)
+
+    if ($null -ne $Launch -and !$Launch.Process.HasExited) {
+        Stop-Process -Id $Launch.Process.Id -Force
+        $Launch.Process.WaitForExit()
+    }
+}
+
+function Wait-TechmapProcessExit {
+    param(
+        [Parameter(Mandatory = $true)]$Launch,
+        [int]$TimeoutMilliseconds = 10000
+    )
+
+    if (!$Launch.Process.WaitForExit($TimeoutMilliseconds)) {
+        Stop-TechmapProcess $Launch
+        throw "The process '$($Launch.RunName)' did not exit within $TimeoutMilliseconds ms."
+    }
+    $Launch.Process.WaitForExit()
+    $Launch.Process.Refresh()
+}
+
+function Read-TechmapOutput {
+    param([Parameter(Mandatory = $true)]$Launch)
+
+    if (!(Test-Path -LiteralPath $Launch.Stdout -PathType Leaf)) {
+        return " "
+    }
+    $content = [string](Get-Content -Raw -LiteralPath $Launch.Stdout)
+    if ([string]::IsNullOrEmpty($content)) {
+        return " "
+    }
+    return $content
+}
+
+function Get-PublishedHostUrl {
+    param([Parameter(Mandatory = $true)][string]$Output)
+
+    $match = [regex]::Match($Output, '(?m)^TECHMAP_HOST_URL=(http://[^\s]+)\r?$')
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+    return $null
+}
+
+function Assert-ExistingLaunch {
+    param(
+        [Parameter(Mandatory = $true)]$Launch,
+        [Parameter(Mandatory = $true)][string]$ExpectedUrl
+    )
+
+    Wait-TechmapProcessExit $Launch
+    $output = Read-TechmapOutput $Launch
+    $errorOutput = if (Test-Path -LiteralPath $Launch.Stderr) {
+        Get-Content -Raw -LiteralPath $Launch.Stderr
+    } else {
+        ""
+    }
+    if ([int]$Launch.Process.ExitCode -ne 0) {
+        throw "Alias launch '$($Launch.RunName)' failed with exit $($Launch.Process.ExitCode): $errorOutput"
+    }
+    if ($output.IndexOf("TECHMAP_INSTANCE_STATUS=existing", [StringComparison]::Ordinal) -lt 0) {
+        throw "Alias launch '$($Launch.RunName)' did not resolve the existing owner. Output: $output"
+    }
+    if ((Get-PublishedHostUrl $output) -ne $ExpectedUrl) {
+        throw "Alias launch '$($Launch.RunName)' did not publish the owner's URL '$ExpectedUrl'. Output: $output"
+    }
+}
+
+function Try-CreateJunction {
+    param(
+        [Parameter(Mandatory = $true)][string]$JunctionPath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+    )
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = Join-Path $env:SystemRoot "System32\cmd.exe"
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $escapedJunction = $JunctionPath.Replace('"', '""')
+    $escapedTarget = $TargetPath.Replace('"', '""')
+    $startInfo.Arguments = "/d /c mklink /J `"$escapedJunction`" `"$escapedTarget`""
+    $process = [Diagnostics.Process]::Start($startInfo)
+    if ($null -eq $process) {
+        return $false
+    }
+    try {
+        $process.WaitForExit()
+        return $process.ExitCode -eq 0 -and (Test-Path -LiteralPath $JunctionPath -PathType Container)
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Test-DataRootAliases {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $dataRoot = Join-Path $dataRootsParent "Alias Root With Spaces"
+    $junctionPath = Join-Path $dataRootsParent "Alias Junction"
+    New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+    $owner = $null
+    $junctionCreated = $false
+    try {
+        $owner = Start-TechmapProcess `
+            -ExecutablePath $ExecutablePath `
+            -DataRoot $dataRoot `
+            -RunName "alias-owner" `
+            -WorkingDirectory $PackageRoot
+        $ownerUrl = Wait-ForHostUrl -StandardOutputPath $owner.Stdout -Process $owner.Process
+        $ownerOutput = Read-TechmapOutput $owner
+        if ($ownerOutput.IndexOf("TECHMAP_INSTANCE_STATUS=owner", [StringComparison]::Ordinal) -lt 0) {
+            throw "The alias-test owner did not report owner status."
+        }
+
+        # ServerOptions resolves a relative --data-root from the executable directory.
+        Push-Location $PackageRoot
+        try {
+            $relativePath = Resolve-Path -LiteralPath $dataRoot -Relative
+        } finally {
+            Pop-Location
+        }
+        $caseChangedPath = $dataRoot.ToUpperInvariant()
+        $aliases = @(
+            [pscustomobject]@{ Name = "absolute"; Path = $dataRoot },
+            [pscustomobject]@{ Name = "relative"; Path = $relativePath },
+            [pscustomobject]@{ Name = "case"; Path = $caseChangedPath }
+        )
+
+        $junctionCreated = Try-CreateJunction -JunctionPath $junctionPath -TargetPath $dataRoot
+        if ($junctionCreated) {
+            $aliases += [pscustomobject]@{ Name = "junction"; Path = $junctionPath }
+        } else {
+            Write-Host "TECHMAP_TEST_SKIP=junction_alias: Windows did not allow a junction to be created."
+        }
+
+        $shortPath = [TechmapPortableNativeMethods]::GetShortPath($dataRoot)
+        if (![string]::IsNullOrWhiteSpace($shortPath) -and
+            ![string]::Equals($shortPath, $dataRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            $aliases += [pscustomobject]@{ Name = "8dot3"; Path = $shortPath }
+        } else {
+            Write-Host "TECHMAP_TEST_SKIP=8dot3_alias: 8.3 names are unavailable on the test volume."
+        }
+
+        foreach ($alias in $aliases) {
+            $launch = Start-TechmapProcess `
+                -ExecutablePath $ExecutablePath `
+                -DataRoot $alias.Path `
+                -RunName "alias-$($alias.Name)" `
+                -WorkingDirectory $PackageRoot `
+                -PathBase "/alias-request-is-ignored"
+            Assert-ExistingLaunch -Launch $launch -ExpectedUrl $ownerUrl
+        }
+    } finally {
+        Stop-TechmapProcess $owner
+        if ($junctionCreated -and (Test-Path -LiteralPath $junctionPath)) {
+            [IO.Directory]::Delete($junctionPath)
+        }
+    }
+}
+
+function Test-DifferentDataRootsConcurrently {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $first = $null
+    $second = $null
+    try {
+        $first = Start-TechmapProcess `
+            -ExecutablePath $ExecutablePath `
+            -DataRoot (Join-Path $dataRootsParent "Concurrent Root A") `
+            -RunName "different-root-a" `
+            -WorkingDirectory $PackageRoot
+        $second = Start-TechmapProcess `
+            -ExecutablePath $ExecutablePath `
+            -DataRoot (Join-Path $dataRootsParent "Concurrent Root B") `
+            -RunName "different-root-b" `
+            -WorkingDirectory $PackageRoot
+
+        $firstUrl = Wait-ForHostUrl -StandardOutputPath $first.Stdout -Process $first.Process
+        $secondUrl = Wait-ForHostUrl -StandardOutputPath $second.Stdout -Process $second.Process
+        if ($first.Process.HasExited -or $second.Process.HasExited) {
+            throw "Different data roots did not remain owned concurrently."
+        }
+        if ($firstUrl -eq $secondUrl) {
+            throw "Different data roots unexpectedly published one URL."
+        }
+        foreach ($launch in @($first, $second)) {
+            if ((Read-TechmapOutput $launch).IndexOf(
+                "TECHMAP_INSTANCE_STATUS=owner",
+                [StringComparison]::Ordinal) -lt 0) {
+                throw "Process '$($launch.RunName)' did not independently own its data root."
+            }
+        }
+    } finally {
+        Stop-TechmapProcess $second
+        Stop-TechmapProcess $first
+    }
+}
+
+function Test-SimultaneousLaunchBurst {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $dataRoot = Join-Path $dataRootsParent "Burst Root"
+    $launches = @()
+    try {
+        foreach ($index in 1..6) {
+            $launches += Start-TechmapProcess `
+                -ExecutablePath $ExecutablePath `
+                -DataRoot $dataRoot `
+                -RunName "burst-$index" `
+                -WorkingDirectory $PackageRoot
+        }
+
+        $deadline = [DateTime]::UtcNow.AddSeconds(20)
+        do {
+            $outputs = @($launches | ForEach-Object { Read-TechmapOutput $_ })
+            $owners = @($outputs | Where-Object {
+                $_.IndexOf("TECHMAP_INSTANCE_STATUS=owner", [StringComparison]::Ordinal) -ge 0
+            })
+            $existing = @($outputs | Where-Object {
+                $_.IndexOf("TECHMAP_INSTANCE_STATUS=existing", [StringComparison]::Ordinal) -ge 0
+            })
+            if ($owners.Count -eq 1 -and $existing.Count -eq ($launches.Count - 1)) {
+                break
+            }
+            if (@($launches | Where-Object { $_.Process.HasExited -and $_.Process.ExitCode -ne 0 }).Count -gt 0) {
+                throw "A simultaneous launcher failed before the burst converged."
+            }
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $deadline)
+
+        if ($owners.Count -ne 1 -or $existing.Count -ne ($launches.Count - 1)) {
+            throw "The simultaneous burst did not converge to one owner and $($launches.Count - 1) existing-instance launches."
+        }
+
+        $ownerLaunch = @($launches | Where-Object {
+            (Read-TechmapOutput $_).IndexOf("TECHMAP_INSTANCE_STATUS=owner", [StringComparison]::Ordinal) -ge 0
+        })
+        if ($ownerLaunch.Count -ne 1 -or $ownerLaunch[0].Process.HasExited) {
+            throw "The simultaneous burst did not leave exactly one live owner."
+        }
+        $ownerUrl = Get-PublishedHostUrl (Read-TechmapOutput $ownerLaunch[0])
+        if ([string]::IsNullOrWhiteSpace($ownerUrl)) {
+            throw "The simultaneous burst owner did not publish its URL."
+        }
+
+        foreach ($launch in $launches) {
+            if ($launch.Process.Id -eq $ownerLaunch[0].Process.Id) {
+                continue
+            }
+            Assert-ExistingLaunch -Launch $launch -ExpectedUrl $ownerUrl
+        }
+    } finally {
+        foreach ($launch in $launches) {
+            Stop-TechmapProcess $launch
+        }
+    }
+}
+
+function Test-OwnerDeathBeforeSessionPublication {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $dataRoot = Join-Path $dataRootsParent "Takeover Before Publication"
+    $readyFile = Join-Path $artifactsRoot "takeover-owner-lease-ready"
+    $releaseFile = Join-Path $artifactsRoot "takeover-owner-lease-release"
+    $contendedFile = Join-Path $artifactsRoot "takeover-contender-lease-contended"
+    Remove-Item -LiteralPath $readyFile, $releaseFile, $contendedFile -Force -ErrorAction SilentlyContinue
+    $previousReady = $env:TECHMAP_TEST_LEASE_READY_FILE
+    $previousRelease = $env:TECHMAP_TEST_LEASE_RELEASE_FILE
+    $previousContended = $env:TECHMAP_TEST_LEASE_CONTENDED_FILE
+    $owner = $null
+    $contender = $null
+    try {
+        $env:TECHMAP_TEST_LEASE_READY_FILE = $readyFile
+        $env:TECHMAP_TEST_LEASE_RELEASE_FILE = $releaseFile
+        $owner = Start-TechmapProcess `
+            -ExecutablePath $ExecutablePath `
+            -DataRoot $dataRoot `
+            -RunName "takeover-unpublished-owner" `
+            -WorkingDirectory $PackageRoot
+        $env:TECHMAP_TEST_LEASE_READY_FILE = $previousReady
+        $env:TECHMAP_TEST_LEASE_RELEASE_FILE = $previousRelease
+
+        Wait-ForFile -Path $readyFile -Process $owner.Process
+        if (![string]::IsNullOrWhiteSpace((Get-PublishedHostUrl (Read-TechmapOutput $owner)))) {
+            throw "The blocked startup published its host URL before release."
+        }
+
+        $env:TECHMAP_TEST_LEASE_CONTENDED_FILE = $contendedFile
+        $contender = Start-TechmapProcess `
+            -ExecutablePath $ExecutablePath `
+            -DataRoot $dataRoot `
+            -RunName "takeover-contender" `
+            -WorkingDirectory $PackageRoot
+        $env:TECHMAP_TEST_LEASE_CONTENDED_FILE = $previousContended
+
+        Wait-ForFile -Path $contendedFile -Process $contender.Process
+        if ($contender.Process.HasExited) {
+            throw "The contender exited while the unpublished owner still held the lease."
+        }
+        if ((Read-TechmapOutput $contender).IndexOf("TECHMAP_INSTANCE_STATUS=owner", [StringComparison]::Ordinal) -ge 0) {
+            throw "The contender became owner before the first process released its lease."
+        }
+
+        Stop-TechmapProcess $owner
+        $owner = $null
+        $contenderUrl = Wait-ForHostUrl `
+            -StandardOutputPath $contender.Stdout `
+            -Process $contender.Process `
+            -TimeoutSeconds 15
+        if ((Read-TechmapOutput $contender).IndexOf(
+            "TECHMAP_INSTANCE_STATUS=owner",
+            [StringComparison]::Ordinal) -lt 0) {
+            throw "The contender did not take ownership after the unpublished owner died."
+        }
+
+        $health = Invoke-WebRequest -UseBasicParsing -Uri "${contenderUrl}api/v1/health"
+        Assert-Equal ([int]$health.StatusCode) 200 "The takeover owner health request failed."
+    } finally {
+        $env:TECHMAP_TEST_LEASE_READY_FILE = $previousReady
+        $env:TECHMAP_TEST_LEASE_RELEASE_FILE = $previousRelease
+        $env:TECHMAP_TEST_LEASE_CONTENDED_FILE = $previousContended
+        Stop-TechmapProcess $contender
+        Stop-TechmapProcess $owner
+        Remove-Item -LiteralPath $readyFile, $releaseFile, $contendedFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $sourceMapOrSymbols = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File |
     Where-Object Extension -in @(".map", ".pdb"))
 if ($sourceMapOrSymbols.Count -gt 0) {
@@ -299,14 +756,32 @@ Test-HostMode `
     -RunName "root"
 Test-HostMode `
     -ExecutablePath $executables[0].FullName `
+    -DataRoot (Join-Path $dataRootsParent "Корневой режим") `
+    -PathBase "/" `
+    -RunName "root-restart-after-forced-stop"
+Test-HostMode `
+    -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Режим с префиксом") `
     -PathBase "/techmap" `
     -RunName "prefix"
+
+Test-DataRootAliases `
+    -ExecutablePath $executables[0].FullName `
+    -PackageRoot $packageRoot
+Test-DifferentDataRootsConcurrently `
+    -ExecutablePath $executables[0].FullName `
+    -PackageRoot $packageRoot
+Test-SimultaneousLaunchBurst `
+    -ExecutablePath $executables[0].FullName `
+    -PackageRoot $packageRoot
+Test-OwnerDeathBeforeSessionPublication `
+    -ExecutablePath $executables[0].FullName `
+    -PackageRoot $packageRoot
 
 [pscustomobject]@{
     Status = "ok"
     Archive = $resolvedArchive
     Package = $packageRoot
     Executable = $executables[0].FullName
-    Modes = 2
+    Modes = 7
 }

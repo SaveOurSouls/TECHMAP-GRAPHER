@@ -1,12 +1,14 @@
 import type { RuntimeConfig } from "./runtime-config";
+import type { LocalSession } from "./local-session";
 
 interface AppProps {
   readonly config: RuntimeConfig;
+  readonly session: LocalSession;
 }
 
 const sections = ["Проекты", "Схема Э4", "Чертёж", "Маршрут", "Справочники"] as const;
 
-export function App({ config }: AppProps) {
+export function App({ config, session: _session }: AppProps) {
   return (
     <div className="app-shell">
       <header className="topbar">

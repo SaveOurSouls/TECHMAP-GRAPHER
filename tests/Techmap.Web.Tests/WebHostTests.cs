@@ -12,7 +12,7 @@ public sealed class WebHostTests
     public async Task Root_mode_serves_placeholder_and_read_only_api()
     {
         await using var factory = new TechmapWebApplicationFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateLocalClient();
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var page = await client.GetAsync("/", cancellationToken);
@@ -25,7 +25,10 @@ public sealed class WebHostTests
         Assert.Contains(
             "TECHMAP-GRAPHER",
             await page.Content.ReadAsStringAsync(cancellationToken));
-        Assert.Equal(new HealthResponse("ok", 1), health);
+        Assert.NotNull(health);
+        Assert.Equal("ok", health.Status);
+        Assert.Equal(1, health.ApiVersion);
+        Assert.True(Guid.TryParseExact(health.InstanceId, "D", out _));
         Assert.NotNull(runtime);
         Assert.Equal(1, runtime.ConfigVersion);
         Assert.Equal("/", runtime.BasePath);
@@ -40,7 +43,7 @@ public sealed class WebHostTests
     public async Task Prefix_mode_serves_only_under_configured_path_base()
     {
         await using var factory = new TechmapWebApplicationFactory("--path-base=/techmap");
-        using var client = factory.CreateClient();
+        using var client = factory.CreateLocalClient();
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var prefixedPage = await client.GetAsync("/techmap/", cancellationToken);
@@ -65,7 +68,7 @@ public sealed class WebHostTests
     public async Task Foreign_host_header_is_rejected()
     {
         await using var factory = new TechmapWebApplicationFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateLocalClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/health");
         request.Headers.Host = "example.invalid";
 
@@ -78,7 +81,7 @@ public sealed class WebHostTests
     public async Task Unknown_api_is_json_404_before_spa_fallback()
     {
         await using var factory = new TechmapWebApplicationFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateLocalClient();
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var response = await client.GetAsync("/api/v1/not-present", cancellationToken);
@@ -110,5 +113,8 @@ public sealed class WebHostTests
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Contains("default-src 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Contains("form-action 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
     }
 }

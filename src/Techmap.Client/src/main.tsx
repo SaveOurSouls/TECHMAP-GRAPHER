@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { missingBrowserFeatures } from "./browser-support";
+import { loadLocalSession } from "./local-session";
 import { RuntimeConfigError, buildRuntimeConfigUrl, loadRuntimeConfig } from "./runtime-config";
 import "./styles.css";
 
@@ -36,11 +37,15 @@ async function bootstrap(): Promise<void> {
         runtimeConfigUrl,
         async (url) => fetch(url, { cache: "no-store", credentials: "same-origin" }),
       );
+      const session = await loadLocalSession(
+        config,
+        async (input, init) => fetch(input, init),
+      );
       const root = document.getElementById("root");
       if (!root) throw new Error("Отсутствует корневой элемент приложения.");
       createRoot(root).render(
         <StrictMode>
-          <App config={config} />
+          <App config={config} session={session} />
         </StrictMode>,
       );
     }
