@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import {
   panEditorCamera,
   screenToWorld,
@@ -27,6 +27,13 @@ export interface CanvasViewportProps {
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
   ) => void;
+  readonly onWireReconnect?: (
+    wireId: string,
+    end: "from" | "to",
+    target: { readonly connectorId: string; readonly contactIndex: number },
+  ) => void;
+  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
+  readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
@@ -49,6 +56,16 @@ interface ObjectPointerDrag {
   readonly objectY: number;
 }
 
+interface WireRoutePointerDrag {
+  readonly kind: "wire-route";
+  readonly pointerId: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly wireId: string;
+  readonly routeIndex: number;
+  readonly point: EditorPoint;
+}
+
 function pointToSegmentDistance(point: EditorPoint, start: EditorPoint, end: EditorPoint): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -69,6 +86,35 @@ function containsPoint(object: EditorSceneObject, point: EditorPoint, tolerance:
   }
   return point.x >= object.x - tolerance && point.x <= object.x + object.width + tolerance &&
     point.y >= object.y - tolerance && point.y <= object.y + object.height + tolerance;
+}
+
+export function hitTestWireRoutePoint(
+  object: EditorSceneObject | undefined,
+  point: EditorPoint,
+  zoom: number,
+): number | null {
+  if (object?.kind !== "wire") return null;
+  const points = object.points ?? [];
+  const tolerance = 10 / zoom;
+  for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
+    const candidate = points[pointIndex]!;
+    if (Math.hypot(point.x - candidate.x, point.y - candidate.y) <= tolerance) return pointIndex - 1;
+  }
+  return null;
+}
+
+export function hitTestWireEnd(
+  object: EditorSceneObject | undefined,
+  point: EditorPoint,
+  zoom: number,
+): "from" | "to" | null {
+  if (object?.kind !== "wire") return null;
+  const points = object.points ?? [];
+  if (points.length < 2) return null;
+  const tolerance = 10 / zoom;
+  if (Math.hypot(point.x - points[0]!.x, point.y - points[0]!.y) <= tolerance) return "from";
+  const last = points.at(-1)!;
+  return Math.hypot(point.x - last.x, point.y - last.y) <= tolerance ? "to" : null;
 }
 
 function contactCount(object: EditorSceneObject): number {
@@ -300,15 +346,22 @@ export function CanvasViewport({
   onObjectSelect,
   onObjectMove,
   onWireConnect,
+  onWireReconnect,
+  onWireRoutePointMove,
+  onWireRoutePointRemove,
   onCanvasDoubleClick,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<PointerDrag | ObjectPointerDrag | null>(null);
+  const dragRef = useRef<PointerDrag | ObjectPointerDrag | WireRoutePointerDrag | null>(null);
   const [wireStart, setWireStart] = useState<{ readonly connectorId: string; readonly contactIndex: number } | null>(null);
+  const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
 
   useEffect(() => {
-    if (tool !== "wire") setWireStart(null);
+    if (tool !== "wire") {
+      setWireStart(null);
+      setWireReconnect(null);
+    }
   }, [tool]);
 
   useEffect(() => {
@@ -340,12 +393,27 @@ export function CanvasViewport({
       return;
     }
     if (tool === "wire") {
+      const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
       const endpoint = hitTestConnectorContact(
         objects,
         layers,
-        screenToWorld(camera, localPoint(event.clientX, event.clientY)),
+        worldPoint,
         camera.zoom,
       );
+      if (wireReconnect) {
+        if (endpoint) onWireReconnect?.(wireReconnect.wireId, wireReconnect.end, endpoint);
+        setWireReconnect(null);
+        return;
+      }
+      if (!wireStart) {
+        const selectedWire = objects.find((item) => item.id === selectedObjectId);
+        const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
+        const wireEnd = selectedLayer?.locked === true ? null : hitTestWireEnd(selectedWire, worldPoint, camera.zoom);
+        if (wireEnd && selectedWire) {
+          setWireReconnect({ wireId: selectedWire.id, end: wireEnd });
+          return;
+        }
+      }
       if (!endpoint) return;
       if (!wireStart) {
         setWireStart(endpoint);
@@ -359,10 +427,32 @@ export function CanvasViewport({
       return;
     }
     if (tool === "select") {
+      const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      if (view === "drawing") {
+        const selectedWire = objects.find((item) => item.id === selectedObjectId);
+        const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
+        const routeIndex = selectedLayer?.locked === true
+          ? null
+          : hitTestWireRoutePoint(selectedWire, worldPoint, camera.zoom);
+        const routePoint = routeIndex === null ? null : selectedWire?.points?.[routeIndex + 1];
+        if (selectedWire && routeIndex !== null && routePoint) {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = {
+            kind: "wire-route",
+            pointerId: event.pointerId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            wireId: selectedWire.id,
+            routeIndex,
+            point: routePoint,
+          };
+          return;
+        }
+      }
       const objectId = hitTestEditorScene(
         objects,
         layers,
-        screenToWorld(camera, localPoint(event.clientX, event.clientY)),
+        worldPoint,
         camera.zoom,
       );
       onObjectSelect(objectId);
@@ -399,6 +489,12 @@ export function CanvasViewport({
         x: drag.objectX + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.objectY + (event.clientY - drag.clientY) / camera.zoom,
       });
+    } else if (dragRef.current?.kind === "wire-route") {
+      const drag = dragRef.current;
+      onWireRoutePointMove?.(drag.wireId, drag.routeIndex, {
+        x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
+        y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
+      });
     }
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -423,6 +519,22 @@ export function CanvasViewport({
     onCatalogDrop(itemId, screenToWorld(camera, localPoint(event.clientX, event.clientY)));
   };
 
+  const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    if (view === "drawing") {
+      const selectedWire = objects.find((item) => item.id === selectedObjectId);
+      const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
+      const routeIndex = selectedLayer?.locked === true
+        ? null
+        : hitTestWireRoutePoint(selectedWire, point, camera.zoom);
+      if (selectedWire && routeIndex !== null) {
+        onWireRoutePointRemove?.(selectedWire.id, routeIndex);
+        return;
+      }
+    }
+    onCanvasDoubleClick?.(point);
+  };
+
   return (
     <div className={`he-canvas-frame tool-${tool}`}>
       <canvas
@@ -437,15 +549,18 @@ export function CanvasViewport({
         onWheel={zoomWheel}
         onDragOver={allowDrop}
         onDrop={drop}
-        onDoubleClick={(event) => onCanvasDoubleClick?.(
-          screenToWorld(camera, localPoint(event.clientX, event.clientY)),
-        )}
+        onDoubleClick={doubleClick}
       />
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
         <span>{tool === "wire"
-          ? wireStart ? "Выберите второй контакт" : "Выберите первый контакт"
-          : tool === "pan" ? "Тяните поле мышью" : "Колесо — масштаб"}</span>
+          ? wireReconnect ? "Выберите новый контакт для конца провода"
+            : wireStart ? "Выберите второй контакт"
+              : "Выберите два контакта; конец выбранного провода можно переподключить"
+          : tool === "pan" ? "Тяните поле мышью"
+            : view === "drawing" && objects.find((item) => item.id === selectedObjectId)?.kind === "wire"
+              ? "Точки трассы: перетащить; двойной щелчок — удалить"
+              : "Колесо — масштаб"}</span>
       </div>
       <ul className="visually-hidden" aria-label="Объекты на поле">
         {objectsInPaintOrder(objects, layers).map((object) => <li key={object.id}>{object.label}</li>)}

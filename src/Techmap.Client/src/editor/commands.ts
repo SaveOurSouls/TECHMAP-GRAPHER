@@ -18,6 +18,7 @@ export type EditorCommand =
   | { readonly type: "add-wire"; readonly wire: WireInstance }
   | { readonly type: "remove-wire"; readonly wireId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number }
+  | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
   | { readonly type: "update-layer"; readonly view: EditorView; readonly layerId: string; readonly visible?: boolean; readonly locked?: boolean }
   | { readonly type: "replace-layers"; readonly view: EditorView; readonly layers: readonly EditorLayer[] }
@@ -132,6 +133,17 @@ export function applyEditorCommand(
           lengthMm: command.lengthMm ?? wire.lengthMm,
         }), "Провод не найден."),
       };
+    case "reconnect-wire": {
+      requireEndpoint(document, command.endpoint);
+      return {
+        ...document,
+        wires: replaceRequired(document.wires, command.wireId, (wire) => {
+          const changed = { ...wire, [command.end]: { ...command.endpoint } };
+          validateWire(document, changed);
+          return changed;
+        }, "Провод не найден."),
+      };
+    }
     case "set-wire-route":
       return {
         ...document,

@@ -43,6 +43,32 @@ describe("shared harness editor model", () => {
     expect(document.wires[0]?.lengthMm).toBe(350);
   });
 
+  it("reconnects one end of an existing wire and preserves its properties", () => {
+    const x1 = createConnector("x1", "X1", 2, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 2, { x: 300, y: 0 });
+    let document = createEmptyHarnessDesign();
+    document = applyEditorCommand(document, { type: "add-connector", connector: x1 });
+    document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }, 420, "ЦЕПЬ-1", "#cc0000"),
+    });
+
+    document = applyEditorCommand(document, {
+      type: "reconnect-wire",
+      wireId: "w1",
+      end: "to",
+      endpoint: { connectorId: "x2", contactId: "x2:contact:2" },
+    });
+
+    expect(document.wires[0]).toMatchObject({
+      to: { connectorId: "x2", contactId: "x2:contact:2" },
+      lengthMm: 420,
+      circuit: "ЦЕПЬ-1",
+      color: "#cc0000",
+    });
+  });
+
   it("undoes and redoes complete document commands", () => {
     let history = createEditorHistory(createEmptyHarnessDesign());
     history = executeEditorCommand(history, {

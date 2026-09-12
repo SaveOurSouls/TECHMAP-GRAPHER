@@ -327,6 +327,29 @@ export function HarnessDesignEditor({
           });
           setSelectedObjectId(id);
         }}
+        onWireReconnect={(wireId, end, target) => {
+          const connector = history.present.connectors.find((item) => item.id === target.connectorId);
+          const contact = connector?.contacts[target.contactIndex];
+          if (!contact) return;
+          run({
+            type: "reconnect-wire",
+            wireId,
+            end,
+            endpoint: { connectorId: target.connectorId, contactId: contact.id },
+          });
+          setSelectedObjectId(wireId);
+        }}
+        onWireRoutePointMove={(wireId, routeIndex, point) => {
+          const wire = history.present.wires.find((item) => item.id === wireId);
+          if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
+          const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);
+          run({ type: "set-wire-route", wireId, route });
+        }}
+        onWireRoutePointRemove={(wireId, routeIndex) => {
+          const wire = history.present.wires.find((item) => item.id === wireId);
+          if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
+          run({ type: "set-wire-route", wireId, route: wire.drawingRoute.filter((_, index) => index !== routeIndex) });
+        }}
         drawingSnapEnabled={drawingSnapEnabled}
         onDrawingSnapChange={setDrawingSnapEnabled}
         onCanvasDoubleClick={addRoutePoint}

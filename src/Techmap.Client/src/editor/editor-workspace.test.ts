@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { hitTestConnectorContact, hitTestEditorScene, objectsInPaintOrder } from "./CanvasViewport";
+import { hitTestConnectorContact, hitTestEditorScene, hitTestWireEnd, hitTestWireRoutePoint, objectsInPaintOrder } from "./CanvasViewport";
 import { panEditorCamera, screenToWorld, worldToScreen, zoomEditorCameraAt } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
@@ -78,6 +78,18 @@ describe("harness editor workspace", () => {
       connectorId: "X1",
       contactIndex: 1,
     });
+  });
+
+  it("finds editable route points and wire ends without treating ends as route points", () => {
+    const routedWire: EditorSceneObject = {
+      id: "W1", layerId: "bottom", kind: "wire", label: "W1",
+      x: 0, y: 0, width: 0, height: 0, color: "#222222",
+      points: [{ x: 10, y: 20 }, { x: 100, y: 80 }, { x: 180, y: 20 }],
+    };
+    expect(hitTestWireRoutePoint(routedWire, { x: 104, y: 84 }, 1)).toBe(0);
+    expect(hitTestWireRoutePoint(routedWire, { x: 10, y: 20 }, 1)).toBeNull();
+    expect(hitTestWireEnd(routedWire, { x: 12, y: 22 }, 1)).toBe("from");
+    expect(hitTestWireEnd(routedWire, { x: 181, y: 21 }, 1)).toBe("to");
   });
 
   it("updates immutable scene and layer state without changing unrelated entries", () => {

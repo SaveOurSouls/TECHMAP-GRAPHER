@@ -84,6 +84,13 @@ export interface HarnessEditorWorkspaceProps {
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
   ) => void;
+  readonly onWireReconnect?: (
+    wireId: string,
+    end: "from" | "to",
+    target: { readonly connectorId: string; readonly contactIndex: number },
+  ) => void;
+  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
+  readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
@@ -113,6 +120,9 @@ export function HarnessEditorWorkspace({
   onCatalogItemActivate,
   onObjectMove,
   onWireConnect,
+  onWireReconnect,
+  onWireRoutePointMove,
+  onWireRoutePointRemove,
   drawingSnapEnabled = true,
   onDrawingSnapChange,
   onCanvasDoubleClick,
@@ -237,6 +247,9 @@ export function HarnessEditorWorkspace({
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
           onWireConnect={onWireConnect}
+          onWireReconnect={onWireReconnect}
+          onWireRoutePointMove={onWireRoutePointMove}
+          onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}
           onCatalogDrop={droppedCatalogItem}
         />
