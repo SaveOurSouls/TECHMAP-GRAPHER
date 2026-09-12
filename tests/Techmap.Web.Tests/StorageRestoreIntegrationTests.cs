@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
 using Techmap.Domain;
@@ -412,6 +413,97 @@ public sealed class StorageRestoreIntegrationTests
         Assert.Equal(liveOnlyProjectId.ToString("D"), Scalar(
             Path.Combine(result.PreRestoreBackup.BackupPath, "app.db"),
             "SELECT project_id FROM projects WHERE designation = 'LIVE-03';"));
+    }
+
+    [Fact]
+    public async Task Full_restore_preserves_published_reference_catalog_snapshot_and_active_records()
+    {
+        using var fixture = RestoreFixture.Create();
+        StorageBackupResult backup;
+        StorageFullRestorePlan plan;
+        string databasePath;
+        ReferenceCatalogSnapshot expectedSnapshot;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            var store = new SqliteReferenceCatalogSnapshotStore(storage);
+            using var payload = JsonDocument.Parse("""{"manufacturer":"Acme","value":17}""");
+            var validation = ReferenceCatalogDraft.Create(
+                ReferenceCatalogSnapshotIdentity.New(),
+                "technology-database",
+                1,
+                new DateTimeOffset(2026, 9, 12, 18, 0, 0, TimeSpan.Zero),
+                new ReferenceCatalogProvenanceInput("xlsx", "catalog-v1", "technology-database.xlsx"),
+                [new ReferenceCatalogRecordInput(
+                    "terminal",
+                    "TER-001",
+                    payload.RootElement.Clone(),
+                    "БД.ТЕР!2")])
+                .Validate();
+            expectedSnapshot = Assert.IsType<ReferenceCatalogSnapshot>(
+                new ReferenceCatalogPublicationService(store).Publish(new ReferenceCatalogPublicationRequest(
+                    validation,
+                    null,
+                    validation.Snapshot!.Sha256,
+                    validation.RequiredWarningAcknowledgements)).PublishedSnapshot);
+
+            using var backupService = new SqliteStorageBackupService(fixture.DataRoot, databasePath);
+            backup = await backupService.CreateAsync(
+                new StorageBackupRequest(fixture.BackupRoot, "0.1.0-m2.01"),
+                TestContext.Current.CancellationToken);
+
+            using var changedPayload = JsonDocument.Parse("""{"manufacturer":"Acme","value":99}""");
+            var changedValidation = ReferenceCatalogDraft.Create(
+                ReferenceCatalogSnapshotIdentity.New(),
+                "technology-database",
+                1,
+                new DateTimeOffset(2026, 9, 12, 19, 0, 0, TimeSpan.Zero),
+                new ReferenceCatalogProvenanceInput("xlsx", "catalog-v2", "technology-database.xlsx"),
+                [new ReferenceCatalogRecordInput(
+                    "terminal",
+                    "TER-001",
+                    changedPayload.RootElement.Clone(),
+                    "БД.ТЕР!2")])
+                .Validate();
+            var changed = new ReferenceCatalogPublicationService(store).Publish(
+                new ReferenceCatalogPublicationRequest(
+                    changedValidation,
+                    expectedSnapshot.SnapshotId,
+                    changedValidation.Snapshot!.Sha256,
+                    changedValidation.RequiredWarningAcknowledgements));
+            Assert.Equal(ReferenceCatalogPublicationStatus.Published, changed.Status);
+
+            using var restore = new SqliteStorageRestoreService(fixture.DataRoot, backupService);
+            plan = await restore.PrepareFullRestoreAsync(
+                backup.BackupPath,
+                TestContext.Current.CancellationToken);
+        }
+
+        using var offlineBackupService = new SqliteStorageBackupService(fixture.DataRoot, databasePath);
+        using var offlineRestore = new SqliteStorageRestoreService(fixture.DataRoot, offlineBackupService);
+        await offlineRestore.RestoreAsync(
+            new StorageFullRestoreRequest(
+                plan,
+                plan.RequiredConfirmation,
+                fixture.PreRestoreRoot,
+                "0.1.0-m2.01"),
+            TestContext.Current.CancellationToken);
+
+        using var restored = SqliteStorage.Open(fixture.DataRoot);
+        var restoredStore = new SqliteReferenceCatalogSnapshotStore(restored);
+        var actualSnapshot = Assert.IsType<ReferenceCatalogSnapshot>(
+            restoredStore.GetActive("technology-database"));
+        Assert.Equal(expectedSnapshot.SnapshotId, actualSnapshot.SnapshotId);
+        Assert.Equal(expectedSnapshot.Sha256, actualSnapshot.Sha256);
+        Assert.Equal(expectedSnapshot.CanonicalJson, actualSnapshot.CanonicalJson);
+        var expectedRecord = Assert.Single(expectedSnapshot.Records);
+        var actualRecord = Assert.Single(actualSnapshot.Records);
+        Assert.Equal(expectedRecord.RecordId, actualRecord.RecordId);
+        Assert.Equal(expectedRecord.SnapshotId, actualRecord.SnapshotId);
+        Assert.Equal(expectedRecord.EntityType, actualRecord.EntityType);
+        Assert.Equal(expectedRecord.SourceKey, actualRecord.SourceKey);
+        Assert.Equal(expectedRecord.Payload.GetRawText(), actualRecord.Payload.GetRawText());
+        Assert.Single(restoredStore.List("technology-database"));
     }
 
     [Fact]

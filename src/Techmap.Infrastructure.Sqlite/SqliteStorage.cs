@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -274,6 +274,255 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                harness_id, kind, 'empty', created_utc, updated_utc
         FROM harnesses
         CROSS JOIN (SELECT 'e4' AS kind UNION ALL SELECT 'drawing' UNION ALL SELECT 'route');
+        """;
+
+    private const string ReferenceSnapshotMigrationId = "M2-01-versioned-reference-snapshots";
+    private const string ReferenceSnapshotSchemaSql =
+        """
+        CREATE TABLE reference_sources (
+            source_id TEXT NOT NULL PRIMARY KEY CHECK (length(source_id) = 36),
+            source_key TEXT NOT NULL UNIQUE CHECK (length(source_key) BETWEEN 1 AND 256),
+            source_kind TEXT NOT NULL CHECK (length(source_kind) BETWEEN 1 AND 64),
+            display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 256),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64)
+        ) STRICT;
+
+        CREATE TABLE reference_snapshots (
+            snapshot_id TEXT NOT NULL PRIMARY KEY CHECK (length(snapshot_id) = 36),
+            source_id TEXT NOT NULL REFERENCES reference_sources(source_id) ON DELETE RESTRICT,
+            snapshot_sequence INTEGER NOT NULL CHECK (snapshot_sequence > 0),
+            contract_version INTEGER NOT NULL CHECK (contract_version > 0),
+            source_version TEXT NOT NULL CHECK (length(source_version) BETWEEN 1 AND 512),
+            source_content_sha256 TEXT NOT NULL
+                CHECK (length(source_content_sha256) = 64)
+                CHECK (source_content_sha256 = lower(source_content_sha256))
+                CHECK (source_content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            snapshot_metadata_sha256 TEXT NOT NULL
+                CHECK (length(snapshot_metadata_sha256) = 64)
+                CHECK (snapshot_metadata_sha256 = lower(snapshot_metadata_sha256))
+                CHECK (snapshot_metadata_sha256 NOT GLOB '*[^0-9a-f]*'),
+            canonical_content_sha256 TEXT NULL
+                CHECK (canonical_content_sha256 IS NULL OR length(canonical_content_sha256) = 64)
+                CHECK (canonical_content_sha256 IS NULL OR canonical_content_sha256 = lower(canonical_content_sha256))
+                CHECK (canonical_content_sha256 IS NULL OR canonical_content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            provenance_json TEXT NOT NULL CHECK (length(provenance_json) BETWEEN 2 AND 65536),
+            lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('draft', 'validated', 'published')),
+            captured_utc TEXT NOT NULL CHECK (length(captured_utc) BETWEEN 1 AND 64),
+            validated_utc TEXT NULL
+                CHECK (validated_utc IS NULL OR length(validated_utc) BETWEEN 1 AND 64),
+            published_utc TEXT NULL
+                CHECK (published_utc IS NULL OR length(published_utc) BETWEEN 1 AND 64),
+            CHECK (
+                (lifecycle_status = 'draft' AND canonical_content_sha256 IS NULL
+                    AND validated_utc IS NULL AND published_utc IS NULL)
+                OR
+                (lifecycle_status = 'validated' AND canonical_content_sha256 IS NOT NULL
+                    AND validated_utc IS NOT NULL AND published_utc IS NULL)
+                OR
+                (lifecycle_status = 'published' AND canonical_content_sha256 IS NOT NULL
+                    AND validated_utc IS NOT NULL AND published_utc IS NOT NULL)),
+            UNIQUE (source_id, snapshot_sequence),
+            UNIQUE (source_id, snapshot_id)
+        ) STRICT;
+
+        CREATE INDEX ix_reference_snapshots_source
+            ON reference_snapshots (source_id, snapshot_sequence DESC, snapshot_id);
+
+        CREATE TABLE reference_snapshot_records (
+            snapshot_id TEXT NOT NULL
+                REFERENCES reference_snapshots(snapshot_id) ON DELETE RESTRICT,
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            source_record_key TEXT NOT NULL CHECK (length(source_record_key) BETWEEN 1 AND 512),
+            source_location TEXT NULL
+                CHECK (source_location IS NULL OR length(source_location) BETWEEN 1 AND 512),
+            canonical_payload TEXT NOT NULL
+                CHECK (length(canonical_payload) BETWEEN 2 AND 1048576),
+            payload_sha256 TEXT NOT NULL
+                CHECK (length(payload_sha256) = 64)
+                CHECK (payload_sha256 = lower(payload_sha256))
+                CHECK (payload_sha256 NOT GLOB '*[^0-9a-f]*'),
+            PRIMARY KEY (snapshot_id, entity_type, source_record_key)
+        ) STRICT;
+
+        CREATE INDEX ix_reference_snapshot_records_type
+            ON reference_snapshot_records (snapshot_id, entity_type, source_record_key);
+
+        CREATE TABLE reference_snapshot_diagnostics (
+            snapshot_id TEXT NOT NULL
+                REFERENCES reference_snapshots(snapshot_id) ON DELETE RESTRICT,
+            diagnostic_index INTEGER NOT NULL CHECK (diagnostic_index >= 0),
+            severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'error')),
+            code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 64),
+            entity_type TEXT NULL
+                CHECK (entity_type IS NULL OR length(entity_type) BETWEEN 1 AND 64),
+            source_record_key TEXT NULL
+                CHECK (source_record_key IS NULL OR length(source_record_key) BETWEEN 1 AND 512),
+            source_location TEXT NULL
+                CHECK (source_location IS NULL OR length(source_location) BETWEEN 1 AND 512),
+            field_name TEXT NULL
+                CHECK (field_name IS NULL OR length(field_name) BETWEEN 1 AND 256),
+            message TEXT NOT NULL CHECK (length(message) BETWEEN 1 AND 4096),
+            diagnostic_sha256 TEXT NOT NULL
+                CHECK (length(diagnostic_sha256) = 64)
+                CHECK (diagnostic_sha256 = lower(diagnostic_sha256))
+                CHECK (diagnostic_sha256 NOT GLOB '*[^0-9a-f]*'),
+            PRIMARY KEY (snapshot_id, diagnostic_index)
+        ) STRICT;
+
+        CREATE INDEX ix_reference_snapshot_diagnostics_severity
+            ON reference_snapshot_diagnostics (snapshot_id, severity, diagnostic_index);
+
+        CREATE TABLE reference_source_heads (
+            source_id TEXT NOT NULL PRIMARY KEY
+                REFERENCES reference_sources(source_id) ON DELETE RESTRICT,
+            snapshot_id TEXT NOT NULL UNIQUE,
+            FOREIGN KEY (source_id, snapshot_id)
+                REFERENCES reference_snapshots(source_id, snapshot_id) ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE TRIGGER enforce_reference_snapshot_update
+        BEFORE UPDATE ON reference_snapshots
+        WHEN OLD.snapshot_id <> NEW.snapshot_id
+          OR OLD.source_id <> NEW.source_id
+          OR OLD.snapshot_sequence <> NEW.snapshot_sequence
+          OR NOT (
+                (OLD.lifecycle_status = 'draft'
+                    AND (
+                        (NEW.lifecycle_status = 'draft'
+                            AND OLD.canonical_content_sha256 IS NEW.canonical_content_sha256
+                            AND OLD.validated_utc IS NEW.validated_utc
+                            AND OLD.published_utc IS NEW.published_utc)
+                        OR (NEW.lifecycle_status = 'validated'
+                            AND OLD.contract_version = NEW.contract_version
+                            AND OLD.source_version = NEW.source_version
+                            AND OLD.source_content_sha256 = NEW.source_content_sha256
+                            AND OLD.snapshot_metadata_sha256 = NEW.snapshot_metadata_sha256
+                            AND OLD.provenance_json = NEW.provenance_json
+                            AND OLD.captured_utc = NEW.captured_utc)))
+                OR
+                (OLD.lifecycle_status = 'validated'
+                    AND NEW.lifecycle_status = 'published'
+                    AND OLD.contract_version = NEW.contract_version
+                    AND OLD.source_version = NEW.source_version
+                    AND OLD.source_content_sha256 = NEW.source_content_sha256
+                    AND OLD.snapshot_metadata_sha256 = NEW.snapshot_metadata_sha256
+                    AND OLD.canonical_content_sha256 = NEW.canonical_content_sha256
+                    AND OLD.provenance_json = NEW.provenance_json
+                    AND OLD.captured_utc = NEW.captured_utc
+                    AND OLD.validated_utc = NEW.validated_utc))
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_lifecycle_transition_is_invalid');
+        END;
+
+        CREATE TRIGGER prevent_reference_snapshot_delete
+        BEFORE DELETE ON reference_snapshots
+        WHEN OLD.lifecycle_status <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_immutable');
+        END;
+
+        CREATE TRIGGER enforce_reference_snapshot_validation
+        BEFORE UPDATE ON reference_snapshots
+        WHEN OLD.lifecycle_status = 'draft'
+          AND NEW.lifecycle_status = 'validated'
+          AND EXISTS (
+                SELECT 1 FROM reference_snapshot_diagnostics
+                WHERE snapshot_id = OLD.snapshot_id AND severity = 'error')
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_has_validation_errors');
+        END;
+
+        CREATE TRIGGER prevent_record_insert_into_frozen_snapshot
+        BEFORE INSERT ON reference_snapshot_records
+        WHEN COALESCE((
+            SELECT lifecycle_status FROM reference_snapshots
+            WHERE snapshot_id = NEW.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER prevent_frozen_reference_snapshot_record_update
+        BEFORE UPDATE ON reference_snapshot_records
+        WHEN COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = OLD.snapshot_id), '') <> 'draft'
+          OR COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = NEW.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER prevent_frozen_reference_snapshot_record_delete
+        BEFORE DELETE ON reference_snapshot_records
+        WHEN COALESCE((
+            SELECT lifecycle_status FROM reference_snapshots
+            WHERE snapshot_id = OLD.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER prevent_reference_snapshot_record_reassignment
+        BEFORE UPDATE ON reference_snapshot_records
+        WHEN OLD.snapshot_id <> NEW.snapshot_id
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_record_cannot_be_reassigned');
+        END;
+
+        CREATE TRIGGER prevent_frozen_reference_snapshot_diagnostic_update
+        BEFORE UPDATE ON reference_snapshot_diagnostics
+        WHEN COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = OLD.snapshot_id), '') <> 'draft'
+          OR COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = NEW.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER prevent_frozen_reference_snapshot_diagnostic_delete
+        BEFORE DELETE ON reference_snapshot_diagnostics
+        WHEN COALESCE((
+            SELECT lifecycle_status FROM reference_snapshots
+            WHERE snapshot_id = OLD.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER prevent_reference_snapshot_diagnostic_reassignment
+        BEFORE UPDATE ON reference_snapshot_diagnostics
+        WHEN OLD.snapshot_id <> NEW.snapshot_id
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_diagnostic_cannot_be_reassigned');
+        END;
+
+        CREATE TRIGGER prevent_diagnostic_insert_into_frozen_snapshot
+        BEFORE INSERT ON reference_snapshot_diagnostics
+        WHEN COALESCE((
+            SELECT lifecycle_status FROM reference_snapshots
+            WHERE snapshot_id = NEW.snapshot_id), '') <> 'draft'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_snapshot_is_frozen');
+        END;
+
+        CREATE TRIGGER enforce_published_reference_source_head_insert
+        BEFORE INSERT ON reference_source_heads
+        WHEN COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = NEW.snapshot_id AND source_id = NEW.source_id), '') <> 'published'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_source_head_requires_published_snapshot');
+        END;
+
+        CREATE TRIGGER enforce_published_reference_source_head_update
+        BEFORE UPDATE ON reference_source_heads
+        WHEN COALESCE((
+                SELECT lifecycle_status FROM reference_snapshots
+                WHERE snapshot_id = NEW.snapshot_id AND source_id = NEW.source_id), '') <> 'published'
+        BEGIN
+            SELECT RAISE(ABORT, 'reference_source_head_requires_published_snapshot');
+        END;
         """;
 
     private readonly string connectionString;
@@ -644,6 +893,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 4, MigrationId: ProjectCommandMigrationId, Sql: ProjectCommandSchemaSql),
             (Version: 5, MigrationId: ProjectImportMigrationId, Sql: ProjectImportSchemaSql),
             (Version: 6, MigrationId: HarnessWorkspaceMigrationId, Sql: HarnessWorkspaceSchemaSql),
+            (Version: 7, MigrationId: ReferenceSnapshotMigrationId, Sql: ReferenceSnapshotSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -721,6 +971,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, HarnessWorkspaceSchemaSql);
         }
 
+        if (schemaVersion >= 7)
+        {
+            ExecuteSchemaSql(expected, ReferenceSnapshotSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -794,6 +1049,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: HarnessWorkspaceMigrationId,
                 Sql: HarnessWorkspaceSchemaSql,
                 Description: "Harness quantities and document workspaces"),
+            6 => (
+                Version: 7,
+                MigrationId: ReferenceSnapshotMigrationId,
+                Sql: ReferenceSnapshotSchemaSql,
+                Description: "Versioned external reference snapshots"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -865,7 +1125,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6))
             {
                 return false;
             }

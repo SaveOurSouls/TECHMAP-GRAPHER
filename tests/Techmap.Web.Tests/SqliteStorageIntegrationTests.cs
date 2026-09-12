@@ -34,12 +34,13 @@ public sealed class SqliteStorageIntegrationTests
 
         using (var connection = OpenIndependentConnection(databasePath))
         {
+            DropReferenceSnapshotSchema(connection);
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version = 6;
+                DELETE FROM schema_history WHERE version IN (6, 7);
                 PRAGMA user_version = 5;
                 """;
             command.ExecuteNonQuery();
@@ -97,7 +98,7 @@ public sealed class SqliteStorageIntegrationTests
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
         var history = storage.ExecuteRead(ReadSchemaHistory);
-        Assert.Equal([1, 2, 3, 4, 5, 6], history.Select(row => row.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], history.Select(row => row.Version));
         Assert.Equal(
             [
                 "M1-03-initial-storage",
@@ -106,6 +107,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M1-06-project-command-journal",
                 "M1-14-project-import-provenance",
                 "M1-04R-harness-workspaces",
+                "M2-01-versioned-reference-snapshots",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -115,7 +117,7 @@ public sealed class SqliteStorageIntegrationTests
         {
             Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
             Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
-            Assert.StartsWith("0.1.0-", row.AppVersion, StringComparison.Ordinal);
+            Assert.Matches("^0\\.(1|2)\\.0-", row.AppVersion);
             Assert.True(DateTimeOffset.TryParseExact(
                 row.AppliedUtc,
                 "O",
@@ -179,7 +181,7 @@ public sealed class SqliteStorageIntegrationTests
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(
-            [1, 2, 3, 4, 5, 6],
+            [1, 2, 3, 4, 5, 6, 7],
             reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
     }
 
@@ -197,6 +199,7 @@ public sealed class SqliteStorageIntegrationTests
 
         using (var connection = OpenIndependentConnection(databasePath))
         {
+            DropReferenceSnapshotSchema(connection);
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
@@ -219,7 +222,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6);
+                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -247,6 +250,10 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal("M1-06-project-command-journal", history[3].MigrationId);
         Assert.Equal(5, history[4].Version);
         Assert.Equal("M1-14-project-import-provenance", history[4].MigrationId);
+        Assert.Equal(6, history[5].Version);
+        Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
+        Assert.Equal(7, history[6].Version);
+        Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -268,6 +275,7 @@ public sealed class SqliteStorageIntegrationTests
 
         using (var connection = OpenIndependentConnection(databasePath))
         {
+            DropReferenceSnapshotSchema(connection);
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
@@ -287,7 +295,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
-                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6);
+                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -311,6 +319,10 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal("M1-06-project-command-journal", history[3].MigrationId);
         Assert.Equal(5, history[4].Version);
         Assert.Equal("M1-14-project-import-provenance", history[4].MigrationId);
+        Assert.Equal(6, history[5].Version);
+        Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
+        Assert.Equal(7, history[6].Version);
+        Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
         Assert.Equal(
             3,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -372,6 +384,7 @@ public sealed class SqliteStorageIntegrationTests
 
         using (var connection = OpenIndependentConnection(databasePath))
         {
+            DropReferenceSnapshotSchema(connection);
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
@@ -387,7 +400,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
-                DELETE FROM schema_history WHERE version IN (4, 5, 6);
+                DELETE FROM schema_history WHERE version IN (4, 5, 6, 7);
                 PRAGMA user_version = 3;
                 """;
             command.ExecuteNonQuery();
@@ -413,7 +426,7 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         Assert.True(migration.Migrated);
         Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
-        Assert.Equal([1, 2, 3, 4, 5, 6], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
         var catalog = new SqliteProjectCatalog(migrated);
         var project = catalog.GetProject(new Techmap.Domain.ProjectIdentity(projectId));
         Assert.Equal(0, project.Revision);
@@ -444,6 +457,7 @@ public sealed class SqliteStorageIntegrationTests
 
         using (var connection = OpenIndependentConnection(databasePath))
         {
+            DropReferenceSnapshotSchema(connection);
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
@@ -452,7 +466,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE project_imports;
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version IN (5, 6);
+                DELETE FROM schema_history WHERE version IN (5, 6, 7);
                 PRAGMA user_version = 4;
                 """;
             command.ExecuteNonQuery();
@@ -471,11 +485,203 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal(originalHistory, history.Take(4));
         Assert.Equal(5, history[4].Version);
         Assert.Equal("M1-14-project-import-provenance", history[4].MigrationId);
+        Assert.Equal(6, history[5].Version);
+        Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
+        Assert.Equal(7, history[6].Version);
+        Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
                 unitOfWork,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_imports';")));
+    }
+
+    [Fact]
+    public async Task Version_six_database_receives_reference_snapshot_schema_without_rewriting_history()
+    {
+        using var fixture = StorageFixture.Create();
+        IReadOnlyList<SchemaHistoryRow> originalHistory;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            originalHistory = storage.ExecuteRead(ReadSchemaHistory).Take(6).ToArray();
+        }
+
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            DropReferenceSnapshotSchema(connection);
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DELETE FROM schema_history WHERE version = 7;
+                PRAGMA user_version = 6;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var sourceHash = HashFile(databasePath);
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            new Techmap.Application.StorageMigrationRequest(
+                fixture.BackupRoot, "0.2.0-m2.01", SqliteStorage.CurrentSchemaVersion),
+            TestContext.Current.CancellationToken);
+        using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        var history = migrated.ExecuteRead(ReadSchemaHistory);
+
+        Assert.True(migration.Migrated);
+        Assert.Equal(6, migration.SourceSchemaVersion);
+        Assert.Equal(7, migration.TargetSchemaVersion);
+        Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
+        Assert.Equal(sourceHash, HashFile(databasePath));
+        Assert.Equal(originalHistory, history.Take(6));
+        Assert.Equal(7, history[6].Version);
+        Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
+        Assert.Equal(
+            [
+                "reference_snapshot_diagnostics",
+                "reference_snapshot_records",
+                "reference_snapshots",
+                "reference_source_heads",
+                "reference_sources",
+            ],
+            migrated.ExecuteRead(unitOfWork => ReadNames(
+                unitOfWork,
+                "SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'reference_%' ORDER BY name;")));
+        Assert.Equal(0, ExecuteScalarInt32(migrated, "SELECT COUNT(*) FROM reference_sources;"));
+    }
+
+    [Fact]
+    public void Reference_snapshot_schema_enforces_draft_validated_published_lifecycle()
+    {
+        using var fixture = StorageFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var sourceId = Guid.NewGuid().ToString("D");
+        var otherSourceId = Guid.NewGuid().ToString("D");
+        var firstSnapshotId = Guid.NewGuid().ToString("D");
+        var secondSnapshotId = Guid.NewGuid().ToString("D");
+        var otherSnapshotId = Guid.NewGuid().ToString("D");
+        var sourceHash = new string('1', 64);
+        var firstCanonicalHash = new string('2', 64);
+        var secondCanonicalHash = new string('3', 64);
+        var otherCanonicalHash = new string('4', 64);
+        const string captured = "2026-09-12T12:00:00.0000000+00:00";
+        const string validated = "2026-09-12T12:01:00.0000000+00:00";
+        const string published = "2026-09-12T12:02:00.0000000+00:00";
+
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                INSERT INTO reference_sources
+                    (source_id, source_key, source_kind, display_name, created_utc)
+                VALUES
+                    ($sourceId, 'technology-db', 'xlsx', 'База технологии', $captured),
+                    ($otherSourceId, 'connector-db', 'xlsx', 'База соединителей', $captured);
+
+                INSERT INTO reference_snapshots
+                    (snapshot_id, source_id, snapshot_sequence, contract_version, source_version,
+                     source_content_sha256, snapshot_metadata_sha256, canonical_content_sha256, provenance_json,
+                     lifecycle_status, captured_utc, validated_utc, published_utc)
+                VALUES
+                    ($firstSnapshotId, $sourceId, 1, 1, 'rev-1', $sourceHash, $sourceHash, NULL,
+                     '{"kind":"xlsx"}', 'draft', $captured, NULL, NULL),
+                    ($secondSnapshotId, $sourceId, 2, 1, 'rev-2', $sourceHash, $sourceHash, NULL,
+                     '{"kind":"xlsx"}', 'draft', $captured, NULL, NULL),
+                    ($otherSnapshotId, $otherSourceId, 1, 1, 'rev-1', $sourceHash, $sourceHash, NULL,
+                     '{"kind":"xlsx"}', 'draft', $captured, NULL, NULL);
+
+                INSERT INTO reference_snapshot_records
+                    (snapshot_id, entity_type, source_record_key, source_location,
+                     canonical_payload, payload_sha256)
+                VALUES
+                    ($firstSnapshotId, 'terminal', 'T-001', 'БД.ТЕР!2', '{}', $sourceHash);
+
+                INSERT INTO reference_snapshot_diagnostics
+                    (snapshot_id, diagnostic_index, severity, code, entity_type,
+                     source_record_key, source_location, field_name, message, diagnostic_sha256)
+                VALUES
+                    ($firstSnapshotId, 0, 'error', 'required_value_missing', 'terminal',
+                     'T-001', 'БД.ТЕР!2', 'stripLength', 'Не указана длина зачистки.', $sourceHash);
+                """);
+            command.Parameters.AddWithValue("$sourceId", sourceId);
+            command.Parameters.AddWithValue("$otherSourceId", otherSourceId);
+            command.Parameters.AddWithValue("$firstSnapshotId", firstSnapshotId);
+            command.Parameters.AddWithValue("$secondSnapshotId", secondSnapshotId);
+            command.Parameters.AddWithValue("$otherSnapshotId", otherSnapshotId);
+            command.Parameters.AddWithValue("$sourceHash", sourceHash);
+            command.Parameters.AddWithValue("$captured", captured);
+            command.ExecuteNonQuery();
+        });
+
+        AssertSqliteConstraint(storage,
+            $"INSERT INTO reference_source_heads VALUES ('{sourceId}', '{firstSnapshotId}');");
+        AssertSqliteConstraint(storage,
+            $"UPDATE reference_snapshots SET lifecycle_status = 'validated', " +
+            $"canonical_content_sha256 = '{firstCanonicalHash}', validated_utc = '{validated}' " +
+            $"WHERE snapshot_id = '{firstSnapshotId}';");
+
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                DELETE FROM reference_snapshot_diagnostics
+                WHERE snapshot_id = $snapshotId AND diagnostic_index = 0;
+                UPDATE reference_snapshot_records
+                SET canonical_payload = '{"stripLength":4}', payload_sha256 = $canonicalHash
+                WHERE snapshot_id = $snapshotId;
+                UPDATE reference_snapshots
+                SET lifecycle_status = 'validated', canonical_content_sha256 = $canonicalHash,
+                    validated_utc = $validated
+                WHERE snapshot_id = $snapshotId;
+                """);
+            command.Parameters.AddWithValue("$snapshotId", firstSnapshotId);
+            command.Parameters.AddWithValue("$canonicalHash", firstCanonicalHash);
+            command.Parameters.AddWithValue("$validated", validated);
+            command.ExecuteNonQuery();
+        });
+
+        AssertSqliteConstraint(storage,
+            $"UPDATE reference_snapshot_records SET canonical_payload = '{{}}' " +
+            $"WHERE snapshot_id = '{firstSnapshotId}';");
+        AssertSqliteConstraint(storage,
+            $"INSERT INTO reference_snapshot_diagnostics " +
+            $"(snapshot_id, diagnostic_index, severity, code, message, diagnostic_sha256) " +
+            $"VALUES ('{firstSnapshotId}', 1, 'warning', 'late', 'late', '{sourceHash}');");
+        AssertSqliteConstraint(storage,
+            $"UPDATE reference_snapshots SET lifecycle_status = 'published', " +
+            $"published_utc = '{published}', source_version = 'changed' " +
+            $"WHERE snapshot_id = '{firstSnapshotId}';");
+
+        storage.ExecuteInTransaction(unitOfWork => ExecuteNonQuery(
+            unitOfWork,
+            $"UPDATE reference_snapshots SET lifecycle_status = 'published', " +
+            $"published_utc = '{published}' WHERE snapshot_id = '{firstSnapshotId}';"));
+        storage.ExecuteInTransaction(unitOfWork => ExecuteNonQuery(
+            unitOfWork,
+            $"INSERT INTO reference_source_heads VALUES ('{sourceId}', '{firstSnapshotId}');"));
+        Assert.Equal(
+            firstSnapshotId,
+            ExecuteScalarString(storage,
+                $"SELECT snapshot_id FROM reference_source_heads WHERE source_id = '{sourceId}';"));
+
+        PublishSnapshot(storage, secondSnapshotId, secondCanonicalHash, validated, published);
+        storage.ExecuteInTransaction(unitOfWork => ExecuteNonQuery(
+            unitOfWork,
+            $"UPDATE reference_source_heads SET snapshot_id = '{secondSnapshotId}' " +
+            $"WHERE source_id = '{sourceId}';"));
+        Assert.Equal(
+            secondSnapshotId,
+            ExecuteScalarString(storage,
+                $"SELECT snapshot_id FROM reference_source_heads WHERE source_id = '{sourceId}';"));
+
+        PublishSnapshot(storage, otherSnapshotId, otherCanonicalHash, validated, published);
+        AssertSqliteConstraint(storage,
+            $"UPDATE reference_source_heads SET snapshot_id = '{otherSnapshotId}' " +
+            $"WHERE source_id = '{sourceId}';");
+        AssertSqliteConstraint(storage,
+            $"DELETE FROM reference_snapshots WHERE snapshot_id = '{firstSnapshotId}';");
+        Assert.Equal(3, ExecuteScalarInt32(storage, "SELECT COUNT(*) FROM reference_snapshots;"));
     }
 
     [Fact]
@@ -776,6 +982,83 @@ public sealed class SqliteStorageIntegrationTests
         using var command = unitOfWork.CreateCommand(commandText);
         return Convert.ToString(command.ExecuteScalar(), CultureInfo.InvariantCulture)
             ?? throw new InvalidDataException($"SQLite returned null for '{commandText}'.");
+    }
+
+    private static string ExecuteScalarString(SqliteStorage storage, string commandText) =>
+        storage.ExecuteRead(unitOfWork => ExecuteScalarString(unitOfWork, commandText));
+
+    private static string[] ReadNames(SqliteUnitOfWork unitOfWork, string commandText)
+    {
+        using var command = unitOfWork.CreateCommand(commandText);
+        using var reader = command.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read())
+        {
+            result.Add(reader.GetString(0));
+        }
+
+        return result.ToArray();
+    }
+
+    private static void AssertSqliteConstraint(SqliteStorage storage, string commandText)
+    {
+        var error = Assert.Throws<SqliteException>(() =>
+            storage.ExecuteInTransaction(unitOfWork => ExecuteNonQuery(unitOfWork, commandText)));
+        Assert.Equal(19, error.SqliteErrorCode);
+    }
+
+    private static void PublishSnapshot(
+        SqliteStorage storage,
+        string snapshotId,
+        string canonicalHash,
+        string validatedUtc,
+        string publishedUtc)
+    {
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                UPDATE reference_snapshots
+                SET lifecycle_status = 'validated', canonical_content_sha256 = $canonicalHash,
+                    validated_utc = $validatedUtc
+                WHERE snapshot_id = $snapshotId;
+                UPDATE reference_snapshots
+                SET lifecycle_status = 'published', published_utc = $publishedUtc
+                WHERE snapshot_id = $snapshotId;
+                """);
+            command.Parameters.AddWithValue("$snapshotId", snapshotId);
+            command.Parameters.AddWithValue("$canonicalHash", canonicalHash);
+            command.Parameters.AddWithValue("$validatedUtc", validatedUtc);
+            command.Parameters.AddWithValue("$publishedUtc", publishedUtc);
+            command.ExecuteNonQuery();
+        });
+    }
+
+    private static void DropReferenceSnapshotSchema(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            DROP TRIGGER enforce_published_reference_source_head_update;
+            DROP TRIGGER enforce_published_reference_source_head_insert;
+            DROP TRIGGER prevent_diagnostic_insert_into_frozen_snapshot;
+            DROP TRIGGER prevent_reference_snapshot_diagnostic_reassignment;
+            DROP TRIGGER prevent_frozen_reference_snapshot_diagnostic_delete;
+            DROP TRIGGER prevent_frozen_reference_snapshot_diagnostic_update;
+            DROP TRIGGER prevent_reference_snapshot_record_reassignment;
+            DROP TRIGGER prevent_frozen_reference_snapshot_record_delete;
+            DROP TRIGGER prevent_frozen_reference_snapshot_record_update;
+            DROP TRIGGER prevent_record_insert_into_frozen_snapshot;
+            DROP TRIGGER enforce_reference_snapshot_validation;
+            DROP TRIGGER prevent_reference_snapshot_delete;
+            DROP TRIGGER enforce_reference_snapshot_update;
+            DROP TABLE reference_source_heads;
+            DROP TABLE reference_snapshot_diagnostics;
+            DROP TABLE reference_snapshot_records;
+            DROP TABLE reference_snapshots;
+            DROP TABLE reference_sources;
+            """;
+        command.ExecuteNonQuery();
     }
 
     private static void ExecuteNonQuery(SqliteUnitOfWork unitOfWork, string commandText)

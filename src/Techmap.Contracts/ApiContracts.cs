@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Techmap.Contracts;
 
 public static class ApiContract
@@ -27,7 +29,8 @@ public sealed record ApiErrorResponse(
     string Error,
     string? Field = null,
     string? Message = null,
-    long? CurrentRevision = null);
+    long? CurrentRevision = null,
+    IReadOnlyList<ReferenceCatalogDiagnosticResponse>? Diagnostics = null);
 
 public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);
 
@@ -143,3 +146,80 @@ public sealed record ProjectAttachmentListResponse(
     IReadOnlyList<ProjectAttachmentResponse> Attachments);
 
 public sealed record AttachmentValidationResponse(Guid AttachmentId, string Status);
+
+public sealed record ReferenceCatalogRecordInputRequest(
+    string? EntityType,
+    string? SourceKey,
+    JsonElement Payload,
+    string? SourceLocation = null);
+
+public sealed record ReferenceCatalogDiagnosticInputRequest(
+    string? Severity,
+    string? Code,
+    string? Message,
+    string? EntityType = null,
+    string? SourceKey = null,
+    string? Field = null,
+    string? SourceLocation = null);
+
+public sealed record PublishReferenceCatalogRequest(
+    Guid SnapshotId,
+    int ContractVersion,
+    DateTimeOffset CapturedUtc,
+    string? SourceKind,
+    string? VersionFingerprint,
+    string? SourceUri,
+    IReadOnlyList<ReferenceCatalogRecordInputRequest>? Records,
+    IReadOnlyList<ReferenceCatalogDiagnosticInputRequest>? Diagnostics,
+    Guid? ExpectedActiveSnapshotId,
+    string? ExpectedValidationSha256,
+    IReadOnlyList<string>? AcknowledgedWarningIds);
+
+public sealed record ValidateReferenceCatalogRequest(
+    Guid SnapshotId,
+    int ContractVersion,
+    DateTimeOffset CapturedUtc,
+    string? SourceKind,
+    string? VersionFingerprint,
+    string? SourceUri,
+    IReadOnlyList<ReferenceCatalogRecordInputRequest>? Records,
+    IReadOnlyList<ReferenceCatalogDiagnosticInputRequest>? Diagnostics);
+
+public sealed record ReferenceCatalogRecordResponse(
+    string RecordId,
+    string EntityType,
+    string SourceKey,
+    JsonElement Payload,
+    string? SourceLocation);
+
+public sealed record ReferenceCatalogDiagnosticResponse(
+    string DiagnosticId,
+    string Severity,
+    string Code,
+    string Message,
+    string? EntityType,
+    string? SourceKey,
+    string? Field,
+    string? SourceLocation);
+
+public sealed record ReferenceCatalogSnapshotResponse(
+    Guid SnapshotId,
+    string SourceId,
+    int ContractVersion,
+    DateTimeOffset CapturedUtc,
+    string SourceKind,
+    string VersionFingerprint,
+    string? SourceUri,
+    string Sha256,
+    IReadOnlyList<ReferenceCatalogRecordResponse> Records,
+    IReadOnlyList<ReferenceCatalogDiagnosticResponse> Diagnostics);
+
+public sealed record ReferenceCatalogPublicationResponse(
+    string Status,
+    Guid? PreviousActiveSnapshotId,
+    ReferenceCatalogSnapshotResponse Snapshot);
+
+public sealed record ReferenceCatalogRecordListResponse(
+    Guid SnapshotId,
+    string SnapshotSha256,
+    IReadOnlyList<ReferenceCatalogRecordResponse> Records);

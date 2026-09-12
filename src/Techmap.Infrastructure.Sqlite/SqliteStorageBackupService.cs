@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Win32.SafeHandles;
 using Techmap.Application;
+using Techmap.Domain;
 
 namespace Techmap.Infrastructure.Sqlite;
 
@@ -339,6 +340,10 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         }
 
         var schemaVersion = SqliteStorage.ValidateSchema(connection);
+        if (schemaVersion >= 7)
+        {
+            ValidateReferenceCatalog(connection);
+        }
 
         var revisions = new List<StorageBackupProjectRevision>();
         if (schemaVersion >= 2)
@@ -397,6 +402,270 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
         return new SnapshotInventory(schemaVersion, revisions, blobs);
     }
+
+    private static void ValidateReferenceCatalog(SqliteConnection connection)
+    {
+        using (var heads = connection.CreateCommand())
+        {
+            heads.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM reference_source_heads h
+                LEFT JOIN reference_snapshots r
+                  ON r.source_id = h.source_id AND r.snapshot_id = h.snapshot_id
+                WHERE r.snapshot_id IS NULL OR r.lifecycle_status <> 'published';
+                """;
+            if (Convert.ToInt32(heads.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            {
+                throw new InvalidDataException("The SQLite backup has an invalid active reference snapshot.");
+            }
+        }
+
+        var headers = new List<ReferenceSnapshotHeader>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT r.snapshot_id, s.source_key, s.source_kind, r.snapshot_sequence,
+                       r.contract_version, r.source_version, r.source_content_sha256,
+                       r.snapshot_metadata_sha256, r.canonical_content_sha256,
+                       r.provenance_json, r.lifecycle_status, r.captured_utc
+                FROM reference_snapshots r
+                JOIN reference_sources s ON s.source_id = r.source_id
+                ORDER BY r.snapshot_id;
+                """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                headers.Add(new ReferenceSnapshotHeader(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt64(3),
+                    reader.GetInt32(4),
+                    reader.GetString(5),
+                    reader.GetString(6),
+                    reader.GetString(7),
+                    reader.IsDBNull(8) ? null : reader.GetString(8),
+                    reader.GetString(9),
+                    reader.GetString(10),
+                    reader.GetString(11)));
+            }
+        }
+
+        foreach (var header in headers)
+        {
+            if (!Guid.TryParseExact(header.SnapshotId, "D", out var snapshotId) || snapshotId == Guid.Empty ||
+                !IsSha256(header.SourceContentSha256) ||
+                !IsSha256(header.MetadataSha256) ||
+                header.Lifecycle == "draft" && header.CanonicalContentSha256 is not null ||
+                header.Lifecycle != "draft" &&
+                    (header.CanonicalContentSha256 is null || !IsSha256(header.CanonicalContentSha256)))
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{header.SnapshotId}' has invalid persisted hashes.");
+            }
+
+            ReferenceCatalogProvenance provenance;
+            try
+            {
+                provenance = JsonSerializer.Deserialize<ReferenceCatalogProvenance>(header.ProvenanceJson, JsonOptions)
+                    ?? throw new JsonException("The reference provenance is null.");
+            }
+            catch (JsonException error)
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{header.SnapshotId}' has invalid provenance JSON.",
+                    error);
+            }
+
+            if (!string.Equals(header.SourceKind, provenance.SourceKind, StringComparison.Ordinal) ||
+                !string.Equals(header.SourceVersion, provenance.VersionFingerprint, StringComparison.Ordinal) ||
+                !string.Equals(
+                    header.SourceContentSha256,
+                    SqliteReferenceCatalogSnapshotStore.SourceContentHash(provenance.VersionFingerprint),
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    header.MetadataSha256,
+                    SqliteReferenceCatalogSnapshotStore.HashSnapshotMetadata(
+                        new ReferenceCatalogSnapshotIdentity(snapshotId),
+                        header.SourceKey,
+                        header.Sequence,
+                        header.ContractVersion,
+                        header.SourceVersion,
+                        header.SourceContentSha256,
+                        header.ProvenanceJson,
+                        header.CapturedUtc),
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{header.SnapshotId}' has corrupt persisted metadata.");
+            }
+
+            var records = ReadReferenceRecords(connection, header.SnapshotId);
+            var diagnostics = ReadReferenceDiagnostics(connection, header.SnapshotId);
+            ReferenceCatalogValidationResult validation;
+            try
+            {
+                var capturedUtc = DateTimeOffset.ParseExact(
+                    header.CapturedUtc,
+                    "O",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind);
+                if (!string.Equals(
+                        capturedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+                        header.CapturedUtc,
+                        StringComparison.Ordinal))
+                {
+                    throw new FormatException("The reference capture time is not canonical UTC.");
+                }
+
+                validation = ReferenceCatalogDraft.Create(
+                    new ReferenceCatalogSnapshotIdentity(snapshotId),
+                    header.SourceKey,
+                    header.ContractVersion,
+                    capturedUtc,
+                    new ReferenceCatalogProvenanceInput(
+                        provenance.SourceKind,
+                        provenance.VersionFingerprint,
+                        provenance.SourceUri),
+                    records,
+                    diagnostics).Validate();
+            }
+            catch (Exception error) when (error is ArgumentException or FormatException or InvalidDataException)
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{header.SnapshotId}' cannot be reconstructed.",
+                    error);
+            }
+
+            if (header.Lifecycle != "draft" &&
+                (validation.Snapshot is null ||
+                 !string.Equals(
+                     validation.Snapshot.Sha256,
+                     header.CanonicalContentSha256,
+                     StringComparison.Ordinal)))
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{header.SnapshotId}' has a corrupt canonical envelope.");
+            }
+        }
+    }
+
+    private static IReadOnlyList<ReferenceCatalogRecordInput> ReadReferenceRecords(
+        SqliteConnection connection,
+        string snapshotId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT entity_type, source_record_key, source_location,
+                   canonical_payload, payload_sha256
+            FROM reference_snapshot_records
+            WHERE snapshot_id = $snapshotId
+            ORDER BY entity_type, source_record_key;
+            """;
+        command.Parameters.AddWithValue("$snapshotId", snapshotId);
+        using var reader = command.ExecuteReader();
+        var result = new List<ReferenceCatalogRecordInput>();
+        while (reader.Read())
+        {
+            var entityType = reader.GetString(0);
+            var sourceKey = reader.GetString(1);
+            var sourceLocation = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var payload = reader.GetString(3);
+            if (!string.Equals(
+                    SqliteReferenceCatalogSnapshotStore.HashRecordMetadata(
+                        entityType, sourceKey, sourceLocation, payload),
+                    reader.GetString(4),
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{snapshotId}' has a corrupt record payload.");
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                result.Add(new ReferenceCatalogRecordInput(
+                    entityType,
+                    sourceKey,
+                    document.RootElement.Clone(),
+                    sourceLocation));
+            }
+            catch (JsonException error)
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{snapshotId}' has invalid record JSON.",
+                    error);
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<ReferenceCatalogDiagnosticInput> ReadReferenceDiagnostics(
+        SqliteConnection connection,
+        string snapshotId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT severity, code, message, entity_type, source_record_key,
+                   field_name, source_location, diagnostic_sha256
+            FROM reference_snapshot_diagnostics
+            WHERE snapshot_id = $snapshotId
+            ORDER BY diagnostic_index;
+            """;
+        command.Parameters.AddWithValue("$snapshotId", snapshotId);
+        using var reader = command.ExecuteReader();
+        var result = new List<ReferenceCatalogDiagnosticInput>();
+        while (reader.Read())
+        {
+            var severityText = reader.GetString(0);
+            var code = reader.GetString(1);
+            var message = reader.GetString(2);
+            var entityType = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var sourceKey = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var field = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var sourceLocation = reader.IsDBNull(6) ? null : reader.GetString(6);
+            if (!string.Equals(
+                    SqliteReferenceCatalogSnapshotStore.HashDiagnosticMetadata(
+                        severityText, code, message, entityType, sourceKey, field, sourceLocation),
+                    reader.GetString(7),
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Reference snapshot '{snapshotId}' has corrupt diagnostic metadata.");
+            }
+
+            var severity = severityText switch
+            {
+                "warning" => ReferenceCatalogDiagnosticSeverity.Warning,
+                "error" => ReferenceCatalogDiagnosticSeverity.Error,
+                _ => throw new InvalidDataException(
+                    $"Reference snapshot '{snapshotId}' has an unsupported diagnostic severity."),
+            };
+            result.Add(new ReferenceCatalogDiagnosticInput(
+                severity, code, message, entityType, sourceKey, field, sourceLocation));
+        }
+
+        return result;
+    }
+
+    private sealed record ReferenceSnapshotHeader(
+        string SnapshotId,
+        string SourceKey,
+        string SourceKind,
+        long Sequence,
+        int ContractVersion,
+        string SourceVersion,
+        string SourceContentSha256,
+        string MetadataSha256,
+        string? CanonicalContentSha256,
+        string ProvenanceJson,
+        string Lifecycle,
+        string CapturedUtc);
 
     private static bool HasTable(SqliteConnection connection, string name)
     {

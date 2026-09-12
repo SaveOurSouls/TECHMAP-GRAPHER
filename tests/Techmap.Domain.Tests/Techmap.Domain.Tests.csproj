@@ -8,6 +8,7 @@
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/Techmap.Application/Techmap.Application.csproj" />
     <ProjectReference Include="../../src/Techmap.Domain/Techmap.Domain.csproj" />
   </ItemGroup>
 </Project>

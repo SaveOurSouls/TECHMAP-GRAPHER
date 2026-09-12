@@ -342,6 +342,62 @@ public sealed class StorageBackupIntegrationTests
     }
 
     [Fact]
+    public async Task Backup_rejects_reference_snapshot_when_header_and_metadata_hash_disagree_with_canonical_content()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var store = new SqliteReferenceCatalogSnapshotStore(storage);
+        using var payload = JsonDocument.Parse("{\"value\":1}");
+        var captured = new DateTimeOffset(2026, 9, 12, 18, 0, 0, TimeSpan.Zero);
+        var validation = ReferenceCatalogDraft.Create(
+            ReferenceCatalogSnapshotIdentity.New(),
+            "technology-database",
+            1,
+            captured,
+            new ReferenceCatalogProvenanceInput("xlsx", "backup-v1", "source.xlsx"),
+            [new ReferenceCatalogRecordInput(
+                "terminal", "TER-001", payload.RootElement.Clone(), "БД.ТЕР!2")]).Validate();
+        var published = new ReferenceCatalogPublicationService(store).Publish(
+            new ReferenceCatalogPublicationRequest(
+                validation, null, validation.Snapshot!.Sha256, [])).PublishedSnapshot!;
+        const string changedProvenance =
+            "{\"sourceKind\":\"xlsx\",\"versionFingerprint\":\"backup-v1\",\"sourceUri\":\"tampered.xlsx\"}";
+        var sourceContentHash = SqliteReferenceCatalogSnapshotStore.SourceContentHash("backup-v1");
+        var metadataHash = SqliteReferenceCatalogSnapshotStore.HashSnapshotMetadata(
+            published.SnapshotId,
+            "technology-database",
+            1,
+            1,
+            "backup-v1",
+            sourceContentHash,
+            changedProvenance,
+            captured.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var drop = unitOfWork.CreateCommand("DROP TRIGGER enforce_reference_snapshot_update;");
+            drop.ExecuteNonQuery();
+            using var corrupt = unitOfWork.CreateCommand(
+                """
+                UPDATE reference_snapshots
+                SET provenance_json = $provenance, snapshot_metadata_sha256 = $metadataHash
+                WHERE snapshot_id = $snapshotId;
+                """);
+            corrupt.Parameters.AddWithValue("$provenance", changedProvenance);
+            corrupt.Parameters.AddWithValue("$metadataHash", metadataHash);
+            corrupt.Parameters.AddWithValue("$snapshotId", published.SnapshotId.Value.ToString("D"));
+            corrupt.ExecuteNonQuery();
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.2.0-m2.01"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
+    [Fact]
     public async Task Retention_keeps_newest_success_and_newest_preupdate_and_ignores_invalid_directory()
     {
         using var fixture = BackupFixture.Create();

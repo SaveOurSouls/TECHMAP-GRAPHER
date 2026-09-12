@@ -273,6 +273,7 @@ builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
     new ContentAddressedAttachmentStore(dataRoot));
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
+builder.Services.AddSingleton<IReferenceCatalogSnapshotStore, SqliteReferenceCatalogSnapshotStore>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(storage);
 builder.Services.AddSingleton(productVersion);
@@ -373,6 +374,7 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
             statusCode: StatusCodes.Status401Unauthorized));
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
+app.MapReferenceCatalogEndpoints();
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),
     statusCode: StatusCodes.Status404NotFound));
