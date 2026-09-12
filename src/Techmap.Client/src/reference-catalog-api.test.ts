@@ -4,6 +4,7 @@ import {
   createReferenceCatalogApi,
   ReferenceCatalogApiError,
   type XlsxPreviewRequest,
+  type XlsxProfilePreviewRequest,
 } from "./reference-catalog-api";
 import { parseRuntimeConfig } from "./runtime-config";
 
@@ -33,6 +34,34 @@ const request: XlsxPreviewRequest = {
   keyColumn: "RecordKey",
   fields: null,
 };
+const profileRequest: XlsxProfilePreviewRequest = {
+  fileName: "База данных. Технология.xlsx",
+  contentBase64: "UEsDBA==",
+  profileId: "technology.operations",
+};
+
+function profiles() {
+  return [
+    {
+      profileId: "technology.operations",
+      displayName: "БД.ОП — операции",
+      sourceId: "technology-operations",
+      sheetName: "БД.ОП",
+      entityType: "operation",
+      keyColumn: "Номер",
+      description: "Операции и исходные параметры времени.",
+    },
+    {
+      profileId: "technology.equipment",
+      displayName: "БД.ОБ — оборудование",
+      sourceId: "technology-equipment",
+      sheetName: "БД.ОБ",
+      entityType: "equipment",
+      keyColumn: "Инв. номер",
+      description: "Физические единицы оборудования.",
+    },
+  ];
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -102,6 +131,41 @@ function snapshot() {
 }
 
 describe("reference catalog API", () => {
+  it("discovers all named XLSX profiles without assuming a fixed count", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(profiles()));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    await expect(api.getXlsxProfiles()).resolves.toEqual([
+      expect.objectContaining({ profileId: "technology.operations", sourceId: "technology-operations" }),
+      expect.objectContaining({ profileId: "technology.equipment", keyColumn: "Инв. номер" }),
+    ]);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-import/xlsx-profiles",
+      expect.objectContaining({ method: "GET", headers: { Accept: "application/json" } }),
+    );
+  });
+
+  it("sends a profile preview to the source declared by the selected profile", async () => {
+    const response = { ...preview(), sourceId: "technology-operations", selectedSheet: "БД.ОП" };
+    const fetcher = vi.fn(async () => jsonResponse(response));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    await expect(api.previewXlsxProfile("technology-operations", profileRequest)).resolves.toEqual(
+      expect.objectContaining({ sourceId: "technology-operations", selectedSheet: "БД.ОП" }),
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-sources/technology-operations/xlsx-profile-previews",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(profileRequest) }),
+    );
+  });
+
+  it("rejects duplicate profile identities from a malformed response", async () => {
+    const fetcher = vi.fn(async () => jsonResponse([profiles()[0], profiles()[0]]));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    await expect(api.getXlsxProfiles()).rejects.toThrow("повторяющиеся профили");
+  });
+
   it("encodes binary input in bounded base64 chunks", () => {
     const bytes = new Uint8Array(3 * 8192 + 5);
     for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;

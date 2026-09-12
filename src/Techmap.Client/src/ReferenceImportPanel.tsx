@@ -6,6 +6,7 @@ import {
   type ReferenceCatalogSnapshot,
   type XlsxFieldMapping,
   type XlsxFieldValueKind,
+  type XlsxImportProfile,
   type XlsxReferencePreview,
   xlsxFileToBase64,
 } from "./reference-catalog-api";
@@ -116,9 +117,65 @@ export function fileSelectionLabel(file: Pick<File, "name" | "size"> | null): st
   return file === null ? "Файл не выбран" : `${file.name} · ${Math.ceil(file.size / 1024)} КиБ`;
 }
 
+export function profileCountLabel(count: number): string {
+  const modulo100 = count % 100;
+  const modulo10 = count % 10;
+  const noun = modulo100 >= 11 && modulo100 <= 14
+    ? "профилей"
+    : modulo10 === 1 ? "профиль" : modulo10 >= 2 && modulo10 <= 4 ? "профиля" : "профилей";
+  return `${count} ${noun}`;
+}
+
+interface XlsxProfilePickerProps {
+  readonly profiles: readonly XlsxImportProfile[] | undefined;
+  readonly error: string | null;
+  readonly selectedProfileId: string;
+  readonly disabled: boolean;
+  readonly onSelect: (profileId: string) => void;
+}
+
+export function XlsxProfilePicker({
+  profiles,
+  error,
+  selectedProfileId,
+  disabled,
+  onSelect,
+}: XlsxProfilePickerProps) {
+  const selectedProfile = profiles?.find((profile) => profile.profileId === selectedProfileId) ?? null;
+  if (profiles === undefined) return <p className="xlsx-profile-state" role="status">Загружаем список таблиц…</p>;
+  if (error) return <p className="xlsx-profile-state error" role="alert">Не удалось загрузить профили: {error}</p>;
+  if (profiles.length === 0) {
+    return <p className="xlsx-profile-state">Готовые профили пока недоступны. Используйте универсальный импорт ниже.</p>;
+  }
+  return (
+    <div className="xlsx-profile-picker">
+      <label>
+        Таблица рабочей книги
+        <select value={selectedProfileId} onChange={(event) => onSelect(event.target.value)} disabled={disabled}>
+          {profiles.map((profile) => <option value={profile.profileId} key={profile.profileId}>{profile.displayName}</option>)}
+        </select>
+      </label>
+      {selectedProfile && (
+        <div className="xlsx-profile-description">
+          <strong>{selectedProfile.displayName}</strong>
+          <p>{selectedProfile.description}</p>
+          <dl>
+            <div><dt>Лист</dt><dd>{selectedProfile.sheetName}</dd></div>
+            <div><dt>Ключ</dt><dd>{selectedProfile.keyColumn}</dd></div>
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ReferenceImportPanel({ config, session }: ReferenceImportPanelProps) {
   const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const [settings, setSettings] = useState<ImportSettings>(initialSettings);
+  const [profiles, setProfiles] = useState<readonly XlsxImportProfile[] | undefined>(undefined);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [manualMode, setManualMode] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sheetOptions, setSheetOptions] = useState<readonly { readonly name: string; readonly hidden: boolean }[]>([]);
   const [manualMapping, setManualMapping] = useState(false);
@@ -133,9 +190,28 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [notice, setNotice] = useState<Notice | null>(null);
   const [now, setNow] = useState(Date.now());
   const activeRequestRef = useRef(0);
+  const selectedProfile = profiles?.find((profile) => profile.profileId === selectedProfileId) ?? null;
+  const activeSourceId = manualMode ? settings.sourceId.trim() : selectedProfile?.sourceId ?? "";
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getXlsxProfiles().then((result) => {
+      if (cancelled) return;
+      setProfiles(result);
+      setProfileError(null);
+      setSelectedProfileId((current) => result.some((profile) => profile.profileId === current)
+        ? current
+        : result[0]?.profileId ?? "");
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setProfiles([]);
+      setProfileError(errorText(error));
+    });
+    return () => { cancelled = true; };
+  }, [api]);
 
   const loadActive = useCallback(async (showBusy: boolean) => {
-    const sourceId = settings.sourceId.trim();
+    const sourceId = activeSourceId;
     if (!sourceId) {
       setActive(null);
       setActiveError(null);
@@ -157,11 +233,11 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     } finally {
       if (showBusy && activeRequestRef.current === requestId) setBusy(null);
     }
-  }, [api, settings.sourceId]);
+  }, [activeSourceId, api]);
 
   useEffect(() => {
     let cancelled = false;
-    const sourceId = settings.sourceId.trim();
+    const sourceId = activeSourceId;
     if (!sourceId) {
       setActive(null);
       setActiveError(null);
@@ -183,7 +259,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       }
     });
     return () => { cancelled = true; };
-  }, [api, settings.sourceId]);
+  }, [activeSourceId, api]);
 
   useEffect(() => {
     if (preview === null) return;
@@ -202,6 +278,16 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
   const changeSetting = (patch: Readonly<Partial<ImportSettings>>) => {
     setSettings((current) => ({ ...current, ...patch }));
+    invalidatePreview();
+  };
+
+  const selectProfile = (profileId: string) => {
+    setSelectedProfileId(profileId);
+    invalidatePreview();
+  };
+
+  const changeImportMode = (manual: boolean) => {
+    setManualMode(manual);
     invalidatePreview();
   };
 
@@ -235,29 +321,12 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
   const submitPreview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const sourceId = settings.sourceId.trim();
-    const entityType = settings.entityType.trim();
-    const keyColumn = settings.keyColumn.trim();
-    const headerRow = positiveInteger(settings.headerRow);
-    const firstDataRow = positiveInteger(settings.firstDataRow);
     if (!file) {
       setNotice({ tone: "error", text: "Выберите файл XLSX." });
       return;
     }
-    if (!sourceId || !entityType || !keyColumn || headerRow === null || firstDataRow === null || firstDataRow <= headerRow) {
-      setNotice({ tone: "error", text: "Заполните источник, тип записи и ключевой столбец; строка данных должна идти после заголовков." });
-      return;
-    }
-    const mappedFields: readonly XlsxFieldMapping[] | null = manualMapping
-      ? fields.map((field) => ({
-        ...field,
-        sourceColumn: field.sourceColumn.trim(),
-        targetProperty: field.targetProperty.trim(),
-        notApplicableTokens: field.notApplicableTokens?.map((token) => token.trim()).filter(Boolean),
-      }))
-      : null;
-    if (manualMapping && (mappedFields === null || mappedFields.length === 0 || mappedFields.some((field) => !field.sourceColumn || !field.targetProperty))) {
-      setNotice({ tone: "error", text: "Заполните исходный столбец и поле назначения во всех строках сопоставления." });
+    if (!manualMode && !selectedProfile) {
+      setNotice({ tone: "error", text: "Выберите таблицу, которую нужно загрузить из рабочей книги." });
       return;
     }
 
@@ -267,16 +336,46 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     setPreviewStale(false);
     setPreviewPublished(false);
     try {
-      const result = await api.previewXlsx(sourceId, {
-        fileName: file.name,
-        contentBase64: await xlsxFileToBase64(file),
-        sheetName: settings.sheetName.trim() || null,
-        headerRow,
-        firstDataRow,
-        entityType,
-        keyColumn,
-        fields: mappedFields,
-      });
+      const contentBase64 = await xlsxFileToBase64(file);
+      let result: XlsxReferencePreview;
+      if (manualMode) {
+        const sourceId = settings.sourceId.trim();
+        const entityType = settings.entityType.trim();
+        const keyColumn = settings.keyColumn.trim();
+        const headerRow = positiveInteger(settings.headerRow);
+        const firstDataRow = positiveInteger(settings.firstDataRow);
+        if (!sourceId || !entityType || !keyColumn || headerRow === null || firstDataRow === null || firstDataRow <= headerRow) {
+          throw new Error("Заполните источник, тип записи и ключевой столбец; строка данных должна идти после заголовков.");
+        }
+        const mappedFields: readonly XlsxFieldMapping[] | null = manualMapping
+          ? fields.map((field) => ({
+            ...field,
+            sourceColumn: field.sourceColumn.trim(),
+            targetProperty: field.targetProperty.trim(),
+            notApplicableTokens: field.notApplicableTokens?.map((token) => token.trim()).filter(Boolean),
+          }))
+          : null;
+        if (manualMapping && (mappedFields === null || mappedFields.length === 0 || mappedFields.some((field) => !field.sourceColumn || !field.targetProperty))) {
+          throw new Error("Заполните исходный столбец и поле назначения во всех строках сопоставления.");
+        }
+        result = await api.previewXlsx(sourceId, {
+          fileName: file.name,
+          contentBase64,
+          sheetName: settings.sheetName.trim() || null,
+          headerRow,
+          firstDataRow,
+          entityType,
+          keyColumn,
+          fields: mappedFields,
+        });
+      } else {
+        const profile = selectedProfile!;
+        result = await api.previewXlsxProfile(profile.sourceId, {
+          fileName: file.name,
+          contentBase64,
+          profileId: profile.profileId,
+        });
+      }
       setPreview(result);
       setSheetOptions(result.sheets);
       setNow(Date.now());
@@ -311,7 +410,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     setBusy("publish");
     setNotice(null);
     try {
-      const publication = await api.publishXlsx(settings.sourceId.trim(), {
+      const publication = await api.publishXlsx(preview.sourceId, {
         previewId: preview.previewId,
         expectedValidationSha256: preview.validationSha256,
         expectedActiveSnapshotId: preview.activeSnapshotId,
@@ -354,7 +453,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div>
           <p className="eyebrow">ЛОКАЛЬНЫЕ ДАННЫЕ</p>
           <h1>Справочники</h1>
-          <p>Проверьте XLSX перед публикацией. Ошибочный файл не заменит активную версию.</p>
+          <p>Загрузите нужную таблицу из рабочей книги. Настройки листа и столбцов применятся автоматически.</p>
         </div>
         <button className="secondary-action" type="button" onClick={() => void loadActive(true)} disabled={busy !== null}>
           {busy === "active" ? "Обновление…" : "Обновить статус"}
@@ -372,6 +471,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div>
           <p className="eyebrow">ТЕКУЩЕЕ СОСТОЯНИЕ</p>
           <h2 id="active-reference-title">Активная версия</h2>
+          {!manualMode && selectedProfile && <span className="active-reference-profile">{selectedProfile.displayName}</span>}
         </div>
         {activeError ? (
           <p className="reference-state error">{activeError}</p>
@@ -393,7 +493,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div className="section-title-row reference-card-title">
           <div>
             <p className="eyebrow">ШАГ 1</p>
-            <h2>Файл и правила чтения</h2>
+            <h2>Выбор таблицы и файла</h2>
           </div>
           <span className="selected-file" title={file?.name}>{fileSelectionLabel(file)}</span>
         </div>
@@ -401,58 +501,79 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div className="xlsx-format-guide" role="note" aria-label="Какой XLSX выбрать">
           <strong>Какой файл нужен</strong>
           <p>
-            Выберите таблицу <code>.xlsx</code>: первая указанная строка содержит заголовки,
-            каждая следующая — одну запись. Нужен столбец с уникальным текстовым артикулом
-            или кодом, например <code>RecordKey</code>. Остальные столбцы импортируются как характеристики.
+            Выберите рабочую книгу <code>База данных. Технология.xlsx</code> целиком.
+            Ниже укажите, какую таблицу из книги загрузить: приложение само выберет лист,
+            строки, ключ и характеристики.
           </p>
           <p>
-            Сейчас это универсальный импорт одного листа за раз. Готовые профили для БД.ОП,
-            БД.ОБ, БД.ТЕР, БД.КОАКС и СПР.КАБ будут добавлены отдельно.
-          </p>
-          <p>
-            Для проверки этой сборки выберите <code>Examples/reference-catalog.xlsx</code>
-            из распакованного архива. Рабочая книга «База данных. Технология.xlsx»
-            требует отдельных профилей и пока целиком не импортируется.
+            Сейчас доступны БД.ОП и БД.ОБ. БД.ТЕР, БД.КОАКС и СПР.КАБ появятся в этом же списке
+            по мере готовности профилей.
           </p>
         </div>
 
-        <div className="reference-form-grid">
+        <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
+          <div className="xlsx-profile-heading">
+            <div>
+              <strong id="xlsx-profile-heading">Что загрузить</strong>
+              <span>Одна публикация обновляет один справочник.</span>
+            </div>
+            {!manualMode && profiles && <span>{profileCountLabel(profiles.length)}</span>}
+          </div>
+          <XlsxProfilePicker
+            profiles={profiles}
+            error={profileError}
+            selectedProfileId={selectedProfileId}
+            disabled={busy !== null || manualMode}
+            onSelect={selectProfile}
+          />
+        </section>
+
+        <div className="reference-form-grid profile-file-grid">
           <label className="file-picker wide-reference-field">
             <span>Файл XLSX</span>
-            <span className="file-picker-control"><strong>Выбрать XLSX</strong><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={busy !== null} /></span>
-            <small>До 25 МиБ. Обычные ссылки на сайты разрешены; внешние книги, подключения к данным, макросы и формулы в импортируемых полях запрещены.</small>
-          </label>
-          <label>
-            Идентификатор источника
-            <input value={settings.sourceId} onChange={(event) => changeSetting({ sourceId: event.target.value })} disabled={busy !== null} required />
-          </label>
-          <label>
-            Лист
-            <input list="xlsx-sheet-options" placeholder="Первый видимый лист" value={settings.sheetName} onChange={(event) => changeSetting({ sheetName: event.target.value })} disabled={busy !== null} />
-            <datalist id="xlsx-sheet-options">
-              {sheetOptions.map((sheet) => <option value={sheet.name} key={sheet.name}>{sheet.hidden ? "Скрытый лист" : "Доступный лист"}</option>)}
-            </datalist>
-          </label>
-          <label>
-            Строка заголовков
-            <input type="number" min="1" max="100000" step="1" value={settings.headerRow} onChange={(event) => changeSetting({ headerRow: event.target.value })} disabled={busy !== null} required />
-          </label>
-          <label>
-            Первая строка данных
-            <input type="number" min="2" max="100000" step="1" value={settings.firstDataRow} onChange={(event) => changeSetting({ firstDataRow: event.target.value })} disabled={busy !== null} required />
-          </label>
-          <label>
-            Тип записи
-            <input placeholder="Например, terminal" value={settings.entityType} onChange={(event) => changeSetting({ entityType: event.target.value })} disabled={busy !== null} required />
-          </label>
-          <label>
-            Ключевой столбец
-            <input placeholder="Точное имя заголовка" value={settings.keyColumn} onChange={(event) => changeSetting({ keyColumn: event.target.value })} disabled={busy !== null} required />
-            <small>Точное имя столбца с уникальным артикулом или кодом. Значения должны храниться как текст.</small>
+            <span className="file-picker-control"><strong>Выбрать рабочую книгу</strong><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={busy !== null} /></span>
+            <small>До 25 МиБ. Обычные ссылки на сайты разрешены; внешние книги, подключения к данным и макросы запрещены.</small>
           </label>
         </div>
 
-        <div className="mapping-section">
+        <details className="manual-import-details" open={manualMode} onToggle={(event) => {
+          if (event.currentTarget.open !== manualMode) changeImportMode(event.currentTarget.open);
+        }}>
+          <summary>
+            <span><strong>Универсальный импорт</strong><small>Для отдельного нестандартного листа с ручной настройкой</small></span>
+          </summary>
+          <div className="reference-form-grid manual-import-grid">
+            <label>
+              Идентификатор источника
+              <input value={settings.sourceId} onChange={(event) => changeSetting({ sourceId: event.target.value })} disabled={busy !== null} required={manualMode} />
+            </label>
+            <label>
+              Лист
+              <input list="xlsx-sheet-options" placeholder="Первый видимый лист" value={settings.sheetName} onChange={(event) => changeSetting({ sheetName: event.target.value })} disabled={busy !== null} />
+              <datalist id="xlsx-sheet-options">
+                {sheetOptions.map((sheet) => <option value={sheet.name} key={sheet.name}>{sheet.hidden ? "Скрытый лист" : "Доступный лист"}</option>)}
+              </datalist>
+            </label>
+            <label>
+              Строка заголовков
+              <input type="number" min="1" max="100000" step="1" value={settings.headerRow} onChange={(event) => changeSetting({ headerRow: event.target.value })} disabled={busy !== null} required={manualMode} />
+            </label>
+            <label>
+              Первая строка данных
+              <input type="number" min="2" max="100000" step="1" value={settings.firstDataRow} onChange={(event) => changeSetting({ firstDataRow: event.target.value })} disabled={busy !== null} required={manualMode} />
+            </label>
+            <label>
+              Тип записи
+              <input placeholder="Например, terminal" value={settings.entityType} onChange={(event) => changeSetting({ entityType: event.target.value })} disabled={busy !== null} required={manualMode} />
+            </label>
+            <label>
+              Ключевой столбец
+              <input placeholder="Точное имя заголовка" value={settings.keyColumn} onChange={(event) => changeSetting({ keyColumn: event.target.value })} disabled={busy !== null} required={manualMode} />
+              <small>Столбец с уникальным текстовым артикулом или кодом записи.</small>
+            </label>
+          </div>
+
+          <div className="mapping-section">
           <label className="mapping-toggle">
             <input type="checkbox" checked={manualMapping} onChange={(event) => {
               setManualMapping(event.target.checked);
@@ -502,11 +623,12 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
               <button className="link-button mapping-add" type="button" onClick={addField} disabled={busy !== null || fields.length >= maximumMappedFields}>+ Добавить поле</button>
             </div>
           )}
-        </div>
+          </div>
+        </details>
 
         <div className="reference-form-actions">
           <button className="primary-action" type="submit" disabled={busy !== null}>
-            {busy === "preview" ? "Проверяем файл…" : "Проверить файл"}
+            {busy === "preview" ? "Проверяем файл…" : manualMode ? "Проверить универсальный импорт" : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
           </button>
           <span>Публикация выполняется отдельным действием после проверки.</span>
         </div>

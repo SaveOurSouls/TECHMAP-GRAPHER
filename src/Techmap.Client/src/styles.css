@@ -294,6 +294,36 @@ input::placeholder { color: #8795a3; }
 .xlsx-format-guide strong { color: #274b61; font-size: 13px; }
 .xlsx-format-guide p { margin: 4px 0 0; }
 .xlsx-format-guide code { padding: 1px 4px; border-radius: 4px; background: #e4eef3; color: #21465d; font: 600 11px Consolas, monospace; }
+.active-reference-profile { display: block; margin-top: 4px; color: #668091; font-size: 11px; font-weight: 650; }
+.xlsx-profile-section { margin-top: 18px; padding: 15px; border: 1px solid #cbdde5; border-radius: 9px; background: #f8fbfc; }
+.xlsx-profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.xlsx-profile-heading > div { display: grid; gap: 3px; }
+.xlsx-profile-heading strong { color: #294b5e; font-size: 13px; }
+.xlsx-profile-heading span { color: #778894; font-size: 10px; }
+.xlsx-profile-heading > span { padding: 4px 7px; border-radius: 10px; background: #e7f1f5; color: #467084; font-weight: 800; }
+.xlsx-profile-picker { margin-top: 13px; display: grid; grid-template-columns: minmax(210px, .72fr) minmax(300px, 1.28fr); gap: 12px; }
+.xlsx-profile-picker > label { display: grid; align-content: start; gap: 6px; color: #526a79; font-size: 11px; font-weight: 750; }
+.xlsx-profile-picker select { min-width: 0; height: 39px; padding: 8px 10px; border: 1px solid #bfd1da; border-radius: 7px; background: #fff; color: #24475a; font-weight: 700; }
+.xlsx-profile-picker select:focus { border-color: #74afc8; outline: 2px solid rgb(44 142 184 / 12%); }
+.xlsx-profile-description { min-width: 0; padding: 10px 12px; border-left: 3px solid #58a5c5; border-radius: 5px; background: #fff; }
+.xlsx-profile-description > strong { color: #27536a; font-size: 12px; }
+.xlsx-profile-description p { margin: 4px 0 8px; color: #657986; font-size: 10px; line-height: 1.45; }
+.xlsx-profile-description dl { margin: 0; display: flex; flex-wrap: wrap; gap: 7px 18px; }
+.xlsx-profile-description dl > div { display: flex; gap: 5px; }
+.xlsx-profile-description dt { color: #89969e; font-size: 9px; }
+.xlsx-profile-description dd { margin: 0; color: #486779; font-size: 9px; font-weight: 750; }
+.xlsx-profile-state { margin: 13px 0 0; padding: 10px 11px; border-radius: 6px; background: #edf4f7; color: #5d7583; font-size: 11px; }
+.xlsx-profile-state.error { background: #fff0f0; color: #923b3b; }
+.profile-file-grid { margin-top: 12px; }
+.manual-import-details { margin-top: 15px; border: 1px solid #dce5e9; border-radius: 8px; background: #fff; }
+.manual-import-details > summary { padding: 12px 14px; display: flex; align-items: center; gap: 9px; color: #506a79; cursor: pointer; list-style-position: inside; }
+.manual-import-details > summary:hover { background: #f8fafb; }
+.manual-import-details > summary span { display: inline-grid; gap: 2px; vertical-align: middle; }
+.manual-import-details > summary strong { font-size: 11px; }
+.manual-import-details > summary small { color: #839099; font-size: 9px; font-weight: 400; }
+.manual-import-details[open] > summary { border-bottom: 1px solid #e2e8eb; background: #f8fafb; }
+.manual-import-grid { margin: 0; padding: 14px; }
+.manual-import-details .mapping-section { margin: 0 14px 14px; }
 .selected-file { max-width: 45%; overflow: hidden; color: #647686; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .reference-form-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 13px; }
 .reference-form-grid label { display: grid; gap: 6px; color: #59697a; font-size: 12px; font-weight: 700; }
@@ -364,6 +394,7 @@ input::placeholder { color: #8795a3; }
   .harness-workspace { grid-template-columns: 1fr; }
   .harness-list { max-height: 280px; }
   .reference-form-grid { grid-template-columns: 1fr 1fr; }
+  .xlsx-profile-picker { grid-template-columns: 1fr; }
   .active-reference-facts { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
 
@@ -394,6 +425,7 @@ input::placeholder { color: #8795a3; }
   .harness-parameters label, .harness-parameters .quantity-control, .harness-parameters .secondary-action { width: 100%; }
   .harness-tab { font-size: 11px; }
   .reference-form-grid { grid-template-columns: 1fr; }
+  .xlsx-profile-heading { align-items: flex-start; flex-direction: column; }
   .preview-facts { grid-template-columns: 1fr 1fr; }
   .mapping-header { display: none; }
   .mapping-row { grid-template-columns: 1fr 1fr; }

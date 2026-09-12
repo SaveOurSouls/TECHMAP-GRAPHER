@@ -27,6 +27,22 @@ export interface XlsxPreviewRequest {
   readonly fields: readonly XlsxFieldMapping[] | null;
 }
 
+export interface XlsxImportProfile {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly sourceId: string;
+  readonly sheetName: string;
+  readonly entityType: string;
+  readonly keyColumn: string;
+  readonly description: string;
+}
+
+export interface XlsxProfilePreviewRequest {
+  readonly fileName: string;
+  readonly contentBase64: string;
+  readonly profileId: string;
+}
+
 export interface ReferenceCatalogDiagnostic {
   readonly diagnosticId: string;
   readonly severity: ReferenceDiagnosticSeverity;
@@ -118,8 +134,10 @@ export interface ReferenceCatalogPublication {
 }
 
 export interface ReferenceCatalogApi {
+  getXlsxProfiles(): Promise<readonly XlsxImportProfile[]>;
   getActive(sourceId: string): Promise<ReferenceCatalogSnapshot | null>;
   previewXlsx(sourceId: string, request: XlsxPreviewRequest): Promise<XlsxReferencePreview>;
+  previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest): Promise<XlsxReferencePreview>;
   publishXlsx(sourceId: string, request: PublishXlsxPreviewRequest): Promise<ReferenceCatalogPublication>;
 }
 
@@ -163,6 +181,8 @@ const errorMessages: Readonly<Record<string, string>> = {
   xlsx_invalid: "Файл повреждён или не является поддерживаемым XLSX.",
   xlsx_too_large: "Файл XLSX превышает допустимый размер 25 МиБ.",
   xlsx_mapping_invalid: "Проверьте настройки листа, строк и сопоставления полей.",
+  xlsx_profile_not_found: "Выбранный профиль импорта больше недоступен. Обновите список.",
+  xlsx_profile_source_mismatch: "Профиль не соответствует выбранному справочнику.",
   xlsx_preview_expired: "Предварительный просмотр истёк. Проверьте файл ещё раз.",
   xlsx_preview_active_mismatch: "Активная версия изменилась. Проверьте файл ещё раз.",
   xlsx_publication_invalid: "Данные предварительного просмотра неполны. Проверьте файл ещё раз.",
@@ -265,6 +285,28 @@ function parseDiagnostic(value: unknown): ReferenceCatalogDiagnostic {
     field: optionalString(record, "field"),
     sourceLocation: optionalString(record, "sourceLocation"),
   });
+}
+
+function parseXlsxProfile(value: unknown): XlsxImportProfile {
+  const record = requireRecord(value, "Сервер вернул повреждённый профиль импорта XLSX.");
+  return Object.freeze({
+    profileId: requireString(record, "profileId"),
+    displayName: requireString(record, "displayName"),
+    sourceId: requireString(record, "sourceId"),
+    sheetName: requireString(record, "sheetName"),
+    entityType: requireString(record, "entityType"),
+    keyColumn: requireString(record, "keyColumn"),
+    description: requireString(record, "description"),
+  });
+}
+
+function parseXlsxProfiles(value: unknown): readonly XlsxImportProfile[] {
+  if (!Array.isArray(value)) throw new Error("Сервер вернул повреждённый список профилей XLSX.");
+  const profiles = value.map(parseXlsxProfile);
+  if (new Set(profiles.map((profile) => profile.profileId)).size !== profiles.length) {
+    throw new Error("Сервер вернул повторяющиеся профили импорта XLSX.");
+  }
+  return Object.freeze(profiles);
 }
 
 function parsePayload(value: unknown): Readonly<Record<string, unknown>> {
@@ -447,6 +489,11 @@ export function createReferenceCatalogApi(
   }
 
   return Object.freeze({
+    getXlsxProfiles: () => request(
+      "reference-import/xlsx-profiles",
+      { method: "GET", headers: { Accept: "application/json" } },
+      parseXlsxProfiles,
+    ),
     getActive: async (sourceId: string) => {
       try {
         return await request(resource(sourceId, "active"), {
@@ -460,6 +507,11 @@ export function createReferenceCatalogApi(
     },
     previewXlsx: (sourceId: string, body: XlsxPreviewRequest) => request(
       resource(sourceId, "xlsx-previews"),
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
+      parsePreview,
+    ),
+    previewXlsxProfile: (sourceId: string, body: XlsxProfilePreviewRequest) => request(
+      resource(sourceId, "xlsx-profile-previews"),
       { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
       parsePreview,
     ),

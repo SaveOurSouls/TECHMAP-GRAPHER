@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   canPublishXlsxPreview,
   fileSelectionLabel,
+  profileCountLabel,
   ReferenceImportPanel,
+  XlsxProfilePicker,
 } from "./ReferenceImportPanel";
 import { AppNavigation } from "./App";
 import type { XlsxReferencePreview } from "./reference-catalog-api";
@@ -36,21 +38,63 @@ describe("reference import panel", () => {
     expect(markup).toContain('aria-current="page"');
   });
 
-  it("renders the real XLSX mapping and preview workflow", () => {
+  it("renders profile-first XLSX import and keeps manual mapping as an advanced disclosure", () => {
     const markup = renderToStaticMarkup(createElement(ReferenceImportPanel, { config, session }));
 
     expect(markup).toContain("Справочники");
-    expect(markup).toContain("Выбрать XLSX");
+    expect(markup).toContain("Выбрать рабочую книгу");
     expect(markup).toContain("Какой файл нужен");
-    expect(markup).toContain("одну запись");
-    expect(markup).toContain("Examples/reference-catalog.xlsx");
+    expect(markup).toContain("База данных. Технология.xlsx");
+    expect(markup).toContain("Что загрузить");
+    expect(markup).toContain("Загружаем список таблиц");
+    expect(markup).toContain("Универсальный импорт");
     expect(markup).toContain("Строка заголовков");
     expect(markup).toContain("Ключевой столбец");
     expect(markup).toContain("Обычные ссылки на сайты разрешены");
     expect(markup).toContain("generic-record");
-    expect(markup).toContain("Проверить файл");
+    expect(markup).toContain("Проверить таблицу");
     expect(markup).toContain("Сначала проверьте файл");
     expect(markup).toContain('accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"');
+  });
+
+  it("renders backend-provided profiles and their exact automatic mapping", () => {
+    const profiles = [
+      {
+        profileId: "technology.operations",
+        displayName: "БД.ОП — операции",
+        sourceId: "technology-operations",
+        sheetName: "БД.ОП",
+        entityType: "operation",
+        keyColumn: "Номер",
+        description: "Операции и исходные параметры времени.",
+      },
+      {
+        profileId: "technology.equipment",
+        displayName: "БД.ОБ — оборудование",
+        sourceId: "technology-equipment",
+        sheetName: "БД.ОБ",
+        entityType: "equipment",
+        keyColumn: "Инв. номер",
+        description: "Физические единицы оборудования.",
+      },
+    ];
+    const markup = renderToStaticMarkup(createElement(XlsxProfilePicker, {
+      profiles,
+      error: null,
+      selectedProfileId: "technology.operations",
+      disabled: false,
+      onSelect: () => undefined,
+    }));
+
+    expect(markup).toContain("БД.ОП — операции");
+    expect(markup).toContain("БД.ОБ — оборудование");
+    expect(markup).toContain("Операции и исходные параметры времени");
+    expect(markup).toContain("Номер");
+    expect(markup).toContain('value="technology.operations" selected=""');
+    expect(profileCountLabel(1)).toBe("1 профиль");
+    expect(profileCountLabel(2)).toBe("2 профиля");
+    expect(profileCountLabel(5)).toBe("5 профилей");
+    expect(profileCountLabel(11)).toBe("11 профилей");
   });
 
   it("requires current preview, warning acknowledgement and a live token", () => {
