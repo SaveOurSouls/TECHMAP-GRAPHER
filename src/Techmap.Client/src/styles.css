@@ -289,6 +289,10 @@ input::placeholder { color: #8795a3; }
 .active-reference-facts dd, .preview-facts dd { margin: 0; color: #29445a; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .reference-import-card, .reference-preview-card { padding: 22px 24px; }
 .reference-card-title { padding-bottom: 16px; border-bottom: 1px solid #e3e9ed; }
+.xlsx-format-guide { margin-top: 16px; padding: 13px 15px; border: 1px solid #cbdfe9; border-radius: 8px; background: #f3f8fb; color: #4c6475; font-size: 12px; line-height: 1.5; }
+.xlsx-format-guide strong { color: #274b61; font-size: 13px; }
+.xlsx-format-guide p { margin: 4px 0 0; }
+.xlsx-format-guide code { padding: 1px 4px; border-radius: 4px; background: #e4eef3; color: #21465d; font: 600 11px Consolas, monospace; }
 .selected-file { max-width: 45%; overflow: hidden; color: #647686; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .reference-form-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 13px; }
 .reference-form-grid label { display: grid; gap: 6px; color: #59697a; font-size: 12px; font-weight: 700; }

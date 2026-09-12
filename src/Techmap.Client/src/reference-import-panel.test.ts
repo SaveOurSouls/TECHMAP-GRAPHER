@@ -41,8 +41,12 @@ describe("reference import panel", () => {
 
     expect(markup).toContain("Справочники");
     expect(markup).toContain("Выбрать XLSX");
+    expect(markup).toContain("Какой файл нужен");
+    expect(markup).toContain("одну запись");
+    expect(markup).toContain("Examples/reference-catalog.xlsx");
     expect(markup).toContain("Строка заголовков");
     expect(markup).toContain("Ключевой столбец");
+    expect(markup).toContain("Обычные ссылки на сайты разрешены");
     expect(markup).toContain("generic-record");
     expect(markup).toContain("Проверить файл");
     expect(markup).toContain("Сначала проверьте файл");

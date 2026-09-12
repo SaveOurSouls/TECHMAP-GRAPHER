@@ -504,6 +504,20 @@ public sealed class StorageRestoreIntegrationTests
         Assert.Equal(expectedRecord.SourceKey, actualRecord.SourceKey);
         Assert.Equal(expectedRecord.Payload.GetRawText(), actualRecord.Payload.GetRawText());
         Assert.Single(restoredStore.List("technology-database"));
+        var search = new SqliteReferenceCatalogSearchStore(restored);
+        var searchPage = await search.SearchAsync(
+            "technology-database",
+            null,
+            new ReferenceCatalogSearchQuery(
+                "acme", "TER-001", ["terminal"],
+                [new ReferenceCatalogFilterCondition(
+                    "manufacturer", ReferenceCatalogFilterOperator.TextEquals, "Acme")],
+                ReferenceCatalogFilterLogic.All,
+                ReferenceCatalogSort.Relevance,
+                40),
+            null,
+            TestContext.Current.CancellationToken);
+        Assert.Equal("TER-001", Assert.Single(searchPage.Records).SourceKey);
     }
 
     [Fact]

@@ -274,6 +274,9 @@ builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
 builder.Services.AddSingleton<IReferenceCatalogSnapshotStore, SqliteReferenceCatalogSnapshotStore>();
+builder.Services.AddSingleton<IReferenceCatalogSearchStore, SqliteReferenceCatalogSearchStore>();
+builder.Services.AddSingleton<IReferenceCatalogSavedFilterStore, SqliteReferenceCatalogSavedFilterStore>();
+builder.Services.AddSingleton<ReferenceCatalogSearchCursorCodec>();
 builder.Services.AddSingleton<XlsxPreviewCatalog>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(storage);
@@ -376,6 +379,7 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
 app.MapReferenceCatalogEndpoints();
+app.MapReferenceCatalogSavedFilterEndpoints();
 app.MapXlsxReferenceEndpoints();
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),

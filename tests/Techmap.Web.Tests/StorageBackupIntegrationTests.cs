@@ -398,6 +398,150 @@ public sealed class StorageBackupIntegrationTests
     }
 
     [Fact]
+    public async Task Backup_rejects_reference_search_projection_with_wrong_record_count()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        using var payload = JsonDocument.Parse("{\"name\":\"Контакт\"}");
+        var validation = ReferenceCatalogDraft.Create(
+            ReferenceCatalogSnapshotIdentity.New(),
+            "technology-database",
+            1,
+            new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero),
+            new ReferenceCatalogProvenanceInput("xlsx", "projection-v1", "source.xlsx"),
+            [new ReferenceCatalogRecordInput(
+                "terminal", "TER-001", payload.RootElement.Clone(), "БД.ТЕР!2")]).Validate();
+        var publication = new ReferenceCatalogPublicationService(
+            new SqliteReferenceCatalogSnapshotStore(storage)).Publish(
+            new ReferenceCatalogPublicationRequest(
+                validation, null, validation.Snapshot!.Sha256, []));
+        Assert.Equal(ReferenceCatalogPublicationStatus.Published, publication.Status);
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var corrupt = unitOfWork.CreateCommand(
+                "UPDATE reference_search_projections SET record_count = 99;");
+            corrupt.ExecuteNonQuery();
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.2.0-m2.03"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
+    [Fact]
+    public async Task Backup_rejects_reference_search_projection_with_missing_full_text_row()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        using var payload = JsonDocument.Parse("{\"name\":\"Контакт\"}");
+        var validation = ReferenceCatalogDraft.Create(
+            ReferenceCatalogSnapshotIdentity.New(), "technology-database", 1,
+            new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero),
+            new ReferenceCatalogProvenanceInput("xlsx", "fts-v1", "source.xlsx"),
+            [new ReferenceCatalogRecordInput(
+                "terminal", "TER-001", payload.RootElement.Clone(), "БД.ТЕР!2")]).Validate();
+        var publication = new ReferenceCatalogPublicationService(
+            new SqliteReferenceCatalogSnapshotStore(storage)).Publish(
+            new ReferenceCatalogPublicationRequest(
+                validation, null, validation.Snapshot!.Sha256, []));
+        Assert.Equal(ReferenceCatalogPublicationStatus.Published, publication.Status);
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var corrupt = unitOfWork.CreateCommand(
+                "DELETE FROM reference_search_fts_docsize;");
+            corrupt.ExecuteNonQuery();
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.2.0-m2.03"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
+    [Theory]
+    [InlineData("UPDATE reference_search_records SET normalized_source_key = 'WRONG';")]
+    [InlineData("UPDATE reference_search_records SET search_text = 'WRONG';")]
+    [InlineData("UPDATE reference_search_fields SET field_name = 'WRONG';")]
+    [InlineData("UPDATE reference_search_fields SET value_kind = 'number';")]
+    [InlineData("UPDATE reference_search_fields SET normalized_text = 'WRONG';")]
+    public async Task Backup_rejects_semantically_corrupt_reference_search_projection(string corruptionSql)
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        using var payload = JsonDocument.Parse("{\"name\":\"Контакт\"}");
+        var validation = ReferenceCatalogDraft.Create(
+            ReferenceCatalogSnapshotIdentity.New(), "technology-database", 1,
+            new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero),
+            new ReferenceCatalogProvenanceInput("xlsx", "semantic-v1", "source.xlsx"),
+            [new ReferenceCatalogRecordInput(
+                "terminal", "TER-001", payload.RootElement.Clone(), "БД.ТЕР!2")]).Validate();
+        var publication = new ReferenceCatalogPublicationService(
+            new SqliteReferenceCatalogSnapshotStore(storage)).Publish(
+            new ReferenceCatalogPublicationRequest(
+                validation, null, validation.Snapshot!.Sha256, []));
+        Assert.Equal(ReferenceCatalogPublicationStatus.Published, publication.Status);
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var corrupt = unitOfWork.CreateCommand(corruptionSql);
+            Assert.Equal(1, corrupt.ExecuteNonQuery());
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.2.0-m2.03"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
+    [Fact]
+    public async Task Backup_rejects_saved_filter_with_query_hash_mismatch()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        using var payload = JsonDocument.Parse("{\"name\":\"Контакт\"}");
+        var validation = ReferenceCatalogDraft.Create(
+            ReferenceCatalogSnapshotIdentity.New(), "technology-database", 1,
+            new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero),
+            new ReferenceCatalogProvenanceInput("xlsx", "saved-filter-v1", "source.xlsx"),
+            [new ReferenceCatalogRecordInput(
+                "terminal", "TER-001", payload.RootElement.Clone(), "БД.ТЕР!2")]).Validate();
+        var publication = new ReferenceCatalogPublicationService(
+            new SqliteReferenceCatalogSnapshotStore(storage)).Publish(
+            new ReferenceCatalogPublicationRequest(
+                validation, null, validation.Snapshot!.Sha256, []));
+        Assert.Equal(ReferenceCatalogPublicationStatus.Published, publication.Status);
+        new SqliteReferenceCatalogSavedFilterStore(storage, TimeProvider.System).Create(
+            "technology-database",
+            "Контакты",
+            new ReferenceCatalogSavedFilterQuery(
+                "конт", null, ["terminal"], [],
+                ReferenceCatalogFilterLogic.All, ReferenceCatalogSort.Relevance));
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var corrupt = unitOfWork.CreateCommand(
+                $"UPDATE reference_catalog_saved_filters SET query_sha256 = '{new string('0', 64)}';");
+            corrupt.ExecuteNonQuery();
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.2.0-m2.03"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
+    [Fact]
     public async Task Retention_keeps_newest_success_and_newest_preupdate_and_ignores_invalid_directory()
     {
         using var fixture = BackupFixture.Create();

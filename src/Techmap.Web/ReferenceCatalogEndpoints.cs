@@ -12,6 +12,63 @@ public static class ReferenceCatalogEndpoints
 
     public static void MapReferenceCatalogEndpoints(this WebApplication app)
     {
+        app.MapPost("/api/v1/reference-sources/{sourceId}/catalog-searches", async (
+            HttpContext context,
+            string sourceId,
+            ReferenceCatalogSearchRequest request,
+            IReferenceCatalogSearchStore searchStore,
+            ReferenceCatalogSearchCursorCodec cursorCodec) => await ExecuteAsync(async () =>
+        {
+            if (request.EntityTypes is null || request.Filters is null)
+                throw new ReferenceCatalogSearchException(
+                    "catalog_search_invalid", "Entity types and filters are required arrays.");
+            var query = new ReferenceCatalogSearchQuery(
+                request.Text,
+                request.ExactSourceKey,
+                request.EntityTypes,
+                request.Filters.Select(ParseFilter).ToArray(),
+                request.FilterLogic switch
+                {
+                    null or "all" => ReferenceCatalogFilterLogic.All,
+                    "any" => ReferenceCatalogFilterLogic.Any,
+                    _ => throw InvalidSearch("The filter logic must be all or any."),
+                },
+                request.Sort switch
+                {
+                    null or "relevance" => ReferenceCatalogSort.Relevance,
+                    "source-key-asc" => ReferenceCatalogSort.SourceKeyAscending,
+                    "source-key-desc" => ReferenceCatalogSort.SourceKeyDescending,
+                    "entity-type-asc" => ReferenceCatalogSort.EntityTypeAscending,
+                    _ => throw InvalidSearch("The catalog sort is unsupported."),
+                },
+                request.PageSize);
+            var querySha256 = ReferenceCatalogSearchCursorCodec.QuerySha256(request);
+            var decoded = request.Cursor is null
+                ? null
+                : cursorCodec.Decode(request.Cursor, sourceId, querySha256, request.PageSize);
+            var page = await searchStore.SearchAsync(
+                sourceId,
+                decoded is null ? null : new ReferenceCatalogSnapshotIdentity(decoded.SnapshotId),
+                query,
+                decoded?.Position,
+                context.RequestAborted);
+            if (decoded is not null && !string.Equals(
+                    decoded.SnapshotSha256, page.SnapshotSha256, StringComparison.Ordinal))
+                throw new ReferenceCatalogSearchCursorException(
+                    "catalog_cursor_invalid", "The catalog search cursor no longer matches its snapshot.");
+            var nextCursor = page.HasMore && page.NextPosition is not null
+                ? cursorCodec.Encode(
+                    sourceId, page.SnapshotId.Value, page.SnapshotSha256,
+                    querySha256, request.PageSize, page.NextPosition)
+                : null;
+            return Results.Ok(new ReferenceCatalogSearchResponse(
+                page.SnapshotId.Value,
+                page.SnapshotSha256,
+                page.Records.Select(item => new ReferenceCatalogSearchRecordResponse(
+                    item.RecordId, item.EntityType, item.SourceKey, item.Payload, item.SourceLocation)).ToArray(),
+                nextCursor));
+        }));
+
         app.MapGet("/api/v1/reference-sources/{sourceId}/active", (
             HttpContext context,
             string sourceId,
@@ -133,6 +190,56 @@ public static class ReferenceCatalogEndpoints
                     statusCode: StatusCodes.Status422UnprocessableEntity),
             };
         }));
+    }
+
+    private static ReferenceCatalogFilterCondition ParseFilter(ReferenceCatalogSearchFilterRequest? filter)
+    {
+        if (filter is null) throw InvalidSearch("A catalog filter condition is required.");
+        return new(filter.Field ?? "", filter.Operator switch
+        {
+            "eq" => ReferenceCatalogFilterOperator.TextEquals,
+            "prefix" => ReferenceCatalogFilterOperator.TextPrefix,
+            "exists" => ReferenceCatalogFilterOperator.Exists,
+            "missing" => ReferenceCatalogFilterOperator.Missing,
+            "null" => ReferenceCatalogFilterOperator.IsNull,
+            "blank" => ReferenceCatalogFilterOperator.IsBlank,
+            _ => throw InvalidSearch("A catalog filter operator is unsupported."),
+        }, filter.Value);
+    }
+
+    private static ReferenceCatalogSearchException InvalidSearch(string message) =>
+        new("catalog_search_invalid", message);
+
+    private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> operation)
+    {
+        try { return await operation().ConfigureAwait(false); }
+        catch (ReferenceCatalogSearchException error)
+        {
+            var status = error.Code switch
+            {
+                "catalog_active_snapshot_not_found" => StatusCodes.Status404NotFound,
+                "catalog_cursor_snapshot_changed" => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status400BadRequest,
+            };
+            return Results.Json(new ApiErrorResponse(error.Code, Message: error.Message), statusCode: status);
+        }
+        catch (ReferenceCatalogSearchCursorException error)
+        {
+            return Results.Json(new ApiErrorResponse(error.Code, Message: error.Message),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (ArgumentException error)
+        {
+            return Results.Json(new ApiErrorResponse("catalog_search_invalid", Message: error.Message),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (InvalidDataException)
+        {
+            return Results.Json(new ApiErrorResponse(
+                    "catalog_snapshot_corrupt",
+                    Message: "The searchable reference snapshot failed integrity validation."),
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static ReferenceCatalogValidationResult BuildValidation(

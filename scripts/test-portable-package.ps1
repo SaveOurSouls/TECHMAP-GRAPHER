@@ -50,7 +50,7 @@ public static class TechmapPortableNativeMethods
 $env:DOTNET_DISABLE_GUI_ERRORS = "1"
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $ArchivePath = if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
-    Join-Path $repositoryRoot "artifacts\m2-02\TECHMAP-GRAPHER-win-x64.zip"
+    Join-Path $repositoryRoot "artifacts\m2-03\TECHMAP-GRAPHER-win-x64.zip"
 } else {
     $ArchivePath
 }
@@ -152,7 +152,8 @@ function Test-HostMode {
         [Parameter(Mandatory = $true)][string]$DataRoot,
         [Parameter(Mandatory = $true)][string]$PathBase,
         [Parameter(Mandatory = $true)][string]$RunName,
-        $ExpectedProject
+        $ExpectedProject,
+        [string]$ExampleXlsxPath
     )
 
     $stdout = Join-Path $artifactsRoot "$RunName.stdout.log"
@@ -246,6 +247,43 @@ function Test-HostMode {
         $mutationHeaders = @{
             Origin = $origin
             "X-Techmap-CSRF" = $sessionJson.csrfNonce
+        }
+        if (![string]::IsNullOrWhiteSpace($ExampleXlsxPath)) {
+            if (!(Test-Path -LiteralPath $ExampleXlsxPath -PathType Leaf)) {
+                throw "The packaged example XLSX is missing: $ExampleXlsxPath"
+            }
+            $xlsxPreviewBody = @{
+                fileName = [IO.Path]::GetFileName($ExampleXlsxPath)
+                contentBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($ExampleXlsxPath))
+                sheetName = "Catalog"
+                headerRow = 1
+                firstDataRow = 2
+                entityType = "wire"
+                keyColumn = "RecordKey"
+                fields = $null
+            } | ConvertTo-Json -Compress
+            $xlsxPreviewResponse = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Method Post `
+                -Headers $mutationHeaders `
+                -ContentType "application/json" `
+                -Body $xlsxPreviewBody `
+                -Uri "$origin$routePrefix/api/v1/reference-sources/portable-example/xlsx-previews"
+            Assert-Equal ([int]$xlsxPreviewResponse.StatusCode) 200 `
+                "Packaged example XLSX preview request failed."
+            Assert-JsonContentType $xlsxPreviewResponse `
+                "Packaged example XLSX preview content type is incorrect."
+            $xlsxPreview = $xlsxPreviewResponse.Content | ConvertFrom-Json
+            Assert-Equal $xlsxPreview.canPublish $true `
+                "Packaged example XLSX preview is not publishable."
+            Assert-Equal ([int]$xlsxPreview.recordCount) 7 `
+                "Packaged example XLSX preview record count is incorrect."
+            Assert-Equal @($xlsxPreview.records).Count 7 `
+                "Packaged example XLSX preview did not return all records."
+            if (@($xlsxPreview.records.sourceKey) -notcontains "0007") {
+                throw "Packaged example XLSX preview did not preserve the text key '0007'."
+            }
         }
         $projectListResponse = Invoke-WebRequest `
             -UseBasicParsing `
@@ -514,6 +552,13 @@ if ($topLevel.Count -ne 1 -or
     throw "Archive must contain exactly one top-level TECHMAP-GRAPHER directory."
 }
 $packageRoot = $topLevel[0].FullName
+$exampleXlsxPath = Join-Path $packageRoot "Examples\reference-catalog.xlsx"
+$exampleReadmePath = Join-Path $packageRoot "Examples\README.txt"
+foreach ($examplePath in @($exampleXlsxPath, $exampleReadmePath)) {
+    if (!(Test-Path -LiteralPath $examplePath -PathType Leaf)) {
+        throw "Package does not contain the required example file: $examplePath"
+    }
+}
 $packageVersion = Get-Content -Raw -LiteralPath (Join-Path $packageRoot "VERSION.json") |
     ConvertFrom-Json
 $expectedSchemaVersion = [int]$packageVersion.storage.schema
@@ -1004,7 +1049,8 @@ $rootProject = Test-HostMode `
     -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Корневой режим") `
     -PathBase "/" `
-    -RunName "root"
+    -RunName "root" `
+    -ExampleXlsxPath $exampleXlsxPath
 Test-HostMode `
     -ExecutablePath $executables[0].FullName `
     -DataRoot (Join-Path $dataRootsParent "Корневой режим") `

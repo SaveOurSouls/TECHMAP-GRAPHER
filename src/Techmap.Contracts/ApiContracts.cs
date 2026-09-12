@@ -224,6 +224,76 @@ public sealed record ReferenceCatalogRecordListResponse(
     string SnapshotSha256,
     IReadOnlyList<ReferenceCatalogRecordResponse> Records);
 
+public sealed record ReferenceCatalogSearchFilterRequest(
+    string? Field,
+    string? Operator,
+    string? Value = null);
+
+public sealed record ReferenceCatalogSearchRequest(
+    string? Text,
+    string? ExactSourceKey,
+    IReadOnlyList<string>? EntityTypes,
+    IReadOnlyList<ReferenceCatalogSearchFilterRequest>? Filters,
+    string? FilterLogic,
+    string? Sort,
+    int PageSize = 40,
+    string? Cursor = null);
+
+public sealed record ReferenceCatalogSearchRecordResponse(
+    string RecordId,
+    string EntityType,
+    string SourceKey,
+    JsonElement Payload,
+    string? SourceLocation);
+
+public sealed record ReferenceCatalogSearchResponse(
+    Guid SnapshotId,
+    string SnapshotSha256,
+    IReadOnlyList<ReferenceCatalogSearchRecordResponse> Items,
+    string? NextCursor);
+
+public sealed record ReferenceCatalogSavedFilterQueryRequest(
+    string? Text,
+    string? ExactSourceKey,
+    IReadOnlyList<string>? EntityTypes,
+    IReadOnlyList<ReferenceCatalogSearchFilterRequest>? Filters,
+    string? FilterLogic,
+    string? Sort);
+
+public sealed record CreateReferenceCatalogSavedFilterRequest(
+    string? Name,
+    ReferenceCatalogSavedFilterQueryRequest? Query);
+
+public sealed record UpdateReferenceCatalogSavedFilterRequest(
+    string? Name,
+    ReferenceCatalogSavedFilterQueryRequest? Query);
+
+public sealed record ReferenceCatalogSavedFilterConditionResponse(
+    string Field,
+    string Operator,
+    string? Value);
+
+public sealed record ReferenceCatalogSavedFilterQueryResponse(
+    int Version,
+    string? Text,
+    string? ExactSourceKey,
+    IReadOnlyList<string> EntityTypes,
+    IReadOnlyList<ReferenceCatalogSavedFilterConditionResponse> Filters,
+    string FilterLogic,
+    string Sort);
+
+public sealed record ReferenceCatalogSavedFilterResponse(
+    Guid FilterId,
+    string SourceId,
+    string Name,
+    ReferenceCatalogSavedFilterQueryResponse Query,
+    string QuerySha256,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ReferenceCatalogSavedFilterListResponse(
+    IReadOnlyList<ReferenceCatalogSavedFilterResponse> Items);
+
 public sealed record XlsxSheetResponse(string Name, bool Hidden);
 
 public sealed record XlsxResolvedColumnResponse(

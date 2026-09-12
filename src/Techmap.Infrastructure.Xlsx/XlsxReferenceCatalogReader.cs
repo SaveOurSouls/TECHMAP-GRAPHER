@@ -118,7 +118,14 @@ public sealed class XlsxReferenceCatalogReader
     private static readonly string[] ForbiddenRelationshipTypeFragments =
     [
         "/vbaproject", "/control", "/oleobject", "/externallink",
-        "/connections", "/querytable", "/package",
+        "/connections", "/querytable", "/package", "/attachedtemplate",
+        "/externaldata", "/dataconnection", "/linkeddatatype", "/webextension",
+        "/altchunk",
+    ];
+    private static readonly string[] WebHyperlinkRelationshipTypes =
+    [
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink",
     ];
 
     public static string CreateVersionFingerprint(
@@ -810,16 +817,29 @@ public sealed class XlsxReferenceCatalogReader
         while (reader.Read())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (reader.NodeType == XmlNodeType.Element && reader.Name.EndsWith("Relationship", StringComparison.Ordinal) &&
-                string.Equals(reader.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
-                throw new XlsxImportException("xlsx_external_relationship_not_allowed", "Внешние связи XLSX запрещены.", entry.FullName);
-            if (reader.NodeType == XmlNodeType.Element && reader.Name.EndsWith("Relationship", StringComparison.Ordinal) &&
-                reader.GetAttribute("Type") is { } relationshipType &&
+            if (reader.NodeType != XmlNodeType.Element ||
+                !reader.Name.EndsWith("Relationship", StringComparison.Ordinal)) continue;
+            var relationshipType = reader.GetAttribute("Type");
+            if (string.Equals(reader.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase) &&
+                !IsSafeWebHyperlink(relationshipType, reader.GetAttribute("Target")))
+                throw new XlsxImportException(
+                    "xlsx_external_relationship_not_allowed",
+                    "XLSX содержит запрещённую внешнюю связь. Обычные веб-гиперссылки разрешены.",
+                    entry.FullName);
+            if (relationshipType is not null &&
                 ForbiddenRelationshipTypeFragments.Any(fragment =>
                     relationshipType.EndsWith(fragment, StringComparison.OrdinalIgnoreCase)))
                 throw new XlsxImportException("xlsx_active_content_not_allowed", "XLSX содержит запрещённый тип связи.", entry.FullName);
         }
     }
+
+    private static bool IsSafeWebHyperlink(string? relationshipType, string? target) =>
+        relationshipType is not null &&
+        WebHyperlinkRelationshipTypes.Contains(relationshipType, StringComparer.Ordinal) &&
+        target is { Length: > 0 and <= 8_192 } &&
+        Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
+        (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
     private static XmlReader SecureXmlReader(Stream stream) => XmlReader.Create(stream, new XmlReaderSettings
     {

@@ -398,11 +398,29 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           <span className="selected-file" title={file?.name}>{fileSelectionLabel(file)}</span>
         </div>
 
+        <div className="xlsx-format-guide" role="note" aria-label="Какой XLSX выбрать">
+          <strong>Какой файл нужен</strong>
+          <p>
+            Выберите таблицу <code>.xlsx</code>: первая указанная строка содержит заголовки,
+            каждая следующая — одну запись. Нужен столбец с уникальным текстовым артикулом
+            или кодом, например <code>RecordKey</code>. Остальные столбцы импортируются как характеристики.
+          </p>
+          <p>
+            Сейчас это универсальный импорт одного листа за раз. Готовые профили для БД.ОП,
+            БД.ОБ, БД.ТЕР, БД.КОАКС и СПР.КАБ будут добавлены отдельно.
+          </p>
+          <p>
+            Для проверки этой сборки выберите <code>Examples/reference-catalog.xlsx</code>
+            из распакованного архива. Рабочая книга «База данных. Технология.xlsx»
+            требует отдельных профилей и пока целиком не импортируется.
+          </p>
+        </div>
+
         <div className="reference-form-grid">
           <label className="file-picker wide-reference-field">
             <span>Файл XLSX</span>
             <span className="file-picker-control"><strong>Выбрать XLSX</strong><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={busy !== null} /></span>
-            <small>До 25 МиБ. Макросы, внешние связи и формулы в импортируемых полях запрещены.</small>
+            <small>До 25 МиБ. Обычные ссылки на сайты разрешены; внешние книги, подключения к данным, макросы и формулы в импортируемых полях запрещены.</small>
           </label>
           <label>
             Идентификатор источника
@@ -430,6 +448,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           <label>
             Ключевой столбец
             <input placeholder="Точное имя заголовка" value={settings.keyColumn} onChange={(event) => changeSetting({ keyColumn: event.target.value })} disabled={busy !== null} required />
+            <small>Точное имя столбца с уникальным артикулом или кодом. Значения должны храниться как текст.</small>
           </label>
         </div>
 

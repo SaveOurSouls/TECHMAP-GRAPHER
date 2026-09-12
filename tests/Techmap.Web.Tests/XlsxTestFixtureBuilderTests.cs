@@ -69,6 +69,25 @@ public sealed class XlsxTestFixtureBuilderTests
     }
 
     [Fact]
+    public void Worksheet_hyperlink_fixture_links_cell_through_external_relationship()
+    {
+        using var archive = Open(new XlsxTestFixtureBuilder()
+            .AddRow("TER-001", "Terminal 1", "0", "mm")
+            .WithWorksheetHyperlink("B2", new Uri("https://example.test/terminals/TER-001"))
+            .Build());
+        var worksheet = ReadXml(archive, "xl/worksheets/sheet1.xml");
+        var relationships = ReadXml(archive, "xl/worksheets/_rels/sheet1.xml.rels");
+        var hyperlink = Assert.Single(worksheet.Descendants(Spreadsheet + "hyperlink"));
+        var relationship = Assert.Single(relationships.Descendants(PackageRelationships + "Relationship"));
+
+        Assert.Equal("B2", (string?)hyperlink.Attribute("ref"));
+        Assert.Equal("rId1", (string?)hyperlink.Attributes().Single(attribute => attribute.Name.LocalName == "id"));
+        Assert.Equal("External", (string?)relationship.Attribute("TargetMode"));
+        Assert.Equal("https://example.test/terminals/TER-001", (string?)relationship.Attribute("Target"));
+        Assert.EndsWith("/hyperlink", (string?)relationship.Attribute("Type"));
+    }
+
+    [Fact]
     public void Corrupt_zip_fixture_cannot_be_opened_as_an_archive()
     {
         using var stream = new MemoryStream(XlsxTestFixtureBuilder.CorruptZip());

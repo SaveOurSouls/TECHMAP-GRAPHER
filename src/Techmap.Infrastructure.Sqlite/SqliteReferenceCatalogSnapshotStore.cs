@@ -155,6 +155,7 @@ public sealed class SqliteReferenceCatalogSnapshotStore(SqliteStorage storage)
                 InsertDiagnostics(unitOfWork, candidate);
                 AdvanceLifecycle(unitOfWork, candidate, "validated", now);
                 AdvanceLifecycle(unitOfWork, candidate, "published", now);
+                ReferenceCatalogSearchProjection.Replace(unitOfWork, sourceDatabaseId, candidate);
                 SwitchHead(unitOfWork, sourceDatabaseId, candidate.SnapshotId);
 
                 return new ReferenceCatalogStorePublishResult(

@@ -20,6 +20,7 @@ internal sealed class XlsxTestFixtureBuilder
     private readonly Dictionary<string, FormulaCell> formulas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ScalarCell> scalarCells = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> sharedStrings = [];
+    private readonly List<WorksheetHyperlink> worksheetHyperlinks = [];
     private string worksheetName = "Catalog";
     private Uri? externalReference;
 
@@ -182,6 +183,23 @@ internal sealed class XlsxTestFixtureBuilder
         return this;
     }
 
+    public XlsxTestFixtureBuilder WithWorksheetHyperlink(
+        string cellReference,
+        Uri target,
+        string relationshipType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink")
+    {
+        var normalizedReference = NormalizeCellReference(cellReference);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(relationshipType);
+        if (!target.IsAbsoluteUri)
+        {
+            throw new ArgumentException("A worksheet hyperlink target must be an absolute URI.", nameof(target));
+        }
+
+        worksheetHyperlinks.Add(new WorksheetHyperlink(normalizedReference, target, relationshipType));
+        return this;
+    }
+
     public string WriteTo(string directory, string fileName = "fixture.xlsx")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
@@ -207,6 +225,11 @@ internal sealed class XlsxTestFixtureBuilder
             AddXml(archive, "xl/workbook.xml", Workbook());
             AddXml(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships());
             AddXml(archive, "xl/worksheets/sheet1.xml", Worksheet());
+
+            if (worksheetHyperlinks.Count > 0)
+            {
+                AddXml(archive, "xl/worksheets/_rels/sheet1.xml.rels", WorksheetRelationships());
+            }
 
             if (sharedStrings.Count > 0)
             {
@@ -353,7 +376,32 @@ internal sealed class XlsxTestFixtureBuilder
                 row.OrderBy(cell => cell.Reference.Column).Select(cell => cell.Cell)));
         }
 
-        return XmlDocument(new XElement(spreadsheet + "worksheet", sheetData));
+        XNamespace relationships = OfficeRelationshipsNamespace;
+        var root = new XElement(spreadsheet + "worksheet",
+            new XAttribute(XNamespace.Xmlns + "r", relationships),
+            sheetData);
+        if (worksheetHyperlinks.Count > 0)
+        {
+            root.Add(new XElement(spreadsheet + "hyperlinks",
+                worksheetHyperlinks.Select((hyperlink, index) =>
+                    new XElement(spreadsheet + "hyperlink",
+                        new XAttribute("ref", hyperlink.CellReference),
+                        new XAttribute(relationships + "id", $"rId{index + 1}")))));
+        }
+
+        return XmlDocument(root);
+    }
+
+    private XDocument WorksheetRelationships()
+    {
+        XNamespace relationships = PackageRelationshipsNamespace;
+        return XmlDocument(new XElement(relationships + "Relationships",
+            worksheetHyperlinks.Select((hyperlink, index) =>
+                new XElement(relationships + "Relationship",
+                    new XAttribute("Id", $"rId{index + 1}"),
+                    new XAttribute("Type", hyperlink.RelationshipType),
+                    new XAttribute("Target", hyperlink.Target.AbsoluteUri),
+                    new XAttribute("TargetMode", "External")))));
     }
 
     private static void AddTextRow(
@@ -507,5 +555,6 @@ internal sealed class XlsxTestFixtureBuilder
 
     private sealed record FormulaCell(string Expression, string CachedValue, bool CachedValueIsText);
     private sealed record ScalarCell(ScalarCellKind Kind, string Value);
+    private sealed record WorksheetHyperlink(string CellReference, Uri Target, string RelationshipType);
     private enum ScalarCellKind { Number, Boolean, SharedString }
 }

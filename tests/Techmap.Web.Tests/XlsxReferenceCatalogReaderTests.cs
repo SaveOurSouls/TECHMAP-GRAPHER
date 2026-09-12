@@ -199,6 +199,62 @@ public sealed class XlsxReferenceCatalogReaderTests
         Assert.Equal("xlsx_invalid", corrupt.Code);
     }
 
+    [Theory]
+    [InlineData("http://example.test/catalog/TER-001")]
+    [InlineData("https://example.test/catalog/TER-001")]
+    public async Task Web_hyperlink_relationship_is_accepted(string target)
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .AddRow("TER-001", "Terminal 1", "0", "mm")
+            .WithWorksheetHyperlink("B2", new Uri(target))
+            .Build();
+
+        var preview = await PreviewAsync(bytes);
+
+        Assert.True(preview.Validation.IsValid);
+        Assert.Equal("TER-001", Assert.Single(preview.Records).SourceKey);
+    }
+
+    [Fact]
+    public async Task File_hyperlink_relationship_is_rejected()
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .AddRow("TER-001", "Terminal 1", "0", "mm")
+            .WithWorksheetHyperlink("B2", new Uri("file:///C:/fixtures/terminal.html"))
+            .Build();
+
+        var error = await Assert.ThrowsAsync<XlsxImportException>(() => PreviewAsync(bytes));
+
+        Assert.Equal("xlsx_external_relationship_not_allowed", error.Code);
+        Assert.Equal("xl/worksheets/_rels/sheet1.xml.rels", error.SourceLocation);
+    }
+
+    [Fact]
+    public async Task Spoofed_relationship_type_ending_in_hyperlink_is_rejected()
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .AddRow("TER-001", "Terminal 1", "0", "mm")
+            .WithWorksheetHyperlink(
+                "B2",
+                new Uri("https://example.test/catalog/TER-001"),
+                "https://attacker.example/relationships/hyperlink")
+            .Build();
+
+        var error = await Assert.ThrowsAsync<XlsxImportException>(() => PreviewAsync(bytes));
+
+        Assert.Equal("xlsx_external_relationship_not_allowed", error.Code);
+        Assert.Equal("xl/worksheets/_rels/sheet1.xml.rels", error.SourceLocation);
+    }
+
+    [Fact]
+    public async Task External_workbook_relationship_is_rejected()
+    {
+        var error = await Assert.ThrowsAsync<XlsxImportException>(() =>
+            PreviewAsync(XlsxTestFixtureBuilder.ExternalReferenceWorkbook()));
+
+        Assert.Equal("xlsx_active_content_not_allowed", error.Code);
+    }
+
     private static XlsxCatalogMapping DefaultMapping() => new(
         "Catalog",
         HeaderRow: 1,

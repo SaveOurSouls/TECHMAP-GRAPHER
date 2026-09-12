@@ -550,6 +550,197 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                     $"Reference snapshot '{header.SnapshotId}' has a corrupt canonical envelope.");
             }
         }
+
+        if (HasTable(connection, "reference_search_projections"))
+        {
+            ValidateReferenceSearchProjection(connection);
+        }
+    }
+
+    private static void ValidateReferenceSearchProjection(SqliteConnection connection)
+    {
+        using (var activeProjection = connection.CreateCommand())
+        {
+            activeProjection.CommandText =
+                """
+                SELECT
+                    (SELECT COUNT(*)
+                     FROM reference_source_heads h
+                     LEFT JOIN reference_search_projections p
+                       ON p.source_id = h.source_id AND p.snapshot_id = h.snapshot_id
+                     WHERE p.source_id IS NULL)
+                    +
+                    (SELECT COUNT(*)
+                     FROM reference_search_projections p
+                     LEFT JOIN reference_source_heads h
+                       ON h.source_id = p.source_id AND h.snapshot_id = p.snapshot_id
+                     WHERE h.source_id IS NULL);
+                """;
+            if (Convert.ToInt32(activeProjection.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            {
+                throw new InvalidDataException(
+                    "The SQLite backup has a search projection that does not match the active reference snapshot.");
+            }
+        }
+
+        using (var recordCounts = connection.CreateCommand())
+        {
+            recordCounts.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM reference_search_projections p
+                WHERE p.record_count <> (
+                          SELECT COUNT(*)
+                          FROM reference_search_records r
+                          WHERE r.source_id = p.source_id AND r.snapshot_id = p.snapshot_id)
+                   OR p.record_count <> (
+                          SELECT COUNT(*)
+                          FROM reference_snapshot_records d
+                          WHERE d.snapshot_id = p.snapshot_id);
+                """;
+            if (Convert.ToInt32(recordCounts.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            {
+                throw new InvalidDataException(
+                    "The SQLite backup has an incomplete reference search projection.");
+            }
+        }
+
+        var expectedFields = new Dictionary<long, ProjectionFieldExpectation>();
+        using (var recordValues = connection.CreateCommand())
+        {
+            recordValues.CommandText =
+                """
+                SELECT r.search_id, r.source_id, r.entity_type, r.source_record_key,
+                       r.normalized_source_key, r.search_text, d.canonical_payload
+                FROM reference_search_records r
+                JOIN reference_snapshot_records d
+                  ON d.snapshot_id = r.snapshot_id
+                 AND d.entity_type = r.entity_type
+                 AND d.source_record_key = r.source_record_key
+                ORDER BY r.search_id;
+                """;
+            using var reader = recordValues.ExecuteReader();
+            while (reader.Read())
+            {
+                var searchId = reader.GetInt64(0);
+                var entityType = reader.GetString(2);
+                var sourceKey = reader.GetString(3);
+                var expected = ReferenceCatalogSearchProjection.BuildExpected(
+                    entityType, sourceKey, reader.GetString(6));
+                if (!string.Equals(reader.GetString(4), expected.NormalizedSourceKey, StringComparison.Ordinal) ||
+                    !string.Equals(reader.GetString(5), expected.SearchText, StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException(
+                        "The SQLite backup has corrupt normalized reference search records.");
+                }
+                expectedFields.Add(searchId, new ProjectionFieldExpectation(
+                    reader.GetString(1), entityType, sourceKey, expected.Fields));
+            }
+        }
+
+        var observedFieldCounts = expectedFields.Keys.ToDictionary(searchId => searchId, _ => 0);
+        using (var fields = connection.CreateCommand())
+        {
+            fields.CommandText =
+                """
+                SELECT search_id, field_ordinal, source_id, entity_type, source_record_key,
+                       source_field_name, field_name, value_kind, normalized_text
+                FROM reference_search_fields
+                ORDER BY search_id, field_ordinal;
+                """;
+            using var reader = fields.ExecuteReader();
+            while (reader.Read())
+            {
+                var searchId = reader.GetInt64(0);
+                if (!expectedFields.TryGetValue(searchId, out var record))
+                    throw new InvalidDataException("The SQLite backup has an orphaned reference search field.");
+                var index = observedFieldCounts[searchId];
+                if (index >= record.Fields.Count)
+                    throw new InvalidDataException("The SQLite backup has extra reference search fields.");
+                var expected = record.Fields[index];
+                var fieldName = reader.IsDBNull(6) ? null : reader.GetString(6);
+                var normalizedText = reader.IsDBNull(8) ? null : reader.GetString(8);
+                if (reader.GetInt32(1) != expected.Ordinal ||
+                    !string.Equals(reader.GetString(2), record.SourceDatabaseId, StringComparison.Ordinal) ||
+                    !string.Equals(reader.GetString(3), record.EntityType, StringComparison.Ordinal) ||
+                    !string.Equals(reader.GetString(4), record.SourceKey, StringComparison.Ordinal) ||
+                    !string.Equals(reader.GetString(5), expected.SourceFieldName, StringComparison.Ordinal) ||
+                    !string.Equals(fieldName, expected.FieldName, StringComparison.Ordinal) ||
+                    !string.Equals(reader.GetString(7), expected.ValueKind, StringComparison.Ordinal) ||
+                    !string.Equals(normalizedText, expected.NormalizedText, StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException(
+                        "The SQLite backup has corrupt normalized reference search fields.");
+                }
+                observedFieldCounts[searchId] = index + 1;
+            }
+        }
+        if (expectedFields.Any(item => observedFieldCounts[item.Key] != item.Value.Fields.Count))
+            throw new InvalidDataException("The SQLite backup has incomplete reference search fields.");
+
+        using var ftsRows = connection.CreateCommand();
+        ftsRows.CommandText =
+            """
+            SELECT
+                (SELECT COUNT(*) FROM reference_search_records)
+                -
+                (SELECT COUNT(*) FROM reference_search_fts_docsize);
+            """;
+        if (Convert.ToInt32(ftsRows.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+        {
+            throw new InvalidDataException(
+                "The SQLite backup has an incomplete full-text reference search index.");
+        }
+
+        ValidateReferenceSavedFilters(connection);
+    }
+
+    private static void ValidateReferenceSavedFilters(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT filter_id, name, normalized_name, query_version, query_json, query_sha256,
+                   created_utc, updated_utc
+            FROM reference_catalog_saved_filters
+            ORDER BY filter_id;
+            """;
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            try
+            {
+                if (!Guid.TryParseExact(reader.GetString(0), "D", out var filterId) || filterId == Guid.Empty)
+                    throw new InvalidDataException("A saved catalog filter has an invalid identity.");
+                var name = reader.GetString(1);
+                var normalized = ReferenceCatalogSavedFilterCanonicalizer.NormalizeName(name);
+                if (!string.Equals(normalized.DisplayName, name, StringComparison.Ordinal) ||
+                    !string.Equals(normalized.NormalizedName, reader.GetString(2), StringComparison.Ordinal) ||
+                    reader.GetInt32(3) != ReferenceCatalogSavedFilterCanonicalizer.CurrentVersion)
+                    throw new InvalidDataException("A saved catalog filter has invalid normalized metadata.");
+                _ = ReferenceCatalogSavedFilterCanonicalizer.ReadCanonical(
+                    reader.GetString(4), reader.GetString(5));
+                var createdUtc = ParseCanonicalUtc(reader.GetString(6));
+                var updatedUtc = ParseCanonicalUtc(reader.GetString(7));
+                if (updatedUtc < createdUtc)
+                    throw new InvalidDataException("A saved catalog filter has invalid timestamps.");
+            }
+            catch (Exception error) when (
+                error is ArgumentException or FormatException or ReferenceCatalogSavedFilterException)
+            {
+                throw new InvalidDataException("The SQLite backup has a corrupt saved catalog filter.", error);
+            }
+        }
+    }
+
+    private static DateTimeOffset ParseCanonicalUtc(string value)
+    {
+        var parsed = DateTimeOffset.ParseExact(
+            value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        if (parsed.Offset != TimeSpan.Zero ||
+            !string.Equals(parsed.ToString("O", CultureInfo.InvariantCulture), value, StringComparison.Ordinal))
+            throw new FormatException("The saved catalog filter timestamp is not canonical UTC.");
+        return parsed;
     }
 
     private static IReadOnlyList<ReferenceCatalogRecordInput> ReadReferenceRecords(
@@ -1311,6 +1502,12 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         int SchemaVersion,
         IReadOnlyList<StorageBackupProjectRevision> ProjectRevisions,
         IReadOnlyList<SnapshotBlob> Blobs);
+
+    private sealed record ProjectionFieldExpectation(
+        string SourceDatabaseId,
+        string EntityType,
+        string SourceKey,
+        IReadOnlyList<ReferenceCatalogSearchProjection.ExpectedField> Fields);
 
     private sealed record BackupManifest(
         int ManifestFormat,

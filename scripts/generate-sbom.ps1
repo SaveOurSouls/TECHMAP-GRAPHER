@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 if ([string]::IsNullOrWhiteSpace($PackageRoot)) {
-    $PackageRoot = Join-Path $repo "artifacts\m2-02\TECHMAP-GRAPHER"
+    $PackageRoot = Join-Path $repo "artifacts\m2-03\TECHMAP-GRAPHER"
 }
 if (-not (Test-Path -LiteralPath $PackageRoot -PathType Container)) { throw "Package root does not exist: $PackageRoot" }
 $package = (Resolve-Path -LiteralPath $PackageRoot).Path

@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-02"
+$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-03"
 $clientRoot = Join-Path $repositoryRoot "src\Techmap.Client"
 $webRoot = Join-Path $repositoryRoot "src\Techmap.Web"
 $staticRoot = Join-Path $webRoot "wwwroot"
@@ -78,6 +78,11 @@ Remove-Item -LiteralPath (Join-Path $packageRoot "aspnetcorev2_inprocess.dll") -
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\README-START.html") -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "THIRD-PARTY-NOTICES.md") -Destination $packageRoot
+$examplesRoot = Join-Path $packageRoot "Examples"
+New-Item -ItemType Directory -Force -Path $examplesRoot | Out-Null
+Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\Examples\README.txt") -Destination $examplesRoot
+& (Join-Path $repositoryRoot "scripts\generate-reference-example.ps1") `
+    -OutputPath (Join-Path $examplesRoot "reference-catalog.xlsx") | Out-Host
 
 & (Join-Path $repositoryRoot "scripts\generate-sbom.ps1") `
     -RepositoryRoot $repositoryRoot `

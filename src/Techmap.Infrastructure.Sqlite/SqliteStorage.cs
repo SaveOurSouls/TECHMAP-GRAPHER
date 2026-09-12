@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -525,6 +525,103 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         END;
         """;
 
+    private const string ReferenceSearchMigrationId = "M2-03-reference-catalog-search";
+    private const string ReferenceSearchSchemaSql =
+        """
+        CREATE TABLE reference_search_projections (
+            source_id TEXT NOT NULL PRIMARY KEY
+                REFERENCES reference_sources(source_id) ON DELETE RESTRICT,
+            snapshot_id TEXT NOT NULL UNIQUE,
+            projection_version INTEGER NOT NULL CHECK (projection_version = 1),
+            record_count INTEGER NOT NULL CHECK (record_count >= 0),
+            UNIQUE (source_id, snapshot_id),
+            FOREIGN KEY (source_id, snapshot_id)
+                REFERENCES reference_snapshots(source_id, snapshot_id) ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE TABLE reference_search_records (
+            search_id INTEGER NOT NULL PRIMARY KEY,
+            source_id TEXT NOT NULL,
+            snapshot_id TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            source_record_key TEXT NOT NULL,
+            normalized_source_key TEXT NOT NULL CHECK (length(normalized_source_key) BETWEEN 1 AND 512),
+            search_text TEXT NOT NULL CHECK (length(search_text) BETWEEN 1 AND 1049600),
+            UNIQUE (source_id, entity_type, source_record_key),
+            FOREIGN KEY (source_id, snapshot_id)
+                REFERENCES reference_search_projections(source_id, snapshot_id) ON DELETE CASCADE,
+            FOREIGN KEY (snapshot_id, entity_type, source_record_key)
+                REFERENCES reference_snapshot_records(snapshot_id, entity_type, source_record_key)
+                ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE INDEX ix_reference_search_records_key
+            ON reference_search_records
+                (source_id, normalized_source_key, source_record_key, entity_type);
+        CREATE INDEX ix_reference_search_records_type
+            ON reference_search_records
+                (source_id, entity_type, normalized_source_key, source_record_key);
+
+        CREATE VIRTUAL TABLE reference_search_fts USING fts5(
+            search_text,
+            content='reference_search_records',
+            content_rowid='search_id',
+            tokenize='unicode61 remove_diacritics 0',
+            prefix='2 3 4'
+        );
+
+        CREATE TRIGGER reference_search_records_ai AFTER INSERT ON reference_search_records BEGIN
+            INSERT INTO reference_search_fts(rowid, search_text)
+            VALUES (new.search_id, new.search_text);
+        END;
+        CREATE TRIGGER reference_search_records_ad AFTER DELETE ON reference_search_records BEGIN
+            INSERT INTO reference_search_fts(reference_search_fts, rowid, search_text)
+            VALUES ('delete', old.search_id, old.search_text);
+        END;
+        CREATE TRIGGER reference_search_records_au AFTER UPDATE ON reference_search_records BEGIN
+            INSERT INTO reference_search_fts(reference_search_fts, rowid, search_text)
+            VALUES ('delete', old.search_id, old.search_text);
+            INSERT INTO reference_search_fts(rowid, search_text)
+            VALUES (new.search_id, new.search_text);
+        END;
+
+        CREATE TABLE reference_search_fields (
+            search_id INTEGER NOT NULL
+                REFERENCES reference_search_records(search_id) ON DELETE CASCADE,
+            field_ordinal INTEGER NOT NULL CHECK (field_ordinal >= 0),
+            source_id TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            source_record_key TEXT NOT NULL,
+            source_field_name TEXT NOT NULL CHECK (length(source_field_name) >= 1),
+            field_name TEXT NULL CHECK (field_name IS NULL OR length(field_name) BETWEEN 1 AND 256),
+            value_kind TEXT NOT NULL CHECK (value_kind IN ('text', 'number', 'boolean', 'null', 'blank')),
+            normalized_text TEXT NULL CHECK (normalized_text IS NULL OR length(normalized_text) <= 32767),
+            PRIMARY KEY (search_id, field_ordinal)
+        ) STRICT;
+
+        CREATE INDEX ix_reference_search_fields_text
+            ON reference_search_fields
+                (source_id, field_name, normalized_text, entity_type, source_record_key);
+
+        CREATE TABLE reference_catalog_saved_filters (
+            filter_id TEXT NOT NULL PRIMARY KEY CHECK (length(filter_id) = 36),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 128),
+            normalized_name TEXT NOT NULL CHECK (length(normalized_name) BETWEEN 1 AND 128),
+            source_id TEXT NOT NULL
+                REFERENCES reference_sources(source_id) ON DELETE CASCADE,
+            query_version INTEGER NOT NULL CHECK (query_version = 1),
+            query_json TEXT NOT NULL CHECK (length(query_json) BETWEEN 2 AND 16384),
+            query_sha256 TEXT NOT NULL
+                CHECK (length(query_sha256) = 64)
+                CHECK (query_sha256 = lower(query_sha256))
+                CHECK (query_sha256 NOT GLOB '*[^0-9a-f]*'),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            updated_utc TEXT NOT NULL CHECK (length(updated_utc) BETWEEN 1 AND 64),
+            UNIQUE (source_id, normalized_name)
+        ) STRICT;
+
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -652,6 +749,42 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             catch
             {
                 TryRollback(transaction);
+                throw;
+            }
+            finally
+            {
+                unitOfWork.Complete();
+            }
+        }
+        finally
+        {
+            transactionScope.Value = false;
+        }
+    }
+
+    public async Task<T> ExecuteReadAsync<T>(
+        Func<SqliteUnitOfWork, CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ThrowIfDisposed();
+        ThrowIfNestedTransaction();
+        transactionScope.Value = true;
+        try
+        {
+            await using var connection = await OpenConfiguredConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = connection.BeginTransaction(deferred: true);
+            await using var context = CreateDbContext(connection, transaction);
+            var unitOfWork = new SqliteUnitOfWork(connection, transaction, context);
+            try
+            {
+                var result = await operation(unitOfWork, cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+            catch
+            {
+                await TryRollbackAsync(transaction).ConfigureAwait(false);
                 throw;
             }
             finally
@@ -894,6 +1027,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 5, MigrationId: ProjectImportMigrationId, Sql: ProjectImportSchemaSql),
             (Version: 6, MigrationId: HarnessWorkspaceMigrationId, Sql: HarnessWorkspaceSchemaSql),
             (Version: 7, MigrationId: ReferenceSnapshotMigrationId, Sql: ReferenceSnapshotSchemaSql),
+            (Version: 8, MigrationId: ReferenceSearchMigrationId, Sql: ReferenceSearchSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -976,6 +1110,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ReferenceSnapshotSchemaSql);
         }
 
+        if (schemaVersion >= 8)
+        {
+            ExecuteSchemaSql(expected, ReferenceSearchSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1054,6 +1193,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ReferenceSnapshotMigrationId,
                 Sql: ReferenceSnapshotSchemaSql,
                 Description: "Versioned external reference snapshots"),
+            7 => (
+                Version: 8,
+                MigrationId: ReferenceSearchMigrationId,
+                Sql: ReferenceSearchSchemaSql,
+                Description: "Indexed reference catalog search"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1072,6 +1216,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 migrate.Transaction = transaction;
                 migrate.CommandText = migration.Sql;
                 migrate.ExecuteNonQuery();
+            }
+
+            if (migration.Version == 8)
+            {
+                ReferenceCatalogSearchProjection.Backfill(connection, transaction);
             }
 
             using (var appendHistory = connection.CreateCommand())
@@ -1125,7 +1274,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7))
             {
                 return false;
             }

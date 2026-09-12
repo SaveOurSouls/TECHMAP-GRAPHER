@@ -40,7 +40,7 @@ public sealed class SqliteStorageIntegrationTests
                 """
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version IN (6, 7);
+                DELETE FROM schema_history WHERE version IN (6, 7, 8);
                 PRAGMA user_version = 5;
                 """;
             command.ExecuteNonQuery();
@@ -98,7 +98,7 @@ public sealed class SqliteStorageIntegrationTests
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
         var history = storage.ExecuteRead(ReadSchemaHistory);
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7], history.Select(row => row.Version));
+        Assert.Equal(Enumerable.Range(1, SqliteStorage.CurrentSchemaVersion), history.Select(row => row.Version));
         Assert.Equal(
             [
                 "M1-03-initial-storage",
@@ -108,6 +108,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M1-14-project-import-provenance",
                 "M1-04R-harness-workspaces",
                 "M2-01-versioned-reference-snapshots",
+                "M2-03-reference-catalog-search",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -117,7 +118,7 @@ public sealed class SqliteStorageIntegrationTests
         {
             Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
             Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
-            Assert.Matches("^0\\.(1|2)\\.0-", row.AppVersion);
+            Assert.Matches("^0\\.(1|2)\\.[0-9]+-", row.AppVersion);
             Assert.True(DateTimeOffset.TryParseExact(
                 row.AppliedUtc,
                 "O",
@@ -181,7 +182,7 @@ public sealed class SqliteStorageIntegrationTests
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(
-            [1, 2, 3, 4, 5, 6, 7],
+            Enumerable.Range(1, SqliteStorage.CurrentSchemaVersion),
             reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
     }
 
@@ -222,7 +223,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7);
+                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7, 8);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -254,6 +255,8 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
         Assert.Equal(7, history[6].Version);
         Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
+        Assert.Equal(8, history[7].Version);
+        Assert.Equal("M2-03-reference-catalog-search", history[7].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -295,7 +298,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
-                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7);
+                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7, 8);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -323,6 +326,8 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
         Assert.Equal(7, history[6].Version);
         Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
+        Assert.Equal(8, history[7].Version);
+        Assert.Equal("M2-03-reference-catalog-search", history[7].MigrationId);
         Assert.Equal(
             3,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -400,7 +405,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
-                DELETE FROM schema_history WHERE version IN (4, 5, 6, 7);
+                DELETE FROM schema_history WHERE version IN (4, 5, 6, 7, 8);
                 PRAGMA user_version = 3;
                 """;
             command.ExecuteNonQuery();
@@ -426,7 +431,8 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         Assert.True(migration.Migrated);
         Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7], migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
+        Assert.Equal(Enumerable.Range(1, SqliteStorage.CurrentSchemaVersion),
+            migrated.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
         var catalog = new SqliteProjectCatalog(migrated);
         var project = catalog.GetProject(new Techmap.Domain.ProjectIdentity(projectId));
         Assert.Equal(0, project.Revision);
@@ -466,7 +472,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE project_imports;
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version IN (5, 6, 7);
+                DELETE FROM schema_history WHERE version IN (5, 6, 7, 8);
                 PRAGMA user_version = 4;
                 """;
             command.ExecuteNonQuery();
@@ -489,6 +495,8 @@ public sealed class SqliteStorageIntegrationTests
         Assert.Equal("M1-04R-harness-workspaces", history[5].MigrationId);
         Assert.Equal(7, history[6].Version);
         Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
+        Assert.Equal(8, history[7].Version);
+        Assert.Equal("M2-03-reference-catalog-search", history[7].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
@@ -514,7 +522,7 @@ public sealed class SqliteStorageIntegrationTests
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
-                DELETE FROM schema_history WHERE version = 7;
+                DELETE FROM schema_history WHERE version IN (7, 8);
                 PRAGMA user_version = 6;
                 """;
             command.ExecuteNonQuery();
@@ -531,14 +539,25 @@ public sealed class SqliteStorageIntegrationTests
 
         Assert.True(migration.Migrated);
         Assert.Equal(6, migration.SourceSchemaVersion);
-        Assert.Equal(7, migration.TargetSchemaVersion);
+        Assert.Equal(SqliteStorage.CurrentSchemaVersion, migration.TargetSchemaVersion);
         Assert.NotEqual(databasePath, migrated.Layout.DatabasePath);
         Assert.Equal(sourceHash, HashFile(databasePath));
         Assert.Equal(originalHistory, history.Take(6));
         Assert.Equal(7, history[6].Version);
         Assert.Equal("M2-01-versioned-reference-snapshots", history[6].MigrationId);
+        Assert.Equal(8, history[7].Version);
+        Assert.Equal("M2-03-reference-catalog-search", history[7].MigrationId);
         Assert.Equal(
             [
+                "reference_catalog_saved_filters",
+                "reference_search_fields",
+                "reference_search_fts",
+                "reference_search_fts_config",
+                "reference_search_fts_data",
+                "reference_search_fts_docsize",
+                "reference_search_fts_idx",
+                "reference_search_projections",
+                "reference_search_records",
                 "reference_snapshot_diagnostics",
                 "reference_snapshot_records",
                 "reference_snapshots",
@@ -1036,6 +1055,7 @@ public sealed class SqliteStorageIntegrationTests
 
     private static void DropReferenceSnapshotSchema(SqliteConnection connection)
     {
+        DropReferenceSearchSchema(connection);
         using var command = connection.CreateCommand();
         command.CommandText =
             """
@@ -1057,6 +1077,23 @@ public sealed class SqliteStorageIntegrationTests
             DROP TABLE reference_snapshot_records;
             DROP TABLE reference_snapshots;
             DROP TABLE reference_sources;
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static void DropReferenceSearchSchema(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            DROP TRIGGER reference_search_records_au;
+            DROP TRIGGER reference_search_records_ad;
+            DROP TRIGGER reference_search_records_ai;
+            DROP TABLE reference_search_fts;
+            DROP TABLE reference_search_fields;
+            DROP TABLE reference_search_records;
+            DROP TABLE reference_search_projections;
+            DROP TABLE reference_catalog_saved_filters;
             """;
         command.ExecuteNonQuery();
     }

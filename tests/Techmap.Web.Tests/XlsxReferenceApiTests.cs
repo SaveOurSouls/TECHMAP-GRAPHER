@@ -152,6 +152,23 @@ public sealed class XlsxReferenceApiTests
         Assert.Equal(HttpStatusCode.Forbidden, unauthenticated.StatusCode);
     }
 
+    [Fact]
+    public async Task Preview_accepts_passive_https_hyperlink()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var bytes = new XlsxTestFixtureBuilder()
+            .AddRow("TER-001", "Terminal 1", "0", "mm")
+            .WithWorksheetHyperlink("B2", new Uri("https://example.test/terminals/TER-001"))
+            .Build();
+
+        var preview = await PreviewAsync(client, csrf, bytes);
+
+        Assert.True(preview.CanPublish);
+        Assert.Equal("TER-001", Assert.Single(preview.Records).SourceKey);
+    }
+
     private static async Task<XlsxReferencePreviewResponse> PreviewAsync(
         HttpClient client,
         string csrf,
