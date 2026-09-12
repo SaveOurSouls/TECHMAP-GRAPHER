@@ -596,6 +596,11 @@ export function App({ config, session }: AppProps) {
         harnessDesignation={selectedHarness.designation}
         initialView={activeHarnessTab}
         onClose={() => setEditorOpen(false)}
+        onViewChange={(view) => setActiveHarnessTabs((current) => rememberHarnessTab(
+          current,
+          selectedHarness.harnessId,
+          view,
+        ))}
       />
     );
   }

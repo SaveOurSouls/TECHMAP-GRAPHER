@@ -65,30 +65,32 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
           />
         </label>
       )}
-      <div className="he-field-pair">
-        <label>
-          X
-          <input
-            type="number"
-            value={selectedObject.x}
-            disabled={disabled}
-            onChange={(event) => onChange(selectedObject.id, {
-              x: finiteNumber(event.target.value, selectedObject.x),
-            })}
-          />
-        </label>
-        <label>
-          Y
-          <input
-            type="number"
-            value={selectedObject.y}
-            disabled={disabled}
-            onChange={(event) => onChange(selectedObject.id, {
-              y: finiteNumber(event.target.value, selectedObject.y),
-            })}
-          />
-        </label>
-      </div>
+      {(selectedObject.kind === "connector" || selectedObject.kind === "text") && (
+        <div className="he-field-pair">
+          <label>
+            X
+            <input
+              type="number"
+              value={selectedObject.x}
+              disabled={disabled}
+              onChange={(event) => onChange(selectedObject.id, {
+                x: finiteNumber(event.target.value, selectedObject.x),
+              })}
+            />
+          </label>
+          <label>
+            Y
+            <input
+              type="number"
+              value={selectedObject.y}
+              disabled={disabled}
+              onChange={(event) => onChange(selectedObject.id, {
+                y: finiteNumber(event.target.value, selectedObject.y),
+              })}
+            />
+          </label>
+        </div>
+      )}
       <label>
         Цвет
         <span className="he-color-field">

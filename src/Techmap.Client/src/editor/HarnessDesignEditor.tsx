@@ -23,6 +23,7 @@ export interface HarnessDesignEditorProps {
   readonly initialView: HarnessEditorView;
   readonly apiOverride?: HarnessDesignApi;
   readonly onClose?: () => void;
+  readonly onViewChange?: (view: HarnessEditorView) => void;
 }
 
 function toUiLayers(document: HarnessDesignDocument, view: HarnessEditorView): readonly UiLayer[] {
@@ -122,6 +123,7 @@ export function HarnessDesignEditor({
   initialView,
   apiOverride,
   onClose,
+  onViewChange,
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
   const [view, setView] = useState<HarnessEditorView>(initialView);
@@ -204,9 +206,23 @@ export function HarnessDesignEditor({
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectId) {
+        const current = historyRef.current?.present;
+        if (!current) return;
+        if (current.connectors.some((item) => item.id === selectedObjectId)) {
+          event.preventDefault();
+          run({ type: "remove-connector", connectorId: selectedObjectId });
+          setSelectedObjectId(null);
+        } else if (current.wires.some((item) => item.id === selectedObjectId)) {
+          event.preventDefault();
+          run({ type: "remove-wire", wireId: selectedObjectId });
+          setSelectedObjectId(null);
+        }
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       const key = event.key.toLocaleLowerCase();
       if (key === "z" && !event.shiftKey) {
         event.preventDefault();
@@ -218,7 +234,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, []);
+  }, [run, selectedObjectId]);
 
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
@@ -252,7 +268,10 @@ export function HarnessDesignEditor({
         layers={layers}
         selectedObjectId={selectedObjectId}
         saveState={saveState}
-        onViewChange={setView}
+        onViewChange={(nextView) => {
+          setView(nextView);
+          onViewChange?.(nextView);
+        }}
         onSelectedObjectChange={setSelectedObjectId}
         onCatalogItemActivate={addCatalogItem}
         onObjectMove={(objectId, point) => run({
