@@ -91,18 +91,24 @@ public sealed class SqliteStorageIntegrationTests
     {
         using var fixture = StorageFixture.Create();
         string databasePath;
+        var projectId = Guid.NewGuid().ToString("D");
 
         using (var storage = SqliteStorage.Open(fixture.DataRoot))
         {
             databasePath = storage.Layout.DatabasePath;
             storage.ExecuteInTransaction(unitOfWork =>
             {
-                ExecuteNonQuery(
-                    unitOfWork,
-                    "CREATE TABLE integration_items (id INTEGER PRIMARY KEY, value TEXT NOT NULL) STRICT;");
                 using var insert = unitOfWork.CreateCommand(
-                    "INSERT INTO integration_items (id, value) VALUES (1, $value);");
-                insert.Parameters.AddWithValue("$value", "survives-reopen");
+                    """
+                    INSERT INTO projects
+                        (project_id, designation, project_increment, name, batch_quantity, status,
+                         created_utc, updated_utc, revision)
+                    VALUES
+                        ($projectId, 'ПР-REOPEN', 1, $name, 1, 'draft', $now, $now, 0);
+                    """);
+                insert.Parameters.AddWithValue("$projectId", projectId);
+                insert.Parameters.AddWithValue("$name", "survives-reopen");
+                insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
                 insert.ExecuteNonQuery();
             });
         }
@@ -114,7 +120,8 @@ public sealed class SqliteStorageIntegrationTests
             reopened.ExecuteInTransaction(unitOfWork =>
             {
                 using var command = unitOfWork.CreateCommand(
-                    "SELECT value FROM integration_items WHERE id = 1;");
+                    "SELECT name FROM projects WHERE project_id = $projectId;");
+                command.Parameters.AddWithValue("$projectId", projectId);
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(

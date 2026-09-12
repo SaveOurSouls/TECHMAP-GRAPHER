@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+
+[assembly: InternalsVisibleTo("Techmap.Web.Tests")]
 
 namespace Techmap.Infrastructure.Sqlite;
 
@@ -501,7 +504,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
     }
 
-    private static int ValidateSchema(SqliteConnection connection)
+    internal static int ValidateSchema(SqliteConnection connection)
     {
         var history = ExecuteScalarInt32(
             connection,
@@ -553,8 +556,98 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             }
         }
 
+        ValidateSchemaShape(connection, userVersion);
+
         return userVersion;
     }
+
+    internal static void InitializeSchemaAtVersion(SqliteConnection connection, int targetVersion)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (targetVersion is < 1 or > CurrentSchemaVersion)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetVersion));
+        }
+
+        InitializeSchema(connection);
+        var version = 1;
+        while (version < targetVersion)
+        {
+            version = ApplyNextMigration(connection, version);
+        }
+    }
+
+    private static void ValidateSchemaShape(SqliteConnection connection, int schemaVersion)
+    {
+        var expected = BuildExpectedSchemaShape(schemaVersion);
+        var actual = ReadSchemaShape(connection);
+        if (!actual.SequenceEqual(expected))
+        {
+            throw new InvalidDataException(
+                $"The database schema shape is inconsistent at version {schemaVersion}.");
+        }
+    }
+
+    private static IReadOnlyList<SchemaObject> BuildExpectedSchemaShape(int schemaVersion)
+    {
+        using var expected = new SqliteConnection("Data Source=:memory:;Mode=Memory;Pooling=False");
+        expected.Open();
+        ExecuteSchemaSql(expected, InitialSchemaSql);
+        if (schemaVersion >= 2)
+        {
+            ExecuteSchemaSql(expected, ProjectSchemaSql);
+        }
+
+        if (schemaVersion >= 3)
+        {
+            ExecuteSchemaSql(expected, ProjectDataSchemaSql);
+        }
+
+        if (schemaVersion >= 4)
+        {
+            ExecuteSchemaSql(expected, ProjectCommandSchemaSql);
+        }
+
+        return ReadSchemaShape(expected);
+    }
+
+    private static void ExecuteSchemaSql(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    private static IReadOnlyList<SchemaObject> ReadSchemaShape(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT type, name, tbl_name, sql
+            FROM sqlite_schema
+            WHERE type IN ('table', 'index', 'trigger')
+              AND name NOT LIKE 'sqlite_%'
+              AND sql IS NOT NULL
+            ORDER BY type, name;
+            """;
+        using var reader = command.ExecuteReader();
+        var result = new List<SchemaObject>();
+        while (reader.Read())
+        {
+            result.Add(new SchemaObject(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                NormalizeSchemaSql(reader.GetString(3))));
+        }
+
+        return result;
+    }
+
+    private static string NormalizeSchemaSql(string sql) =>
+        string.Join(' ', sql.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private sealed record SchemaObject(string Type, string Name, string TableName, string Sql);
 
     private static int ApplyNextMigration(SqliteConnection connection, int currentVersion)
     {
