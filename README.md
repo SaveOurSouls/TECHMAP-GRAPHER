@@ -13,7 +13,7 @@ M1-01 создала запускаемый product-каркас и перено
 локальную сессию, M1-03 добавила SQLite и атомарный unit of work, M1-04 — проекты
 и до 100 независимых жгутов, M1-05 — атомарные вложения и закреплённые снимки данных,
 M1-06 — ревизии проектов, журнал команд и автосохранение; M1-07 — точные единицы
-и расчёт длины резки EX-01.
+и расчёт длины резки EX-01; M1-08 — норматив времени и EX-02.
 Предметного редактора пока нет. Ожидаются формы документов.
 Рабочие решения находятся в [docs/requirements-notes.md](docs/requirements-notes.md),
 макеты — в `design/mockups/`, предоставленные примеры — в `design/references/`.
@@ -48,12 +48,13 @@ M1-04: [проекты и независимые жгуты](docs/m1-04-projects
 M1-05: [вложения и закреплённые снимки](docs/m1-05-attachments-snapshots.md).
 M1-06: [команды, ревизии и автосохранение](docs/m1-06-commands-autosave.md).
 M1-07: [точные единицы и расчёт длины резки](docs/m1-07-exact-units.md).
+M1-08: [норматив времени и EX-02](docs/m1-08-operation-time.md).
 Выпуск ТЗ и инструкции требует отдельной команды владельца.
 
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-07.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-08.ps1
 ```
 
 Готовый локальный артефакт создаётся в

@@ -3,6 +3,7 @@ namespace Techmap.Domain;
 public readonly record struct Length
 {
     public const long MicrometresPerMillimetre = 1_000;
+    public const long MicrometresPerMetre = 1_000_000;
 
     public Length(long micrometres)
     {
