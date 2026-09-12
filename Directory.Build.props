@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <VersionPrefix>0.1.0</VersionPrefix>
-    <InformationalVersion>0.1.0-m1.6</InformationalVersion>
+    <InformationalVersion>0.1.0-m1.7</InformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
