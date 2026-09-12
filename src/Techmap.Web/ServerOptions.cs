@@ -8,6 +8,8 @@ public sealed record ServerOptions(
     PathString PathBase,
     string DataRoot,
     string BackupRoot,
+    Guid? ExportProjectId,
+    string? ExportDestination,
     bool NoBrowser,
     bool VerifyPackage)
 {
@@ -43,14 +45,45 @@ public sealed record ServerOptions(
         var backupRoot = backupRootValue is null
             ? Path.Combine(dataRootParent, $"{Path.GetFileName(dataRoot)}-backups")
             : Path.GetFullPath(backupRootValue, programRoot);
+        var exportProjectValue = ReadSingleValue(args, "--export-project=") ?? configuration["ExportProject"];
+        var exportDestinationValue = ReadSingleValue(args, "--export-destination=") ??
+            configuration["ExportDestination"];
+        if ((exportProjectValue is null) != (exportDestinationValue is null))
+        {
+            throw new ArgumentException(
+                "--export-project and --export-destination must be specified together.");
+        }
+
+        Guid? exportProjectId = null;
+        string? exportDestination = null;
+        if (exportProjectValue is not null)
+        {
+            if (!Guid.TryParseExact(exportProjectValue, "D", out var parsedProjectId) ||
+                parsedProjectId == Guid.Empty)
+            {
+                throw new ArgumentException("--export-project must be a non-empty UUID in D format.");
+            }
+
+            exportProjectId = parsedProjectId;
+            exportDestination = Path.GetFullPath(exportDestinationValue!, programRoot);
+        }
+
+        var noBrowser = HasSwitch(args, "--no-browser") || configuration.GetValue("NoBrowser", false);
+        var verifyPackage = HasSwitch(args, "--verify-package");
+        if (exportProjectId is not null && verifyPackage)
+        {
+            throw new ArgumentException("Project export mode cannot be combined with --verify-package.");
+        }
 
         return new ServerOptions(
             port,
             pathBase,
             dataRoot,
             Path.GetFullPath(backupRoot),
-            HasSwitch(args, "--no-browser") || configuration.GetValue("NoBrowser", false),
-            HasSwitch(args, "--verify-package"));
+            exportProjectId,
+            exportDestination,
+            exportProjectId is not null || noBrowser,
+            verifyPackage);
     }
 
     private static string? ReadSingleValue(string[] args, string prefix)

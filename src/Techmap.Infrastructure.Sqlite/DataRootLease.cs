@@ -51,6 +51,54 @@ public sealed class DataRootLease : IDisposable, IAsyncDisposable
 
     public string MutexName => BuildMutexName(Identity);
 
+    public static string ResolveProspectiveDirectoryPath(string path)
+    {
+        EnsureWindows();
+        var fullPath = Path.GetFullPath(path);
+        var existing = fullPath;
+        var missingSegments = new Stack<string>();
+        while (!Directory.Exists(existing))
+        {
+            var leaf = Path.GetFileName(existing);
+            if (string.IsNullOrEmpty(leaf))
+            {
+                throw new DirectoryNotFoundException("An existing directory ancestor cannot be found.");
+            }
+
+            missingSegments.Push(leaf);
+            existing = Path.GetDirectoryName(existing)
+                ?? throw new DirectoryNotFoundException("An existing directory ancestor cannot be found.");
+        }
+
+        using var directory = OpenDirectory(existing);
+        var result = ResolveFinalPath(directory);
+        while (missingSegments.TryPop(out var segment))
+        {
+            result = Path.Combine(result, segment);
+        }
+
+        return Path.GetFullPath(result);
+    }
+
+    internal static ExistingDirectoryGuard GuardExistingDirectory(string path)
+    {
+        EnsureWindows();
+        var directory = OpenDirectory(Path.GetFullPath(path));
+        try
+        {
+            var canonicalPath = ResolveFinalPath(directory);
+            return new ExistingDirectoryGuard(
+                canonicalPath,
+                ReadIdentity(directory, canonicalPath),
+                directory);
+        }
+        catch
+        {
+            directory.Dispose();
+            throw;
+        }
+    }
+
     public static DataRootLease Acquire(string dataRoot)
     {
         EnsureWindows();
@@ -467,6 +515,18 @@ public sealed class DataRootLease : IDisposable, IAsyncDisposable
                 acquisition.TrySetException(ExceptionDispatchInfo.Capture(error).SourceException);
             }
         }
+    }
+
+    internal sealed class ExistingDirectoryGuard(
+        string canonicalPath,
+        DataRootIdentity identity,
+        SafeFileHandle handle) : IDisposable
+    {
+        public string CanonicalPath { get; } = canonicalPath;
+
+        public DataRootIdentity Identity { get; } = identity;
+
+        public void Dispose() => handle.Dispose();
     }
 }
 

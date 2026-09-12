@@ -6,6 +6,8 @@ using Techmap.Infrastructure.Sqlite;
 using Techmap.Web;
 
 WindowsProcessErrorMode.Apply();
+try
+{
 var programRoot = Path.GetFullPath(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -55,6 +57,13 @@ try
 }
 catch (DataRootLeaseUnavailableException error)
 {
+    if (options.ExportProjectId is not null)
+    {
+        throw new InvalidOperationException(
+            "Offline project export requires exclusive access to the data root.",
+            error);
+    }
+
     StartupTestHooks.MarkLeaseContended();
     var ownerResolutionDeadline = DateTime.UtcNow.AddSeconds(10);
     while (dataRootLease is null)
@@ -137,6 +146,19 @@ await backupPolicy.CommitSuccessfulStartupAsync(
     startupBackup,
     CancellationToken.None);
 migrationService.CompleteSuccessfulStartup(migration);
+
+if (options.ExportProjectId is Guid exportProjectId)
+{
+    var projectExport = await new SqliteProjectExportService(heldDataRootLease, storage).ExportAsync(
+        new ProjectExportRequest(
+            new Techmap.Domain.ProjectIdentity(exportProjectId),
+            options.ExportDestination!,
+            productVersion.AppVersion),
+        CancellationToken.None);
+    Console.WriteLine("TECHMAP_PROJECT_EXPORT_STATUS=ok");
+    Console.WriteLine($"TECHMAP_PROJECT_EXPORT_SHA256={projectExport.ArchiveSha256}");
+    return;
+}
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
@@ -308,6 +330,11 @@ else
         LocalInstanceRecord.DeleteIfOwned(dataRootLease.Identity, instanceId);
         await app.StopAsync();
     }
+}
+}
+catch (Exception exception)
+{
+    Environment.ExitCode = StartupFailureReporter.Report(exception, args);
 }
 
 public partial class Program;

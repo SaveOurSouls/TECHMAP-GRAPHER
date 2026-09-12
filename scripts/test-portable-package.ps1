@@ -481,20 +481,31 @@ Assert-Equal $verifyProcess.ExitCode 0 "Packaged --verify-package failed."
 $tamperTarget = Join-Path $packageRoot "README-START.html"
 $tamperOriginal = [IO.File]::ReadAllBytes($tamperTarget)
 $tamperDataRoot = Join-Path $dataRootsParent "Поврежденный пакет"
+$tamperLogRoot = $tamperDataRoot
+$safeTamperLogRoot = "$tamperDataRoot-startup-errors"
 try {
     [IO.File]::AppendAllText($tamperTarget, "tampered")
     $tamperedProcess = Start-Process `
         -FilePath (Join-Path $packageRoot "Techmap.Server.exe") `
-        -ArgumentList @("--no-browser", "--data-root=`"$tamperDataRoot`"") `
+        -ArgumentList @(
+            "--no-browser",
+            "--no-error-dialog",
+            "--data-root=`"$tamperDataRoot`"",
+            "--error-log-root=`"$tamperLogRoot`"") `
         -WorkingDirectory $packageRoot `
         -WindowStyle Hidden `
         -Wait `
         -PassThru
-    if ($tamperedProcess.ExitCode -eq 0) {
-        throw "A package with a modified file was accepted."
-    }
+    Assert-Equal $tamperedProcess.ExitCode 1 "A package with a modified file did not fail cleanly."
     if (Test-Path -LiteralPath $tamperDataRoot) {
         throw "A damaged package wrote to dataRoot before failing verification."
+    }
+    $startupLog = @(Get-ChildItem -LiteralPath $safeTamperLogRoot -Filter "startup-error-*.log" -File)
+    Assert-Equal $startupLog.Count 1 "Damaged package did not write exactly one startup log."
+    if ([IO.File]::ReadAllText($startupLog[0].FullName).IndexOf(
+            "Package file size mismatch",
+            [StringComparison]::Ordinal) -lt 0) {
+        throw "Damaged package startup log does not explain the integrity failure."
     }
 } finally {
     [IO.File]::WriteAllBytes($tamperTarget, $tamperOriginal)
