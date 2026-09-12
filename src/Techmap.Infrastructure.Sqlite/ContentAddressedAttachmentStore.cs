@@ -66,7 +66,7 @@ public sealed class ContentAddressedAttachmentStore : IAttachmentContentStore
 
             try
             {
-                File.Move(stagingFile, destination, overwrite: false);
+                StorageGenerationLayout.MoveNewDurably(stagingFile, destination);
             }
             catch (IOException) when (File.Exists(destination))
             {

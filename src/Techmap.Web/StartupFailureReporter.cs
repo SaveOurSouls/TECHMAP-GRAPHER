@@ -79,9 +79,10 @@ public static class StartupFailureReporter
         Environment.UserInteractive &&
         !arguments.Any(argument =>
             argument.Equals(NoDialogSwitch, StringComparison.OrdinalIgnoreCase) ||
-            argument.Equals("--no-browser", StringComparison.OrdinalIgnoreCase) ||
-            argument.Equals("--verify-package", StringComparison.OrdinalIgnoreCase) ||
-            argument.StartsWith("--export-project=", StringComparison.OrdinalIgnoreCase));
+                argument.Equals("--no-browser", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--verify-package", StringComparison.OrdinalIgnoreCase) ||
+                argument.StartsWith("--export-project=", StringComparison.OrdinalIgnoreCase) ||
+                argument.StartsWith("--import-project=", StringComparison.OrdinalIgnoreCase));
 
     internal static IReadOnlyList<string> SafeLogRoots(
         IReadOnlyCollection<string> arguments,

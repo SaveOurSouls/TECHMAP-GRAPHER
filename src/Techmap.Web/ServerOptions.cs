@@ -10,6 +10,7 @@ public sealed record ServerOptions(
     string BackupRoot,
     Guid? ExportProjectId,
     string? ExportDestination,
+    string? ImportProjectArchive,
     bool NoBrowser,
     bool VerifyPackage)
 {
@@ -68,11 +69,20 @@ public sealed record ServerOptions(
             exportDestination = Path.GetFullPath(exportDestinationValue!, programRoot);
         }
 
+        var importProjectValue = ReadSingleValue(args, "--import-project=") ?? configuration["ImportProject"];
+        var importProjectArchive = importProjectValue is null
+            ? null
+            : Path.GetFullPath(importProjectValue, programRoot);
+        if (importProjectArchive is not null && exportProjectId is not null)
+        {
+            throw new ArgumentException("Project import and export modes are mutually exclusive.");
+        }
+
         var noBrowser = HasSwitch(args, "--no-browser") || configuration.GetValue("NoBrowser", false);
         var verifyPackage = HasSwitch(args, "--verify-package");
-        if (exportProjectId is not null && verifyPackage)
+        if ((exportProjectId is not null || importProjectArchive is not null) && verifyPackage)
         {
-            throw new ArgumentException("Project export mode cannot be combined with --verify-package.");
+            throw new ArgumentException("Project import/export mode cannot be combined with --verify-package.");
         }
 
         return new ServerOptions(
@@ -82,7 +92,8 @@ public sealed record ServerOptions(
             Path.GetFullPath(backupRoot),
             exportProjectId,
             exportDestination,
-            exportProjectId is not null || noBrowser,
+            importProjectArchive,
+            exportProjectId is not null || importProjectArchive is not null || noBrowser,
             verifyPackage);
     }
 

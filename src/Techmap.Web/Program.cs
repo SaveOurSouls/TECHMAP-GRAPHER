@@ -57,10 +57,10 @@ try
 }
 catch (DataRootLeaseUnavailableException error)
 {
-    if (options.ExportProjectId is not null)
+    if (options.ExportProjectId is not null || options.ImportProjectArchive is not null)
     {
         throw new InvalidOperationException(
-            "Offline project export requires exclusive access to the data root.",
+            "Offline project export/import requires exclusive access to the data root.",
             error);
     }
 
@@ -147,6 +147,12 @@ await backupPolicy.CommitSuccessfulStartupAsync(
     CancellationToken.None);
 migrationService.CompleteSuccessfulStartup(migration);
 
+var projectImportService = new SqliteProjectImportService(heldDataRootLease, storage);
+if (options.ImportProjectArchive is null)
+{
+    _ = await projectImportService.RecoverPendingAsync(CancellationToken.None);
+}
+
 if (options.ExportProjectId is Guid exportProjectId)
 {
     var projectExport = await new SqliteProjectExportService(heldDataRootLease, storage).ExportAsync(
@@ -157,6 +163,18 @@ if (options.ExportProjectId is Guid exportProjectId)
         CancellationToken.None);
     Console.WriteLine("TECHMAP_PROJECT_EXPORT_STATUS=ok");
     Console.WriteLine($"TECHMAP_PROJECT_EXPORT_SHA256={projectExport.ArchiveSha256}");
+    return;
+}
+
+if (options.ImportProjectArchive is not null)
+{
+    var projectImport = await projectImportService.ImportAsync(
+        new ProjectImportRequest(options.ImportProjectArchive, productVersion.AppVersion),
+        CancellationToken.None);
+    Console.WriteLine("TECHMAP_PROJECT_IMPORT_STATUS=ok");
+    Console.WriteLine($"TECHMAP_PROJECT_IMPORT_PROJECT_ID={projectImport.ProjectId.Value:D}");
+    Console.WriteLine($"TECHMAP_PROJECT_IMPORT_INCREMENT={projectImport.ProjectIncrement}");
+    Console.WriteLine($"TECHMAP_PROJECT_IMPORT_SHA256={projectImport.ArchiveSha256}");
     return;
 }
 

@@ -16,7 +16,8 @@ M1-06 — ревизии проектов, журнал команд и авто
 и расчёт длины резки EX-01; M1-08 — норматив времени и EX-02; M1-09 — загрузка
 независимых рабочих мест и EX-03; M1-10 — целостная резервная копия хранилища,
 M1-11 — безопасное восстановление, M1-12 — crash-safe миграции, M1-13 —
-детерминированный offline-экспорт одного проекта.
+детерминированный offline-экспорт одного проекта, M1-14 — безопасный offline-импорт
+новой независимой копии с remap ID и crash recovery.
 Предметного редактора пока нет. Ожидаются формы документов.
 Рабочие решения находятся в [docs/requirements-notes.md](docs/requirements-notes.md),
 макеты — в `design/mockups/`, предоставленные примеры — в `design/references/`.
@@ -57,12 +58,13 @@ M1-10: [целостная резервная копия хранилища](doc
 M1-11: [безопасное восстановление хранилища](docs/m1-11-storage-restore.md).
 M1-12: [безопасные миграции хранилища](docs/m1-12-storage-migrations.md).
 M1-13: [минимальный offline-экспорт проекта](docs/m1-13-project-export.md).
+M1-14: [безопасный offline-импорт проекта](docs/m1-14-project-import.md).
 Выпуск ТЗ и инструкции требует отдельной команды владельца.
 
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-13.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-14.ps1
 ```
 
 Готовый локальный артефакт создаётся в

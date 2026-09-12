@@ -23,6 +23,33 @@ public sealed class ServerOptionsTests
         Assert.False(options.NoBrowser);
         Assert.Null(options.ExportProjectId);
         Assert.Null(options.ExportDestination);
+        Assert.Null(options.ImportProjectArchive);
+    }
+
+    [Fact]
+    public void Accepts_offline_project_import_mode()
+    {
+        var root = Path.GetFullPath("program-root");
+        var options = Techmap.Web.ServerOptions.Parse(
+            ["--import-project=../source.techmap-project.zip"],
+            EmptyConfiguration(),
+            root);
+
+        Assert.Equal(
+            Path.GetFullPath("../source.techmap-project.zip", root),
+            options.ImportProjectArchive);
+        Assert.True(options.NoBrowser);
+    }
+
+    [Theory]
+    [InlineData("--import-project=a.techmap-project.zip", "--verify-package")]
+    [InlineData("--import-project=a.techmap-project.zip", "--export-project=11111111-1111-1111-1111-111111111111", "--export-destination=b.techmap-project.zip")]
+    public void Rejects_import_mode_conflicts(params string[] arguments)
+    {
+        Assert.Throws<ArgumentException>(() => Techmap.Web.ServerOptions.Parse(
+            arguments,
+            EmptyConfiguration(),
+            Path.GetFullPath("program-root")));
     }
 
     [Fact]

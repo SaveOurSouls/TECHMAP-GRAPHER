@@ -36,6 +36,7 @@ public sealed class StartupFailureReporterTests : IDisposable
     [InlineData("--no-browser")]
     [InlineData("--verify-package")]
     [InlineData("--export-project=11111111-1111-1111-1111-111111111111")]
+    [InlineData("--import-project=source.techmap-project.zip")]
     public void Automated_modes_suppress_the_dialog(string argument)
     {
         Assert.False(StartupFailureReporter.ShouldShowDialog([argument]));

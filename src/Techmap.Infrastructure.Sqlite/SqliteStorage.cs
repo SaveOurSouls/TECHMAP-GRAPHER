@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -199,6 +199,47 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         WHEN EXISTS (SELECT 1 FROM projects WHERE project_id = OLD.project_id)
         BEGIN
             SELECT RAISE(ABORT, 'project_version_is_immutable');
+        END;
+        """;
+    private const string ProjectImportMigrationId = "M1-14-project-import-provenance";
+    private const string ProjectImportSchemaSql =
+        """
+        CREATE TABLE project_imports (
+            project_id TEXT NOT NULL PRIMARY KEY
+                REFERENCES projects(project_id) ON DELETE CASCADE,
+            import_operation_id TEXT NOT NULL UNIQUE CHECK (length(import_operation_id) = 36),
+            source_manifest_sha256 TEXT NOT NULL
+                CHECK (length(source_manifest_sha256) = 64)
+                CHECK (source_manifest_sha256 = lower(source_manifest_sha256))
+                CHECK (source_manifest_sha256 NOT GLOB '*[^0-9a-f]*'),
+            source_archive_sha256 TEXT NOT NULL
+                CHECK (length(source_archive_sha256) = 64)
+                CHECK (source_archive_sha256 = lower(source_archive_sha256))
+                CHECK (source_archive_sha256 NOT GLOB '*[^0-9a-f]*'),
+            source_project_id TEXT NOT NULL CHECK (length(source_project_id) = 36),
+            source_project_revision INTEGER NOT NULL CHECK (source_project_revision >= 0),
+            source_project_increment INTEGER NOT NULL CHECK (source_project_increment > 0),
+            source_storage_schema_version INTEGER NOT NULL
+                CHECK (source_storage_schema_version > 0),
+            source_app_version TEXT NOT NULL CHECK (length(source_app_version) BETWEEN 1 AND 128),
+            import_app_version TEXT NOT NULL CHECK (length(import_app_version) BETWEEN 1 AND 128),
+            imported_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_project_imports_source
+            ON project_imports (source_project_id, imported_utc, project_id);
+
+        CREATE TRIGGER prevent_project_import_update
+        BEFORE UPDATE ON project_imports
+        BEGIN
+            SELECT RAISE(ABORT, 'project_import_is_immutable');
+        END;
+
+        CREATE TRIGGER prevent_project_import_delete
+        BEFORE DELETE ON project_imports
+        WHEN EXISTS (SELECT 1 FROM projects WHERE project_id = OLD.project_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'project_import_is_immutable');
         END;
         """;
 
@@ -568,6 +609,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 2, MigrationId: ProjectMigrationId, Sql: ProjectSchemaSql),
             (Version: 3, MigrationId: ProjectDataMigrationId, Sql: ProjectDataSchemaSql),
             (Version: 4, MigrationId: ProjectCommandMigrationId, Sql: ProjectCommandSchemaSql),
+            (Version: 5, MigrationId: ProjectImportMigrationId, Sql: ProjectImportSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -635,6 +677,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ProjectCommandSchemaSql);
         }
 
+        if (schemaVersion >= 5)
+        {
+            ExecuteSchemaSql(expected, ProjectImportSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -698,6 +745,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ProjectCommandMigrationId,
                 Sql: ProjectCommandSchemaSql,
                 Description: "Project revisions and immutable command journal"),
+            4 => (
+                Version: 5,
+                MigrationId: ProjectImportMigrationId,
+                Sql: ProjectImportSchemaSql,
+                Description: "Project import provenance"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -769,7 +821,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3))
+            if (version is not (1 or 2 or 3 or 4))
             {
                 return false;
             }
