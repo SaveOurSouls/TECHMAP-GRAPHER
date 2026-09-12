@@ -12,14 +12,17 @@ public sealed class WindowsProcessErrorModeTests
 
         WindowsProcessErrorMode.Apply(
             isWindows: true,
+            getErrorMode: () => 0x0004u,
             mode =>
             {
                 appliedMode = mode;
                 return 0;
             });
 
-        Assert.Equal(0x8003u, appliedMode);
-        Assert.Equal(WindowsProcessErrorMode.SuppressedDialogMode, appliedMode);
+        Assert.Equal(0x8007u, appliedMode);
+        Assert.Equal(
+            WindowsProcessErrorMode.SuppressedDialogMode,
+            appliedMode & WindowsProcessErrorMode.SuppressedDialogMode);
     }
 
     [Fact]
@@ -29,6 +32,7 @@ public sealed class WindowsProcessErrorModeTests
 
         WindowsProcessErrorMode.Apply(
             isWindows: false,
+            getErrorMode: () => throw new InvalidOperationException("Native API must not be called."),
             mode =>
             {
                 nativeCallCount++;

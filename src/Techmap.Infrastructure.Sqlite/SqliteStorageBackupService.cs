@@ -16,6 +16,10 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
     public const string ManifestFileName = "manifest.json";
     public const string ManifestChecksumFileName = "manifest.sha256";
     public const string ProductId = "TECHMAP-GRAPHER";
+    public const int MaximumManifestBytes = 16 * 1024 * 1024;
+    public const int MaximumBackupFileCount = 100_001;
+    public const long MaximumBackupFileBytes = 2L * 1024 * 1024 * 1024;
+    public const long MaximumBackupTotalBytes = 100L * 1024 * 1024 * 1024;
     private const string StagingDirectoryName = ".staging";
     private const string DatabaseFileName = "app.db";
     private const int BufferSize = 128 * 1024;
@@ -160,13 +164,14 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                     Encoding.ASCII.GetBytes($"{manifestHash}\n"));
                 progressHook?.Invoke("before_publish");
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!TryValidateBackupDirectory(stagingPath, manifest, manifestHash, requirePublishedName: false))
+                var verifiedStaging = ReadVerifiedBackup(stagingPath, requirePublishedName: false);
+                if (verifiedStaging.Result.BackupId != backupId)
                 {
-                    throw new InvalidDataException("The staged backup failed complete verification.");
+                    throw new InvalidDataException("The staged backup identity changed during verification.");
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                Directory.Move(stagingPath, publishedPath);
+                StorageGenerationLayout.MoveNewDurably(stagingPath, publishedPath);
 
                 var database = files.Single(file => file.Path == DatabaseFileName);
                 return new StorageBackupResult(
@@ -202,11 +207,11 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
     public IReadOnlyList<StorageBackupResult> ApplyRetention(string backupRoot, int maximumBackups)
     {
-        if (maximumBackups < 2)
+        if (maximumBackups < 3)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(maximumBackups),
-                "Retention must preserve at least the newest successful and newest pre-update backups.");
+                "Retention must preserve the newest successful, pre-update and pre-restore backups.");
         }
 
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
@@ -230,6 +235,12 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
             if (newestPreUpdate is not null)
             {
                 keep.Add(newestPreUpdate.BackupId);
+            }
+
+            var newestPreRestore = backups.FirstOrDefault(backup => backup.Kind == StorageBackupKind.PreRestore);
+            if (newestPreRestore is not null)
+            {
+                keep.Add(newestPreRestore.BackupId);
             }
 
             foreach (var backup in backups)
@@ -298,7 +309,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         useDeleteJournal.ExecuteNonQuery();
     }
 
-    private static SnapshotInventory InspectSnapshot(string snapshotPath)
+    internal static SnapshotInventory InspectSnapshot(string snapshotPath)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -489,7 +500,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         }
     }
 
-    private static string ResolveCanonicalExistingPath(string value, bool expectDirectory)
+    internal static string ResolveCanonicalExistingPath(string value, bool expectDirectory)
     {
         var requested = Path.GetFullPath(value);
         if (expectDirectory ? !Directory.Exists(requested) : !File.Exists(requested))
@@ -589,56 +600,70 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         }
     }
 
+    internal static VerifiedBackupArchive ReadVerifiedBackup(string directory, bool requirePublishedName = true)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        directory = ResolveCanonicalExistingPath(directory, expectDirectory: true);
+        RejectReparsePoint(directory, "A published backup must not be a reparse point.");
+        var manifestPath = Path.Combine(directory, ManifestFileName);
+        var checksumPath = Path.Combine(directory, ManifestChecksumFileName);
+        if (!File.Exists(manifestPath) || !File.Exists(checksumPath))
+        {
+            throw new InvalidDataException("The backup manifest or its detached checksum is missing.");
+        }
+
+        var manifestLength = new FileInfo(manifestPath).Length;
+        var checksumLength = new FileInfo(checksumPath).Length;
+        if (manifestLength is <= 0 or > MaximumManifestBytes || checksumLength is <= 0 or > 66)
+        {
+            throw new InvalidDataException("The backup manifest exceeds its format limits.");
+        }
+
+        var bytes = File.ReadAllBytes(manifestPath);
+        ValidateManifestJsonShape(bytes);
+        var expected = File.ReadAllText(checksumPath, Encoding.ASCII).Trim();
+        if (!IsSha256(expected) ||
+            !string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)), expected, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("The backup manifest checksum is invalid.");
+        }
+
+        var manifest = JsonSerializer.Deserialize<BackupManifest>(bytes, JsonOptions)
+            ?? throw new InvalidDataException("The backup manifest is empty.");
+        if (manifest.Files is null || manifest.ProjectRevisions is null ||
+            !TryValidateBackupDirectory(directory, manifest, expected, requirePublishedName))
+        {
+            throw new InvalidDataException("The backup failed complete verification.");
+        }
+
+        var database = manifest.Files.Single(file => file.Path == DatabaseFileName);
+        var result = new StorageBackupResult(
+            manifest.BackupId,
+            directory,
+            ParseKind(manifest.Kind),
+            manifest.CreatedUtc,
+            manifest.SchemaVersion,
+            expected,
+            database.Sha256,
+            database.SizeBytes,
+            manifest.Files.Count - 1,
+            manifest.ProjectRevisions);
+        return new VerifiedBackupArchive(
+            result,
+            manifest.Files.Select(file => new VerifiedBackupFile(file.Path, file.SizeBytes, file.Sha256)).ToArray());
+    }
+
     private static bool TryReadPublishedBackup(string directory, out StorageBackupResult result)
     {
         result = null!;
         try
         {
-            RejectReparsePoint(directory, "A published backup must not be a reparse point.");
-            var manifestPath = Path.Combine(directory, ManifestFileName);
-            var checksumPath = Path.Combine(directory, ManifestChecksumFileName);
-            if (!File.Exists(manifestPath) || !File.Exists(checksumPath))
-            {
-                return false;
-            }
-
-            var bytes = File.ReadAllBytes(manifestPath);
-            var expected = File.ReadAllText(checksumPath, Encoding.ASCII).Trim();
-            if (!IsSha256(expected) ||
-                !string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)), expected, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            var manifest = JsonSerializer.Deserialize<BackupManifest>(bytes, JsonOptions);
-            if (manifest?.Files is null || manifest.ProjectRevisions is null ||
-                !TryValidateBackupDirectory(directory, manifest, expected, requirePublishedName: true))
-            {
-                return false;
-            }
-
-            var database = manifest.Files.SingleOrDefault(file => file.Path == DatabaseFileName);
-            if (database is null)
-            {
-                return false;
-            }
-
-            result = new StorageBackupResult(
-                manifest.BackupId,
-                directory,
-                ParseKind(manifest.Kind),
-                manifest.CreatedUtc,
-                manifest.SchemaVersion,
-                expected,
-                database.Sha256,
-                database.SizeBytes,
-                manifest.Files.Count - 1,
-                manifest.ProjectRevisions);
+            result = ReadVerifiedBackup(directory).Result;
             return true;
         }
         catch (Exception error) when (
             error is IOException or UnauthorizedAccessException or InvalidDataException or SqliteException or
-                JsonException or InvalidOperationException or ArgumentException)
+                JsonException or InvalidOperationException or ArgumentException or OverflowException)
         {
             return false;
         }
@@ -659,7 +684,15 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                 return false;
             }
 
+            var manifestLength = new FileInfo(manifestPath).Length;
+            var checksumLength = new FileInfo(checksumPath).Length;
+            if (manifestLength is <= 0 or > MaximumManifestBytes || checksumLength is <= 0 or > 66)
+            {
+                return false;
+            }
+
             var manifestBytes = File.ReadAllBytes(manifestPath);
+            ValidateManifestJsonShape(manifestBytes);
             var detachedHash = File.ReadAllText(checksumPath, Encoding.ASCII).Trim();
             if (!string.Equals(Convert.ToHexStringLower(SHA256.HashData(manifestBytes)), manifestSha256, StringComparison.Ordinal) ||
                 !string.Equals(detachedHash, manifestSha256, StringComparison.Ordinal))
@@ -678,6 +711,10 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                 manifest.BackupId == Guid.Empty ||
                 manifest.SchemaVersion <= 0 ||
                 string.IsNullOrWhiteSpace(manifest.AppVersion) ||
+                manifest.AppVersion.Length > 128 || manifest.AppVersion.Any(char.IsControl) ||
+                manifest.PreviousAppVersion is { Length: > 128 } ||
+                manifest.PreviousAppVersion?.Any(char.IsControl) == true ||
+                manifest.CreatedUtc.Offset != TimeSpan.Zero ||
                 !IsSha256(manifestSha256) ||
                 manifest.ProjectRevisions.Any(item => item is null || item.ProjectId == Guid.Empty || item.Revision < 0) ||
                 manifest.ProjectRevisions.Select(item => item.ProjectId).Distinct().Count() != manifest.ProjectRevisions.Count ||
@@ -685,10 +722,12 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                     .OrderBy(item => item.ProjectId)
                     .SequenceEqual(manifest.ProjectRevisions) is false ||
                 manifest.Files.Count == 0 ||
+                manifest.Files.Count > MaximumBackupFileCount ||
                 manifest.Files.Any(file => file is null || file.Path is null || file.Sha256 is null) ||
                 manifest.Files.Select(file => file.Path).Distinct(StringComparer.Ordinal).Count() != manifest.Files.Count ||
+                manifest.Files.Select(file => file.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.Files.Count ||
                 !manifest.Files.OrderBy(file => file.Path, StringComparer.Ordinal).SequenceEqual(manifest.Files) ||
-                manifest.Kind is not ("regular" or "pre-update") ||
+                manifest.Kind is not ("regular" or "pre-update" or "pre-restore") ||
                 requirePublishedName && !string.Equals(
                     Path.GetFileName(directory),
                     ExpectedBackupDirectoryName(manifest.CreatedUtc, manifest.BackupId),
@@ -702,8 +741,13 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
             foreach (var file in manifest.Files)
             {
                 if (!IsCanonicalManifestPath(file.Path) ||
-                    file.SizeBytes < 0 ||
-                    !IsSha256(file.Sha256))
+                    file.SizeBytes < 0 || file.SizeBytes > MaximumBackupFileBytes ||
+                    !IsSha256(file.Sha256) ||
+                    file.Path != DatabaseFileName &&
+                    !string.Equals(
+                        file.Path,
+                        $"attachments/blobs/{file.Sha256[..2]}/{file.Sha256}",
+                        StringComparison.Ordinal))
                 {
                     return false;
                 }
@@ -722,6 +766,11 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                 {
                     return false;
                 }
+            }
+
+            if (manifest.Files.Aggregate(0L, (total, file) => checked(total + file.SizeBytes)) > MaximumBackupTotalBytes)
+            {
+                return false;
             }
 
             var databasePath = Path.Combine(directory, DatabaseFileName);
@@ -756,7 +805,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         }
         catch (Exception error) when (
             error is IOException or UnauthorizedAccessException or InvalidDataException or SqliteException or
-                JsonException or InvalidOperationException or ArgumentException or NullReferenceException)
+                JsonException or InvalidOperationException or ArgumentException or NullReferenceException or OverflowException)
         {
             return false;
         }
@@ -841,6 +890,53 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         path == path.Replace('\\', '/') &&
         !Path.IsPathRooted(path) &&
         !path.Split('/').Any(segment => segment is "" or "." or "..");
+
+    private static void ValidateManifestJsonShape(byte[] bytes)
+    {
+        using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions
+        {
+            AllowTrailingCommas = false,
+            CommentHandling = JsonCommentHandling.Disallow,
+            MaxDepth = 8,
+        });
+        ValidateObjectProperties(
+            document.RootElement,
+            "manifestFormat", "productId", "backupId", "kind", "appVersion",
+            "previousAppVersion", "schemaVersion", "createdUtc", "projectRevisions", "files");
+        if (!document.RootElement.TryGetProperty("projectRevisions", out var revisions) ||
+            revisions.ValueKind != JsonValueKind.Array ||
+            !document.RootElement.TryGetProperty("files", out var files) ||
+            files.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("The backup manifest collections are invalid.");
+        }
+
+        foreach (var revision in revisions.EnumerateArray())
+        {
+            ValidateObjectProperties(revision, "projectId", "revision");
+        }
+
+        foreach (var file in files.EnumerateArray())
+        {
+            ValidateObjectProperties(file, "path", "sizeBytes", "sha256");
+        }
+    }
+
+    private static void ValidateObjectProperties(JsonElement element, params string[] expected)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("The backup manifest contains a non-object entry.");
+        }
+
+        var properties = element.EnumerateObject().Select(property => property.Name).ToArray();
+        if (properties.Length != expected.Length ||
+            properties.Distinct(StringComparer.Ordinal).Count() != properties.Length ||
+            !properties.Order(StringComparer.Ordinal).SequenceEqual(expected.Order(StringComparer.Ordinal)))
+        {
+            throw new InvalidDataException("The backup manifest has missing, extra or duplicate properties.");
+        }
+    }
 
     private static bool IsSha256(string? value) =>
         value is not null &&
@@ -928,6 +1024,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
     {
         StorageBackupKind.Regular => "regular",
         StorageBackupKind.PreUpdate => "pre-update",
+        StorageBackupKind.PreRestore => "pre-restore",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -935,12 +1032,13 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
     {
         "regular" => StorageBackupKind.Regular,
         "pre-update" => StorageBackupKind.PreUpdate,
+        "pre-restore" => StorageBackupKind.PreRestore,
         _ => throw new InvalidDataException("A backup manifest has an unsupported kind."),
     };
 
-    private sealed record SnapshotBlob(string Sha256, long SizeBytes);
+    internal sealed record SnapshotBlob(string Sha256, long SizeBytes);
 
-    private sealed record SnapshotInventory(
+    internal sealed record SnapshotInventory(
         int SchemaVersion,
         IReadOnlyList<StorageBackupProjectRevision> ProjectRevisions,
         IReadOnlyList<SnapshotBlob> Blobs);
@@ -976,3 +1074,9 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         uint filePathLength,
         uint flags);
 }
+
+internal sealed record VerifiedBackupFile(string Path, long SizeBytes, string Sha256);
+
+internal sealed record VerifiedBackupArchive(
+    StorageBackupResult Result,
+    IReadOnlyList<VerifiedBackupFile> Files);

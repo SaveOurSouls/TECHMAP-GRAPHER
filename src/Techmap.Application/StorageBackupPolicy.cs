@@ -14,11 +14,11 @@ public sealed record StorageBackupPolicyOptions(
     public void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(BackupRoot);
-        if (RetentionCount < 2)
+        if (RetentionCount < 3)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(RetentionCount),
-                "Retention must preserve at least the newest successful and newest pre-update backups.");
+                "Retention must preserve the newest successful, pre-update and pre-restore backups.");
         }
 
         if (EffectiveRegularInterval <= TimeSpan.Zero)

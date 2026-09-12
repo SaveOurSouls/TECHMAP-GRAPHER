@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,6 +19,8 @@ public sealed record StorageGenerationLayout(
     public const string InitialGenerationName = "generation-00000001";
     public const string DatabaseFileName = "app.db";
     public const string ReadyMarkerFileName = "READY";
+    private const uint MoveFileReplaceExisting = 0x00000001;
+    private const uint MoveFileWriteThrough = 0x00000008;
 
     private static readonly Regex GenerationNamePattern = new(
         @"\Ageneration-[0-9]{8}\z",
@@ -131,7 +135,7 @@ public sealed record StorageGenerationLayout(
         }
     }
 
-    private static void PublishNewDurableFile(string destinationPath, string content)
+    internal static void PublishNewDurableFile(string destinationPath, string content)
     {
         var temporaryPath = Path.Combine(
             Path.GetDirectoryName(destinationPath)
@@ -152,15 +156,109 @@ public sealed record StorageGenerationLayout(
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, destinationPath, overwrite: false);
+            MoveNewDurably(temporaryPath, destinationPath);
         }
         finally
         {
-            File.Delete(temporaryPath);
+            TryDeleteTemporary(temporaryPath);
         }
     }
 
-    private static string ReadCurrentGeneration(string currentPointerPath)
+    internal static void ReplaceCurrentDurably(
+        string currentPointerPath,
+        string generationName,
+        Action? afterReplacement = null)
+    {
+        ValidateGenerationName(generationName);
+        var temporaryPath = Path.Combine(
+            Path.GetDirectoryName(currentPointerPath)
+                ?? throw new InvalidOperationException("The CURRENT pointer must have a parent directory."),
+            $".{CurrentPointerFileName}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes($"{generationName}\n");
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 4096,
+                       FileOptions.WriteThrough))
+            {
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+            }
+
+            try
+            {
+                MoveReplaceDurably(temporaryPath, currentPointerPath);
+                afterReplacement?.Invoke();
+            }
+            catch (Exception) when (TryReadExpectedCurrent(currentPointerPath, generationName))
+            {
+                // A rename is the commit point. If a wrapper or later managed operation
+                // failed after the namespace change, report success and never let a caller
+                // delete the generation that CURRENT already names.
+            }
+        }
+        finally
+        {
+            TryDeleteTemporary(temporaryPath);
+        }
+    }
+
+    internal static void MoveNewDurably(string sourcePath, string destinationPath)
+    {
+        if (!MoveFileEx(sourcePath, destinationPath, MoveFileWriteThrough))
+        {
+            throw new IOException(
+                "A durable storage item publication failed.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+    }
+
+    private static void MoveReplaceDurably(string sourcePath, string destinationPath)
+    {
+        if (!MoveFileEx(
+                sourcePath,
+                destinationPath,
+                MoveFileReplaceExisting | MoveFileWriteThrough))
+        {
+            throw new IOException(
+                "The durable CURRENT replacement failed.",
+                new Win32Exception(Marshal.GetLastWin32Error()));
+        }
+    }
+
+    private static bool TryReadExpectedCurrent(string currentPointerPath, string generationName)
+    {
+        try
+        {
+            return string.Equals(
+                ReadCurrentGeneration(currentPointerPath),
+                generationName,
+                StringComparison.Ordinal);
+        }
+        catch (Exception error) when (
+            error is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return false;
+        }
+    }
+
+    private static void TryDeleteTemporary(string temporaryPath)
+    {
+        try
+        {
+            File.Delete(temporaryPath);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // A fully written orphan temporary file is ignored and can be removed by maintenance.
+        }
+    }
+
+    internal static string ReadCurrentGeneration(string currentPointerPath)
     {
         RejectReparsePoint(currentPointerPath, "The CURRENT pointer must not be a reparse point.");
         var value = File.ReadAllText(currentPointerPath, Encoding.UTF8);
@@ -172,7 +270,7 @@ public sealed record StorageGenerationLayout(
         return value.TrimEnd('\r', '\n');
     }
 
-    private static void ValidateGenerationName(string generationName)
+    internal static void ValidateGenerationName(string generationName)
     {
         if (!GenerationNamePattern.IsMatch(generationName))
         {
@@ -196,6 +294,10 @@ public sealed record StorageGenerationLayout(
             throw new InvalidDataException(message);
         }
     }
+
+    [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileEx(string existingFileName, string? newFileName, uint flags);
 }
 
 internal sealed record PreparedStorageGeneration(

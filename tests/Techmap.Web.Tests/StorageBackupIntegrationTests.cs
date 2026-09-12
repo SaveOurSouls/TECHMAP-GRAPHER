@@ -360,6 +360,10 @@ public sealed class StorageBackupIntegrationTests
             fixture.BackupRoot, "C", StorageBackupKind.PreUpdate, "B"),
             TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromHours(1));
+        var newestPreRestore = await service.CreateAsync(new StorageBackupRequest(
+            fixture.BackupRoot, "C", StorageBackupKind.PreRestore),
+            TestContext.Current.CancellationToken);
+        clock.Advance(TimeSpan.FromHours(1));
         var newest = await service.CreateAsync(
             new StorageBackupRequest(fixture.BackupRoot, "C"),
             TestContext.Current.CancellationToken);
@@ -388,14 +392,15 @@ public sealed class StorageBackupIntegrationTests
             Path.Combine(malformedField, SqliteStorageBackupService.ManifestChecksumFileName),
             Convert.ToHexStringLower(SHA256.HashData(malformedFieldManifest)));
 
-        var kept = service.ApplyRetention(fixture.BackupRoot, 2);
+        var kept = service.ApplyRetention(fixture.BackupRoot, 3);
 
         Assert.Equal(
-            new[] { newest.BackupId, newestPre.BackupId }.Order(),
+            new[] { newest.BackupId, newestPre.BackupId, newestPreRestore.BackupId }.Order(),
             kept.Select(item => item.BackupId).Order());
         Assert.False(Directory.Exists(oldPre.BackupPath));
         Assert.False(Directory.Exists(oldRegular.BackupPath));
         Assert.True(Directory.Exists(newestPre.BackupPath));
+        Assert.True(Directory.Exists(newestPreRestore.BackupPath));
         Assert.True(Directory.Exists(newest.BackupPath));
         Assert.True(Directory.Exists(invalid));
         Assert.True(Directory.Exists(malformed));

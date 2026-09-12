@@ -150,6 +150,10 @@ public sealed class StorageBackupPolicyTests
             fixture.StatePath));
         Assert.Throws<ArgumentOutOfRangeException>(() => new StorageBackupPolicy(
             service,
+            new StorageBackupPolicyOptions(fixture.BackupRoot, RetentionCount: 2),
+            fixture.StatePath));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new StorageBackupPolicy(
+            service,
             new StorageBackupPolicyOptions(fixture.BackupRoot, RegularInterval: TimeSpan.Zero),
             fixture.StatePath));
 

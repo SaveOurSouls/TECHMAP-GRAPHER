@@ -12,11 +12,24 @@ using System.Text;
 
 public static class TechmapPortableNativeMethods
 {
+    private const uint SuppressedDialogMode = 0x0001 | 0x0002 | 0x8000;
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetShortPathName(
         string longPath,
         StringBuilder shortPath,
         uint bufferLength);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetErrorMode();
+
+    [DllImport("kernel32.dll")]
+    private static extern uint SetErrorMode(uint errorMode);
+
+    public static void SuppressCrashDialogs()
+    {
+        SetErrorMode(GetErrorMode() | SuppressedDialogMode);
+    }
 
     public static string GetShortPath(string path)
     {
@@ -32,6 +45,8 @@ public static class TechmapPortableNativeMethods
 }
 "@
 }
+[TechmapPortableNativeMethods]::SuppressCrashDialogs()
+$env:DOTNET_DISABLE_GUI_ERRORS = "1"
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $ArchivePath = if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
     Join-Path $repositoryRoot "artifacts\m1-01\TECHMAP-GRAPHER-win-x64.zip"
