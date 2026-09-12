@@ -2,11 +2,15 @@ tmp/
 node_modules/
 dist/
 build/
+artifacts/
 publish/
 bin/
 obj/
 .dotnet-cli-home/
 .appdata/
+.build/
+.packages/
+.pnpm-store/
 .env
 .env.*
 !.env.example
@@ -17,3 +21,8 @@ data/
 backups/
 *.db
 *.sqlite*
+!src/Techmap.Infrastructure.Sqlite/
+!src/Techmap.Infrastructure.Sqlite/*.cs
+!src/Techmap.Infrastructure.Sqlite/*.csproj
+!src/Techmap.Infrastructure.Sqlite/packages.lock.json
+src/Techmap.Web/wwwroot/

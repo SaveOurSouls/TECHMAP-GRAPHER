@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Techmap.Application/Techmap.Application.csproj" />
+    <ProjectReference Include="../../src/Techmap.Contracts/Techmap.Contracts.csproj" />
+    <ProjectReference Include="../../src/Techmap.Domain/Techmap.Domain.csproj" />
+    <ProjectReference Include="../../src/Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
+  </ItemGroup>
+</Project>

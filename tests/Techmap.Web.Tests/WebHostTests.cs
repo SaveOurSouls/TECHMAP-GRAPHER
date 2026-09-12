@@ -1,0 +1,114 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Techmap.Contracts;
+using Xunit;
+
+namespace Techmap.Web.Tests;
+
+public sealed class WebHostTests
+{
+    [Fact]
+    public async Task Root_mode_serves_placeholder_and_read_only_api()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateClient();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var page = await client.GetAsync("/", cancellationToken);
+        var health = await client.GetFromJsonAsync<HealthResponse>("/api/v1/health", cancellationToken);
+        var runtime = await client.GetFromJsonAsync<RuntimeConfigResponse>(
+            "/runtime-config.json",
+            cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        Assert.Contains(
+            "TECHMAP-GRAPHER",
+            await page.Content.ReadAsStringAsync(cancellationToken));
+        Assert.Equal(new HealthResponse("ok", 1), health);
+        Assert.NotNull(runtime);
+        Assert.Equal(1, runtime.ConfigVersion);
+        Assert.Equal("/", runtime.BasePath);
+        Assert.Equal("/api/v1/", runtime.ApiBasePath);
+        Assert.Equal("1", runtime.ApiVersion);
+        Assert.Equal("0", runtime.SchemaVersion);
+        Assert.DoesNotContain("programRoot", await page.Content.ReadAsStringAsync(cancellationToken));
+        AssertSecurityHeaders(page);
+    }
+
+    [Fact]
+    public async Task Prefix_mode_serves_only_under_configured_path_base()
+    {
+        await using var factory = new TechmapWebApplicationFactory("--path-base=/techmap");
+        using var client = factory.CreateClient();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var prefixedPage = await client.GetAsync("/techmap/", cancellationToken);
+        var prefixedRuntime = await client.GetFromJsonAsync<RuntimeConfigResponse>(
+            "/techmap/runtime-config.json",
+            cancellationToken);
+        var outsidePrefix = await client.GetAsync("/", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, prefixedPage.StatusCode);
+        Assert.NotNull(prefixedRuntime);
+        Assert.Equal("/techmap/", prefixedRuntime.BasePath);
+        Assert.Equal("/techmap/api/v1/", prefixedRuntime.ApiBasePath);
+        Assert.Contains("<base href=\"/techmap/\">", await prefixedPage.Content.ReadAsStringAsync(cancellationToken));
+        Assert.Equal(HttpStatusCode.NotFound, outsidePrefix.StatusCode);
+
+        var unknownApi = await client.GetAsync("/techmap/api/v1/not-present", cancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, unknownApi.StatusCode);
+        Assert.Equal("application/json", unknownApi.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Foreign_host_header_is_rejected()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/health");
+        request.Headers.Host = "example.invalid";
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Unknown_api_is_json_404_before_spa_fallback()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateClient();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var response = await client.GetAsync("/api/v1/not-present", cancellationToken);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(new ApiErrorResponse("api_route_not_found"), error);
+        AssertSecurityHeaders(response);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("techmap")]
+    [InlineData("/techmap/")]
+    [InlineData("/techmap//nested")]
+    [InlineData("/../techmap")]
+    [InlineData("/techmap?mode=1")]
+    public void Bad_path_base_is_rejected(string value)
+    {
+        var error = Assert.Throws<ArgumentException>(() =>
+            Techmap.Web.PathBaseConfiguration.Parse([$"--path-base={value}"]));
+
+        Assert.Contains("--path-base", error.Message);
+    }
+
+    private static void AssertSecurityHeaders(HttpResponseMessage response)
+    {
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Contains("default-src 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+    }
+}

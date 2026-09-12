@@ -1,0 +1,10 @@
+{
+  "name": "techmap-grapher",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "client:build": "pnpm --filter @techmap/client build",
+    "client:test": "pnpm --filter @techmap/client test",
+    "client:typecheck": "pnpm --filter @techmap/client typecheck"
+  }
+}

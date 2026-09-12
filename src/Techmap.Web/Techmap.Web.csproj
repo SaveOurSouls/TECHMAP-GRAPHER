@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>Techmap.Server</AssemblyName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <DefineConstants>$(DefineConstants);PACKAGED_BUILD</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Techmap.Application/Techmap.Application.csproj" />
+    <ProjectReference Include="../Techmap.Contracts/Techmap.Contracts.csproj" />
+    <ProjectReference Include="../Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
+  </ItemGroup>
+</Project>

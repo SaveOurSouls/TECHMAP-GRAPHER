@@ -1,0 +1,122 @@
+:root {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #172333;
+  background: #eef2f5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button { font: inherit; }
+
+.app-shell { min-height: 100vh; background: #f5f7f9; }
+.topbar {
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #16324f;
+  color: #fff;
+  box-shadow: 0 2px 12px rgb(13 34 54 / 18%);
+}
+.topbar > div { display: flex; align-items: center; gap: 12px; }
+.product-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgb(255 255 255 / 38%);
+  border-radius: 8px;
+  color: #8fd3ff;
+  font-weight: 800;
+}
+.product-name { font-size: 14px; font-weight: 750; letter-spacing: .08em; }
+.runtime-status { font-size: 12px; color: #d6e4ef; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #5bd6a2; box-shadow: 0 0 0 3px rgb(91 214 162 / 15%); }
+
+.workspace { min-height: calc(100vh - 64px); display: grid; grid-template-columns: 220px 1fr; }
+.sidebar { padding: 24px 14px; background: #fff; border-right: 1px solid #dce3e9; }
+.nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #536273;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-item:hover { background: #f0f5f8; }
+.nav-item.active { background: #e9f3f9; color: #145f8c; font-weight: 700; }
+.nav-index { font-size: 10px; letter-spacing: .08em; opacity: .65; }
+
+.content { padding: 36px clamp(24px, 5vw, 72px); }
+.content-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.eyebrow { margin: 0 0 8px; color: #2e7da8; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 8px; font-size: clamp(28px, 3vw, 40px); letter-spacing: -.03em; }
+.content-heading p:last-child { margin-bottom: 0; color: #657486; }
+
+.primary-action, .secondary-action {
+  border-radius: 8px;
+  padding: 11px 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.primary-action { border: 1px solid #176e9d; background: #176e9d; color: #fff; box-shadow: 0 4px 12px rgb(23 110 157 / 18%); }
+.primary-action:hover { background: #125d86; }
+.secondary-action { border: 1px solid #c9d4dc; background: #fff; color: #27445a; }
+.secondary-action:hover { background: #f4f7f9; }
+
+.empty-state {
+  max-width: 760px;
+  min-height: 390px;
+  margin: 42px auto 0;
+  padding: 64px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dce4ea;
+  border-radius: 16px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 12px 40px rgb(40 64 81 / 7%);
+}
+.empty-state h2 { margin: 24px 0 8px; font-size: 22px; }
+.empty-state p { color: #6a7887; }
+.empty-actions { display: flex; gap: 10px; margin-top: 16px; }
+.empty-glyph { position: relative; width: 84px; height: 64px; }
+.empty-glyph span { position: absolute; width: 52px; height: 34px; border: 2px solid #6aa5c5; border-radius: 6px; background: #eff8fc; }
+.empty-glyph span:nth-child(1) { left: 0; top: 15px; }
+.empty-glyph span:nth-child(2) { right: 0; top: 0; }
+.empty-glyph span:nth-child(3) { right: 0; bottom: 0; background: #fff; }
+
+.startup-error {
+  width: min(680px, calc(100% - 32px));
+  margin: 12vh auto;
+  padding: 32px;
+  border: 1px solid #e4b9b9;
+  border-left: 5px solid #b53a3a;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 50px rgb(56 30 30 / 10%);
+}
+.startup-error h1 { color: #812828; font-size: 26px; }
+.startup-error p { color: #4f5863; line-height: 1.55; }
+.startup-error-hint { margin-bottom: 0; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .runtime-status { display: none !important; }
+  .workspace { grid-template-columns: 1fr; }
+  .sidebar { display: flex; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid #dce3e9; }
+  .nav-item { width: auto; flex: 0 0 auto; }
+  .content { padding: 24px 16px; }
+  .content-heading { align-items: flex-start; flex-direction: column; }
+  .empty-state { margin-top: 28px; min-height: 330px; }
+}

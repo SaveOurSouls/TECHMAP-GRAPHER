@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Techmap.Contracts/Techmap.Contracts.csproj" />
+    <ProjectReference Include="../Techmap.Domain/Techmap.Domain.csproj" />
+  </ItemGroup>
+</Project>

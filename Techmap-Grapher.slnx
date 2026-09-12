@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Techmap.Domain/Techmap.Domain.csproj" />
+    <Project Path="src/Techmap.Application/Techmap.Application.csproj" />
+    <Project Path="src/Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
+    <Project Path="src/Techmap.Contracts/Techmap.Contracts.csproj" />
+    <Project Path="src/Techmap.Web/Techmap.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Techmap.Architecture.Tests/Techmap.Architecture.Tests.csproj" />
+    <Project Path="tests/Techmap.Web.Tests/Techmap.Web.Tests.csproj" />
+  </Folder>
+</Solution>
