@@ -16,7 +16,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -70,6 +70,66 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         WHEN (SELECT COUNT(*) FROM harnesses WHERE project_id = NEW.project_id) >= 100
         BEGIN
             SELECT RAISE(ABORT, 'harness_limit_reached');
+        END;
+        """;
+    private const string ProjectDataMigrationId = "M1-05-attachments-and-pinned-data";
+    private const string ProjectDataSchemaSql =
+        """
+        CREATE TABLE attachment_blobs (
+            content_sha256 TEXT NOT NULL PRIMARY KEY
+                CHECK (length(content_sha256) = 64)
+                CHECK (content_sha256 = lower(content_sha256))
+                CHECK (content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+            created_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TABLE project_attachments (
+            attachment_id TEXT NOT NULL PRIMARY KEY CHECK (length(attachment_id) = 36),
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            content_sha256 TEXT NOT NULL
+                REFERENCES attachment_blobs(content_sha256) ON DELETE RESTRICT,
+            file_name TEXT NOT NULL CHECK (length(file_name) BETWEEN 1 AND 255),
+            media_type TEXT NOT NULL CHECK (length(media_type) BETWEEN 1 AND 127),
+            purpose TEXT NOT NULL CHECK (length(purpose) BETWEEN 1 AND 64),
+            created_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_project_attachments_project
+            ON project_attachments (project_id, created_utc, attachment_id);
+        CREATE INDEX ix_project_attachments_content
+            ON project_attachments (content_sha256, attachment_id);
+
+        CREATE TABLE pinned_characteristics (
+            snapshot_id TEXT NOT NULL PRIMARY KEY CHECK (length(snapshot_id) = 36),
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            source_kind TEXT NOT NULL CHECK (length(source_kind) BETWEEN 1 AND 64),
+            source_record_key TEXT NOT NULL CHECK (length(source_record_key) BETWEEN 1 AND 512),
+            source_version TEXT NOT NULL CHECK (length(source_version) BETWEEN 1 AND 512),
+            characteristic_name TEXT NOT NULL CHECK (length(characteristic_name) BETWEEN 1 AND 256),
+            characteristic_value TEXT NOT NULL CHECK (length(characteristic_value) <= 4096),
+            unit TEXT NOT NULL CHECK (length(unit) <= 64),
+            canonical_payload TEXT NOT NULL CHECK (length(canonical_payload) BETWEEN 2 AND 65536),
+            payload_sha256 TEXT NOT NULL
+                CHECK (length(payload_sha256) = 64)
+                CHECK (payload_sha256 = lower(payload_sha256))
+                CHECK (payload_sha256 NOT GLOB '*[^0-9a-f]*'),
+            captured_utc TEXT NOT NULL,
+            UNIQUE (
+                project_id,
+                source_kind,
+                source_record_key,
+                source_version,
+                characteristic_name)
+        ) STRICT;
+
+        CREATE INDEX ix_pinned_characteristics_project
+            ON pinned_characteristics (project_id, source_kind, source_record_key, characteristic_name);
+
+        CREATE TRIGGER prevent_pinned_characteristic_update
+        BEFORE UPDATE ON pinned_characteristics
+        BEGIN
+            SELECT RAISE(ABORT, 'pinned_characteristic_is_immutable');
         END;
         """;
 
@@ -410,6 +470,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         {
             (Version: 1, MigrationId: InitialMigrationId, Sql: InitialSchemaSql),
             (Version: 2, MigrationId: ProjectMigrationId, Sql: ProjectSchemaSql),
+            (Version: 3, MigrationId: ProjectDataMigrationId, Sql: ProjectDataSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -430,7 +491,23 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
     private static int ApplyNextMigration(SqliteConnection connection, int currentVersion)
     {
-        if (currentVersion != 1)
+        var migration = currentVersion switch
+        {
+            1 => (
+                Version: 2,
+                MigrationId: ProjectMigrationId,
+                Sql: ProjectSchemaSql,
+                Description: "Projects and harnesses"),
+            2 => (
+                Version: 3,
+                MigrationId: ProjectDataMigrationId,
+                Sql: ProjectDataSchemaSql,
+                Description: "Attachments and pinned external data"),
+            _ => throw new InvalidDataException(
+                $"No supported migration follows storage schema {currentVersion}."),
+        };
+
+        if (migration.Version != currentVersion + 1)
         {
             throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}.");
@@ -442,7 +519,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             using (var migrate = connection.CreateCommand())
             {
                 migrate.Transaction = transaction;
-                migrate.CommandText = ProjectSchemaSql;
+                migrate.CommandText = migration.Sql;
                 migrate.ExecuteNonQuery();
             }
 
@@ -456,28 +533,28 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                     VALUES (
                         $version, $migrationId, $scriptHash, $appVersion, $appliedUtc, $description);
                     """;
-                appendHistory.Parameters.AddWithValue("$version", 2);
-                appendHistory.Parameters.AddWithValue("$migrationId", ProjectMigrationId);
+                appendHistory.Parameters.AddWithValue("$version", migration.Version);
+                appendHistory.Parameters.AddWithValue("$migrationId", migration.MigrationId);
                 appendHistory.Parameters.AddWithValue(
                     "$scriptHash",
-                    HashMigrationSql(ProjectSchemaSql));
+                    HashMigrationSql(migration.Sql));
                 appendHistory.Parameters.AddWithValue("$appVersion", ApplicationInformationalVersion());
                 appendHistory.Parameters.AddWithValue(
                     "$appliedUtc",
                     DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-                appendHistory.Parameters.AddWithValue("$description", "Projects and harnesses");
+                appendHistory.Parameters.AddWithValue("$description", migration.Description);
                 appendHistory.ExecuteNonQuery();
             }
 
             using (var setUserVersion = connection.CreateCommand())
             {
                 setUserVersion.Transaction = transaction;
-                setUserVersion.CommandText = "PRAGMA user_version = 2;";
+                setUserVersion.CommandText = $"PRAGMA user_version = {migration.Version};";
                 setUserVersion.ExecuteNonQuery();
             }
 
             transaction.Commit();
-            return 2;
+            return migration.Version;
         }
         catch
         {

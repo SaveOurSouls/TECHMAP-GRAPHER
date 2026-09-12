@@ -43,9 +43,13 @@ public sealed class SqliteStorageIntegrationTests
         Assert.False(File.Exists(Path.Combine(layout.DataRootPath, StorageGenerationLayout.DatabaseFileName)));
 
         var history = storage.ExecuteRead(ReadSchemaHistory);
-        Assert.Equal([1, 2], history.Select(row => row.Version));
+        Assert.Equal([1, 2, 3], history.Select(row => row.Version));
         Assert.Equal(
-            ["M1-03-initial-storage", "M1-04-projects-and-harnesses"],
+            [
+                "M1-03-initial-storage",
+                "M1-04-projects-and-harnesses",
+                "M1-05-attachments-and-pinned-data",
+            ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
             "06cd209eb54cb85cfbe7d0682917044b0dd15f1990c1963c2dac41544ec87fb8",
@@ -111,7 +115,7 @@ public sealed class SqliteStorageIntegrationTests
                 return Assert.IsType<string>(command.ExecuteScalar());
             }));
         Assert.Equal(
-            [1, 2],
+            [1, 2, 3],
             reopened.ExecuteRead(ReadSchemaHistory).Select(row => row.Version));
     }
 
@@ -132,11 +136,15 @@ public sealed class SqliteStorageIntegrationTests
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
+                DROP TRIGGER prevent_pinned_characteristic_update;
+                DROP TABLE pinned_characteristics;
+                DROP TABLE project_attachments;
+                DROP TABLE attachment_blobs;
                 DROP TRIGGER enforce_project_harness_limit;
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version = 2;
+                DELETE FROM schema_history WHERE version IN (2, 3);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -145,15 +153,62 @@ public sealed class SqliteStorageIntegrationTests
         using var migrated = SqliteStorage.Open(fixture.DataRoot);
         var history = migrated.ExecuteRead(ReadSchemaHistory);
 
-        Assert.Equal(2, migrated.Diagnostics.SchemaVersion);
+        Assert.Equal(3, migrated.Diagnostics.SchemaVersion);
         Assert.Equal(originalVersionOne, history[0]);
         Assert.Equal(2, history[1].Version);
         Assert.Equal("M1-04-projects-and-harnesses", history[1].MigrationId);
+        Assert.Equal(3, history[2].Version);
+        Assert.Equal("M1-05-attachments-and-pinned-data", history[2].MigrationId);
         Assert.Equal(
             1,
             migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
                 unitOfWork,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects';")));
+    }
+
+    [Fact]
+    public void Version_two_database_is_migrated_without_rewriting_existing_history()
+    {
+        using var fixture = StorageFixture.Create();
+        IReadOnlyList<SchemaHistoryRow> originalHistory;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            originalHistory = storage.ExecuteRead(ReadSchemaHistory).Take(2).ToArray();
+        }
+
+        using (var connection = OpenIndependentConnection(databasePath))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DROP TRIGGER prevent_pinned_characteristic_update;
+                DROP TABLE pinned_characteristics;
+                DROP TABLE project_attachments;
+                DROP TABLE attachment_blobs;
+                DELETE FROM schema_history WHERE version = 3;
+                PRAGMA user_version = 2;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        using var migrated = SqliteStorage.Open(fixture.DataRoot);
+        var history = migrated.ExecuteRead(ReadSchemaHistory);
+
+        Assert.Equal(3, migrated.Diagnostics.SchemaVersion);
+        Assert.Equal(originalHistory, history.Take(2));
+        Assert.Equal(3, history[2].Version);
+        Assert.Equal("M1-05-attachments-and-pinned-data", history[2].MigrationId);
+        Assert.Equal(
+            3,
+            migrated.ExecuteRead(unitOfWork => ExecuteScalarInt32(
+                unitOfWork,
+                """
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table'
+                  AND name IN ('attachment_blobs', 'project_attachments', 'pinned_characteristics');
+                """)));
     }
 
     [Fact]

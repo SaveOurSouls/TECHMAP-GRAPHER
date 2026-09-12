@@ -142,6 +142,9 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
                     now);
             }
 
+            CopyAttachments(unitOfWork, sourceProjectId, destinationId, now);
+            CopyPinnedCharacteristics(unitOfWork, sourceProjectId, destinationId);
+
             return ReadProject(unitOfWork, destinationId);
         });
     }
@@ -446,6 +449,103 @@ public sealed class SqliteProjectCatalog(SqliteStorage storage) : IProjectCatalo
         command.Parameters.AddWithValue("$updatedUtc", timestamp);
         command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
         command.ExecuteNonQuery();
+    }
+
+    private static void CopyAttachments(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity sourceProjectId,
+        ProjectIdentity destinationProjectId,
+        string createdUtc)
+    {
+        using var read = unitOfWork.CreateCommand(
+            """
+            SELECT content_sha256, file_name, media_type, purpose
+            FROM project_attachments
+            WHERE project_id = $projectId
+            ORDER BY created_utc, attachment_id;
+            """);
+        read.Parameters.AddWithValue("$projectId", Format(sourceProjectId.Value));
+        using var reader = read.ExecuteReader();
+        var rows = new List<(string Hash, string FileName, string MediaType, string Purpose)>();
+        while (reader.Read())
+        {
+            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        }
+
+        reader.Close();
+        foreach (var row in rows)
+        {
+            using var insert = unitOfWork.CreateCommand(
+                """
+                INSERT INTO project_attachments (
+                    attachment_id, project_id, content_sha256, file_name, media_type, purpose, created_utc)
+                VALUES (
+                    $attachmentId, $projectId, $contentSha256, $fileName, $mediaType, $purpose, $createdUtc);
+                """);
+            insert.Parameters.AddWithValue("$attachmentId", Format(Guid.NewGuid()));
+            insert.Parameters.AddWithValue("$projectId", Format(destinationProjectId.Value));
+            insert.Parameters.AddWithValue("$contentSha256", row.Hash);
+            insert.Parameters.AddWithValue("$fileName", row.FileName);
+            insert.Parameters.AddWithValue("$mediaType", row.MediaType);
+            insert.Parameters.AddWithValue("$purpose", row.Purpose);
+            insert.Parameters.AddWithValue("$createdUtc", createdUtc);
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    private static void CopyPinnedCharacteristics(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity sourceProjectId,
+        ProjectIdentity destinationProjectId)
+    {
+        using var read = unitOfWork.CreateCommand(
+            """
+            SELECT source_kind, source_record_key, source_version,
+                   characteristic_name, characteristic_value, unit,
+                   canonical_payload, payload_sha256, captured_utc
+            FROM pinned_characteristics
+            WHERE project_id = $projectId
+            ORDER BY captured_utc, snapshot_id;
+            """);
+        read.Parameters.AddWithValue("$projectId", Format(sourceProjectId.Value));
+        using var reader = read.ExecuteReader();
+        var rows = new List<(string SourceKind, string RecordKey, string SourceVersion,
+            string Name, string Value, string Unit, string Payload, string Hash, string CapturedUtc)>();
+        while (reader.Read())
+        {
+            rows.Add((
+                reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                reader.GetString(6), reader.GetString(7), reader.GetString(8)));
+        }
+
+        reader.Close();
+        foreach (var row in rows)
+        {
+            using var insert = unitOfWork.CreateCommand(
+                """
+                INSERT INTO pinned_characteristics (
+                    snapshot_id, project_id, source_kind, source_record_key, source_version,
+                    characteristic_name, characteristic_value, unit, canonical_payload,
+                    payload_sha256, captured_utc)
+                VALUES (
+                    $snapshotId, $projectId, $sourceKind, $sourceRecordKey, $sourceVersion,
+                    $characteristicName, $characteristicValue, $unit, $canonicalPayload,
+                    $payloadSha256, $capturedUtc);
+                """);
+            insert.Parameters.AddWithValue("$snapshotId", Format(Guid.NewGuid()));
+            insert.Parameters.AddWithValue("$projectId", Format(destinationProjectId.Value));
+            insert.Parameters.AddWithValue("$sourceKind", row.SourceKind);
+            insert.Parameters.AddWithValue("$sourceRecordKey", row.RecordKey);
+            insert.Parameters.AddWithValue("$sourceVersion", row.SourceVersion);
+            insert.Parameters.AddWithValue("$characteristicName", row.Name);
+            insert.Parameters.AddWithValue("$characteristicValue", row.Value);
+            insert.Parameters.AddWithValue("$unit", row.Unit);
+            insert.Parameters.AddWithValue("$canonicalPayload", row.Payload);
+            insert.Parameters.AddWithValue("$payloadSha256", row.Hash);
+            insert.Parameters.AddWithValue("$capturedUtc", row.CapturedUtc);
+            insert.ExecuteNonQuery();
+        }
     }
 
     private static ProjectIdentity ReadProjectId(SqliteDataReader reader, int ordinal) =>

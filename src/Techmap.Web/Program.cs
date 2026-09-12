@@ -86,9 +86,18 @@ if (!int.TryParse(
     throw new InvalidDataException("The packaged and live storage schema versions do not match.");
 }
 
-builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, options.Port));
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.MaxRequestBodySize = ProjectDataEndpoints.MaximumAttachmentRequestBytes;
+    kestrel.Listen(IPAddress.Loopback, options.Port);
+});
 builder.Services.AddSingleton<IApplicationBoundary, StorageBoundary>();
 builder.Services.AddSingleton<IProjectCatalog, SqliteProjectCatalog>();
+builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
+    new ContentAddressedAttachmentStore(dataRoot));
+builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
+builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(storage);
 builder.Services.AddSingleton<LocalHttpSession>();
 
@@ -183,6 +192,7 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
             new ApiErrorResponse("invalid_session"),
             statusCode: StatusCodes.Status401Unauthorized));
 app.MapProjectEndpoints();
+app.MapProjectDataEndpoints();
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),
     statusCode: StatusCodes.Status404NotFound));

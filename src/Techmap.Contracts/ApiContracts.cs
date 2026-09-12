@@ -74,3 +74,24 @@ public sealed record ProjectDetailsResponse(
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc,
     IReadOnlyList<HarnessResponse> Harnesses);
+
+public sealed record CreateAttachmentRequest(
+    string? FileName,
+    string? MediaType,
+    string? Purpose,
+    string? ContentBase64);
+
+public sealed record ProjectAttachmentResponse(
+    Guid AttachmentId,
+    Guid ProjectId,
+    string Sha256,
+    long SizeBytes,
+    string FileName,
+    string MediaType,
+    string Purpose,
+    DateTimeOffset CreatedUtc);
+
+public sealed record ProjectAttachmentListResponse(
+    IReadOnlyList<ProjectAttachmentResponse> Attachments);
+
+public sealed record AttachmentValidationResponse(Guid AttachmentId, string Status);

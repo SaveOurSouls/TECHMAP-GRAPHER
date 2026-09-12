@@ -185,7 +185,7 @@ function Test-HostMode {
         $expectedApiBase = if ($PathBase -eq "/") { "/api/v1/" } else { "$PathBase/api/v1/" }
         Assert-Equal $runtime.basePath $expectedBasePath "Runtime basePath is incorrect."
         Assert-Equal $runtime.apiBasePath $expectedApiBase "Runtime apiBasePath is incorrect."
-        Assert-Equal ([int]$runtime.schemaVersion) 2 "Runtime schema version is incorrect."
+        Assert-Equal ([int]$runtime.schemaVersion) 3 "Runtime schema version is incorrect."
 
         $diagnosticsResponse = Invoke-WebRequest `
             -UseBasicParsing `
@@ -194,7 +194,7 @@ function Test-HostMode {
         Assert-JsonContentType $diagnosticsResponse "Diagnostics content type is incorrect."
         $diagnostics = $diagnosticsResponse.Content | ConvertFrom-Json
         Assert-Equal $diagnostics.status "ready" "Storage diagnostics status is incorrect."
-        Assert-Equal ([int]$diagnostics.schemaVersion) 2 "Live SQLite schema version is incorrect."
+        Assert-Equal ([int]$diagnostics.schemaVersion) 3 "Live SQLite schema version is incorrect."
         Assert-Equal $diagnostics.foreignKeysEnabled $true "SQLite foreign keys are not enabled."
         Assert-Equal $diagnostics.journalMode "wal" "SQLite journal mode is incorrect."
         if ([string]::IsNullOrWhiteSpace($diagnostics.sqliteVersion)) {
@@ -263,6 +263,25 @@ function Test-HostMode {
                 $projectSnapshot = $harnessResponse.Content | ConvertFrom-Json
             }
             Assert-Equal @($projectSnapshot.harnesses).Count 2 "Portable project did not store two harnesses."
+            $attachmentText = "Вложение переносимого проекта"
+            $attachmentBody = @{
+                fileName = "portable-check.txt"
+                mediaType = "text/plain"
+                purpose = "portable-test"
+                contentBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($attachmentText))
+            } | ConvertTo-Json -Compress
+            $attachmentResponse = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Method Post `
+                -Headers $mutationHeaders `
+                -ContentType "application/json" `
+                -Body $attachmentBody `
+                -Uri "$origin$routePrefix/api/v1/projects/$($projectSnapshot.projectId)/attachments"
+            $attachmentSnapshot = $attachmentResponse.Content | ConvertFrom-Json
+            $projectSnapshot | Add-Member `
+                -NotePropertyName testAttachment `
+                -NotePropertyValue $attachmentSnapshot
         } else {
             Assert-Equal @($projectList.projects).Count 1 "Restart did not list the persisted project."
             Assert-Equal $projectList.projects[0].projectId $ExpectedProject.projectId `
@@ -284,6 +303,39 @@ function Test-HostMode {
                 "Restart changed the first harness order."
             Assert-Equal $projectSnapshot.harnesses[1].sortOrder 1 `
                 "Restart changed the second harness order."
+            $attachmentsResponse = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Uri "$origin$routePrefix/api/v1/projects/$($ExpectedProject.projectId)/attachments"
+            $attachments = $attachmentsResponse.Content | ConvertFrom-Json
+            $attachmentSnapshot = @($attachments.attachments)[0]
+            Assert-Equal @($attachments.attachments).Count 1 `
+                "Restart did not preserve the project attachment."
+            Assert-Equal $attachmentSnapshot.attachmentId $ExpectedProject.testAttachment.attachmentId `
+                "Restart changed the attachment UUID."
+            Assert-Equal $attachmentSnapshot.sha256 $ExpectedProject.testAttachment.sha256 `
+                "Restart changed the attachment SHA-256."
+            $validation = Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -Method Post `
+                -Headers $mutationHeaders `
+                -ContentType "application/json" `
+                -Body "{}" `
+                -Uri "$origin$routePrefix/api/v1/projects/$($ExpectedProject.projectId)/attachments/$($attachmentSnapshot.attachmentId)/validations"
+            Assert-Equal (($validation.Content | ConvertFrom-Json).status) "valid" `
+                "Restarted package did not validate the attachment."
+            $attachmentDownload = Join-Path $artifactsRoot "$RunName.attachment.bin"
+            Remove-Item -LiteralPath $attachmentDownload -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest `
+                -UseBasicParsing `
+                -WebSession $webSession `
+                -OutFile $attachmentDownload `
+                -Uri "$origin$routePrefix/api/v1/projects/$($ExpectedProject.projectId)/attachments/$($attachmentSnapshot.attachmentId)/content" | Out-Null
+            Assert-Equal `
+                (Get-FileHash -LiteralPath $attachmentDownload -Algorithm SHA256).Hash.ToLowerInvariant() `
+                $ExpectedProject.testAttachment.sha256 `
+                "Restarted package returned different attachment bytes."
         }
 
         $secondaryStdout = Join-Path $artifactsRoot "$RunName.secondary.stdout.log"
