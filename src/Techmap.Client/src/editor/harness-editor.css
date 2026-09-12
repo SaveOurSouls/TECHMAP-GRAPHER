@@ -22,7 +22,7 @@
   min-width: 0;
   padding: 0 15px;
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+  grid-template-columns: minmax(190px, 1fr) auto 52px minmax(110px, 1fr);
   align-items: center;
   border-bottom: 1px solid var(--he-line);
   background: #fff;
@@ -42,7 +42,8 @@
 .he-view-tabs button.active { background: #fff; color: #076f9e; box-shadow: 0 1px 5px rgb(41 71 87 / 13%); }
 
 .he-save-state { justify-self: end; display: flex; align-items: center; gap: 7px; color: #607480; font-size: 11px; font-weight: 650; }
-.he-angle-snap { justify-self: end; margin-right: 96px; width: 42px; height: 28px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; color: #617681; font-size: 10px; font-weight: 800; cursor: pointer; }
+.he-view-options { display: grid; place-items: center; }
+.he-angle-snap { width: 42px; height: 28px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; color: #617681; font-size: 10px; font-weight: 800; cursor: pointer; }
 .he-angle-snap.active { border-color: #8fc4da; background: #e3f3f9; color: #0875a3; }
 .he-save-state > span { width: 7px; height: 7px; border-radius: 50%; background: #55a480; }
 .he-save-state.saving > span, .he-save-state.changed > span { background: #d59a3a; }

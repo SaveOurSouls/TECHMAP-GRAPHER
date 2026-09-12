@@ -201,15 +201,17 @@ export function HarnessEditorWorkspace({
           <button type="button" role="tab" aria-selected={view === "e4"} className={view === "e4" ? "active" : ""} onClick={() => changeView("e4")}>Схема Э4</button>
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
         </div>
-        {view === "drawing" && (
-          <button
-            className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
-            type="button"
-            aria-pressed={drawingSnapEnabled}
-            title="Фиксировать направление нового участка с шагом 15 градусов"
-            onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
-          >15°</button>
-        )}
+        <div className="he-view-options">
+          {view === "drawing" && (
+            <button
+              className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
+              type="button"
+              aria-pressed={drawingSnapEnabled}
+              title="Фиксировать направление нового участка с шагом 15 градусов"
+              onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
+            >15°</button>
+          )}
+        </div>
         <div className={`he-save-state ${saveState}`} role="status">
           <span aria-hidden="true" />{saveLabels[saveState]}
         </div>

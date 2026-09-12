@@ -209,7 +209,11 @@ export function HarnessDesignEditor({
   }, [api, harnessId, projectId]);
 
   useEffect(() => {
-    if (!history || JSON.stringify(history.present) === savedJsonRef.current) return;
+    if (!history) return;
+    if (JSON.stringify(history.present) === savedJsonRef.current) {
+      if (!savingRef.current) setSaveState("saved");
+      return;
+    }
     setSaveState("changed");
     const timer = window.setTimeout(() => void flushSave(), 650);
     return () => window.clearTimeout(timer);
