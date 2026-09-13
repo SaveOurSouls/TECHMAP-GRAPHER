@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  E4_BRIDGE_MINIMUM_SPACING,
   polylineLength,
   routeE4Wire,
   validateE4Route,
@@ -71,7 +72,7 @@ describe("E4 obstacle router", () => {
     expect(() => validateE4Route(route.points, request)).not.toThrow();
   });
 
-  it("separates parallel portions by the configured clearance", () => {
+  it("separates parallel portions by the complete bridge footprint including its halo", () => {
     const request = horizontalRequest({
       start: { position: { x: 0, y: 2 }, leadDirection: "right" },
       end: { position: { x: 100, y: 2 }, leadDirection: "left" },
@@ -80,7 +81,8 @@ describe("E4 obstacle router", () => {
     });
     const route = routeE4Wire(request);
 
-    expect(route.points.some((point) => point.y === 10)).toBe(true);
+    expect(route.points.some((point) => point.y === E4_BRIDGE_MINIMUM_SPACING)).toBe(true);
+    expect(E4_BRIDGE_MINIMUM_SPACING).toBeGreaterThanOrEqual(21);
     expect(() => validateE4Route(route.points, request)).not.toThrow();
   });
 

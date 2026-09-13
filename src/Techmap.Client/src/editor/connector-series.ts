@@ -69,7 +69,7 @@ export interface SeriesArticleSelectionResult {
 
 export type FreeContactValues = Partial<Pick<
   ConnectorContact,
-  "contactType" | "circuit" | "terminalArticle" | "wire" | "color" | "connectionStatus" | "customValues"
+  "contactType" | "circuit" | "terminalArticle" | "wire" | "color" | "secondaryColor" | "connectionStatus" | "customValues"
 >>;
 
 const maximumContactCount = 300;
@@ -139,6 +139,7 @@ export function selectConnectorSeriesArticle(
           : "",
         wire: previous?.wire ?? "",
         color: previous?.color ?? "",
+        secondaryColor: previous?.secondaryColor ?? "",
         connectionStatus: previous?.connectionStatus ?? "available",
         customValues: previous?.customValues ?? {},
         libraryContact,
@@ -188,6 +189,7 @@ export function appendFreeConnectorContact(
     terminalArticle: normalizeOptionalText(values.terminalArticle),
     wire: normalizeOptionalText(values.wire),
     color: normalizeOptionalText(values.color),
+    secondaryColor: normalizeOptionalText(values.secondaryColor),
     connectionStatus: values.connectionStatus ?? "available",
     customValues: values.customValues ?? {},
     libraryContact: null,

@@ -553,6 +553,8 @@ describe("harness editor workspace", () => {
     expect(pairLayout.motifs[0]!.to - pairLayout.motifs[0]!.from).toBe(16);
     expect(pairLayout.motifs[0]!.from - pairLayout.span.start).toBe(32);
     expect(pairLayout.span.end - pairLayout.motifs[0]!.to).toBe(32);
+    expect(pairLayout.motifs[0]!.coloredFrom).toBeLessThan(pairLayout.motifs[0]!.from);
+    expect(pairLayout.motifs[0]!.coloredTo).toBeGreaterThan(pairLayout.motifs[0]!.to);
     expect(hitTestE4DifferentialPair([pair], wires, { x: 60, y: 50 }, 1)?.wireIds).toEqual(["h1", "h2"]);
     expect(hitTestE4DifferentialPair([pair], wires, { x: 30, y: 50 }, 1_000)).toBeNull();
     expect(getE4DifferentialPairLayout({

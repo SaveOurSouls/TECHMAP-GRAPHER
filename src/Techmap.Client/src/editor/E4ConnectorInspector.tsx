@@ -9,8 +9,15 @@ import {
   connectorBaseColumnKeys,
   connectorE4TableGeometry,
   type ConnectorBaseColumnKey,
+  type ConnectorContact,
   type ConnectorInstance,
 } from "./model";
+import {
+  builtInWireColors,
+  builtInWireReferences,
+  filterWireSuggestions,
+  type WireColorReference,
+} from "./wire-reference-catalog";
 import "./e4-connector-inspector.css";
 
 export interface E4ConnectorInspectorProps {
@@ -21,6 +28,9 @@ export interface E4ConnectorInspectorProps {
   readonly series?: ConnectorSeries;
   readonly terminalArticles?: readonly string[];
   readonly onTerminalSearch?: (query: string) => void;
+  readonly wireArticles?: readonly string[];
+  readonly onWireSearch?: (query: string) => void;
+  readonly wireColors?: readonly WireColorReference[];
   readonly editing?: boolean;
   readonly onEditingChange?: (editing: boolean) => void;
 }
@@ -33,6 +43,97 @@ const baseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
   wire: "Провод",
   color: "Цвет",
 };
+
+function normalizedColorKey(value: string): string {
+  return value.trim().toLocaleLowerCase("ru-RU").replace(/ё/g, "е");
+}
+
+function colorHex(value: string, choices: readonly WireColorReference[]): string {
+  if (/^#[0-9a-f]{6}$/i.test(value.trim())) return value.trim();
+  return choices.find((choice) => normalizedColorKey(choice.name) === normalizedColorKey(value))?.hex ?? "#D9E2E7";
+}
+
+function connectorColorChoices(connector: ConnectorInstance): readonly WireColorReference[] {
+  const known = new Set(builtInWireColors.map((color) => normalizedColorKey(color.name)));
+  const customValues = connector.contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""])
+    .filter((value) => value.trim() !== "" && !known.has(normalizedColorKey(value)));
+  return [
+    ...builtInWireColors,
+    ...[...new Set(customValues)].map((value) => ({
+      id: `custom:${normalizedColorKey(value)}`,
+      name: value,
+      hex: /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : "#D9E2E7",
+      kind: "custom" as const,
+    })),
+  ];
+}
+
+function ColorCellEditor({
+  contact,
+  choices,
+  disabled,
+  editing,
+  onChange,
+}: {
+  readonly contact: ConnectorContact;
+  readonly choices: readonly WireColorReference[];
+  readonly disabled: boolean;
+  readonly editing: boolean;
+  readonly onChange: (patch: Pick<ConnectorContact, "color" | "secondaryColor">) => void;
+}) {
+  const primary = contact.color;
+  const secondary = contact.secondaryColor ?? "";
+  const swatchStyle = {
+    background: secondary
+      ? `linear-gradient(225deg, ${colorHex(primary, choices)} 0 49%, #8da0aa 49% 51%, ${colorHex(secondary, choices)} 51% 100%)`
+      : colorHex(primary, choices),
+  };
+  if (!editing) {
+    return <span className="e4cce-color-readonly" title={[primary, secondary].filter(Boolean).join(" / ")}>
+      <i style={swatchStyle} aria-hidden="true" />
+      <span>{[primary, secondary].filter(Boolean).join(" / ") || " "}</span>
+    </span>;
+  }
+  return (
+    <details className="e4cce-color-editor">
+      <summary aria-label={`Цвет, контакт ${contact.number}`} title="Основной и второй цвет провода">
+        <i style={swatchStyle} aria-hidden="true" />
+        <span>{[primary, secondary].filter(Boolean).join(" / ") || "—"}</span>
+      </summary>
+      <div className="e4cce-color-popover">
+        <label>Основной цвет
+          <select
+            value={primary}
+            disabled={disabled}
+            onChange={(event) => onChange({ color: event.target.value, secondaryColor: secondary })}
+          >
+            <option value="">—</option>
+            {choices.map((choice) => <option key={choice.id} value={choice.name}>{choice.name}</option>)}
+          </select>
+        </label>
+        <label>Второй цвет
+          <select
+            value={secondary}
+            disabled={disabled}
+            onChange={(event) => onChange({ color: primary, secondaryColor: event.target.value })}
+          >
+            <option value="">Пусто · одноцветный</option>
+            {choices.map((choice) => <option key={choice.id} value={choice.name}>{choice.name}</option>)}
+          </select>
+        </label>
+        <label className="e4cce-palette">Новый цвет
+          <input
+            type="color"
+            aria-label={`Новый цвет из палитры, контакт ${contact.number}`}
+            disabled={disabled}
+            value={colorHex(primary, choices)}
+            onChange={(event) => onChange({ color: event.target.value.toUpperCase(), secondaryColor: secondary })}
+          />
+        </label>
+      </div>
+    </details>
+  );
+}
 
 function nextCustomFieldId(connector: ConnectorInstance, label: string): string {
   const slug = label
@@ -73,12 +174,16 @@ export function E4ConnectorInspector({
   series,
   terminalArticles = [],
   onTerminalSearch,
+  wireArticles = builtInWireReferences.map((wire) => wire.designation),
+  onWireSearch,
+  wireColors,
   editing,
   onEditingChange,
 }: E4ConnectorInspectorProps) {
   const [designation, setDesignation] = useState(connector.designation);
   const [partNumber, setPartNumber] = useState(connector.partNumber);
   const [newFieldLabel, setNewFieldLabel] = useState("");
+  const [wireQueries, setWireQueries] = useState<Readonly<Record<string, string>>>({});
   const cancelIdentityBlurRef = useRef(false);
   const canvasEditing = mode !== "canvas" || editing === true;
 
@@ -136,6 +241,7 @@ export function E4ConnectorInspector({
       terminalArticle: patch.terminalArticle,
       wire: patch.wire,
       color: patch.color,
+      secondaryColor: patch.secondaryColor,
       connectionStatus: patch.connectionStatus,
       customValues: patch.customValues,
     });
@@ -149,7 +255,7 @@ export function E4ConnectorInspector({
       connectorId: connector.id,
       contact: {
         id: nextContactId(connector, number), number, contactType: "", circuit: "",
-        terminalArticle: "", wire: "", color: "", connectionStatus: "available", customValues: {},
+        terminalArticle: "", wire: "", color: "", secondaryColor: "", connectionStatus: "available", customValues: {},
       },
     });
   };
@@ -157,6 +263,8 @@ export function E4ConnectorInspector({
   if (mode === "canvas") {
     const isSeries = connector.libraryBinding?.mode === "series";
     const article = isSeries && series ? findConnectorSeriesArticle(series, connector.partNumber) : null;
+    const libraryCode = isSeries ? series?.name ?? connector.libraryBinding?.seriesId ?? "СЕРИЯ" : "FREE";
+    const colorChoices = wireColors ?? connectorColorChoices(connector);
     const geometry = connectorE4TableGeometry(connector);
     const columns = geometry.columns.map((column) => column.kind === "base"
       ? { id: column.key, label: baseColumnLabels[column.key], width: column.width }
@@ -180,7 +288,13 @@ export function E4ConnectorInspector({
           className="e4cce-title"
           title={canvasEditing ? "Редактирование" : "Перетащить соединитель"}
         >
-          <span aria-hidden="true">⠿</span>
+          <button
+            type="button"
+            className="e4cce-title-add"
+            disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
+            title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
+            onClick={addContact}
+          >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
           {canvasEditing ? (
             <input
               type="text"
@@ -235,7 +349,15 @@ export function E4ConnectorInspector({
                     ? article.allowedTerminalArticles[contact.libraryContact.kind]
                     : [];
                   const lockedBySeries = isSeries && (column.id === "number" || column.id === "contactType");
-                  const input = column.id === "terminal" && isSeries ? (
+                  const input = column.id === "color" ? (
+                    <ColorCellEditor
+                      contact={contact}
+                      choices={colorChoices}
+                      disabled={disabled}
+                      editing={canvasEditing}
+                      onChange={(patch) => updateContact(contact, patch)}
+                    />
+                  ) : column.id === "terminal" && isSeries ? (
                     <select
                       value={value}
                       disabled={disabled || !canvasEditing}
@@ -247,7 +369,44 @@ export function E4ConnectorInspector({
                       {!terminalOptions.includes(value) && value && <option value={value}>{value}</option>}
                       {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}
                     </select>
-                  ) : <input
+                  ) : column.id === "wire" ? <div className="e4cce-wire-picker">
+                    <input
+                      type="text"
+                      value={value}
+                      disabled={disabled || !canvasEditing}
+                      aria-label={`${column.label}, контакт ${contact.number}`}
+                      autoComplete="off"
+                      onChange={(event) => {
+                        const query = event.target.value;
+                        updateContact(contact, { wire: query });
+                        setWireQueries((current) => ({ ...current, [contact.id]: query }));
+                        onWireSearch?.(query);
+                      }}
+                      onFocus={(event) => setWireQueries((current) => ({ ...current, [contact.id]: event.currentTarget.value }))}
+                      onBlur={() => setTimeout(() => setWireQueries((current) => {
+                        const next = { ...current };
+                        delete next[contact.id];
+                        return next;
+                      }), 120)}
+                    />
+                    {wireQueries[contact.id] !== undefined && <div className="e4cce-wire-suggestions" role="listbox" aria-label={`Подсказки проводов, контакт ${contact.number}`}>
+                      {filterWireSuggestions(wireQueries[contact.id] ?? "")
+                        .filter((wire) => wireArticles.includes(wire.designation))
+                        .map((wire) => <button
+                          type="button"
+                          key={wire.id}
+                          onPointerDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            updateContact(contact, { wire: wire.designation });
+                            setWireQueries((current) => {
+                              const next = { ...current };
+                              delete next[contact.id];
+                              return next;
+                            });
+                          }}
+                        >{wire.designation}</button>)}
+                    </div>}
+                  </div> : <input
                     type={column.id === "number" ? "number" : "text"}
                     min={column.id === "number" ? 1 : undefined}
                     max={column.id === "number" ? 300 : undefined}
@@ -273,7 +432,8 @@ export function E4ConnectorInspector({
                       }
                     }}
                   />;
-                  const cell = canvasEditing ? input : <span className="e4cce-readonly-value">{value || " "}</span>;
+                  const cell = column.id === "color" ? input
+                    : canvasEditing ? input : <span className="e4cce-readonly-value">{value || " "}</span>;
                   return <td key={column.id} className={column.id === "number" ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && <span className="e4cce-row-actions">
                     <button
                       type="button"
@@ -295,27 +455,12 @@ export function E4ConnectorInspector({
                 })}
               </tr>
             ))}</tbody>
-            <tfoot><tr>{columns.length === 0 ? <td className="e4cce-empty-column">
-              <button
-                type="button"
-                className="e4cce-add-row"
-                disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
-                onClick={addContact}
-              >⊕ Добавить строку</button>
-            </td> : columns.map((column, index) => (
-              <td key={column.id} className={column.id === "number" ? "e4cce-part-number" : undefined}>
-                {column.id === "number" ? <span title={connector.partNumber}>{connector.partNumber}</span>
-                  : index === columns.findIndex((item) => item.id !== "number") ? (
-                    <button
-                      type="button"
-                      className="e4cce-add-row"
-                      disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
-                      title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
-                      onClick={addContact}
-                    >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
-                  ) : null}
-              </td>
-            ))}</tr></tfoot>
+            <tfoot><tr><td colSpan={Math.max(1, columns.length)}>
+              <div className="e4cce-footer">
+                <span className="e4cce-footer-code" title={libraryCode}>{libraryCode}</span>
+                <span className="e4cce-footer-article" title={connector.partNumber}>{connector.partNumber}</span>
+              </div>
+            </td></tr></tfoot>
           </table>
         </div>
       </section>

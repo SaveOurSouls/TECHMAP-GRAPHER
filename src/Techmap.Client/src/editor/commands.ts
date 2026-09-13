@@ -38,7 +38,7 @@ export type EditorCommand =
   | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string }
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
-  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "toggle-base-column-visibility"; readonly connectorId: string; readonly key: ConnectorBaseColumnKey }
@@ -94,6 +94,7 @@ export function createConnector(
     terminalArticle: "",
     wire: "",
     color: "",
+    secondaryColor: "",
     connectionStatus: "available",
     customValues: {},
   }));
@@ -147,10 +148,10 @@ export function applyEditorCommand(
         throw new Error("Соединитель с таким ID уже существует.");
       }
       validateConnectorLibraryMetadata(command.connector);
-      return rebuildConnectorE4Wires(
+      return rememberCustomWireColors(rebuildConnectorE4Wires(
         { ...document, connectors: [...document.connectors, command.connector] },
         command.connector.id,
-      );
+      ), command.connector.contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
     case "move-connector":
       {
       const moved = {
@@ -218,7 +219,7 @@ export function applyEditorCommand(
         ...candidate,
         positions: item.positions,
       }));
-      return updated;
+      return rememberCustomWireColors(updated, contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
     }
     case "flip-connector-orientation":
       return updateConnectorE4Geometry(document, command.connectorId, (connector) => ({
@@ -228,8 +229,8 @@ export function applyEditorCommand(
           orientation: connector.schematic.orientation === "contacts-left" ? "contacts-right" : "contacts-left",
         },
       }));
-    case "update-contact":
-      return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
+    case "update-contact": {
+      const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
         if (connector.libraryBinding?.mode === "series" && (command.number !== undefined || command.contactType !== undefined)) {
           throw new Error("Номер и тип библиотечного контакта определяются выбранным артикулом серии.");
         }
@@ -251,14 +252,19 @@ export function applyEditorCommand(
             : normalizeValue(command.terminalArticle, "Артикул терминала"),
           wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
           color: command.color === undefined ? contact.color : normalizeValue(command.color, "Цвет провода контакта"),
+          secondaryColor: command.secondaryColor === undefined
+            ? contact.secondaryColor ?? ""
+            : normalizeValue(command.secondaryColor, "Второй цвет провода контакта"),
           connectionStatus: command.connectionStatus ?? contact.connectionStatus,
           customValues: customValues ?? contact.customValues,
         }), "Контакт не найден.");
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
-    case "add-contact":
-      return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
+      return rememberCustomWireColors(updated, [command.color ?? "", command.secondaryColor ?? ""]);
+    }
+    case "add-contact": {
+      const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
         if (connector.libraryBinding?.mode === "series") {
           throw new Error("Число контактов библиотечного соединителя определяется выбранным артикулом серии.");
         }
@@ -270,6 +276,8 @@ export function applyEditorCommand(
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
+      return rememberCustomWireColors(updated, [command.contact.color, command.contact.secondaryColor ?? ""]);
+    }
     case "remove-contact": {
       const connector = document.connectors.find((item) => item.id === command.connectorId);
       if (connector?.libraryBinding?.mode === "series") {
@@ -507,7 +515,12 @@ export function applyEditorCommand(
       const junction = requireJunction(document, command.junctionId);
       let changed: HarnessDesignDocument = { ...document, junctions: document.junctions.map((item) =>
         item.id === junction.id ? { ...item, position: { ...command.position } } : item) };
-      changed = rerouteE4WireBatch(changed, junction.wireIds);
+      // A moved junction changes the routes and therefore the positions of
+      // their labels. Reflow every automatic route in the same transaction so
+      // a newly positioned label cannot be left over an unrelated conductor.
+      changed = rerouteE4WireBatch(changed, changed.wires
+        .filter((wire) => wire.e4RouteMode !== "manual" || junction.wireIds.includes(wire.id))
+        .map((wire) => wire.id));
       validateJunctionAgainstWires(changed, changed.junctions.find((item) => item.id === junction.id)!);
       validateWireGroups(changed);
       validateAllE4Wires(changed);
@@ -619,6 +632,23 @@ export function applyEditorCommand(
   }
 }
 
+function rememberCustomWireColors(
+  document: HarnessDesignDocument,
+  values: readonly string[],
+): HarnessDesignDocument {
+  const colors = [...new Set([
+    ...(document.customWireColors ?? []),
+    ...values.flatMap((value) => {
+      const normalized = value.trim().toUpperCase();
+      return /^#[0-9A-F]{6}$/.test(normalized) ? [normalized] : [];
+    }),
+  ])];
+  return colors.length === (document.customWireColors?.length ?? 0) &&
+    colors.every((value, index) => value === document.customWireColors?.[index])
+    ? document
+    : { ...document, customWireColors: colors };
+}
+
 /** Repairs or upgrades loaded E4 geometry before it is shown or saved. */
 export function normalizeE4RoutingDocument(document: HarnessDesignDocument): HarnessDesignDocument {
   return rebuildConnectorE4Wires(document);
@@ -714,6 +744,7 @@ function normalizeContact(
     terminalArticle: normalizeValue(contact.terminalArticle, "Артикул терминала"),
     wire: normalizeValue(contact.wire, "Провод контакта"),
     color: normalizeValue(contact.color, "Цвет провода контакта"),
+    secondaryColor: normalizeValue(contact.secondaryColor ?? "", "Второй цвет провода контакта"),
     customValues: normalizeCustomValues(contact.customValues, customFields),
   };
 }
@@ -854,9 +885,19 @@ function validateE4WireIds(document: HarnessDesignDocument, wireIds: readonly st
     const start = wireEndpointE4Anchor(document, wire.from);
     const end = wireEndpointE4Anchor(document, wire.to);
     if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+    // A junction component is one electrical net. Its branches may enter the
+    // visual label of another branch; treating that annotation as an obstacle
+    // would make a valid T connection impossible after its junction moves.
+    const junctionComponent = collectJunctionComponent([wireId], document.junctions);
+    const request = createE4RoutingRequest(document, wire, wire.id);
     validateE4Route(
       [start.position, ...wire.e4Route, end.position],
-      createE4RoutingRequest(document, wire, wire.id),
+      {
+        ...request,
+        obstacles: request.obstacles?.filter((obstacle) =>
+          !obstacle.id?.startsWith("wire-label:") ||
+          !junctionComponent.has(obstacle.id.slice("wire-label:".length))),
+      },
     );
   }
 }

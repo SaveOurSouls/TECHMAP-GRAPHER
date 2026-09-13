@@ -13,6 +13,7 @@ import {
   createBuiltInConnectorInstance,
 } from "./connector-series-demo";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
+import { builtInWireColors, createCustomWireColor, resolveWireColorHex } from "./wire-reference-catalog";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
 import {
   connectorContactPosition,
@@ -105,6 +106,7 @@ export function designToScene(
 ): readonly EditorSceneObject[] {
   const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
     const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
+    const seriesBinding = connector.libraryBinding?.mode === "series" ? connector.libraryBinding : null;
     const metadata: Record<string, string> = { contactCount: String(connector.contacts.length) };
     if (view === "e4" && geometry) {
       const columnIds = geometry.columns.map((column) => column.kind === "base"
@@ -116,6 +118,9 @@ export function designToScene(
         view: "e4",
         orientation: connector.schematic.orientation === "contacts-left" ? "left" : "right",
         designation: connector.designation,
+        libraryCode: seriesBinding
+          ? builtInConnectorSeries.find((series) => series.id === seriesBinding.seriesId)?.name ?? seriesBinding.seriesId
+          : "FREE",
         partNumber: connector.partNumber,
         columns: JSON.stringify(columnIds),
         columnLabels: JSON.stringify(customLabels),
@@ -126,6 +131,7 @@ export function designToScene(
             terminal: contact.terminalArticle,
             wire: contact.wire,
             color: contact.color,
+            secondaryColor: contact.secondaryColor ?? "",
             status: contact.connectionStatus,
             customValues: contact.customValues,
           }))),
@@ -479,6 +485,18 @@ export function HarnessDesignEditor({
   const selectedConnectorSeries = selectedSeriesId
     ? builtInConnectorSeries.find((series) => series.id === selectedSeriesId)
     : undefined;
+  const customWireColorHexes = [...new Set([
+    ...(history.present.customWireColors ?? []),
+    ...history.present.connectors.flatMap((connector) => connector.contacts
+      .flatMap((contact) => [contact.color, contact.secondaryColor ?? ""])),
+  ].flatMap((value) => {
+    const normalized = value.trim().toUpperCase();
+    return /^#[0-9A-F]{6}$/.test(normalized) ? [normalized] : [];
+  }))];
+  const editorWireColors = [
+    ...builtInWireColors,
+    ...customWireColorHexes.map((hex) => createCustomWireColor(hex)),
+  ];
   const addCatalogItem = (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
     if (item.placement !== "connector") return;
     const id = crypto.randomUUID();
@@ -515,7 +533,15 @@ export function HarnessDesignEditor({
   };
 
   const createRoutedWire = (id: string, from: WireEndpoint, to: WireEndpoint) => {
-    const wire = createWire(id, from, to, 100);
+    const contactValues = [from, to].flatMap((endpoint) => {
+      if (isJunctionEndpoint(endpoint)) return [];
+      const connector = history.present.connectors.find((item) => item.id === endpoint.connectorId);
+      const contact = connector?.contacts.find((item) => item.id === endpoint.contactId);
+      return contact ? [contact] : [];
+    });
+    const circuit = contactValues.find((contact) => contact.circuit.trim())?.circuit ?? "";
+    const colorName = contactValues.find((contact) => contact.color.trim())?.color ?? "";
+    const wire = createWire(id, from, to, 100, circuit, resolveWireColorHex(colorName));
     const start = wireEndpointE4Anchor(history.present, from);
     const end = wireEndpointE4Anchor(history.present, to);
     return start && end ? { ...wire, e4Route: createOrthogonalE4Route(start, end) } : wire;
@@ -603,6 +629,7 @@ export function HarnessDesignEditor({
             series={selectedConnectorSeries}
             terminalArticles={terminalLookup.articles}
             onTerminalSearch={terminalLookup.search}
+            wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
           />
@@ -613,6 +640,7 @@ export function HarnessDesignEditor({
             series={selectedConnectorSeries}
             terminalArticles={terminalLookup.articles}
             onTerminalSearch={terminalLookup.search}
+            wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
             mode="canvas"

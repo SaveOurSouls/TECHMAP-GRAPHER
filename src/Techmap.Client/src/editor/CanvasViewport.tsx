@@ -14,8 +14,10 @@ import type {
   EditorTool,
   HarnessEditorView,
 } from "./editor-types";
-import { connectorE4TableColumnWidth } from "./model";
+import { connectorE4FooterWidth, connectorE4TableColumnWidth } from "./model";
 import { getE4WireLabelLayout, projectPointToE4WireLabelPosition } from "./e4-wire-label";
+import { E4_BRIDGE_RADIUS } from "./e4-router";
+import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -513,7 +515,7 @@ export interface E4BridgeGeometry {
 /** Geometry with coloured legs overlapping the exact butt-capped clear span. */
 export function getE4BridgeGeometry(
   crossing: Pick<E4WireCrossing, "point" | "overOrientation">,
-  radius = 7,
+  radius = E4_BRIDGE_RADIUS,
 ): E4BridgeGeometry {
   const { point, overOrientation } = crossing;
   if (overOrientation === "horizontal") {
@@ -657,6 +659,9 @@ export interface E4DifferentialPairMotif {
   readonly from: number;
   readonly center: number;
   readonly to: number;
+  /** Coloured horizontal/vertical legs overlap the erased base conductors here. */
+  readonly coloredFrom: number;
+  readonly coloredTo: number;
 }
 
 export interface E4DifferentialPairLayout {
@@ -703,6 +708,8 @@ export function getE4DifferentialPairLayout(
         from: Math.max(span.start, center - motifLength / 2),
         center,
         to: Math.min(span.end, center + motifLength / 2),
+        coloredFrom: Math.max(span.start, center - motifLength / 2 - 2),
+        coloredTo: Math.min(span.end, center + motifLength / 2 + 2),
       };
     }),
   };
@@ -963,6 +970,7 @@ interface E4ContactRow {
   readonly terminal: string;
   readonly wire: string;
   readonly color: string;
+  readonly secondaryColor: string;
   readonly status: "available" | "not-connected";
   readonly customValues: Readonly<Record<string, string>>;
 }
@@ -976,6 +984,7 @@ export interface E4ConnectorColumnLayout {
 
 export interface E4ConnectorLayout {
   readonly designation: string;
+  readonly libraryCode: string;
   readonly partNumber: string;
   readonly x: number;
   readonly y: number;
@@ -1047,7 +1056,8 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
   for (const item of parsed) {
     if (!isRecord(item) || !Number.isSafeInteger(item.number) || (item.number as number) < 1) return null;
     const contactType = typeof item.contactType === "string" ? item.contactType : item.type;
-    const textValues = [contactType, item.circuit, item.terminal, item.wire, item.color];
+    const secondaryColor = item.secondaryColor === undefined ? "" : item.secondaryColor;
+    const textValues = [contactType, item.circuit, item.terminal, item.wire, item.color, secondaryColor];
     const customValues = parseStringRecord(item.customValues ?? item.values);
     if (!textValues.every((entry) => typeof entry === "string") || customValues === null ||
         (item.status !== "available" && item.status !== "not-connected")) return null;
@@ -1058,6 +1068,7 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
       terminal: item.terminal as string,
       wire: item.wire as string,
       color: item.color as string,
+      secondaryColor: secondaryColor as string,
       status: item.status,
       customValues,
     });
@@ -1069,6 +1080,7 @@ function e4CellText(row: E4ContactRow, column: E4ColumnId): string {
   if (column === "number") return String(row.number);
   if (isCustomE4ColumnId(column)) return row.customValues[column.slice("custom:".length)] ?? "";
   if (column === "contactType") return row.type;
+  if (column === "color") return [row.color, row.secondaryColor].filter(Boolean).join(" / ");
   return row[column];
 }
 
@@ -1106,7 +1118,7 @@ export function e4ContactMarker(
  * { view: "e4", orientation: "left" | "right", designation: string,
  *   partNumber?: string, columns: JSON.stringify(E4ColumnId[]),
  *   columnLabels?: JSON.stringify(Record<string, string>),
- *   rows: JSON.stringify({ number, contactType, circuit, terminal, wire, color,
+ *   rows: JSON.stringify({ number, contactType, circuit, terminal, wire, color, secondaryColor,
  *     status: "available" | "not-connected", customValues: Record<string, string> }[]) }.
  * The orientation names the outer contact side. Invalid metadata deliberately
  * returns null so legacy contactCount connectors keep their compact renderer.
@@ -1121,6 +1133,7 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
   const columnIds = parseE4Columns(object.metadata.columns, connectionSide);
   const columnLabels = parseStringRecord(parseJson(object.metadata.columnLabels)) ?? {};
   const designation = object.metadata.designation?.trim() || object.label;
+  const libraryCode = object.metadata.libraryCode?.trim() || "FREE";
   const partNumber = object.metadata.partNumber?.trim() ?? "";
   const widths = new Map<E4ColumnId, number>(columnIds.map((column) => {
     const label = columnLabels[column] ?? (isCustomE4ColumnId(column) ? column.slice("custom:".length) : e4ColumnLabels[column]);
@@ -1131,14 +1144,15 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
     ];
   }));
   const columnWidth = columnIds.reduce((total, column) => total + (widths.get(column) ?? 0), 0);
-  const width = Math.max(118, columnWidth);
+  const width = Math.max(118, columnWidth, connectorE4FooterWidth(libraryCode, partNumber));
   const titleHeight = 24;
   const headerHeight = 28;
   const rowHeight = 24;
   const footerHeight = 24;
   const height = titleHeight + headerHeight + rows.length * rowHeight + footerHeight;
   const widthRemainder = width - columnWidth;
-  const growColumn = columnIds.indexOf("number");
+  const flexibleColumn = columnIds.findIndex((column) => column !== "number");
+  const growColumn = flexibleColumn < 0 ? 0 : flexibleColumn;
   let columnX = object.x;
   const columns = columnIds.map((id, index) => {
     const columnWidth = widths.get(id)! + (index === (growColumn < 0 ? 0 : growColumn) ? widthRemainder : 0);
@@ -1158,6 +1172,7 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
   }));
   return {
     designation,
+    libraryCode,
     partNumber,
     x: object.x,
     y: object.y,
@@ -1317,6 +1332,59 @@ function drawE4CellText(
   context.restore();
 }
 
+function drawE4ColorCell(
+  context: CanvasRenderingContext2D,
+  row: E4ContactRow,
+  column: E4ConnectorColumnLayout,
+  y: number,
+  height: number,
+) {
+  const label = e4CellText(row, "color");
+  if (!label) return;
+  const swatchWidth = Math.min(26, Math.max(14, column.width - 12));
+  const swatchHeight = Math.min(13, height - 7);
+  const swatchX = column.x + 5;
+  const swatchY = y + (height - swatchHeight) / 2;
+  const primary = resolveWireColorHex(row.color, undefined, "#d9e2e7");
+  const secondary = row.secondaryColor
+    ? resolveWireColorHex(row.secondaryColor, undefined, "#d9e2e7")
+    : "";
+  context.save();
+  context.beginPath();
+  context.rect(column.x + 1, y + 1, column.width - 2, height - 2);
+  context.clip();
+  if (secondary) {
+    context.fillStyle = primary;
+    context.beginPath();
+    context.moveTo(swatchX, swatchY);
+    context.lineTo(swatchX + swatchWidth, swatchY);
+    context.lineTo(swatchX + swatchWidth, swatchY + swatchHeight);
+    context.closePath();
+    context.fill();
+    context.fillStyle = secondary;
+    context.beginPath();
+    context.moveTo(swatchX, swatchY);
+    context.lineTo(swatchX, swatchY + swatchHeight);
+    context.lineTo(swatchX + swatchWidth, swatchY + swatchHeight);
+    context.closePath();
+    context.fill();
+  } else {
+    context.fillStyle = primary;
+    context.fillRect(swatchX, swatchY, swatchWidth, swatchHeight);
+  }
+  context.strokeStyle = "#8297a2";
+  context.lineWidth = 1;
+  context.strokeRect(swatchX, swatchY, swatchWidth, swatchHeight);
+  if (column.width - swatchWidth >= 36) {
+    context.fillStyle = "#284957";
+    context.font = "500 8px Inter, Arial, sans-serif";
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    context.fillText(label, swatchX + swatchWidth + 4, y + height / 2);
+  }
+  context.restore();
+}
+
 function drawE4Connector(
   context: CanvasRenderingContext2D,
   object: EditorSceneObject,
@@ -1363,7 +1431,7 @@ function drawE4Connector(
   context.lineTo(layout.x + layout.width, footerY);
   for (const column of layout.columns.slice(1)) {
     context.moveTo(column.x, headerY);
-    context.lineTo(column.x, layout.y + layout.height);
+    context.lineTo(column.x, footerY);
   }
   for (let index = 1; index < layout.rows.length; index += 1) {
     const rowY = bodyY + index * layout.rowHeight;
@@ -1372,26 +1440,33 @@ function drawE4Connector(
   }
   context.stroke();
 
-  context.fillStyle = "#426a7d";
-  context.font = "700 12px Inter, Arial, sans-serif";
-  context.textBaseline = "middle";
-  context.textAlign = "left";
-  context.fillText("⠿", layout.x + 8, layout.y + layout.titleHeight / 2);
   context.fillStyle = "#17384b";
   context.font = "800 12px Inter, Arial, sans-serif";
-  drawE4CellText(context, layout.designation, layout.x + 26, layout.y, layout.width - 52, layout.titleHeight);
+  drawE4CellText(context, layout.designation, layout.x + layout.width * 0.3, layout.y, layout.width * 0.4, layout.titleHeight);
+  context.fillStyle = "#2584a8";
+  context.font = "700 8px Inter, Arial, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillText("⊕ Добавить…", layout.x + 6, layout.y + layout.titleHeight / 2);
 
-  context.fillStyle = "#405f6e";
   context.font = "700 9px Inter, Arial, sans-serif";
-  const numberColumn = layout.columns.find((column) => column.id === "number");
-  if (numberColumn) drawE4CellText(
-    context,
-    layout.partNumber,
-    numberColumn.x,
-    footerY,
-    numberColumn.width,
-    layout.footerHeight,
-  );
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  const codeWidth = Math.min(layout.width * 0.35, Math.max(34, context.measureText(layout.libraryCode).width + 14));
+  context.save();
+  context.beginPath();
+  context.rect(layout.x + 5, footerY + 1, Math.max(0, codeWidth - 10), layout.footerHeight - 2);
+  context.clip();
+  context.fillStyle = "#405f6e";
+  context.fillText(layout.libraryCode, layout.x + 7, footerY + layout.footerHeight / 2);
+  context.restore();
+  context.save();
+  context.beginPath();
+  context.rect(layout.x + codeWidth, footerY + 1, Math.max(0, layout.width - codeWidth - 7), layout.footerHeight - 2);
+  context.clip();
+  context.fillStyle = "#d62f45";
+  context.fillText(layout.partNumber, layout.x + codeWidth + 3, footerY + layout.footerHeight / 2);
+  context.restore();
 
   context.fillStyle = "#405f6e";
   context.font = "700 10px Inter, Arial, sans-serif";
@@ -1404,7 +1479,8 @@ function drawE4Connector(
   layout.rows.forEach((row, rowIndex) => {
     const rowY = bodyY + rowIndex * layout.rowHeight;
     for (const column of layout.columns) {
-      drawE4CellText(context, e4CellText(row, column.id), column.x, rowY, column.width, layout.rowHeight);
+      if (column.id === "color") drawE4ColorCell(context, row, column, rowY, layout.rowHeight);
+      else drawE4CellText(context, e4CellText(row, column.id), column.x, rowY, column.width, layout.rowHeight);
     }
     const point = layout.contactPoints[rowIndex]!;
     const marker = e4ContactMarker(row.status, layout.connectionSide);
@@ -1548,24 +1624,41 @@ function drawE4BridgeCrossings(
   crossings: readonly E4WireCrossing[],
   objects: readonly EditorSceneObject[],
 ) {
-  const radius = 7;
+  const radius = E4_BRIDGE_RADIUS;
   for (const crossing of crossings) {
     const over = objects.find((object) => object.id === crossing.overWireId);
-    if (!over) continue;
+    const under = objects.find((object) => object.id === crossing.underWireId);
+    if (!over || !under) continue;
     const geometry = getE4BridgeGeometry(crossing, radius);
     context.save();
+    context.lineJoin = "round";
+    // Remove the straight portion which the bridge replaces, then restore the
+    // perpendicular conductor through the cleared centre. This keeps its
+    // colour continuous instead of leaving the white break created by the
+    // former eraser-only implementation.
     context.strokeStyle = "#f8fafb";
     context.lineWidth = 7;
-    // Butt caps keep the erased interval exact. The coloured bridge below
-    // extends beyond it, overlapping the untouched base line at both seams.
     context.lineCap = "butt";
     context.beginPath();
     context.moveTo(geometry.clearStart.x, geometry.clearStart.y);
     context.lineTo(geometry.clearEnd.x, geometry.clearEnd.y);
     context.stroke();
-    context.strokeStyle = over.color;
+    context.strokeStyle = under.color;
     context.lineWidth = 3;
-    context.lineCap = "round";
+    context.lineCap = "butt";
+    context.beginPath();
+    if (crossing.overOrientation === "horizontal") {
+      context.moveTo(crossing.point.x, crossing.point.y - 5);
+      context.lineTo(crossing.point.x, crossing.point.y + 5);
+    } else {
+      context.moveTo(crossing.point.x - 5, crossing.point.y);
+      context.lineTo(crossing.point.x + 5, crossing.point.y);
+    }
+    context.stroke();
+    // A halo which follows the raised path establishes layer order. Drawing
+    // the same path in colour afterwards keeps the bridge and both feet whole.
+    context.strokeStyle = "#f8fafb";
+    context.lineWidth = 7;
     context.beginPath();
     context.moveTo(geometry.coloredStart.x, geometry.coloredStart.y);
     context.lineTo(geometry.arcStart.x, geometry.arcStart.y);
@@ -1584,6 +1677,10 @@ function drawE4BridgeCrossings(
     }
     context.lineTo(geometry.coloredEnd.x, geometry.coloredEnd.y);
     context.stroke();
+    context.strokeStyle = over.color;
+    context.lineWidth = 3;
+    context.lineCap = "round";
+    context.stroke();
     context.restore();
   }
 }
@@ -1600,11 +1697,12 @@ function drawE4DifferentialPairs(
     const first = objects.find((object) => object.id === group.wireIds[0]);
     const second = objects.find((object) => object.id === group.wireIds[1]);
     if (!first || !second) continue;
-    for (const motif of layout.motifs) {
-      const { from, to, center: along } = motif;
+    for (const [motifIndex, motif] of layout.motifs.entries()) {
+      const { from, to, coloredFrom, coloredTo, center: along } = motif;
       const crossingLength = to - from;
       context.save();
-      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.lineCap = "butt";
       context.strokeStyle = "#f8fafb";
       context.lineWidth = 7;
       for (const crossValue of [layout.crossMinimum, layout.crossMaximum]) {
@@ -1618,22 +1716,65 @@ function drawE4DifferentialPairs(
         }
         context.stroke();
       }
-      context.lineWidth = 2.5;
-      for (const [wire, reverse] of [[first, false], [second, true]] as const) {
+      context.lineCap = "round";
+      const traceMotif = (reverse: boolean, extendBefore: boolean, extendAfter: boolean) => {
         const crossStart = reverse ? layout.crossMaximum : layout.crossMinimum;
         const crossEnd = reverse ? layout.crossMinimum : layout.crossMaximum;
-        context.strokeStyle = wire.color;
         context.beginPath();
         if (span.orientation === "horizontal") {
-          context.moveTo(from, crossStart);
+          context.moveTo(extendBefore ? coloredFrom : from, crossStart);
+          context.lineTo(from, crossStart);
           if (layout.variant === 2) context.lineTo(to, crossEnd);
           else context.bezierCurveTo(along - crossingLength / 4, crossStart, along + crossingLength / 4, crossEnd, to, crossEnd);
+          context.lineTo(extendAfter ? coloredTo : to, crossEnd);
         } else {
-          context.moveTo(crossStart, from);
+          context.moveTo(crossStart, extendBefore ? coloredFrom : from);
+          context.lineTo(crossStart, from);
           if (layout.variant === 2) context.lineTo(crossEnd, to);
           else context.bezierCurveTo(crossStart, along - crossingLength / 4, crossEnd, along + crossingLength / 4, crossEnd, to);
+          context.lineTo(crossEnd, extendAfter ? coloredTo : to);
         }
-        context.stroke();
+      };
+      // Each X represents two wires swapping lanes. Before the first motif the
+      // colours belong to their original lanes; after it they belong to the
+      // opposite lanes, and every following motif swaps them back. Repaint the
+      // straight spans between motifs with the colour of the physical wire
+      // which currently occupies that lane, avoiding a colour splice at the
+      // feet of an X.
+      const firstStartsOnMinimum = motifIndex % 2 === 0;
+      traceMotif(!firstStartsOnMinimum, true, true);
+      context.strokeStyle = first.color;
+      context.lineWidth = 3;
+      context.stroke();
+      traceMotif(firstStartsOnMinimum, true, true);
+      context.strokeStyle = "#f8fafb";
+      context.lineWidth = 7;
+      context.lineCap = "butt";
+      context.stroke();
+      context.strokeStyle = second.color;
+      context.lineWidth = 3;
+      context.lineCap = "round";
+      context.stroke();
+      const nextMotif = layout.motifs[motifIndex + 1];
+      const straightEnd = nextMotif?.from ?? span.end;
+      if (straightEnd > to) {
+        const drawLane = (cross: number, color: string) => {
+          context.beginPath();
+          if (span.orientation === "horizontal") {
+            context.moveTo(to, cross);
+            context.lineTo(straightEnd, cross);
+          } else {
+            context.moveTo(cross, to);
+            context.lineTo(cross, straightEnd);
+          }
+          context.strokeStyle = color;
+          context.lineWidth = 3;
+          context.lineCap = "butt";
+          context.stroke();
+        };
+        const afterSwap = motifIndex % 2 === 0;
+        drawLane(layout.crossMinimum, afterSwap ? second.color : first.color);
+        drawLane(layout.crossMaximum, afterSwap ? first.color : second.color);
       }
       context.restore();
     }

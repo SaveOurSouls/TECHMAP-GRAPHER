@@ -74,7 +74,7 @@ describe("harness design scene adapter", () => {
     document = applyEditorCommand(document, {
       type: "update-contact", connectorId: "x1", contactId: "x1:contact:1",
       contactType: "сигнальный", circuit: "CAN-H", terminalArticle: "SHP-002P-0.5T",
-      wire: "UL1061 28AWG", color: "чёрный", connectionStatus: "not-connected",
+      wire: "UL1061 28AWG", color: "красный", secondaryColor: "черный", connectionStatus: "not-connected",
     });
     document = applyEditorCommand(document, { type: "flip-connector-orientation", connectorId: "x1" });
     const connector = document.connectors[0]!;
@@ -85,14 +85,14 @@ describe("harness design scene adapter", () => {
 
     expect(object).toMatchObject({ x: 10, y: 20, width: geometry.width, height: geometry.height });
     expect(object.metadata).toMatchObject({
-      view: "e4", orientation: "left", designation: "XS1", partNumber: "PHR-7",
+      view: "e4", orientation: "left", designation: "XS1", libraryCode: "FREE", partNumber: "PHR-7",
     });
     expect(JSON.parse(object.metadata!.columns!)).toEqual([
       "number", "contactType", "circuit", "terminal", "wire", "color",
     ]);
     expect(rows[0]).toMatchObject({
       number: 1, contactType: "сигнальный", circuit: "CAN-H", terminal: "SHP-002P-0.5T",
-      wire: "UL1061 28AWG", color: "чёрный", status: "not-connected",
+      wire: "UL1061 28AWG", color: "красный", secondaryColor: "черный", status: "not-connected",
     });
   });
 

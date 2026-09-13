@@ -243,6 +243,7 @@ export function createConnectorInstanceFromFreeTemplate(
     terminalArticle: "",
     wire: "",
     color: "",
+    secondaryColor: "",
     connectionStatus: "available",
     customValues: {},
     libraryContact: null,

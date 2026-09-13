@@ -97,6 +97,12 @@ function e4TextWidth(text: string): number {
   return Array.from(text.trim()).length * connectorE4TableMetrics.characterWidth;
 }
 
+export function connectorE4FooterWidth(libraryCode: string, partNumber: string): number {
+  return Math.ceil(
+    e4TextWidth(libraryCode) + e4TextWidth(partNumber) + connectorE4TableMetrics.cellHorizontalPadding * 3,
+  );
+}
+
 /**
  * Shared content-based E4 column sizing for both the canvas drawing and its
  * HTML editor overlay.  It intentionally uses a deterministic font estimate:
@@ -128,6 +134,8 @@ export interface ConnectorContact {
   readonly terminalArticle: string;
   readonly wire: string;
   readonly color: string;
+  /** Empty or missing means that the wire has one insulation color. */
+  readonly secondaryColor?: string;
   readonly connectionStatus: ConnectorContactStatus;
   readonly customValues: Readonly<Record<string, string>>;
   readonly libraryContact?: ConnectorLibraryContact | null;
@@ -210,6 +218,8 @@ export interface EditorViewState {
 
 export interface HarnessDesignDocument {
   readonly schemaVersion: 1;
+  /** User-created wire colors retained by this harness even when temporarily unused. */
+  readonly customWireColors?: readonly string[];
   readonly connectors: readonly ConnectorInstance[];
   readonly wires: readonly WireInstance[];
   readonly junctions: readonly E4Junction[];
@@ -245,7 +255,8 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
             : column.key === "contactType" ? contact.contactType
               : column.key === "circuit" ? contact.circuit
                 : column.key === "terminal" ? contact.terminalArticle
-                  : column.key === "wire" ? contact.wire : contact.color),
+                  : column.key === "wire" ? contact.wire
+                    : [contact.color, contact.secondaryColor].filter(Boolean).join(" / ")),
         ],
       ),
     }));
@@ -272,9 +283,15 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
     x += column.width;
     return positioned;
   });
-  const width = Math.max(connectorE4TableMetrics.minimumWidth, x);
+  const libraryCode = connector.libraryBinding?.mode === "series" ? connector.libraryBinding.seriesId : "FREE";
+  const width = Math.max(
+    connectorE4TableMetrics.minimumWidth,
+    x,
+    connectorE4FooterWidth(libraryCode, connector.partNumber),
+  );
   if (columns.length > 0 && width > x) {
-    const growIndex = Math.max(0, columns.findIndex((column) => column.kind === "base" && column.key === "number"));
+    const flexibleIndex = columns.findIndex((column) => column.kind !== "base" || column.key !== "number");
+    const growIndex = flexibleIndex < 0 ? 0 : flexibleIndex;
     columns = columns.map((column, index) => index === growIndex
       ? { ...column, width: column.width + width - x }
       : column);
@@ -319,6 +336,7 @@ function defaultLayers(): readonly EditorLayer[] {
 export function createEmptyHarnessDesign(): HarnessDesignDocument {
   return {
     schemaVersion: 1,
+    customWireColors: [],
     connectors: [],
     wires: [],
     junctions: [],
@@ -340,12 +358,21 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   const views = requireRecord(record.views, "Представления документа жгута заданы неверно.");
   let document: HarnessDesignDocument = {
     schemaVersion: 1,
+    customWireColors: parseCustomWireColors(record.customWireColors),
     connectors: record.connectors.map(parseConnector),
     wires: wireValues.map(parseWire),
     junctions: record.junctions === undefined ? [] : parseJunctions(record.junctions),
     diffPairs: record.diffPairs === undefined ? [] : parseDiffPairs(record.diffPairs),
     screens: record.screens === undefined ? [] : parseScreens(record.screens),
     views: { e4: parseView(views.e4), drawing: parseView(views.drawing) },
+  };
+  document = {
+    ...document,
+    customWireColors: normalizeCustomWireColors([
+      ...(document.customWireColors ?? []),
+      ...document.connectors.flatMap((connector) => connector.contacts
+        .flatMap((contact) => [contact.color, contact.secondaryColor ?? ""])),
+    ]),
   };
   const connectorIds = new Set(document.connectors.map((connector) => connector.id));
   if (connectorIds.size !== document.connectors.length) throw new Error("ID соединителей должны быть уникальны.");
@@ -390,6 +417,21 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   validateJunctions(document);
   validateJunctionCircuitComponents(document.wires, document.junctions);
   return document;
+}
+
+function parseCustomWireColors(value: unknown): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error("Пользовательские цвета проводов заданы неверно.");
+  }
+  return normalizeCustomWireColors(value as readonly string[]);
+}
+
+function normalizeCustomWireColors(values: readonly string[]): readonly string[] {
+  return [...new Set(values.flatMap((value) => {
+    const normalized = value.trim().toUpperCase();
+    return /^#[0-9A-F]{6}$/.test(normalized) ? [normalized] : [];
+  }))];
 }
 
 export function isJunctionEndpoint(endpoint: WireEndpoint): endpoint is Extract<WireEndpoint, { junctionId: string }> {
@@ -563,6 +605,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       terminalArticle: optionalString(contact.terminalArticle, "Артикул терминала"),
       wire: optionalString(contact.wire, "Провод контакта"),
       color: optionalString(contact.color, "Цвет провода контакта"),
+      secondaryColor: optionalString(contact.secondaryColor, "Второй цвет провода контакта"),
       connectionStatus: parseContactStatus(contact.connectionStatus),
       customValues: parseCustomValues(contact.customValues),
       libraryContact: parseConnectorLibraryContact(contact.libraryContact),

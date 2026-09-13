@@ -30,7 +30,7 @@ export interface E4OccupiedRoute {
 export interface E4RouterOptions {
   /** Required straight distance outward from a directed contact. Defaults to 24. */
   readonly leadLength?: number;
-  /** Minimum distance between parallel portions of different wires. Defaults to 8. */
+  /** Requested distance between parallel portions. The bridge footprint is the hard minimum. */
   readonly wireClearance?: number;
   /** Extra space around table rectangles. Defaults to 0. */
   readonly obstacleClearance?: number;
@@ -95,6 +95,12 @@ const EPSILON = 1e-9;
 const NO_DIRECTION = 0;
 const HORIZONTAL = 1;
 const VERTICAL = 2;
+
+/** A seven-unit bridge also needs space for its coloured feet and halo. */
+export const E4_BRIDGE_RADIUS = 7;
+// The visible bridge includes two-unit coloured feet plus a seven-pixel halo.
+// Keep complete symbols separate, not only their centre-line arcs.
+export const E4_BRIDGE_MINIMUM_SPACING = E4_BRIDGE_RADIUS * 2 + 7;
 
 /**
  * Finds a shortest obstacle-aware orthogonal route. Length is minimized first;
@@ -219,12 +225,12 @@ function normalizeRequest(request: E4RoutingRequest): {
 
 function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptions {
   const leadLength = options?.leadLength ?? 24;
-  const wireClearance = options?.wireClearance ?? 8;
+  const requestedWireClearance = options?.wireClearance ?? 8;
   const obstacleClearance = options?.obstacleClearance ?? 0;
   const maxGridNodes = options?.maxGridNodes ?? 250_000;
   for (const [name, value] of [
     ["Длина прямого участка", leadLength],
-    ["Зазор между проводами", wireClearance],
+    ["Зазор между проводами", requestedWireClearance],
     ["Зазор до препятствия", obstacleClearance],
   ] as const) {
     if (!Number.isFinite(value) || value < 0) throw new Error(`${name} задан неверно.`);
@@ -232,6 +238,7 @@ function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptio
   if (!Number.isSafeInteger(maxGridNodes) || maxGridNodes < 4) {
     throw new Error("Ограничение размера сетки задано неверно.");
   }
+  const wireClearance = Math.max(requestedWireClearance, E4_BRIDGE_MINIMUM_SPACING);
   const defaultMargin = Math.max(16, leadLength, wireClearance, obstacleClearance);
   const searchMargin = options?.searchMargin ?? defaultMargin;
   if (!Number.isFinite(searchMargin) || searchMargin <= 0) {
@@ -556,11 +563,13 @@ function validateRouteLead(anchor: E4RouterAnchor, segment: Segment, isStart: bo
 function validateNoSelfIntersections(segments: readonly Segment[]): void {
   for (let leftIndex = 0; leftIndex < segments.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < segments.length; rightIndex += 1) {
-      const intersection = segmentIntersection(segments[leftIndex]!, segments[rightIndex]!);
+      const left = segments[leftIndex]!;
+      const right = segments[rightIndex]!;
+      const intersection = segmentIntersection(left, right);
       if (intersection.kind === "none") continue;
       if (rightIndex === leftIndex + 1 && intersection.kind === "point" &&
-          samePoint(intersection.point, segments[leftIndex]!.end) &&
-          samePoint(intersection.point, segments[rightIndex]!.start)) continue;
+          samePoint(intersection.point, left.end) &&
+          samePoint(intersection.point, right.start)) continue;
       throw new Error("Маршрут не должен пересекать или накладывать сам себя.");
     }
   }

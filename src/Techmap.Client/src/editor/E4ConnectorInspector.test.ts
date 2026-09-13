@@ -36,6 +36,7 @@ describe("E4 connector inline editing", () => {
       disabled: false,
       onCommand: vi.fn(),
       mode: "canvas",
+      editing: true,
     }));
 
     expect(markup).toContain("Поля соединителя XS9");
@@ -43,10 +44,12 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("terminal-articles-free1");
     expect(markup).toContain("M39029/57-354");
     expect(markup).toContain("Скрыть поле");
-    expect(markup).toContain("Двойной клик — редактировать");
-    expect(markup).toContain("is-readonly");
-    expect(markup).toContain("Зажмите и перетащите. Двойной клик — редактировать");
-    expect(markup).toContain("e4cce-part-number");
+    expect(markup).toContain("Редактирование включено. Escape — закончить");
+    expect(markup).toContain("is-editing");
+    expect(markup).toContain("e4cce-title-add");
+    expect(markup).toContain("e4cce-footer-code");
+    expect(markup).toContain("e4cce-footer-article");
+    expect(markup).toContain("e4cce-wire-picker");
     expect(markup).toContain("XS9");
   });
 
@@ -87,5 +90,10 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain('aria-label="Обозначение соединителя"');
     expect(markup).toContain("TERM-SIG-05");
     expect(markup).toContain("Номер и тип заданы артикулом серии");
+    expect(markup).toContain("Основной цвет");
+    expect(markup).toContain("Второй цвет");
+    expect(markup).toContain("Пусто · одноцветный");
+    expect(markup).toContain("Новый цвет");
+    expect(markup).toContain("e4cce-wire-picker");
   });
 });
