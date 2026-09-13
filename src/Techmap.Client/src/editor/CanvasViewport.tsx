@@ -745,8 +745,24 @@ function containsPoint(
   const e4Layout = view === "drawing" ? null : getE4ConnectorLayout(object);
   const width = e4Layout?.width ?? object.width;
   const height = e4Layout?.height ?? object.height;
-  return point.x >= object.x - tolerance && point.x <= object.x + width + tolerance &&
-    point.y >= object.y - tolerance && point.y <= object.y + height + tolerance;
+  if (point.x >= object.x - tolerance && point.x <= object.x + width + tolerance &&
+      point.y >= object.y - tolerance && point.y <= object.y + height + tolerance) return true;
+  if (!e4Layout) return false;
+  return e4Layout.rows.some((row, rowIndex) => {
+    const marker = e4ContactMarker(row.status, e4Layout.connectionSide);
+    if (!marker) return false;
+    const anchor = e4Layout.contactPoints[rowIndex]!;
+    const lineStart = { x: anchor.x + marker.lineStart.x, y: anchor.y + marker.lineStart.y };
+    const lineEnd = { x: anchor.x + marker.lineEnd.x, y: anchor.y + marker.lineEnd.y };
+    const crossCenter = { x: anchor.x + marker.crossCenter.x, y: anchor.y + marker.crossCenter.y };
+    const crossStartA = { x: crossCenter.x - marker.crossSize, y: crossCenter.y - marker.crossSize };
+    const crossEndA = { x: crossCenter.x + marker.crossSize, y: crossCenter.y + marker.crossSize };
+    const crossStartB = { x: crossCenter.x - marker.crossSize, y: crossCenter.y + marker.crossSize };
+    const crossEndB = { x: crossCenter.x + marker.crossSize, y: crossCenter.y - marker.crossSize };
+    return pointToSegmentDistance(point, lineStart, lineEnd) <= tolerance ||
+      pointToSegmentDistance(point, crossStartA, crossEndA) <= tolerance ||
+      pointToSegmentDistance(point, crossStartB, crossEndB) <= tolerance;
+  });
 }
 
 export function hitTestWireRoutePoint(
@@ -913,8 +929,33 @@ function e4CellText(row: E4ContactRow, column: E4ColumnId): string {
   return row[column];
 }
 
-export function e4ContactMarker(status: E4ContactRow["status"]): string {
-  return status === "not-connected" ? "--X" : "";
+export interface E4ContactMarkerGeometry {
+  readonly lineStart: EditorPoint;
+  readonly lineEnd: EditorPoint;
+  readonly crossCenter: EditorPoint;
+  readonly crossSize: number;
+}
+
+/**
+ * Returns the geometry for the dedicated E4 "not connected" glyph.  The
+ * contact remains the anchor; a short lead and a diagonal cross are drawn
+ * outside the connector.  This deliberately does not use a text "--X"
+ * marker, so the glyph mirrors with the connector's connection side.
+ */
+export function e4ContactMarker(
+  status: E4ContactRow["status"],
+  connectionSide: E4ConnectionSide,
+): E4ContactMarkerGeometry | null {
+  if (status !== "not-connected") return null;
+  const direction = connectionSide === "left" ? -1 : 1;
+  const lineLength = 12;
+  const crossOffset = 16;
+  return {
+    lineStart: { x: 0, y: 0 },
+    lineEnd: { x: direction * lineLength, y: 0 },
+    crossCenter: { x: direction * crossOffset, y: 0 },
+    crossSize: 5,
+  };
 }
 
 /**
@@ -1210,15 +1251,37 @@ function drawE4Connector(
       drawE4CellText(context, e4CellText(row, column.id), column.x, rowY, column.width, layout.rowHeight);
     }
     const point = layout.contactPoints[rowIndex]!;
-    const marker = e4ContactMarker(row.status);
-    context.fillStyle = marker ? "#8d3b32" : object.color;
+    const marker = e4ContactMarker(row.status, layout.connectionSide);
     if (marker) {
-      context.font = "700 10px Inter, Arial, sans-serif";
-      context.textAlign = layout.connectionSide === "left" ? "right" : "left";
-      context.textBaseline = "middle";
-      const offset = layout.connectionSide === "left" ? -5 : 5;
-      context.fillText(marker, point.x + offset, point.y);
+      context.save();
+      context.strokeStyle = "#2c3fbd";
+      context.lineWidth = 1.7;
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(point.x + marker.lineStart.x, point.y + marker.lineStart.y);
+      context.lineTo(point.x + marker.lineEnd.x, point.y + marker.lineEnd.y);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(
+        point.x + marker.crossCenter.x - marker.crossSize,
+        point.y + marker.crossCenter.y - marker.crossSize,
+      );
+      context.lineTo(
+        point.x + marker.crossCenter.x + marker.crossSize,
+        point.y + marker.crossCenter.y + marker.crossSize,
+      );
+      context.moveTo(
+        point.x + marker.crossCenter.x - marker.crossSize,
+        point.y + marker.crossCenter.y + marker.crossSize,
+      );
+      context.lineTo(
+        point.x + marker.crossCenter.x + marker.crossSize,
+        point.y + marker.crossCenter.y - marker.crossSize,
+      );
+      context.stroke();
+      context.restore();
     } else {
+      context.fillStyle = object.color;
       context.beginPath();
       context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
       context.fill();

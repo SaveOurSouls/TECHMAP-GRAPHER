@@ -192,8 +192,27 @@ describe("harness editor workspace", () => {
     const rightNumber = rightLayout.columns.at(-1)!;
     expect(hitTestConnectorContact([right], layers, { x: rightNumber.x, y: rightLayout.contactPoints[0]!.y }, 1, "e4")).toBeNull();
     expect(hitTestConnectorContact([left], layers, { x: left.x + leftLayout.width, y: leftLayout.contactPoints[0]!.y }, 1, "e4")).toBeNull();
-    expect(e4ContactMarker("available")).toBe("");
-    expect(e4ContactMarker("not-connected")).toBe("--X");
+    expect(e4ContactMarker("available", "right")).toBeNull();
+    expect(e4ContactMarker("not-connected", "right")).toEqual({
+      lineStart: { x: 0, y: 0 },
+      lineEnd: { x: 12, y: 0 },
+      crossCenter: { x: 16, y: 0 },
+      crossSize: 5,
+    });
+    expect(e4ContactMarker("not-connected", "left")).toEqual({
+      lineStart: { x: 0, y: 0 },
+      lineEnd: { x: -12, y: 0 },
+      crossCenter: { x: -16, y: 0 },
+      crossSize: 5,
+    });
+    expect(hitTestEditorScene([right], layers, {
+      x: rightLayout.contactPoints[1]!.x + 16,
+      y: rightLayout.contactPoints[1]!.y,
+    }, 1, "e4")).toBe("X-right");
+    expect(hitTestEditorScene([left], layers, {
+      x: leftLayout.contactPoints[1]!.x - 16,
+      y: leftLayout.contactPoints[1]!.y,
+    }, 1, "e4")).toBe("X-left");
   });
 
   it("supports hidden and custom E4 columns while preserving Drawing connector fallback", () => {
