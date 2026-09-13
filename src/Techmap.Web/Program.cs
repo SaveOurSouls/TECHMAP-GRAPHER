@@ -432,7 +432,7 @@ static IResult ServeIndex(
     IWebHostEnvironment environment,
     PathString configuredPathBase,
     LocalHttpSession session,
-    bool includeBrowserLifecycleScript)
+    BrowserLifecycleMonitor browserLifecycle)
 {
     var indexFile = environment.WebRootFileProvider.GetFileInfo("index.html");
     if (!indexFile.Exists)
@@ -443,29 +443,40 @@ static IResult ServeIndex(
     var basePath = PathBaseConfiguration.Display(configuredPathBase);
     var escapedBasePath = HtmlEncoder.Default.Encode(basePath);
     using var reader = new StreamReader(indexFile.CreateReadStream());
-    var html = reader.ReadToEnd()
-        .Replace("<head>", $"<head><base href=\"{escapedBasePath}\">", StringComparison.Ordinal);
-    if (includeBrowserLifecycleScript)
-    {
-        html = html.Replace(
-            "</head>",
-            $"<script src=\"{BrowserLifecycleScript.FileName}\" defer></script></head>",
-            StringComparison.OrdinalIgnoreCase);
-    }
+    var lifecycleScript = browserLifecycle.Enabled
+        ? $"<script src=\"{BrowserLifecycleScript.FileName}\" defer></script>"
+        : string.Empty;
+    var html = reader.ReadToEnd().Replace(
+        "<head>",
+        $"<head><base href=\"{escapedBasePath}\">{lifecycleScript}",
+        StringComparison.Ordinal);
     session.IssueCookie(context.Response, configuredPathBase);
     context.Response.Headers.CacheControl = "no-store";
     return Results.Content(html, "text/html; charset=utf-8");
 }
 
-app.MapGet($"/{BrowserLifecycleScript.FileName}", () => Results.Content(
-    BrowserLifecycleScript.Content,
-    "text/javascript; charset=utf-8"));
-app.MapGet("/", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
-app.MapGet("/index.html", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
-app.MapFallback((HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
+app.MapGet($"/{BrowserLifecycleScript.FileName}", (BrowserLifecycleMonitor browserLifecycle) =>
+    browserLifecycle.Enabled
+        ? Results.Content(BrowserLifecycleScript.Content, "text/javascript; charset=utf-8")
+        : Results.NotFound());
+app.MapGet("/", (
+    HttpContext context,
+    IWebHostEnvironment environment,
+    LocalHttpSession session,
+    BrowserLifecycleMonitor browserLifecycle) =>
+    ServeIndex(context, environment, pathBase, session, browserLifecycle));
+app.MapGet("/index.html", (
+    HttpContext context,
+    IWebHostEnvironment environment,
+    LocalHttpSession session,
+    BrowserLifecycleMonitor browserLifecycle) =>
+    ServeIndex(context, environment, pathBase, session, browserLifecycle));
+app.MapFallback((
+    HttpContext context,
+    IWebHostEnvironment environment,
+    LocalHttpSession session,
+    BrowserLifecycleMonitor browserLifecycle) =>
+    ServeIndex(context, environment, pathBase, session, browserLifecycle));
 
 if (app.Environment.IsEnvironment("Testing"))
 {

@@ -16,6 +16,8 @@ public sealed class BrowserLifecycleMonitor(
 
     public void Enable() => tracker.Enable();
 
+    public void Disable() => tracker.Disable();
+
     public IDisposable OpenConnection() => tracker.OpenConnection();
 
     public async Task WaitForBrowserClosedAsync(CancellationToken cancellationToken = default)

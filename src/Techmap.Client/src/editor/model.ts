@@ -483,7 +483,7 @@ function parseConnector(value: unknown): ConnectorInstance {
   if (!Array.isArray(record.contacts)) throw new Error("Контакты соединителя заданы неверно.");
   const positions = requireRecord(record.positions, "Координаты соединителя заданы неверно.");
   const layerIds = requireRecord(record.layerIds, "Слои соединителя заданы неверно.");
-  const contacts = record.contacts.map((contactValue) => {
+  const parsedContacts = record.contacts.map((contactValue) => {
     const contact = requireRecord(contactValue, "Контакт соединителя задан неверно.");
     return {
       id: requireText(contact.id, "ID контакта"),
@@ -498,11 +498,19 @@ function parseConnector(value: unknown): ConnectorInstance {
       libraryContact: parseConnectorLibraryContact(contact.libraryContact),
     };
   });
-  if (new Set(contacts.map((contact) => contact.id)).size !== contacts.length ||
-      new Set(contacts.map((contact) => contact.number)).size !== contacts.length) {
+  if (new Set(parsedContacts.map((contact) => contact.id)).size !== parsedContacts.length ||
+      new Set(parsedContacts.map((contact) => contact.number)).size !== parsedContacts.length) {
     throw new Error("Контакты соединителя должны иметь уникальные ID и номера.");
   }
   const designation = requireBoundedText(record.designation, "Обозначение соединителя", 120);
+  const partNumber = record.partNumber === undefined
+    ? designation
+    : requireBoundedText(record.partNumber, "Артикул шаблона соединителя", 120);
+  const libraryBinding = parseConnectorLibraryBinding(record.libraryBinding) ?? { mode: "free" };
+  const contacts = parsedContacts.map((contact) => ({
+    ...contact,
+    libraryContact: contact.libraryContact ?? null,
+  }));
   const schematic = parseConnectorSchematic(record.schematic);
   const customFieldIds = new Set(schematic.customFields.map((field) => field.id));
   for (const contact of contacts) {
@@ -510,12 +518,10 @@ function parseConnector(value: unknown): ConnectorInstance {
       throw new Error("Значение контакта ссылается на отсутствующее справочное поле.");
     }
   }
-  return {
+  const connector: ConnectorInstance = {
     id: requireText(record.id, "ID соединителя"),
     designation,
-    partNumber: record.partNumber === undefined
-      ? designation
-      : requireBoundedText(record.partNumber, "Артикул шаблона соединителя", 120),
+    partNumber,
     contacts,
     schematic,
     positions: { e4: parsePoint(positions.e4), drawing: parsePoint(positions.drawing) },
@@ -523,8 +529,45 @@ function parseConnector(value: unknown): ConnectorInstance {
       e4: requireText(layerIds.e4, "Слой соединителя Э4"),
       drawing: requireText(layerIds.drawing, "Слой соединителя чертежа"),
     },
-    libraryBinding: parseConnectorLibraryBinding(record.libraryBinding),
+    libraryBinding,
   };
+  validateConnectorLibraryMetadata(connector);
+  return connector;
+}
+
+/** Validates additive library metadata without requiring the external series catalog. */
+export function validateConnectorLibraryMetadata(connector: ConnectorInstance): void {
+  const binding = connector.libraryBinding;
+  if (binding === undefined || binding.mode === "free") {
+    if (connector.contacts.some((contact) => contact.libraryContact !== undefined && contact.libraryContact !== null)) {
+      throw new Error("Свободный соединитель не должен ссылаться на позиции библиотечной серии.");
+    }
+    return;
+  }
+  if (!binding.seriesId.trim() || !binding.partNumber.trim()) {
+    throw new Error("Привязка соединителя к серии задана неверно.");
+  }
+  if (connector.partNumber !== binding.partNumber) {
+    throw new Error("Артикул соединителя не совпадает с выбранным артикулом серии.");
+  }
+  const nextOrdinal: Record<ConnectorLibraryContactKind, number> = { signal: 1, power: 1, third: 1 };
+  const kindOrder: Readonly<Record<ConnectorLibraryContactKind, number>> = { signal: 0, power: 1, third: 2 };
+  let previousKindOrder = 0;
+  connector.contacts.forEach((contact, index) => {
+    const position = contact.libraryContact;
+    if (!position) throw new Error("У библиотечного контакта отсутствует позиция в серии.");
+    const order = kindOrder[position.kind];
+    if (order === undefined || !Number.isSafeInteger(position.ordinal) || position.ordinal < 1 ||
+        order < previousKindOrder || position.ordinal !== nextOrdinal[position.kind]) {
+      throw new Error("Позиции библиотечных контактов заданы непоследовательно.");
+    }
+    if (contact.number !== index + 1 ||
+        contact.id !== `${connector.id}:contact:${position.kind}:${position.ordinal}`) {
+      throw new Error("ID или номер библиотечного контакта не соответствует его позиции в серии.");
+    }
+    nextOrdinal[position.kind] += 1;
+    previousKindOrder = order;
+  });
 }
 
 function parseConnectorLibraryBinding(value: unknown): ConnectorLibraryBinding | undefined {

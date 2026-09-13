@@ -86,6 +86,10 @@ public sealed class WebHostTests
         using var response = await client.SendAsync(request, cancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var script = await client.GetAsync(
+            $"/{BrowserLifecycleScript.FileName}",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, script.StatusCode);
     }
 
     [Fact]
@@ -94,6 +98,7 @@ public sealed class WebHostTests
         await using var factory = new TechmapWebApplicationFactory(noBrowser: false);
         using var client = factory.CreateLocalClient();
 
+        factory.Services.GetRequiredService<BrowserLifecycleMonitor>().Enable();
         using var page = await client.GetAsync("/", TestContext.Current.CancellationToken);
         var html = await page.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var script = await client.GetAsync(
@@ -104,6 +109,9 @@ public sealed class WebHostTests
             $"<script src=\"{BrowserLifecycleScript.FileName}\" defer></script>",
             html,
             StringComparison.Ordinal);
+        Assert.True(
+            html.IndexOf(BrowserLifecycleScript.FileName, StringComparison.Ordinal) <
+            html.IndexOf("type=\"module\"", StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.OK, script.StatusCode);
         Assert.Equal("text/javascript", script.Content.Headers.ContentType?.MediaType);
     }

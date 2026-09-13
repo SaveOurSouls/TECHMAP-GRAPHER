@@ -51,6 +51,74 @@ describe("shared harness editor model", () => {
     })).toThrow(/определяются выбранным артикулом/);
   });
 
+  it("keeps wires on retained series positions and rejects an article that removes a wired position", () => {
+    const series = builtInConnectorSeries[0]!;
+    const xs10 = createBuiltInConnectorInstance("catalog-xs-10", {
+      id: "xs1", designation: "XS1", e4Position: { x: 0, y: 0 },
+    });
+    const mate = createConnector("x2", "X2", 2, { x: 1000, y: 0 });
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: xs10 });
+    document = applyEditorCommand(document, { type: "add-connector", connector: mate });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("keep", { connectorId: "xs1", contactId: "xs1:contact:signal:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("remove", { connectorId: "xs1", contactId: "xs1:contact:signal:6" }, { connectorId: "x2", contactId: "x2:contact:2" }),
+    });
+    const xs04 = selectConnectorSeriesArticle(xs10, series, "XS-04").connector;
+    const command = {
+      type: "apply-connector-article" as const,
+      connectorId: xs10.id,
+      partNumber: xs04.partNumber,
+      contacts: xs04.contacts,
+      libraryBinding: xs04.libraryBinding,
+    };
+
+    expect(() => applyEditorCommand(document, command)).toThrow(/^Выбранный артикул удалит подключённые контакты/);
+    expect(document.connectors[0]?.partNumber).toBe("XS-10");
+    document = applyEditorCommand(document, { type: "remove-wire", wireId: "remove" });
+    document = applyEditorCommand(document, command);
+    expect(document.connectors[0]?.partNumber).toBe("XS-04");
+    expect(document.wires[0]?.from).toEqual({ connectorId: "xs1", contactId: "xs1:contact:signal:1" });
+  });
+
+  it("rejects inconsistent series article commands and forged free library positions", () => {
+    const connector = createBuiltInConnectorInstance("catalog-xs-04", {
+      id: "xs1", designation: "XS1", e4Position: { x: 0, y: 0 },
+    });
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
+    expect(() => applyEditorCommand(document, {
+      type: "apply-connector-article",
+      connectorId: connector.id,
+      partNumber: "XS-10",
+      contacts: connector.contacts,
+      libraryBinding: { mode: "series", seriesId: "xs-demo-series", partNumber: "XS-04" },
+    })).toThrow(/не совпадает/);
+    expect(() => applyEditorCommand(document, {
+      type: "apply-connector-article",
+      connectorId: connector.id,
+      partNumber: "XS-04",
+      contacts: connector.contacts,
+      libraryBinding: { mode: "series", seriesId: "another-series", partNumber: "XS-04" },
+    })).toThrow(/заменить серию/);
+    expect(() => applyEditorCommand(document, {
+      type: "update-connector", connectorId: connector.id, designation: "XS1", partNumber: "FORGED",
+    })).toThrow(/выбором артикула/);
+
+    const free = createConnector("free", "X1", 1, { x: 0, y: 0 });
+    document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: free });
+    expect(() => applyEditorCommand(document, {
+      type: "add-contact",
+      connectorId: free.id,
+      contact: {
+        ...free.contacts[0]!, id: "free:contact:signal:2", number: 2,
+        libraryContact: { kind: "signal", ordinal: 2 },
+      },
+    })).toThrow(/Свободная строка/);
+  });
+
   it("connects existing contacts and removes their wires with the connector", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 0, y: 0 });
     const x2 = createConnector("x2", "X2", 2, { x: 300, y: 0 });
@@ -181,7 +249,7 @@ describe("shared harness editor model", () => {
     const legacy = createEmptyHarnessDesign();
     const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
     const x2 = createConnector("x2", "X2", 1, { x: 200, y: 0 });
-    const { partNumber: _partNumber, schematic: _schematic, ...legacyX1 } = x1;
+    const { partNumber: _partNumber, schematic: _schematic, libraryBinding: _libraryBinding, ...legacyX1 } = x1;
     const legacyJson = {
       ...legacy,
       connectors: [
@@ -195,8 +263,35 @@ describe("shared harness editor model", () => {
     };
     const parsed = parseHarnessDesignDocument(legacyJson);
     expect(parsed.connectors[0]?.partNumber).toBe("X1");
-    expect(parsed.connectors[0]?.contacts[0]).toMatchObject({ wire: "", color: "", connectionStatus: "available", customValues: {} });
+    expect(parsed.connectors[0]).toMatchObject({ libraryBinding: { mode: "free" } });
+    expect(parsed.connectors[0]?.contacts[0]).toMatchObject({
+      wire: "", color: "", connectionStatus: "available", customValues: {}, libraryContact: null,
+    });
     expect(() => applyEditorCommand(parsed, { type: "remove-contact", connectorId: "x1", contactId: "x1:contact:1" })).toThrow(/подключён/);
+  });
+
+  it("rejects inconsistent library metadata while parsing schema version 1", () => {
+    const base = createEmptyHarnessDesign();
+    const seriesConnector = createBuiltInConnectorInstance("catalog-xs-04", {
+      id: "xs1", designation: "XS1", e4Position: { x: 0, y: 0 },
+    });
+    expect(() => parseHarnessDesignDocument({
+      ...base,
+      connectors: [{ ...seriesConnector, libraryBinding: { ...seriesConnector.libraryBinding!, partNumber: "XS-10" } }],
+    })).toThrow(/Артикул соединителя не совпадает/);
+    expect(() => parseHarnessDesignDocument({
+      ...base,
+      connectors: [{ ...seriesConnector, contacts: seriesConnector.contacts.map((contact, index) =>
+        index === 0 ? { ...contact, libraryContact: undefined } : contact) }],
+    })).toThrow(/отсутствует позиция/);
+    const free = createConnector("free", "X1", 1, { x: 0, y: 0 });
+    expect(() => parseHarnessDesignDocument({
+      ...base,
+      connectors: [{
+        ...free,
+        contacts: [{ ...free.contacts[0], libraryContact: { kind: "signal", ordinal: 1 } }],
+      }],
+    })).toThrow(/Свободный соединитель/);
   });
 
   it("enforces the electrical meaning of a not-connected contact", () => {

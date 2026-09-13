@@ -1,4 +1,6 @@
 using Techmap.Web;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Techmap.Web.Tests;
@@ -15,6 +17,32 @@ public sealed class BrowserLifecycleTrackerTests
         Assert.False(BrowserLauncher.ShouldTrackLifecycle("http://localhost:8762/", noBrowser: false));
         Assert.False(BrowserLauncher.ShouldTrackLifecycle("http://192.168.1.10:8762/", noBrowser: false));
         Assert.False(BrowserLauncher.ShouldTrackLifecycle("https://127.0.0.1:8762/", noBrowser: false));
+    }
+
+    [Fact]
+    public void Browser_is_started_after_lifecycle_is_enabled()
+    {
+        var monitor = CreateMonitor();
+
+        BrowserLauncher.StartOwnerBrowser(
+            "http://127.0.0.1:8762/",
+            monitor,
+            _ => Assert.True(monitor.Enabled));
+
+        Assert.True(monitor.Enabled);
+    }
+
+    [Fact]
+    public void Failed_browser_launch_disables_lifecycle()
+    {
+        var monitor = CreateMonitor();
+
+        Assert.Throws<InvalidOperationException>(() => BrowserLauncher.StartOwnerBrowser(
+            "http://127.0.0.1:8762/",
+            monitor,
+            _ => throw new InvalidOperationException("shell launch failed")));
+
+        Assert.False(monitor.Enabled);
     }
 
     [Fact]
@@ -76,6 +104,39 @@ public sealed class BrowserLifecycleTrackerTests
         time.Advance(GracePeriod);
 
         Assert.False(tracker.ShouldStop());
+    }
+
+    [Fact]
+    public void Connection_disposed_after_disable_cannot_arm_shutdown()
+    {
+        var time = new MutableTimeProvider();
+        var tracker = new BrowserLifecycleTracker(time, GracePeriod);
+        tracker.Enable();
+        var page = tracker.OpenConnection();
+
+        tracker.Disable();
+        page.Dispose();
+        time.Advance(TimeSpan.FromHours(1));
+
+        Assert.False(tracker.ShouldStop());
+    }
+
+    private static BrowserLifecycleMonitor CreateMonitor() => new(
+        new TestApplicationLifetime(),
+        TimeProvider.System,
+        NullLogger<BrowserLifecycleMonitor>.Instance);
+
+    private sealed class TestApplicationLifetime : IHostApplicationLifetime
+    {
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => CancellationToken.None;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication()
+        {
+        }
     }
 
     private sealed class MutableTimeProvider : TimeProvider

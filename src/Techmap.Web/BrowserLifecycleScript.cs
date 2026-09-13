@@ -21,7 +21,10 @@ public static class BrowserLifecycleScript
                 cache: 'no-store',
                 signal: current.signal
               });
-              if (!sessionResponse.ok) return;
+              if (!sessionResponse.ok) {
+                if (sessionResponse.status === 401 || sessionResponse.status === 404) active = false;
+                return;
+              }
               const session = await sessionResponse.json();
               const response = await fetch(lifecycleUrl, {
                 method: 'POST',
@@ -34,7 +37,10 @@ public static class BrowserLifecycleScript
                 body: '{}',
                 signal: current.signal
               });
-              if (!response.ok || !response.body) return;
+              if (!response.ok || !response.body) {
+                if (response.status === 401 || response.status === 404) active = false;
+                return;
+              }
               const reader = response.body.getReader();
               while (active) {
                 const item = await reader.read();

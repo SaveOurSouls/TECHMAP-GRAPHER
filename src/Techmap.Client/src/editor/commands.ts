@@ -5,6 +5,7 @@ import {
   createDefaultConnectorBaseColumns,
   defaultLayerIds,
   isJunctionEndpoint,
+  validateConnectorLibraryMetadata,
   validateOrthogonalE4Route,
   wireE4PathContainsPoint,
   wireEndpointE4Anchor,
@@ -138,6 +139,7 @@ export function applyEditorCommand(
       if (document.connectors.some((item) => item.id === command.connector.id)) {
         throw new Error("Соединитель с таким ID уже существует.");
       }
+      validateConnectorLibraryMetadata(command.connector);
       return { ...document, connectors: [...document.connectors, command.connector] };
     case "move-connector":
       {
@@ -158,11 +160,13 @@ export function applyEditorCommand(
       if (partNumber !== undefined) requireConnectorText(partNumber, "Укажите артикул шаблона соединителя.");
       return {
         ...document,
-        connectors: replaceRequired(document.connectors, command.connectorId, (connector) => ({
-          ...connector,
-          designation,
-          partNumber: partNumber ?? connector.partNumber,
-        }), "Соединитель не найден."),
+        connectors: replaceRequired(document.connectors, command.connectorId, (connector) => {
+          if (partNumber !== undefined && connector.libraryBinding?.mode === "series" &&
+              partNumber !== connector.libraryBinding.partNumber) {
+            throw new Error("Артикул библиотечного соединителя можно изменить только выбором артикула серии.");
+          }
+          return { ...connector, designation, partNumber: partNumber ?? connector.partNumber };
+        }, "Соединитель не найден."),
       };
     }
     case "apply-connector-article": {
@@ -170,18 +174,38 @@ export function applyEditorCommand(
       requireConnectorText(partNumber, "Укажите артикул соединителя.");
       const connector = document.connectors.find((item) => item.id === command.connectorId);
       if (!connector) throw new Error("Соединитель не найден.");
+      if (command.libraryBinding.mode !== "series") {
+        throw new Error("Команда выбора артикула должна сохранять привязку к серии.");
+      }
+      if (command.libraryBinding.partNumber !== partNumber) {
+        throw new Error("Артикул команды не совпадает с артикулом привязки к серии.");
+      }
+      if (connector.libraryBinding?.mode === "series" &&
+          connector.libraryBinding.seriesId !== command.libraryBinding.seriesId) {
+        throw new Error("Нельзя заменить серию уже привязанного библиотечного соединителя.");
+      }
       const contacts = command.contacts.map((contact) => normalizeContact(contact, connector.schematic.customFields));
       validateUniqueContacts(contacts);
-      const retainedContactIds = new Set(contacts.map((contact) => contact.id));
-      if (document.wires.some((wire) => [wire.from, wire.to].some((endpoint) =>
-        !isJunctionEndpoint(endpoint) && endpoint.connectorId === command.connectorId && !retainedContactIds.has(endpoint.contactId)))) {
-        throw new Error("Выбранный артикул удалит подключённые контакты. Сначала переподключите или удалите их провода.");
-      }
-      const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
-        ...item,
+      const candidate: ConnectorInstance = {
+        ...connector,
         partNumber,
         contacts,
         libraryBinding: command.libraryBinding,
+      };
+      validateConnectorLibraryMetadata(candidate);
+      const retainedContactIds = new Set(contacts.map((contact) => contact.id));
+      const connectedContactIds = new Set(document.wires.flatMap((wire) => [wire.from, wire.to]
+        .filter((endpoint) => !isJunctionEndpoint(endpoint) && endpoint.connectorId === command.connectorId)
+        .map((endpoint) => endpoint.contactId)));
+      if ([...connectedContactIds].some((contactId) => !retainedContactIds.has(contactId))) {
+        throw new Error("Выбранный артикул удалит подключённые контакты. Сначала переподключите или удалите их провода.");
+      }
+      if (contacts.some((contact) => connectedContactIds.has(contact.id) && contact.connectionStatus === "not-connected")) {
+        throw new Error("Выбранный артикул помечает подключённый контакт как неподключённый.");
+      }
+      const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
+        ...candidate,
+        positions: item.positions,
       }));
       return updated;
     }
@@ -228,6 +252,9 @@ export function applyEditorCommand(
           throw new Error("Число контактов библиотечного соединителя определяется выбранным артикулом серии.");
         }
         const contact = normalizeContact(command.contact, connector.schematic.customFields);
+        if (contact.libraryContact !== undefined && contact.libraryContact !== null) {
+          throw new Error("Свободная строка не должна ссылаться на позицию библиотечной серии.");
+        }
         const contacts = [...connector.contacts, contact];
         validateUniqueContacts(contacts);
         return { ...connector, contacts };

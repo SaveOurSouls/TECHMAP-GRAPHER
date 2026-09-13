@@ -48,6 +48,17 @@ public sealed class BrowserLifecycleTracker
         }
     }
 
+    public void Disable()
+    {
+        lock (gate)
+        {
+            enabled = false;
+            connections.Clear();
+            disconnectedAt = null;
+            hasObservedConnection = false;
+        }
+    }
+
     public IDisposable OpenConnection()
     {
         lock (gate)

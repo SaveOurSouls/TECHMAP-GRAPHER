@@ -28,7 +28,10 @@ import {
   projectPointToOrthogonalSegment,
 } from "./CanvasViewport";
 import {
+  clampEditorZoom,
   fitEditorCameraToBounds,
+  maximumEditorZoom,
+  minimumEditorZoom,
   panEditorCamera,
   screenToWorld,
   worldToScreen,
@@ -157,6 +160,25 @@ describe("harness editor workspace", () => {
     expect(screenToWorld(zoomed, anchor).y).toBeCloseTo(screenToWorld(camera, anchor).y);
   });
 
+  it("clamps wheel zoom at both limits without losing its screen anchor", () => {
+    const anchor = { x: 113.25, y: 87.5 };
+    for (const [camera, deltaY, expectedZoom] of [
+      [{ offsetX: -8, offsetY: 15, zoom: maximumEditorZoom }, -1, maximumEditorZoom],
+      [{ offsetX: -8, offsetY: 15, zoom: minimumEditorZoom }, 1, minimumEditorZoom],
+    ] as const) {
+      const worldBefore = screenToWorld(camera, anchor);
+      const next = zoomEditorCameraFromWheel(camera, anchor, deltaY, true);
+      expect(next.zoom).toBe(expectedZoom);
+      expect(screenToWorld(next, anchor).x).toBeCloseTo(worldBefore.x, 10);
+      expect(screenToWorld(next, anchor).y).toBeCloseTo(worldBefore.y, 10);
+    }
+    expect(clampEditorZoom(Number.NaN)).toBe(minimumEditorZoom);
+    expect(clampEditorZoom(Number.NEGATIVE_INFINITY)).toBe(minimumEditorZoom);
+    expect(clampEditorZoom(Number.POSITIVE_INFINITY)).toBe(maximumEditorZoom);
+    const camera = { offsetX: 1, offsetY: 2, zoom: 1 };
+    expect(zoomEditorCameraFromWheel(camera, anchor, Number.NaN, true)).toBe(camera);
+  });
+
   it("handles Ctrl+wheel over inline inputs without letting pointer presses reach the canvas", () => {
     const camera = { offsetX: 40, offsetY: -20, zoom: 1.25 };
     const preventDefault = vi.fn();
@@ -226,6 +248,53 @@ describe("harness editor workspace", () => {
       maxX: connector.x + layout.width + 21,
       maxY: connector.y + layout.height,
     });
+  });
+
+  it("keeps an empty scene camera unchanged and fits a 300-contact table", () => {
+    const camera = { offsetX: 17, offsetY: -31, zoom: 1.5 };
+    expect(getEditorSceneBounds([], layers, "e4")).toBeNull();
+    expect(fitEditorCameraToBounds(camera, null, { width: 900, height: 600 })).toBe(camera);
+
+    const rows = Array.from({ length: 300 }, (_, index) => ({
+      number: index + 1,
+      contactType: "S",
+      circuit: `C${index + 1}`,
+      terminal: "T",
+      wire: "W",
+      color: "R",
+      status: index === 299 ? "not-connected" : "available",
+      customValues: {},
+    }));
+    const connector: EditorSceneObject = {
+      id: "X-300", layerId: "top", kind: "connector", label: "X-300",
+      x: -700, y: -250, width: 118, height: 72, color: "#123456",
+      metadata: { view: "e4", orientation: "left", rows: JSON.stringify(rows) },
+    };
+    const layout = getE4ConnectorLayout(connector)!;
+    const bounds = getEditorSceneBounds([connector], layers, "e4")!;
+    expect(layout.height).toBe(7_276);
+    expect(bounds).toEqual({
+      minX: connector.x - 21,
+      minY: connector.y,
+      maxX: connector.x + layout.width,
+      maxY: connector.y + layout.height,
+    });
+    const fitted = fitEditorCameraToBounds(camera, bounds, { width: 900, height: 600 }, 48);
+    expect(fitted.zoom).toBeCloseTo(504 / layout.height, 10);
+    expect(fitted.zoom).toBeLessThan(0.25);
+    expect(worldToScreen(fitted, { x: bounds.minX, y: bounds.minY }).y).toBeCloseTo(48, 8);
+    expect(worldToScreen(fitted, { x: bounds.maxX, y: bounds.maxY }).y).toBeCloseTo(552, 8);
+  });
+
+  it("normalizes inverted fit bounds and remains finite in a viewport smaller than its margins", () => {
+    const fitted = fitEditorCameraToBounds(
+      { offsetX: 0, offsetY: 0, zoom: 1 },
+      { minX: 200, minY: 100, maxX: -200, maxY: -100 },
+      { width: 20, height: 10 },
+      48,
+    );
+    expect(fitted.zoom).toBe(minimumEditorZoom);
+    expect(fitted).toEqual({ zoom: minimumEditorZoom, offsetX: 10, offsetY: 5 });
   });
 
   it("honors visual layer order, visibility and polyline selection", () => {

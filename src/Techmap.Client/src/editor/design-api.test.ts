@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseRuntimeConfig } from "../runtime-config";
 import { createHarnessDesignApi, HarnessDesignApiError } from "./design-api";
+import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { createEmptyHarnessDesign } from "./model";
 
 const config = parseRuntimeConfig({
@@ -36,6 +37,63 @@ describe("harness design API", () => {
       headers: expect.objectContaining({ "X-Techmap-CSRF": session.csrfNonce }),
       body: JSON.stringify({ expectedRevision: 3, schemaVersion: 1, content }),
     }));
+  });
+
+  it("round-trips connector series metadata through the save API", async () => {
+    const connector = createBuiltInConnectorInstance("catalog-xs-10", {
+      id: "xs1", designation: "XS1", e4Position: { x: 20, y: 30 },
+    });
+    const seriesContent = { ...content, connectors: [connector] };
+    let requestBody: Record<string, unknown> | undefined;
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return response({
+        harnessId,
+        schemaVersion: 1,
+        revision: 1,
+        content: requestBody.content,
+        updatedUtc: "2026-09-13T00:00:00Z",
+      });
+    });
+    const api = createHarnessDesignApi(config, session, fetcher);
+
+    const saved = await api.save(projectId, harnessId, 0, seriesContent);
+
+    const sentContent = requestBody?.content as typeof seriesContent;
+    expect(sentContent.connectors[0]).toMatchObject({
+      libraryBinding: { mode: "series", seriesId: "xs-demo-series", partNumber: "XS-10" },
+    });
+    expect(sentContent.connectors[0]?.contacts[0]?.libraryContact).toEqual({ kind: "signal", ordinal: 1 });
+    expect(saved.content.connectors[0]).toMatchObject({
+      libraryBinding: { mode: "series", seriesId: "xs-demo-series", partNumber: "XS-10" },
+    });
+    expect(saved.content.connectors[0]?.contacts.at(-1)?.libraryContact).toEqual({ kind: "third", ordinal: 2 });
+  });
+
+  it("normalizes old schemaVersion 1 connectors before saving and rejects inconsistent metadata locally", async () => {
+    const current = createBuiltInConnectorInstance("catalog-xs-04", {
+      id: "xs1", designation: "XS1", e4Position: { x: 0, y: 0 },
+    });
+    const { libraryBinding: _binding, ...legacyConnector } = current;
+    const legacyContacts = legacyConnector.contacts.map(({ libraryContact: _position, ...contact }) => contact);
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { content: typeof content };
+      return response({ harnessId, schemaVersion: 1, revision: 1, content: body.content, updatedUtc: "2026-09-13T00:00:00Z" });
+    });
+    const api = createHarnessDesignApi(config, session, fetcher);
+    const saved = await api.save(projectId, harnessId, 0, {
+      ...content,
+      connectors: [{ ...legacyConnector, contacts: legacyContacts }],
+    });
+    expect(saved.content.connectors[0]?.libraryBinding).toEqual({ mode: "free" });
+    expect(saved.content.connectors[0]?.contacts.every((contact) => contact.libraryContact === null)).toBe(true);
+
+    const inconsistent = {
+      ...content,
+      connectors: [{ ...current, partNumber: "BROKEN" }],
+    };
+    await expect(api.save(projectId, harnessId, 1, inconsistent)).rejects.toThrow(/не совпадает/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces the current revision on a conflict", async () => {

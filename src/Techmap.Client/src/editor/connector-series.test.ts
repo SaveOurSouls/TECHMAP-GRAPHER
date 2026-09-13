@@ -227,7 +227,7 @@ describe("connector series model", () => {
       series,
       "DT04-3P",
     ).connector;
-    const parsed = parseConnectorSeriesHarnessDesignDocument({ ...base, connectors: [configured] });
+    const parsed = parseConnectorSeriesHarnessDesignDocument({ ...base, connectors: [configured] }, [series]);
 
     expect(parsed.schemaVersion).toBe(1);
     expect(parsed.connectors[0]?.libraryBinding).toEqual({
@@ -239,5 +239,39 @@ describe("connector series model", () => {
       { kind: "power", ordinal: 2 },
     ]);
     expect(() => validateConnectorSeriesBinding(parsed.connectors[0]!, [series])).not.toThrow();
+  });
+
+  it("uses an available series library to reject semantically invalid persisted contacts", () => {
+    const base = createEmptyHarnessDesign();
+    const configured = selectConnectorSeriesArticle(
+      createConnector("x1", "XS1", 1, { x: 0, y: 0 }),
+      series,
+      "DT04-4P",
+    ).connector;
+    const invalidTerminal = {
+      ...configured,
+      contacts: configured.contacts.map((contact, index) => index === 0
+        ? { ...contact, terminalArticle: "0460-215-16141" }
+        : contact),
+    };
+    expect(() => parseConnectorSeriesHarnessDesignDocument(
+      { ...base, connectors: [invalidTerminal] },
+      [series],
+    )).toThrow(/Терминал не разрешён/);
+
+    const invalidType = {
+      ...configured,
+      contacts: configured.contacts.map((contact, index) => index === 0
+        ? { ...contact, contactType: "силовой" }
+        : contact),
+    };
+    expect(() => parseConnectorSeriesHarnessDesignDocument(
+      { ...base, connectors: [invalidType] },
+      [series],
+    )).toThrow(/ID, номер или тип/);
+    expect(() => parseConnectorSeriesHarnessDesignDocument(
+      { ...base, connectors: [configured] },
+      [],
+    )).toThrow(/отсутствует в библиотеке/);
   });
 });

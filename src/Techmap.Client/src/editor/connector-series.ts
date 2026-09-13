@@ -1,5 +1,6 @@
 import {
   parseHarnessDesignDocument,
+  validateConnectorLibraryMetadata,
   type ConnectorContact,
   type ConnectorInstance,
   type HarnessDesignDocument,
@@ -262,7 +263,10 @@ export function enterFreeConnectorTerminalArticle(
  * Reads the established schemaVersion 1 format. Connectors without the new
  * additive metadata become free instances and keep all legacy contact values.
  */
-export function parseConnectorSeriesHarnessDesignDocument(value: unknown): ConnectorSeriesHarnessDesignDocument {
+export function parseConnectorSeriesHarnessDesignDocument(
+  value: unknown,
+  seriesLibrary?: readonly ConnectorSeries[],
+): ConnectorSeriesHarnessDesignDocument {
   const parsed = parseHarnessDesignDocument(value);
   const rawDocument = requireRecord(value, "Документ жгута задан неверно.");
   if (!Array.isArray(rawDocument.connectors)) throw new Error("Соединители документа заданы неверно.");
@@ -286,7 +290,12 @@ export function parseConnectorSeriesHarnessDesignDocument(value: unknown): Conne
     }
     return { ...connector, contacts, libraryBinding: binding };
   });
-  return { ...parsed, connectors };
+  const document = { ...parsed, connectors };
+  for (const connector of document.connectors) {
+    validateConnectorLibraryMetadata(connector);
+    if (seriesLibrary !== undefined) validateConnectorSeriesBinding(connector, seriesLibrary);
+  }
+  return document;
 }
 
 export function validateConnectorSeriesBinding(

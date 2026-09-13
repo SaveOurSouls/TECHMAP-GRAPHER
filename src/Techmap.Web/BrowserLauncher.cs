@@ -31,13 +31,10 @@ public static class BrowserLauncher
         Console.WriteLine($"TECHMAP_DATA_ROOT={dataRoot}");
         if (!options.NoBrowser)
         {
+            var browserLifecycle = app.Services.GetRequiredService<BrowserLifecycleMonitor>();
             try
             {
-                Process.Start(new ProcessStartInfo(pageUrl) { UseShellExecute = true });
-                if (ShouldTrackLifecycle(pageUrl, options.NoBrowser))
-                {
-                    app.Services.GetRequiredService<BrowserLifecycleMonitor>().Enable();
-                }
+                StartOwnerBrowser(pageUrl, browserLifecycle, StartBrowser);
             }
             catch (Exception exception)
             {
@@ -51,6 +48,34 @@ public static class BrowserLauncher
         Uri.TryCreate(pageUrl, UriKind.Absolute, out var pageUri) &&
         pageUri.Scheme == Uri.UriSchemeHttp &&
         pageUri.Host == "127.0.0.1";
+
+    public static void StartOwnerBrowser(
+        string pageUrl,
+        BrowserLifecycleMonitor browserLifecycle,
+        Action<string> browserStarter)
+    {
+        ArgumentNullException.ThrowIfNull(browserLifecycle);
+        ArgumentNullException.ThrowIfNull(browserStarter);
+        if (!ShouldTrackLifecycle(pageUrl, noBrowser: false))
+        {
+            browserStarter(pageUrl);
+            return;
+        }
+
+        browserLifecycle.Enable();
+        try
+        {
+            browserStarter(pageUrl);
+        }
+        catch
+        {
+            browserLifecycle.Disable();
+            throw;
+        }
+    }
+
+    private static void StartBrowser(string pageUrl) =>
+        Process.Start(new ProcessStartInfo(pageUrl) { UseShellExecute = true });
 
     public static void OpenExisting(ExistingLocalInstance instance, bool noBrowser)
     {

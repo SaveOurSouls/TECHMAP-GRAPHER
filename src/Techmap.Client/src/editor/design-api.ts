@@ -67,11 +67,14 @@ export function createHarnessDesignApi(
       method: "GET",
       headers: { Accept: "application/json" },
     }),
-    save: (projectId, harnessId, expectedRevision, content) => request(resource(projectId, harnessId), {
-      method: "PUT",
-      headers,
-      body: JSON.stringify({ expectedRevision, schemaVersion: 1, content }),
-    }),
+    save: async (projectId, harnessId, expectedRevision, content) => {
+      const validatedContent = parseHarnessDesignDocument(content);
+      return request(resource(projectId, harnessId), {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ expectedRevision, schemaVersion: 1, content: validatedContent }),
+      });
+    },
   };
 }
 
