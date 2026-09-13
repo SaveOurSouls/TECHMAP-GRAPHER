@@ -43,6 +43,10 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("terminal-articles-free1");
     expect(markup).toContain("M39029/57-354");
     expect(markup).toContain("Скрыть поле");
+    expect(markup).toContain("Двойной клик — редактировать");
+    expect(markup).toContain("is-readonly");
+    expect(markup).toContain("Зажмите и перетащите. Двойной клик — редактировать");
+    expect(markup).toContain("XS9");
   });
 
   it("locks series number and type rows and filters terminals by contact kind", () => {
@@ -57,10 +61,29 @@ describe("E4 connector inline editing", () => {
       mode: "canvas",
     }));
 
-    expect(markup).toContain("Номер и тип заданы артикулом серии");
-    expect(markup).toContain("TERM-SIG-05");
-    expect(markup).toContain("TERM-PWR-15");
-    expect(markup).toContain("TERM-COAX-50");
+    expect(markup).toContain("Двойной клик — редактировать");
+    expect(markup).toContain("сигнальный");
+    expect(markup).toContain("силовой");
+    expect(markup).toContain("коаксиальный");
     expect(markup).toContain("Строки из артикула");
+  });
+
+  it("renders actual controls only after the canvas enters editing mode", () => {
+    const connector = createBuiltInConnectorInstance("catalog-connector-series:xs-demo-series", {
+      id: "xs1", designation: "XS1", e4Position: { x: 20, y: 30 },
+    });
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector,
+      series: builtInConnectorSeries[0],
+      disabled: false,
+      onCommand: vi.fn(),
+      mode: "canvas",
+      editing: true,
+    }));
+
+    expect(markup).toContain("is-editing");
+    expect(markup).toContain("Редактирование включено. Escape — закончить");
+    expect(markup).toContain("TERM-SIG-05");
+    expect(markup).toContain("Номер и тип заданы артикулом серии");
   });
 });

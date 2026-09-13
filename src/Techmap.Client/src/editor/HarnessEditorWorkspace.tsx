@@ -96,6 +96,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCatalogLoadMore?: () => void;
   readonly onCatalogRetry?: () => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onWireConnect?: (
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
@@ -182,6 +183,7 @@ export function HarnessEditorWorkspace({
   onCatalogLoadMore,
   onCatalogRetry,
   onObjectMove,
+  onObjectEditRequest,
   onWireConnect,
   onWireReconnect,
   onWireConnectToWire,
@@ -408,6 +410,7 @@ export function HarnessEditorWorkspace({
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
+          onObjectEditRequest={onObjectEditRequest}
           onWireConnect={onWireConnect}
           onWireReconnect={onWireReconnect}
           onWireConnectToWire={onWireConnectToWire}

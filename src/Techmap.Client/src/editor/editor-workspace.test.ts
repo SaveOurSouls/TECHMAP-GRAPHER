@@ -22,6 +22,9 @@ import {
   hitTestWireRoutePoint,
   handleEditorViewportWheel,
   containInlineEditorPointerEvent,
+  inlineObjectDragDestination,
+  inlineObjectDragMoved,
+  isInlineEditorReadonlyTarget,
   moveE4OrthogonalSegment,
   objectsInPaintOrder,
   parseE4SceneOverlays,
@@ -202,6 +205,24 @@ describe("harness editor workspace", () => {
     const stopPropagation = vi.fn();
     containInlineEditorPointerEvent({ stopPropagation });
     expect(stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  it("starts inline movement only after the drag threshold and respects zoom", () => {
+    expect(inlineObjectDragMoved(2, 2)).toBe(false);
+    expect(inlineObjectDragMoved(3, 0)).toBe(true);
+    expect(inlineObjectDragMoved(0, 0)).toBe(false);
+    expect(inlineObjectDragMoved(Number.NaN, 5)).toBe(false);
+    expect(inlineObjectDragDestination({ x: 100, y: 80 }, 20, -10, 2)).toEqual({ x: 110, y: 75 });
+    expect(inlineObjectDragDestination({ x: 100, y: 80 }, 20, -10, 0.25)).toEqual({ x: 180, y: 40 });
+  });
+
+  it("treats the complete readonly table surface as a drag target", () => {
+    const readonlyRoot = {};
+    const closest = vi.fn((selector: string) => selector === ".e4-connector-canvas-editor.is-readonly" ? readonlyRoot : null);
+    expect(isInlineEditorReadonlyTarget({ closest } as unknown as EventTarget)).toBe(true);
+    expect(closest).toHaveBeenCalledWith(".e4-connector-canvas-editor.is-readonly");
+    expect(isInlineEditorReadonlyTarget({ closest: () => null } as unknown as EventTarget)).toBe(false);
+    expect(isInlineEditorReadonlyTarget(null)).toBe(false);
   });
 
   it("fits actual E4 table and wire bounds into the available viewport", () => {

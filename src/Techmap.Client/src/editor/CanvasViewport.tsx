@@ -54,6 +54,7 @@ export interface CanvasViewportProps {
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
+  readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
@@ -82,6 +83,26 @@ export function handleEditorViewportWheel(
 
 export function containInlineEditorPointerEvent(event: Pick<PointerEvent<HTMLElement>, "stopPropagation">): void {
   event.stopPropagation();
+}
+
+export function isInlineEditorReadonlyTarget(target: EventTarget | null): boolean {
+  const candidate = target as { closest?: (selector: string) => unknown } | null;
+  return typeof candidate?.closest === "function" &&
+    candidate.closest(".e4-connector-canvas-editor.is-readonly") !== null;
+}
+
+export function inlineObjectDragMoved(deltaX: number, deltaY: number, threshold = 3): boolean {
+  return Number.isFinite(deltaX) && Number.isFinite(deltaY) && Math.hypot(deltaX, deltaY) >= threshold;
+}
+
+export function inlineObjectDragDestination(
+  origin: EditorPoint,
+  deltaX: number,
+  deltaY: number,
+  zoom: number,
+): EditorPoint {
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return { x: origin.x + deltaX / safeZoom, y: origin.y + deltaY / safeZoom };
 }
 
 interface PointerDrag {
@@ -1238,21 +1259,13 @@ function drawE4Connector(
   }
   context.stroke();
 
-  context.fillStyle = "#17384b";
-  context.font = "700 13px Inter, Arial, sans-serif";
   const labelOnRight = layout.connectionSide === "left";
   context.textAlign = labelOnRight ? "right" : "left";
+  context.fillStyle = "#78909b";
+  context.font = "700 9px Inter, Arial, sans-serif";
   context.textBaseline = "middle";
-  context.save();
-  context.beginPath();
-  context.rect(layout.x + 10, layout.y + 2, layout.width - 20, layout.titleHeight - 4);
-  context.clip();
-  context.fillText(
-    layout.designation,
-    labelOnRight ? layout.x + layout.width - 12 : layout.x + 12,
-    layout.y + layout.titleHeight / 2,
-  );
-  context.restore();
+  context.textAlign = "center";
+  context.fillText("⠿", layout.x + layout.width / 2, layout.y + layout.titleHeight / 2);
 
   context.fillStyle = "#405f6e";
   context.font = "600 10px Inter, Arial, sans-serif";
@@ -1270,7 +1283,23 @@ function drawE4Connector(
   context.fillStyle = "#405f6e";
   context.font = "700 10px Inter, Arial, sans-serif";
   for (const column of layout.columns) {
-    drawE4CellText(context, column.label, column.x, headerY, column.width, layout.headerHeight);
+    if (column.id === "number") {
+      context.save();
+      context.beginPath();
+      context.rect(column.x + 3, headerY + 1, Math.max(0, column.width - 6), layout.headerHeight - 2);
+      context.clip();
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = "#17384b";
+      context.font = "700 9px Inter, Arial, sans-serif";
+      context.fillText(layout.designation, column.x + column.width / 2, headerY + 8);
+      context.fillStyle = "#405f6e";
+      context.font = "700 9px Inter, Arial, sans-serif";
+      context.fillText(column.label, column.x + column.width / 2, headerY + 20);
+      context.restore();
+    } else {
+      drawE4CellText(context, column.label, column.x, headerY, column.width, layout.headerHeight);
+    }
   }
 
   context.fillStyle = "#284957";
@@ -1716,6 +1745,7 @@ export function CanvasViewport({
   onE4ScreenPositionChange,
   onWireRoutePointMove,
   onWireRoutePointRemove,
+  onObjectEditRequest,
   onCanvasDoubleClick,
   onCatalogDrop,
 }: CanvasViewportProps) {
@@ -1723,6 +1753,10 @@ export function CanvasViewport({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<PointerDrag | ObjectPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4ScreenPointerDrag | null>(null);
+  const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
+  const inlineDragActivatedRef = useRef(false);
+  const suppressInlineDoubleClickUntilRef = useRef(0);
+  const [inlineDragOffset, setInlineDragOffset] = useState<EditorPoint | null>(null);
   const [wireStart, setWireStart] = useState<{ readonly connectorId: string; readonly contactIndex: number } | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
@@ -1739,6 +1773,12 @@ export function CanvasViewport({
       setWireReconnect(null);
     }
   }, [tool]);
+
+  useEffect(() => {
+    inlineDragRef.current = null;
+    inlineDragActivatedRef.current = false;
+    setInlineDragOffset(null);
+  }, [inlineObject?.id, tool, view]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1942,10 +1982,14 @@ export function CanvasViewport({
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if (dragRef.current?.kind === "object") {
       const drag = dragRef.current;
-      onObjectMove?.(drag.objectId, {
-        x: drag.objectX + (event.clientX - drag.clientX) / camera.zoom,
-        y: drag.objectY + (event.clientY - drag.clientY) / camera.zoom,
-      });
+      const deltaX = event.clientX - drag.clientX;
+      const deltaY = event.clientY - drag.clientY;
+      if (inlineObjectDragMoved(deltaX, deltaY)) {
+        onObjectMove?.(
+          drag.objectId,
+          inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
+        );
+      }
     } else if (dragRef.current?.kind === "wire-route") {
       const drag = dragRef.current;
       onWireRoutePointMove?.(drag.wireId, drag.routeIndex, {
@@ -1982,6 +2026,12 @@ export function CanvasViewport({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
+  const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   const allowDrop = (event: DragEvent<HTMLCanvasElement>) => {
     if (!event.dataTransfer.types.includes("application/x-techmap-catalog-item")) return;
     event.preventDefault();
@@ -1997,6 +2047,16 @@ export function CanvasViewport({
 
   const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    if (view === "e4" && tool === "select" && onObjectEditRequest) {
+      const objectId = hitTestEditorScene(objects, layers, point, camera.zoom, view);
+      const object = objects.find((item) => item.id === objectId);
+      const layer = object ? layers.find((item) => item.id === object.layerId) : null;
+      if (object?.kind === "connector" && layer?.locked !== true) {
+        onObjectSelect(object.id, false);
+        onObjectEditRequest(object.id);
+        return;
+      }
+    }
     if (view === "drawing") {
       const selectedWire = objects.find((item) => item.id === selectedObjectId);
       const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
@@ -2011,6 +2071,80 @@ export function CanvasViewport({
     onCanvasDoubleClick?.(point);
   };
 
+  const inlinePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    containInlineEditorPointerEvent(event);
+    if (event.button !== 0 || tool !== "select" || !inlineObject ||
+        !isInlineEditorReadonlyTarget(event.target)) return;
+    const layer = layers.find((item) => item.id === inlineObject.layerId);
+    if (layer?.locked === true) return;
+    if (event.detail >= 2 && Date.now() > suppressInlineDoubleClickUntilRef.current && onObjectEditRequest) {
+      onObjectEditRequest(inlineObject.id);
+      return;
+    }
+    if (!onObjectMove) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    inlineDragRef.current = {
+      kind: "object",
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      objectId: inlineObject.id,
+      objectX: inlineObject.x,
+      objectY: inlineObject.y,
+    };
+    inlineDragActivatedRef.current = false;
+  };
+
+  const inlinePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    containInlineEditorPointerEvent(event);
+    if (inlineDragRef.current?.pointerId !== event.pointerId) return;
+    const drag = inlineDragRef.current;
+    const deltaX = event.clientX - drag.clientX;
+    const deltaY = event.clientY - drag.clientY;
+    if (inlineObjectDragMoved(deltaX, deltaY)) {
+      onObjectMove?.(
+        drag.objectId,
+        inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
+      );
+    }
+    if (inlineDragActivatedRef.current) suppressInlineDoubleClickUntilRef.current = Date.now() + 500;
+    setInlineDragOffset(null);
+    inlineDragRef.current = null;
+    inlineDragActivatedRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const inlinePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    containInlineEditorPointerEvent(event);
+    if (inlineDragRef.current?.pointerId !== event.pointerId) return;
+    setInlineDragOffset(null);
+    inlineDragRef.current = null;
+    inlineDragActivatedRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const inlinePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    containInlineEditorPointerEvent(event);
+    const drag = inlineDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.clientX;
+    const deltaY = event.clientY - drag.clientY;
+    if (!inlineObjectDragMoved(deltaX, deltaY)) return;
+    inlineDragActivatedRef.current = true;
+    event.preventDefault();
+    setInlineDragOffset({ x: deltaX, y: deltaY });
+  };
+
+  const inlineDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (!inlineObject || Date.now() <= suppressInlineDoubleClickUntilRef.current) {
+      event.preventDefault();
+      return;
+    }
+    const layer = layers.find((item) => item.id === inlineObject.layerId);
+    if (tool === "select" && layer?.locked !== true) onObjectEditRequest?.(inlineObject.id);
+  };
+
   return (
     <div ref={frameRef} className={`he-canvas-frame tool-${tool}`}>
       <canvas
@@ -2021,7 +2155,7 @@ export function CanvasViewport({
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={endPointer}
-        onPointerCancel={endPointer}
+        onPointerCancel={cancelPointer}
         onDragOver={allowDrop}
         onDrop={drop}
         onDoubleClick={doubleClick}
@@ -2042,13 +2176,18 @@ export function CanvasViewport({
         <div
           className="he-e4-inline-editor"
           style={{
-            left: inlineLayout.x * camera.zoom + camera.offsetX,
-            top: inlineLayout.y * camera.zoom + camera.offsetY,
+            left: inlineLayout.x * camera.zoom + camera.offsetX + (inlineDragOffset?.x ?? 0),
+            top: inlineLayout.y * camera.zoom + camera.offsetY + (inlineDragOffset?.y ?? 0),
             width: inlineLayout.width,
             height: inlineLayout.height,
             transform: `scale(${camera.zoom})`,
           }}
-          onPointerDown={containInlineEditorPointerEvent}
+          onPointerDown={inlinePointerDown}
+          onPointerMove={inlinePointerMove}
+          onPointerUp={inlinePointerUp}
+          onPointerCancel={inlinePointerCancel}
+          onLostPointerCapture={inlinePointerCancel}
+          onDoubleClick={inlineDoubleClick}
         >{inlineEditor}</div>
       )}
       <ul className="visually-hidden" aria-label="Объекты на поле">

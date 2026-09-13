@@ -21,6 +21,8 @@ export interface E4ConnectorInspectorProps {
   readonly series?: ConnectorSeries;
   readonly terminalArticles?: readonly string[];
   readonly onTerminalSearch?: (query: string) => void;
+  readonly editing?: boolean;
+  readonly onEditingChange?: (editing: boolean) => void;
 }
 
 const baseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
@@ -63,10 +65,21 @@ function nextContactId(connector: ConnectorInstance, number: number): string {
 
 /** Contact values live on the E4 object itself. The side panel only edits
  * identity and the set of visible fields. */
-export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "panel", series, terminalArticles = [], onTerminalSearch }: E4ConnectorInspectorProps) {
+export function E4ConnectorInspector({
+  connector,
+  disabled,
+  onCommand,
+  mode = "panel",
+  series,
+  terminalArticles = [],
+  onTerminalSearch,
+  editing,
+  onEditingChange,
+}: E4ConnectorInspectorProps) {
   const [designation, setDesignation] = useState(connector.designation);
   const [partNumber, setPartNumber] = useState(connector.partNumber);
   const [newFieldLabel, setNewFieldLabel] = useState("");
+  const canvasEditing = mode !== "canvas" || editing === true;
 
   useEffect(() => setDesignation(connector.designation), [connector.id, connector.designation]);
   useEffect(() => setPartNumber(connector.partNumber), [connector.id, connector.partNumber]);
@@ -153,22 +166,40 @@ export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "p
       ? [...customColumns, ...baseColumns].reverse()
       : [...baseColumns, ...customColumns];
     return (
-      <section className={`e4-connector-canvas-editor ${connector.schematic.orientation}`} aria-label={`Поля соединителя ${connector.designation}`}>
+      <section
+          className={`e4-connector-canvas-editor ${connector.schematic.orientation} ${canvasEditing ? "is-editing" : "is-readonly"}`}
+          aria-label={`Поля соединителя ${connector.designation}`}
+          title={canvasEditing ? "Редактирование включено. Escape — закончить" : "Зажмите и перетащите. Двойной клик — редактировать"}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && canvasEditing) {
+              event.stopPropagation();
+              onEditingChange?.(false);
+            }
+          }}
+        >
         <datalist id={`terminal-articles-${connector.id}`}>
           {terminalArticles.map((terminal) => <option key={terminal} value={terminal} />)}
         </datalist>
-        <div className="e4cce-title"><strong>{connector.designation}</strong></div>
+        <div
+          className="e4cce-title"
+          title={canvasEditing ? "Редактирование" : "Перетащить соединитель"}
+        ><span aria-hidden="true">⠿</span><span>{canvasEditing ? "Редактирование" : "Перетащить"}</span></div>
         <div className="e4cce-table-scroll">
           <table>
             <colgroup>{columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}</colgroup>
             <thead><tr>
               {columns.map((column) => (
                 <th key={column.id} title="Изменить видимость поля">
-                  <span>{column.label}</span>
+                  {column.id === "number" ? (
+                    <span className="e4cce-number-heading">
+                      <strong title={connector.designation}>{connector.designation}</strong>
+                      <span>{column.label}</span>
+                    </span>
+                  ) : <span>{column.label}</span>}
                   <button
                     type="button"
                     aria-label={`Скрыть поле ${column.label}`}
-                    disabled={disabled}
+                    disabled={disabled || !canvasEditing}
                     onClick={() => column.id.startsWith("custom:")
                       ? onCommand({ type: "toggle-custom-field-visibility", connectorId: connector.id, fieldId: column.id.slice(7) })
                       : onCommand({ type: "toggle-base-column-visibility", connectorId: connector.id, key: column.id as ConnectorBaseColumnKey })}
@@ -193,7 +224,7 @@ export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "p
                   const input = column.id === "terminal" && isSeries ? (
                     <select
                       value={value}
-                      disabled={disabled}
+                      disabled={disabled || !canvasEditing}
                       aria-label={`${column.label}, контакт ${contact.number}`}
                       title="Допустимые терминалы для этого типа контакта"
                       onChange={(event) => updateContact(contact, { terminalArticle: event.target.value })}
@@ -208,7 +239,7 @@ export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "p
                     max={column.id === "number" ? 300 : undefined}
                     value={value}
                     list={column.id === "terminal" && !isSeries ? `terminal-articles-${connector.id}` : undefined}
-                    disabled={disabled || lockedBySeries}
+                    disabled={disabled || !canvasEditing || lockedBySeries}
                     title={lockedBySeries ? "Номер и тип заданы артикулом серии" : undefined}
                     aria-label={`${column.label}, контакт ${contact.number}`}
                     onChange={(event) => {
@@ -228,7 +259,8 @@ export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "p
                       }
                     }}
                   />;
-                  return <td key={column.id} className={column.id === "number" ? "e4cce-number" : undefined}>{input}{column.id === "number" && <span className="e4cce-row-actions">
+                  const cell = canvasEditing ? input : <span className="e4cce-readonly-value">{value || " "}</span>;
+                  return <td key={column.id} className={column.id === "number" ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && <span className="e4cce-row-actions">
                     <button
                       type="button"
                       className={contact.connectionStatus === "not-connected" ? "active" : ""}
@@ -253,7 +285,7 @@ export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "p
               <button
                 type="button"
                 className="e4cce-add-row"
-                disabled={disabled || isSeries || nextContactNumber(connector) === null}
+                disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
                 title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
                 onClick={addContact}
               >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>

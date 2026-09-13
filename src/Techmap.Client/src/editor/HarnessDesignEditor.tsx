@@ -240,6 +240,7 @@ export function HarnessDesignEditor({
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
+  const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
   const [message, setMessage] = useState("Загружаем документ жгута…");
@@ -261,6 +262,7 @@ export function HarnessDesignEditor({
     setHistory(null);
     setSelectedObjectId(null);
     setSelectedObjectIds([]);
+    setEditingObjectId(null);
     setMessage("Загружаем документ жгута…");
     setSaveState("saved");
     void api.get(projectId, harnessId).then((loaded) => {
@@ -342,6 +344,10 @@ export function HarnessDesignEditor({
     }
   }, [history, selectedObjectId, selectedObjectIds]);
 
+  useEffect(() => {
+    if (editingObjectId && (view !== "e4" || editingObjectId !== selectedObjectId)) setEditingObjectId(null);
+  }, [editingObjectId, selectedObjectId, view]);
+
   const run = useCallback((command: EditorCommand): boolean => {
     const current = historyRef.current;
     if (!current) return false;
@@ -371,6 +377,11 @@ export function HarnessDesignEditor({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (event.key === "Escape" && editingObjectId) {
+        event.preventDefault();
+        setEditingObjectId(null);
+        return;
+      }
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectIds.length > 0) {
         const current = historyRef.current?.present;
@@ -396,7 +407,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [run, selectedObjectIds]);
+  }, [editingObjectId, run, selectedObjectIds]);
 
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
@@ -553,13 +564,19 @@ export function HarnessDesignEditor({
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
             mode="canvas"
+            editing={editingObjectId === selectedConnector.id}
+            onEditingChange={(editing) => setEditingObjectId(editing ? selectedConnector.id : null)}
           />
         ) : undefined}
         onViewChange={(nextView) => {
+          setEditingObjectId(null);
           setView(nextView);
           onViewChange?.(nextView);
         }}
-        onSelectedObjectChange={setSelectedObjectId}
+        onSelectedObjectChange={(objectId) => {
+          setSelectedObjectId(objectId);
+          setEditingObjectId((current) => current === objectId ? current : null);
+        }}
         onSelectedObjectIdsChange={setSelectedObjectIds}
         onCatalogItemActivate={addCatalogItem}
         onCatalogSourceChange={catalog.selectSource}
@@ -572,6 +589,11 @@ export function HarnessDesignEditor({
           view,
           position: point,
         })}
+        onObjectEditRequest={(objectId) => {
+          setSelectedObjectId(objectId);
+          setSelectedObjectIds([objectId]);
+          setEditingObjectId(objectId);
+        }}
         onWireConnect={(from, to) => {
           const fromConnector = history.present.connectors.find((item) => item.id === from.connectorId);
           const toConnector = history.present.connectors.find((item) => item.id === to.connectorId);
