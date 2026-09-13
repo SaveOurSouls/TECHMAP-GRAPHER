@@ -1,7 +1,15 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { hitTestConnectorContact, hitTestEditorScene, hitTestWireEnd, hitTestWireRoutePoint, objectsInPaintOrder } from "./CanvasViewport";
+import {
+  e4ContactMarker,
+  getE4ConnectorLayout,
+  hitTestConnectorContact,
+  hitTestEditorScene,
+  hitTestWireEnd,
+  hitTestWireRoutePoint,
+  objectsInPaintOrder,
+} from "./CanvasViewport";
 import { panEditorCamera, screenToWorld, worldToScreen, zoomEditorCameraAt } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
@@ -113,6 +121,75 @@ describe("harness editor workspace", () => {
       connectorId: "X1",
       contactIndex: 1,
     });
+  });
+
+  it("builds mirrored E4 connector tables and exposes only the number-column outer contact edge", () => {
+    const rows = JSON.stringify([
+      { number: 1, contactType: "S", circuit: "PWR", terminal: "M39029", wire: "МС 0,5", color: "красный", status: "available", customValues: { note: "A" } },
+      { number: 2, contactType: "S", circuit: "GND", terminal: "M39029", wire: "МС 0,5", color: "чёрный", status: "not-connected", customValues: { note: "B" } },
+    ]);
+    const right: EditorSceneObject = {
+      id: "X-right", layerId: "top", kind: "connector", label: "X1",
+      x: 100, y: 80, width: 118, height: 72, color: "#123456",
+      metadata: {
+        view: "e4", orientation: "right", designation: "X1", partNumber: "D-SUB-9",
+        columns: JSON.stringify(["color", "wire", "terminal", "circuit", "contactType", "number"]),
+        rows,
+      },
+    };
+    const left: EditorSceneObject = {
+      ...right,
+      id: "X-left",
+      x: 800,
+      metadata: {
+        ...right.metadata,
+        orientation: "left",
+        columns: JSON.stringify(["number", "contactType", "circuit", "terminal", "wire", "color"]),
+      },
+    };
+    const rightLayout = getE4ConnectorLayout(right)!;
+    const leftLayout = getE4ConnectorLayout(left)!;
+
+    expect(rightLayout.columns.map((column) => column.id)).toEqual(["color", "wire", "terminal", "circuit", "contactType", "number"]);
+    expect(leftLayout.columns.map((column) => column.id)).toEqual(["number", "contactType", "circuit", "terminal", "wire", "color"]);
+    expect(rightLayout.width).toBeGreaterThan(right.width);
+    expect(rightLayout.height).toBe(124);
+    expect(rightLayout.contactPoints[0]).toEqual({ x: right.x + rightLayout.width, y: 144 });
+    expect(leftLayout.contactPoints[0]).toEqual({ x: left.x, y: 144 });
+
+    expect(hitTestConnectorContact([right], layers, rightLayout.contactPoints[0]!, 1, "e4")).toEqual({ connectorId: "X-right", contactIndex: 0 });
+    expect(hitTestConnectorContact([right], layers, rightLayout.contactPoints[1]!, 1, "e4")).toBeNull();
+    expect(hitTestConnectorContact([left], layers, leftLayout.contactPoints[0]!, 1, "e4")).toEqual({ connectorId: "X-left", contactIndex: 0 });
+    const rightNumber = rightLayout.columns.at(-1)!;
+    expect(hitTestConnectorContact([right], layers, { x: rightNumber.x, y: rightLayout.contactPoints[0]!.y }, 1, "e4")).toBeNull();
+    expect(hitTestConnectorContact([left], layers, { x: left.x + leftLayout.width, y: leftLayout.contactPoints[0]!.y }, 1, "e4")).toBeNull();
+    expect(e4ContactMarker("available")).toBe("");
+    expect(e4ContactMarker("not-connected")).toBe("--X");
+  });
+
+  it("supports hidden and custom E4 columns while preserving Drawing connector fallback", () => {
+    const connector: EditorSceneObject = {
+      id: "X-custom", layerId: "top", kind: "connector", label: "X3",
+      x: 50, y: 60, width: 118, height: 100, color: "#123456",
+      metadata: {
+        view: "e4", orientation: "right", contactCount: "2",
+        columns: JSON.stringify(["circuit", "custom:note"]),
+        columnLabels: JSON.stringify({ "custom:note": "Примечание" }),
+        rows: JSON.stringify([
+          { number: 1, contactType: "", circuit: "A1", terminal: "", wire: "", color: "", status: "available", customValues: { note: "Экран" } },
+          { number: 2, contactType: "", circuit: "A2", terminal: "", wire: "", color: "", status: "available", customValues: { note: "Резерв" } },
+        ]),
+      },
+    };
+    const layout = getE4ConnectorLayout(connector)!;
+    expect(layout.columns.map((column) => [column.id, column.label])).toEqual([
+      ["circuit", "Цепь"],
+      ["custom:note", "Примечание"],
+    ]);
+    expect(layout.contactPoints[0]!.x).toBe(connector.x + layout.width);
+    const drawingContact = { x: connector.x, y: connector.y + 28 };
+    expect(hitTestConnectorContact([connector], layers, drawingContact, 1, "drawing")).toEqual({ connectorId: "X-custom", contactIndex: 0 });
+    expect(hitTestConnectorContact([connector], layers, { ...drawingContact, x: connector.x + connector.width }, 1, "drawing")).toEqual({ connectorId: "X-custom", contactIndex: 0 });
   });
 
   it("finds editable route points and wire ends without treating ends as route points", () => {

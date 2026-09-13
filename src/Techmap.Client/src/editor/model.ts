@@ -5,16 +5,88 @@ export interface Point {
   readonly y: number;
 }
 
+export type ConnectorContactStatus = "available" | "not-connected";
+
+export type ConnectorSchematicOrientation = "contacts-left" | "contacts-right";
+
+export const connectorBaseColumnKeys = [
+  "number",
+  "contactType",
+  "circuit",
+  "terminal",
+  "wire",
+  "color",
+] as const;
+
+export type ConnectorBaseColumnKey = typeof connectorBaseColumnKeys[number];
+
+export interface ConnectorBaseColumn {
+  readonly key: ConnectorBaseColumnKey;
+  readonly visible: boolean;
+}
+
+export interface ConnectorCustomField {
+  readonly id: string;
+  readonly label: string;
+  readonly visible: boolean;
+}
+
+export interface ConnectorSchematicPresentation {
+  readonly orientation: ConnectorSchematicOrientation;
+  readonly baseColumns: readonly ConnectorBaseColumn[];
+  readonly customFields: readonly ConnectorCustomField[];
+}
+
+export type ConnectorE4TableColumn =
+  | { readonly kind: "base"; readonly key: ConnectorBaseColumnKey; readonly x: number; readonly width: number }
+  | { readonly kind: "custom"; readonly id: string; readonly label: string; readonly x: number; readonly width: number };
+
+export interface ConnectorE4TableGeometry {
+  readonly width: number;
+  readonly height: number;
+  readonly titleHeight: number;
+  readonly headerHeight: number;
+  readonly rowHeight: number;
+  readonly footerHeight: number;
+  readonly columns: readonly ConnectorE4TableColumn[];
+  readonly contactPoints: Readonly<Record<string, Point>>;
+}
+
+export const connectorE4TableMetrics = {
+  minimumWidth: 118,
+  titleHeight: 24,
+  headerHeight: 28,
+  rowHeight: 24,
+  footerHeight: 24,
+  customColumnWidth: 120,
+  baseColumnWidths: {
+    number: 44,
+    contactType: 96,
+    circuit: 140,
+    terminal: 132,
+    wire: 132,
+    color: 80,
+  } satisfies Readonly<Record<ConnectorBaseColumnKey, number>>,
+} as const;
+
 export interface ConnectorContact {
   readonly id: string;
   readonly number: number;
+  readonly contactType: string;
   readonly circuit: string;
+  readonly terminalArticle: string;
+  readonly wire: string;
+  readonly color: string;
+  readonly connectionStatus: ConnectorContactStatus;
+  readonly customValues: Readonly<Record<string, string>>;
 }
 
 export interface ConnectorInstance {
   readonly id: string;
   readonly designation: string;
+  readonly partNumber: string;
   readonly contacts: readonly ConnectorContact[];
+  readonly schematic: ConnectorSchematicPresentation;
   readonly positions: Readonly<Record<EditorView, Point>>;
   readonly layerIds: Readonly<Record<EditorView, string>>;
 }
@@ -59,6 +131,62 @@ export const defaultLayerIds = {
   wires: "wires",
   dimensions: "dimensions",
 } as const;
+
+export function createDefaultConnectorBaseColumns(): readonly ConnectorBaseColumn[] {
+  return connectorBaseColumnKeys.map((key) => ({ key, visible: true }));
+}
+
+export function connectorE4TableGeometry(connector: ConnectorInstance): ConnectorE4TableGeometry {
+  const baseColumns: ConnectorE4TableColumn[] = connector.schematic.baseColumns
+    .filter((column) => column.visible)
+    .map((column) => ({
+      kind: "base",
+      key: column.key,
+      x: 0,
+      width: connectorE4TableMetrics.baseColumnWidths[column.key],
+    }));
+  const customColumns: ConnectorE4TableColumn[] = connector.schematic.customFields
+    .filter((field) => field.visible)
+    .map((field) => ({
+      kind: "custom",
+      id: field.id,
+      label: field.label,
+      x: 0,
+      width: connectorE4TableMetrics.customColumnWidth,
+    }));
+  const contactsFirst = connector.schematic.orientation === "contacts-left";
+  const orderedColumns = contactsFirst
+    ? [...baseColumns, ...customColumns]
+    : [...customColumns, ...baseColumns].reverse();
+  let x = 0;
+  const columns = orderedColumns.map((column) => {
+    const positioned = { ...column, x };
+    x += column.width;
+    return positioned;
+  });
+  const width = Math.max(connectorE4TableMetrics.minimumWidth, x);
+  const height = connectorE4TableMetrics.titleHeight + connectorE4TableMetrics.headerHeight +
+    connector.contacts.length * connectorE4TableMetrics.rowHeight + connectorE4TableMetrics.footerHeight;
+  const contactX = contactsFirst ? 0 : width;
+  const contactPoints = Object.fromEntries(connector.contacts.map((contact, index) => [
+    contact.id,
+    {
+      x: contactX,
+      y: connectorE4TableMetrics.titleHeight + connectorE4TableMetrics.headerHeight +
+        (index + 0.5) * connectorE4TableMetrics.rowHeight,
+    },
+  ]));
+  return {
+    width,
+    height,
+    titleHeight: connectorE4TableMetrics.titleHeight,
+    headerHeight: connectorE4TableMetrics.headerHeight,
+    rowHeight: connectorE4TableMetrics.rowHeight,
+    footerHeight: connectorE4TableMetrics.footerHeight,
+    columns,
+    contactPoints,
+  };
+}
 
 function defaultLayers(): readonly EditorLayer[] {
   return [
@@ -115,8 +243,11 @@ export function connectorContactPosition(
   const index = connector.contacts.findIndex((contact) => contact.id === contactId);
   if (index < 0) return null;
   const origin = connector.positions[view];
-  const spacing = view === "e4" ? 22 : 16;
-  return { x: origin.x + 118, y: origin.y + 28 + index * spacing };
+  if (view === "e4") {
+    const point = connectorE4TableGeometry(connector).contactPoints[contactId];
+    return point ? { x: origin.x + point.x, y: origin.y + point.y } : null;
+  }
+  return { x: origin.x + 118, y: origin.y + 28 + index * 16 };
 }
 
 export function findWireEndpoint(
@@ -138,23 +269,106 @@ function parseConnector(value: unknown): ConnectorInstance {
     return {
       id: requireText(contact.id, "ID контакта"),
       number: requireInteger(contact.number, "Номер контакта", 1, 300),
+      contactType: optionalString(contact.contactType, "Тип контакта"),
       circuit: requireString(contact.circuit, "Цепь контакта"),
+      terminalArticle: optionalString(contact.terminalArticle, "Артикул терминала"),
+      wire: optionalString(contact.wire, "Провод контакта"),
+      color: optionalString(contact.color, "Цвет провода контакта"),
+      connectionStatus: parseContactStatus(contact.connectionStatus),
+      customValues: parseCustomValues(contact.customValues),
     };
   });
   if (new Set(contacts.map((contact) => contact.id)).size !== contacts.length ||
       new Set(contacts.map((contact) => contact.number)).size !== contacts.length) {
     throw new Error("Контакты соединителя должны иметь уникальные ID и номера.");
   }
+  const designation = requireBoundedText(record.designation, "Обозначение соединителя", 120);
+  const schematic = parseConnectorSchematic(record.schematic);
+  const customFieldIds = new Set(schematic.customFields.map((field) => field.id));
+  for (const contact of contacts) {
+    if (Object.keys(contact.customValues).some((fieldId) => !customFieldIds.has(fieldId))) {
+      throw new Error("Значение контакта ссылается на отсутствующее справочное поле.");
+    }
+  }
   return {
     id: requireText(record.id, "ID соединителя"),
-    designation: requireText(record.designation, "Обозначение соединителя"),
+    designation,
+    partNumber: record.partNumber === undefined
+      ? designation
+      : requireBoundedText(record.partNumber, "Артикул шаблона соединителя", 120),
     contacts,
+    schematic,
     positions: { e4: parsePoint(positions.e4), drawing: parsePoint(positions.drawing) },
     layerIds: {
       e4: requireText(layerIds.e4, "Слой соединителя Э4"),
       drawing: requireText(layerIds.drawing, "Слой соединителя чертежа"),
     },
   };
+}
+
+function parseConnectorSchematic(value: unknown): ConnectorSchematicPresentation {
+  if (value === undefined) {
+    return { orientation: "contacts-right", baseColumns: createDefaultConnectorBaseColumns(), customFields: [] };
+  }
+  const record = requireRecord(value, "Представление соединителя на схеме задано неверно.");
+  const orientation = record.orientation === "contacts-left" || record.orientation === "contacts-right"
+    ? record.orientation
+    : (() => { throw new Error("Ориентация соединителя на схеме задана неверно."); })();
+  const baseColumns = parseBaseColumns(record.baseColumns);
+  const customFields = record.customFields === undefined
+    ? []
+    : parseCustomFields(record.customFields);
+  return { orientation, baseColumns, customFields };
+}
+
+function parseBaseColumns(value: unknown): readonly ConnectorBaseColumn[] {
+  if (value === undefined) return createDefaultConnectorBaseColumns();
+  if (!Array.isArray(value)) throw new Error("Базовые колонки соединителя заданы неверно.");
+  const byKey = new Map<ConnectorBaseColumnKey, ConnectorBaseColumn>();
+  for (const columnValue of value) {
+    const column = requireRecord(columnValue, "Базовая колонка соединителя задана неверно.");
+    if (!connectorBaseColumnKeys.includes(column.key as ConnectorBaseColumnKey) || typeof column.visible !== "boolean") {
+      throw new Error("Базовая колонка соединителя задана неверно.");
+    }
+    const key = column.key as ConnectorBaseColumnKey;
+    if (byKey.has(key)) throw new Error("Базовые колонки соединителя не должны повторяться.");
+    byKey.set(key, { key, visible: column.visible });
+  }
+  return connectorBaseColumnKeys.map((key) => byKey.get(key) ?? { key, visible: true });
+}
+
+function parseCustomFields(value: unknown): readonly ConnectorCustomField[] {
+  if (!Array.isArray(value)) throw new Error("Справочные поля соединителя заданы неверно.");
+  const fields = value.map((fieldValue) => {
+    const field = requireRecord(fieldValue, "Справочное поле соединителя задано неверно.");
+    if (typeof field.visible !== "boolean") throw new Error("Видимость справочного поля задана неверно.");
+    return {
+      id: requireText(field.id, "ID справочного поля"),
+      label: requireBoundedText(field.label, "Название справочного поля", 120),
+      visible: field.visible,
+    };
+  });
+  if (new Set(fields.map((field) => field.id)).size !== fields.length) {
+    throw new Error("ID справочных полей должны быть уникальны.");
+  }
+  return fields;
+}
+
+function parseContactStatus(value: unknown): ConnectorContactStatus {
+  if (value === undefined) return "available";
+  if (value !== "available" && value !== "not-connected") {
+    throw new Error("Статус подключения контакта задан неверно.");
+  }
+  return value;
+}
+
+function parseCustomValues(value: unknown): Readonly<Record<string, string>> {
+  if (value === undefined) return {};
+  const record = requireRecord(value, "Значения справочных полей контакта заданы неверно.");
+  return Object.fromEntries(Object.entries(record).map(([key, item]) => [
+    requireText(key, "ID справочного поля"),
+    requireString(item, "Значение справочного поля"),
+  ]));
 }
 
 function parseWire(value: unknown): WireInstance {
@@ -224,9 +438,19 @@ function requireString(value: unknown, name: string): string {
   return value;
 }
 
+function optionalString(value: unknown, name: string): string {
+  return value === undefined ? "" : requireString(value, name);
+}
+
 function requireText(value: unknown, name: string): string {
   const result = requireString(value, name);
   if (!result.trim()) throw new Error(`${name} не заполнено.`);
+  return result;
+}
+
+function requireBoundedText(value: unknown, name: string, maximumLength: number): string {
+  const result = requireText(value, name);
+  if (result.length > maximumLength) throw new Error(`${name} задано неверно.`);
   return result;
 }
 

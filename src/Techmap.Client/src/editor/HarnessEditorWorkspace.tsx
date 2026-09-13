@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CanvasViewport } from "./CanvasViewport";
 import { CatalogDock } from "./CatalogDock";
 import { zoomEditorCameraAt } from "./editor-camera";
@@ -106,6 +106,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly drawingSnapEnabled?: boolean;
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
+  readonly propertyInspector?: ReactNode;
   readonly onClose?: () => void;
 }
 
@@ -149,6 +150,7 @@ export function HarnessEditorWorkspace({
   drawingSnapEnabled = true,
   onDrawingSnapChange,
   onCanvasDoubleClick,
+  propertyInspector,
   onClose,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
@@ -291,12 +293,14 @@ export function HarnessEditorWorkspace({
           </div>
           <div className="he-inspector-content">
             {inspectorTab === "properties" ? (
-              <ObjectInspector
-                view={view}
-                selectedObject={selectedObject}
-                disabled={selectedLayer?.locked === true}
-                onChange={(objectId, patch) => changeObjects(updateEditorObject(objects, objectId, patch))}
-              />
+              propertyInspector ?? (
+                <ObjectInspector
+                  view={view}
+                  selectedObject={selectedObject}
+                  disabled={selectedLayer?.locked === true}
+                  onChange={(objectId, patch) => changeObjects(updateEditorObject(objects, objectId, patch))}
+                />
+              )
             ) : (
               <LayersPanel
                 layers={layers}

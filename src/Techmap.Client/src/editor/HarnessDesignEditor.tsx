@@ -6,9 +6,11 @@ import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResour
 import { useEditorReferenceCatalog } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
+import { E4ConnectorInspector } from "./E4ConnectorInspector";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
 import {
   connectorContactPosition,
+  connectorE4TableGeometry,
   createEmptyHarnessDesign,
   findWireEndpoint,
   type EditorLayer,
@@ -45,7 +47,8 @@ function contactPointForWire(
   if (!connector) return null;
   const point = connectorContactPosition(connector, contactId, view);
   if (!point) return null;
-  const height = Math.max(72, 44 + connector.contacts.length * (view === "e4" ? 22 : 16));
+  if (view === "e4") return point;
+  const height = Math.max(72, 44 + connector.contacts.length * 16);
   const useLeft = other ? other.positions[view].x < connector.positions[view].x : false;
   return {
     x: useLeft ? connector.positions[view].x : connector.positions[view].x + 118,
@@ -57,18 +60,56 @@ export function designToScene(
   document: HarnessDesignDocument,
   view: HarnessEditorView,
 ): readonly EditorSceneObject[] {
-  const connectors: EditorSceneObject[] = document.connectors.map((connector) => ({
-    id: connector.id,
-    layerId: connector.layerIds[view],
-    kind: "connector",
-    label: connector.designation,
-    x: connector.positions[view].x,
-    y: connector.positions[view].y,
-    width: 118,
-    height: Math.max(72, 44 + connector.contacts.length * (view === "e4" ? 22 : 16)),
-    color: "#416579",
-    metadata: { contactCount: String(connector.contacts.length) },
-  }));
+  const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
+    const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
+    const metadata: Record<string, string> = { contactCount: String(connector.contacts.length) };
+    if (view === "e4" && geometry) {
+      const columnIds = geometry.columns.map((column) => column.kind === "base"
+        ? column.key
+        : `custom:${column.id}`);
+      const customLabels = Object.fromEntries(geometry.columns.flatMap((column) =>
+        column.kind === "custom" ? [[`custom:${column.id}`, column.label]] : []));
+      const connectedWires = new Map(connector.contacts.map((contact) => [
+        contact.id,
+        document.wires.find((wire) =>
+          (wire.from.connectorId === connector.id && wire.from.contactId === contact.id) ||
+          (wire.to.connectorId === connector.id && wire.to.contactId === contact.id)),
+      ]));
+      Object.assign(metadata, {
+        view: "e4",
+        orientation: connector.schematic.orientation === "contacts-left" ? "left" : "right",
+        designation: connector.designation,
+        partNumber: connector.partNumber,
+        columns: JSON.stringify(columnIds),
+        columnLabels: JSON.stringify(customLabels),
+        rows: JSON.stringify(connector.contacts.map((contact) => {
+          const connectedWire = connectedWires.get(contact.id);
+          return {
+            number: contact.number,
+            contactType: contact.contactType,
+            circuit: contact.circuit || connectedWire?.circuit || "",
+            terminal: contact.terminalArticle,
+            wire: contact.wire,
+            color: contact.color || connectedWire?.color || "",
+            status: contact.connectionStatus,
+            customValues: contact.customValues,
+          };
+        })),
+      });
+    }
+    return {
+      id: connector.id,
+      layerId: connector.layerIds[view],
+      kind: "connector" as const,
+      label: connector.designation,
+      x: connector.positions[view].x,
+      y: connector.positions[view].y,
+      width: geometry?.width ?? 118,
+      height: geometry?.height ?? Math.max(72, 44 + connector.contacts.length * 16),
+      color: "#416579",
+      metadata,
+    };
+  });
   const wires: EditorSceneObject[] = document.wires.flatMap((wire, index) => {
     const start = contactPointForWire(document, wire.from.connectorId, wire.from.contactId, wire.to.connectorId, view);
     const end = contactPointForWire(document, wire.to.connectorId, wire.to.contactId, wire.from.connectorId, view);
@@ -298,6 +339,12 @@ export function HarnessDesignEditor({
 
   const scene = designToScene(history.present, view);
   const layers = toUiLayers(history.present, view);
+  const selectedConnector = view === "e4" && selectedObjectId
+    ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
+    : null;
+  const selectedConnectorLayer = selectedConnector
+    ? layers.find((layer) => layer.id === selectedConnector.layerIds.e4)
+    : null;
   const addCatalogItem = (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
     if (!item.id.includes("xs-")) return;
     const contactCount = item.id.includes("10") ? 10 : 4;
@@ -345,6 +392,13 @@ export function HarnessDesignEditor({
         selectedObjectId={selectedObjectId}
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
+        propertyInspector={selectedConnector ? (
+          <E4ConnectorInspector
+            connector={selectedConnector}
+            disabled={selectedConnectorLayer?.locked === true}
+            onCommand={run}
+          />
+        ) : undefined}
         onViewChange={(nextView) => {
           setView(nextView);
           onViewChange?.(nextView);

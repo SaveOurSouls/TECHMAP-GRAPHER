@@ -1,6 +1,11 @@
 import {
+  connectorBaseColumnKeys,
+  createDefaultConnectorBaseColumns,
   defaultLayerIds,
+  type ConnectorBaseColumnKey,
   type ConnectorContact,
+  type ConnectorContactStatus,
+  type ConnectorCustomField,
   type ConnectorInstance,
   type EditorLayer,
   type EditorView,
@@ -13,7 +18,15 @@ import {
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
-  | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string }
+  | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string }
+  | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
+  | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
+  | { readonly type: "toggle-base-column-visibility"; readonly connectorId: string; readonly key: ConnectorBaseColumnKey }
+  | { readonly type: "add-custom-field"; readonly connectorId: string; readonly field: ConnectorCustomField }
+  | { readonly type: "remove-custom-field"; readonly connectorId: string; readonly fieldId: string }
+  | { readonly type: "toggle-custom-field-visibility"; readonly connectorId: string; readonly fieldId: string }
   | { readonly type: "remove-connector"; readonly connectorId: string }
   | { readonly type: "add-wire"; readonly wire: WireInstance }
   | { readonly type: "remove-wire"; readonly wireId: string }
@@ -30,21 +43,36 @@ export function createConnector(
   contactCount: number,
   e4Position: Point,
   drawingPosition: Point = e4Position,
+  partNumber: string = designation,
 ): ConnectorInstance {
   if (!Number.isSafeInteger(contactCount) || contactCount < 1 || contactCount > 300) {
     throw new Error("Число контактов должно быть от 1 до 300.");
   }
   const normalizedDesignation = designation.trim();
-  if (!normalizedDesignation) throw new Error("Укажите обозначение соединителя.");
+  requireConnectorText(normalizedDesignation, "Укажите обозначение соединителя.");
+  const normalizedPartNumber = partNumber.trim();
+  requireConnectorText(normalizedPartNumber, "Укажите артикул шаблона соединителя.");
   const contacts: ConnectorContact[] = Array.from({ length: contactCount }, (_, index) => ({
     id: `${id}:contact:${index + 1}`,
     number: index + 1,
+    contactType: "",
     circuit: "",
+    terminalArticle: "",
+    wire: "",
+    color: "",
+    connectionStatus: "available",
+    customValues: {},
   }));
   return {
     id,
     designation: normalizedDesignation,
+    partNumber: normalizedPartNumber,
     contacts,
+    schematic: {
+      orientation: "contacts-right",
+      baseColumns: createDefaultConnectorBaseColumns(),
+      customFields: [],
+    },
     positions: { e4: e4Position, drawing: drawingPosition },
     layerIds: { e4: defaultLayerIds.connectors, drawing: defaultLayerIds.connectors },
   };
@@ -91,15 +119,117 @@ export function applyEditorCommand(
       };
     case "update-connector": {
       const designation = command.designation.trim();
-      if (!designation) throw new Error("Укажите обозначение соединителя.");
+      requireConnectorText(designation, "Укажите обозначение соединителя.");
+      const partNumber = command.partNumber?.trim();
+      if (partNumber !== undefined) requireConnectorText(partNumber, "Укажите артикул шаблона соединителя.");
       return {
         ...document,
         connectors: replaceRequired(document.connectors, command.connectorId, (connector) => ({
           ...connector,
           designation,
+          partNumber: partNumber ?? connector.partNumber,
         }), "Соединитель не найден."),
       };
     }
+    case "flip-connector-orientation":
+      return updateConnector(document, command.connectorId, (connector) => ({
+        ...connector,
+        schematic: {
+          ...connector.schematic,
+          orientation: connector.schematic.orientation === "contacts-left" ? "contacts-right" : "contacts-left",
+        },
+      }));
+    case "update-contact":
+      return updateConnector(document, command.connectorId, (connector) => {
+        if (command.number !== undefined) requireContactNumber(command.number);
+        if (command.connectionStatus !== undefined) requireContactStatus(command.connectionStatus);
+        if (command.connectionStatus === "not-connected" && isContactConnected(document, command.connectorId, command.contactId)) {
+          throw new Error("Нельзя пометить контакт как неподключённый, пока к нему подключён провод.");
+        }
+        const customValues = command.customValues === undefined
+          ? undefined
+          : normalizeCustomValues(command.customValues, connector.schematic.customFields);
+        const contacts = replaceRequired(connector.contacts, command.contactId, (contact) => ({
+          ...contact,
+          number: command.number ?? contact.number,
+          contactType: command.contactType === undefined ? contact.contactType : normalizeValue(command.contactType, "Тип контакта"),
+          circuit: command.circuit === undefined ? contact.circuit : normalizeValue(command.circuit, "Цепь контакта"),
+          terminalArticle: command.terminalArticle === undefined
+            ? contact.terminalArticle
+            : normalizeValue(command.terminalArticle, "Артикул терминала"),
+          wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
+          color: command.color === undefined ? contact.color : normalizeValue(command.color, "Цвет провода контакта"),
+          connectionStatus: command.connectionStatus ?? contact.connectionStatus,
+          customValues: customValues ?? contact.customValues,
+        }), "Контакт не найден.");
+        validateUniqueContacts(contacts);
+        return { ...connector, contacts };
+      });
+    case "add-contact":
+      return updateConnector(document, command.connectorId, (connector) => {
+        const contact = normalizeContact(command.contact, connector.schematic.customFields);
+        const contacts = [...connector.contacts, contact];
+        validateUniqueContacts(contacts);
+        return { ...connector, contacts };
+      });
+    case "remove-contact": {
+      if (document.wires.some((wire) =>
+        (wire.from.connectorId === command.connectorId && wire.from.contactId === command.contactId) ||
+        (wire.to.connectorId === command.connectorId && wire.to.contactId === command.contactId))) {
+        throw new Error("Нельзя удалить контакт, к которому подключён провод.");
+      }
+      return updateConnector(document, command.connectorId, (connector) => ({
+        ...connector,
+        contacts: removeRequired(connector.contacts, command.contactId, "Контакт не найден."),
+      }));
+    }
+    case "toggle-base-column-visibility":
+      if (!connectorBaseColumnKeys.includes(command.key)) throw new Error("Базовая колонка не найдена.");
+      return updateConnector(document, command.connectorId, (connector) => ({
+        ...connector,
+        schematic: {
+          ...connector.schematic,
+          baseColumns: connector.schematic.baseColumns.map((column) =>
+            column.key === command.key ? { ...column, visible: !column.visible } : column),
+        },
+      }));
+    case "add-custom-field":
+      return updateConnector(document, command.connectorId, (connector) => {
+        const field = normalizeCustomField(command.field);
+        if (connector.schematic.customFields.some((item) => item.id === field.id)) {
+          throw new Error("Справочное поле с таким ID уже существует.");
+        }
+        return {
+          ...connector,
+          schematic: {
+            ...connector.schematic,
+            customFields: [...connector.schematic.customFields, field],
+          },
+        };
+      });
+    case "remove-custom-field":
+      return updateConnector(document, command.connectorId, (connector) => ({
+        ...connector,
+        contacts: connector.contacts.map((contact) => {
+          const { [command.fieldId]: _removed, ...customValues } = contact.customValues;
+          return { ...contact, customValues };
+        }),
+        schematic: {
+          ...connector.schematic,
+          customFields: removeRequired(connector.schematic.customFields, command.fieldId, "Справочное поле не найдено."),
+        },
+      }));
+    case "toggle-custom-field-visibility":
+      return updateConnector(document, command.connectorId, (connector) => ({
+        ...connector,
+        schematic: {
+          ...connector.schematic,
+          customFields: replaceRequired(connector.schematic.customFields, command.fieldId, (field) => ({
+            ...field,
+            visible: !field.visible,
+          }), "Справочное поле не найдено."),
+        },
+      }));
     case "remove-connector": {
       if (!document.connectors.some((item) => item.id === command.connectorId)) {
         throw new Error("Соединитель не найден.");
@@ -174,6 +304,87 @@ function validateLayers(layers: readonly EditorLayer[]): void {
   }
 }
 
+function updateConnector(
+  document: HarnessDesignDocument,
+  connectorId: string,
+  update: (connector: ConnectorInstance) => ConnectorInstance,
+): HarnessDesignDocument {
+  return {
+    ...document,
+    connectors: replaceRequired(document.connectors, connectorId, update, "Соединитель не найден."),
+  };
+}
+
+function normalizeContact(
+  contact: ConnectorContact,
+  customFields: readonly ConnectorCustomField[],
+): ConnectorContact {
+  requireContactNumber(contact.number);
+  requireContactStatus(contact.connectionStatus);
+  if (!contact.id.trim() || contact.id.length > 1024) throw new Error("ID контакта задан неверно.");
+  return {
+    ...contact,
+    id: contact.id.trim(),
+    contactType: normalizeValue(contact.contactType, "Тип контакта"),
+    circuit: normalizeValue(contact.circuit, "Цепь контакта"),
+    terminalArticle: normalizeValue(contact.terminalArticle, "Артикул терминала"),
+    wire: normalizeValue(contact.wire, "Провод контакта"),
+    color: normalizeValue(contact.color, "Цвет провода контакта"),
+    customValues: normalizeCustomValues(contact.customValues, customFields),
+  };
+}
+
+function normalizeCustomField(field: ConnectorCustomField): ConnectorCustomField {
+  const id = field.id.trim();
+  const label = field.label.trim();
+  if (!id || id.length > 1024) throw new Error("ID справочного поля задан неверно.");
+  if (!label || label.length > 120) throw new Error("Название справочного поля задано неверно.");
+  if (typeof field.visible !== "boolean") throw new Error("Видимость справочного поля задана неверно.");
+  return { id, label, visible: field.visible };
+}
+
+function normalizeCustomValues(
+  values: Readonly<Record<string, string>>,
+  customFields: readonly ConnectorCustomField[],
+): Readonly<Record<string, string>> {
+  const knownIds = new Set(customFields.map((field) => field.id));
+  const result: Record<string, string> = {};
+  for (const [fieldId, value] of Object.entries(values)) {
+    if (!knownIds.has(fieldId)) throw new Error("Справочное поле контакта не найдено.");
+    result[fieldId] = normalizeValue(value, "Значение справочного поля");
+  }
+  return result;
+}
+
+function validateUniqueContacts(contacts: readonly ConnectorContact[]): void {
+  if (new Set(contacts.map((contact) => contact.id)).size !== contacts.length ||
+      new Set(contacts.map((contact) => contact.number)).size !== contacts.length) {
+    throw new Error("Контакты соединителя должны иметь уникальные ID и номера.");
+  }
+}
+
+function requireContactNumber(number: number): void {
+  if (!Number.isSafeInteger(number) || number < 1 || number > 300) {
+    throw new Error("Номер контакта должен быть от 1 до 300.");
+  }
+}
+
+function requireContactStatus(status: ConnectorContactStatus): void {
+  if (status !== "available" && status !== "not-connected") {
+    throw new Error("Статус подключения контакта задан неверно.");
+  }
+}
+
+function normalizeValue(value: string, name: string): string {
+  if (typeof value !== "string" || value.length > 1024) throw new Error(`${name} задано неверно.`);
+  return value.trim();
+}
+
+function requireConnectorText(value: string, emptyMessage: string): void {
+  if (!value) throw new Error(emptyMessage);
+  if (value.length > 120) throw new Error("Значение соединителя не должно быть длиннее 120 символов.");
+}
+
 function updateLayers(
   document: HarnessDesignDocument,
   view: EditorView,
@@ -211,9 +422,19 @@ function validateWire(document: HarnessDesignDocument, wire: WireInstance): void
 
 function requireEndpoint(document: HarnessDesignDocument, endpoint: WireEndpoint): void {
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
-  if (!connector || !connector.contacts.some((contact) => contact.id === endpoint.contactId)) {
+  const contact = connector?.contacts.find((item) => item.id === endpoint.contactId);
+  if (!contact) {
     throw new Error("Точка подключения провода не найдена.");
   }
+  if (contact.connectionStatus === "not-connected") {
+    throw new Error("Контакт помечен как неподключённый и не может быть соединён проводом.");
+  }
+}
+
+function isContactConnected(document: HarnessDesignDocument, connectorId: string, contactId: string): boolean {
+  return document.wires.some((wire) =>
+    (wire.from.connectorId === connectorId && wire.from.contactId === contactId) ||
+    (wire.to.connectorId === connectorId && wire.to.contactId === contactId));
 }
 
 function requireLength(lengthMm: number): void {
