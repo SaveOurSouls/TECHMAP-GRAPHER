@@ -516,13 +516,18 @@ function drawE4Connector(
 
   context.fillStyle = "#17384b";
   context.font = "700 13px Inter, Arial, sans-serif";
-  context.textAlign = "left";
+  const labelOnRight = layout.connectionSide === "left";
+  context.textAlign = labelOnRight ? "right" : "left";
   context.textBaseline = "middle";
   context.save();
   context.beginPath();
   context.rect(layout.x + 10, layout.y + 2, layout.width - 20, layout.titleHeight - 4);
   context.clip();
-  context.fillText(layout.designation, layout.x + 12, layout.y + layout.titleHeight / 2);
+  context.fillText(
+    layout.designation,
+    labelOnRight ? layout.x + layout.width - 12 : layout.x + 12,
+    layout.y + layout.titleHeight / 2,
+  );
   context.restore();
 
   context.fillStyle = "#405f6e";
@@ -531,7 +536,11 @@ function drawE4Connector(
   context.beginPath();
   context.rect(layout.x + 10, footerY + 1, layout.width - 20, layout.footerHeight - 2);
   context.clip();
-  context.fillText(layout.partNumber, layout.x + 12, footerY + layout.footerHeight / 2);
+  context.fillText(
+    layout.partNumber,
+    labelOnRight ? layout.x + layout.width - 12 : layout.x + 12,
+    footerY + layout.footerHeight / 2,
+  );
   context.restore();
 
   context.fillStyle = "#405f6e";

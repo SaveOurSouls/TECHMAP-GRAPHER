@@ -356,7 +356,7 @@ export function HarnessDesignEditor({
     };
     run({
       type: "add-connector",
-      connector: createConnector(id, `X${index + 1}`, contactCount, placement),
+      connector: createConnector(id, `XS${index + 1}`, contactCount, placement, placement, item.title),
     });
     setSelectedObjectId(id);
   };
