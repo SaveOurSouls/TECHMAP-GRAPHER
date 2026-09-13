@@ -1,5 +1,6 @@
 import { createMutationHeaders, type LocalSession } from "../local-session";
 import { buildApiUrl, type RuntimeConfig } from "../runtime-config";
+import { normalizeE4RoutingDocument } from "./commands";
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "./model";
 
 export interface HarnessDesignResource {
@@ -68,7 +69,7 @@ export function createHarnessDesignApi(
       headers: { Accept: "application/json" },
     }),
     save: async (projectId, harnessId, expectedRevision, content) => {
-      const validatedContent = parseHarnessDesignDocument(content);
+      const validatedContent = normalizeE4RoutingDocument(parseHarnessDesignDocument(content));
       return request(resource(projectId, harnessId), {
         method: "PUT",
         headers,
@@ -89,7 +90,7 @@ function parseResource(value: unknown): HarnessDesignResource {
     harnessId,
     schemaVersion: 1,
     revision: record.revision as number,
-    content: parseHarnessDesignDocument(record.content),
+    content: normalizeE4RoutingDocument(parseHarnessDesignDocument(record.content)),
     updatedUtc: requireString(record.updatedUtc, "updatedUtc"),
   };
 }

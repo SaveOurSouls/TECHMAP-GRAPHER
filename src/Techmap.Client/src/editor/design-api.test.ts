@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parseRuntimeConfig } from "../runtime-config";
 import { createHarnessDesignApi, HarnessDesignApiError } from "./design-api";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
+import { applyEditorCommand, createConnector, createWire } from "./commands";
 import { createEmptyHarnessDesign } from "./model";
 
 const config = parseRuntimeConfig({
@@ -94,6 +95,41 @@ describe("harness design API", () => {
     };
     await expect(api.save(projectId, harnessId, 1, inconsistent)).rejects.toThrow(/не совпадает/);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs stale automatic E4 geometry at the API boundary", async () => {
+    let staleContent = createEmptyHarnessDesign();
+    staleContent = applyEditorCommand(staleContent, {
+      type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+    });
+    staleContent = applyEditorCommand(staleContent, {
+      type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 1600, y: 0 }),
+    });
+    staleContent = applyEditorCommand(staleContent, { type: "flip-connector-orientation", connectorId: "x2" });
+    staleContent = applyEditorCommand(staleContent, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    staleContent = {
+      ...staleContent,
+      connectors: [
+        ...staleContent.connectors,
+        createConnector("obstacle", "X3", 1, { x: 800, y: 40 }),
+      ],
+    };
+    const staleRoute = staleContent.wires[0]!.e4Route;
+    let sentContent: typeof staleContent | undefined;
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { content: typeof staleContent };
+      sentContent = body.content;
+      return response({ harnessId, schemaVersion: 1, revision: 1, content: body.content, updatedUtc: "2026-09-13T00:00:00Z" });
+    });
+    const api = createHarnessDesignApi(config, session, fetcher);
+
+    const saved = await api.save(projectId, harnessId, 0, staleContent);
+
+    expect(sentContent?.wires[0]?.e4Route).not.toEqual(staleRoute);
+    expect(saved.content.wires[0]?.e4Route).toEqual(sentContent?.wires[0]?.e4Route);
   });
 
   it("surfaces the current revision on a conflict", async () => {

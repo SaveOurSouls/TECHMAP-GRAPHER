@@ -14,6 +14,7 @@ import type {
   EditorTool,
   HarnessEditorView,
 } from "./editor-types";
+import { connectorE4TableColumnWidth } from "./model";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -25,11 +26,14 @@ export interface CanvasViewportProps {
   readonly selectedObjectIds?: readonly string[];
   readonly e4Overlays?: E4SceneOverlays;
   readonly overlay?: ReactNode;
+  readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
   readonly onViewportSizeChange?: (size: EditorViewportSize) => void;
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  /** Shows a transient move without adding an undo entry. Passing null clears it. */
+  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onWireConnect?: (
     from: { readonly connectorId: string; readonly contactIndex: number },
     to: { readonly connectorId: string; readonly contactIndex: number },
@@ -899,15 +903,6 @@ const e4ColumnLabels: Readonly<Record<E4BaseColumnId, string>> = {
   number: "№",
 };
 
-const e4ColumnWidths: Readonly<Record<E4BaseColumnId, number>> = {
-  color: 80,
-  wire: 132,
-  terminal: 132,
-  circuit: 140,
-  contactType: 96,
-  number: 44,
-};
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1028,12 +1023,17 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
   if (!connectionSide || rows === null) return null;
   const columnIds = parseE4Columns(object.metadata.columns, connectionSide);
   const columnLabels = parseStringRecord(parseJson(object.metadata.columnLabels)) ?? {};
-  const widths = new Map<E4ColumnId, number>(columnIds.map((column) => [
-    column,
-    isCustomE4ColumnId(column) ? 120 : e4ColumnWidths[column],
-  ]));
   const designation = object.metadata.designation?.trim() || object.label;
   const partNumber = object.metadata.partNumber?.trim() ?? "";
+  const widths = new Map<E4ColumnId, number>(columnIds.map((column) => {
+    const label = columnLabels[column] ?? (isCustomE4ColumnId(column) ? column.slice("custom:".length) : e4ColumnLabels[column]);
+    const values = rows.map((row) => e4CellText(row, column));
+    if (column === "number") values.unshift(partNumber);
+    return [
+      column,
+      connectorE4TableColumnWidth(isCustomE4ColumnId(column) ? null : column, label, values),
+    ];
+  }));
   const columnWidth = columnIds.reduce((total, column) => total + (widths.get(column) ?? 0), 0);
   const width = Math.max(118, columnWidth);
   const titleHeight = 24;
@@ -1041,13 +1041,16 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
   const rowHeight = 24;
   const footerHeight = 24;
   const height = titleHeight + headerHeight + rows.length * rowHeight + footerHeight;
+  const widthRemainder = width - columnWidth;
+  const growColumn = columnIds.indexOf("number");
   let columnX = object.x;
-  const columns = columnIds.map((id) => {
+  const columns = columnIds.map((id, index) => {
+    const columnWidth = widths.get(id)! + (index === (growColumn < 0 ? 0 : growColumn) ? widthRemainder : 0);
     const column = {
       id,
       label: columnLabels[id] ?? (isCustomE4ColumnId(id) ? id.slice("custom:".length) : e4ColumnLabels[id]),
       x: columnX,
-      width: widths.get(id)!,
+      width: columnWidth,
     };
     columnX += column.width;
     return column;
@@ -1236,9 +1239,23 @@ function drawE4Connector(
   context.fillStyle = "#f4f7f8";
   context.fillRect(layout.x, footerY, layout.width, layout.footerHeight);
 
-  context.strokeStyle = selected ? "#087bb4" : object.color;
+  const hasDiagnostic = object.metadata?.diagnostic === "error";
+  context.strokeStyle = hasDiagnostic ? "#c43d3d" : selected ? "#087bb4" : object.color;
   context.lineWidth = selected ? 3 : 1.5;
   context.strokeRect(layout.x, layout.y, layout.width, layout.height);
+  if (hasDiagnostic) {
+    context.save();
+    context.fillStyle = "#c43d3d";
+    context.beginPath();
+    context.arc(layout.x + layout.width - 12, layout.y + layout.titleHeight / 2, 8, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#fff";
+    context.font = "800 11px Inter, Arial, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("!", layout.x + layout.width - 12, layout.y + layout.titleHeight / 2 + 0.5);
+    context.restore();
+  }
   context.lineWidth = 1;
   context.strokeStyle = "#9fb2bc";
   context.beginPath();
@@ -1250,7 +1267,7 @@ function drawE4Connector(
   context.lineTo(layout.x + layout.width, footerY);
   for (const column of layout.columns.slice(1)) {
     context.moveTo(column.x, headerY);
-    context.lineTo(column.x, footerY);
+    context.lineTo(column.x, layout.y + layout.height);
   }
   for (let index = 1; index < layout.rows.length; index += 1) {
     const rowY = bodyY + index * layout.rowHeight;
@@ -1259,47 +1276,31 @@ function drawE4Connector(
   }
   context.stroke();
 
-  const labelOnRight = layout.connectionSide === "left";
-  context.textAlign = labelOnRight ? "right" : "left";
-  context.fillStyle = "#78909b";
-  context.font = "700 9px Inter, Arial, sans-serif";
+  context.fillStyle = "#426a7d";
+  context.font = "700 12px Inter, Arial, sans-serif";
   context.textBaseline = "middle";
-  context.textAlign = "center";
-  context.fillText("⠿", layout.x + layout.width / 2, layout.y + layout.titleHeight / 2);
+  context.textAlign = "left";
+  context.fillText("⠿", layout.x + 8, layout.y + layout.titleHeight / 2);
+  context.fillStyle = "#17384b";
+  context.font = "800 12px Inter, Arial, sans-serif";
+  drawE4CellText(context, layout.designation, layout.x + 26, layout.y, layout.width - 52, layout.titleHeight);
 
   context.fillStyle = "#405f6e";
-  context.font = "600 10px Inter, Arial, sans-serif";
-  context.save();
-  context.beginPath();
-  context.rect(layout.x + 10, footerY + 1, layout.width - 20, layout.footerHeight - 2);
-  context.clip();
-  context.fillText(
+  context.font = "700 9px Inter, Arial, sans-serif";
+  const numberColumn = layout.columns.find((column) => column.id === "number");
+  if (numberColumn) drawE4CellText(
+    context,
     layout.partNumber,
-    labelOnRight ? layout.x + layout.width - 12 : layout.x + 12,
-    footerY + layout.footerHeight / 2,
+    numberColumn.x,
+    footerY,
+    numberColumn.width,
+    layout.footerHeight,
   );
-  context.restore();
 
   context.fillStyle = "#405f6e";
   context.font = "700 10px Inter, Arial, sans-serif";
   for (const column of layout.columns) {
-    if (column.id === "number") {
-      context.save();
-      context.beginPath();
-      context.rect(column.x + 3, headerY + 1, Math.max(0, column.width - 6), layout.headerHeight - 2);
-      context.clip();
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillStyle = "#17384b";
-      context.font = "700 9px Inter, Arial, sans-serif";
-      context.fillText(layout.designation, column.x + column.width / 2, headerY + 8);
-      context.fillStyle = "#405f6e";
-      context.font = "700 9px Inter, Arial, sans-serif";
-      context.fillText(column.label, column.x + column.width / 2, headerY + 20);
-      context.restore();
-    } else {
-      drawE4CellText(context, column.label, column.x, headerY, column.width, layout.headerHeight);
-    }
+    drawE4CellText(context, column.label, column.x, headerY, column.width, layout.headerHeight);
   }
 
   context.fillStyle = "#284957";
@@ -1732,11 +1733,13 @@ export function CanvasViewport({
   selectedObjectIds,
   e4Overlays,
   overlay,
+  diagnosticOverlay,
   inlineEditor,
   onCameraChange,
   onViewportSizeChange,
   onObjectSelect,
   onObjectMove,
+  onObjectMovePreview,
   onWireConnect,
   onWireReconnect,
   onWireConnectToWire,
@@ -1762,7 +1765,7 @@ export function CanvasViewport({
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
   const overlays = e4Overlays ?? parseE4SceneOverlays(objects);
-  const inlineObject = view === "e4" && selectedObjectId
+  const inlineObject = view === "e4" && tool === "select" && selectedObjectId
     ? objects.find((object) => object.id === selectedObjectId && object.kind === "connector") ?? null
     : null;
   const inlineLayout = inlineObject ? getE4ConnectorLayout(inlineObject) : null;
@@ -1775,10 +1778,14 @@ export function CanvasViewport({
   }, [tool]);
 
   useEffect(() => {
+    const activeObjectId = inlineDragRef.current?.objectId ??
+      (dragRef.current?.kind === "object" ? dragRef.current.objectId : null);
+    if (activeObjectId) onObjectMovePreview?.(activeObjectId, null);
     inlineDragRef.current = null;
+    if (dragRef.current?.kind === "object") dragRef.current = null;
     inlineDragActivatedRef.current = false;
     setInlineDragOffset(null);
-  }, [inlineObject?.id, tool, view]);
+  }, [inlineObject?.id, onObjectMovePreview, tool, view]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1794,7 +1801,7 @@ export function CanvasViewport({
     const observer = new ResizeObserver(redraw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [camera, e4Overlays, layers, objects, onViewportSizeChange, selectedObjectIds, selectedObjectId, view]);
+  }, [camera, e4Overlays, inlineObject?.id, layers, objects, onViewportSizeChange, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -1975,6 +1982,18 @@ export function CanvasViewport({
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (drag.kind === "pan") {
       onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
+    } else if (drag.kind === "object" && inlineObjectDragMoved(event.clientX - drag.clientX, event.clientY - drag.clientY)) {
+      const destination = inlineObjectDragDestination(
+        { x: drag.objectX, y: drag.objectY },
+        event.clientX - drag.clientX,
+        event.clientY - drag.clientY,
+        camera.zoom,
+      );
+      if (onObjectMovePreview) onObjectMovePreview(drag.objectId, destination);
+      else setInlineDragOffset({
+        x: (destination.x - drag.objectX) * camera.zoom,
+        y: (destination.y - drag.objectY) * camera.zoom,
+      });
     }
   };
 
@@ -1990,6 +2009,7 @@ export function CanvasViewport({
           inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
         );
       }
+      onObjectMovePreview?.(drag.objectId, null);
     } else if (dragRef.current?.kind === "wire-route") {
       const drag = dragRef.current;
       onWireRoutePointMove?.(drag.wireId, drag.routeIndex, {
@@ -2028,6 +2048,7 @@ export function CanvasViewport({
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
+    if (dragRef.current.kind === "object") onObjectMovePreview?.(dragRef.current.objectId, null);
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -2107,6 +2128,7 @@ export function CanvasViewport({
         inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
       );
     }
+    onObjectMovePreview?.(drag.objectId, null);
     if (inlineDragActivatedRef.current) suppressInlineDoubleClickUntilRef.current = Date.now() + 500;
     setInlineDragOffset(null);
     inlineDragRef.current = null;
@@ -2117,6 +2139,7 @@ export function CanvasViewport({
   const inlinePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
     containInlineEditorPointerEvent(event);
     if (inlineDragRef.current?.pointerId !== event.pointerId) return;
+    onObjectMovePreview?.(inlineDragRef.current.objectId, null);
     setInlineDragOffset(null);
     inlineDragRef.current = null;
     inlineDragActivatedRef.current = false;
@@ -2132,7 +2155,18 @@ export function CanvasViewport({
     if (!inlineObjectDragMoved(deltaX, deltaY)) return;
     inlineDragActivatedRef.current = true;
     event.preventDefault();
-    setInlineDragOffset({ x: deltaX, y: deltaY });
+    const destination = inlineObjectDragDestination(
+      { x: drag.objectX, y: drag.objectY },
+      deltaX,
+      deltaY,
+      camera.zoom,
+    );
+    if (onObjectMovePreview) {
+      setInlineDragOffset(null);
+      onObjectMovePreview(drag.objectId, destination);
+    } else {
+      setInlineDragOffset({ x: deltaX, y: deltaY });
+    }
   };
 
   const inlineDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -2172,9 +2206,10 @@ export function CanvasViewport({
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
+      {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}
       {inlineEditor && inlineObject && inlineLayout && (
         <div
-          className="he-e4-inline-editor"
+          className={`he-e4-inline-editor ${inlineObject.metadata?.diagnostic === "error" ? "has-error" : ""}`}
           style={{
             left: inlineLayout.x * camera.zoom + camera.offsetX + (inlineDragOffset?.x ?? 0),
             top: inlineLayout.y * camera.zoom + camera.offsetY + (inlineDragOffset?.y ?? 0),

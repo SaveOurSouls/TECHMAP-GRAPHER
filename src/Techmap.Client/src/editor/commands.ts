@@ -1,8 +1,10 @@
 import {
   connectorBaseColumnKeys,
+  connectorE4TableGeometry,
   createOrthogonalE4Route,
   createJunctionEndpoint,
   createDefaultConnectorBaseColumns,
+  defaultE4WireLead,
   defaultLayerIds,
   isJunctionEndpoint,
   validateConnectorLibraryMetadata,
@@ -27,6 +29,7 @@ import {
   type WireScreenGroup,
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
+import { routeE4Wire, validateE4Route, type E4RouterAnchor } from "./e4-router";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
@@ -125,6 +128,7 @@ export function createWire(
     color,
     lengthMm,
     e4Route: [],
+    e4RouteMode: "auto",
     drawingRoute: [],
     layerIds: { e4: defaultLayerIds.wires, drawing: defaultLayerIds.wires },
   };
@@ -140,7 +144,10 @@ export function applyEditorCommand(
         throw new Error("Соединитель с таким ID уже существует.");
       }
       validateConnectorLibraryMetadata(command.connector);
-      return { ...document, connectors: [...document.connectors, command.connector] };
+      return rebuildConnectorE4Wires(
+        { ...document, connectors: [...document.connectors, command.connector] },
+        command.connector.id,
+      );
     case "move-connector":
       {
       const moved = {
@@ -151,23 +158,24 @@ export function applyEditorCommand(
         }), "Соединитель не найден."),
       };
       if (command.view !== "e4") return moved;
-      return rebuildConnectorE4Wires(moved, command.connectorId);
+      return rebuildConnectorE4Wires(
+        moved,
+        command.connectorId,
+        document.connectors.find((connector) => connector.id === command.connectorId),
+      );
       }
     case "update-connector": {
       const designation = command.designation.trim();
       requireConnectorText(designation, "Укажите обозначение соединителя.");
       const partNumber = command.partNumber?.trim();
       if (partNumber !== undefined) requireConnectorText(partNumber, "Укажите артикул шаблона соединителя.");
-      return {
-        ...document,
-        connectors: replaceRequired(document.connectors, command.connectorId, (connector) => {
+      return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
           if (partNumber !== undefined && connector.libraryBinding?.mode === "series" &&
               partNumber !== connector.libraryBinding.partNumber) {
             throw new Error("Артикул библиотечного соединителя можно изменить только выбором артикула серии.");
           }
           return { ...connector, designation, partNumber: partNumber ?? connector.partNumber };
-        }, "Соединитель не найден."),
-      };
+        });
     }
     case "apply-connector-article": {
       const partNumber = command.partNumber.trim();
@@ -218,7 +226,7 @@ export function applyEditorCommand(
         },
       }));
     case "update-contact":
-      return updateConnector(document, command.connectorId, (connector) => {
+      return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
         if (connector.libraryBinding?.mode === "series" && (command.number !== undefined || command.contactType !== undefined)) {
           throw new Error("Номер и тип библиотечного контакта определяются выбранным артикулом серии.");
         }
@@ -247,7 +255,7 @@ export function applyEditorCommand(
         return { ...connector, contacts };
       });
     case "add-contact":
-      return updateConnector(document, command.connectorId, (connector) => {
+      return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
         if (connector.libraryBinding?.mode === "series") {
           throw new Error("Число контактов библиотечного соединителя определяется выбранным артикулом серии.");
         }
@@ -327,11 +335,12 @@ export function applyEditorCommand(
       }
       const removedWireIds = document.wires.filter((wire) =>
         isConnectorEndpoint(wire.from, command.connectorId) || isConnectorEndpoint(wire.to, command.connectorId)).map((wire) => wire.id);
-      return cleanupWireReferences({
+      const changed = cleanupWireReferences({
         ...document,
         connectors: document.connectors.filter((item) => item.id !== command.connectorId),
         wires: document.wires.filter((wire) => !removedWireIds.includes(wire.id)),
       }, removedWireIds);
+      return rebuildConnectorE4Wires(changed, command.connectorId, document.connectors.find((item) => item.id === command.connectorId));
     }
     case "add-wire":
       validateWire(document, command.wire);
@@ -422,7 +431,9 @@ export function applyEditorCommand(
         .map((junction) => junction.id));
       let changed: HarnessDesignDocument = {
         ...document,
-        wires: document.wires.map((item) => item.id === command.wireId ? { ...item, e4Route: route } : item),
+        wires: document.wires.map((item) => item.id === command.wireId
+          ? { ...item, e4Route: route, e4RouteMode: "manual" as const }
+          : item),
         junctions: document.junctions.map((junction) => !movedJunctionIds.has(junction.id)
           ? junction
           : first.x === second.x
@@ -437,11 +448,19 @@ export function applyEditorCommand(
         .filter((junction) => movedJunctionIds.has(junction.id))
         .flatMap((junction) => junction.wireIds)
         .filter((wireId) => wireId !== command.wireId));
-      for (const wireId of otherWireIds) changed = rerouteWireE4ThroughJunctions(changed, wireId);
+      validateE4Route([start.position, ...route, end.position], createE4RoutingRequest(
+        changed, wire, command.wireId, undefined, undefined, new Set([command.wireId, ...otherWireIds]),
+      ));
+      const pendingWireIds = [...otherWireIds];
+      for (const wireId of pendingWireIds) {
+        otherWireIds.delete(wireId);
+        changed = rerouteWireE4ThroughJunctions(changed, wireId, otherWireIds);
+      }
       for (const junction of changed.junctions.filter((item) => movedJunctionIds.has(item.id))) {
         validateJunctionAgainstWires(changed, junction);
       }
       validateWireGroups(changed);
+      validateAllE4Wires(changed);
       return changed;
     }
     case "set-wire-crossing-style":
@@ -473,9 +492,10 @@ export function applyEditorCommand(
       const junction = requireJunction(document, command.junctionId);
       let changed: HarnessDesignDocument = { ...document, junctions: document.junctions.map((item) =>
         item.id === junction.id ? { ...item, position: { ...command.position } } : item) };
-      for (const wireId of junction.wireIds) changed = rerouteWireE4ThroughJunctions(changed, wireId);
+      changed = rerouteE4WireBatch(changed, junction.wireIds);
       validateJunctionAgainstWires(changed, changed.junctions.find((item) => item.id === junction.id)!);
       validateWireGroups(changed);
+      validateAllE4Wires(changed);
       return changed;
     }
     case "remove-junction": {
@@ -584,6 +604,11 @@ export function applyEditorCommand(
   }
 }
 
+/** Repairs or upgrades loaded E4 geometry before it is shown or saved. */
+export function normalizeE4RoutingDocument(document: HarnessDesignDocument): HarnessDesignDocument {
+  return rebuildConnectorE4Wires(document);
+}
+
 function validateLayers(layers: readonly EditorLayer[]): void {
   if (layers.length < 1 || new Set(layers.map((layer) => layer.id)).size !== layers.length ||
       new Set(layers.map((layer) => layer.order)).size !== layers.length) {
@@ -607,38 +632,56 @@ function updateConnectorE4Geometry(
   connectorId: string,
   update: (connector: ConnectorInstance) => ConnectorInstance,
 ): HarnessDesignDocument {
-  return rebuildConnectorE4Wires(updateConnector(document, connectorId, update), connectorId);
+  const before = document.connectors.find((connector) => connector.id === connectorId);
+  const changed = updateConnector(document, connectorId, update);
+  const after = changed.connectors.find((connector) => connector.id === connectorId);
+  if (!before || !after) throw new Error("Соединитель не найден.");
+  const oldGeometry = connectorE4TableGeometry(before);
+  const newGeometry = connectorE4TableGeometry(after);
+  const changedAnchors = before.schematic.orientation !== after.schematic.orientation ||
+    oldGeometry.width !== newGeometry.width || oldGeometry.height !== newGeometry.height ||
+    before.contacts.some((contact) => {
+      const oldPoint = oldGeometry.contactPoints[contact.id];
+      const newPoint = newGeometry.contactPoints[contact.id];
+      return !oldPoint || !newPoint || oldPoint.x !== newPoint.x || oldPoint.y !== newPoint.y;
+    });
+  return changedAnchors ? rebuildConnectorE4Wires(changed, connectorId, before) : changed;
 }
 
 function rebuildConnectorE4Wires(
   document: HarnessDesignDocument,
-  connectorId: string,
+  changedConnectorId?: string,
+  previousConnector?: ConnectorInstance,
 ): HarnessDesignDocument {
-  let changed = document;
-  const affectedWireIds = document.wires
-    .filter((wire) => isConnectorEndpoint(wire.from, connectorId) || isConnectorEndpoint(wire.to, connectorId))
-    .map((wire) => wire.id);
-  for (const wireId of affectedWireIds) {
-    const wire = findWire(changed, wireId);
-    const start = wireEndpointE4Anchor(changed, wire.from);
-    const end = wireEndpointE4Anchor(changed, wire.to);
-    if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-    let currentRouteIsValid = true;
+  // Keep manually arranged routes when they remain valid. A route becomes an
+  // affected route when its contact anchor moved or a changed/new table now
+  // covers it. Completed reroutes reserve their clearance immediately.
+  const currentConnector = changedConnectorId
+    ? document.connectors.find((connector) => connector.id === changedConnectorId)
+    : undefined;
+  const affectedWireIds = document.wires.flatMap((wire) => {
+    const isAutomatic = wire.e4RouteMode !== "manual";
+    const connectedToChanged = changedConnectorId !== undefined &&
+      (isConnectorEndpoint(wire.from, changedConnectorId) || isConnectorEndpoint(wire.to, changedConnectorId));
+    const closeToChangedObstacle = isAutomatic && changedConnectorId !== undefined &&
+      [previousConnector, currentConnector].some((connector) => connector !== undefined &&
+        wireRouteTouchesConnector(document, wire, connector));
+    if (connectedToChanged || closeToChangedObstacle || (isAutomatic && changedConnectorId === undefined)) return [wire.id];
+    if (isAutomatic && changedConnectorId !== undefined) return [];
+    const start = wireEndpointE4Anchor(document, wire.from);
+    const end = wireEndpointE4Anchor(document, wire.to);
+    if (!start || !end) return [wire.id];
     try {
-      validateOrthogonalE4Route(start, wire.e4Route, end);
-      for (const junction of changed.junctions.filter((item) => item.wireIds.includes(wireId))) {
-        validateJunctionAgainstWires(changed, junction);
-      }
+      validateE4Route(
+        [start.position, ...wire.e4Route, end.position],
+        createE4RoutingRequest(document, wire, wire.id),
+      );
+      return [];
     } catch {
-      currentRouteIsValid = false;
+      return [wire.id];
     }
-    if (!currentRouteIsValid) changed = rerouteWireE4ThroughJunctions(changed, wireId);
-  }
-  for (const junction of changed.junctions.filter((item) => item.wireIds.some((wireId) => affectedWireIds.includes(wireId)))) {
-    validateJunctionAgainstWires(changed, junction);
-  }
-  validateWireGroups(changed);
-  return changed;
+  });
+  return rerouteE4WireBatch(document, affectedWireIds);
 }
 
 function normalizeContact(
@@ -729,7 +772,10 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
   const copy = route.map((point) => ({ ...point }));
   validateOrthogonalE4Route(start, copy, end);
-  const changed = { ...document, wires: document.wires.map((item) => item.id === wireId ? { ...item, e4Route: copy } : item) };
+  validateE4Route([start.position, ...copy, end.position], createE4RoutingRequest(document, wire, wireId));
+  const changed = { ...document, wires: document.wires.map((item) => item.id === wireId
+    ? { ...item, e4Route: copy, e4RouteMode: "manual" as const }
+    : item) };
   for (const junction of changed.junctions.filter((item) => item.wireIds.includes(wireId))) validateJunctionAgainstWires(changed, junction);
   validateWireGroups(changed);
   return changed;
@@ -739,25 +785,225 @@ function rerouteWireE4(document: HarnessDesignDocument, wireId: string): Harness
   return rerouteWireE4ThroughJunctions(document, wireId);
 }
 
-function rerouteWireE4ThroughJunctions(document: HarnessDesignDocument, wireId: string): HarnessDesignDocument {
+function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly string[]): HarnessDesignDocument {
+  const baseOrder = [...new Set(wireIds)];
+  if (baseOrder.length === 0) return document;
+  const byRouteComplexity = [...baseOrder].sort((left, right) => {
+    const difference = findWire(document, right).e4Route.length - findWire(document, left).e4Route.length;
+    return difference || left.localeCompare(right);
+  });
+  const candidates = [baseOrder, [...baseOrder].reverse(), byRouteComplexity, [...byRouteComplexity].reverse()];
+  for (let offset = 1; offset < Math.min(baseOrder.length, 5); offset += 1) {
+    candidates.push([...baseOrder.slice(offset), ...baseOrder.slice(0, offset)]);
+  }
+  const seen = new Set<string>();
+  let lastError: unknown = new Error("Ортогональный маршрут с заданными зазорами не найден.");
+  for (const order of candidates) {
+    const key = order.join("\u0000");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      let changed = document;
+      for (const [index, wireId] of order.entries()) {
+        changed = rerouteWireE4ThroughJunctions(changed, wireId, new Set(order.slice(index + 1)));
+      }
+      validateE4WireIds(changed, order);
+      for (const junction of changed.junctions) validateJunctionAgainstWires(changed, junction);
+      validateWireGroups(changed);
+      return changed;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function validateAllE4Wires(document: HarnessDesignDocument): void {
+  validateE4WireIds(document, document.wires.map((wire) => wire.id));
+}
+
+function validateE4WireIds(document: HarnessDesignDocument, wireIds: readonly string[]): void {
+  for (const wireId of wireIds) {
+    const wire = findWire(document, wireId);
+    const start = wireEndpointE4Anchor(document, wire.from);
+    const end = wireEndpointE4Anchor(document, wire.to);
+    if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+    validateE4Route([start.position, ...wire.e4Route, end.position], createE4RoutingRequest(document, wire, wire.id));
+  }
+}
+
+function wireRouteTouchesConnector(
+  document: HarnessDesignDocument,
+  wire: WireInstance,
+  connector: ConnectorInstance,
+): boolean {
+  const geometry = connectorE4TableGeometry(connector);
+  const padding = 4;
+  const rect = {
+    left: connector.positions.e4.x - padding,
+    right: connector.positions.e4.x + geometry.width + padding,
+    top: connector.positions.e4.y - padding,
+    bottom: connector.positions.e4.y + geometry.height + padding,
+  };
+  const start = wireEndpointE4Anchor(document, wire.from)?.position;
+  const end = wireEndpointE4Anchor(document, wire.to)?.position;
+  if (!start || !end) return true;
+  const points = [start, ...wire.e4Route, end];
+  for (let index = 1; index < points.length; index += 1) {
+    const first = points[index - 1]!;
+    const second = points[index]!;
+    if (first.x === second.x) {
+      if (first.x >= rect.left && first.x <= rect.right &&
+          Math.max(Math.min(first.y, second.y), rect.top) <= Math.min(Math.max(first.y, second.y), rect.bottom)) return true;
+    } else if (first.y === second.y && first.y >= rect.top && first.y <= rect.bottom &&
+        Math.max(Math.min(first.x, second.x), rect.left) <= Math.min(Math.max(first.x, second.x), rect.right)) return true;
+  }
+  return false;
+}
+
+function rerouteWireE4ThroughJunctions(
+  document: HarnessDesignDocument,
+  wireId: string,
+  additionallyExcludedWireIds: ReadonlySet<string> = new Set(),
+): HarnessDesignDocument {
   const wire = findWire(document, wireId);
   const start = wireEndpointE4Anchor(document, wire.from);
   const end = wireEndpointE4Anchor(document, wire.to);
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
   const endpointJunctionIds = new Set([wire.from, wire.to].filter(isJunctionEndpoint).map((endpoint) => endpoint.junctionId));
+  const currentPoints = [start.position, ...wire.e4Route, end.position];
   const waypoints = document.junctions
     .filter((junction) => junction.wireIds.includes(wireId) && !endpointJunctionIds.has(junction.id))
-    .map((junction) => ({ position: junction.position, leadDirection: null }));
-  const anchors = [start, ...waypoints, end];
+    .map((junction, index) => ({
+      junction,
+      index,
+      distance: orthogonalPathProjectionDistance(currentPoints, junction.position),
+    }))
+    .sort((left, right) => left.distance - right.distance || left.index - right.index)
+    .map(({ junction }) => junction)
+    .map((junction): E4RouterAnchor => ({ position: junction.position, leadDirection: null }));
+  const anchors: readonly E4RouterAnchor[] = [
+    {
+      ...start,
+      obstacleId: isJunctionEndpoint(wire.from) ? undefined : wire.from.connectorId,
+    },
+    ...waypoints,
+    {
+      ...end,
+      obstacleId: isJunctionEndpoint(wire.to) ? undefined : wire.to.connectorId,
+    },
+  ];
   const e4Route: Point[] = [];
   for (let index = 0; index < anchors.length - 1; index += 1) {
     const legStart = anchors[index]!;
     const legEnd = anchors[index + 1]!;
-    e4Route.push(...createOrthogonalE4Route(legStart, legEnd));
+    const occupiedWireIds = new Set([wireId, ...additionallyExcludedWireIds]);
+    const routed = routeE4Wire(createE4RoutingRequest(
+      document,
+      wire,
+      wireId,
+      legStart,
+      legEnd,
+      occupiedWireIds,
+      e4Route.length > 0 ? [start.position, ...e4Route] : undefined,
+    ));
+    e4Route.push(...routed.intermediate);
     if (index < anchors.length - 2) e4Route.push({ ...legEnd.position });
   }
   validateOrthogonalE4Route(start, e4Route, end);
+  validateE4Route(
+    [start.position, ...e4Route, end.position],
+    createE4RoutingRequest(document, wire, wireId, undefined, undefined, new Set([wireId, ...additionallyExcludedWireIds])),
+  );
   return { ...document, wires: document.wires.map((item) => item.id === wireId ? { ...item, e4Route } : item) };
+}
+
+function createE4RoutingRequest(
+  document: HarnessDesignDocument,
+  wire: WireInstance,
+  wireId: string,
+  explicitStart?: E4RouterAnchor,
+  explicitEnd?: E4RouterAnchor,
+  excludedWireIds: ReadonlySet<string> = new Set([wireId]),
+  partialRoute?: readonly Point[],
+) {
+  const wireStart = wireEndpointE4Anchor(document, wire.from);
+  const wireEnd = wireEndpointE4Anchor(document, wire.to);
+  if (!wireStart || !wireEnd) throw new Error("Точки подключения маршрута Э4 не найдены.");
+  const start: E4RouterAnchor = explicitStart ?? {
+    ...wireStart,
+    obstacleId: isJunctionEndpoint(wire.from) ? undefined : wire.from.connectorId,
+  };
+  const end: E4RouterAnchor = explicitEnd ?? {
+    ...wireEnd,
+    obstacleId: isJunctionEndpoint(wire.to) ? undefined : wire.to.connectorId,
+  };
+  const fullWirePoints = (candidate: WireInstance): readonly Point[] | null => {
+    const candidateStart = wireEndpointE4Anchor(document, candidate.from);
+    const candidateEnd = wireEndpointE4Anchor(document, candidate.to);
+    if (!candidateStart || !candidateEnd) return null;
+    const points = [candidateStart.position, ...candidate.e4Route, candidateEnd.position];
+    try {
+      validateOrthogonalE4Route(candidateStart, candidate.e4Route, candidateEnd);
+      return points;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    start,
+    end,
+    obstacles: document.connectors.map((connector) => {
+      const geometry = connectorE4TableGeometry(connector);
+      return {
+        id: connector.id,
+        x: connector.positions.e4.x,
+        y: connector.positions.e4.y,
+        width: geometry.width,
+        height: geometry.height,
+      };
+    }),
+    occupiedRoutes: [
+      ...document.wires.flatMap((candidate) => {
+      if (excludedWireIds.has(candidate.id)) return [];
+      const points = fullWirePoints(candidate);
+      return points ? [{ id: candidate.id, points }] : [];
+      }),
+      ...(partialRoute && partialRoute.length >= 2
+        ? [{
+          id: `partial:${wireId}`,
+          points: partialRoute,
+          allowCrossings: false,
+          allowedTouchPoint: partialRoute.at(-1),
+        }]
+        : []),
+    ],
+    // Leave a visible gap from the table stroke while keeping the mandatory
+    // contact lead attached to the table itself.
+    options: { leadLength: defaultE4WireLead, wireClearance: 8, obstacleClearance: 4 },
+  };
+}
+
+function orthogonalPathProjectionDistance(points: readonly Point[], point: Point): number {
+  let distance = 0;
+  let bestDeviation = Number.POSITIVE_INFINITY;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1]!;
+    const end = points[index]!;
+    const horizontal = start.y === end.y;
+    const projected = horizontal
+      ? { x: Math.max(Math.min(point.x, Math.max(start.x, end.x)), Math.min(start.x, end.x)), y: start.y }
+      : { x: start.x, y: Math.max(Math.min(point.y, Math.max(start.y, end.y)), Math.min(start.y, end.y)) };
+    const deviation = Math.abs(point.x - projected.x) + Math.abs(point.y - projected.y);
+    const projectedDistance = distance + Math.abs(projected.x - start.x) + Math.abs(projected.y - start.y);
+    if (deviation < bestDeviation || (deviation === bestDeviation && projectedDistance < bestDistance)) {
+      bestDeviation = deviation;
+      bestDistance = projectedDistance;
+    }
+    distance += Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
+  }
+  return bestDistance;
 }
 
 function normalizeJunction(junction: E4Junction): E4Junction {

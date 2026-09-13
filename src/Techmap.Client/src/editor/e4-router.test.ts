@@ -1,0 +1,151 @@
+import { describe, expect, it } from "vitest";
+import {
+  polylineLength,
+  routeE4Wire,
+  validateE4Route,
+  type E4RoutingRequest,
+} from "./e4-router";
+
+const horizontalRequest = (overrides: Partial<E4RoutingRequest> = {}): E4RoutingRequest => ({
+  start: { position: { x: 0, y: 0 }, leadDirection: "right" },
+  end: { position: { x: 100, y: 0 }, leadDirection: "left" },
+  options: { leadLength: 10, wireClearance: 8 },
+  ...overrides,
+});
+
+describe("E4 obstacle router", () => {
+  it("keeps mandatory contact leads and produces a minimal orthogonal route", () => {
+    const request = horizontalRequest({
+      end: { position: { x: 100, y: 40 }, leadDirection: "left" },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points[0]).toEqual({ x: 0, y: 0 });
+    expect(route.points[1]).toEqual({ x: 10, y: 0 });
+    expect(route.points.at(-1)).toEqual({ x: 100, y: 40 });
+    expect(route.points.at(-2)?.y).toBe(40);
+    expect(route.points.at(-2)?.x).toBeLessThanOrEqual(90);
+    expect(route.length).toBe(140);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("takes a shortest orthogonal detour around a connector table", () => {
+    const request = horizontalRequest({
+      obstacles: [{ id: "X3", x: 40, y: -10, width: 20, height: 20 }],
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.length).toBe(120);
+    expect(route.points.some((point) => point.y === -10 || point.y === 10)).toBe(true);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("honors obstacle padding while allowing a contact lead to leave its own table", () => {
+    const request = horizontalRequest({
+      start: { position: { x: 20, y: 0 }, leadDirection: "right", obstacleId: "X1" },
+      end: { position: { x: 100, y: 0 }, leadDirection: "left" },
+      obstacles: [
+        { id: "X1", x: 0, y: -20, width: 20, height: 40 },
+        { id: "X3", x: 45, y: -5, width: 10, height: 10 },
+      ],
+      options: { leadLength: 10, obstacleClearance: 4, wireClearance: 8 },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points[1]?.y).toBe(0);
+    expect(route.points[1]?.x).toBeGreaterThanOrEqual(30);
+    expect(route.points.some((point) => Math.abs(point.y) === 9)).toBe(true);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("extends a lead through its own padding when padding exceeds the minimum lead", () => {
+    const request = horizontalRequest({
+      start: { position: { x: 20, y: 0 }, leadDirection: "right", obstacleId: "X1" },
+      obstacles: [{ id: "X1", x: 0, y: -20, width: 20, height: 40 }],
+      options: { leadLength: 4, obstacleClearance: 12, wireClearance: 8 },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points[1]?.x).toBeGreaterThanOrEqual(32);
+    expect(route.points[1]?.y).toBe(0);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("separates parallel portions by the configured clearance", () => {
+    const request = horizontalRequest({
+      start: { position: { x: 0, y: 2 }, leadDirection: "right" },
+      end: { position: { x: 100, y: 2 }, leadDirection: "left" },
+      occupiedRoutes: [{ id: "W1", points: [{ x: 30, y: 0 }, { x: 70, y: 0 }] }],
+      options: { leadLength: 10, wireClearance: 10 },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points.some((point) => point.y === 10)).toBe(true);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("permits perpendicular crossings of different wires", () => {
+    const request = horizontalRequest({
+      occupiedRoutes: [{ id: "W1", points: [{ x: 50, y: -20 }, { x: 50, y: 20 }] }],
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(route.length).toBe(100);
+  });
+
+  it("never uses a collinear overlap, even when clearance is zero", () => {
+    const request = horizontalRequest({
+      occupiedRoutes: [{ id: "W1", points: [{ x: 30, y: 0 }, { x: 70, y: 0 }] }],
+      options: { leadLength: 10, wireClearance: 0 },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.length).toBeGreaterThan(100);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("does not revisit an earlier point of a partially built route", () => {
+    const request = horizontalRequest({
+      start: { position: { x: 20, y: 20 }, leadDirection: null },
+      end: { position: { x: 100, y: 0 }, leadDirection: null },
+      occupiedRoutes: [{
+        id: "partial",
+        points: [{ x: 0, y: 0 }, { x: 0, y: 20 }, { x: 20, y: 20 }],
+        allowCrossings: false,
+        allowedTouchPoint: { x: 20, y: 20 },
+      }],
+      options: { leadLength: 0, wireClearance: 0 },
+    });
+    const route = routeE4Wire(request);
+
+    expect(route.points).not.toContainEqual({ x: 0, y: 0 });
+    expect(route.points).not.toContainEqual({ x: 0, y: 20 });
+  });
+
+  it("rejects self intersections and self overlaps", () => {
+    const request: E4RoutingRequest = {
+      start: { position: { x: 0, y: 0 }, leadDirection: null },
+      end: { position: { x: 30, y: 10 }, leadDirection: null },
+      options: { leadLength: 0 },
+    };
+    expect(() => validateE4Route([
+      { x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 },
+      { x: 10, y: 20 }, { x: 10, y: -10 }, { x: 30, y: -10 }, { x: 30, y: 10 },
+    ], request)).toThrow(/сам себя/);
+    expect(() => validateE4Route([
+      { x: 0, y: 0 }, { x: 30, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 30, y: 10 },
+    ], request)).toThrow(/сам себя/);
+  });
+
+  it("fails when the compulsory lead itself is blocked", () => {
+    const request = horizontalRequest({
+      obstacles: [{ x: 5, y: -2, width: 2, height: 4 }],
+    });
+    expect(() => routeE4Wire(request)).toThrow(/препятствие/);
+  });
+
+  it("reports the Manhattan length of a route", () => {
+    expect(polylineLength([{ x: 1, y: 2 }, { x: 5, y: 2 }, { x: 5, y: -3 }])).toBe(9);
+  });
+});

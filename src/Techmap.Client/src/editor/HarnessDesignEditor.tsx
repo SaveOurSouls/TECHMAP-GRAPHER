@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { createWire, type EditorCommand } from "./commands";
+import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
 import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
+import { collectE4Diagnostics } from "./e4-diagnostics";
 import {
   builtInConnectorSeries,
   createBuiltInConnectorInstance,
@@ -100,6 +101,7 @@ function contactPointForWire(
 export function designToScene(
   document: HarnessDesignDocument,
   view: HarnessEditorView,
+  diagnosticObjectIds: ReadonlySet<string> = new Set(),
 ): readonly EditorSceneObject[] {
   const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
     const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
@@ -110,12 +112,6 @@ export function designToScene(
         : `custom:${column.id}`);
       const customLabels = Object.fromEntries(geometry.columns.flatMap((column) =>
         column.kind === "custom" ? [[`custom:${column.id}`, column.label]] : []));
-      const connectedWires = new Map(connector.contacts.map((contact) => [
-        contact.id,
-        document.wires.find((wire) =>
-          (wire.from.connectorId === connector.id && wire.from.contactId === contact.id) ||
-          (wire.to.connectorId === connector.id && wire.to.contactId === contact.id)),
-      ]));
       Object.assign(metadata, {
         view: "e4",
         orientation: connector.schematic.orientation === "contacts-left" ? "left" : "right",
@@ -123,19 +119,17 @@ export function designToScene(
         partNumber: connector.partNumber,
         columns: JSON.stringify(columnIds),
         columnLabels: JSON.stringify(customLabels),
-        rows: JSON.stringify(connector.contacts.map((contact) => {
-          const connectedWire = connectedWires.get(contact.id);
-          return {
+        rows: JSON.stringify(connector.contacts.map((contact) => ({
             number: contact.number,
             contactType: contact.contactType,
-            circuit: contact.circuit || connectedWire?.circuit || "",
+            circuit: contact.circuit,
             terminal: contact.terminalArticle,
             wire: contact.wire,
-            color: contact.color || connectedWire?.color || "",
+            color: contact.color,
             status: contact.connectionStatus,
             customValues: contact.customValues,
-          };
-        })),
+          }))),
+        ...(diagnosticObjectIds.has(connector.id) ? { diagnostic: "error" } : {}),
       });
     }
     return {
@@ -243,6 +237,10 @@ export function HarnessDesignEditor({
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
+  const [movePreview, setMovePreview] = useState<{
+    readonly objectId: string;
+    readonly point: { readonly x: number; readonly y: number };
+  } | null>(null);
   const [message, setMessage] = useState("Загружаем документ жгута…");
   const historyRef = useRef<EditorHistory | null>(null);
   const resourceRef = useRef<HarnessDesignResource | null>(null);
@@ -251,6 +249,8 @@ export function HarnessDesignEditor({
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const queuedRef = useRef(false);
   const loadGeneration = useRef(0);
+  const previewFrameRef = useRef<number | null>(null);
+  const pendingMovePreviewRef = useRef<typeof movePreview>(null);
 
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { resourceRef.current = resource; }, [resource]);
@@ -263,12 +263,14 @@ export function HarnessDesignEditor({
     setSelectedObjectId(null);
     setSelectedObjectIds([]);
     setEditingObjectId(null);
+    setMovePreview(null);
     setMessage("Загружаем документ жгута…");
     setSaveState("saved");
     void api.get(projectId, harnessId).then((loaded) => {
       if (generation !== loadGeneration.current) return;
+      const normalizedContent = normalizeE4RoutingDocument(loaded.content);
       setResource(loaded);
-      setHistory(createEditorHistory(loaded.content));
+      setHistory(createEditorHistory(normalizedContent));
       savedJsonRef.current = JSON.stringify(loaded.content);
       setMessage("");
     }).catch((error: unknown) => {
@@ -348,6 +350,34 @@ export function HarnessDesignEditor({
     if (editingObjectId && (view !== "e4" || editingObjectId !== selectedObjectId)) setEditingObjectId(null);
   }, [editingObjectId, selectedObjectId, view]);
 
+  const previewResult = useMemo(() => {
+    if (!history) return { document: null, error: null };
+    if (!movePreview) return { document: history.present, error: null };
+    try {
+      return { document: applyEditorCommand(history.present, {
+        type: "move-connector",
+        connectorId: movePreview.objectId,
+        view,
+        position: movePreview.point,
+      }), error: null };
+    } catch (error) {
+      // An impossible placement still follows the pointer, but no previous
+      // wire trace is drawn beneath it. Releasing it leaves the saved scene
+      // intact and the normal command reports why it could not be placed.
+      return {
+        document: {
+          ...history.present,
+          connectors: history.present.connectors.map((connector) => connector.id === movePreview.objectId
+            ? { ...connector, positions: { ...connector.positions, [view]: movePreview.point } }
+            : connector),
+          wires: history.present.wires.filter((wire) => ![wire.from, wire.to].some((endpoint) =>
+            endpoint.connectorId === movePreview.objectId)),
+        },
+        error: error instanceof Error ? error.message : "Трассировка невозможна.",
+      };
+    }
+  }, [history, movePreview, view]);
+
   const run = useCallback((command: EditorCommand): boolean => {
     const current = historyRef.current;
     if (!current) return false;
@@ -361,6 +391,25 @@ export function HarnessDesignEditor({
       setMessage(error instanceof Error ? error.message : "Не удалось изменить документ жгута.");
       return false;
     }
+  }, []);
+
+  const previewObjectMove = useCallback((objectId: string, point: { readonly x: number; readonly y: number } | null) => {
+    pendingMovePreviewRef.current = point ? { objectId, point } : null;
+    if (!point) {
+      if (previewFrameRef.current !== null) cancelAnimationFrame(previewFrameRef.current);
+      previewFrameRef.current = null;
+      setMovePreview(null);
+      return;
+    }
+    if (previewFrameRef.current !== null) return;
+    previewFrameRef.current = requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      setMovePreview(pendingMovePreviewRef.current);
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (previewFrameRef.current !== null) cancelAnimationFrame(previewFrameRef.current);
   }, []);
 
   useEffect(() => {
@@ -413,7 +462,9 @@ export function HarnessDesignEditor({
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
   }
 
-  const scene = designToScene(history.present, view);
+  const diagnostics = view === "e4" ? collectE4Diagnostics(history.present) : [];
+  const diagnosticObjectIds = new Set(diagnostics.map((diagnostic) => diagnostic.target.objectId));
+  const scene = designToScene(previewResult.document ?? history.present, view, diagnosticObjectIds);
   const layers = toUiLayers(history.present, view);
   const selectedConnector = view === "e4" && selectedObjectId
     ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
@@ -568,6 +619,13 @@ export function HarnessDesignEditor({
             onEditingChange={(editing) => setEditingObjectId(editing ? selectedConnector.id : null)}
           />
         ) : undefined}
+        diagnostics={diagnostics.map((diagnostic) => ({
+          id: diagnostic.id,
+          objectId: diagnostic.target.objectId,
+          label: diagnostic.designation,
+          message: diagnostic.message,
+        }))}
+        previewMessage={previewResult.error}
         onViewChange={(nextView) => {
           setEditingObjectId(null);
           setView(nextView);
@@ -589,6 +647,7 @@ export function HarnessDesignEditor({
           view,
           position: point,
         })}
+        onObjectMovePreview={previewObjectMove}
         onObjectEditRequest={(objectId) => {
           setSelectedObjectId(objectId);
           setSelectedObjectIds([objectId]);

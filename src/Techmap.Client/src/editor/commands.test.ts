@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand } from "./history";
+import { validateE4Route } from "./e4-router";
 import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
 import { selectConnectorSeriesArticle } from "./connector-series";
 import {
@@ -121,7 +122,7 @@ describe("shared harness editor model", () => {
 
   it("connects existing contacts and removes their wires with the connector", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 0, y: 0 });
-    const x2 = createConnector("x2", "X2", 2, { x: 300, y: 0 });
+    const x2 = createConnector("x2", "X2", 2, { x: 800, y: 0 });
     let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: x1 });
     document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
     document = applyEditorCommand(document, {
@@ -135,7 +136,7 @@ describe("shared harness editor model", () => {
 
   it("does not change absolute length when route geometry changes", () => {
     const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
-    const x2 = createConnector("x2", "X2", 1, { x: 300, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 800, y: 0 });
     let document = createEmptyHarnessDesign();
     document = applyEditorCommand(document, { type: "add-connector", connector: x1 });
     document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
@@ -150,7 +151,7 @@ describe("shared harness editor model", () => {
 
   it("reconnects one end of an existing wire and preserves its properties", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 0, y: 0 });
-    const x2 = createConnector("x2", "X2", 2, { x: 300, y: 0 });
+    const x2 = createConnector("x2", "X2", 2, { x: 800, y: 0 });
     let document = createEmptyHarnessDesign();
     document = applyEditorCommand(document, { type: "add-connector", connector: x1 });
     document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
@@ -300,7 +301,7 @@ describe("shared harness editor model", () => {
       type: "add-connector", connector: createConnector("x1", "X1", 2, { x: 0, y: 0 }),
     });
     document = applyEditorCommand(document, {
-      type: "add-connector", connector: createConnector("x2", "X2", 2, { x: 200, y: 0 }),
+      type: "add-connector", connector: createConnector("x2", "X2", 2, { x: 800, y: 0 }),
     });
     document = applyEditorCommand(document, {
       type: "update-contact", connectorId: "x1", contactId: "x1:contact:1", connectionStatus: "not-connected",
@@ -346,6 +347,20 @@ describe("shared harness editor model", () => {
     expect(left.height).toBe(left.titleHeight + left.headerHeight + 2 * left.rowHeight + left.footerHeight);
   });
 
+  it("sizes E4 columns to their visible content with a bounded maximum", () => {
+    const short = createConnector("short", "X1", 2, { x: 0, y: 0 });
+    const long = {
+      ...short,
+      contacts: short.contacts.map((contact, index) => index === 0
+        ? { ...contact, circuit: "Длинное текстовое обозначение цепи" }
+        : contact),
+    };
+    const shortCircuit = connectorE4TableGeometry(short).columns.find((column) => column.kind === "base" && column.key === "circuit")!;
+    const longCircuit = connectorE4TableGeometry(long).columns.find((column) => column.kind === "base" && column.key === "circuit")!;
+    expect(longCircuit.width).toBeGreaterThan(shortCircuit.width);
+    expect(longCircuit.width).toBeLessThanOrEqual(220);
+  });
+
   it("creates and validates orthogonal E4 routes with 24-unit contact leads", () => {
     const start = { position: { x: 100, y: 50 }, leadDirection: "right" as const };
     const end = { position: { x: 300, y: 90 }, leadDirection: "left" as const };
@@ -354,6 +369,81 @@ describe("shared harness editor model", () => {
     expect(route.at(-1)).toEqual({ x: 276, y: 90 });
     expect(() => validateOrthogonalE4Route(start, route, end)).not.toThrow();
     expect(() => validateOrthogonalE4Route(start, [{ x: 110, y: 50 }, { x: 300, y: 90 }], end)).toThrow(/ортогональных|прямой участок/);
+  });
+
+  it("reroutes independent wires with clearance and around every connector table", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w3", { connectorId: "x1", contactId: "x1:contact:3" }, { connectorId: "x2", contactId: "x2:contact:3" }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-connector",
+      connector: createConnector("obstacle", "X3", 1, { x: 500, y: -180 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "move-connector", connectorId: "obstacle", view: "e4", position: { x: 500, y: 40 },
+    });
+
+    const fullRoute = (wireId: string) => {
+      const wire = document.wires.find((item) => item.id === wireId)!;
+      return [
+        connectorContactPosition(document.connectors.find((item) => item.id === wire.from.connectorId)!, wire.from.contactId, "e4")!,
+        ...wire.e4Route,
+        connectorContactPosition(document.connectors.find((item) => item.id === wire.to.connectorId)!, wire.to.contactId, "e4")!,
+      ];
+    };
+    const obstacle = document.connectors.find((item) => item.id === "obstacle")!;
+    const obstacleGeometry = connectorE4TableGeometry(obstacle);
+    for (const wireId of ["w1", "w2", "w3"]) {
+      const points = fullRoute(wireId);
+      expect(() => validateE4Route(points, {
+        start: { position: points[0]!, leadDirection: "right", obstacleId: "x1" },
+        end: { position: points.at(-1)!, leadDirection: "left", obstacleId: "x2" },
+        obstacles: [{
+          id: obstacle.id,
+          x: obstacle.positions.e4.x,
+          y: obstacle.positions.e4.y,
+          width: obstacleGeometry.width,
+          height: obstacleGeometry.height,
+        }],
+        occupiedRoutes: ["w1", "w2", "w3"].filter((id) => id !== wireId).map((id) => ({ id, points: fullRoute(id) })),
+        options: { wireClearance: 8, leadLength: 24 },
+      })).not.toThrow();
+    }
+  });
+
+  it("reoptimizes automatic routes after an obstacle moves away and preserves manual routes", () => {
+    let document = createEmptyHarnessDesign();
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 1000, y: 0 }),
+    });
+    document = applyEditorCommand(document, { type: "flip-connector-orientation", connectorId: "x2" });
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("obstacle", "X3", 1, { x: 500, y: 40 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("automatic", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    const detour = document.wires[0]!.e4Route;
+    expect(document.wires[0]?.e4RouteMode).toBe("auto");
+
+    document = applyEditorCommand(document, {
+      type: "move-connector", connectorId: "obstacle", view: "e4", position: { x: 500, y: 300 },
+    });
+    expect(document.wires[0]?.e4Route).not.toEqual(detour);
+
+    const autoRoute = document.wires[0]!.e4Route;
+    document = applyEditorCommand(document, { type: "set-e4-wire-route", wireId: "automatic", route: autoRoute });
+    expect(document.wires[0]?.e4RouteMode).toBe("manual");
+    document = applyEditorCommand(document, {
+      type: "move-connector", connectorId: "obstacle", view: "e4", position: { x: 500, y: 500 },
+    });
+    expect(document.wires[0]?.e4Route).toEqual(autoRoute);
   });
 
   it("stores, moves segments and repairs E4 routes after connector movement", () => {
@@ -532,18 +622,17 @@ describe("shared harness editor model", () => {
     });
     expect(document.junctions[0]).toMatchObject({ id: "j1", wireIds: ["w1", "w3"] });
     expect(document.wires.find((wire) => wire.id === "w3")?.to).toMatchObject({ junctionId: "j1" });
-    document = applyEditorCommand(document, {
+    expect(() => applyEditorCommand(document, {
       type: "add-wire",
       wire: createWire("w4", { connectorId: "x1", contactId: "x1:contact:2" }, createJunctionEndpoint("j1"), 100, ""),
-    });
-    expect(document.junctions[0]?.wireIds).toEqual(["w1", "w3", "w4"]);
-    expect(document.wires.find((wire) => wire.id === "w4")?.circuit).toBe("NET-A");
+    })).toThrow(/накладывается/);
+    expect(document.junctions[0]?.wireIds).toEqual(["w1", "w3"]);
     expect(() => applyEditorCommand(document, {
       type: "connect-wire-to-wire", wireId: "w2", end: "to", targetWireId: "w1", junctionId: "j2", position: { x: 750, y: 64 },
     })).toThrow(/разными непустыми/);
   });
 
-  it("adds the selected target wire to an existing junction at the same coordinate", () => {
+  it("rejects a second wire laid directly over an existing wire at a junction", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {
       type: "add-wire",
@@ -552,24 +641,17 @@ describe("shared harness editor model", () => {
     document = applyEditorCommand(document, {
       type: "connect-wire-to-wire", wireId: "w3", end: "to", targetWireId: "w1", junctionId: "j1", position: { x: 700, y: 64 },
     });
-    document = applyEditorCommand(document, {
+    expect(() => applyEditorCommand(document, {
       type: "add-wire",
       wire: {
         ...createWire("w4", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }, 100, "NET-A"),
         e4Route: document.wires.find((wire) => wire.id === "w1")!.e4Route,
       },
-    });
-    document = applyEditorCommand(document, { type: "update-wire", wireId: "w2", circuit: "" });
-
-    document = applyEditorCommand(document, {
-      type: "connect-wire-to-wire", wireId: "w2", end: "to", targetWireId: "w4", junctionId: "j1", position: { x: 700, y: 64 },
-    });
-
-    expect(document.junctions.find((junction) => junction.id === "j1")?.wireIds).toEqual(["w1", "w3", "w4", "w2"]);
-    expect(document.wires.find((wire) => wire.id === "w2")?.to).toMatchObject({ junctionId: "j1" });
+    })).toThrow(/накладывается/);
+    expect(document.junctions.find((junction) => junction.id === "j1")?.wireIds).toEqual(["w1", "w3"]);
   });
 
-  it("adds a new branch and its selected target wire to an existing junction atomically", () => {
+  it("does not add a branch to a selected target that overlaps an existing wire", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {
       type: "add-wire",
@@ -578,24 +660,14 @@ describe("shared harness editor model", () => {
     document = applyEditorCommand(document, {
       type: "connect-wire-to-wire", wireId: "w3", end: "to", targetWireId: "w1", junctionId: "j1", position: { x: 700, y: 64 },
     });
-    document = applyEditorCommand(document, {
+    expect(() => applyEditorCommand(document, {
       type: "add-wire",
       wire: {
         ...createWire("w4", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }, 100, "NET-A"),
         e4Route: document.wires.find((wire) => wire.id === "w1")!.e4Route,
       },
-    });
-    document = applyEditorCommand(document, {
-      type: "add-wire",
-      targetWireId: "w4",
-      wire: {
-        ...createWire("w5", { connectorId: "x1", contactId: "x1:contact:2" }, createJunctionEndpoint("j1"), 100, "NET-A"),
-        e4Route: [{ x: 648, y: 88 }, { x: 700, y: 88 }],
-      },
-    });
-
-    expect(document.junctions.find((junction) => junction.id === "j1")?.wireIds).toEqual(["w1", "w3", "w5", "w4"]);
-    expect(document.wires.find((wire) => wire.id === "w5")?.to).toMatchObject({ junctionId: "j1" });
+    })).toThrow(/накладывается/);
+    expect(document.junctions.find((junction) => junction.id === "j1")?.wireIds).toEqual(["w1", "w3"]);
   });
 
   it("reroutes connector and junction endpoint changes as valid E4 paths", () => {
@@ -612,16 +684,29 @@ describe("shared harness editor model", () => {
 
     document = applyEditorCommand(document, {
       type: "add-wire",
-      wire: createWire("w3", { connectorId: "x1", contactId: "x1:contact:3" }, { connectorId: "x2", contactId: "x2:contact:2" }, 100, "NET-A"),
+      wire: createWire("w3", { connectorId: "x1", contactId: "x1:contact:3" }, { connectorId: "x2", contactId: "x2:contact:4" }, 100, "NET-A"),
     });
+    const junctionPoint = (() => {
+      const target = document.wires.find((item) => item.id === "w1")!;
+      const points = [
+        connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")!,
+        ...target.e4Route,
+        connectorContactPosition(document.connectors[1]!, "x2:contact:3", "e4")!,
+      ];
+      const first = points[0]!;
+      const second = points[1]!;
+      return first.y === second.y
+        ? { x: (first.x + second.x) / 2, y: first.y }
+        : { x: first.x, y: (first.y + second.y) / 2 };
+    })();
     document = applyEditorCommand(document, {
-      type: "connect-wire-to-wire", wireId: "w3", end: "to", targetWireId: "w1", junctionId: "j1", position: { x: 700, y: 64 },
+      type: "connect-wire-to-wire", wireId: "w3", end: "to", targetWireId: "w1", junctionId: "j1", position: junctionPoint,
     });
     wire = document.wires.find((item) => item.id === "w3")!;
     expect(() => validateOrthogonalE4Route(
       { position: connectorContactPosition(document.connectors[0]!, "x1:contact:3", "e4")!, leadDirection: "right" },
       wire.e4Route,
-      { position: { x: 700, y: 64 }, leadDirection: null },
+      { position: junctionPoint, leadDirection: null },
     )).not.toThrow();
   });
 
@@ -654,10 +739,10 @@ describe("shared harness editor model", () => {
 function connectionDocument() {
   let document = createEmptyHarnessDesign();
   document = applyEditorCommand(document, {
-    type: "add-connector", connector: createConnector("x1", "X1", 3, { x: 0, y: 0 }),
+    type: "add-connector", connector: createConnector("x1", "X1", 4, { x: 0, y: 0 }),
   });
   document = applyEditorCommand(document, {
-    type: "add-connector", connector: createConnector("x2", "X2", 3, { x: 1000, y: 0 }),
+    type: "add-connector", connector: createConnector("x2", "X2", 4, { x: 1000, y: 0 }),
   });
   document = applyEditorCommand(document, { type: "flip-connector-orientation", connectorId: "x2" });
   document = applyEditorCommand(document, {

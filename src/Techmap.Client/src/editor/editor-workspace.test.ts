@@ -258,9 +258,12 @@ describe("harness editor workspace", () => {
       { width: 900, height: 600 },
       50,
     );
-    expect(fitted.zoom).toBeCloseTo(800 / (bounds.maxX - bounds.minX));
-    expect(worldToScreen(fitted, { x: bounds.minX, y: bounds.minY }).x).toBeCloseTo(50);
-    expect(worldToScreen(fitted, { x: bounds.maxX, y: bounds.maxY }).x).toBeCloseTo(850);
+    expect(fitted.zoom).toBeCloseTo(Math.min(
+      800 / (bounds.maxX - bounds.minX),
+      500 / (bounds.maxY - bounds.minY),
+    ));
+    expect(worldToScreen(fitted, { x: bounds.minX, y: bounds.minY }).x).toBeGreaterThanOrEqual(50);
+    expect(worldToScreen(fitted, { x: bounds.maxX, y: bounds.maxY }).x).toBeLessThanOrEqual(850);
 
     const hiddenWireLayers = layers.map((layer) => layer.id === "bottom" ? { ...layer, visible: false } : layer);
     expect(getEditorSceneBounds([connector, wire], hiddenWireLayers, "e4")).toMatchObject({

@@ -69,16 +69,56 @@ export const connectorE4TableMetrics = {
   headerHeight: 28,
   rowHeight: 24,
   footerHeight: 24,
-  customColumnWidth: 120,
+  characterWidth: 6.2,
+  cellHorizontalPadding: 12,
+  headerControlWidth: 22,
+  customColumnWidth: 64,
   baseColumnWidths: {
     number: 44,
-    contactType: 96,
-    circuit: 140,
-    terminal: 132,
-    wire: 132,
-    color: 80,
+    contactType: 60,
+    circuit: 64,
+    terminal: 78,
+    wire: 72,
+    color: 56,
   } satisfies Readonly<Record<ConnectorBaseColumnKey, number>>,
+  maximumColumnWidth: 220,
 } as const;
+
+const connectorBaseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
+  number: "№",
+  contactType: "Тип",
+  circuit: "Цепь",
+  terminal: "Терминал",
+  wire: "Провод",
+  color: "Цвет",
+};
+
+function e4TextWidth(text: string): number {
+  return Array.from(text.trim()).length * connectorE4TableMetrics.characterWidth;
+}
+
+/**
+ * Shared content-based E4 column sizing for both the canvas drawing and its
+ * HTML editor overlay.  It intentionally uses a deterministic font estimate:
+ * persisted connector geometry and contact anchors must not depend on the
+ * browser's loaded fonts or on a canvas instance.
+ */
+export function connectorE4TableColumnWidth(
+  key: ConnectorBaseColumnKey | null,
+  label: string,
+  values: readonly string[],
+): number {
+  const minimum = key === null
+    ? connectorE4TableMetrics.customColumnWidth
+    : connectorE4TableMetrics.baseColumnWidths[key];
+  const headerWidth = e4TextWidth(label) + connectorE4TableMetrics.cellHorizontalPadding +
+    connectorE4TableMetrics.headerControlWidth;
+  const contentWidth = Math.max(0, ...values.map(e4TextWidth)) + connectorE4TableMetrics.cellHorizontalPadding;
+  return Math.ceil(Math.min(
+    connectorE4TableMetrics.maximumColumnWidth,
+    Math.max(minimum, headerWidth, contentWidth),
+  ));
+}
 
 export interface ConnectorContact {
   readonly id: string;
@@ -147,6 +187,8 @@ export interface WireInstance {
   readonly color: string;
   readonly lengthMm: number;
   readonly e4Route: readonly Point[];
+  /** Missing in older documents and treated as automatic. */
+  readonly e4RouteMode?: "auto" | "manual";
   readonly drawingRoute: readonly Point[];
   readonly layerIds: Readonly<Record<EditorView, string>>;
 }
@@ -193,7 +235,18 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
       kind: "base",
       key: column.key,
       x: 0,
-      width: connectorE4TableMetrics.baseColumnWidths[column.key],
+      width: connectorE4TableColumnWidth(
+        column.key,
+        connectorBaseColumnLabels[column.key],
+        [
+          ...(column.key === "number" ? [connector.partNumber] : []),
+          ...connector.contacts.map((contact) => column.key === "number" ? String(contact.number)
+            : column.key === "contactType" ? contact.contactType
+              : column.key === "circuit" ? contact.circuit
+                : column.key === "terminal" ? contact.terminalArticle
+                  : column.key === "wire" ? contact.wire : contact.color),
+        ],
+      ),
     }));
   const customColumns: ConnectorE4TableColumn[] = connector.schematic.customFields
     .filter((field) => field.visible)
@@ -202,19 +255,35 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
       id: field.id,
       label: field.label,
       x: 0,
-      width: connectorE4TableMetrics.customColumnWidth,
+      width: connectorE4TableColumnWidth(
+        null,
+        field.label,
+        connector.contacts.map((contact) => contact.customValues[field.id] ?? ""),
+      ),
     }));
   const contactsFirst = connector.schematic.orientation === "contacts-left";
   const orderedColumns = contactsFirst
     ? [...baseColumns, ...customColumns]
     : [...customColumns, ...baseColumns].reverse();
   let x = 0;
-  const columns = orderedColumns.map((column) => {
+  let columns = orderedColumns.map((column) => {
     const positioned = { ...column, x };
     x += column.width;
     return positioned;
   });
   const width = Math.max(connectorE4TableMetrics.minimumWidth, x);
+  if (columns.length > 0 && width > x) {
+    const growIndex = Math.max(0, columns.findIndex((column) => column.kind === "base" && column.key === "number"));
+    columns = columns.map((column, index) => index === growIndex
+      ? { ...column, width: column.width + width - x }
+      : column);
+    let adjustedX = 0;
+    columns = columns.map((column) => {
+      const positioned = { ...column, x: adjustedX };
+      adjustedX += column.width;
+      return positioned;
+    });
+  }
   const height = connectorE4TableMetrics.titleHeight + connectorE4TableMetrics.headerHeight +
     connector.contacts.length * connectorE4TableMetrics.rowHeight + connectorE4TableMetrics.footerHeight;
   const contactX = contactsFirst ? 0 : width;
@@ -303,7 +372,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
       const start = wireEndpointE4Anchor(document, wire.from);
       const end = wireEndpointE4Anchor(document, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-      return { ...wire, e4Route: createOrthogonalE4Route(start, end) };
+      return { ...wire, e4Route: createOrthogonalE4Route(start, end), e4RouteMode: "auto" };
     }),
   };
   for (const [index, wireValue] of wireValues.entries()) {
@@ -676,6 +745,9 @@ function parseWire(value: unknown): WireInstance {
     color: requireText(record.color, "Цвет провода"),
     lengthMm,
     e4Route: record.e4Route === undefined ? [] : record.e4Route.map(parsePoint),
+    e4RouteMode: record.e4RouteMode === undefined || record.e4RouteMode === "auto"
+      ? "auto"
+      : record.e4RouteMode === "manual" ? "manual" : (() => { throw new Error("Режим трассы Э4 задан неверно."); })(),
     drawingRoute: record.drawingRoute.map(parsePoint),
     layerIds: {
       e4: requireText(layerIds.e4, "Слой провода Э4"),

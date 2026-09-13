@@ -96,6 +96,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCatalogLoadMore?: () => void;
   readonly onCatalogRetry?: () => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onWireConnect?: (
     from: { readonly connectorId: string; readonly contactIndex: number },
@@ -131,6 +132,13 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
   readonly canvasEditor?: ReactNode;
+  readonly diagnostics?: readonly {
+    readonly id: string;
+    readonly objectId: string;
+    readonly label: string;
+    readonly message: string;
+  }[];
+  readonly previewMessage?: string | null;
   readonly onClose?: () => void;
 }
 
@@ -183,6 +191,7 @@ export function HarnessEditorWorkspace({
   onCatalogLoadMore,
   onCatalogRetry,
   onObjectMove,
+  onObjectMovePreview,
   onObjectEditRequest,
   onWireConnect,
   onWireReconnect,
@@ -202,6 +211,8 @@ export function HarnessEditorWorkspace({
   onCanvasDoubleClick,
   propertyInspector,
   canvasEditor,
+  diagnostics = [],
+  previewMessage,
   onClose,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
@@ -348,6 +359,27 @@ export function HarnessEditorWorkspace({
     zoomEditorCameraAt(current, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, zoom));
   const changeZoom = (factor: number) => setCamera((current) =>
     zoomEditorCameraAt(current, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, current.zoom * factor));
+  const focusObject = (objectId: string) => {
+    selectObject(objectId);
+    const object = objects.find((candidate) => candidate.id === objectId);
+    if (!object) return;
+    setCamera((current) => ({
+      ...current,
+      offsetX: viewportSize.width / 2 - (object.x + object.width / 2) * current.zoom,
+      offsetY: viewportSize.height / 2 - (object.y + object.height / 2) * current.zoom,
+    }));
+  };
+  const diagnosticOverlay = view === "e4" && diagnostics.length > 0 ? (
+    <section className="he-e4-diagnostic-list" aria-label="Ошибки схемы Э4">
+      <header><strong>Ошибки</strong><span>{diagnostics.length}</span></header>
+      {diagnostics.map((diagnostic) => (
+        <button type="button" key={diagnostic.id} onClick={() => focusObject(diagnostic.objectId)}>
+          <span aria-hidden="true">!</span>
+          <span><strong>{diagnostic.label}</strong><small>{diagnostic.message}</small></span>
+        </button>
+      ))}
+    </section>
+  ) : undefined;
 
   return (
     <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`}>
@@ -406,10 +438,12 @@ export function HarnessEditorWorkspace({
           selectedObjectIds={selectedObjectIds}
           e4Overlays={e4Overlays}
           overlay={e4WireMenu}
+          diagnosticOverlay={diagnosticOverlay}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
+          onObjectMovePreview={onObjectMovePreview}
           onObjectEditRequest={onObjectEditRequest}
           onWireConnect={onWireConnect}
           onWireReconnect={onWireReconnect}
@@ -423,6 +457,7 @@ export function HarnessEditorWorkspace({
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />
+        {previewMessage && <div className="he-routing-preview-error" role="status">{previewMessage}</div>}
 
         <aside className="he-right-panel" aria-label="Настройки редактора">
           <div className="he-inspector-tabs" role="tablist" aria-label="Панель объекта">

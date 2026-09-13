@@ -25,7 +25,7 @@ describe("harness design scene adapter", () => {
 
   it("deletes selected wires before selected connectors and ignores stale selection", () => {
     const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
-    const x2 = createConnector("x2", "X2", 1, { x: 200, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 800, y: 0 });
     let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: x1 });
     document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
     document = applyEditorCommand(document, {
@@ -40,7 +40,7 @@ describe("harness design scene adapter", () => {
 
   it("renders the same domain instances in E4 and drawing with separate positions", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 10, y: 20 }, { x: 100, y: 120 });
-    const x2 = createConnector("x2", "X2", 2, { x: 400, y: 20 }, { x: 500, y: 120 });
+    const x2 = createConnector("x2", "X2", 2, { x: 800, y: 20 }, { x: 500, y: 120 });
     let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: x1 });
     document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
     document = applyEditorCommand(document, {
@@ -94,5 +94,29 @@ describe("harness design scene adapter", () => {
       number: 1, contactType: "сигнальный", circuit: "CAN-H", terminal: "SHP-002P-0.5T",
       wire: "UL1061 28AWG", color: "чёрный", status: "not-connected",
     });
+  });
+
+  it("marks every conflicting connector in the E4 scene and clears the marks after correction", () => {
+    let document = createEmptyHarnessDesign();
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 600, y: 0 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "update-connector", connectorId: "x2", designation: "x1",
+    });
+    const duplicateIds = new Set(["x1", "x2"]);
+    expect(designToScene(document, "e4", duplicateIds)
+      .filter((object) => object.kind === "connector")
+      .map((object) => object.metadata?.diagnostic)).toEqual(["error", "error"]);
+
+    document = applyEditorCommand(document, {
+      type: "update-connector", connectorId: "x2", designation: "X2",
+    });
+    expect(designToScene(document, "e4")
+      .filter((object) => object.kind === "connector")
+      .map((object) => object.metadata?.diagnostic)).toEqual([undefined, undefined]);
   });
 });

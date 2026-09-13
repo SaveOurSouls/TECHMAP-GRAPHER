@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EditorCommand } from "./commands";
 import {
   findConnectorSeriesArticle,
@@ -7,7 +7,7 @@ import {
 } from "./connector-series";
 import {
   connectorBaseColumnKeys,
-  connectorE4TableMetrics,
+  connectorE4TableGeometry,
   type ConnectorBaseColumnKey,
   type ConnectorInstance,
 } from "./model";
@@ -79,12 +79,17 @@ export function E4ConnectorInspector({
   const [designation, setDesignation] = useState(connector.designation);
   const [partNumber, setPartNumber] = useState(connector.partNumber);
   const [newFieldLabel, setNewFieldLabel] = useState("");
+  const cancelIdentityBlurRef = useRef(false);
   const canvasEditing = mode !== "canvas" || editing === true;
 
   useEffect(() => setDesignation(connector.designation), [connector.id, connector.designation]);
   useEffect(() => setPartNumber(connector.partNumber), [connector.id, connector.partNumber]);
 
   const commitIdentity = () => {
+    if (cancelIdentityBlurRef.current) {
+      cancelIdentityBlurRef.current = false;
+      return;
+    }
     const nextDesignation = designation.trim();
     const nextPartNumber = connector.libraryBinding?.mode === "series" ? connector.partNumber : partNumber.trim();
     if (!nextDesignation || !nextPartNumber) {
@@ -152,19 +157,10 @@ export function E4ConnectorInspector({
   if (mode === "canvas") {
     const isSeries = connector.libraryBinding?.mode === "series";
     const article = isSeries && series ? findConnectorSeriesArticle(series, connector.partNumber) : null;
-    const baseColumns = connector.schematic.baseColumns
-      .filter((column) => column.visible)
-      .map((column) => ({
-        id: column.key,
-        label: baseColumnLabels[column.key],
-        width: connectorE4TableMetrics.baseColumnWidths[column.key],
-      }));
-    const customColumns = connector.schematic.customFields
-      .filter((field) => field.visible)
-      .map((field) => ({ id: `custom:${field.id}`, label: field.label, width: connectorE4TableMetrics.customColumnWidth }));
-    const columns = connector.schematic.orientation === "contacts-right"
-      ? [...customColumns, ...baseColumns].reverse()
-      : [...baseColumns, ...customColumns];
+    const geometry = connectorE4TableGeometry(connector);
+    const columns = geometry.columns.map((column) => column.kind === "base"
+      ? { id: column.key, label: baseColumnLabels[column.key], width: column.width }
+      : { id: `custom:${column.id}` as const, label: column.label, width: column.width });
     return (
       <section
           className={`e4-connector-canvas-editor ${connector.schematic.orientation} ${canvasEditing ? "is-editing" : "is-readonly"}`}
@@ -183,19 +179,37 @@ export function E4ConnectorInspector({
         <div
           className="e4cce-title"
           title={canvasEditing ? "Редактирование" : "Перетащить соединитель"}
-        ><span aria-hidden="true">⠿</span><span>{canvasEditing ? "Редактирование" : "Перетащить"}</span></div>
+        >
+          <span aria-hidden="true">⠿</span>
+          {canvasEditing ? (
+            <input
+              type="text"
+              value={designation}
+              disabled={disabled}
+              aria-label="Обозначение соединителя"
+              title="Обозначение соединителя"
+              onChange={(event) => setDesignation(event.target.value)}
+              onBlur={commitIdentity}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setDesignation(connector.designation);
+                  onEditingChange?.(false);
+                }
+              }}
+            />
+          ) : <strong title={connector.designation}>{connector.designation}</strong>}
+        </div>
         <div className="e4cce-table-scroll">
           <table>
-            <colgroup>{columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}</colgroup>
+            <colgroup>{columns.length === 0
+              ? <col style={{ width: geometry.width }} />
+              : columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}</colgroup>
             <thead><tr>
-              {columns.map((column) => (
+              {columns.length === 0 ? <th className="e4cce-empty-column">Нет видимых полей</th> : columns.map((column) => (
                 <th key={column.id} title="Изменить видимость поля">
-                  {column.id === "number" ? (
-                    <span className="e4cce-number-heading">
-                      <strong title={connector.designation}>{connector.designation}</strong>
-                      <span>{column.label}</span>
-                    </span>
-                  ) : <span>{column.label}</span>}
+                  <span>{column.label}</span>
                   <button
                     type="button"
                     aria-label={`Скрыть поле ${column.label}`}
@@ -209,7 +223,7 @@ export function E4ConnectorInspector({
             </tr></thead>
             <tbody>{connector.contacts.map((contact) => (
               <tr key={contact.id}>
-                {columns.map((column) => {
+                {columns.length === 0 ? <td className="e4cce-empty-column">&nbsp;</td> : columns.map((column) => {
                   const value = column.id === "number" ? String(contact.number)
                     : column.id === "contactType" ? contact.contactType
                       : column.id === "circuit" ? contact.circuit
@@ -281,16 +295,27 @@ export function E4ConnectorInspector({
                 })}
               </tr>
             ))}</tbody>
-            <tfoot><tr><td colSpan={Math.max(1, columns.length)}><div>
+            <tfoot><tr>{columns.length === 0 ? <td className="e4cce-empty-column">
               <button
                 type="button"
                 className="e4cce-add-row"
                 disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
-                title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
                 onClick={addContact}
-              >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
-              <span>{connector.partNumber}</span>
-            </div></td></tr></tfoot>
+              >⊕ Добавить строку</button>
+            </td> : columns.map((column, index) => (
+              <td key={column.id} className={column.id === "number" ? "e4cce-part-number" : undefined}>
+                {column.id === "number" ? <span title={connector.partNumber}>{connector.partNumber}</span>
+                  : index === columns.findIndex((item) => item.id !== "number") ? (
+                    <button
+                      type="button"
+                      className="e4cce-add-row"
+                      disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
+                      title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
+                      onClick={addContact}
+                    >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
+                  ) : null}
+              </td>
+            ))}</tr></tfoot>
           </table>
         </div>
       </section>
@@ -320,7 +345,11 @@ export function E4ConnectorInspector({
             onBlur={commitIdentity}
             onKeyDown={(event) => {
               if (event.key === "Enter") { event.preventDefault(); commitIdentity(); event.currentTarget.blur(); }
-              if (event.key === "Escape") { setDesignation(connector.designation); event.currentTarget.blur(); }
+              if (event.key === "Escape") {
+                cancelIdentityBlurRef.current = true;
+                setDesignation(connector.designation);
+                event.currentTarget.blur();
+              }
             }}
           />
         </label>
@@ -340,7 +369,11 @@ export function E4ConnectorInspector({
               onBlur={commitIdentity}
               onKeyDown={(event) => {
                 if (event.key === "Enter") { event.preventDefault(); commitIdentity(); event.currentTarget.blur(); }
-                if (event.key === "Escape") { setPartNumber(connector.partNumber); event.currentTarget.blur(); }
+                if (event.key === "Escape") {
+                  cancelIdentityBlurRef.current = true;
+                  setPartNumber(connector.partNumber);
+                  event.currentTarget.blur();
+                }
               }}
             />
           )}

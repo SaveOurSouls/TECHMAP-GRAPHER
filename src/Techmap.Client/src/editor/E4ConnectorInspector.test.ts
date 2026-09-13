@@ -46,6 +46,7 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("Двойной клик — редактировать");
     expect(markup).toContain("is-readonly");
     expect(markup).toContain("Зажмите и перетащите. Двойной клик — редактировать");
+    expect(markup).toContain("e4cce-part-number");
     expect(markup).toContain("XS9");
   });
 
@@ -83,6 +84,7 @@ describe("E4 connector inline editing", () => {
 
     expect(markup).toContain("is-editing");
     expect(markup).toContain("Редактирование включено. Escape — закончить");
+    expect(markup).toContain('aria-label="Обозначение соединителя"');
     expect(markup).toContain("TERM-SIG-05");
     expect(markup).toContain("Номер и тип заданы артикулом серии");
   });
