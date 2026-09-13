@@ -91,9 +91,39 @@ export interface ConnectorInstance {
   readonly layerIds: Readonly<Record<EditorView, string>>;
 }
 
-export interface WireEndpoint {
-  readonly connectorId: string;
-  readonly contactId: string;
+export type WireEndpoint =
+  | { readonly connectorId: string; readonly contactId: string; readonly junctionId?: never }
+  | { readonly junctionId: string; readonly connectorId: ""; readonly contactId: "" };
+
+export interface E4Junction {
+  readonly id: string;
+  readonly position: Point;
+  readonly wireIds: readonly string[];
+}
+
+export interface DiffPairGroup {
+  readonly id: string;
+  readonly wireIds: readonly [string, string];
+  readonly step: number;
+  readonly amplitude: number;
+  readonly variant: 1 | 2;
+}
+
+export interface WireScreenGroup {
+  readonly id: string;
+  readonly wireIds: readonly string[];
+  readonly position: number;
+  readonly label: string;
+  readonly width: number;
+}
+
+export type WireCrossingStyle = "none" | "bridge";
+
+export type E4RouteLeadDirection = "left" | "right" | null;
+
+export interface E4RouteAnchor {
+  readonly position: Point;
+  readonly leadDirection: E4RouteLeadDirection;
 }
 
 export interface WireInstance {
@@ -103,6 +133,7 @@ export interface WireInstance {
   readonly circuit: string;
   readonly color: string;
   readonly lengthMm: number;
+  readonly e4Route: readonly Point[];
   readonly drawingRoute: readonly Point[];
   readonly layerIds: Readonly<Record<EditorView, string>>;
 }
@@ -117,14 +148,20 @@ export interface EditorLayer {
 
 export interface EditorViewState {
   readonly layers: readonly EditorLayer[];
+  readonly wireCrossingStyle: WireCrossingStyle;
 }
 
 export interface HarnessDesignDocument {
   readonly schemaVersion: 1;
   readonly connectors: readonly ConnectorInstance[];
   readonly wires: readonly WireInstance[];
+  readonly junctions: readonly E4Junction[];
+  readonly diffPairs: readonly DiffPairGroup[];
+  readonly screens: readonly WireScreenGroup[];
   readonly views: Readonly<Record<EditorView, EditorViewState>>;
 }
+
+export const defaultE4WireLead = 24;
 
 export const defaultLayerIds = {
   connectors: "connectors",
@@ -201,9 +238,12 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
     schemaVersion: 1,
     connectors: [],
     wires: [],
+    junctions: [],
+    diffPairs: [],
+    screens: [],
     views: {
-      e4: { layers: defaultLayers() },
-      drawing: { layers: defaultLayers() },
+      e4: { layers: defaultLayers(), wireCrossingStyle: "none" },
+      drawing: { layers: defaultLayers(), wireCrossingStyle: "none" },
     },
   };
 }
@@ -213,26 +253,189 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   if (record.schemaVersion !== 1 || !Array.isArray(record.connectors) || !Array.isArray(record.wires)) {
     throw new Error("Версия или состав документа жгута не поддерживаются.");
   }
+  const wireValues = record.wires;
   const views = requireRecord(record.views, "Представления документа жгута заданы неверно.");
-  const document: HarnessDesignDocument = {
+  let document: HarnessDesignDocument = {
     schemaVersion: 1,
     connectors: record.connectors.map(parseConnector),
-    wires: record.wires.map(parseWire),
+    wires: wireValues.map(parseWire),
+    junctions: record.junctions === undefined ? [] : parseJunctions(record.junctions),
+    diffPairs: record.diffPairs === undefined ? [] : parseDiffPairs(record.diffPairs),
+    screens: record.screens === undefined ? [] : parseScreens(record.screens),
     views: { e4: parseView(views.e4), drawing: parseView(views.drawing) },
   };
   const connectorIds = new Set(document.connectors.map((connector) => connector.id));
   if (connectorIds.size !== document.connectors.length) throw new Error("ID соединителей должны быть уникальны.");
   const wireIds = new Set(document.wires.map((wire) => wire.id));
   if (wireIds.size !== document.wires.length) throw new Error("ID проводов должны быть уникальны.");
+  const junctionIds = new Set(document.junctions.map((junction) => junction.id));
+  if (junctionIds.size !== document.junctions.length) throw new Error("ID узлов соединения должны быть уникальны.");
   for (const wire of document.wires) {
     for (const endpoint of [wire.from, wire.to]) {
-      const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
-      if (!connector?.contacts.some((contact) => contact.id === endpoint.contactId)) {
-        throw new Error("Провод ссылается на отсутствующую точку подключения.");
+      if (isJunctionEndpoint(endpoint)) {
+        if (!junctionIds.has(endpoint.junctionId)) throw new Error("Провод ссылается на отсутствующий узел соединения.");
+      } else {
+        const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
+        if (!connector?.contacts.some((contact) => contact.id === endpoint.contactId)) {
+          throw new Error("Провод ссылается на отсутствующую точку подключения.");
+        }
       }
     }
   }
+  document = {
+    ...document,
+    wires: document.wires.map((wire, index) => {
+      const wireRecord = requireRecord(wireValues[index], "Провод задан неверно.");
+      if (wireRecord.e4Route !== undefined) return wire;
+      const start = wireEndpointE4Anchor(document, wire.from);
+      const end = wireEndpointE4Anchor(document, wire.to);
+      if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+      return { ...wire, e4Route: createOrthogonalE4Route(start, end) };
+    }),
+  };
+  for (const [index, wireValue] of wireValues.entries()) {
+    const wireRecord = requireRecord(wireValue, "Провод задан неверно.");
+    const wire = document.wires[index]!;
+    if (wireRecord.e4Route !== undefined) {
+      const start = wireEndpointE4Anchor(document, wire.from);
+      const end = wireEndpointE4Anchor(document, wire.to);
+      if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+      validateOrthogonalE4Route(start, wire.e4Route, end);
+    }
+  }
+  validateParsedGroups(document, wireIds);
+  validateJunctions(document);
+  validateJunctionCircuitComponents(document.wires, document.junctions);
   return document;
+}
+
+export function isJunctionEndpoint(endpoint: WireEndpoint): endpoint is Extract<WireEndpoint, { junctionId: string }> {
+  return "junctionId" in endpoint;
+}
+
+export function createJunctionEndpoint(junctionId: string): WireEndpoint {
+  return { junctionId, connectorId: "", contactId: "" };
+}
+
+export function wireEndpointE4Anchor(document: HarnessDesignDocument, endpoint: WireEndpoint): E4RouteAnchor | null {
+  if (isJunctionEndpoint(endpoint)) {
+    const junction = document.junctions.find((item) => item.id === endpoint.junctionId);
+    return junction ? { position: junction.position, leadDirection: null } : null;
+  }
+  const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
+  if (!connector) return null;
+  const position = connectorContactPosition(connector, endpoint.contactId, "e4");
+  return position ? {
+    position,
+    leadDirection: connector.schematic.orientation === "contacts-left" ? "left" : "right",
+  } : null;
+}
+
+export function validateOrthogonalE4Route(
+  start: E4RouteAnchor,
+  intermediate: readonly Point[],
+  end: E4RouteAnchor,
+  minimumLead = defaultE4WireLead,
+): void {
+  if (!Number.isFinite(minimumLead) || minimumLead < 0) throw new Error("Минимальный прямой участок задан неверно.");
+  const points = [start.position, ...intermediate, end.position];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const current = points[index]!;
+    if ((previous.x === current.x) === (previous.y === current.y)) {
+      throw new Error("Маршрут Э4 должен состоять из ненулевых ортогональных сегментов.");
+    }
+  }
+  validateLead(start, points[1]!, minimumLead);
+  validateLead(end, points.at(-2)!, minimumLead);
+}
+
+export function createOrthogonalE4Route(
+  start: E4RouteAnchor,
+  end: E4RouteAnchor,
+  minimumLead = defaultE4WireLead,
+): readonly Point[] {
+  const startLead = leadPoint(start, minimumLead);
+  const endLead = leadPoint(end, minimumLead);
+  const candidates: Point[] = [];
+  if (!samePoint(start.position, startLead)) candidates.push(startLead);
+  if (startLead.x !== endLead.x && startLead.y !== endLead.y) candidates.push({ x: endLead.x, y: startLead.y });
+  if (!samePoint(startLead, endLead)) candidates.push(endLead);
+  const intermediate = candidates.filter((point, index) => {
+    const previous = index === 0 ? start.position : candidates[index - 1]!;
+    return !samePoint(point, previous) && !samePoint(point, end.position);
+  });
+  validateOrthogonalE4Route(start, intermediate, end, minimumLead);
+  return intermediate;
+}
+
+function validateLead(anchor: E4RouteAnchor, adjacent: Point, minimumLead: number): void {
+  if (anchor.leadDirection === null) return;
+  const distance = anchor.leadDirection === "left"
+    ? anchor.position.x - adjacent.x
+    : adjacent.x - anchor.position.x;
+  if (adjacent.y !== anchor.position.y || distance < minimumLead) {
+    throw new Error("Маршрут Э4 должен иметь прямой участок наружу от контакта.");
+  }
+}
+
+function leadPoint(anchor: E4RouteAnchor, minimumLead: number): Point {
+  if (anchor.leadDirection === "left") return { x: anchor.position.x - minimumLead, y: anchor.position.y };
+  if (anchor.leadDirection === "right") return { x: anchor.position.x + minimumLead, y: anchor.position.y };
+  return anchor.position;
+}
+
+function samePoint(left: Point, right: Point): boolean {
+  return left.x === right.x && left.y === right.y;
+}
+
+function validateParsedGroups(
+  document: HarnessDesignDocument,
+  wireIds: ReadonlySet<string>,
+): void {
+  const { diffPairs, screens } = document;
+  if (new Set(diffPairs.map((group) => group.id)).size !== diffPairs.length ||
+      new Set(screens.map((group) => group.id)).size !== screens.length) {
+    throw new Error("ID групп проводов должны быть уникальны.");
+  }
+  for (const group of [...diffPairs, ...screens]) {
+    if (group.wireIds.some((wireId) => !wireIds.has(wireId))) {
+      throw new Error("Группа ссылается на отсутствующий провод.");
+    }
+  }
+  const pairedWireIds = diffPairs.flatMap((group) => [...group.wireIds]);
+  if (new Set(pairedWireIds).size !== pairedWireIds.length) {
+    throw new Error("Провод не может входить в несколько дифференциальных пар.");
+  }
+  for (const group of diffPairs) if (!wireGroupHasCommonE4ParallelSpan(document, group.wireIds)) {
+    throw new Error("Провода дифференциальной пары должны иметь общий параллельный участок.");
+  }
+  for (const screen of screens) if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
+    throw new Error("Провода экрана должны иметь общий параллельный участок.");
+  }
+}
+
+function validateJunctionCircuitComponents(wires: readonly WireInstance[], junctions: readonly E4Junction[]): void {
+  const visited = new Set<string>();
+  for (const wire of wires) {
+    if (visited.has(wire.id)) continue;
+    const component = collectConnectedWireIds(wire.id, junctions);
+    for (const wireId of component) visited.add(wireId);
+    const circuits = new Set(wires.filter((item) => component.has(item.id) && item.circuit).map((item) => item.circuit));
+    if (circuits.size > 1) throw new Error("Провода одной цепи через узел соединения имеют разные обозначения цепи.");
+  }
+}
+
+function collectConnectedWireIds(wireId: string, junctions: readonly E4Junction[]): Set<string> {
+  const result = new Set([wireId]);
+  let size = -1;
+  while (size !== result.size) {
+    size = result.size;
+    for (const junction of junctions) if (junction.wireIds.some((id) => result.has(id))) {
+      for (const id of junction.wireIds) result.add(id);
+    }
+  }
+  return result;
 }
 
 export function connectorContactPosition(
@@ -255,6 +458,9 @@ export function findWireEndpoint(
   endpoint: WireEndpoint,
   view: EditorView,
 ): Point | null {
+  if (isJunctionEndpoint(endpoint)) {
+    return view === "e4" ? document.junctions.find((item) => item.id === endpoint.junctionId)?.position ?? null : null;
+  }
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   return connector ? connectorContactPosition(connector, endpoint.contactId, view) : null;
 }
@@ -374,7 +580,9 @@ function parseCustomValues(value: unknown): Readonly<Record<string, string>> {
 function parseWire(value: unknown): WireInstance {
   const record = requireRecord(value, "Провод задан неверно.");
   const layerIds = requireRecord(record.layerIds, "Слои провода заданы неверно.");
-  if (!Array.isArray(record.drawingRoute)) throw new Error("Трасса провода задана неверно.");
+  if (!Array.isArray(record.drawingRoute) || (record.e4Route !== undefined && !Array.isArray(record.e4Route))) {
+    throw new Error("Трасса провода задана неверно.");
+  }
   const lengthMm = requireNumber(record.lengthMm, "Длина провода");
   if (lengthMm <= 0 || lengthMm > 1_000_000_000) throw new Error("Длина провода задана неверно.");
   return {
@@ -384,6 +592,7 @@ function parseWire(value: unknown): WireInstance {
     circuit: requireString(record.circuit, "Цепь провода"),
     color: requireText(record.color, "Цвет провода"),
     lengthMm,
+    e4Route: record.e4Route === undefined ? [] : record.e4Route.map(parsePoint),
     drawingRoute: record.drawingRoute.map(parsePoint),
     layerIds: {
       e4: requireText(layerIds.e4, "Слой провода Э4"),
@@ -394,6 +603,7 @@ function parseWire(value: unknown): WireInstance {
 
 function parseEndpoint(value: unknown): WireEndpoint {
   const record = requireRecord(value, "Конец провода задан неверно.");
+  if (record.junctionId !== undefined) return createJunctionEndpoint(requireText(record.junctionId, "Узел конца провода"));
   return {
     connectorId: requireText(record.connectorId, "Соединитель конца провода"),
     contactId: requireText(record.contactId, "Контакт конца провода"),
@@ -420,7 +630,128 @@ function parseView(value: unknown): EditorViewState {
       new Set(layers.map((layer) => layer.order)).size !== layers.length) {
     throw new Error("Слои должны иметь уникальные ID и порядок.");
   }
-  return { layers };
+  const wireCrossingStyle = record.wireCrossingStyle === undefined ? "none" : record.wireCrossingStyle;
+  if (wireCrossingStyle !== "none" && wireCrossingStyle !== "bridge") {
+    throw new Error("Режим пересечения проводов задан неверно.");
+  }
+  return { layers, wireCrossingStyle };
+}
+
+function parseJunctions(value: unknown): readonly E4Junction[] {
+  if (!Array.isArray(value)) throw new Error("Узлы соединения заданы неверно.");
+  return value.map((item) => {
+    const record = requireRecord(item, "Узел соединения задан неверно.");
+    if (!Array.isArray(record.wireIds) || record.wireIds.length < 2) {
+      throw new Error("Узел соединения должен объединять не менее двух проводов.");
+    }
+    const wireIds = record.wireIds.map((id) => requireText(id, "ID провода узла соединения"));
+    if (new Set(wireIds).size !== wireIds.length) throw new Error("Провода узла соединения не должны повторяться.");
+    return { id: requireText(record.id, "ID узла соединения"), position: parsePoint(record.position), wireIds };
+  });
+}
+
+function validateJunctions(document: HarnessDesignDocument): void {
+  const wires = new Map(document.wires.map((wire) => [wire.id, wire]));
+  for (const junction of document.junctions) {
+    for (const wireId of junction.wireIds) {
+      const wire = wires.get(wireId);
+      if (!wire) throw new Error("Узел соединения ссылается на отсутствующий провод.");
+      const endsAtJunction = [wire.from, wire.to].some((endpoint) =>
+        isJunctionEndpoint(endpoint) && endpoint.junctionId === junction.id);
+      if (!endsAtJunction && !wireE4PathContainsPoint(document, wire, junction.position)) {
+        throw new Error("Линия провода должна проходить через узел соединения.");
+      }
+    }
+  }
+  for (const wire of document.wires) {
+    for (const endpoint of [wire.from, wire.to]) if (isJunctionEndpoint(endpoint)) {
+      const junction = document.junctions.find((item) => item.id === endpoint.junctionId);
+      if (!junction?.wireIds.includes(wire.id)) throw new Error("Узел соединения не содержит завершающийся в нём провод.");
+    }
+  }
+}
+
+export function wireE4PathContainsPoint(
+  document: HarnessDesignDocument,
+  wire: WireInstance,
+  point: Point,
+): boolean {
+  const start = wireEndpointE4Anchor(document, wire.from)?.position;
+  const end = wireEndpointE4Anchor(document, wire.to)?.position;
+  if (!start || !end) return false;
+  const points = [start, ...wire.e4Route, end];
+  return points.slice(1).some((current, index) => pointOnSegment(point, points[index]!, current));
+}
+
+export function wireGroupHasCommonE4ParallelSpan(
+  document: HarnessDesignDocument,
+  wireIds: readonly string[],
+): boolean {
+  const segmentGroups = wireIds.map((wireId) => {
+    const wire = document.wires.find((item) => item.id === wireId);
+    if (!wire) return [];
+    const start = wireEndpointE4Anchor(document, wire.from)?.position;
+    const end = wireEndpointE4Anchor(document, wire.to)?.position;
+    if (!start || !end) return [];
+    const points = [start, ...wire.e4Route, end];
+    return points.slice(1).map((current, index) => {
+      const previous = points[index]!;
+      return previous.y === current.y
+        ? { orientation: "horizontal" as const, start: Math.min(previous.x, current.x), end: Math.max(previous.x, current.x) }
+        : { orientation: "vertical" as const, start: Math.min(previous.y, current.y), end: Math.max(previous.y, current.y) };
+    });
+  });
+  if (segmentGroups.length === 0 || segmentGroups.some((segments) => segments.length === 0)) return false;
+
+  const visit = (wireIndex: number, orientation: "horizontal" | "vertical" | null, start: number, end: number): boolean => {
+    if (wireIndex === segmentGroups.length) return end > start;
+    for (const segment of segmentGroups[wireIndex]!) {
+      if (orientation !== null && segment.orientation !== orientation) continue;
+      const overlapStart = wireIndex === 0 ? segment.start : Math.max(start, segment.start);
+      const overlapEnd = wireIndex === 0 ? segment.end : Math.min(end, segment.end);
+      if (overlapEnd > overlapStart && visit(wireIndex + 1, segment.orientation, overlapStart, overlapEnd)) return true;
+    }
+    return false;
+  };
+  return visit(0, null, 0, 0);
+}
+
+function pointOnSegment(point: Point, start: Point, end: Point): boolean {
+  if (start.x === end.x) return point.x === start.x && point.y >= Math.min(start.y, end.y) && point.y <= Math.max(start.y, end.y);
+  if (start.y === end.y) return point.y === start.y && point.x >= Math.min(start.x, end.x) && point.x <= Math.max(start.x, end.x);
+  return false;
+}
+
+function parseDiffPairs(value: unknown): readonly DiffPairGroup[] {
+  if (!Array.isArray(value)) throw new Error("Дифференциальные пары заданы неверно.");
+  return value.map((item) => {
+    const record = requireRecord(item, "Дифференциальная пара задана неверно.");
+    if (!Array.isArray(record.wireIds) || record.wireIds.length !== 2) throw new Error("Дифференциальная пара должна содержать два провода.");
+    const wireIds = record.wireIds.map((id) => requireText(id, "ID провода")) as [string, string];
+    if (wireIds[0] === wireIds[1]) throw new Error("Дифференциальная пара должна содержать два разных провода.");
+    const variant = record.variant === undefined ? 1 : record.variant;
+    if (variant !== 1 && variant !== 2) throw new Error("Вид дифференциальной пары задан неверно.");
+    return { id: requireText(record.id, "ID дифференциальной пары"), wireIds, step: requirePositive(record.step, "Шаг пары"), amplitude: requirePositive(record.amplitude, "Амплитуда пары"), variant };
+  });
+}
+
+function parseScreens(value: unknown): readonly WireScreenGroup[] {
+  if (!Array.isArray(value)) throw new Error("Экраны проводов заданы неверно.");
+  return value.map((item) => {
+    const record = requireRecord(item, "Экран проводов задан неверно.");
+    if (!Array.isArray(record.wireIds) || record.wireIds.length < 1) throw new Error("Экран должен содержать хотя бы один провод.");
+    const wireIds = record.wireIds.map((id) => requireText(id, "ID провода"));
+    if (new Set(wireIds).size !== wireIds.length) throw new Error("Провода экрана не должны повторяться.");
+    const position = requireNumber(record.position, "Положение экрана");
+    if (position < 0 || position > 1) throw new Error("Положение экрана должно быть от 0 до 1.");
+    return { id: requireText(record.id, "ID экрана"), wireIds, position, label: requireBoundedText(record.label, "Обозначение экрана", 120), width: requirePositive(record.width, "Ширина экрана") };
+  });
+}
+
+function requirePositive(value: unknown, name: string): number {
+  const result = requireNumber(value, name);
+  if (result <= 0) throw new Error(`${name} должно быть положительным числом.`);
+  return result;
 }
 
 function parsePoint(value: unknown): Point {

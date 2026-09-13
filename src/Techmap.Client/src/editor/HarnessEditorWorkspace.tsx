@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { CanvasViewport } from "./CanvasViewport";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CanvasViewport, type E4SceneOverlays } from "./CanvasViewport";
 import { CatalogDock } from "./CatalogDock";
 import { zoomEditorCameraAt } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
@@ -14,6 +14,8 @@ import type {
   HarnessEditorView,
 } from "./editor-types";
 import { EditorToolbar } from "./EditorToolbar";
+import { E4WireSelectionMenu } from "./E4WireSelectionMenu";
+import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
 import "./harness-editor.css";
@@ -80,12 +82,14 @@ export interface HarnessEditorWorkspaceProps {
   readonly catalogMessage?: string | null;
   readonly catalogHasMore?: boolean;
   readonly selectedObjectId?: string | null;
+  readonly selectedObjectIds?: readonly string[];
   readonly saveState?: EditorSaveState;
   readonly onSaveRequest?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
   readonly onObjectsChange?: (objects: readonly EditorSceneObject[]) => void;
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
   readonly onSelectedObjectChange?: (objectId: string | null) => void;
+  readonly onSelectedObjectIdsChange?: (objectIds: readonly string[]) => void;
   readonly onCatalogItemActivate?: (item: EditorCatalogItem, point?: EditorPoint) => void;
   readonly onCatalogSourceChange?: (sourceId: string) => void;
   readonly onCatalogQueryChange?: (query: string) => void;
@@ -101,6 +105,24 @@ export interface HarnessEditorWorkspaceProps {
     end: "from" | "to",
     target: { readonly connectorId: string; readonly contactIndex: number },
   ) => void;
+  readonly onWireConnectToWire?: (
+    from: { readonly connectorId: string; readonly contactIndex: number },
+    targetWireId: string,
+    point: EditorPoint,
+  ) => void;
+  readonly onWireReconnectToWire?: (
+    wireId: string,
+    end: "from" | "to",
+    targetWireId: string,
+    point: EditorPoint,
+  ) => void;
+  readonly onE4WireSegmentMove?: (wireId: string, segmentIndex: number, coordinate: number) => void;
+  readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
+  readonly e4Overlays?: E4SceneOverlays;
+  readonly onE4CrossingStyleChange?: (style: "none" | "bridge") => void;
+  readonly onE4DifferentialPairChange?: (state: E4DifferentialPairState | null) => void;
+  readonly onE4ScreenChange?: (state: E4ScreenState | null) => void;
+  readonly onE4ClearGroup?: () => void;
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
@@ -108,6 +130,20 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
   readonly onClose?: () => void;
+}
+
+export function reconcileWorkspaceSelection(
+  selectedObjectIds: readonly string[],
+  selectedObjectId: string | null,
+  objects: readonly EditorSceneObject[],
+): { readonly objectIds: readonly string[]; readonly primaryObjectId: string | null } {
+  const availableIds = new Set(objects.filter((object) => !object.id.startsWith("dimension:")).map((object) => object.id));
+  const objectIds = [...new Set(selectedObjectIds)].filter((id) => availableIds.has(id));
+  const primaryObjectId = selectedObjectId && availableIds.has(selectedObjectId)
+    ? selectedObjectId
+    : objectIds.at(-1) ?? null;
+  if (primaryObjectId && !objectIds.includes(primaryObjectId)) objectIds.push(primaryObjectId);
+  return { objectIds, primaryObjectId };
 }
 
 const saveLabels: Readonly<Record<EditorSaveState, string>> = {
@@ -131,12 +167,14 @@ export function HarnessEditorWorkspace({
   catalogMessage,
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
+  selectedObjectIds: controlledSelectedObjectIds,
   saveState = "saved",
   onSaveRequest,
   onViewChange,
   onObjectsChange,
   onLayersChange,
   onSelectedObjectChange,
+  onSelectedObjectIdsChange,
   onCatalogItemActivate,
   onCatalogSourceChange,
   onCatalogQueryChange,
@@ -145,6 +183,15 @@ export function HarnessEditorWorkspace({
   onObjectMove,
   onWireConnect,
   onWireReconnect,
+  onWireConnectToWire,
+  onWireReconnectToWire,
+  onE4WireSegmentMove,
+  onE4ScreenPositionChange,
+  e4Overlays,
+  onE4CrossingStyleChange,
+  onE4DifferentialPairChange,
+  onE4ScreenChange,
+  onE4ClearGroup,
   onWireRoutePointMove,
   onWireRoutePointRemove,
   drawingSnapEnabled = true,
@@ -158,6 +205,7 @@ export function HarnessEditorWorkspace({
   const [localObjects, setLocalObjects] = useState(defaultObjects);
   const [localLayers, setLocalLayers] = useState(defaultLayers);
   const [localSelectedObjectId, setLocalSelectedObjectId] = useState<string | null>("W1");
+  const [localSelectedObjectIds, setLocalSelectedObjectIds] = useState<readonly string[]>(["W1"]);
   const [camera, setCamera] = useState(initialCamera);
   const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">("properties");
   const [catalogExpanded, setCatalogExpanded] = useState(true);
@@ -168,11 +216,57 @@ export function HarnessEditorWorkspace({
   const selectedObjectId = controlledSelectedObjectId === undefined
     ? localSelectedObjectId
     : controlledSelectedObjectId;
+  const selectedObjectIds = controlledSelectedObjectIds ?? localSelectedObjectIds;
+  useEffect(() => {
+    const normalized = reconcileWorkspaceSelection(selectedObjectIds, selectedObjectId, objects);
+    const idsChanged = normalized.objectIds.length !== selectedObjectIds.length ||
+      normalized.objectIds.some((id, index) => id !== selectedObjectIds[index]);
+    if (!idsChanged && normalized.primaryObjectId === selectedObjectId) return;
+    if (controlledSelectedObjectId === undefined) setLocalSelectedObjectId(normalized.primaryObjectId);
+    if (controlledSelectedObjectIds === undefined) setLocalSelectedObjectIds(normalized.objectIds);
+    onSelectedObjectChange?.(normalized.primaryObjectId);
+    onSelectedObjectIdsChange?.(normalized.objectIds);
+  }, [
+    controlledSelectedObjectId,
+    controlledSelectedObjectIds,
+    objects,
+    onSelectedObjectChange,
+    onSelectedObjectIdsChange,
+    selectedObjectId,
+    selectedObjectIds,
+  ]);
   const selectedObject = useMemo(
     () => objects.find((object) => object.id === selectedObjectId) ?? null,
     [objects, selectedObjectId],
   );
   const selectedLayer = layers.find((layer) => layer.id === selectedObject?.layerId);
+  const selectedWireIds = selectedObjectIds.filter((id) => objects.some((object) => object.id === id && object.kind === "wire"));
+  const selectedDiffPair = e4Overlays?.diffPairs.find((group) =>
+    group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
+  const selectedScreen = e4Overlays?.screens.find((group) =>
+    group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
+  const canClearSelectedGroup = Boolean(
+    e4Overlays?.diffPairs.some((group) => group.wireIds.some((id) => selectedWireIds.includes(id))) ||
+    e4Overlays?.screens.some((group) => group.wireIds.some((id) => selectedWireIds.includes(id))),
+  );
+  const e4WireMenu = view === "e4" && tool === "select" && selectedWireIds.length > 0 ? (
+    <E4WireSelectionMenu
+      selectedWireIds={selectedWireIds}
+      crossingStyle={e4Overlays?.crossingStyle ?? "none"}
+      differentialPair={selectedDiffPair ? {
+        variant: selectedDiffPair.variant ?? 1,
+        twistPitchMm: selectedDiffPair.step,
+      } : null}
+      screen={selectedScreen ? { positionPercent: Math.round(selectedScreen.position * 100) } : null}
+      canClearGroup={canClearSelectedGroup}
+      disabled={selectedWireIds.some((id) => layers.find((layer) =>
+        layer.id === objects.find((object) => object.id === id)?.layerId)?.locked === true)}
+      onCrossingStyleChange={(style) => onE4CrossingStyleChange?.(style)}
+      onDifferentialPairChange={(state) => onE4DifferentialPairChange?.(state)}
+      onScreenChange={(state) => onE4ScreenChange?.(state)}
+      onClearGroup={() => onE4ClearGroup?.()}
+    />
+  ) : null;
 
   const changeView = (nextView: HarnessEditorView) => {
     if (controlledView === undefined) setLocalView(nextView);
@@ -190,9 +284,23 @@ export function HarnessEditorWorkspace({
     onLayersChange?.(nextLayers);
   };
 
-  const selectObject = (objectId: string | null) => {
-    if (controlledSelectedObjectId === undefined) setLocalSelectedObjectId(objectId);
-    onSelectedObjectChange?.(objectId);
+  const selectObject = (objectId: string | null, additive = false) => {
+    const currentIds = selectedObjectIds.filter((id) => objects.some((object) => object.id === id));
+    let nextIds: readonly string[];
+    if (!objectId) {
+      nextIds = [];
+    } else if (!additive) {
+      nextIds = [objectId];
+    } else if (currentIds.includes(objectId)) {
+      nextIds = currentIds.filter((id) => id !== objectId);
+    } else {
+      nextIds = [...currentIds, objectId];
+    }
+    const primaryId = nextIds.at(-1) ?? null;
+    if (controlledSelectedObjectId === undefined) setLocalSelectedObjectId(primaryId);
+    if (controlledSelectedObjectIds === undefined) setLocalSelectedObjectIds(nextIds);
+    onSelectedObjectChange?.(primaryId);
+    onSelectedObjectIdsChange?.(nextIds);
   };
 
   const activateCatalogItem = (item: EditorCatalogItem, point?: EditorPoint) => {
@@ -275,11 +383,18 @@ export function HarnessEditorWorkspace({
           objects={view === "e4" ? objects.filter((object) => object.kind !== "dimension") : objects}
           layers={layers}
           selectedObjectId={selectedObjectId}
+          selectedObjectIds={selectedObjectIds}
+          e4Overlays={e4Overlays}
+          overlay={e4WireMenu}
           onCameraChange={setCamera}
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
           onWireConnect={onWireConnect}
           onWireReconnect={onWireReconnect}
+          onWireConnectToWire={onWireConnectToWire}
+          onWireReconnectToWire={onWireReconnectToWire}
+          onE4WireSegmentMove={onE4WireSegmentMove}
+          onE4ScreenPositionChange={onE4ScreenPositionChange}
           onWireRoutePointMove={onWireRoutePointMove}
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}

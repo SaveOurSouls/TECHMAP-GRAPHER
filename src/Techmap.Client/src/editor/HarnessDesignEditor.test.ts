@@ -1,9 +1,43 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire, applyEditorCommand } from "./commands";
-import { designToScene, snapRoutePoint } from "./HarnessDesignEditor";
+import {
+  designToScene,
+  normalizeEditorSelection,
+  selectedEditorDeletionCommands,
+  snapRoutePoint,
+} from "./HarnessDesignEditor";
 import { connectorE4TableGeometry, createEmptyHarnessDesign } from "./model";
 
 describe("harness design scene adapter", () => {
+  it("removes deleted and duplicate ids from multi-selection and promotes a surviving primary object", () => {
+    expect(normalizeEditorSelection(
+      ["wire-1", "deleted", "wire-1", "wire-2"],
+      "deleted",
+      new Set(["wire-1", "wire-2"]),
+    )).toEqual({ objectIds: ["wire-1", "wire-2"], primaryObjectId: "wire-2" });
+    expect(normalizeEditorSelection(["wire-1"], "connector-1", new Set(["wire-1", "connector-1"]))).toEqual({
+      objectIds: ["wire-1", "connector-1"], primaryObjectId: "connector-1",
+    });
+    expect(normalizeEditorSelection(["deleted"], "deleted", new Set())).toEqual({
+      objectIds: [], primaryObjectId: null,
+    });
+  });
+
+  it("deletes selected wires before selected connectors and ignores stale selection", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 200, y: 0 });
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: x1 });
+    document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    expect(selectedEditorDeletionCommands(document, ["x1", "w1", "removed"])).toEqual([
+      { type: "remove-wire", wireId: "w1" },
+      { type: "remove-connector", connectorId: "x1" },
+    ]);
+  });
+
   it("renders the same domain instances in E4 and drawing with separate positions", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 10, y: 20 }, { x: 100, y: 120 });
     const x2 = createConnector("x2", "X2", 2, { x: 400, y: 20 }, { x: 500, y: 120 });

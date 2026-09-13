@@ -7,14 +7,20 @@ import { useEditorReferenceCatalog } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
+import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
 import {
   connectorContactPosition,
   connectorE4TableGeometry,
+  createJunctionEndpoint,
+  createOrthogonalE4Route,
   createEmptyHarnessDesign,
   findWireEndpoint,
+  isJunctionEndpoint,
+  wireEndpointE4Anchor,
   type EditorLayer,
   type HarnessDesignDocument,
+  type WireEndpoint,
 } from "./model";
 
 export interface HarnessDesignEditorProps {
@@ -29,6 +35,34 @@ export interface HarnessDesignEditorProps {
   readonly onViewChange?: (view: HarnessEditorView) => void;
 }
 
+export function normalizeEditorSelection(
+  selectedIds: readonly string[],
+  selectedPrimaryId: string | null,
+  availableObjectIds: ReadonlySet<string>,
+): { readonly objectIds: readonly string[]; readonly primaryObjectId: string | null } {
+  const objectIds = [...new Set(selectedIds)].filter((id) => availableObjectIds.has(id));
+  const primaryObjectId = selectedPrimaryId && availableObjectIds.has(selectedPrimaryId)
+    ? selectedPrimaryId
+    : objectIds.at(-1) ?? null;
+  if (primaryObjectId && !objectIds.includes(primaryObjectId)) objectIds.push(primaryObjectId);
+  return { objectIds, primaryObjectId };
+}
+
+export function selectedEditorDeletionCommands(
+  document: HarnessDesignDocument,
+  selectedObjectIds: readonly string[],
+): readonly EditorCommand[] {
+  const selectedIds = new Set(selectedObjectIds);
+  return [
+    ...document.wires
+      .filter((wire) => selectedIds.has(wire.id))
+      .map((wire): EditorCommand => ({ type: "remove-wire", wireId: wire.id })),
+    ...document.connectors
+      .filter((connector) => selectedIds.has(connector.id))
+      .map((connector): EditorCommand => ({ type: "remove-connector", connectorId: connector.id })),
+  ];
+}
+
 function toUiLayers(document: HarnessDesignDocument, view: HarnessEditorView): readonly UiLayer[] {
   return [...document.views[view].layers]
     .sort((left, right) => right.order - left.order)
@@ -37,11 +71,14 @@ function toUiLayers(document: HarnessDesignDocument, view: HarnessEditorView): r
 
 function contactPointForWire(
   document: HarnessDesignDocument,
-  connectorId: string,
-  contactId: string,
-  otherConnectorId: string,
+  endpoint: WireEndpoint,
+  otherEndpoint: WireEndpoint,
   view: HarnessEditorView,
 ) {
+  if (isJunctionEndpoint(endpoint)) return findWireEndpoint(document, endpoint, view);
+  const connectorId = endpoint.connectorId;
+  const contactId = endpoint.contactId;
+  const otherConnectorId = isJunctionEndpoint(otherEndpoint) ? "" : otherEndpoint.connectorId;
   const connector = document.connectors.find((item) => item.id === connectorId);
   const other = document.connectors.find((item) => item.id === otherConnectorId);
   if (!connector) return null;
@@ -111,10 +148,12 @@ export function designToScene(
     };
   });
   const wires: EditorSceneObject[] = document.wires.flatMap((wire, index) => {
-    const start = contactPointForWire(document, wire.from.connectorId, wire.from.contactId, wire.to.connectorId, view);
-    const end = contactPointForWire(document, wire.to.connectorId, wire.to.contactId, wire.from.connectorId, view);
+    const start = contactPointForWire(document, wire.from, wire.to, view);
+    const end = contactPointForWire(document, wire.to, wire.from, view);
     if (!start || !end) return [];
-    const points = view === "drawing" ? [start, ...wire.drawingRoute, end] : [start, end];
+    const points = view === "drawing" ? [start, ...wire.drawingRoute, end] : [start, ...wire.e4Route, end];
+    const fromAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.from) : null;
+    const toAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.to) : null;
     return [{
       id: wire.id,
       layerId: wire.layerIds[view],
@@ -126,14 +165,20 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      metadata: { lengthMm: String(wire.lengthMm) },
+      metadata: {
+        lengthMm: String(wire.lengthMm),
+        ...(view === "e4" ? {
+          view: "e4",
+          fromSide: fromAnchor?.leadDirection ?? "",
+          toSide: toAnchor?.leadDirection ?? "",
+          leadLength: "24",
+        } : {}),
+      },
     }];
   });
   const dimensions: EditorSceneObject[] = view === "drawing" ? document.wires.flatMap((wire) => {
-    const start = contactPointForWire(
-      document, wire.from.connectorId, wire.from.contactId, wire.to.connectorId, view);
-    const end = contactPointForWire(
-      document, wire.to.connectorId, wire.to.contactId, wire.from.connectorId, view);
+    const start = contactPointForWire(document, wire.from, wire.to, view);
+    const end = contactPointForWire(document, wire.to, wire.from, view);
     if (!start || !end) return [];
     const y = Math.max(start.y, end.y) + 70;
     return [{
@@ -189,6 +234,7 @@ export function HarnessDesignEditor({
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
   const [message, setMessage] = useState("Загружаем документ жгута…");
@@ -208,6 +254,8 @@ export function HarnessDesignEditor({
     const generation = ++loadGeneration.current;
     setResource(null);
     setHistory(null);
+    setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setMessage("Загружаем документ жгута…");
     setSaveState("saved");
     void api.get(projectId, harnessId).then((loaded) => {
@@ -275,6 +323,20 @@ export function HarnessDesignEditor({
     return () => window.clearTimeout(timer);
   }, [flushSave, history]);
 
+  useEffect(() => {
+    if (!history) return;
+    const availableObjectIds = new Set([
+      ...history.present.connectors.map((item) => item.id),
+      ...history.present.wires.map((item) => item.id),
+    ]);
+    const normalized = normalizeEditorSelection(selectedObjectIds, selectedObjectId, availableObjectIds);
+    if (normalized.primaryObjectId !== selectedObjectId) setSelectedObjectId(normalized.primaryObjectId);
+    if (normalized.objectIds.length !== selectedObjectIds.length ||
+        normalized.objectIds.some((id, index) => id !== selectedObjectIds[index])) {
+      setSelectedObjectIds(normalized.objectIds);
+    }
+  }, [history, selectedObjectId, selectedObjectIds]);
+
   const run = useCallback((command: EditorCommand): boolean => {
     const current = historyRef.current;
     if (!current) return false;
@@ -305,17 +367,15 @@ export function HarnessDesignEditor({
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectId) {
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectIds.length > 0) {
         const current = historyRef.current?.present;
         if (!current) return;
-        if (current.connectors.some((item) => item.id === selectedObjectId)) {
-          event.preventDefault();
-          run({ type: "remove-connector", connectorId: selectedObjectId });
+        const commands = selectedEditorDeletionCommands(current, selectedObjectIds);
+        if (commands.length > 0) event.preventDefault();
+        for (const command of commands) run(command);
+        if (commands.length > 0) {
           setSelectedObjectId(null);
-        } else if (current.wires.some((item) => item.id === selectedObjectId)) {
-          event.preventDefault();
-          run({ type: "remove-wire", wireId: selectedObjectId });
-          setSelectedObjectId(null);
+          setSelectedObjectIds([]);
         }
         return;
       }
@@ -331,7 +391,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [run, selectedObjectId]);
+  }, [run, selectedObjectIds]);
 
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
@@ -350,15 +410,18 @@ export function HarnessDesignEditor({
     const contactCount = item.id.includes("10") ? 10 : 4;
     const id = crypto.randomUUID();
     const index = history.present.connectors.length;
-    const placement = point ?? {
-      x: 120 + (index % 4) * 190,
-      y: 100 + Math.floor(index / 4) * 150,
-    };
+    const preview = createConnector(id, `XS${index + 1}`, contactCount, { x: 0, y: 0 }, { x: 0, y: 0 }, item.title);
+    const nextE4Y = history.present.connectors.reduce((bottom, connector) => Math.max(
+      bottom,
+      connector.positions.e4.y + connectorE4TableGeometry(connector).height + 90,
+    ), 100);
+    const placement = point ?? { x: 120, y: nextE4Y };
     run({
       type: "add-connector",
-      connector: createConnector(id, `XS${index + 1}`, contactCount, placement, placement, item.title),
+      connector: { ...preview, positions: { e4: placement, drawing: placement } },
     });
     setSelectedObjectId(id);
+    setSelectedObjectIds([id]);
   };
 
   const addRoutePoint = (point: { readonly x: number; readonly y: number }) => {
@@ -371,6 +434,63 @@ export function HarnessDesignEditor({
     if (!start) return;
     const next = snapRoutePoint(start, point, drawingSnapEnabled);
     run({ type: "set-wire-route", wireId: wire.id, route: [...wire.drawingRoute, next] });
+  };
+
+  const createRoutedWire = (id: string, from: WireEndpoint, to: WireEndpoint) => {
+    const wire = createWire(id, from, to, 100);
+    const start = wireEndpointE4Anchor(history.present, from);
+    const end = wireEndpointE4Anchor(history.present, to);
+    return start && end ? { ...wire, e4Route: createOrthogonalE4Route(start, end) } : wire;
+  };
+
+  const selectedWireIds = selectedObjectIds.filter((id) => history.present.wires.some((wire) => wire.id === id));
+  const selectedDiffPair = history.present.diffPairs.find((group) =>
+    group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
+  const selectedScreen = history.present.screens.find((group) =>
+    group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
+
+  const changeDiffPair = (state: E4DifferentialPairState | null) => {
+    if (selectedWireIds.length !== 2) return;
+    if (state === null) {
+      if (selectedDiffPair) run({ type: "remove-diff-pair", groupId: selectedDiffPair.id });
+      return;
+    }
+    if (selectedDiffPair) {
+      run({
+        type: "update-diff-pair",
+        groupId: selectedDiffPair.id,
+        variant: state.variant,
+        step: state.twistPitchMm,
+      });
+      return;
+    }
+    run({
+      type: "create-diff-pair",
+      group: {
+        id: crypto.randomUUID(),
+        wireIds: [selectedWireIds[0]!, selectedWireIds[1]!],
+        variant: state.variant,
+        step: state.twistPitchMm,
+        amplitude: 7,
+      },
+    });
+  };
+
+  const changeScreen = (state: E4ScreenState | null) => {
+    if (selectedWireIds.length < 1) return;
+    if (state === null) {
+      if (selectedScreen) run({ type: "remove-screen", screenId: selectedScreen.id });
+      return;
+    }
+    const position = state.positionPercent / 100;
+    if (selectedScreen) {
+      run({ type: "update-screen", screenId: selectedScreen.id, position });
+    } else {
+      run({
+        type: "create-screen",
+        screen: { id: crypto.randomUUID(), wireIds: selectedWireIds, position, label: "Экран", width: 46 },
+      });
+    }
   };
 
   return (
@@ -390,6 +510,13 @@ export function HarnessDesignEditor({
         catalogMessage={catalog.message}
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
+        selectedObjectIds={selectedObjectIds}
+        e4Overlays={view === "e4" ? {
+          crossingStyle: history.present.views.e4.wireCrossingStyle,
+          junctions: history.present.junctions,
+          diffPairs: history.present.diffPairs,
+          screens: history.present.screens,
+        } : undefined}
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
         propertyInspector={selectedConnector ? (
@@ -404,6 +531,7 @@ export function HarnessDesignEditor({
           onViewChange?.(nextView);
         }}
         onSelectedObjectChange={setSelectedObjectId}
+        onSelectedObjectIdsChange={setSelectedObjectIds}
         onCatalogItemActivate={addCatalogItem}
         onCatalogSourceChange={catalog.selectSource}
         onCatalogQueryChange={catalog.changeQuery}
@@ -424,14 +552,14 @@ export function HarnessDesignEditor({
           const id = crypto.randomUUID();
           run({
             type: "add-wire",
-            wire: createWire(
+            wire: createRoutedWire(
               id,
               { connectorId: from.connectorId, contactId: fromContact.id },
               { connectorId: to.connectorId, contactId: toContact.id },
-              100,
             ),
           });
           setSelectedObjectId(id);
+          setSelectedObjectIds([id]);
         }}
         onWireReconnect={(wireId, end, target) => {
           const connector = history.present.connectors.find((item) => item.id === target.connectorId);
@@ -444,6 +572,87 @@ export function HarnessDesignEditor({
             endpoint: { connectorId: target.connectorId, contactId: contact.id },
           });
           setSelectedObjectId(wireId);
+          setSelectedObjectIds([wireId]);
+        }}
+        onWireConnectToWire={(from, targetWireId, point) => {
+          const connector = history.present.connectors.find((item) => item.id === from.connectorId);
+          const contact = connector?.contacts[from.contactIndex];
+          const targetWire = history.present.wires.find((item) => item.id === targetWireId);
+          if (!contact || !targetWire) return;
+          const wireId = crypto.randomUUID();
+          const existingJunction = history.present.junctions.find((junction) =>
+            junction.wireIds.includes(targetWireId) &&
+            Math.hypot(junction.position.x - point.x, junction.position.y - point.y) < 0.01);
+          const junctionId = existingJunction?.id ?? crypto.randomUUID();
+          const fromEndpoint = { connectorId: from.connectorId, contactId: contact.id };
+          const toEndpoint = createJunctionEndpoint(junctionId);
+          const base = createWire(wireId, fromEndpoint, toEndpoint, 100, targetWire.circuit);
+          const start = wireEndpointE4Anchor(history.present, fromEndpoint);
+          const branchWire = start ? {
+            ...base,
+            e4Route: createOrthogonalE4Route(start, { position: point, leadDirection: null }),
+          } : base;
+          const succeeded = existingJunction
+            ? run({ type: "add-wire", wire: branchWire, targetWireId })
+            : run({
+              type: "create-junction",
+              junction: { id: junctionId, position: point, wireIds: [targetWireId, wireId] },
+              branchWire,
+            });
+          if (succeeded) {
+            setSelectedObjectId(wireId);
+            setSelectedObjectIds([wireId]);
+          }
+        }}
+        onWireReconnectToWire={(wireId, end, targetWireId, point) => {
+          const existingJunction = history.present.junctions.find((junction) =>
+            junction.wireIds.includes(targetWireId) &&
+            Math.hypot(junction.position.x - point.x, junction.position.y - point.y) < 0.01);
+          const succeeded = existingJunction
+            ? run({
+              type: "connect-wire-to-wire",
+              wireId,
+              end,
+              targetWireId,
+              junctionId: existingJunction.id,
+              position: existingJunction.position,
+            })
+            : run({
+              type: "connect-wire-to-wire",
+              wireId,
+              end,
+              targetWireId,
+              junctionId: crypto.randomUUID(),
+              position: point,
+            });
+          if (succeeded) {
+            setSelectedObjectId(wireId);
+            setSelectedObjectIds([wireId]);
+          }
+        }}
+        onE4WireSegmentMove={(wireId, segmentIndex, coordinate) => run({
+          type: "move-e4-wire-segment",
+          wireId,
+          segmentIndex,
+          position: { x: coordinate, y: coordinate },
+        })}
+        onE4ScreenPositionChange={(screenId, position) => run({
+          type: "update-screen",
+          screenId,
+          position,
+        })}
+        onE4CrossingStyleChange={(style) => run({ type: "set-wire-crossing-style", view: "e4", style })}
+        onE4DifferentialPairChange={changeDiffPair}
+        onE4ScreenChange={changeScreen}
+        onE4ClearGroup={() => {
+          for (const group of history.present.diffPairs.filter((item) =>
+            item.wireIds.some((id) => selectedWireIds.includes(id)))) {
+            run({ type: "remove-diff-pair", groupId: group.id });
+          }
+          for (const screen of history.present.screens.filter((item) =>
+            item.wireIds.some((id) => selectedWireIds.includes(id)))) {
+            run({ type: "remove-screen", screenId: screen.id });
+          }
         }}
         onWireRoutePointMove={(wireId, routeIndex, point) => {
           const wire = history.present.wires.find((item) => item.id === wireId);
