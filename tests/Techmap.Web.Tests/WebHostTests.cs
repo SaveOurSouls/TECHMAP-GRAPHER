@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Techmap.Contracts;
 using Techmap.Infrastructure.Sqlite;
 using Xunit;
@@ -54,7 +56,94 @@ public sealed class WebHostTests
             await diagnosticsResponse.Content.ReadAsStringAsync(cancellationToken),
             StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("programRoot", await page.Content.ReadAsStringAsync(cancellationToken));
+        Assert.DoesNotContain(
+            "techmap-browser-lifecycle.js",
+            await page.Content.ReadAsStringAsync(cancellationToken),
+            StringComparison.Ordinal);
         AssertSecurityHeaders(page);
+    }
+
+    [Fact]
+    public async Task No_browser_mode_does_not_expose_browser_lifecycle_channel()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var page = await client.GetAsync("/", cancellationToken);
+        var session = await client.GetFromJsonAsync<SessionBootstrapResponse>(
+            "/api/v1/session",
+            cancellationToken);
+        Assert.NotNull(session);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/browser-lifecycle")
+        {
+            Content = JsonContent.Create(new { }),
+        };
+        request.Headers.TryAddWithoutValidation(
+            "Origin",
+            $"http://127.0.0.1:{TechmapWebApplicationFactory.TestPort}");
+        request.Headers.TryAddWithoutValidation(LocalHttpSession.CsrfHeaderName, session.CsrfNonce);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Interactive_mode_injects_external_browser_lifecycle_script()
+    {
+        await using var factory = new TechmapWebApplicationFactory(noBrowser: false);
+        using var client = factory.CreateLocalClient();
+
+        using var page = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        var html = await page.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        using var script = await client.GetAsync(
+            $"/{BrowserLifecycleScript.FileName}",
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            $"<script src=\"{BrowserLifecycleScript.FileName}\" defer></script>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+        Assert.Equal("text/javascript", script.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Interactive_lifecycle_stops_host_after_last_connection_closes()
+    {
+        await using var factory = new TechmapWebApplicationFactory(noBrowser: false);
+        using var client = factory.CreateLocalClient();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var page = await client.GetAsync("/", cancellationToken);
+        var session = await client.GetFromJsonAsync<SessionBootstrapResponse>(
+            "/api/v1/session",
+            cancellationToken);
+        Assert.NotNull(session);
+
+        var lifecycle = factory.Services.GetRequiredService<BrowserLifecycleMonitor>();
+        var applicationLifetime = factory.Services.GetRequiredService<IHostApplicationLifetime>();
+        lifecycle.Enable();
+        var monitorTask = lifecycle.WaitForBrowserClosedAsync(cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/browser-lifecycle")
+        {
+            Content = JsonContent.Create(new { }),
+        };
+        request.Headers.TryAddWithoutValidation(
+            "Origin",
+            $"http://127.0.0.1:{TechmapWebApplicationFactory.TestPort}");
+        request.Headers.TryAddWithoutValidation(LocalHttpSession.CsrfHeaderName, session.CsrfNonce);
+
+        using (var response = await client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        await monitorTask.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+
+        Assert.True(applicationLifetime.ApplicationStopping.IsCancellationRequested);
     }
 
     [Fact]

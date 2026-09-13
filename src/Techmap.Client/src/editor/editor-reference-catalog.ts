@@ -6,6 +6,7 @@ import {
   type ReferenceCatalogSearchRecord,
 } from "../reference-catalog-api";
 import type { RuntimeConfig } from "../runtime-config";
+import { builtInConnectorTemplates } from "./connector-series-demo";
 import type { EditorCatalogItem, EditorCatalogSource } from "./editor-types";
 
 interface RemoteCatalogSource extends EditorCatalogSource {
@@ -52,24 +53,19 @@ export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
 
 export const editorCatalogSources: readonly EditorCatalogSource[] = [localSource, ...remoteEditorCatalogSources];
 
-export const builtInConnectorItems: readonly EditorCatalogItem[] = [
-  {
-    id: "catalog-xs-04",
-    title: "XS-04",
-    subtitle: "Универсальный соединитель · 4 контакта",
-    category: "Соединители",
-    accent: "#3f718b",
-    placement: "connector",
-  },
-  {
-    id: "catalog-xs-10",
-    title: "XS-10",
-    subtitle: "Универсальный соединитель · 10 контактов",
-    category: "Соединители",
-    accent: "#3f718b",
-    placement: "connector",
-  },
-];
+export const builtInConnectorItems: readonly EditorCatalogItem[] = builtInConnectorTemplates.map((template) => ({
+  id: template.id,
+  title: template.title,
+  subtitle: template.description,
+  category: "Соединители",
+  accent: template.kind === "series" ? "#3f718b" : "#71808a",
+  placement: "connector",
+  templateKind: template.kind,
+  ...(template.kind === "series" ? {
+    seriesId: template.seriesId,
+    defaultPartNumber: template.defaultPartNumber,
+  } : {}),
+}));
 
 function displayValue(value: unknown): string | null {
   if (typeof value === "string") return value.trim() || null;
@@ -175,6 +171,55 @@ export interface EditorReferenceCatalogState {
   readonly changeQuery: (query: string) => void;
   readonly loadMore: () => void;
   readonly retry: () => void;
+}
+
+export interface TerminalArticleLookupState {
+  readonly articles: readonly string[];
+  readonly search: (query: string) => void;
+}
+
+/** Searches the active БД.ТЕР snapshot independently of the catalog tab.
+ * The inline free connector keeps manual input, while the datalist can query
+ * the whole published terminal reference as the operator types. */
+export function useTerminalArticleLookup(
+  config: RuntimeConfig,
+  session: LocalSession,
+): TerminalArticleLookupState {
+  const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
+  const [query, setQuery] = useState<string | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+  const [articles, setArticles] = useState<readonly string[]>([]);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    if (query === null) return;
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 220);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (debouncedQuery === null) return;
+    const currentGeneration = ++generation.current;
+    const controller = new AbortController();
+    void api.searchCatalog("technology-terminals", {
+      text: debouncedQuery.trim() || null,
+      exactSourceKey: null,
+      entityTypes: ["terminal"],
+      filters: [],
+      filterLogic: "all",
+      sort: debouncedQuery.trim() ? "relevance" : "source-key-asc",
+      pageSize: 30,
+      cursor: null,
+    }, controller.signal).then((page) => {
+      if (generation.current !== currentGeneration) return;
+      setArticles([...new Set(page.items.map((item) => item.sourceKey))]);
+    }).catch(() => {
+      if (!controller.signal.aborted && generation.current === currentGeneration) setArticles([]);
+    });
+    return () => controller.abort();
+  }, [api, debouncedQuery]);
+
+  return { articles, search: setQuery };
 }
 
 const pageSize = 30;

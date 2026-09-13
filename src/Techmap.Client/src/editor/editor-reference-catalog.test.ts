@@ -19,8 +19,8 @@ function record(entityType: string, sourceKey: string, payload: Readonly<Record<
 
 describe("editor reference catalog", () => {
   it("keeps exactly two built-in connector cards and searches them locally", () => {
-    expect(builtInConnectorItems.map((item) => item.title)).toEqual(["XS-04", "XS-10"]);
-    expect(filterBuiltInConnectors("10 контактов").map((item) => item.title)).toEqual(["XS-10"]);
+    expect(builtInConnectorItems.map((item) => item.title)).toEqual(["Серия XS", "Свободный соединитель"]);
+    expect(filterBuiltInConnectors("XS-10").map((item) => item.title)).toEqual(["Серия XS"]);
     expect(filterBuiltInConnectors("unknown")).toEqual([]);
   });
 

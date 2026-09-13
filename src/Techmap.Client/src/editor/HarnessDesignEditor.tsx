@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { createConnector, createWire, type EditorCommand } from "./commands";
+import { createWire, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
-import { useEditorReferenceCatalog } from "./editor-reference-catalog";
+import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
+import {
+  builtInConnectorSeries,
+  createBuiltInConnectorInstance,
+} from "./connector-series-demo";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
 import {
@@ -230,6 +234,7 @@ export function HarnessDesignEditor({
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
   const catalog = useEditorReferenceCatalog(config, session);
+  const terminalLookup = useTerminalArticleLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(initialView);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
@@ -405,12 +410,22 @@ export function HarnessDesignEditor({
   const selectedConnectorLayer = selectedConnector
     ? layers.find((layer) => layer.id === selectedConnector.layerIds.e4)
     : null;
+  const selectedSeriesId = selectedConnector?.libraryBinding?.mode === "series"
+    ? selectedConnector.libraryBinding.seriesId
+    : null;
+  const selectedConnectorSeries = selectedSeriesId
+    ? builtInConnectorSeries.find((series) => series.id === selectedSeriesId)
+    : undefined;
   const addCatalogItem = (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
-    if (!item.id.includes("xs-")) return;
-    const contactCount = item.id.includes("10") ? 10 : 4;
+    if (item.placement !== "connector") return;
     const id = crypto.randomUUID();
     const index = history.present.connectors.length;
-    const preview = createConnector(id, `XS${index + 1}`, contactCount, { x: 0, y: 0 }, { x: 0, y: 0 }, item.title);
+    const preview = createBuiltInConnectorInstance(item.id, {
+      id,
+      designation: `XS${index + 1}`,
+      e4Position: { x: 0, y: 0 },
+      partNumber: item.defaultPartNumber,
+    });
     const nextE4Y = history.present.connectors.reduce((bottom, connector) => Math.max(
       bottom,
       connector.positions.e4.y + connectorE4TableGeometry(connector).height + 90,
@@ -522,8 +537,22 @@ export function HarnessDesignEditor({
         propertyInspector={selectedConnector ? (
           <E4ConnectorInspector
             connector={selectedConnector}
+            series={selectedConnectorSeries}
+            terminalArticles={terminalLookup.articles}
+            onTerminalSearch={terminalLookup.search}
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
+          />
+        ) : undefined}
+        canvasEditor={selectedConnector ? (
+          <E4ConnectorInspector
+            connector={selectedConnector}
+            series={selectedConnectorSeries}
+            terminalArticles={terminalLookup.articles}
+            onTerminalSearch={terminalLookup.search}
+            disabled={selectedConnectorLayer?.locked === true}
+            onCommand={run}
+            mode="canvas"
           />
         ) : undefined}
         onViewChange={(nextView) => {

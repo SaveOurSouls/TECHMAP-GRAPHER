@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import {
   panEditorCamera,
   screenToWorld,
-  zoomEditorCameraAt,
+  zoomEditorCameraFromWheel,
+  type EditorSceneBounds,
+  type EditorViewportSize,
 } from "./editor-camera";
 import type {
   EditorCamera,
@@ -23,7 +25,9 @@ export interface CanvasViewportProps {
   readonly selectedObjectIds?: readonly string[];
   readonly e4Overlays?: E4SceneOverlays;
   readonly overlay?: ReactNode;
+  readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
+  readonly onViewportSizeChange?: (size: EditorViewportSize) => void;
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   readonly onWireConnect?: (
@@ -52,6 +56,32 @@ export interface CanvasViewportProps {
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
+}
+
+interface EditorViewportWheelEvent {
+  readonly ctrlKey: boolean;
+  readonly deltaY: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  preventDefault: () => void;
+}
+
+/** Handles Ctrl+wheel for the whole viewport, including HTML controls over the canvas. */
+export function handleEditorViewportWheel(
+  event: EditorViewportWheelEvent,
+  camera: EditorCamera,
+  canvasBounds: Pick<DOMRect, "left" | "top">,
+  onCameraChange: (camera: EditorCamera) => void,
+): boolean {
+  if (!event.ctrlKey || event.deltaY === 0) return false;
+  event.preventDefault();
+  const anchor = { x: event.clientX - canvasBounds.left, y: event.clientY - canvasBounds.top };
+  onCameraChange(zoomEditorCameraFromWheel(camera, anchor, event.deltaY, event.ctrlKey));
+  return true;
+}
+
+export function containInlineEditorPointerEvent(event: Pick<PointerEvent<HTMLElement>, "stopPropagation">): void {
+  event.stopPropagation();
 }
 
 interface PointerDrag {
@@ -1533,6 +1563,95 @@ export function getVisibleE4SceneOverlays(
   };
 }
 
+function expandSceneBounds(
+  bounds: EditorSceneBounds | null,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): EditorSceneBounds {
+  if (!bounds) return { minX, minY, maxX, maxY };
+  return {
+    minX: Math.min(bounds.minX, minX),
+    minY: Math.min(bounds.minY, minY),
+    maxX: Math.max(bounds.maxX, maxX),
+    maxY: Math.max(bounds.maxY, maxY),
+  };
+}
+
+/** Returns world-space bounds for everything painted in the current view. */
+export function getEditorSceneBounds(
+  objects: readonly EditorSceneObject[],
+  layers: readonly EditorLayer[],
+  view: HarnessEditorView,
+  e4Overlays?: E4SceneOverlays,
+): EditorSceneBounds | null {
+  let bounds: EditorSceneBounds | null = null;
+  const visibleObjects = objectsInPaintOrder(objects, layers);
+  for (const object of visibleObjects) {
+    if (object.kind === "wire" || object.kind === "dimension") {
+      const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
+      for (const point of points) {
+        bounds = expandSceneBounds(bounds, point.x, point.y, point.x, point.y);
+      }
+      continue;
+    }
+    const e4Layout = view === "e4" ? getE4ConnectorLayout(object) : null;
+    const width = e4Layout?.width ?? object.width;
+    const height = e4Layout?.height ?? object.height;
+    let minX = object.x;
+    let maxX = object.x + Math.max(1, width);
+    if (e4Layout) {
+      const hasDisconnectedContact = e4Layout.rows.some((row) => row.status === "not-connected");
+      if (hasDisconnectedContact) {
+        if (e4Layout.connectionSide === "left") minX -= 21;
+        else maxX += 21;
+      }
+    }
+    bounds = expandSceneBounds(bounds, minX, object.y, maxX, object.y + Math.max(1, height));
+  }
+
+  if (view !== "e4") return bounds;
+  const visibleOverlays = getVisibleE4SceneOverlays(
+    e4Overlays ?? parseE4SceneOverlays(objects),
+    objects,
+    layers,
+  );
+  for (const junction of visibleOverlays.junctions) {
+    bounds = expandSceneBounds(
+      bounds,
+      junction.position.x - 5,
+      junction.position.y - 5,
+      junction.position.x + 5,
+      junction.position.y + 5,
+    );
+  }
+  for (const group of visibleOverlays.diffPairs) {
+    const layout = getE4DifferentialPairLayout(group, visibleObjects);
+    if (!layout) continue;
+    if (layout.span.orientation === "horizontal") {
+      bounds = expandSceneBounds(bounds, layout.span.start, layout.crossMinimum, layout.span.end, layout.crossMaximum);
+    } else {
+      bounds = expandSceneBounds(bounds, layout.crossMinimum, layout.span.start, layout.crossMaximum, layout.span.end);
+    }
+  }
+  for (const screen of visibleOverlays.screens) {
+    const layout = getE4ScreenLayout(screen, visibleObjects);
+    if (!layout) continue;
+    const width = layout.orientation === "horizontal" ? layout.alongSize : layout.crossSize;
+    const height = layout.orientation === "horizontal" ? layout.crossSize : layout.alongSize;
+    const labelSpace = screen.label ? 15 : 0;
+    bounds = expandSceneBounds(
+      bounds,
+      layout.center.x - width / 2,
+      layout.center.y - height / 2 - labelSpace,
+      layout.center.x + width / 2,
+      layout.center.y + height / 2,
+    );
+  }
+  return bounds;
+}
+
 function redrawCanvas(
   canvas: HTMLCanvasElement,
   view: HarnessEditorView,
@@ -1584,7 +1703,9 @@ export function CanvasViewport({
   selectedObjectIds,
   e4Overlays,
   overlay,
+  inlineEditor,
   onCameraChange,
+  onViewportSizeChange,
   onObjectSelect,
   onObjectMove,
   onWireConnect,
@@ -1598,6 +1719,7 @@ export function CanvasViewport({
   onCanvasDoubleClick,
   onCatalogDrop,
 }: CanvasViewportProps) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<PointerDrag | ObjectPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4ScreenPointerDrag | null>(null);
@@ -1606,6 +1728,10 @@ export function CanvasViewport({
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
   const overlays = e4Overlays ?? parseE4SceneOverlays(objects);
+  const inlineObject = view === "e4" && selectedObjectId
+    ? objects.find((object) => object.id === selectedObjectId && object.kind === "connector") ?? null
+    : null;
+  const inlineLayout = inlineObject ? getE4ConnectorLayout(inlineObject) : null;
 
   useEffect(() => {
     if (tool !== "wire") {
@@ -1617,12 +1743,29 @@ export function CanvasViewport({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const redraw = () => redrawCanvas(canvas, view, camera, objects, layers, selectedSet, e4Overlays);
+    const redraw = () => {
+      redrawCanvas(canvas, view, camera, objects, layers, selectedSet, e4Overlays);
+      onViewportSizeChange?.({
+        width: Math.max(1, Math.round(canvas.clientWidth)),
+        height: Math.max(1, Math.round(canvas.clientHeight)),
+      });
+    };
     redraw();
     const observer = new ResizeObserver(redraw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [camera, e4Overlays, layers, objects, selectedObjectIds, selectedObjectId, view]);
+  }, [camera, e4Overlays, layers, objects, onViewportSizeChange, selectedObjectIds, selectedObjectId, view]);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const canvas = canvasRef.current;
+    if (!frame || !canvas) return;
+    const wheel = (event: globalThis.WheelEvent) => {
+      handleEditorViewportWheel(event, camera, canvas.getBoundingClientRect(), onCameraChange);
+    };
+    frame.addEventListener("wheel", wheel, { passive: false, capture: true });
+    return () => frame.removeEventListener("wheel", wheel, true);
+  }, [camera, onCameraChange]);
 
   const localPoint = (clientX: number, clientY: number): EditorPoint => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -1839,12 +1982,6 @@ export function CanvasViewport({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
-  const zoomWheel = (event: WheelEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
-    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-    onCameraChange(zoomEditorCameraAt(camera, localPoint(event.clientX, event.clientY), camera.zoom * factor));
-  };
-
   const allowDrop = (event: DragEvent<HTMLCanvasElement>) => {
     if (!event.dataTransfer.types.includes("application/x-techmap-catalog-item")) return;
     event.preventDefault();
@@ -1875,7 +2012,7 @@ export function CanvasViewport({
   };
 
   return (
-    <div className={`he-canvas-frame tool-${tool}`}>
+    <div ref={frameRef} className={`he-canvas-frame tool-${tool}`}>
       <canvas
         ref={canvasRef}
         className="he-canvas"
@@ -1885,7 +2022,6 @@ export function CanvasViewport({
         onPointerMove={pointerMove}
         onPointerUp={endPointer}
         onPointerCancel={endPointer}
-        onWheel={zoomWheel}
         onDragOver={allowDrop}
         onDrop={drop}
         onDoubleClick={doubleClick}
@@ -1899,9 +2035,22 @@ export function CanvasViewport({
           : tool === "pan" ? "Тяните поле мышью"
             : view === "drawing" && objects.find((item) => item.id === selectedObjectId)?.kind === "wire"
               ? "Точки трассы: перетащить; двойной щелчок — удалить"
-              : "Колесо — масштаб"}</span>
+              : "Ctrl + колесо — масштаб"}</span>
       </div>
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
+      {inlineEditor && inlineObject && inlineLayout && (
+        <div
+          className="he-e4-inline-editor"
+          style={{
+            left: inlineLayout.x * camera.zoom + camera.offsetX,
+            top: inlineLayout.y * camera.zoom + camera.offsetY,
+            width: inlineLayout.width,
+            height: inlineLayout.height,
+            transform: `scale(${camera.zoom})`,
+          }}
+          onPointerDown={containInlineEditorPointerEvent}
+        >{inlineEditor}</div>
+      )}
       <ul className="visually-hidden" aria-label="Объекты на поле">
         {objectsInPaintOrder(objects, layers).map((object) => <li key={object.id}>{object.label}</li>)}
       </ul>

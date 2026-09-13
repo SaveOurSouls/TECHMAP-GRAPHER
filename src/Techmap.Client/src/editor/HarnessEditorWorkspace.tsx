@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CanvasViewport, type E4SceneOverlays } from "./CanvasViewport";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { CanvasViewport, getEditorSceneBounds, type E4SceneOverlays } from "./CanvasViewport";
 import { CatalogDock } from "./CatalogDock";
-import { zoomEditorCameraAt } from "./editor-camera";
+import { fitEditorCameraToBounds, zoomEditorCameraAt, type EditorViewportSize } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type {
   EditorCamera,
@@ -56,8 +56,8 @@ const defaultObjects: readonly EditorSceneObject[] = [
 ];
 
 const defaultCatalog: readonly EditorCatalogItem[] = [
-  { id: "catalog-xs-04", title: "XS-04", subtitle: "Соединитель · 4 контакта", category: "Соединители", accent: "#3f718b" },
-  { id: "catalog-xs-10", title: "XS-10", subtitle: "Соединитель · 10 контактов", category: "Соединители", accent: "#3f718b" },
+  { id: "catalog-connector-series:xs-demo-series", title: "Серия XS", subtitle: "Артикулы XS-04 и XS-10", category: "Соединители", accent: "#3f718b", placement: "connector", templateKind: "series", seriesId: "xs-demo-series", defaultPartNumber: "XS-04" },
+  { id: "catalog-connector-free", title: "Свободный соединитель", subtitle: "Независимые строки и терминалы из всей базы", category: "Соединители", accent: "#71808a", placement: "connector", templateKind: "free" },
   { id: "catalog-wire-red", title: "Провод 0,35", subtitle: "Красный · 0,35 мм²", category: "Провода", accent: "#c94b47" },
   { id: "catalog-wire-black", title: "Провод 0,50", subtitle: "Чёрный · 0,50 мм²", category: "Провода", accent: "#303a40" },
   { id: "catalog-tube", title: "ТУТ 3/1,5", subtitle: "Термоусадка · чёрная", category: "Аксессуары", accent: "#596168" },
@@ -129,6 +129,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
+  readonly canvasEditor?: ReactNode;
   readonly onClose?: () => void;
 }
 
@@ -198,6 +199,7 @@ export function HarnessEditorWorkspace({
   onDrawingSnapChange,
   onCanvasDoubleClick,
   propertyInspector,
+  canvasEditor,
   onClose,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
@@ -207,6 +209,7 @@ export function HarnessEditorWorkspace({
   const [localSelectedObjectId, setLocalSelectedObjectId] = useState<string | null>("W1");
   const [localSelectedObjectIds, setLocalSelectedObjectIds] = useState<readonly string[]>(["W1"]);
   const [camera, setCamera] = useState(initialCamera);
+  const [viewportSize, setViewportSize] = useState<EditorViewportSize>({ width: 860, height: 560 });
   const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">("properties");
   const [catalogExpanded, setCatalogExpanded] = useState(true);
 
@@ -327,9 +330,22 @@ export function HarnessEditorWorkspace({
     if (item) activateCatalogItem(item, point);
   };
 
-  const resetView = () => setCamera(initialCamera);
+  const viewportObjects = useMemo(
+    () => view === "e4" ? objects.filter((object) => object.kind !== "dimension") : objects,
+    [objects, view],
+  );
+  const rememberViewportSize = useCallback((size: EditorViewportSize) => {
+    setViewportSize((current) => current.width === size.width && current.height === size.height ? current : size);
+  }, []);
+  const fitView = () => setCamera((current) => fitEditorCameraToBounds(
+    current,
+    getEditorSceneBounds(viewportObjects, layers, view, e4Overlays),
+    viewportSize,
+  ));
+  const setZoom = (zoom: number) => setCamera((current) =>
+    zoomEditorCameraAt(current, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, zoom));
   const changeZoom = (factor: number) => setCamera((current) =>
-    zoomEditorCameraAt(current, { x: 430, y: 280 }, current.zoom * factor));
+    zoomEditorCameraAt(current, { x: viewportSize.width / 2, y: viewportSize.height / 2 }, current.zoom * factor));
 
   return (
     <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`}>
@@ -371,22 +387,25 @@ export function HarnessEditorWorkspace({
         <EditorToolbar
           view={view}
           activeTool={tool}
+          zoom={camera.zoom}
           onToolChange={setTool}
           onZoomIn={() => changeZoom(1.2)}
           onZoomOut={() => changeZoom(1 / 1.2)}
-          onResetView={resetView}
+          onZoomChange={setZoom}
+          onFitView={fitView}
         />
         <CanvasViewport
           view={view}
           tool={tool}
           camera={camera}
-          objects={view === "e4" ? objects.filter((object) => object.kind !== "dimension") : objects}
+          objects={viewportObjects}
           layers={layers}
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
           e4Overlays={e4Overlays}
           overlay={e4WireMenu}
           onCameraChange={setCamera}
+          onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
           onObjectMove={onObjectMove}
           onWireConnect={onWireConnect}
@@ -399,6 +418,7 @@ export function HarnessEditorWorkspace({
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}
           onCatalogDrop={droppedCatalogItem}
+          inlineEditor={canvasEditor}
         />
 
         <aside className="he-right-panel" aria-label="Настройки редактора">

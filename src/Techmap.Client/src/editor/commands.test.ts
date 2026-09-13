@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand } from "./history";
+import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
+import { selectConnectorSeriesArticle } from "./connector-series";
 import {
   connectorContactPosition,
   connectorE4TableGeometry,
@@ -21,6 +23,32 @@ describe("shared harness editor model", () => {
     });
     expect(moved.connectors[0]?.positions.e4).toEqual({ x: 10, y: 20 });
     expect(moved.connectors[0]?.positions.drawing).toEqual({ x: 90, y: 110 });
+  });
+
+  it("applies a series article atomically and protects its deterministic rows", () => {
+    const connector = createBuiltInConnectorInstance("catalog-connector-series:xs-demo-series", {
+      id: "xs1", designation: "XS1", e4Position: { x: 0, y: 0 },
+    });
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
+    const selected = selectConnectorSeriesArticle(connector, builtInConnectorSeries[0]!, "XS-10").connector;
+    document = applyEditorCommand(document, {
+      type: "apply-connector-article",
+      connectorId: connector.id,
+      partNumber: selected.partNumber,
+      contacts: selected.contacts,
+      libraryBinding: selected.libraryBinding,
+    });
+    expect(document.connectors[0]).toMatchObject({
+      partNumber: "XS-10",
+      libraryBinding: { mode: "series", seriesId: "xs-demo-series", partNumber: "XS-10" },
+    });
+    expect(document.connectors[0]?.contacts).toHaveLength(10);
+    expect(() => applyEditorCommand(document, {
+      type: "update-contact", connectorId: "xs1", contactId: "xs1:contact:signal:1", number: 99,
+    })).toThrow(/определяются выбранным артикулом/);
+    expect(() => applyEditorCommand(document, {
+      type: "remove-contact", connectorId: "xs1", contactId: "xs1:contact:signal:1",
+    })).toThrow(/определяются выбранным артикулом/);
   });
 
   it("connects existing contacts and removes their wires with the connector", () => {

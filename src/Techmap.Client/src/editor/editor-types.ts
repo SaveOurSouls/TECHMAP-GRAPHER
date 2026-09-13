@@ -46,6 +46,10 @@ export interface EditorCatalogItem {
   readonly sourceId?: string;
   readonly sourceKey?: string;
   readonly entityType?: string;
+  /** Library template metadata used when placing connector instances. */
+  readonly templateKind?: "series" | "free";
+  readonly seriesId?: string;
+  readonly defaultPartNumber?: string;
 }
 
 export interface EditorCatalogSource {

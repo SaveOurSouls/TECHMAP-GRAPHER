@@ -3,10 +3,23 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Techmap.Web.Tests;
 
-public sealed class TechmapWebApplicationFactory(params string[] arguments)
-    : WebApplicationFactory<Program>
+public sealed class TechmapWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const int TestPort = 18762;
+
+    private readonly string[] arguments;
+    private readonly bool noBrowser;
+
+    public TechmapWebApplicationFactory(params string[] arguments)
+        : this(noBrowser: true, arguments)
+    {
+    }
+
+    public TechmapWebApplicationFactory(bool noBrowser, params string[] arguments)
+    {
+        this.noBrowser = noBrowser;
+        this.arguments = arguments;
+    }
 
     public HttpClient CreateLocalClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -16,7 +29,7 @@ public sealed class TechmapWebApplicationFactory(params string[] arguments)
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("NoBrowser", "true");
+        builder.UseSetting("NoBrowser", noBrowser.ToString());
         builder.UseSetting("Port", TestPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var dataRootArgument = arguments.SingleOrDefault(argument =>
             argument.StartsWith("--data-root=", StringComparison.OrdinalIgnoreCase));

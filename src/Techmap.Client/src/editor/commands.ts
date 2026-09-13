@@ -25,11 +25,13 @@ import {
   type WireInstance,
   type WireScreenGroup,
 } from "./model";
+import type { ConnectorLibraryBinding } from "./model";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
   | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string }
+  | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
   | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
@@ -101,6 +103,7 @@ export function createConnector(
     },
     positions: { e4: e4Position, drawing: drawingPosition },
     layerIds: { e4: defaultLayerIds.connectors, drawing: defaultLayerIds.connectors },
+    libraryBinding: { mode: "free" },
   };
 }
 
@@ -162,6 +165,26 @@ export function applyEditorCommand(
         }), "Соединитель не найден."),
       };
     }
+    case "apply-connector-article": {
+      const partNumber = command.partNumber.trim();
+      requireConnectorText(partNumber, "Укажите артикул соединителя.");
+      const connector = document.connectors.find((item) => item.id === command.connectorId);
+      if (!connector) throw new Error("Соединитель не найден.");
+      const contacts = command.contacts.map((contact) => normalizeContact(contact, connector.schematic.customFields));
+      validateUniqueContacts(contacts);
+      const retainedContactIds = new Set(contacts.map((contact) => contact.id));
+      if (document.wires.some((wire) => [wire.from, wire.to].some((endpoint) =>
+        !isJunctionEndpoint(endpoint) && endpoint.connectorId === command.connectorId && !retainedContactIds.has(endpoint.contactId)))) {
+        throw new Error("Выбранный артикул удалит подключённые контакты. Сначала переподключите или удалите их провода.");
+      }
+      const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
+        ...item,
+        partNumber,
+        contacts,
+        libraryBinding: command.libraryBinding,
+      }));
+      return updated;
+    }
     case "flip-connector-orientation":
       return updateConnectorE4Geometry(document, command.connectorId, (connector) => ({
         ...connector,
@@ -172,6 +195,9 @@ export function applyEditorCommand(
       }));
     case "update-contact":
       return updateConnector(document, command.connectorId, (connector) => {
+        if (connector.libraryBinding?.mode === "series" && (command.number !== undefined || command.contactType !== undefined)) {
+          throw new Error("Номер и тип библиотечного контакта определяются выбранным артикулом серии.");
+        }
         if (command.number !== undefined) requireContactNumber(command.number);
         if (command.connectionStatus !== undefined) requireContactStatus(command.connectionStatus);
         if (command.connectionStatus === "not-connected" && isContactConnected(document, command.connectorId, command.contactId)) {
@@ -198,12 +224,19 @@ export function applyEditorCommand(
       });
     case "add-contact":
       return updateConnector(document, command.connectorId, (connector) => {
+        if (connector.libraryBinding?.mode === "series") {
+          throw new Error("Число контактов библиотечного соединителя определяется выбранным артикулом серии.");
+        }
         const contact = normalizeContact(command.contact, connector.schematic.customFields);
         const contacts = [...connector.contacts, contact];
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
     case "remove-contact": {
+      const connector = document.connectors.find((item) => item.id === command.connectorId);
+      if (connector?.libraryBinding?.mode === "series") {
+        throw new Error("Строки библиотечного соединителя определяются выбранным артикулом серии.");
+      }
       if (document.wires.some((wire) =>
         (isConnectorEndpoint(wire.from, command.connectorId, command.contactId)) ||
         (isConnectorEndpoint(wire.to, command.connectorId, command.contactId)))) {

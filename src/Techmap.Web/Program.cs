@@ -286,6 +286,7 @@ builder.Services.AddSingleton(storageBackupService);
 builder.Services.AddSingleton(backupPolicy);
 builder.Services.AddHostedService<StorageBackupHostedService>();
 builder.Services.AddSingleton<LocalHttpSession>();
+builder.Services.AddSingleton<BrowserLifecycleMonitor>();
 
 var app = builder.Build();
 var pathBase = options.PathBase;
@@ -377,6 +378,45 @@ app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
         : Results.Json(
             new ApiErrorResponse("invalid_session"),
             statusCode: StatusCodes.Status401Unauthorized));
+app.MapPost("/api/v1/browser-lifecycle", async (
+    HttpContext context,
+    LocalHttpSession session,
+    BrowserLifecycleMonitor browserLifecycle) =>
+{
+    if (!browserLifecycle.Enabled)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    if (!session.HasValidCookie(context.Request))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    context.Response.ContentType = "text/event-stream";
+    context.Response.Headers.CacheControl = "no-store";
+    using var connection = browserLifecycle.OpenConnection();
+    try
+    {
+        await context.Request.Body.CopyToAsync(Stream.Null, context.RequestAborted);
+        while (!context.RequestAborted.IsCancellationRequested)
+        {
+            await context.Response.WriteAsync("event: keepalive\ndata: ok\n\n", context.RequestAborted);
+            await context.Response.Body.FlushAsync(context.RequestAborted);
+            await Task.Delay(TimeSpan.FromSeconds(15), context.RequestAborted);
+        }
+    }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        // The browser page closed, navigated away, or refreshed.
+    }
+    catch (IOException)
+    {
+        // Kestrel can report a disconnected browser as a broken response stream.
+    }
+});
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
 app.MapHarnessDesignEndpoints();
@@ -391,7 +431,8 @@ static IResult ServeIndex(
     HttpContext context,
     IWebHostEnvironment environment,
     PathString configuredPathBase,
-    LocalHttpSession session)
+    LocalHttpSession session,
+    bool includeBrowserLifecycleScript)
 {
     var indexFile = environment.WebRootFileProvider.GetFileInfo("index.html");
     if (!indexFile.Exists)
@@ -404,17 +445,27 @@ static IResult ServeIndex(
     using var reader = new StreamReader(indexFile.CreateReadStream());
     var html = reader.ReadToEnd()
         .Replace("<head>", $"<head><base href=\"{escapedBasePath}\">", StringComparison.Ordinal);
+    if (includeBrowserLifecycleScript)
+    {
+        html = html.Replace(
+            "</head>",
+            $"<script src=\"{BrowserLifecycleScript.FileName}\" defer></script></head>",
+            StringComparison.OrdinalIgnoreCase);
+    }
     session.IssueCookie(context.Response, configuredPathBase);
     context.Response.Headers.CacheControl = "no-store";
     return Results.Content(html, "text/html; charset=utf-8");
 }
 
+app.MapGet($"/{BrowserLifecycleScript.FileName}", () => Results.Content(
+    BrowserLifecycleScript.Content,
+    "text/javascript; charset=utf-8"));
 app.MapGet("/", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session));
+    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
 app.MapGet("/index.html", (HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session));
+    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
 app.MapFallback((HttpContext context, IWebHostEnvironment environment, LocalHttpSession session) =>
-    ServeIndex(context, environment, pathBase, session));
+    ServeIndex(context, environment, pathBase, session, !options.NoBrowser));
 
 if (app.Environment.IsEnvironment("Testing"))
 {
@@ -431,7 +482,12 @@ else
             options,
             dataRootLease.Identity,
             dataRoot);
+        var browserLifecycle = app.Services.GetRequiredService<BrowserLifecycleMonitor>();
+        var browserLifecycleTask = browserLifecycle.Enabled
+            ? browserLifecycle.WaitForBrowserClosedAsync(app.Lifetime.ApplicationStopping)
+            : Task.CompletedTask;
         await app.WaitForShutdownAsync();
+        await browserLifecycleTask;
     }
     finally
     {

@@ -34,6 +34,10 @@ public static class BrowserLauncher
             try
             {
                 Process.Start(new ProcessStartInfo(pageUrl) { UseShellExecute = true });
+                if (ShouldTrackLifecycle(pageUrl, options.NoBrowser))
+                {
+                    app.Services.GetRequiredService<BrowserLifecycleMonitor>().Enable();
+                }
             }
             catch (Exception exception)
             {
@@ -41,6 +45,12 @@ public static class BrowserLauncher
             }
         }
     }
+
+    public static bool ShouldTrackLifecycle(string pageUrl, bool noBrowser) =>
+        !noBrowser &&
+        Uri.TryCreate(pageUrl, UriKind.Absolute, out var pageUri) &&
+        pageUri.Scheme == Uri.UriSchemeHttp &&
+        pageUri.Host == "127.0.0.1";
 
     public static void OpenExisting(ExistingLocalInstance instance, bool noBrowser)
     {

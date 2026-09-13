@@ -7,6 +7,17 @@ export interface Point {
 
 export type ConnectorContactStatus = "available" | "not-connected";
 
+export type ConnectorLibraryContactKind = "signal" | "power" | "third";
+
+export type ConnectorLibraryBinding =
+  | { readonly mode: "series"; readonly seriesId: string; readonly partNumber: string }
+  | { readonly mode: "free" };
+
+export interface ConnectorLibraryContact {
+  readonly kind: ConnectorLibraryContactKind;
+  readonly ordinal: number;
+}
+
 export type ConnectorSchematicOrientation = "contacts-left" | "contacts-right";
 
 export const connectorBaseColumnKeys = [
@@ -79,6 +90,7 @@ export interface ConnectorContact {
   readonly color: string;
   readonly connectionStatus: ConnectorContactStatus;
   readonly customValues: Readonly<Record<string, string>>;
+  readonly libraryContact?: ConnectorLibraryContact | null;
 }
 
 export interface ConnectorInstance {
@@ -89,6 +101,7 @@ export interface ConnectorInstance {
   readonly schematic: ConnectorSchematicPresentation;
   readonly positions: Readonly<Record<EditorView, Point>>;
   readonly layerIds: Readonly<Record<EditorView, string>>;
+  readonly libraryBinding?: ConnectorLibraryBinding;
 }
 
 export type WireEndpoint =
@@ -482,6 +495,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       color: optionalString(contact.color, "Цвет провода контакта"),
       connectionStatus: parseContactStatus(contact.connectionStatus),
       customValues: parseCustomValues(contact.customValues),
+      libraryContact: parseConnectorLibraryContact(contact.libraryContact),
     };
   });
   if (new Set(contacts.map((contact) => contact.id)).size !== contacts.length ||
@@ -509,6 +523,32 @@ function parseConnector(value: unknown): ConnectorInstance {
       e4: requireText(layerIds.e4, "Слой соединителя Э4"),
       drawing: requireText(layerIds.drawing, "Слой соединителя чертежа"),
     },
+    libraryBinding: parseConnectorLibraryBinding(record.libraryBinding),
+  };
+}
+
+function parseConnectorLibraryBinding(value: unknown): ConnectorLibraryBinding | undefined {
+  if (value === undefined) return undefined;
+  const record = requireRecord(value, "Привязка соединителя к библиотечной серии задана неверно.");
+  if (record.mode === "free") return { mode: "free" };
+  if (record.mode !== "series") throw new Error("Режим библиотечного соединителя задан неверно.");
+  return {
+    mode: "series",
+    seriesId: requireText(record.seriesId, "ID серии соединителя"),
+    partNumber: requireText(record.partNumber, "Артикул соединителя серии"),
+  };
+}
+
+function parseConnectorLibraryContact(value: unknown): ConnectorLibraryContact | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const record = requireRecord(value, "Позиция контакта в библиотечной серии задана неверно.");
+  if (record.kind !== "signal" && record.kind !== "power" && record.kind !== "third") {
+    throw new Error("Тип контакта библиотечной серии задан неверно.");
+  }
+  return {
+    kind: record.kind,
+    ordinal: requireInteger(record.ordinal, "Порядковый номер контакта серии", 1, 300),
   };
 }
 

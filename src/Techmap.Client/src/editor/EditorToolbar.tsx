@@ -1,3 +1,4 @@
+import { editorZoomPresets } from "./editor-camera";
 import type { EditorTool, HarnessEditorView } from "./editor-types";
 
 interface ToolDefinition {
@@ -20,20 +21,26 @@ const tools: readonly ToolDefinition[] = [
 export interface EditorToolbarProps {
   readonly view: HarnessEditorView;
   readonly activeTool: EditorTool;
+  readonly zoom: number;
   readonly onToolChange: (tool: EditorTool) => void;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
-  readonly onResetView: () => void;
+  readonly onZoomChange: (zoom: number) => void;
+  readonly onFitView: () => void;
 }
 
 export function EditorToolbar({
   view,
   activeTool,
+  zoom,
   onToolChange,
   onZoomIn,
   onZoomOut,
-  onResetView,
+  onZoomChange,
+  onFitView,
 }: EditorToolbarProps) {
+  const zoomIsPreset = editorZoomPresets.some((preset) => Math.abs(preset - zoom) < 0.001);
+
   return (
     <aside className="he-toolbar" aria-label="Инструменты редактора">
       <div className="he-toolbar-group">
@@ -54,10 +61,24 @@ export function EditorToolbar({
       </div>
       <div className="he-toolbar-group he-zoom-tools" aria-label="Масштаб">
         <button className="he-tool" type="button" aria-label="Увеличить масштаб" title="Увеличить" onClick={onZoomIn}>+</button>
+        <select
+          className="he-zoom-select"
+          aria-label="Масштаб редактора"
+          title="Масштаб редактора"
+          value={zoomIsPreset ? String(zoom) : "custom"}
+          onChange={(event) => event.target.value === "fit"
+            ? onFitView()
+            : event.target.value !== "custom" && onZoomChange(Number(event.target.value))}
+        >
+          {!zoomIsPreset && <option value="custom">{Math.round(zoom * 100)}%</option>}
+          {editorZoomPresets.map((preset) => (
+            <option key={preset} value={preset}>{Math.round(preset * 100)}%</option>
+          ))}
+          <option value="fit">Вписать в экран</option>
+        </select>
         <button className="he-tool" type="button" aria-label="Уменьшить масштаб" title="Уменьшить" onClick={onZoomOut}>−</button>
-        <button className="he-tool he-fit-tool" type="button" aria-label="Показать весь лист" title="Показать весь лист" onClick={onResetView}>⌂</button>
+        <button className="he-tool he-fit-tool" type="button" aria-label="Вписать в экран" title="Вписать в экран" onClick={onFitView}>⌂</button>
       </div>
     </aside>
   );
 }
-

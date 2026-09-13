@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { EditorCommand } from "./commands";
 import {
+  findConnectorSeriesArticle,
+  selectConnectorSeriesArticle,
+  type ConnectorSeries,
+} from "./connector-series";
+import {
   connectorBaseColumnKeys,
+  connectorE4TableMetrics,
   type ConnectorBaseColumnKey,
-  type ConnectorContact,
   type ConnectorInstance,
 } from "./model";
 import "./e4-connector-inspector.css";
@@ -12,6 +17,10 @@ export interface E4ConnectorInspectorProps {
   readonly connector: ConnectorInstance;
   readonly disabled: boolean;
   readonly onCommand: (command: EditorCommand) => void;
+  readonly mode?: "panel" | "canvas";
+  readonly series?: ConnectorSeries;
+  readonly terminalArticles?: readonly string[];
+  readonly onTerminalSearch?: (query: string) => void;
 }
 
 const baseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
@@ -22,23 +31,6 @@ const baseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
   wire: "Провод",
   color: "Цвет",
 };
-
-function nextContactNumber(connector: ConnectorInstance): number | null {
-  const used = new Set(connector.contacts.map((contact) => contact.number));
-  for (let number = 1; number <= 300; number += 1) {
-    if (!used.has(number)) return number;
-  }
-  return null;
-}
-
-function nextContactId(connector: ConnectorInstance, number: number): string {
-  const prefix = `${connector.id}:contact:${number}`;
-  const used = new Set(connector.contacts.map((contact) => contact.id));
-  if (!used.has(prefix)) return prefix;
-  let suffix = 2;
-  while (used.has(`${prefix}:${suffix}`)) suffix += 1;
-  return `${prefix}:${suffix}`;
-}
 
 function nextCustomFieldId(connector: ConnectorInstance, label: string): string {
   const slug = label
@@ -54,40 +46,68 @@ function nextCustomFieldId(connector: ConnectorInstance, label: string): string 
   return `${prefix}-${suffix}`;
 }
 
-function visibleBaseColumns(connector: ConnectorInstance): ReadonlySet<ConnectorBaseColumnKey> {
-  return new Set(connector.schematic.baseColumns.filter((column) => column.visible).map((column) => column.key));
+function nextContactNumber(connector: ConnectorInstance): number | null {
+  const used = new Set(connector.contacts.map((contact) => contact.number));
+  for (let number = 1; number <= 300; number += 1) if (!used.has(number)) return number;
+  return null;
 }
 
-export function E4ConnectorInspector({ connector, disabled, onCommand }: E4ConnectorInspectorProps) {
+function nextContactId(connector: ConnectorInstance, number: number): string {
+  const prefix = `${connector.id}:contact:${number}`;
+  const used = new Set(connector.contacts.map((contact) => contact.id));
+  if (!used.has(prefix)) return prefix;
+  let suffix = 2;
+  while (used.has(`${prefix}:${suffix}`)) suffix += 1;
+  return `${prefix}:${suffix}`;
+}
+
+/** Contact values live on the E4 object itself. The side panel only edits
+ * identity and the set of visible fields. */
+export function E4ConnectorInspector({ connector, disabled, onCommand, mode = "panel", series, terminalArticles = [], onTerminalSearch }: E4ConnectorInspectorProps) {
   const [designation, setDesignation] = useState(connector.designation);
   const [partNumber, setPartNumber] = useState(connector.partNumber);
   const [newFieldLabel, setNewFieldLabel] = useState("");
-  const shownBaseColumns = useMemo(() => visibleBaseColumns(connector), [connector]);
-  const visibleCustomFields = connector.schematic.customFields.filter((field) => field.visible);
-  const availableContactNumber = nextContactNumber(connector);
 
   useEffect(() => setDesignation(connector.designation), [connector.id, connector.designation]);
   useEffect(() => setPartNumber(connector.partNumber), [connector.id, connector.partNumber]);
 
   const commitIdentity = () => {
     const nextDesignation = designation.trim();
-    const nextPartNumber = partNumber.trim();
+    const nextPartNumber = connector.libraryBinding?.mode === "series" ? connector.partNumber : partNumber.trim();
     if (!nextDesignation || !nextPartNumber) {
       setDesignation(connector.designation);
       setPartNumber(connector.partNumber);
       return;
     }
     if (nextDesignation !== connector.designation || nextPartNumber !== connector.partNumber) {
-      onCommand({
-        type: "update-connector",
-        connectorId: connector.id,
-        designation: nextDesignation,
-        partNumber: nextPartNumber,
-      });
+      onCommand({ type: "update-connector", connectorId: connector.id, designation: nextDesignation, partNumber: nextPartNumber });
     }
   };
 
-  const updateContact = (contact: ConnectorContact, patch: Partial<ConnectorContact>) => {
+  const selectArticle = (nextPartNumber: string) => {
+    if (!series || nextPartNumber === connector.partNumber) return;
+    const selected = selectConnectorSeriesArticle(connector, series, nextPartNumber).connector;
+    onCommand({
+      type: "apply-connector-article",
+      connectorId: connector.id,
+      partNumber: selected.partNumber,
+      contacts: selected.contacts,
+      libraryBinding: selected.libraryBinding,
+    });
+  };
+
+  const addCustomField = () => {
+    const label = newFieldLabel.trim();
+    if (!label) return;
+    onCommand({
+      type: "add-custom-field",
+      connectorId: connector.id,
+      field: { id: nextCustomFieldId(connector, label), label, visible: true },
+    });
+    setNewFieldLabel("");
+  };
+
+  const updateContact = (contact: ConnectorInstance["contacts"][number], patch: Partial<typeof contact>) => {
     onCommand({
       type: "update-contact",
       connectorId: connector.id,
@@ -104,57 +124,162 @@ export function E4ConnectorInspector({ connector, disabled, onCommand }: E4Conne
   };
 
   const addContact = () => {
-    if (availableContactNumber === null) return;
-    const customValues = Object.fromEntries(connector.schematic.customFields.map((field) => [field.id, ""]));
+    const number = nextContactNumber(connector);
+    if (number === null) return;
     onCommand({
       type: "add-contact",
       connectorId: connector.id,
       contact: {
-        id: nextContactId(connector, availableContactNumber),
-        number: availableContactNumber,
-        contactType: "",
-        circuit: "",
-        terminalArticle: "",
-        wire: "",
-        color: "",
-        connectionStatus: "available",
-        customValues,
+        id: nextContactId(connector, number), number, contactType: "", circuit: "",
+        terminalArticle: "", wire: "", color: "", connectionStatus: "available", customValues: {},
       },
     });
   };
 
-  const addCustomField = () => {
-    const label = newFieldLabel.trim();
-    if (!label) return;
-    onCommand({
-      type: "add-custom-field",
-      connectorId: connector.id,
-      field: { id: nextCustomFieldId(connector, label), label, visible: true },
-    });
-    setNewFieldLabel("");
-  };
+  if (mode === "canvas") {
+    const isSeries = connector.libraryBinding?.mode === "series";
+    const article = isSeries && series ? findConnectorSeriesArticle(series, connector.partNumber) : null;
+    const baseColumns = connector.schematic.baseColumns
+      .filter((column) => column.visible)
+      .map((column) => ({
+        id: column.key,
+        label: baseColumnLabels[column.key],
+        width: connectorE4TableMetrics.baseColumnWidths[column.key],
+      }));
+    const customColumns = connector.schematic.customFields
+      .filter((field) => field.visible)
+      .map((field) => ({ id: `custom:${field.id}`, label: field.label, width: connectorE4TableMetrics.customColumnWidth }));
+    const columns = connector.schematic.orientation === "contacts-right"
+      ? [...customColumns, ...baseColumns].reverse()
+      : [...baseColumns, ...customColumns];
+    return (
+      <section className={`e4-connector-canvas-editor ${connector.schematic.orientation}`} aria-label={`Поля соединителя ${connector.designation}`}>
+        <datalist id={`terminal-articles-${connector.id}`}>
+          {terminalArticles.map((terminal) => <option key={terminal} value={terminal} />)}
+        </datalist>
+        <div className="e4cce-title"><strong>{connector.designation}</strong></div>
+        <div className="e4cce-table-scroll">
+          <table>
+            <colgroup>{columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}</colgroup>
+            <thead><tr>
+              {columns.map((column) => (
+                <th key={column.id} title="Изменить видимость поля">
+                  <span>{column.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Скрыть поле ${column.label}`}
+                    disabled={disabled}
+                    onClick={() => column.id.startsWith("custom:")
+                      ? onCommand({ type: "toggle-custom-field-visibility", connectorId: connector.id, fieldId: column.id.slice(7) })
+                      : onCommand({ type: "toggle-base-column-visibility", connectorId: connector.id, key: column.id as ConnectorBaseColumnKey })}
+                  >◉</button>
+                </th>
+              ))}
+            </tr></thead>
+            <tbody>{connector.contacts.map((contact) => (
+              <tr key={contact.id}>
+                {columns.map((column) => {
+                  const value = column.id === "number" ? String(contact.number)
+                    : column.id === "contactType" ? contact.contactType
+                      : column.id === "circuit" ? contact.circuit
+                        : column.id === "terminal" ? contact.terminalArticle
+                          : column.id === "wire" ? contact.wire
+                            : column.id === "color" ? contact.color
+                              : contact.customValues[column.id.slice(7)] ?? "";
+                  const terminalOptions = contact.libraryContact && article
+                    ? article.allowedTerminalArticles[contact.libraryContact.kind]
+                    : [];
+                  const lockedBySeries = isSeries && (column.id === "number" || column.id === "contactType");
+                  const input = column.id === "terminal" && isSeries ? (
+                    <select
+                      value={value}
+                      disabled={disabled}
+                      aria-label={`${column.label}, контакт ${contact.number}`}
+                      title="Допустимые терминалы для этого типа контакта"
+                      onChange={(event) => updateContact(contact, { terminalArticle: event.target.value })}
+                    >
+                      <option value="">—</option>
+                      {!terminalOptions.includes(value) && value && <option value={value}>{value}</option>}
+                      {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}
+                    </select>
+                  ) : <input
+                    type={column.id === "number" ? "number" : "text"}
+                    min={column.id === "number" ? 1 : undefined}
+                    max={column.id === "number" ? 300 : undefined}
+                    value={value}
+                    list={column.id === "terminal" && !isSeries ? `terminal-articles-${connector.id}` : undefined}
+                    disabled={disabled || lockedBySeries}
+                    title={lockedBySeries ? "Номер и тип заданы артикулом серии" : undefined}
+                    aria-label={`${column.label}, контакт ${contact.number}`}
+                    onChange={(event) => {
+                      if (column.id === "number") {
+                        const number = Number(event.target.value);
+                        if (Number.isSafeInteger(number) && number >= 1 && number <= 300) updateContact(contact, { number });
+                      } else if (column.id.startsWith("custom:")) {
+                        updateContact(contact, { customValues: { ...contact.customValues, [column.id.slice(7)]: event.target.value } });
+                      } else {
+                        const patch = column.id === "contactType" ? { contactType: event.target.value }
+                          : column.id === "circuit" ? { circuit: event.target.value }
+                            : column.id === "terminal" ? { terminalArticle: event.target.value }
+                              : column.id === "wire" ? { wire: event.target.value }
+                                : { color: event.target.value };
+                        updateContact(contact, patch);
+                        if (column.id === "terminal") onTerminalSearch?.(event.target.value);
+                      }
+                    }}
+                  />;
+                  return <td key={column.id} className={column.id === "number" ? "e4cce-number" : undefined}>{input}{column.id === "number" && <span className="e4cce-row-actions">
+                    <button
+                      type="button"
+                      className={contact.connectionStatus === "not-connected" ? "active" : ""}
+                      disabled={disabled}
+                      aria-label={`Контакт ${contact.number} не подключён`}
+                      aria-pressed={contact.connectionStatus === "not-connected"}
+                      title={contact.connectionStatus === "not-connected" ? "Снять отметку «не подключено»" : "Пометить как не подключено"}
+                      onClick={() => updateContact(contact, { connectionStatus: contact.connectionStatus === "not-connected" ? "available" : "not-connected" })}
+                    >×</button>
+                    <button
+                      type="button"
+                      disabled={disabled || isSeries}
+                      aria-label={`Удалить контакт ${contact.number}`}
+                      title={`Удалить контакт ${contact.number}`}
+                      onClick={() => onCommand({ type: "remove-contact", connectorId: connector.id, contactId: contact.id })}
+                    >−</button>
+                  </span>}</td>;
+                })}
+              </tr>
+            ))}</tbody>
+            <tfoot><tr><td colSpan={Math.max(1, columns.length)}><div>
+              <button
+                type="button"
+                className="e4cce-add-row"
+                disabled={disabled || isSeries || nextContactNumber(connector) === null}
+                title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
+                onClick={addContact}
+              >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
+              <span>{connector.partNumber}</span>
+            </div></td></tr></tfoot>
+          </table>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="e4-connector-inspector" aria-label={`Соединитель ${connector.designation}`}>
       <header className="e4ci-header">
-        <div>
-          <span className="e4ci-eyebrow">Схема Э4 · соединитель</span>
-          <strong>{connector.designation}</strong>
-        </div>
+        <div><span className="e4ci-eyebrow">Схема Э4 · соединитель</span><strong>{connector.designation}</strong></div>
         <button
           type="button"
           className="e4ci-flip-button"
           disabled={disabled}
           onClick={() => onCommand({ type: "flip-connector-orientation", connectorId: connector.id })}
           title="Перенести контакты на другую сторону"
-        >
-          ⇆ Зеркальный вид
-        </button>
+        >⇆ Зеркальный вид</button>
       </header>
 
       <div className="e4ci-identity">
-        <label>
-          Обозначение
+        <label>Обозначение
           <input
             value={designation}
             maxLength={120}
@@ -162,99 +287,85 @@ export function E4ConnectorInspector({ connector, disabled, onCommand }: E4Conne
             onChange={(event) => setDesignation(event.target.value)}
             onBlur={commitIdentity}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitIdentity();
-                event.currentTarget.blur();
-              }
-              if (event.key === "Escape") {
-                setDesignation(connector.designation);
-                event.currentTarget.blur();
-              }
+              if (event.key === "Enter") { event.preventDefault(); commitIdentity(); event.currentTarget.blur(); }
+              if (event.key === "Escape") { setDesignation(connector.designation); event.currentTarget.blur(); }
             }}
           />
         </label>
-        <label>
-          Артикул
-          <input
-            value={partNumber}
-            maxLength={120}
-            disabled={disabled}
-            onChange={(event) => setPartNumber(event.target.value)}
-            onBlur={commitIdentity}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitIdentity();
-                event.currentTarget.blur();
-              }
-              if (event.key === "Escape") {
-                setPartNumber(connector.partNumber);
-                event.currentTarget.blur();
-              }
-            }}
-          />
+        <label>{connector.libraryBinding?.mode === "series" ? "Артикул серии" : "Артикул"}
+          {connector.libraryBinding?.mode === "series" && series ? (
+            <select value={connector.partNumber} disabled={disabled} onChange={(event) => selectArticle(event.target.value)}>
+              {series.articles.map((article) => (
+                <option key={article.partNumber} value={article.partNumber}>{article.partNumber}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={partNumber}
+              maxLength={120}
+              disabled={disabled}
+              onChange={(event) => setPartNumber(event.target.value)}
+              onBlur={commitIdentity}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") { event.preventDefault(); commitIdentity(); event.currentTarget.blur(); }
+                if (event.key === "Escape") { setPartNumber(connector.partNumber); event.currentTarget.blur(); }
+              }}
+            />
+          )}
         </label>
-        <span className="e4ci-readonly-note">Обозначение экземпляра и артикул шаблона хранятся отдельно.</span>
+        <span className="e4ci-readonly-note">{connector.libraryBinding?.mode === "series"
+          ? "Артикул определяет число и типы контактов. Значения цепей сохраняются для совпавших строк."
+          : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</span>
       </div>
 
-      <details className="e4ci-column-settings">
-        <summary>Колонки таблицы</summary>
+      <div className="e4ci-canvas-edit-note">
+        <strong>Поля редактируются на объекте</strong>
+        <span>Изменяйте значения контактов прямо в таблице схемы Э4. Кнопки глаза в заголовках скрывают поле.</span>
+      </div>
+
+      <details className="e4ci-column-settings" open>
+        <summary>Поля таблицы · скрыть / показать</summary>
         <div className="e4ci-base-columns">
           {connectorBaseColumnKeys.map((key) => {
-            const column = connector.schematic.baseColumns.find((item) => item.key === key);
+            const visible = connector.schematic.baseColumns.find((item) => item.key === key)?.visible ?? true;
             return (
-              <label key={key}>
-                <input
-                  type="checkbox"
-                  checked={column?.visible ?? true}
-                  disabled={disabled}
-                  onChange={() => onCommand({
-                    type: "toggle-base-column-visibility",
-                    connectorId: connector.id,
-                    key,
-                  })}
-                />
+              <button
+                type="button"
+                className={visible ? "e4ci-column-toggle active" : "e4ci-column-toggle"}
+                key={key}
+                disabled={disabled}
+                aria-pressed={visible}
+                title={visible ? `Скрыть поле «${baseColumnLabels[key]}»` : `Показать поле «${baseColumnLabels[key]}»`}
+                onClick={() => onCommand({ type: "toggle-base-column-visibility", connectorId: connector.id, key })}
+              >
+                <span aria-hidden="true">{visible ? "◉" : "○"}</span>
                 <span>{baseColumnLabels[key]}</span>
-                <small>обязательная</small>
-              </label>
+                <small>{visible ? "видимо" : "скрыто"}</small>
+              </button>
             );
           })}
         </div>
         <div className="e4ci-custom-columns">
-          <div className="e4ci-section-title">
-            <strong>Справочные колонки</strong>
-            <span>Текстовые поля для контактов</span>
-          </div>
-          {connector.schematic.customFields.length === 0 && (
-            <p>Дополнительных колонок пока нет.</p>
-          )}
+          <div className="e4ci-section-title"><strong>Справочные поля</strong><span>Дополнительные текстовые колонки</span></div>
+          {connector.schematic.customFields.length === 0 && <p>Дополнительных полей пока нет.</p>}
           {connector.schematic.customFields.map((field) => (
             <div className="e4ci-custom-column" key={field.id}>
               <button
                 type="button"
                 className={field.visible ? "active" : ""}
                 disabled={disabled}
-                onClick={() => onCommand({
-                  type: "toggle-custom-field-visibility",
-                  connectorId: connector.id,
-                  fieldId: field.id,
-                })}
+                onClick={() => onCommand({ type: "toggle-custom-field-visibility", connectorId: connector.id, fieldId: field.id })}
                 aria-pressed={field.visible}
-                title={field.visible ? "Скрыть колонку" : "Показать колонку"}
-              >
-                {field.visible ? "◉" : "○"}
-              </button>
+                title={field.visible ? "Скрыть поле" : "Показать поле"}
+              >{field.visible ? "◉" : "○"}</button>
               <span>{field.label}</span>
               <button
                 type="button"
                 className="danger"
                 disabled={disabled}
                 onClick={() => onCommand({ type: "remove-custom-field", connectorId: connector.id, fieldId: field.id })}
-                title="Удалить справочную колонку и её значения"
-              >
-                ×
-              </button>
+                title="Удалить справочное поле и его значения"
+              >×</button>
             </div>
           ))}
           <div className="e4ci-add-field">
@@ -262,122 +373,15 @@ export function E4ConnectorInspector({ connector, disabled, onCommand }: E4Conne
               value={newFieldLabel}
               maxLength={120}
               disabled={disabled}
-              placeholder="Название новой колонки"
-              aria-label="Название новой справочной колонки"
+              placeholder="Название нового поля"
+              aria-label="Название нового справочного поля"
               onChange={(event) => setNewFieldLabel(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addCustomField();
-                }
-              }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomField(); } }}
             />
             <button type="button" disabled={disabled || !newFieldLabel.trim()} onClick={addCustomField}>Добавить</button>
           </div>
         </div>
       </details>
-
-      <div className="e4ci-table-section">
-        <div className="e4ci-section-title">
-          <strong>Контакты</strong>
-          <span>{connector.contacts.length} из 300</span>
-        </div>
-        <div className="e4ci-table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {shownBaseColumns.has("number") && <th className="number">№</th>}
-                {shownBaseColumns.has("contactType") && <th>Тип</th>}
-                {shownBaseColumns.has("circuit") && <th>Цепь</th>}
-                {shownBaseColumns.has("terminal") && <th>Терминал</th>}
-                {shownBaseColumns.has("wire") && <th>Провод</th>}
-                {shownBaseColumns.has("color") && <th>Цвет</th>}
-                {visibleCustomFields.map((field) => <th key={field.id}>{field.label}</th>)}
-                <th className="status">Не подключено</th>
-                <th className="actions"><span className="e4ci-visually-hidden">Действия</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {connector.contacts.map((contact) => (
-                <tr key={contact.id}>
-                  {shownBaseColumns.has("number") && (
-                    <td className="number">
-                      <input
-                        type="number"
-                        min="1"
-                        max="300"
-                        value={contact.number}
-                        disabled={disabled}
-                        aria-label={`Номер контакта ${contact.number}`}
-                        onChange={(event) => {
-                          const number = Number(event.target.value);
-                          if (Number.isSafeInteger(number) && number >= 1 && number <= 300) updateContact(contact, { number });
-                        }}
-                      />
-                    </td>
-                  )}
-                  {shownBaseColumns.has("contactType") && (
-                    <td><input value={contact.contactType} disabled={disabled} aria-label={`Тип контакта ${contact.number}`} onChange={(event) => updateContact(contact, { contactType: event.target.value })} /></td>
-                  )}
-                  {shownBaseColumns.has("circuit") && (
-                    <td><input value={contact.circuit} disabled={disabled} aria-label={`Цепь контакта ${contact.number}`} onChange={(event) => updateContact(contact, { circuit: event.target.value })} /></td>
-                  )}
-                  {shownBaseColumns.has("terminal") && (
-                    <td><input value={contact.terminalArticle} disabled={disabled} aria-label={`Терминал контакта ${contact.number}`} onChange={(event) => updateContact(contact, { terminalArticle: event.target.value })} /></td>
-                  )}
-                  {shownBaseColumns.has("wire") && (
-                    <td><input value={contact.wire} disabled={disabled} aria-label={`Провод контакта ${contact.number}`} onChange={(event) => updateContact(contact, { wire: event.target.value })} /></td>
-                  )}
-                  {shownBaseColumns.has("color") && (
-                    <td><input value={contact.color} disabled={disabled} aria-label={`Цвет провода контакта ${contact.number}`} onChange={(event) => updateContact(contact, { color: event.target.value })} /></td>
-                  )}
-                  {visibleCustomFields.map((field) => (
-                    <td key={field.id}>
-                      <input
-                        value={contact.customValues[field.id] ?? ""}
-                        disabled={disabled}
-                        aria-label={`${field.label}, контакт ${contact.number}`}
-                        onChange={(event) => updateContact(contact, {
-                          customValues: { ...contact.customValues, [field.id]: event.target.value },
-                        })}
-                      />
-                    </td>
-                  ))}
-                  <td className="status">
-                    <input
-                      type="checkbox"
-                      checked={contact.connectionStatus === "not-connected"}
-                      disabled={disabled}
-                      aria-label={`Контакт ${contact.number} не подключён`}
-                      onChange={(event) => updateContact(contact, {
-                        connectionStatus: event.target.checked ? "not-connected" : "available",
-                      })}
-                    />
-                  </td>
-                  <td className="actions">
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => onCommand({ type: "remove-contact", connectorId: connector.id, contactId: contact.id })}
-                      title={`Удалить контакт ${contact.number}`}
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button
-          type="button"
-          className="e4ci-add-contact"
-          disabled={disabled || availableContactNumber === null}
-          onClick={addContact}
-        >
-          ＋ Добавить контакт
-        </button>
-      </div>
     </section>
   );
 }

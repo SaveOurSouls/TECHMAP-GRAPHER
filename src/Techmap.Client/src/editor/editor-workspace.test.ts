@@ -6,6 +6,7 @@ import {
   e4ContactMarker,
   e4WireSegments,
   findE4CommonParallelSpan,
+  getEditorSceneBounds,
   getE4DifferentialPairLayout,
   getE4ScreenLayout,
   getVisibleE4SceneOverlays,
@@ -19,12 +20,21 @@ import {
   hitTestWireSegment,
   hitTestWireEnd,
   hitTestWireRoutePoint,
+  handleEditorViewportWheel,
+  containInlineEditorPointerEvent,
   moveE4OrthogonalSegment,
   objectsInPaintOrder,
   parseE4SceneOverlays,
   projectPointToOrthogonalSegment,
 } from "./CanvasViewport";
-import { panEditorCamera, screenToWorld, worldToScreen, zoomEditorCameraAt } from "./editor-camera";
+import {
+  fitEditorCameraToBounds,
+  panEditorCamera,
+  screenToWorld,
+  worldToScreen,
+  zoomEditorCameraAt,
+  zoomEditorCameraFromWheel,
+} from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
 import { HarnessEditorWorkspace, reconcileWorkspaceSelection } from "./HarnessEditorWorkspace";
@@ -79,6 +89,14 @@ describe("harness editor workspace", () => {
     expect(markup).toContain("Соединители");
     expect(markup).toContain("XS-04");
     expect(markup).toContain("XS-10");
+    expect(markup).toContain("Масштаб редактора");
+    expect(markup).toContain("25%");
+    expect(markup).toContain("50%");
+    expect(markup).toContain("100%");
+    expect(markup).toContain("150%");
+    expect(markup).toContain("200%");
+    expect(markup).toContain("Вписать в экран");
+    expect(markup).toContain("Ctrl + колесо — масштаб");
     expect(markup).not.toContain("Размер, клавиша D");
   });
 
@@ -126,6 +144,88 @@ describe("harness editor workspace", () => {
     expect(worldAfter.y).toBeCloseTo(worldBefore.y, 10);
     expect(worldToScreen(zoomed, worldAfter)).toEqual(anchor);
     expect(panEditorCamera(camera, 12, -7)).toEqual({ offsetX: 52, offsetY: -27, zoom: 1.25 });
+  });
+
+  it("changes zoom from the wheel only while Ctrl is pressed", () => {
+    const camera = { offsetX: 40, offsetY: -20, zoom: 1.25 };
+    const anchor = { x: 315, y: 220 };
+    expect(zoomEditorCameraFromWheel(camera, anchor, -100, false)).toBe(camera);
+    expect(zoomEditorCameraFromWheel(camera, anchor, 0, true)).toBe(camera);
+    const zoomed = zoomEditorCameraFromWheel(camera, anchor, -100, true);
+    expect(zoomed.zoom).toBeCloseTo(1.4);
+    expect(screenToWorld(zoomed, anchor).x).toBeCloseTo(screenToWorld(camera, anchor).x);
+    expect(screenToWorld(zoomed, anchor).y).toBeCloseTo(screenToWorld(camera, anchor).y);
+  });
+
+  it("handles Ctrl+wheel over inline inputs without letting pointer presses reach the canvas", () => {
+    const camera = { offsetX: 40, offsetY: -20, zoom: 1.25 };
+    const preventDefault = vi.fn();
+    const changeCamera = vi.fn();
+    const ordinaryWheel = {
+      ctrlKey: false, deltaY: -100, clientX: 315, clientY: 220, preventDefault,
+      target: { tagName: "INPUT" },
+    };
+    expect(handleEditorViewportWheel(ordinaryWheel, camera, { left: 15, top: 20 }, changeCamera)).toBe(false);
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(changeCamera).not.toHaveBeenCalled();
+
+    const ctrlWheel = { ...ordinaryWheel, ctrlKey: true };
+    expect(handleEditorViewportWheel(ctrlWheel, camera, { left: 15, top: 20 }, changeCamera)).toBe(true);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    const nextCamera = changeCamera.mock.calls[0]![0];
+    expect(nextCamera.zoom).toBeCloseTo(1.4);
+    expect(screenToWorld(nextCamera, { x: 300, y: 200 }).x).toBeCloseTo(screenToWorld(camera, { x: 300, y: 200 }).x);
+    expect(screenToWorld(nextCamera, { x: 300, y: 200 }).y).toBeCloseTo(screenToWorld(camera, { x: 300, y: 200 }).y);
+
+    const stopPropagation = vi.fn();
+    containInlineEditorPointerEvent({ stopPropagation });
+    expect(stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  it("fits actual E4 table and wire bounds into the available viewport", () => {
+    const connector: EditorSceneObject = {
+      id: "X-fit", layerId: "top", kind: "connector", label: "X-fit",
+      x: 100, y: 80, width: 118, height: 72, color: "#123456",
+      metadata: {
+        view: "e4", orientation: "right",
+        rows: JSON.stringify([
+          { number: 1, contactType: "S", circuit: "A", terminal: "T", wire: "W", color: "R", status: "available", customValues: {} },
+          { number: 2, contactType: "S", circuit: "B", terminal: "T", wire: "W", color: "B", status: "available", customValues: {} },
+          { number: 3, contactType: "P", circuit: "C", terminal: "T", wire: "W", color: "G", status: "not-connected", customValues: {} },
+        ]),
+      },
+    };
+    const wire: EditorSceneObject = {
+      id: "W-fit", layerId: "bottom", kind: "wire", label: "W-fit",
+      x: 0, y: 0, width: 0, height: 0, color: "#c00",
+      points: [{ x: -50, y: 30 }, { x: 250, y: 30 }, { x: 250, y: 420 }],
+      metadata: { view: "e4" },
+    };
+    const bounds = getEditorSceneBounds([connector, wire], layers, "e4")!;
+    const layout = getE4ConnectorLayout(connector)!;
+    expect(bounds).toEqual({
+      minX: -50,
+      minY: 30,
+      maxX: connector.x + layout.width + 21,
+      maxY: 420,
+    });
+    const fitted = fitEditorCameraToBounds(
+      { offsetX: 0, offsetY: 0, zoom: 1 },
+      bounds,
+      { width: 900, height: 600 },
+      50,
+    );
+    expect(fitted.zoom).toBeCloseTo(800 / (bounds.maxX - bounds.minX));
+    expect(worldToScreen(fitted, { x: bounds.minX, y: bounds.minY }).x).toBeCloseTo(50);
+    expect(worldToScreen(fitted, { x: bounds.maxX, y: bounds.maxY }).x).toBeCloseTo(850);
+
+    const hiddenWireLayers = layers.map((layer) => layer.id === "bottom" ? { ...layer, visible: false } : layer);
+    expect(getEditorSceneBounds([connector, wire], hiddenWireLayers, "e4")).toMatchObject({
+      minX: connector.x,
+      minY: connector.y,
+      maxX: connector.x + layout.width + 21,
+      maxY: connector.y + layout.height,
+    });
   });
 
   it("honors visual layer order, visibility and polyline selection", () => {
