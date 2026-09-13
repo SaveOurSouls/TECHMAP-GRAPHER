@@ -298,17 +298,18 @@ export function HarnessDesignEditor({
 
   const scene = designToScene(history.present, view);
   const layers = toUiLayers(history.present, view);
-  const addCatalogItem = (item: EditorCatalogItem, point = { x: 250, y: 180 }) => {
+  const addCatalogItem = (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
     if (!item.id.includes("xs-")) return;
     const contactCount = item.id.includes("10") ? 10 : 4;
     const id = crypto.randomUUID();
-    const offset = history.present.connectors.length * 30;
+    const index = history.present.connectors.length;
+    const placement = point ?? {
+      x: 120 + (index % 4) * 190,
+      y: 100 + Math.floor(index / 4) * 150,
+    };
     run({
       type: "add-connector",
-      connector: createConnector(id, `X${history.present.connectors.length + 1}`, contactCount, point, {
-        x: point.x + offset,
-        y: point.y + offset,
-      }),
+      connector: createConnector(id, `X${index + 1}`, contactCount, placement),
     });
     setSelectedObjectId(id);
   };

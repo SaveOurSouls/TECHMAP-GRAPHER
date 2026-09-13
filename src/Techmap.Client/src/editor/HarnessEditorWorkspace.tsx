@@ -193,16 +193,17 @@ export function HarnessEditorWorkspace({
     onSelectedObjectChange?.(objectId);
   };
 
-  const activateCatalogItem = (item: EditorCatalogItem, point: EditorPoint = { x: 385, y: 245 }) => {
+  const activateCatalogItem = (item: EditorCatalogItem, point?: EditorPoint) => {
     onCatalogItemActivate?.(item, point);
     if (controlledObjects !== undefined) return;
+    const placement = point ?? { x: 385, y: 245 };
     const nextObject: EditorSceneObject = {
       id: `${item.id}-${objects.length + 1}`,
       layerId: "components",
       kind: "connector",
       label: item.title,
-      x: Math.round(point.x - 55),
-      y: Math.round(point.y - 34),
+      x: Math.round(placement.x - 55),
+      y: Math.round(placement.y - 34),
       width: 110,
       height: 68,
       color: item.accent,
