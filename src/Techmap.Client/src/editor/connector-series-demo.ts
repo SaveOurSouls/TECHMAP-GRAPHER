@@ -50,6 +50,66 @@ export interface CreateConnectorPlacementOptions {
   readonly drawingPosition?: Point;
 }
 
+/** Detailed demo data for terminals referenced by the JST XH series. */
+export interface BuiltInTerminalReference {
+  readonly article: string;
+  readonly awgFrom: number;
+  readonly awgTo: number;
+  readonly sectionFromMm2: number;
+  readonly sectionToMm2: number;
+  readonly insulationDiameterFromMm: number;
+  readonly insulationDiameterToMm: number;
+}
+
+export const builtInJstXhTerminalReferences: readonly BuiltInTerminalReference[] = [
+  {
+    article: "SXH-001T-P0.6N",
+    awgFrom: 26,
+    awgTo: 22,
+    sectionFromMm2: 0.13,
+    sectionToMm2: 0.33,
+    insulationDiameterFromMm: 1.3,
+    insulationDiameterToMm: 1.9,
+  },
+  {
+    article: "SXH-002T-P0.6",
+    awgFrom: 30,
+    awgTo: 26,
+    sectionFromMm2: 0.05,
+    sectionToMm2: 0.13,
+    insulationDiameterFromMm: 0.9,
+    insulationDiameterToMm: 1.3,
+  },
+  {
+    article: "SXH-001T-P0.6",
+    awgFrom: 28,
+    awgTo: 22,
+    sectionFromMm2: 0.08,
+    sectionToMm2: 0.33,
+    insulationDiameterFromMm: 0.9,
+    insulationDiameterToMm: 1.9,
+  },
+];
+
+const jstXhTerminalArticles = builtInJstXhTerminalReferences.map(({ article }) => article);
+const jstXhPartNumbers = [
+  "XHP-1",
+  "XHP-2",
+  "XHP-2(10.0)-U",
+  ...Array.from({ length: 4 }, (_, index) => `XHP-${index + 3}`),
+  "XHP-6(5.0)-U",
+  ...Array.from({ length: 10 }, (_, index) => `XHP-${index + 7}`),
+  "XHP-20",
+] as const;
+
+function jstXhContactCount(partNumber: string): number {
+  if (partNumber === "XHP-2(10.0)-U") return 2;
+  if (partNumber === "XHP-6(5.0)-U") return 6;
+  const count = /^XHP-(\d+)$/.exec(partNumber)?.[1];
+  if (!count) throw new Error(`Не удалось определить число контактов JST XH для ${partNumber}.`);
+  return Number(count);
+}
+
 /**
  * Demo reference data. Articles and compatibility lists are illustrative and
  * can later be replaced by the persistent library without changing instances.
@@ -80,6 +140,20 @@ export const builtInConnectorSeries: readonly ConnectorSeries[] = defineConnecto
       },
     ],
   },
+  {
+    id: "jst-xh",
+    name: "JST XH",
+    thirdContactTypeLabel: "третий",
+    articles: jstXhPartNumbers.map((partNumber) => ({
+      partNumber,
+      contactCounts: { signal: jstXhContactCount(partNumber), power: 0, third: 0 },
+      allowedTerminalArticles: {
+        signal: jstXhTerminalArticles,
+        power: [],
+        third: [],
+      },
+    })),
+  },
 ]);
 
 export const freeConnectorTemplateCatalogId = "catalog-connector-free";
@@ -105,6 +179,14 @@ export const builtInConnectorTemplates: readonly BuiltInConnectorTemplate[] = [
     description: "Артикулы XS-04 и XS-10",
     seriesId: "xs-demo-series",
     defaultPartNumber: "XS-04",
+  },
+  {
+    id: connectorSeriesCatalogId("jst-xh"),
+    kind: "series",
+    title: "JST XH",
+    description: "Корпуса XHP с 1–16 и 20 сигнальными контактами",
+    seriesId: "jst-xh",
+    defaultPartNumber: "XHP-2",
   },
   builtInFreeConnectorTemplate,
 ];

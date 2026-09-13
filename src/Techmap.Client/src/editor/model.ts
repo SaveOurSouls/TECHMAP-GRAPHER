@@ -189,6 +189,8 @@ export interface WireInstance {
   readonly e4Route: readonly Point[];
   /** Missing in older documents and treated as automatic. */
   readonly e4RouteMode?: "auto" | "manual";
+  /** Normalized distance along the complete E4 route. Missing means centered. */
+  readonly e4LabelPosition?: number;
   readonly drawingRoute: readonly Point[];
   readonly layerIds: Readonly<Record<EditorView, string>>;
 }
@@ -239,7 +241,6 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
         column.key,
         connectorBaseColumnLabels[column.key],
         [
-          ...(column.key === "number" ? [connector.partNumber] : []),
           ...connector.contacts.map((contact) => column.key === "number" ? String(contact.number)
             : column.key === "contactType" ? contact.contactType
               : column.key === "circuit" ? contact.circuit
@@ -748,12 +749,21 @@ function parseWire(value: unknown): WireInstance {
     e4RouteMode: record.e4RouteMode === undefined || record.e4RouteMode === "auto"
       ? "auto"
       : record.e4RouteMode === "manual" ? "manual" : (() => { throw new Error("Режим трассы Э4 задан неверно."); })(),
+    e4LabelPosition: record.e4LabelPosition === undefined
+      ? 0.5
+      : parseNormalizedPosition(record.e4LabelPosition, "Положение обозначения провода"),
     drawingRoute: record.drawingRoute.map(parsePoint),
     layerIds: {
       e4: requireText(layerIds.e4, "Слой провода Э4"),
       drawing: requireText(layerIds.drawing, "Слой провода чертежа"),
     },
   };
+}
+
+function parseNormalizedPosition(value: unknown, name: string): number {
+  const number = requireNumber(value, name);
+  if (number < 0 || number > 1) throw new Error(`${name} должно быть от 0 до 1.`);
+  return number;
 }
 
 function parseEndpoint(value: unknown): WireEndpoint {

@@ -119,6 +119,7 @@ export interface HarnessEditorWorkspaceProps {
     point: EditorPoint,
   ) => void;
   readonly onE4WireSegmentMove?: (wireId: string, segmentIndex: number, coordinate: number) => void;
+  readonly onE4WireLabelPositionChange?: (wireId: string, position: number) => void;
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly e4Overlays?: E4SceneOverlays;
   readonly onE4CrossingStyleChange?: (style: "none" | "bridge") => void;
@@ -154,6 +155,15 @@ export function reconcileWorkspaceSelection(
     : objectIds.at(-1) ?? null;
   if (primaryObjectId && !objectIds.includes(primaryObjectId)) objectIds.push(primaryObjectId);
   return { objectIds, primaryObjectId };
+}
+
+export function reconcileWorkspaceGroupSelection(
+  objectIds: readonly string[],
+  objects: readonly EditorSceneObject[],
+): { readonly objectIds: readonly string[]; readonly primaryObjectId: string | null } {
+  const available = new Set(objects.filter((object) => object.kind !== "dimension").map((object) => object.id));
+  const nextObjectIds = [...new Set(objectIds)].filter((id) => available.has(id));
+  return { objectIds: nextObjectIds, primaryObjectId: nextObjectIds.at(-1) ?? null };
 }
 
 const saveLabels: Readonly<Record<EditorSaveState, string>> = {
@@ -198,6 +208,7 @@ export function HarnessEditorWorkspace({
   onWireConnectToWire,
   onWireReconnectToWire,
   onE4WireSegmentMove,
+  onE4WireLabelPositionChange,
   onE4ScreenPositionChange,
   e4Overlays,
   onE4CrossingStyleChange,
@@ -317,6 +328,14 @@ export function HarnessEditorWorkspace({
     if (controlledSelectedObjectIds === undefined) setLocalSelectedObjectIds(nextIds);
     onSelectedObjectChange?.(primaryId);
     onSelectedObjectIdsChange?.(nextIds);
+  };
+
+  const selectObjectGroup = (objectIds: readonly string[]) => {
+    const next = reconcileWorkspaceGroupSelection(objectIds, objects);
+    if (controlledSelectedObjectId === undefined) setLocalSelectedObjectId(next.primaryObjectId);
+    if (controlledSelectedObjectIds === undefined) setLocalSelectedObjectIds(next.objectIds);
+    onSelectedObjectChange?.(next.primaryObjectId);
+    onSelectedObjectIdsChange?.(next.objectIds);
   };
 
   const activateCatalogItem = (item: EditorCatalogItem, point?: EditorPoint) => {
@@ -442,6 +461,7 @@ export function HarnessEditorWorkspace({
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
+          onObjectGroupSelect={selectObjectGroup}
           onObjectMove={onObjectMove}
           onObjectMovePreview={onObjectMovePreview}
           onObjectEditRequest={onObjectEditRequest}
@@ -450,7 +470,9 @@ export function HarnessEditorWorkspace({
           onWireConnectToWire={onWireConnectToWire}
           onWireReconnectToWire={onWireReconnectToWire}
           onE4WireSegmentMove={onE4WireSegmentMove}
+          onE4WireLabelPositionChange={onE4WireLabelPositionChange}
           onE4ScreenPositionChange={onE4ScreenPositionChange}
+          onWireToolRequest={() => setTool("wire")}
           onWireRoutePointMove={onWireRoutePointMove}
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}

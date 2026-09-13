@@ -165,6 +165,7 @@ export function designToScene(
       points,
       metadata: {
         lengthMm: String(wire.lengthMm),
+        e4LabelPosition: String(wire.e4LabelPosition ?? 0.5),
         ...(view === "e4" ? {
           view: "e4",
           fromSide: fromAnchor?.leadDirection ?? "",
@@ -745,6 +746,11 @@ export function HarnessDesignEditor({
           wireId,
           segmentIndex,
           position: { x: coordinate, y: coordinate },
+        })}
+        onE4WireLabelPositionChange={(wireId, position) => run({
+          type: "set-e4-wire-label-position",
+          wireId,
+          position,
         })}
         onE4ScreenPositionChange={(screenId, position) => run({
           type: "update-screen",

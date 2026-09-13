@@ -361,6 +361,30 @@ describe("shared harness editor model", () => {
     expect(longCircuit.width).toBeLessThanOrEqual(220);
   });
 
+  it("does not widen the contact-number column for a long article in the footer", () => {
+    const shortArticle = createConnector("short", "X1", 12, { x: 0, y: 0 });
+    const longArticle = { ...shortArticle, partNumber: "XHP-2(10.0)-U-WITH-A-LONG-SUFFIX" };
+    const numberWidth = (connector: typeof shortArticle) => connectorE4TableGeometry(connector).columns
+      .find((column) => column.kind === "base" && column.key === "number")!.width;
+    expect(numberWidth(longArticle)).toBe(numberWidth(shortArticle));
+  });
+
+  it("moves an E4 wire label without changing that wire topology", () => {
+    const before = connectionDocument();
+    const wireBefore = before.wires.find((wire) => wire.id === "w1")!;
+    const after = applyEditorCommand(before, {
+      type: "set-e4-wire-label-position", wireId: "w1", position: 0.2,
+    });
+    const wireAfter = after.wires.find((wire) => wire.id === "w1")!;
+    expect(wireAfter.e4LabelPosition).toBe(0.2);
+    expect(wireAfter.from).toEqual(wireBefore.from);
+    expect(wireAfter.to).toEqual(wireBefore.to);
+    expect(wireAfter.e4Route).toEqual(wireBefore.e4Route);
+    expect(() => applyEditorCommand(after, {
+      type: "set-e4-wire-label-position", wireId: "w1", position: 2,
+    })).toThrow(/от 0 до 1/);
+  });
+
   it("creates and validates orthogonal E4 routes with 24-unit contact leads", () => {
     const start = { position: { x: 100, y: 50 }, leadDirection: "right" as const };
     const end = { position: { x: 300, y: 90 }, leadDirection: "left" as const };
@@ -450,7 +474,7 @@ describe("shared harness editor model", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {
       type: "set-e4-wire-route", wireId: "w1",
-      route: [{ x: 648, y: 64 }, { x: 700, y: 64 }, { x: 700, y: 120 }, { x: 900, y: 120 }, { x: 900, y: 64 }, { x: 976, y: 64 }],
+      route: [{ x: 648, y: 64 }, { x: 740, y: 64 }, { x: 740, y: 120 }, { x: 900, y: 120 }, { x: 900, y: 64 }, { x: 976, y: 64 }],
     });
     document = applyEditorCommand(document, {
       type: "move-e4-wire-segment", wireId: "w1", segmentIndex: 2, position: { x: 760, y: 0 },
@@ -473,7 +497,7 @@ describe("shared harness editor model", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {
       type: "set-e4-wire-route", wireId: "w1",
-      route: [{ x: 648, y: 64 }, { x: 700, y: 64 }, { x: 700, y: 120 }, { x: 900, y: 120 }, { x: 900, y: 64 }, { x: 976, y: 64 }],
+      route: [{ x: 648, y: 64 }, { x: 740, y: 64 }, { x: 740, y: 120 }, { x: 900, y: 120 }, { x: 900, y: 64 }, { x: 976, y: 64 }],
     });
     document = applyEditorCommand(document, {
       type: "create-junction",

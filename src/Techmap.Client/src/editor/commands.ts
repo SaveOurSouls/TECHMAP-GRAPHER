@@ -30,6 +30,7 @@ import {
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
 import { routeE4Wire, validateE4Route, type E4RouterAnchor } from "./e4-router";
+import { getE4WireLabelLayout, normalizeE4WireLabelPosition } from "./e4-wire-label";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
@@ -48,6 +49,7 @@ export type EditorCommand =
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number }
+  | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
   | { readonly type: "set-e4-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -129,6 +131,7 @@ export function createWire(
     lengthMm,
     e4Route: [],
     e4RouteMode: "auto",
+    e4LabelPosition: 0.5,
     drawingRoute: [],
     layerIds: { e4: defaultLayerIds.wires, drawing: defaultLayerIds.wires },
   };
@@ -375,6 +378,18 @@ export function applyEditorCommand(
           lengthMm: command.lengthMm ?? wire.lengthMm,
         }), "Провод не найден."),
       });
+    case "set-e4-wire-label-position": {
+      const changed = {
+        ...document,
+        wires: replaceRequired(document.wires, command.wireId, (wire) => ({
+          ...wire,
+          e4LabelPosition: normalizeE4WireLabelPosition(command.position),
+        }), "Провод не найден."),
+      };
+      // Moving an annotation must not move the wire that owns it. Automatic
+      // neighboring wires may reroute around the label's new rectangle.
+      return reflowWiresAroundLabel(changed, command.wireId);
+    }
     case "reconnect-wire": {
       requireEndpoint(document, command.endpoint);
       const original = findWire(document, command.wireId);
@@ -772,7 +787,10 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
   const copy = route.map((point) => ({ ...point }));
   validateOrthogonalE4Route(start, copy, end);
-  validateE4Route([start.position, ...copy, end.position], createE4RoutingRequest(document, wire, wireId));
+  validateE4Route(
+    [start.position, ...copy, end.position],
+    createE4RoutingRequest(document, wire, wireId),
+  );
   const changed = { ...document, wires: document.wires.map((item) => item.id === wireId
     ? { ...item, e4Route: copy, e4RouteMode: "manual" as const }
     : item) };
@@ -822,13 +840,24 @@ function validateAllE4Wires(document: HarnessDesignDocument): void {
   validateE4WireIds(document, document.wires.map((wire) => wire.id));
 }
 
+function reflowWiresAroundLabel(document: HarnessDesignDocument, labelWireId: string): HarnessDesignDocument {
+  const routed = rerouteE4WireBatch(document, document.wires
+    .filter((wire) => wire.id !== labelWireId && wire.e4RouteMode !== "manual")
+    .map((wire) => wire.id));
+  validateAllE4Wires(routed);
+  return routed;
+}
+
 function validateE4WireIds(document: HarnessDesignDocument, wireIds: readonly string[]): void {
   for (const wireId of wireIds) {
     const wire = findWire(document, wireId);
     const start = wireEndpointE4Anchor(document, wire.from);
     const end = wireEndpointE4Anchor(document, wire.to);
     if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-    validateE4Route([start.position, ...wire.e4Route, end.position], createE4RoutingRequest(document, wire, wire.id));
+    validateE4Route(
+      [start.position, ...wire.e4Route, end.position],
+      createE4RoutingRequest(document, wire, wire.id),
+    );
   }
 }
 
@@ -950,19 +979,39 @@ function createE4RoutingRequest(
       return null;
     }
   };
+  const junctionLinkedWireIds = collectJunctionComponent([wireId], document.junctions);
   return {
     start,
     end,
-    obstacles: document.connectors.map((connector) => {
-      const geometry = connectorE4TableGeometry(connector);
-      return {
-        id: connector.id,
-        x: connector.positions.e4.x,
-        y: connector.positions.e4.y,
-        width: geometry.width,
-        height: geometry.height,
-      };
-    }),
+    obstacles: [
+      ...document.connectors.map((connector) => {
+        const geometry = connectorE4TableGeometry(connector);
+        return {
+          id: connector.id,
+          x: connector.positions.e4.x,
+          y: connector.positions.e4.y,
+          width: geometry.width,
+          height: geometry.height,
+        };
+      }),
+      ...document.wires.flatMap((candidate, index) => {
+        if (junctionLinkedWireIds.has(candidate.id)) return [];
+        const points = fullWirePoints(candidate);
+        if (!points) return [];
+        const label = candidate.circuit || `W${index + 1}`;
+        const layout = getE4WireLabelLayout(points, label, candidate.e4LabelPosition ?? 0.5);
+        return layout ? [{
+          id: `wire-label:${candidate.id}`,
+          // The router adds four units of obstacle clearance below. Shrinking
+          // here keeps the final reserved rectangle equal to the visible label
+          // box instead of applying the clearance twice.
+          x: layout.x + 4,
+          y: layout.y + 4,
+          width: Math.max(0, layout.width - 8),
+          height: Math.max(0, layout.height - 8),
+        }] : [];
+      }),
+    ],
     occupiedRoutes: [
       ...document.wires.flatMap((candidate) => {
       if (excludedWireIds.has(candidate.id)) return [];

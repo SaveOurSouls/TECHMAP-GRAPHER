@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   builtInConnectorSeries,
   builtInConnectorTemplates,
+  builtInJstXhTerminalReferences,
   builtInFreeConnectorTemplate,
   createBuiltInConnectorInstance,
   createConnectorFromSeries,
@@ -16,8 +17,7 @@ import { createConnector } from "./commands";
 
 describe("built-in connector series demo", () => {
   it("models XS-04 and XS-10 as articles of one series with all three contact kinds", () => {
-    expect(builtInConnectorSeries).toHaveLength(1);
-    const series = builtInConnectorSeries[0]!;
+    const series = findBuiltInConnectorSeries("xs-demo-series");
     expect(series).toMatchObject({
       id: "xs-demo-series",
       name: "Серия XS",
@@ -37,10 +37,38 @@ describe("built-in connector series demo", () => {
     }
   });
 
+  it("models the JST XH demonstration series and its terminal compatibility ranges", () => {
+    const series = findBuiltInConnectorSeries("jst-xh");
+    expect(series.name).toBe("JST XH");
+    expect(series.articles.map((article) => article.partNumber)).toEqual([
+      "XHP-1", "XHP-2", "XHP-2(10.0)-U", "XHP-3", "XHP-4", "XHP-5", "XHP-6", "XHP-6(5.0)-U",
+      ...Array.from({ length: 10 }, (_, index) => `XHP-${index + 7}`), "XHP-20",
+    ]);
+    for (const article of series.articles) {
+      const expectedCount = article.partNumber === "XHP-2(10.0)-U"
+        ? 2
+        : article.partNumber === "XHP-6(5.0)-U" ? 6 : Number(article.partNumber.slice("XHP-".length));
+      expect(article.contactCounts).toEqual({ signal: expectedCount, power: 0, third: 0 });
+      expect(article.allowedTerminalArticles.signal).toEqual(
+        builtInJstXhTerminalReferences.map((terminal) => terminal.article),
+      );
+      expect(article.allowedTerminalArticles.power).toEqual([]);
+      expect(article.allowedTerminalArticles.third).toEqual([]);
+    }
+    expect(builtInJstXhTerminalReferences).toEqual([
+      { article: "SXH-001T-P0.6N", awgFrom: 26, awgTo: 22, sectionFromMm2: 0.13, sectionToMm2: 0.33, insulationDiameterFromMm: 1.3, insulationDiameterToMm: 1.9 },
+      { article: "SXH-002T-P0.6", awgFrom: 30, awgTo: 26, sectionFromMm2: 0.05, sectionToMm2: 0.13, insulationDiameterFromMm: 0.9, insulationDiameterToMm: 1.3 },
+      { article: "SXH-001T-P0.6", awgFrom: 28, awgTo: 22, sectionFromMm2: 0.08, sectionToMm2: 0.33, insulationDiameterFromMm: 0.9, insulationDiameterToMm: 1.9 },
+    ]);
+  });
+
   it("exposes one series template and one independent free template", () => {
     expect(builtInConnectorTemplates).toEqual([
       expect.objectContaining({
         id: "catalog-connector-series:xs-demo-series", kind: "series", seriesId: "xs-demo-series", defaultPartNumber: "XS-04",
+      }),
+      expect.objectContaining({
+        id: "catalog-connector-series:jst-xh", kind: "series", seriesId: "jst-xh", defaultPartNumber: "XHP-2",
       }),
       expect.objectContaining({
         id: "catalog-connector-free", kind: "free", partNumber: "FREE-CONNECTOR", defaultContactCount: 4,
@@ -53,7 +81,7 @@ describe("built-in connector series demo", () => {
 
   it("creates a ready ConnectorInstance for XS-04", () => {
     const connector = createConnectorInstanceFromSeries(
-      builtInConnectorSeries[0]!,
+      findBuiltInConnectorSeries("xs-demo-series"),
       "XS-04",
       { id: "x1", designation: "XS1", e4Position: { x: 20, y: 30 } },
     );
@@ -75,6 +103,18 @@ describe("built-in connector series demo", () => {
       { kind: "power", ordinal: 1 },
       { kind: "third", ordinal: 1 },
     ]);
+  });
+
+  it("creates JST XH instances with article-specific signal row counts", () => {
+    const connector = createBuiltInConnectorInstance(connectorSeriesCatalogId("jst-xh"), {
+      id: "xh20", designation: "J1", partNumber: "XHP-20", e4Position: { x: 0, y: 0 },
+    });
+    expect(connector.contacts).toHaveLength(20);
+    expect(connector.contacts.every((contact) => contact.contactType === "сигнальный")).toBe(true);
+    expect(connector.contacts.at(-1)?.libraryContact).toEqual({ kind: "signal", ordinal: 20 });
+    expect(createBuiltInConnectorInstance(connectorSeriesCatalogId("jst-xh"), {
+      id: "xhu", designation: "J2", partNumber: "XHP-2(10.0)-U", e4Position: { x: 0, y: 0 },
+    }).contacts).toHaveLength(2);
   });
 
   it("creates XS-10 through its legacy catalog ID and keeps an explicit drawing position", () => {
@@ -112,8 +152,9 @@ describe("built-in connector series demo", () => {
 
   it("applies the default or selected article to an existing MVP connector", () => {
     const base = createConnector("base", "XS5", 1, { x: 5, y: 6 });
-    expect(createConnectorFromSeries(base, builtInConnectorSeries[0]!).partNumber).toBe("XS-04");
-    const selected = createConnectorFromSeries(base, builtInConnectorSeries[0]!, "XS-10");
+    const xsSeries = findBuiltInConnectorSeries("xs-demo-series");
+    expect(createConnectorFromSeries(base, xsSeries).partNumber).toBe("XS-04");
+    const selected = createConnectorFromSeries(base, xsSeries, "XS-10");
     expect(selected).toMatchObject({
       id: "base",
       designation: "XS5",

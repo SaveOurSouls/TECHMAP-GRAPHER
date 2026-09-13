@@ -7,14 +7,17 @@ import {
   e4WireSegments,
   findE4CommonParallelSpan,
   getEditorSceneBounds,
+  getE4BridgeGeometry,
   getE4DifferentialPairLayout,
   getE4ScreenLayout,
   getVisibleE4SceneOverlays,
   getE4ConnectorLayout,
   getE4WireCrossings,
   getE4WireRoute,
+  hitTestE4DifferentialPair,
   hitTestE4Screen,
   hitTestE4WireSegment,
+  hitTestE4WireLabel,
   hitTestConnectorContact,
   hitTestEditorScene,
   hitTestWireSegment,
@@ -150,6 +153,24 @@ describe("harness editor workspace", () => {
     expect(worldAfter.y).toBeCloseTo(worldBefore.y, 10);
     expect(worldToScreen(zoomed, worldAfter)).toEqual(anchor);
     expect(panEditorCamera(camera, 12, -7)).toEqual({ offsetX: 52, offsetY: -27, zoom: 1.25 });
+  });
+
+  it("selects an E4 wire by its movable label box", () => {
+    const labelWire: EditorSceneObject = {
+      id: "label-wire",
+      layerId: "bottom",
+      kind: "wire",
+      label: "CAN-H",
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      color: "#34566a",
+      points: [{ x: 100, y: 100 }, { x: 220, y: 100 }],
+      metadata: { e4LabelPosition: "0.5" },
+    };
+    expect(hitTestE4WireLabel([labelWire], layers, { x: 160, y: 80 }, 1)).toEqual({ wireId: "label-wire" });
+    expect(hitTestE4WireLabel([labelWire], layers, { x: 160, y: 130 }, 1)).toBeNull();
   });
 
   it("changes zoom from the wheel only while Ctrl is pressed", () => {
@@ -433,6 +454,20 @@ describe("harness editor workspace", () => {
     expect(hitTestConnectorContact([connector], layers, { ...drawingContact, x: connector.x + connector.width }, 1, "drawing")).toEqual({ connectorId: "X-custom", contactIndex: 0 });
   });
 
+  it("does not widen the canvas number column for a long footer article", () => {
+    const makeConnector = (partNumber: string): EditorSceneObject => ({
+      id: partNumber, layerId: "top", kind: "connector", label: "X1",
+      x: 0, y: 0, width: 118, height: 72, color: "#123456",
+      metadata: {
+        view: "e4", orientation: "right", designation: "X1", partNumber,
+        rows: JSON.stringify([{ number: 1, contactType: "", circuit: "", terminal: "", wire: "", color: "", status: "available", customValues: {} }]),
+      },
+    });
+    const numberWidth = (partNumber: string) => getE4ConnectorLayout(makeConnector(partNumber))!.columns
+      .find((column) => column.id === "number")!.width;
+    expect(numberWidth("XHP-2(10.0)-U-WITH-A-LONG-SUFFIX")).toBe(numberWidth("XHP-2"));
+  });
+
   it("finds editable route points and wire ends without treating ends as route points", () => {
     const routedWire: EditorSceneObject = {
       id: "W1", layerId: "bottom", kind: "wire", label: "W1",
@@ -501,9 +536,25 @@ describe("harness editor workspace", () => {
     const span = findE4CommonParallelSpan(wires, ["h1", "h2"]);
     expect(span).toMatchObject({ orientation: "horizontal", start: 20, end: 100, crossMinimum: 40, crossMaximum: 60 });
     const screen = { id: "s1", wireIds: ["h1", "h2"], position: 0.25, label: "Экран", width: 18 };
-    expect(getE4ScreenLayout(screen, wires)).toMatchObject({ center: { x: 40, y: 50 }, orientation: "horizontal" });
+    const screenLayout = getE4ScreenLayout(screen, wires)!;
+    expect(screenLayout).toMatchObject({
+      center: { x: 40, y: 50 }, orientation: "horizontal", crossSize: 38,
+    });
+    expect(screenLayout.alongSize).toBeCloseTo(60.8);
+    expect(screenLayout.alongSize / screenLayout.crossSize).toBeCloseTo(1.6);
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 50 }, 1)?.id).toBe("s1");
-    expect(hitTestE4Screen([screen], wires, { x: 48, y: 68 }, 1_000)).toBeNull();
+    expect(hitTestE4Screen([screen], wires, { x: 40, y: 70 }, 1_000)).toBeNull();
+    const pair = { id: "dp", wireIds: ["h1", "h2"] as const, step: 25, amplitude: 6, variant: 2 as const };
+    const pairLayout = getE4DifferentialPairLayout(pair, wires)!;
+    expect(pairLayout).toMatchObject({
+      variant: 2, wireIds: ["h1", "h2"], crossMinimum: 40, crossMaximum: 60,
+    });
+    expect(pairLayout.motifs).toHaveLength(1);
+    expect(pairLayout.motifs[0]!.to - pairLayout.motifs[0]!.from).toBe(16);
+    expect(pairLayout.motifs[0]!.from - pairLayout.span.start).toBe(32);
+    expect(pairLayout.span.end - pairLayout.motifs[0]!.to).toBe(32);
+    expect(hitTestE4DifferentialPair([pair], wires, { x: 60, y: 50 }, 1)?.wireIds).toEqual(["h1", "h2"]);
+    expect(hitTestE4DifferentialPair([pair], wires, { x: 30, y: 50 }, 1_000)).toBeNull();
     expect(getE4DifferentialPairLayout({
       id: "dp", wireIds: ["h1", "h2"], step: 25, amplitude: 6, variant: 2,
     }, wires)).toMatchObject({ variant: 2, crossMinimum: 40, crossMaximum: 60 });
@@ -534,6 +585,17 @@ describe("harness editor workspace", () => {
     expect(getE4WireCrossings(crossingWires, layers, [{
       id: "other", position: { x: 70, y: 40 }, wireIds: ["third", "fourth"],
     }])).toEqual([]);
+    const horizontalBridge = getE4BridgeGeometry({ point: { x: 70, y: 40 }, overOrientation: "horizontal" });
+    expect(horizontalBridge).toEqual({
+      clearStart: { x: 62, y: 40 }, clearEnd: { x: 78, y: 40 },
+      coloredStart: { x: 61, y: 40 }, arcStart: { x: 63, y: 40 },
+      arcEnd: { x: 77, y: 40 }, coloredEnd: { x: 79, y: 40 },
+    });
+    expect(horizontalBridge.coloredStart.x).toBeLessThan(horizontalBridge.clearStart.x);
+    expect(horizontalBridge.coloredEnd.x).toBeGreaterThan(horizontalBridge.clearEnd.x);
+    const verticalBridge = getE4BridgeGeometry({ point: { x: 70, y: 40 }, overOrientation: "vertical" });
+    expect(verticalBridge.coloredStart.y).toBeLessThan(verticalBridge.clearStart.y);
+    expect(verticalBridge.coloredEnd.y).toBeGreaterThan(verticalBridge.clearEnd.y);
   });
 
   it("finds a common span in polynomial time for a large routed bundle", () => {
