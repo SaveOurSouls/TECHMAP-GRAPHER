@@ -206,7 +206,8 @@ public sealed record ProjectComponentPlacementCommandResponse(
     ProjectComponentPlacementResponse Placement);
 
 public sealed record ProjectComponentPlacementListResponse(
-    IReadOnlyList<ProjectComponentPlacementResponse> Placements);
+    IReadOnlyList<ProjectComponentPlacementResponse> Placements,
+    IReadOnlyList<ProjectComponentSnapshotResponse> Snapshots);
 
 public sealed record ComponentTemplateArticleBindingRequest(
     string? SourceId,
