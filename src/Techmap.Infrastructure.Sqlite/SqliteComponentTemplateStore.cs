@@ -15,7 +15,7 @@ public sealed class SqliteComponentTemplateStore(
     TimeProvider timeProvider,
     IAttachmentContentStore? attachmentContentStore = null) : IComponentTemplateStore
 {
-    public const int CurrentContentSchemaVersion = 2;
+    public const int CurrentContentSchemaVersion = 3;
     public const int MinimumSupportedContentSchemaVersion = 1;
     public const int MaximumContentBytes = 1024 * 1024;
     public const int MaximumTemplates = 500;
@@ -307,7 +307,7 @@ public sealed class SqliteComponentTemplateStore(
                 var asset = new ComponentTemplateAsset(
                     Guid.NewGuid(), expectedContent, normalizedFileName, normalizedMediaType);
                 var assets = current.Assets.Append(asset).ToArray();
-                var nextContent = current.SchemaVersion == 2
+                var nextContent = current.SchemaVersion >= 2
                     ? RewriteV2ContentAssets(current.ContentJson, assets)
                     : current.ContentJson;
                 var input = ValidateInput(
@@ -348,14 +348,14 @@ public sealed class SqliteComponentTemplateStore(
             var assets = current.Assets.Where(item => item.AssetId != assetId).ToArray();
             if (assets.Length == current.Assets.Count)
                 throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
-            if (current.SchemaVersion == 2 && FindV2ImageReferencePath(current.ContentJson, assetId) is { } referencePath)
+            if (current.SchemaVersion >= 2 && FindV2ImageReferencePath(current.ContentJson, assetId) is { } referencePath)
             {
                 throw Invalid(
                     "component_template_asset_in_use",
                     "The image asset is still referenced by a template image node.",
                     referencePath);
             }
-            var nextContent = current.SchemaVersion == 2
+            var nextContent = current.SchemaVersion >= 2
                 ? RewriteV2ContentAssets(current.ContentJson, assets)
                 : current.ContentJson;
             var input = ValidateInput(
@@ -486,7 +486,11 @@ public sealed class SqliteComponentTemplateStore(
                     "Content schemaVersion must match the request schemaVersion.",
                     "content.schemaVersion");
             }
-            if (schemaVersion == 2)
+            if (schemaVersion == 3)
+            {
+                ComponentTemplateContentV3Validator.Validate(root);
+            }
+            else if (schemaVersion == 2)
             {
                 ComponentTemplateContentV2Validator.Validate(root);
             }
@@ -595,7 +599,7 @@ public sealed class SqliteComponentTemplateStore(
     }
 
     internal static bool IsSupportedContentSchemaVersion(int schemaVersion) =>
-        schemaVersion is MinimumSupportedContentSchemaVersion or CurrentContentSchemaVersion;
+        schemaVersion is >= MinimumSupportedContentSchemaVersion and <= CurrentContentSchemaVersion;
 
     private static void ValidatePrimitive(JsonElement primitive, ISet<string> ids)
     {
@@ -1204,7 +1208,7 @@ public sealed class SqliteComponentTemplateStore(
         int schemaVersion,
         IReadOnlyList<ComponentTemplateAsset> assets)
     {
-        if (schemaVersion != 2) return;
+        if (schemaVersion < 2) return;
         using var document = JsonDocument.Parse(contentJson);
         var contentAssets = document.RootElement.GetProperty("assets");
         if (contentAssets.GetArrayLength() != assets.Count)

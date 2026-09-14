@@ -8,6 +8,87 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateMigrationTests
 {
     [Fact]
+    public async Task Schema_twelve_migrates_directly_to_v3_without_rewriting_v2_template_versions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-v3-migration", Guid.NewGuid().ToString("N"));
+        var dataRoot = Path.Combine(root, "data");
+        var backupRoot = Path.Combine(root, "backups");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var generationName = StorageGenerationLayout.InitialGenerationName;
+            var databasePath = Path.Combine(dataRoot, "generations", generationName, "app.db");
+            Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+            File.WriteAllBytes(databasePath, []);
+            var templateId = Guid.NewGuid();
+            var canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(
+                ComponentTemplateV2StoreTests.V2Content,
+                2);
+            var contentHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(canonical)));
+            var versionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+                templateId, 1, 2, "MIG-12", "Existing v2 template", [], canonical);
+            var now = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            using (var connection = Open(databasePath))
+            {
+                SqliteStorage.InitializeSchemaAtVersion(connection, 12);
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    INSERT INTO component_templates
+                        (template_id, current_version, current_code, current_name, normalized_code,
+                         created_utc, updated_utc, deleted_utc)
+                    VALUES ($templateId, 0, 'MIG-12', 'Existing v2 template', 'MIG-12', $now, $now, NULL);
+                    INSERT INTO component_template_versions
+                        (template_id, version, schema_version, code, name, content_json,
+                         content_sha256, version_sha256, created_utc)
+                    VALUES ($templateId, 1, 2, 'MIG-12', 'Existing v2 template', $content,
+                            $contentHash, $versionHash, $now);
+                    UPDATE component_templates
+                    SET current_version = 1
+                    WHERE template_id = $templateId;
+                    """;
+                command.Parameters.AddWithValue("$templateId", templateId.ToString("D"));
+                command.Parameters.AddWithValue("$now", now);
+                command.Parameters.AddWithValue("$content", canonical);
+                command.Parameters.AddWithValue("$contentHash", contentHash);
+                command.Parameters.AddWithValue("$versionHash", versionHash);
+                command.ExecuteNonQuery();
+            }
+
+            File.WriteAllText(
+                Path.Combine(Path.GetDirectoryName(databasePath)!, StorageGenerationLayout.ReadyMarkerFileName),
+                "ready\n");
+            File.WriteAllText(Path.Combine(dataRoot, StorageGenerationLayout.CurrentPointerFileName), generationName + "\n");
+
+            await using var lease = DataRootLease.Acquire(dataRoot);
+            var migrationService = new SqliteStorageMigrationService(lease);
+            var migration = await migrationService.MigrateIfRequiredAsync(
+                new StorageMigrationRequest(
+                    backupRoot, "0.3.10-m2.07", SqliteStorage.CurrentSchemaVersion),
+                TestContext.Current.CancellationToken);
+            using var migrated = SqliteStorage.Open(dataRoot);
+            var store = new SqliteComponentTemplateStore(migrated, TimeProvider.System);
+            var historical = store.GetVersion(templateId, 1);
+            var v3 = store.Create(
+                "MIG-13", "New v3 template", [], 3,
+                ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+
+            Assert.True(migration.Migrated);
+            Assert.Equal(12, migration.SourceSchemaVersion);
+            Assert.Equal(13, migration.TargetSchemaVersion);
+            Assert.Equal(2, historical.SchemaVersion);
+            Assert.Equal(canonical, historical.ContentJson);
+            Assert.Equal(3, v3.SchemaVersion);
+            migrationService.CompleteSuccessfulStartup(migration);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Schema_ten_migrates_existing_v1_template_versions_without_rewriting_them()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-asset-migration", Guid.NewGuid().ToString("N"));
@@ -124,7 +205,7 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE component_templates;
-                    DELETE FROM schema_history WHERE version IN (10, 11, 12);
+                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

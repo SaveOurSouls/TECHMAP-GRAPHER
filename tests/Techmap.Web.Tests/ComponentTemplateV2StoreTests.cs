@@ -8,6 +8,61 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateV2StoreTests
 {
     [Fact]
+    public void Store_accepts_v3_and_keeps_an_immutable_v2_version_readable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-v3", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var v2 = store.Create("SERIES-V3", "Series", [], 2, V2Content);
+
+            var v3 = store.Update(
+                v2.TemplateId, v2.Version, "SERIES-V3", "Series v3", [], 3,
+                ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+
+            Assert.Equal(3, v3.SchemaVersion);
+            Assert.Equal(2, store.GetVersion(v2.TemplateId, 1).SchemaVersion);
+            Assert.Equal(v2.ContentJson, store.GetVersion(v2.TemplateId, 1).ContentJson);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task V3_asset_commands_keep_metadata_atomic_and_protect_referenced_images()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-v3-assets", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var created = store.Create(
+                "ASSET-V3", "Asset v3", [], 3, ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+            var added = await store.AddAssetAsync(
+                created.TemplateId, 1, new MemoryStream(Png), "symbol.png", "image/png",
+                TestContext.Current.CancellationToken);
+            var asset = Assert.Single(added.Assets);
+            AssertContentAsset(added.ContentJson, asset);
+
+            var referenced = JsonNode.Parse(added.ContentJson)!.AsObject();
+            referenced["views"]![0]!["layers"]![0]!["nodes"]!.AsArray().Add(ImageNode(asset.AssetId));
+            var saved = store.Update(created.TemplateId, 2, "ASSET-V3", "Asset v3", [], 3, referenced.ToJsonString());
+            var error = Assert.Throws<ComponentTemplateException>(() =>
+                store.RemoveAsset(created.TemplateId, saved.Version, asset.AssetId));
+            Assert.Equal("component_template_asset_in_use", error.Code);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task V2_asset_commands_keep_content_metadata_and_history_in_lockstep()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-v2", Guid.NewGuid().ToString("N"));

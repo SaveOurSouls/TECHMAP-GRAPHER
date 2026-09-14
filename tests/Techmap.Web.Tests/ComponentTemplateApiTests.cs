@@ -13,6 +13,26 @@ public sealed class ComponentTemplateApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Fact]
+    public async Task Api_creates_and_reads_strict_v3_content()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var v3Content = JsonDocument.Parse(ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+
+        using var create = await SendAsync(
+            client, HttpMethod.Post, "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("V3", "Version 3", [], v3Content.RootElement.Clone()), csrf);
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(3, created.Content.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("DATA+", created.Content.GetProperty("logicalContacts")[0]
+            .GetProperty("circuitText").GetString());
+    }
+
+    [Fact]
     public async Task Api_creates_and_reads_v2_content_and_rejects_invalid_v2()
     {
         await using var factory = new TechmapWebApplicationFactory();
