@@ -17,6 +17,9 @@
   box-shadow: 0 16px 44px rgb(33 65 83 / 12%);
 }
 
+.he-loading.error > span { display: block; margin-top: 6px; color: #6f4a4e; }
+.he-loading.error > button { margin-top: 12px; padding: 7px 11px; border: 1px solid #c88e94; border-radius: 6px; background: #fff; color: #8d2832; font: inherit; cursor: pointer; }
+
 .he-header {
   z-index: 5;
   min-width: 0;

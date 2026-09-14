@@ -107,7 +107,16 @@ export const E4_BRIDGE_MINIMUM_SPACING = E4_BRIDGE_RADIUS * 2 + 7;
  * the number of bends is the deterministic tie-breaker.
  */
 export function routeE4Wire(request: E4RoutingRequest): E4RouteResult {
+  return routeE4WireThroughWaypoints(request, []);
+}
+
+/** Finds one globally shortest route through the supplied ordered mandatory points. */
+export function routeE4WireThroughWaypoints(
+  request: E4RoutingRequest,
+  waypoints: readonly Point[],
+): E4RouteResult {
   const input = normalizeRequest(request);
+  waypoints.forEach((point, index) => requirePoint(point, `Обязательная точка ${index + 1}`));
   const startLead = leadPoint(input.start, input.options.leadLength, input.obstacles);
   const endLead = leadPoint(input.end, input.options.leadLength, input.obstacles);
   const fixedLeads = createFixedLeads(input.start.position, startLead, endLead, input.end.position);
@@ -115,19 +124,22 @@ export function routeE4Wire(request: E4RoutingRequest): E4RouteResult {
   validateForcedLead(input.start, startLead, true, input);
   validateForcedLead(input.end, endLead, false, input);
 
-  const { xs, ys } = buildGridCoordinates(input, startLead, endLead);
-  const nodeCount = xs.length * ys.length;
-  if (nodeCount > input.options.maxGridNodes) {
-    throw new Error(`Сетка автотрассировки слишком велика (${nodeCount} узлов).`);
+  const { xs, ys } = buildGridCoordinates(input, startLead, endLead, waypoints);
+  const gridNodeCount = xs.length * ys.length;
+  const searchNodeCount = gridNodeCount * (waypoints.length + 1);
+  if (searchNodeCount > input.options.maxGridNodes) {
+    throw new Error(`Сетка автотрассировки слишком велика (${searchNodeCount} узлов).`);
   }
 
   const startNode = nodeIndex(xs, ys, startLead);
   const endNode = nodeIndex(xs, ys, endLead);
+  const waypointNodes = waypoints.map((point) => nodeIndex(xs, ys, point));
   const graphPoints = findShortestGridPath(
     xs,
     ys,
     startNode,
     endNode,
+    waypointNodes,
     input,
     fixedLeads,
   );
@@ -321,9 +333,12 @@ function buildGridCoordinates(
   input: ReturnType<typeof normalizeRequest>,
   startLead: Point,
   endLead: Point,
+  waypoints: readonly Point[] = [],
 ): { readonly xs: readonly number[]; readonly ys: readonly number[] } {
   const xs = [input.start.position.x, input.end.position.x, startLead.x, endLead.x];
   const ys = [input.start.position.y, input.end.position.y, startLead.y, endLead.y];
+  xs.push(...waypoints.map((point) => point.x));
+  ys.push(...waypoints.map((point) => point.y));
   for (const obstacle of input.obstacles) {
     xs.push(obstacle.left, obstacle.right);
     ys.push(obstacle.top, obstacle.bottom);
@@ -362,11 +377,13 @@ function findShortestGridPath(
   ys: readonly number[],
   startNode: number,
   endNode: number,
+  waypointNodes: readonly number[],
   input: ReturnType<typeof normalizeRequest>,
   fixedLeads: ReturnType<typeof createFixedLeads>,
 ): readonly Point[] | null {
-  if (startNode === endNode) return [pointForNode(xs, ys, startNode)];
-  const stateCount = xs.length * ys.length * 3;
+  const gridNodeCount = xs.length * ys.length;
+  const phaseCount = waypointNodes.length + 1;
+  const stateCount = gridNodeCount * phaseCount * 3;
   const lengths = new Float64Array(stateCount);
   lengths.fill(Number.POSITIVE_INFINITY);
   const bends = new Int32Array(stateCount);
@@ -379,7 +396,18 @@ function findShortestGridPath(
   const endDirection = fixedLeads.some((fixed) => samePoint(fixed.graphEndpoint, pointForNode(xs, ys, endNode)))
     ? directionCode(fixedLeads.find((fixed) => samePoint(fixed.graphEndpoint, pointForNode(xs, ys, endNode)))!.segment)
     : NO_DIRECTION;
-  const startState = startNode * 3 + startDirection;
+  const advancePhase = (phase: number, node: number) => {
+    let result = phase;
+    while (result < waypointNodes.length && waypointNodes[result] === node) result += 1;
+    return result;
+  };
+  const stateIndex = (phase: number, node: number, direction: number) =>
+    (phase * gridNodeCount + node) * 3 + direction;
+  const startPhase = advancePhase(0, startNode);
+  if (startNode === endNode && startPhase === waypointNodes.length) {
+    return [pointForNode(xs, ys, startNode)];
+  }
+  const startState = stateIndex(startPhase, startNode, startDirection);
   lengths[startState] = 0;
   bends[startState] = 0;
   const queue = new MinQueue();
@@ -388,7 +416,9 @@ function findShortestGridPath(
   while (queue.size > 0) {
     const current = queue.pop()!;
     if (!sameCost(current.length, current.bends, lengths[current.state]!, bends[current.state]!)) continue;
-    const node = Math.floor(current.state / 3);
+    const phaseAndNode = Math.floor(current.state / 3);
+    const node = phaseAndNode % gridNodeCount;
+    const phase = Math.floor(phaseAndNode / gridNodeCount);
     const previousDirection = current.state % 3;
     for (const neighbor of neighbors(xs, ys, node)) {
       const from = pointForNode(xs, ys, node);
@@ -399,7 +429,8 @@ function findShortestGridPath(
       const nextLength = current.length + neighbor.length;
       const nextBends = current.bends +
         (previousDirection !== NO_DIRECTION && previousDirection !== nextDirection ? 1 : 0);
-      const nextState = neighbor.node * 3 + nextDirection;
+      const nextPhase = advancePhase(phase, neighbor.node);
+      const nextState = stateIndex(nextPhase, neighbor.node, nextDirection);
       if (!costIsBetter(nextLength, nextBends, lengths[nextState]!, bends[nextState]!)) continue;
       lengths[nextState] = nextLength;
       bends[nextState] = nextBends;
@@ -410,7 +441,7 @@ function findShortestGridPath(
 
   let endState = -1;
   for (const direction of [NO_DIRECTION, HORIZONTAL, VERTICAL]) {
-    const state = endNode * 3 + direction;
+    const state = stateIndex(waypointNodes.length, endNode, direction);
     const finalBends = bends[state]! +
       (endDirection !== NO_DIRECTION && direction !== NO_DIRECTION && direction !== endDirection ? 1 : 0);
     const bestDirection = endState < 0 ? NO_DIRECTION : endState % 3;
@@ -424,7 +455,8 @@ function findShortestGridPath(
 
   const reversed: Point[] = [];
   for (let state = endState; state >= 0; state = previous[state]!) {
-    reversed.push(pointForNode(xs, ys, Math.floor(state / 3)));
+    const phaseAndNode = Math.floor(state / 3);
+    reversed.push(pointForNode(xs, ys, phaseAndNode % gridNodeCount));
     if (state === startState) break;
   }
   if (!samePoint(reversed.at(-1)!, pointForNode(xs, ys, startNode))) return null;

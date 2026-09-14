@@ -282,6 +282,7 @@ function createConnectorSeed(
   return {
     id,
     designation,
+    libraryCode: "FREE",
     partNumber: normalizedPartNumber,
     contacts,
     schematic: {

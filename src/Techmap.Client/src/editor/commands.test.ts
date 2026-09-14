@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEditorCommand, createConnector, createWire } from "./commands";
+import { applyEditorCommand, createConnector, createWire, normalizeE4RoutingDocument } from "./commands";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand } from "./history";
 import { validateE4Route } from "./e4-router";
 import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
@@ -8,10 +8,13 @@ import {
   connectorContactPosition,
   connectorE4TableGeometry,
   createJunctionEndpoint,
+  createScreenEndpoint,
   createOrthogonalE4Route,
   createEmptyHarnessDesign,
   parseHarnessDesignDocument,
   validateOrthogonalE4Route,
+  wireEndpointE4Anchor,
+  wireScreenConnectionGeometry,
   wireE4PathContainsPoint,
 } from "./model";
 
@@ -206,6 +209,62 @@ describe("shared harness editor model", () => {
     expect(() => applyEditorCommand(document, {
       type: "update-connector", connectorId: "x1", designation: "XP1", partNumber: " ",
     })).toThrow(/артикул/);
+  });
+
+  it("stores the free footer code separately from its article and preserves legacy FREE", () => {
+    let document = applyEditorCommand(createEmptyHarnessDesign(), {
+      type: "add-connector", connector: createConnector("free", "X1", 1, { x: 0, y: 0 }, undefined, "ARTICLE-1"),
+    });
+    document = applyEditorCommand(document, {
+      type: "update-connector",
+      connectorId: "free",
+      designation: "X1",
+      libraryCode: "CUSTOM",
+      partNumber: "ARTICLE-2",
+    });
+    expect(document.connectors[0]).toMatchObject({
+      libraryCode: "CUSTOM", partNumber: "ARTICLE-2",
+    });
+    const legacy = structuredClone(document) as unknown as { connectors: Array<Record<string, unknown>> };
+    delete legacy.connectors[0]!.libraryCode;
+    expect(parseHarnessDesignDocument(legacy).connectors[0]?.libraryCode).toBe("FREE");
+  });
+
+  it("adds a row to a newly placed FREE connector without an intermediate edit", () => {
+    const placed = createBuiltInConnectorInstance("catalog-connector-free", {
+      id: "free-new", designation: "X1", e4Position: { x: 50, y: 60 },
+    });
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector: placed });
+    document = applyEditorCommand(document, {
+      type: "add-contact",
+      connectorId: placed.id,
+      contact: {
+        id: "free-new:contact:5", number: 5, contactType: "", circuit: "", terminalArticle: "",
+        wire: "", color: "", secondaryColor: "", connectionStatus: "available", customValues: {},
+      },
+    });
+    expect(document.connectors[0]?.contacts.map((contact) => contact.number)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("keeps the E4 document usable after entering a wire reference on a connected contact", () => {
+    let document = applyEditorCommand(createEmptyHarnessDesign(), {
+      type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 800, y: 0 }),
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: "x1", contactId: "x1:contact:1", wire: "UL1061 28AWG",
+    });
+    expect(document.connectors[0]?.contacts[0]?.wire).toBe("UL1061 28AWG");
+    expect(document.wires[0]?.e4Route.length).toBeGreaterThan(0);
+    const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+    expect(restored.connectors[0]?.contacts[0]?.wire).toBe("UL1061 28AWG");
+    expect(restored.wires[0]?.e4Route).toEqual(document.wires[0]?.e4Route);
   });
 
   it("supports flipping orientation, contact status, custom fields and safe contact removal", () => {
@@ -604,6 +663,176 @@ describe("shared harness editor model", () => {
     })).toThrow(/общего параллельного участка/);
   });
 
+  it("connects an ordinary wire to the conducting point of a screen", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, {
+      type: "create-screen",
+      screen: { id: "s1", wireIds: ["w1", "w2"], position: 0.5, label: "SH1", width: 46 },
+    });
+    const geometry = wireScreenConnectionGeometry(document, "s1")!;
+    expect(geometry.orientation).toBe("horizontal");
+    expect(geometry.crossSize).toBeGreaterThan(geometry.alongSize);
+    expect(geometry.connectionPoint).toEqual({
+      x: geometry.bodyConnectionPoint.x,
+      y: geometry.bodyConnectionPoint.y - 16,
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire(
+        "shield-lead",
+        { connectorId: "x1", contactId: "x1:contact:3" },
+        createScreenEndpoint("s1"),
+        100,
+        "SHIELD",
+      ),
+    });
+    expect(document.wires.find((wire) => wire.id === "shield-lead")?.to).toEqual({
+      screenId: "s1", connectorId: "", contactId: "",
+    });
+    expect(wireEndpointE4Anchor(document, createScreenEndpoint("s1"))).toMatchObject({
+      position: wireScreenConnectionGeometry(document, "s1")!.connectionPoint,
+      leadDirection: "up",
+    });
+  });
+
+  it("reroutes a screen connection when the screen or a screened manual segment moves", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, {
+      type: "set-e4-wire-route",
+      wireId: "w1",
+      route: [
+        { x: 420, y: 64 }, { x: 420, y: 16 }, { x: 800, y: 16 },
+        { x: 800, y: 64 }, { x: 976, y: 64 },
+      ],
+    });
+    document = applyEditorCommand(document, {
+      type: "create-screen",
+      screen: { id: "s1", wireIds: ["w1", "w2"], position: 0.35, label: "SH1", width: 46 },
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire(
+        "shield-lead",
+        { connectorId: "x1", contactId: "x1:contact:3" },
+        createScreenEndpoint("s1"),
+        100,
+        "SHIELD",
+      ),
+    });
+
+    const initialPoint = wireScreenConnectionGeometry(document, "s1")!.connectionPoint;
+    const initialRoute = document.wires.find((wire) => wire.id === "shield-lead")!.e4Route;
+    document = applyEditorCommand(document, {
+      type: "update-screen", screenId: "s1", position: 0.7,
+    });
+    const movedPoint = wireScreenConnectionGeometry(document, "s1")!.connectionPoint;
+    const movedRoute = document.wires.find((wire) => wire.id === "shield-lead")!.e4Route;
+    expect(movedPoint).not.toEqual(initialPoint);
+    expect(movedRoute).not.toEqual(initialRoute);
+
+    document = applyEditorCommand(document, {
+      type: "move-e4-wire-segment", wireId: "w1", segmentIndex: 2, position: { x: 0, y: 32 },
+    });
+    const finalPoint = wireScreenConnectionGeometry(document, "s1")!.connectionPoint;
+    const lead = document.wires.find((wire) => wire.id === "shield-lead")!;
+    const start = wireEndpointE4Anchor(document, lead.from)!;
+    const end = wireEndpointE4Anchor(document, lead.to)!;
+    expect(finalPoint).not.toEqual(movedPoint);
+    expect(end.position).toEqual(finalPoint);
+    expect(() => validateOrthogonalE4Route(start, lead.e4Route, end)).not.toThrow();
+  });
+
+  it("parses and removes a persisted screen endpoint without breaking legacy documents", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, {
+      type: "create-screen",
+      screen: { id: "s1", wireIds: ["w1"], position: 0.5, label: "SH1", width: 32 },
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("shield-lead", { connectorId: "x1", contactId: "x1:contact:3" }, createScreenEndpoint("s1")),
+    });
+    const parsed = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+    expect(parsed.wires.find((wire) => wire.id === "shield-lead")?.to).toEqual({
+      screenId: "s1", connectorId: "", contactId: "",
+    });
+    const removed = applyEditorCommand(parsed, { type: "remove-screen", screenId: "s1" });
+    expect(removed.wires.some((wire) => wire.id === "shield-lead")).toBe(false);
+  });
+
+  it("normalizes legacy routes whose old eight-unit clearance is no longer valid", () => {
+    let legacy = connectionDocument();
+    legacy = applyEditorCommand(legacy, {
+      type: "add-wire",
+      wire: createWire("w3", { connectorId: "x1", contactId: "x1:contact:3" },
+        { connectorId: "x2", contactId: "x2:contact:3" }, 100, "NET-C"),
+    });
+    legacy = applyEditorCommand(legacy, {
+      type: "add-wire",
+      wire: createWire("w4", { connectorId: "x1", contactId: "x1:contact:4" },
+        { connectorId: "x2", contactId: "x2:contact:4" }, 100, "NET-D"),
+    });
+    const withLegacySpacing = {
+      ...legacy,
+      wires: legacy.wires.map((wire) => ({
+        ...wire,
+        e4RouteMode: "manual" as const,
+        e4Route: wire.id === "w1"
+          ? [{ x: 648, y: 64 }, { x: 680, y: 64 }, { x: 680, y: 80 },
+            { x: 944, y: 80 }, { x: 944, y: 64 }, { x: 976, y: 64 }]
+          : wire.id === "w2"
+            ? [{ x: 648, y: 88 }, { x: 976, y: 88 }]
+            : wire.id === "w3"
+              ? [{ x: 648, y: 112 }, { x: 680, y: 112 }, { x: 680, y: 88 },
+                { x: 944, y: 88 }, { x: 944, y: 112 }, { x: 976, y: 112 }]
+              : [{ x: 648, y: 136 }, { x: 976, y: 136 }],
+      })),
+    };
+    withLegacySpacing.wires.forEach((wire) => expect(() => validateOrthogonalE4Route(
+      wireEndpointE4Anchor(withLegacySpacing, wire.from)!,
+      wire.e4Route,
+      wireEndpointE4Anchor(withLegacySpacing, wire.to)!,
+    )).not.toThrow());
+    const fullPoints = (wireId: string) => {
+      const wire = withLegacySpacing.wires.find((item) => item.id === wireId)!;
+      return [wireEndpointE4Anchor(withLegacySpacing, wire.from)!.position,
+        ...wire.e4Route, wireEndpointE4Anchor(withLegacySpacing, wire.to)!.position];
+    };
+    const validationRequest = (wireId: string, occupiedWireId: string) => {
+      const wire = withLegacySpacing.wires.find((item) => item.id === wireId)!;
+      return {
+        start: wireEndpointE4Anchor(withLegacySpacing, wire.from)!,
+        end: wireEndpointE4Anchor(withLegacySpacing, wire.to)!,
+        occupiedRoutes: [{ id: occupiedWireId, points: fullPoints(occupiedWireId) }],
+      };
+    };
+    expect(() => validateE4Route(fullPoints("w1"), validationRequest("w1", "w2"))).toThrow(/зазор/);
+    expect(() => validateE4Route(fullPoints("w3"), validationRequest("w3", "w2"))).toThrow(/накладывается/);
+
+    const preservedRoute = withLegacySpacing.wires.find((wire) => wire.id === "w4")!.e4Route;
+    const normalized = normalizeE4RoutingDocument(withLegacySpacing);
+    expect(normalized.wires.find((wire) => wire.id === "w4")?.e4Route).toEqual(preservedRoute);
+    expect(normalized.wires.filter((wire) => wire.id !== "w4").map((wire) => wire.e4Route))
+      .not.toEqual(withLegacySpacing.wires.filter((wire) => wire.id !== "w4").map((wire) => wire.e4Route));
+    for (const wire of normalized.wires) {
+      const start = wireEndpointE4Anchor(normalized, wire.from)!;
+      const end = wireEndpointE4Anchor(normalized, wire.to)!;
+      expect(() => validateOrthogonalE4Route(start, wire.e4Route, end)).not.toThrow();
+      expect(() => validateE4Route(
+        [start.position, ...wire.e4Route, end.position],
+        {
+          start,
+          end,
+          occupiedRoutes: normalized.wires.filter((item) => item.id !== wire.id).map((item) => ({
+            id: item.id,
+            points: [wireEndpointE4Anchor(normalized, item.from)!.position,
+              ...item.e4Route, wireEndpointE4Anchor(normalized, item.to)!.position],
+          })),
+        },
+      )).not.toThrow();
+    }
+  });
+
   it("defaults legacy differential pair variant to the first visual style", () => {
     const current = connectionDocument();
     const parsed = parseHarnessDesignDocument({
@@ -631,7 +860,10 @@ describe("shared harness editor model", () => {
     expect(document.wires.find((wire) => wire.id === "w1")?.to).toEqual({ connectorId: "x2", contactId: "x2:contact:1" });
     expect(document.wires.find((wire) => wire.id === "w3")?.circuit).toBe("NET-A");
     document = applyEditorCommand(document, { type: "move-junction", junctionId: "j1", position: { x: 740, y: 120 } });
-    expect(wireE4PathContainsPoint(document, document.wires.find((wire) => wire.id === "w1")!, { x: 740, y: 120 })).toBe(true);
+    const trunk = document.wires.find((wire) => wire.id === "w1")!;
+    expect(wireE4PathContainsPoint(document, trunk, { x: 740, y: 120 })).toBe(true);
+    expect(trunk.e4Route).toHaveLength(4);
+    expect(Math.min(...trunk.e4Route.map((point) => point.y))).toBe(64);
     expect(() => applyEditorCommand(document, { type: "remove-junction", junctionId: "j1" })).toThrow(/ветвь/);
   });
 

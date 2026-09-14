@@ -7,6 +7,7 @@ import {
   defaultE4WireLead,
   defaultLayerIds,
   isJunctionEndpoint,
+  isScreenEndpoint,
   validateConnectorLibraryMetadata,
   validateOrthogonalE4Route,
   wireE4PathContainsPoint,
@@ -29,13 +30,13 @@ import {
   type WireScreenGroup,
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
-import { routeE4Wire, validateE4Route, type E4RouterAnchor } from "./e4-router";
+import { routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { getE4WireLabelLayout, normalizeE4WireLabelPosition } from "./e4-wire-label";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
-  | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string }
+  | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string; readonly libraryCode?: string }
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
   | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
@@ -101,6 +102,7 @@ export function createConnector(
   return {
     id,
     designation: normalizedDesignation,
+    libraryCode: "FREE",
     partNumber: normalizedPartNumber,
     contacts,
     schematic: {
@@ -173,12 +175,22 @@ export function applyEditorCommand(
       requireConnectorText(designation, "Укажите обозначение соединителя.");
       const partNumber = command.partNumber?.trim();
       if (partNumber !== undefined) requireConnectorText(partNumber, "Укажите артикул шаблона соединителя.");
+      const libraryCode = command.libraryCode?.trim();
+      if (libraryCode !== undefined) requireConnectorText(libraryCode, "Укажите код свободного блока.");
       return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
           if (partNumber !== undefined && connector.libraryBinding?.mode === "series" &&
               partNumber !== connector.libraryBinding.partNumber) {
             throw new Error("Артикул библиотечного соединителя можно изменить только выбором артикула серии.");
           }
-          return { ...connector, designation, partNumber: partNumber ?? connector.partNumber };
+          if (libraryCode !== undefined && connector.libraryBinding?.mode === "series") {
+            throw new Error("Код библиотечной серии определяется справочником.");
+          }
+          return {
+            ...connector,
+            designation,
+            libraryCode: libraryCode ?? connector.libraryCode ?? "FREE",
+            partNumber: partNumber ?? connector.partNumber,
+          };
         });
     }
     case "apply-connector-article": {
@@ -207,7 +219,8 @@ export function applyEditorCommand(
       validateConnectorLibraryMetadata(candidate);
       const retainedContactIds = new Set(contacts.map((contact) => contact.id));
       const connectedContactIds = new Set(document.wires.flatMap((wire) => [wire.from, wire.to]
-        .filter((endpoint) => !isJunctionEndpoint(endpoint) && endpoint.connectorId === command.connectorId)
+        .filter((endpoint) => !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) &&
+          endpoint.connectorId === command.connectorId)
         .map((endpoint) => endpoint.contactId)));
       if ([...connectedContactIds].some((contactId) => !retainedContactIds.has(contactId))) {
         throw new Error("Выбранный артикул удалит подключённые контакты. Сначала переподключите или удалите их провода.");
@@ -369,11 +382,13 @@ export function applyEditorCommand(
       validateWireGroups(addedAndRouted);
       return normalizeJunctionCircuits(addedAndRouted);
     case "remove-wire": {
+      const attachedWireIds = screenAttachmentWireIds(document, [command.wireId]);
       const changed = {
         ...document,
         wires: removeRequired(document.wires, command.wireId, "Провод не найден."),
       };
-      return cleanupWireReferences(changed, [command.wireId]);
+      const cleaned = cleanupWireReferences(changed, [command.wireId]);
+      return rerouteE4WireBatch(cleaned, attachedWireIds.filter((wireId) => cleaned.wires.some((wire) => wire.id === wireId)));
     }
     case "update-wire":
       if (command.lengthMm !== undefined) requireLength(command.lengthMm);
@@ -467,10 +482,13 @@ export function applyEditorCommand(
       const end = wireEndpointE4Anchor(changed, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
       validateOrthogonalE4Route(start, route, end);
-      const otherWireIds = new Set(changed.junctions
-        .filter((junction) => movedJunctionIds.has(junction.id))
-        .flatMap((junction) => junction.wireIds)
-        .filter((wireId) => wireId !== command.wireId));
+      const otherWireIds = new Set([
+        ...changed.junctions
+          .filter((junction) => movedJunctionIds.has(junction.id))
+          .flatMap((junction) => junction.wireIds)
+          .filter((wireId) => wireId !== command.wireId),
+        ...screenAttachmentWireIds(changed, [command.wireId]),
+      ]);
       validateE4Route([start.position, ...route, end.position], createE4RoutingRequest(
         changed, wire, command.wireId, undefined, undefined, new Set([command.wireId, ...otherWireIds]),
       ));
@@ -604,8 +622,8 @@ export function applyEditorCommand(
       if (document.screens.some((item) => item.id === screen.id)) throw new Error("Экран с таким ID уже существует.");
       return { ...document, screens: [...document.screens, screen] };
     }
-    case "update-screen":
-      return {
+    case "update-screen": {
+      const changed = {
         ...document,
         screens: replaceRequired(document.screens, command.screenId, (screen) => normalizeScreen(document, {
           ...screen,
@@ -615,8 +633,20 @@ export function applyEditorCommand(
           width: command.width ?? screen.width,
         }), "Экран не найден."),
       };
-    case "remove-screen":
-      return { ...document, screens: removeRequired(document.screens, command.screenId, "Экран не найден.") };
+      const attachedWireIds = changed.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
+        isScreenEndpoint(endpoint) && endpoint.screenId === command.screenId)).map((wire) => wire.id);
+      return rerouteE4WireBatch(changed, attachedWireIds);
+    }
+    case "remove-screen": {
+      const attachedWireIds = document.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
+        isScreenEndpoint(endpoint) && endpoint.screenId === command.screenId)).map((wire) => wire.id);
+      const changed = {
+        ...document,
+        screens: removeRequired(document.screens, command.screenId, "Экран не найден."),
+        wires: document.wires.filter((wire) => !attachedWireIds.includes(wire.id)),
+      };
+      return cleanupWireReferences(changed, attachedWireIds);
+    }
     case "update-layer":
       return updateLayers(document, command.view, (layers) =>
         replaceRequired(layers, command.layerId, (layer) => ({
@@ -726,7 +756,18 @@ function rebuildConnectorE4Wires(
       return [wire.id];
     }
   });
-  return rerouteE4WireBatch(document, affectedWireIds);
+  return rerouteE4WireBatch(document, [
+    ...affectedWireIds,
+    ...screenAttachmentWireIds(document, affectedWireIds),
+  ]);
+}
+
+function screenAttachmentWireIds(document: HarnessDesignDocument, changedWireIds: readonly string[]): readonly string[] {
+  const changed = new Set(changedWireIds);
+  const screenIds = new Set(document.screens.filter((screen) =>
+    screen.wireIds.some((wireId) => changed.has(wireId))).map((screen) => screen.id));
+  return document.wires.flatMap((wire) => !changed.has(wire.id) && [wire.from, wire.to].some((endpoint) =>
+    isScreenEndpoint(endpoint) && screenIds.has(endpoint.screenId)) ? [wire.id] : []);
 }
 
 function normalizeContact(
@@ -801,7 +842,7 @@ function requireConnectorText(value: string, emptyMessage: string): void {
 }
 
 function isConnectorEndpoint(endpoint: WireEndpoint, connectorId: string, contactId?: string): boolean {
-  return !isJunctionEndpoint(endpoint) && endpoint.connectorId === connectorId &&
+  return !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) && endpoint.connectorId === connectorId &&
     (contactId === undefined || endpoint.contactId === contactId);
 }
 
@@ -827,7 +868,7 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
     : item) };
   for (const junction of changed.junctions.filter((item) => item.wireIds.includes(wireId))) validateJunctionAgainstWires(changed, junction);
   validateWireGroups(changed);
-  return changed;
+  return rerouteE4WireBatch(changed, screenAttachmentWireIds(changed, [wireId]));
 }
 
 function rerouteWireE4(document: HarnessDesignDocument, wireId: string): HarnessDesignDocument {
@@ -955,14 +996,29 @@ function rerouteWireE4ThroughJunctions(
   const anchors: readonly E4RouterAnchor[] = [
     {
       ...start,
-      obstacleId: isJunctionEndpoint(wire.from) ? undefined : wire.from.connectorId,
+      obstacleId: isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ? undefined : wire.from.connectorId,
     },
     ...waypoints,
     {
       ...end,
-      obstacleId: isJunctionEndpoint(wire.to) ? undefined : wire.to.connectorId,
+      obstacleId: isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to) ? undefined : wire.to.connectorId,
     },
   ];
+  if (waypoints.length > 0) {
+    try {
+      const routed = routeE4WireThroughWaypoints(
+        createE4RoutingRequest(document, wire, wireId, anchors[0], anchors.at(-1),
+          new Set([wireId, ...additionallyExcludedWireIds])),
+        waypoints.map((waypoint) => waypoint.position),
+      );
+      validateOrthogonalE4Route(start, routed.intermediate, end);
+      return { ...document, wires: document.wires.map((item) => item.id === wireId
+        ? { ...item, e4Route: routed.intermediate } : item) };
+    } catch {
+      // An unrestricted shortest path can revisit an earlier leg. The
+      // sequential builder below reserves completed legs in that case.
+    }
+  }
   const e4Route: Point[] = [];
   for (let index = 0; index < anchors.length - 1; index += 1) {
     const legStart = anchors[index]!;
@@ -1002,11 +1058,11 @@ function createE4RoutingRequest(
   if (!wireStart || !wireEnd) throw new Error("Точки подключения маршрута Э4 не найдены.");
   const start: E4RouterAnchor = explicitStart ?? {
     ...wireStart,
-    obstacleId: isJunctionEndpoint(wire.from) ? undefined : wire.from.connectorId,
+    obstacleId: isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ? undefined : wire.from.connectorId,
   };
   const end: E4RouterAnchor = explicitEnd ?? {
     ...wireEnd,
-    obstacleId: isJunctionEndpoint(wire.to) ? undefined : wire.to.connectorId,
+    obstacleId: isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to) ? undefined : wire.to.connectorId,
   };
   const fullWirePoints = (candidate: WireInstance): readonly Point[] | null => {
     const candidateStart = wireEndpointE4Anchor(document, candidate.from);
@@ -1020,7 +1076,12 @@ function createE4RoutingRequest(
       return null;
     }
   };
-  const junctionLinkedWireIds = collectJunctionComponent([wireId], document.junctions);
+  const junctionLinkedWireIds = collectConductiveComponent([wireId], document);
+  const endpointScreenIds = new Set([wire.from, wire.to].flatMap((endpoint) =>
+    isScreenEndpoint(endpoint) ? [endpoint.screenId] : []));
+  const screenedWireIdsAtEndpoint = new Set(document.screens
+    .filter((screen) => endpointScreenIds.has(screen.id))
+    .flatMap((screen) => screen.wireIds));
   return {
     start,
     end,
@@ -1037,6 +1098,7 @@ function createE4RoutingRequest(
       }),
       ...document.wires.flatMap((candidate, index) => {
         if (junctionLinkedWireIds.has(candidate.id)) return [];
+        if (screenedWireIdsAtEndpoint.has(candidate.id)) return [];
         const points = fullWirePoints(candidate);
         if (!points) return [];
         const label = candidate.circuit || `W${index + 1}`;
@@ -1164,7 +1226,7 @@ function validateWireGroups(document: HarnessDesignDocument): void {
 function normalizeJunctionCircuits(document: HarnessDesignDocument): HarnessDesignDocument {
   const byId = new Map(document.wires.map((wire) => [wire.id, wire]));
   for (const junction of document.junctions) {
-    const component = collectJunctionComponent(junction.wireIds, document.junctions);
+    const component = collectConductiveComponent(junction.wireIds, document);
     const circuits = new Set([...component].map((wireId) => byId.get(wireId)?.circuit).filter((value): value is string => Boolean(value)));
     if (circuits.size > 1) throw new Error("Нельзя соединить провода с разными непустыми обозначениями цепи.");
     const circuit = circuits.values().next().value as string | undefined;
@@ -1173,7 +1235,34 @@ function normalizeJunctionCircuits(document: HarnessDesignDocument): HarnessDesi
       if (wire && !wire.circuit) byId.set(wireId, { ...wire, circuit });
     }
   }
+  for (const screen of document.screens) {
+    const attached = document.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
+      isScreenEndpoint(endpoint) && endpoint.screenId === screen.id)).map((wire) => wire.id);
+    if (attached.length === 0) continue;
+    const component = collectConductiveComponent(attached, document);
+    const circuits = new Set([...component].map((wireId) => byId.get(wireId)?.circuit).filter((value): value is string => Boolean(value)));
+    if (circuits.size > 1) throw new Error("Нельзя соединить с экраном провода с разными непустыми обозначениями цепи.");
+    const circuit = circuits.values().next().value as string | undefined;
+    if (circuit) for (const wireId of component) {
+      const wire = byId.get(wireId);
+      if (wire && !wire.circuit) byId.set(wireId, { ...wire, circuit });
+    }
+  }
   return { ...document, wires: document.wires.map((wire) => byId.get(wire.id)!) };
+}
+
+function collectConductiveComponent(initial: readonly string[], document: HarnessDesignDocument): Set<string> {
+  const result = collectJunctionComponent(initial, document.junctions);
+  let size = -1;
+  while (size !== result.size) {
+    size = result.size;
+    const screenIds = new Set(document.wires.filter((wire) => result.has(wire.id)).flatMap((wire) =>
+      [wire.from, wire.to].flatMap((endpoint) => isScreenEndpoint(endpoint) ? [endpoint.screenId] : [])));
+    const attached = document.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
+      isScreenEndpoint(endpoint) && screenIds.has(endpoint.screenId))).map((wire) => wire.id);
+    for (const wireId of collectJunctionComponent(attached, document.junctions)) result.add(wireId);
+  }
+  return result;
 }
 
 function collectJunctionComponent(initial: readonly string[], junctions: readonly E4Junction[]): Set<string> {
@@ -1191,6 +1280,7 @@ function collectJunctionComponent(initial: readonly string[], junctions: readonl
 function cleanupWireReferences(document: HarnessDesignDocument, removedWireIds: readonly string[]): HarnessDesignDocument {
   const removed = new Set(removedWireIds);
   let junctions = document.junctions;
+  let screens = document.screens;
   let expanded = true;
   while (expanded) {
     expanded = false;
@@ -1202,13 +1292,21 @@ function cleanupWireReferences(document: HarnessDesignDocument, removedWireIds: 
       expanded = true;
     }
     junctions = junctions.filter((junction) => !collapsedIds.has(junction.id));
+    screens = screens.map((screen) => ({ ...screen, wireIds: screen.wireIds.filter((id) => !removed.has(id)) }));
+    const emptyScreenIds = new Set(screens.filter((screen) => screen.wireIds.length === 0).map((screen) => screen.id));
+    for (const wire of document.wires) if (!removed.has(wire.id) && [wire.from, wire.to].some((endpoint) =>
+      isScreenEndpoint(endpoint) && emptyScreenIds.has(endpoint.screenId))) {
+      removed.add(wire.id);
+      expanded = true;
+    }
+    screens = screens.filter((screen) => !emptyScreenIds.has(screen.id));
   }
   return {
     ...document,
     wires: document.wires.filter((wire) => !removed.has(wire.id)),
     junctions,
     diffPairs: document.diffPairs.filter((group) => !group.wireIds.some((id) => removed.has(id))),
-    screens: document.screens.map((screen) => ({ ...screen, wireIds: screen.wireIds.filter((id) => !removed.has(id)) })).filter((screen) => screen.wireIds.length >= 1),
+    screens,
   };
 }
 
@@ -1265,6 +1363,10 @@ function normalizeScreen(document: HarnessDesignDocument, screen: WireScreenGrou
   if (!id || !label || label.length > 120) throw new Error("ID или обозначение экрана задано неверно.");
   if (screen.wireIds.length < 1 || new Set(screen.wireIds).size !== screen.wireIds.length) throw new Error("Экран должен содержать хотя бы один провод без повторов.");
   requireWireIds(document, screen.wireIds);
+  if (screen.wireIds.some((wireId) => {
+    const wire = document.wires.find((item) => item.id === wireId);
+    return wire && [wire.from, wire.to].some((endpoint) => isScreenEndpoint(endpoint) && endpoint.screenId === id);
+  })) throw new Error("Провод, подключённый к экрану, не может одновременно входить в его охват.");
   if (!Number.isFinite(screen.position) || screen.position < 0 || screen.position > 1) throw new Error("Положение экрана должно быть от 0 до 1.");
   requirePositiveParameter(screen.width, "Ширина экрана");
   if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
@@ -1323,6 +1425,13 @@ function requireEndpoint(document: HarnessDesignDocument, endpoint: WireEndpoint
     }
     return;
   }
+  if (isScreenEndpoint(endpoint)) {
+    if (!document.screens.some((screen) => screen.id === endpoint.screenId) ||
+        !wireEndpointE4Anchor(document, endpoint)) {
+      throw new Error("Точка подключения экрана не найдена.");
+    }
+    return;
+  }
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   const contact = connector?.contacts.find((item) => item.id === endpoint.contactId);
   if (!contact) {
@@ -1339,9 +1448,10 @@ function isContactConnected(document: HarnessDesignDocument, connectorId: string
 }
 
 function sameEndpoint(left: WireEndpoint, right: WireEndpoint): boolean {
-  return isJunctionEndpoint(left)
-    ? isJunctionEndpoint(right) && left.junctionId === right.junctionId
-    : !isJunctionEndpoint(right) && left.connectorId === right.connectorId && left.contactId === right.contactId;
+  if (isJunctionEndpoint(left)) return isJunctionEndpoint(right) && left.junctionId === right.junctionId;
+  if (isScreenEndpoint(left)) return isScreenEndpoint(right) && left.screenId === right.screenId;
+  return !isJunctionEndpoint(right) && !isScreenEndpoint(right) &&
+    left.connectorId === right.connectorId && left.contactId === right.contactId;
 }
 
 function requireLength(lengthMm: number): void {

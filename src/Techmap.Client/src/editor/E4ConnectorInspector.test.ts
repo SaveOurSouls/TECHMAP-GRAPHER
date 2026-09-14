@@ -47,10 +47,30 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("Редактирование включено. Escape — закончить");
     expect(markup).toContain("is-editing");
     expect(markup).toContain("e4cce-title-add");
+    expect(markup).toMatch(/class="e4cce-title-add"[^>]*>⊕ Добавить строку/);
+    expect(markup).not.toMatch(/class="e4cce-title-add"[^>]*disabled/);
     expect(markup).toContain("e4cce-footer-code");
     expect(markup).toContain("e4cce-footer-article");
+    expect(markup).toContain('aria-label="Код свободного блока"');
+    expect(markup).toContain('aria-label="Артикул свободного блока"');
     expect(markup).toContain("e4cce-wire-picker");
     expect(markup).toContain("XS9");
+  });
+
+  it("keeps add-row immediately available on a selected free block before field editing", () => {
+    const connector = createBuiltInConnectorInstance("catalog-connector-free", {
+      id: "free1", designation: "XS9", e4Position: { x: 20, y: 30 }, freeContactCount: 2,
+    });
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector,
+      disabled: false,
+      onCommand: vi.fn(),
+      mode: "canvas",
+      editing: false,
+    }));
+
+    expect(markup).toMatch(/class="e4cce-title-add"[^>]*>⊕ Добавить строку/);
+    expect(markup).not.toMatch(/class="e4cce-title-add"[^>]*disabled/);
   });
 
   it("locks series number and type rows and filters terminals by contact kind", () => {
@@ -94,6 +114,8 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("Второй цвет");
     expect(markup).toContain("Пусто · одноцветный");
     expect(markup).toContain("Новый цвет");
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('class="e4cce-color-popover" hidden=""');
     expect(markup).toContain("e4cce-wire-picker");
   });
 });

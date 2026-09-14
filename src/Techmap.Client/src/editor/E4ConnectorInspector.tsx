@@ -73,12 +73,16 @@ function ColorCellEditor({
   choices,
   disabled,
   editing,
+  open,
+  onOpenChange,
   onChange,
 }: {
   readonly contact: ConnectorContact;
   readonly choices: readonly WireColorReference[];
   readonly disabled: boolean;
   readonly editing: boolean;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
   readonly onChange: (patch: Pick<ConnectorContact, "color" | "secondaryColor">) => void;
 }) {
   const primary = contact.color;
@@ -95,17 +99,27 @@ function ColorCellEditor({
     </span>;
   }
   return (
-    <details className="e4cce-color-editor">
-      <summary aria-label={`Цвет, контакт ${contact.number}`} title="Основной и второй цвет провода">
+    <div className={`e4cce-color-editor ${open ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className="e4cce-color-summary"
+        aria-label={`Цвет, контакт ${contact.number}`}
+        aria-expanded={open}
+        title="Основной и второй цвет провода"
+        onClick={() => onOpenChange(!open)}
+      >
         <i style={swatchStyle} aria-hidden="true" />
         <span>{[primary, secondary].filter(Boolean).join(" / ") || "—"}</span>
-      </summary>
-      <div className="e4cce-color-popover">
+      </button>
+      <div className="e4cce-color-popover" hidden={!open}>
         <label>Основной цвет
           <select
             value={primary}
             disabled={disabled}
-            onChange={(event) => onChange({ color: event.target.value, secondaryColor: secondary })}
+            onChange={(event) => {
+              onChange({ color: event.target.value, secondaryColor: secondary });
+              onOpenChange(false);
+            }}
           >
             <option value="">—</option>
             {choices.map((choice) => <option key={choice.id} value={choice.name}>{choice.name}</option>)}
@@ -115,7 +129,10 @@ function ColorCellEditor({
           <select
             value={secondary}
             disabled={disabled}
-            onChange={(event) => onChange({ color: primary, secondaryColor: event.target.value })}
+            onChange={(event) => {
+              onChange({ color: primary, secondaryColor: event.target.value });
+              onOpenChange(false);
+            }}
           >
             <option value="">Пусто · одноцветный</option>
             {choices.map((choice) => <option key={choice.id} value={choice.name}>{choice.name}</option>)}
@@ -127,11 +144,14 @@ function ColorCellEditor({
             aria-label={`Новый цвет из палитры, контакт ${contact.number}`}
             disabled={disabled}
             value={colorHex(primary, choices)}
-            onChange={(event) => onChange({ color: event.target.value.toUpperCase(), secondaryColor: secondary })}
+            onChange={(event) => {
+              onChange({ color: event.target.value.toUpperCase(), secondaryColor: secondary });
+              onOpenChange(false);
+            }}
           />
         </label>
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -181,14 +201,31 @@ export function E4ConnectorInspector({
   onEditingChange,
 }: E4ConnectorInspectorProps) {
   const [designation, setDesignation] = useState(connector.designation);
+  const [libraryCode, setLibraryCode] = useState(connector.libraryCode ?? "FREE");
   const [partNumber, setPartNumber] = useState(connector.partNumber);
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [wireQueries, setWireQueries] = useState<Readonly<Record<string, string>>>({});
+  const [openColorContactId, setOpenColorContactId] = useState<string | null>(null);
+  const canvasEditorRef = useRef<HTMLElement | null>(null);
   const cancelIdentityBlurRef = useRef(false);
   const canvasEditing = mode !== "canvas" || editing === true;
 
   useEffect(() => setDesignation(connector.designation), [connector.id, connector.designation]);
+  useEffect(() => setLibraryCode(connector.libraryCode ?? "FREE"), [connector.id, connector.libraryCode]);
   useEffect(() => setPartNumber(connector.partNumber), [connector.id, connector.partNumber]);
+  useEffect(() => {
+    if (!openColorContactId) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && canvasEditorRef.current?.contains(target) &&
+          (target as Element).closest?.(".e4cce-color-editor")) return;
+      // Dismiss during capture, then let the same click reach the next cell or
+      // the empty canvas. This keeps editing a one-click operation.
+      setOpenColorContactId(null);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+  }, [openColorContactId]);
 
   const commitIdentity = () => {
     if (cancelIdentityBlurRef.current) {
@@ -196,14 +233,25 @@ export function E4ConnectorInspector({
       return;
     }
     const nextDesignation = designation.trim();
+    const nextLibraryCode = connector.libraryBinding?.mode === "series"
+      ? connector.libraryCode ?? "FREE"
+      : libraryCode.trim();
     const nextPartNumber = connector.libraryBinding?.mode === "series" ? connector.partNumber : partNumber.trim();
-    if (!nextDesignation || !nextPartNumber) {
+    if (!nextDesignation || !nextLibraryCode || !nextPartNumber) {
       setDesignation(connector.designation);
+      setLibraryCode(connector.libraryCode ?? "FREE");
       setPartNumber(connector.partNumber);
       return;
     }
-    if (nextDesignation !== connector.designation || nextPartNumber !== connector.partNumber) {
-      onCommand({ type: "update-connector", connectorId: connector.id, designation: nextDesignation, partNumber: nextPartNumber });
+    if (nextDesignation !== connector.designation || nextLibraryCode !== (connector.libraryCode ?? "FREE") ||
+        nextPartNumber !== connector.partNumber) {
+      onCommand({
+        type: "update-connector",
+        connectorId: connector.id,
+        designation: nextDesignation,
+        libraryCode: connector.libraryBinding?.mode === "series" ? undefined : nextLibraryCode,
+        partNumber: nextPartNumber,
+      });
     }
   };
 
@@ -263,7 +311,9 @@ export function E4ConnectorInspector({
   if (mode === "canvas") {
     const isSeries = connector.libraryBinding?.mode === "series";
     const article = isSeries && series ? findConnectorSeriesArticle(series, connector.partNumber) : null;
-    const libraryCode = isSeries ? series?.name ?? connector.libraryBinding?.seriesId ?? "СЕРИЯ" : "FREE";
+    const displayedLibraryCode = isSeries
+      ? series?.name ?? connector.libraryBinding?.seriesId ?? "СЕРИЯ"
+      : connector.libraryCode ?? "FREE";
     const colorChoices = wireColors ?? connectorColorChoices(connector);
     const geometry = connectorE4TableGeometry(connector);
     const columns = geometry.columns.map((column) => column.kind === "base"
@@ -271,6 +321,7 @@ export function E4ConnectorInspector({
       : { id: `custom:${column.id}` as const, label: column.label, width: column.width });
     return (
       <section
+          ref={canvasEditorRef}
           className={`e4-connector-canvas-editor ${connector.schematic.orientation} ${canvasEditing ? "is-editing" : "is-readonly"}`}
           aria-label={`Поля соединителя ${connector.designation}`}
           title={canvasEditing ? "Редактирование включено. Escape — закончить" : "Зажмите и перетащите. Двойной клик — редактировать"}
@@ -291,7 +342,7 @@ export function E4ConnectorInspector({
           <button
             type="button"
             className="e4cce-title-add"
-            disabled={disabled || !canvasEditing || isSeries || nextContactNumber(connector) === null}
+            disabled={disabled || isSeries || nextContactNumber(connector) === null}
             title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
             onClick={addContact}
           >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
@@ -355,6 +406,8 @@ export function E4ConnectorInspector({
                       choices={colorChoices}
                       disabled={disabled}
                       editing={canvasEditing}
+                      open={openColorContactId === contact.id}
+                      onOpenChange={(open) => setOpenColorContactId(open ? contact.id : null)}
                       onChange={(patch) => updateContact(contact, patch)}
                     />
                   ) : column.id === "terminal" && isSeries ? (
@@ -457,8 +510,38 @@ export function E4ConnectorInspector({
             ))}</tbody>
             <tfoot><tr><td colSpan={Math.max(1, columns.length)}>
               <div className="e4cce-footer">
-                <span className="e4cce-footer-code" title={libraryCode}>{libraryCode}</span>
-                <span className="e4cce-footer-article" title={connector.partNumber}>{connector.partNumber}</span>
+                {canvasEditing && !isSeries ? <input
+                  className="e4cce-footer-code"
+                  aria-label="Код свободного блока"
+                  maxLength={120}
+                  disabled={disabled}
+                  value={libraryCode}
+                  onChange={(event) => setLibraryCode(event.target.value)}
+                  onBlur={commitIdentity}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setLibraryCode(connector.libraryCode ?? "FREE");
+                    }
+                  }}
+                /> : <span className="e4cce-footer-code" title={displayedLibraryCode}>{displayedLibraryCode}</span>}
+                {canvasEditing && !isSeries ? <input
+                  className="e4cce-footer-article"
+                  aria-label="Артикул свободного блока"
+                  maxLength={120}
+                  disabled={disabled}
+                  value={partNumber}
+                  onChange={(event) => setPartNumber(event.target.value)}
+                  onBlur={commitIdentity}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setPartNumber(connector.partNumber);
+                    }
+                  }}
+                /> : <span className="e4cce-footer-article" title={connector.partNumber}>{connector.partNumber}</span>}
               </div>
             </td></tr></tfoot>
           </table>

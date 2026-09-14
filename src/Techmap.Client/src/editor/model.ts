@@ -144,6 +144,8 @@ export interface ConnectorContact {
 export interface ConnectorInstance {
   readonly id: string;
   readonly designation: string;
+  /** Editable footer code for a free connector. Series connectors derive it from their library. */
+  readonly libraryCode?: string;
   readonly partNumber: string;
   readonly contacts: readonly ConnectorContact[];
   readonly schematic: ConnectorSchematicPresentation;
@@ -153,8 +155,9 @@ export interface ConnectorInstance {
 }
 
 export type WireEndpoint =
-  | { readonly connectorId: string; readonly contactId: string; readonly junctionId?: never }
-  | { readonly junctionId: string; readonly connectorId: ""; readonly contactId: "" };
+  | { readonly connectorId: string; readonly contactId: string; readonly junctionId?: never; readonly screenId?: never }
+  | { readonly junctionId: string; readonly connectorId: ""; readonly contactId: ""; readonly screenId?: never }
+  | { readonly screenId: string; readonly connectorId: ""; readonly contactId: ""; readonly junctionId?: never };
 
 export interface E4Junction {
   readonly id: string;
@@ -180,7 +183,7 @@ export interface WireScreenGroup {
 
 export type WireCrossingStyle = "none" | "bridge";
 
-export type E4RouteLeadDirection = "left" | "right" | null;
+export type E4RouteLeadDirection = "left" | "right" | "up" | "down" | null;
 
 export interface E4RouteAnchor {
   readonly position: Point;
@@ -229,6 +232,8 @@ export interface HarnessDesignDocument {
 }
 
 export const defaultE4WireLead = 24;
+export const e4ScreenAlongSize = 18;
+export const e4ScreenTerminalLength = 16;
 
 export const defaultLayerIds = {
   connectors: "connectors",
@@ -283,7 +288,9 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
     x += column.width;
     return positioned;
   });
-  const libraryCode = connector.libraryBinding?.mode === "series" ? connector.libraryBinding.seriesId : "FREE";
+  const libraryCode = connector.libraryBinding?.mode === "series"
+    ? connector.libraryBinding.seriesId
+    : connector.libraryCode ?? "FREE";
   const width = Math.max(
     connectorE4TableMetrics.minimumWidth,
     x,
@@ -384,6 +391,11 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
     for (const endpoint of [wire.from, wire.to]) {
       if (isJunctionEndpoint(endpoint)) {
         if (!junctionIds.has(endpoint.junctionId)) throw new Error("Провод ссылается на отсутствующий узел соединения.");
+      } else if (isScreenEndpoint(endpoint)) {
+        if (!document.screens.some((screen) => screen.id === endpoint.screenId) ||
+            !wireScreenConnectionPoint(document, endpoint.screenId)) {
+          throw new Error("Провод ссылается на отсутствующую точку подключения экрана.");
+        }
       } else {
         const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
         if (!connector?.contacts.some((contact) => contact.id === endpoint.contactId)) {
@@ -442,10 +454,33 @@ export function createJunctionEndpoint(junctionId: string): WireEndpoint {
   return { junctionId, connectorId: "", contactId: "" };
 }
 
+export function isScreenEndpoint(endpoint: WireEndpoint): endpoint is Extract<WireEndpoint, { screenId: string }> {
+  return "screenId" in endpoint;
+}
+
+export function createScreenEndpoint(screenId: string): WireEndpoint {
+  return { screenId, connectorId: "", contactId: "" };
+}
+
 export function wireEndpointE4Anchor(document: HarnessDesignDocument, endpoint: WireEndpoint): E4RouteAnchor | null {
+  return wireEndpointE4AnchorInternal(document, endpoint, new Set());
+}
+
+function wireEndpointE4AnchorInternal(
+  document: HarnessDesignDocument,
+  endpoint: WireEndpoint,
+  resolvingScreenIds: ReadonlySet<string>,
+): E4RouteAnchor | null {
   if (isJunctionEndpoint(endpoint)) {
     const junction = document.junctions.find((item) => item.id === endpoint.junctionId);
     return junction ? { position: junction.position, leadDirection: null } : null;
+  }
+  if (isScreenEndpoint(endpoint)) {
+    const geometry = wireScreenConnectionGeometry(document, endpoint.screenId, resolvingScreenIds);
+    return geometry ? {
+      position: geometry.connectionPoint,
+      leadDirection: geometry.orientation === "horizontal" ? "up" : "left",
+    } : null;
   }
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   if (!connector) return null;
@@ -454,6 +489,147 @@ export function wireEndpointE4Anchor(document: HarnessDesignDocument, endpoint: 
     position,
     leadDirection: connector.schematic.orientation === "contacts-left" ? "left" : "right",
   } : null;
+}
+
+interface ScreenRouteSpan {
+  readonly orientation: "horizontal" | "vertical";
+  readonly start: number;
+  readonly end: number;
+  readonly crossMinimum: number;
+  readonly crossMaximum: number;
+}
+
+interface ScreenRouteSegment {
+  readonly orientation: "horizontal" | "vertical";
+  readonly start: number;
+  readonly end: number;
+  readonly cross: number;
+}
+
+export interface WireScreenConnectionGeometry {
+  readonly center: Point;
+  readonly bodyConnectionPoint: Point;
+  readonly connectionPoint: Point;
+  readonly orientation: "horizontal" | "vertical";
+  readonly alongSize: number;
+  readonly crossSize: number;
+}
+
+/** Derives the screen body and its conducting terminal from the screened routes. */
+export function wireScreenConnectionGeometry(
+  document: HarnessDesignDocument,
+  screenId: string,
+  resolvingScreenIds: ReadonlySet<string> = new Set(),
+): WireScreenConnectionGeometry | null {
+  if (resolvingScreenIds.has(screenId)) return null;
+  const screen = document.screens.find((item) => item.id === screenId);
+  if (!screen) return null;
+  const nextResolving = new Set([...resolvingScreenIds, screenId]);
+  const segmentLists: ScreenRouteSegment[][] = screen.wireIds.map((wireId): ScreenRouteSegment[] => {
+    const wire = document.wires.find((item) => item.id === wireId);
+    if (!wire) return [];
+    const start = wireEndpointE4AnchorInternal(document, wire.from, nextResolving)?.position;
+    const end = wireEndpointE4AnchorInternal(document, wire.to, nextResolving)?.position;
+    if (!start || !end) return [];
+    const points = [start, ...wire.e4Route, end];
+    const segments: ScreenRouteSegment[] = [];
+    points.slice(1).forEach((current, index) => {
+      const previous = points[index]!;
+      if (previous.y === current.y && previous.x !== current.x) segments.push({
+        orientation: "horizontal",
+        start: Math.min(previous.x, current.x),
+        end: Math.max(previous.x, current.x),
+        cross: previous.y,
+      });
+      else if (previous.x === current.x && previous.y !== current.y) segments.push({
+        orientation: "vertical",
+        start: Math.min(previous.y, current.y),
+        end: Math.max(previous.y, current.y),
+        cross: previous.x,
+      });
+    });
+    return segments;
+  });
+  if (segmentLists.length === 0 || segmentLists.some((segments) => segments.length === 0)) return null;
+
+  const spans: ScreenRouteSpan[] = [];
+  const aligned = segmentLists.every((segments) => segments.length === segmentLists[0]!.length);
+  if (aligned) for (let index = 0; index < segmentLists[0]!.length; index += 1) {
+    const selected = segmentLists.map((segments) => segments[index]!);
+    if (selected.some((segment) => segment.orientation !== selected[0]!.orientation)) continue;
+    const start = Math.max(...selected.map((segment) => segment.start));
+    const end = Math.min(...selected.map((segment) => segment.end));
+    if (end > start) spans.push({
+      orientation: selected[0]!.orientation,
+      start,
+      end,
+      crossMinimum: Math.min(...selected.map((segment) => segment.cross)),
+      crossMaximum: Math.max(...selected.map((segment) => segment.cross)),
+    });
+  }
+  if (spans.length === 0) {
+    let best: ScreenRouteSpan | null = null;
+    for (const orientation of ["horizontal", "vertical"] as const) {
+      const candidates = [...new Set(segmentLists.flatMap((segments) => segments
+        .filter((segment) => segment.orientation === orientation)
+        .map((segment) => segment.start)))];
+      for (const start of candidates) {
+        const selected = segmentLists.map((segments) => segments
+          .filter((segment) => segment.orientation === orientation && segment.start <= start && segment.end > start)
+          .sort((left, right) => right.end - left.end)[0]);
+        if (selected.some((segment) => segment === undefined)) continue;
+        const end = Math.min(...selected.map((segment) => segment!.end));
+        if (end <= start || best && best.end - best.start >= end - start) continue;
+        best = {
+          orientation,
+          start,
+          end,
+          crossMinimum: Math.min(...selected.map((segment) => segment!.cross)),
+          crossMaximum: Math.max(...selected.map((segment) => segment!.cross)),
+        };
+      }
+    }
+    if (best) spans.push(best);
+  }
+  if (spans.length === 0) return null;
+  const pathLength = spans.reduce((sum, span) => sum + span.end - span.start, 0);
+  const requestedDistance = pathLength * Math.max(0, Math.min(1, screen.position));
+  let accumulated = 0;
+  let selected = spans[0]!;
+  for (const span of spans) {
+    if (requestedDistance <= accumulated + span.end - span.start || span === spans.at(-1)) {
+      selected = span;
+      break;
+    }
+    accumulated += span.end - span.start;
+  }
+  const along = selected.start + Math.max(0, Math.min(selected.end - selected.start, requestedDistance - accumulated));
+  const cross = (selected.crossMinimum + selected.crossMaximum) / 2;
+  const alongSize = e4ScreenAlongSize;
+  const crossSize = Math.max(32, screen.width, selected.crossMaximum - selected.crossMinimum + 18);
+  const center = selected.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
+  const bodyConnectionPoint = selected.orientation === "horizontal"
+    ? { x: center.x, y: center.y - crossSize / 2 }
+    : { x: center.x - crossSize / 2, y: center.y };
+  const connectionPoint = selected.orientation === "horizontal"
+    ? { x: bodyConnectionPoint.x, y: bodyConnectionPoint.y - e4ScreenTerminalLength }
+    : { x: bodyConnectionPoint.x - e4ScreenTerminalLength, y: bodyConnectionPoint.y };
+  return {
+    center,
+    bodyConnectionPoint,
+    connectionPoint,
+    orientation: selected.orientation,
+    alongSize,
+    crossSize,
+  };
+}
+
+export function wireScreenConnectionPoint(
+  document: HarnessDesignDocument,
+  screenId: string,
+  resolvingScreenIds: ReadonlySet<string> = new Set(),
+): Point | null {
+  return wireScreenConnectionGeometry(document, screenId, resolvingScreenIds)?.connectionPoint ?? null;
 }
 
 export function validateOrthogonalE4Route(
@@ -496,10 +672,16 @@ export function createOrthogonalE4Route(
 
 function validateLead(anchor: E4RouteAnchor, adjacent: Point, minimumLead: number): void {
   if (anchor.leadDirection === null) return;
+  const horizontal = anchor.leadDirection === "left" || anchor.leadDirection === "right";
   const distance = anchor.leadDirection === "left"
     ? anchor.position.x - adjacent.x
-    : adjacent.x - anchor.position.x;
-  if (adjacent.y !== anchor.position.y || distance < minimumLead) {
+    : anchor.leadDirection === "right"
+      ? adjacent.x - anchor.position.x
+      : anchor.leadDirection === "up"
+        ? anchor.position.y - adjacent.y
+        : adjacent.y - anchor.position.y;
+  const aligned = horizontal ? adjacent.y === anchor.position.y : adjacent.x === anchor.position.x;
+  if (!aligned || distance < minimumLead) {
     throw new Error("Маршрут Э4 должен иметь прямой участок наружу от контакта.");
   }
 }
@@ -507,6 +689,8 @@ function validateLead(anchor: E4RouteAnchor, adjacent: Point, minimumLead: numbe
 function leadPoint(anchor: E4RouteAnchor, minimumLead: number): Point {
   if (anchor.leadDirection === "left") return { x: anchor.position.x - minimumLead, y: anchor.position.y };
   if (anchor.leadDirection === "right") return { x: anchor.position.x + minimumLead, y: anchor.position.y };
+  if (anchor.leadDirection === "up") return { x: anchor.position.x, y: anchor.position.y - minimumLead };
+  if (anchor.leadDirection === "down") return { x: anchor.position.x, y: anchor.position.y + minimumLead };
   return anchor.position;
 }
 
@@ -538,20 +722,28 @@ function validateParsedGroups(
   for (const screen of screens) if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
     throw new Error("Провода экрана должны иметь общий параллельный участок.");
   }
+  for (const screen of screens) if (screen.wireIds.some((wireId) => {
+    const wire = document.wires.find((item) => item.id === wireId);
+    return wire && [wire.from, wire.to].some((endpoint) => isScreenEndpoint(endpoint) && endpoint.screenId === screen.id);
+  })) throw new Error("Провод, подключённый к экрану, не может одновременно входить в его охват.");
 }
 
 function validateJunctionCircuitComponents(wires: readonly WireInstance[], junctions: readonly E4Junction[]): void {
   const visited = new Set<string>();
   for (const wire of wires) {
     if (visited.has(wire.id)) continue;
-    const component = collectConnectedWireIds(wire.id, junctions);
+    const component = collectConnectedWireIds(wire.id, wires, junctions);
     for (const wireId of component) visited.add(wireId);
     const circuits = new Set(wires.filter((item) => component.has(item.id) && item.circuit).map((item) => item.circuit));
     if (circuits.size > 1) throw new Error("Провода одной цепи через узел соединения имеют разные обозначения цепи.");
   }
 }
 
-function collectConnectedWireIds(wireId: string, junctions: readonly E4Junction[]): Set<string> {
+function collectConnectedWireIds(
+  wireId: string,
+  wires: readonly WireInstance[],
+  junctions: readonly E4Junction[],
+): Set<string> {
   const result = new Set([wireId]);
   let size = -1;
   while (size !== result.size) {
@@ -559,6 +751,10 @@ function collectConnectedWireIds(wireId: string, junctions: readonly E4Junction[
     for (const junction of junctions) if (junction.wireIds.some((id) => result.has(id))) {
       for (const id of junction.wireIds) result.add(id);
     }
+    const screenIds = new Set(wires.filter((wire) => result.has(wire.id)).flatMap((wire) =>
+      [wire.from, wire.to].flatMap((endpoint) => isScreenEndpoint(endpoint) ? [endpoint.screenId] : [])));
+    for (const wire of wires) if ([wire.from, wire.to].some((endpoint) =>
+      isScreenEndpoint(endpoint) && screenIds.has(endpoint.screenId))) result.add(wire.id);
   }
   return result;
 }
@@ -586,6 +782,7 @@ export function findWireEndpoint(
   if (isJunctionEndpoint(endpoint)) {
     return view === "e4" ? document.junctions.find((item) => item.id === endpoint.junctionId)?.position ?? null : null;
   }
+  if (isScreenEndpoint(endpoint)) return view === "e4" ? wireScreenConnectionPoint(document, endpoint.screenId) : null;
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   return connector ? connectorContactPosition(connector, endpoint.contactId, view) : null;
 }
@@ -634,6 +831,9 @@ function parseConnector(value: unknown): ConnectorInstance {
   const connector: ConnectorInstance = {
     id: requireText(record.id, "ID соединителя"),
     designation,
+    libraryCode: record.libraryCode === undefined
+      ? "FREE"
+      : requireBoundedText(record.libraryCode, "Код свободного блока", 120),
     partNumber,
     contacts,
     schematic,
@@ -812,6 +1012,7 @@ function parseNormalizedPosition(value: unknown, name: string): number {
 function parseEndpoint(value: unknown): WireEndpoint {
   const record = requireRecord(value, "Конец провода задан неверно.");
   if (record.junctionId !== undefined) return createJunctionEndpoint(requireText(record.junctionId, "Узел конца провода"));
+  if (record.screenId !== undefined) return createScreenEndpoint(requireText(record.screenId, "Экран конца провода"));
   return {
     connectorId: requireText(record.connectorId, "Соединитель конца провода"),
     contactId: requireText(record.contactId, "Контакт конца провода"),

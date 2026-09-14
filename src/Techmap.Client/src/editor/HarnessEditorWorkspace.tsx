@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CanvasViewport, getEditorSceneBounds, type E4SceneOverlays } from "./CanvasViewport";
+import {
+  CanvasViewport,
+  getEditorSceneBounds,
+  type E4ConnectableEndpoint,
+  type E4SceneOverlays,
+} from "./CanvasViewport";
 import { CatalogDock } from "./CatalogDock";
 import { fitEditorCameraToBounds, zoomEditorCameraAt, type EditorViewportSize } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
@@ -99,16 +104,16 @@ export interface HarnessEditorWorkspaceProps {
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onWireConnect?: (
-    from: { readonly connectorId: string; readonly contactIndex: number },
-    to: { readonly connectorId: string; readonly contactIndex: number },
+    from: E4ConnectableEndpoint,
+    to: E4ConnectableEndpoint,
   ) => void;
   readonly onWireReconnect?: (
     wireId: string,
     end: "from" | "to",
-    target: { readonly connectorId: string; readonly contactIndex: number },
+    target: E4ConnectableEndpoint,
   ) => void;
   readonly onWireConnectToWire?: (
-    from: { readonly connectorId: string; readonly contactIndex: number },
+    from: E4ConnectableEndpoint,
     targetWireId: string,
     point: EditorPoint,
   ) => void;

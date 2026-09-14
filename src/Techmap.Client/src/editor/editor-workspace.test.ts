@@ -16,6 +16,7 @@ import {
   getE4WireRoute,
   hitTestE4DifferentialPair,
   hitTestE4Screen,
+  hitTestE4ScreenConnection,
   hitTestE4WireSegment,
   hitTestE4WireLabel,
   hitTestConnectorContact,
@@ -539,11 +540,13 @@ describe("harness editor workspace", () => {
     const screenLayout = getE4ScreenLayout(screen, wires)!;
     expect(screenLayout).toMatchObject({
       center: { x: 40, y: 50 }, orientation: "horizontal", crossSize: 38,
+      bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 15 },
     });
-    expect(screenLayout.alongSize).toBeCloseTo(60.8);
-    expect(screenLayout.alongSize / screenLayout.crossSize).toBeCloseTo(1.6);
+    expect(screenLayout.alongSize).toBe(18);
+    expect(screenLayout.crossSize / screenLayout.alongSize).toBeGreaterThan(2);
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 50 }, 1)?.id).toBe("s1");
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 70 }, 1_000)).toBeNull();
+    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 15 }, 1)).toEqual({ screenId: "s1" });
     const pair = { id: "dp", wireIds: ["h1", "h2"] as const, step: 25, amplitude: 6, variant: 2 as const };
     const pairLayout = getE4DifferentialPairLayout(pair, wires)!;
     expect(pairLayout).toMatchObject({

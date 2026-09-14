@@ -3,6 +3,7 @@ import {
   E4_BRIDGE_MINIMUM_SPACING,
   polylineLength,
   routeE4Wire,
+  routeE4WireThroughWaypoints,
   validateE4Route,
   type E4RoutingRequest,
 } from "./e4-router";
@@ -15,6 +16,37 @@ const horizontalRequest = (overrides: Partial<E4RoutingRequest> = {}): E4Routing
 });
 
 describe("E4 obstacle router", () => {
+  it("minimizes the full path through a mandatory point, including bends after that point", () => {
+    const request: E4RoutingRequest = {
+      start: { position: { x: 0, y: 0 }, leadDirection: null },
+      end: { position: { x: 100, y: 100 }, leadDirection: null },
+      options: { leadLength: 0 },
+    };
+    const waypoint = { x: 50, y: 50 };
+    const locallyChosenFirstLeg = routeE4Wire({ ...request, end: { position: waypoint, leadDirection: null } });
+    const locallyChosenSecondLeg = routeE4Wire({ ...request, start: { position: waypoint, leadDirection: null } });
+    const route = routeE4WireThroughWaypoints(request, [waypoint]);
+    const localPoints = [...locallyChosenFirstLeg.points, ...locallyChosenSecondLeg.points.slice(1)];
+    const localBends = localPoints.slice(2).filter((point, index) => {
+      const first = localPoints[index]!;
+      const second = localPoints[index + 1]!;
+      return (first.x === second.x) !== (second.x === point.x);
+    }).length;
+
+    expect(route.length).toBe(200);
+    expect(route.bends).toBe(2);
+    expect(route.points.slice(1).some((point, index) => {
+      const previous = route.points[index]!;
+      return previous.x === point.x && previous.x === waypoint.x &&
+          waypoint.y >= Math.min(previous.y, point.y) && waypoint.y <= Math.max(previous.y, point.y) ||
+        previous.y === point.y && previous.y === waypoint.y &&
+          waypoint.x >= Math.min(previous.x, point.x) && waypoint.x <= Math.max(previous.x, point.x);
+    })).toBe(true);
+    expect(localBends).toBe(3);
+    expect(route.bends).toBeLessThan(localBends);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
   it("keeps mandatory contact leads and produces a minimal orthogonal route", () => {
     const request = horizontalRequest({
       end: { position: { x: 100, y: 40 }, leadDirection: "left" },

@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import { createConnector, createWire, applyEditorCommand } from "./commands";
 import {
   designToScene,
+  HarnessEditorErrorBoundary,
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
   snapRoutePoint,
@@ -9,6 +12,19 @@ import {
 import { connectorE4TableGeometry, createEmptyHarnessDesign } from "./model";
 
 describe("harness design scene adapter", () => {
+  it("shows a recoverable error instead of an empty editor surface", () => {
+    const boundary = new HarnessEditorErrorBoundary({
+      children: createElement("div", null, "editor"),
+      onError: vi.fn(),
+      onRecover: vi.fn(),
+    });
+    boundary.state = HarnessEditorErrorBoundary.getDerivedStateFromError(new Error("render failed"));
+    const markup = renderToStaticMarkup(boundary.render());
+    expect(markup).toContain("Редактор не смог отобразить последнее изменение");
+    expect(markup).toContain("render failed");
+    expect(markup).toContain("Вернуться к редактору");
+  });
+
   it("removes deleted and duplicate ids from multi-selection and promotes a surviving primary object", () => {
     expect(normalizeEditorSelection(
       ["wire-1", "deleted", "wire-1", "wire-2"],

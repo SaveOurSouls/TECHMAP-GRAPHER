@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
@@ -19,10 +19,12 @@ import {
   connectorContactPosition,
   connectorE4TableGeometry,
   createJunctionEndpoint,
+  createScreenEndpoint,
   createOrthogonalE4Route,
   createEmptyHarnessDesign,
   findWireEndpoint,
   isJunctionEndpoint,
+  isScreenEndpoint,
   wireEndpointE4Anchor,
   type EditorLayer,
   type HarnessDesignDocument,
@@ -39,6 +41,44 @@ export interface HarnessDesignEditorProps {
   readonly apiOverride?: HarnessDesignApi;
   readonly onClose?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
+}
+
+interface HarnessEditorErrorBoundaryProps {
+  readonly children: ReactNode;
+  readonly onRecover: () => void;
+  readonly onError: (message: string) => void;
+}
+
+interface HarnessEditorErrorBoundaryState {
+  readonly error: Error | null;
+}
+
+/** Keeps an unexpected editor render failure visible and recoverable instead of leaving a blank page. */
+export class HarnessEditorErrorBoundary extends Component<
+  HarnessEditorErrorBoundaryProps,
+  HarnessEditorErrorBoundaryState
+> {
+  override state: HarnessEditorErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): HarnessEditorErrorBoundaryState {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, _info: ErrorInfo): void {
+    this.props.onError(error.message || "Ошибка отображения редактора.");
+  }
+
+  override render(): ReactNode {
+    if (!this.state.error) return this.props.children;
+    return <div className="he-loading error" role="alert">
+      <strong>Редактор не смог отобразить последнее изменение.</strong>
+      <span>{this.state.error.message}</span>
+      <button type="button" onClick={() => {
+        this.setState({ error: null });
+        this.props.onRecover();
+      }}>Вернуться к редактору</button>
+    </div>;
+  }
 }
 
 export function normalizeEditorSelection(
@@ -81,10 +121,12 @@ function contactPointForWire(
   otherEndpoint: WireEndpoint,
   view: HarnessEditorView,
 ) {
-  if (isJunctionEndpoint(endpoint)) return findWireEndpoint(document, endpoint, view);
+  if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return findWireEndpoint(document, endpoint, view);
   const connectorId = endpoint.connectorId;
   const contactId = endpoint.contactId;
-  const otherConnectorId = isJunctionEndpoint(otherEndpoint) ? "" : otherEndpoint.connectorId;
+  const otherConnectorId = isJunctionEndpoint(otherEndpoint) || isScreenEndpoint(otherEndpoint)
+    ? ""
+    : otherEndpoint.connectorId;
   const connector = document.connectors.find((item) => item.id === connectorId);
   const other = document.connectors.find((item) => item.id === otherConnectorId);
   if (!connector) return null;
@@ -120,7 +162,7 @@ export function designToScene(
         designation: connector.designation,
         libraryCode: seriesBinding
           ? builtInConnectorSeries.find((series) => series.id === seriesBinding.seriesId)?.name ?? seriesBinding.seriesId
-          : "FREE",
+          : connector.libraryCode ?? "FREE",
         partNumber: connector.partNumber,
         columns: JSON.stringify(columnIds),
         columnLabels: JSON.stringify(customLabels),
@@ -244,6 +286,7 @@ export function HarnessDesignEditor({
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
+  const [uiFailureNonce, setUiFailureNonce] = useState(0);
   const [movePreview, setMovePreview] = useState<{
     readonly objectId: string;
     readonly point: { readonly x: number; readonly y: number };
@@ -378,7 +421,7 @@ export function HarnessDesignEditor({
             ? { ...connector, positions: { ...connector.positions, [view]: movePreview.point } }
             : connector),
           wires: history.present.wires.filter((wire) => ![wire.from, wire.to].some((endpoint) =>
-            endpoint.connectorId === movePreview.objectId)),
+            !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) && endpoint.connectorId === movePreview.objectId)),
         },
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
@@ -534,7 +577,7 @@ export function HarnessDesignEditor({
 
   const createRoutedWire = (id: string, from: WireEndpoint, to: WireEndpoint) => {
     const contactValues = [from, to].flatMap((endpoint) => {
-      if (isJunctionEndpoint(endpoint)) return [];
+      if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return [];
       const connector = history.present.connectors.find((item) => item.id === endpoint.connectorId);
       const contact = connector?.contacts.find((item) => item.id === endpoint.contactId);
       return contact ? [contact] : [];
@@ -600,7 +643,15 @@ export function HarnessDesignEditor({
   return (
     <div className="he-host">
       {message && <div className="he-save-message" role="alert">{message}</div>}
-      <HarnessEditorWorkspace
+      <HarnessEditorErrorBoundary
+        key={`${harnessId}:${uiFailureNonce}`}
+        onError={(failure) => setMessage(`Ошибка отображения: ${failure}`)}
+        onRecover={() => {
+          setEditingObjectId(null);
+          setMovePreview(null);
+          setUiFailureNonce((value) => value + 1);
+        }}
+      ><HarnessEditorWorkspace
         harnessId={harnessId}
         harnessDesignation={harnessDesignation}
         view={view}
@@ -683,47 +734,56 @@ export function HarnessDesignEditor({
           setEditingObjectId(objectId);
         }}
         onWireConnect={(from, to) => {
-          const fromConnector = history.present.connectors.find((item) => item.id === from.connectorId);
-          const toConnector = history.present.connectors.find((item) => item.id === to.connectorId);
-          const fromContact = fromConnector?.contacts[from.contactIndex];
-          const toContact = toConnector?.contacts[to.contactIndex];
-          if (!fromContact || !toContact) return;
+          const resolveEndpoint = (endpoint: typeof from): WireEndpoint | null => {
+            if ("screenId" in endpoint) return createScreenEndpoint(endpoint.screenId);
+            const connector = history.present.connectors.find((item) => item.id === endpoint.connectorId);
+            const contact = connector?.contacts[endpoint.contactIndex];
+            return contact ? { connectorId: endpoint.connectorId, contactId: contact.id } : null;
+          };
+          const fromEndpoint = resolveEndpoint(from);
+          const toEndpoint = resolveEndpoint(to);
+          if (!fromEndpoint || !toEndpoint) return;
           const id = crypto.randomUUID();
           run({
             type: "add-wire",
-            wire: createRoutedWire(
-              id,
-              { connectorId: from.connectorId, contactId: fromContact.id },
-              { connectorId: to.connectorId, contactId: toContact.id },
-            ),
+            wire: createRoutedWire(id, fromEndpoint, toEndpoint),
           });
           setSelectedObjectId(id);
           setSelectedObjectIds([id]);
         }}
         onWireReconnect={(wireId, end, target) => {
-          const connector = history.present.connectors.find((item) => item.id === target.connectorId);
-          const contact = connector?.contacts[target.contactIndex];
-          if (!contact) return;
+          const endpoint: WireEndpoint | null = "screenId" in target
+            ? createScreenEndpoint(target.screenId)
+            : (() => {
+              const connector = history.present.connectors.find((item) => item.id === target.connectorId);
+              const contact = connector?.contacts[target.contactIndex];
+              return contact ? { connectorId: target.connectorId, contactId: contact.id } : null;
+            })();
+          if (!endpoint) return;
           run({
             type: "reconnect-wire",
             wireId,
             end,
-            endpoint: { connectorId: target.connectorId, contactId: contact.id },
+            endpoint,
           });
           setSelectedObjectId(wireId);
           setSelectedObjectIds([wireId]);
         }}
         onWireConnectToWire={(from, targetWireId, point) => {
-          const connector = history.present.connectors.find((item) => item.id === from.connectorId);
-          const contact = connector?.contacts[from.contactIndex];
+          const fromEndpoint: WireEndpoint | null = "screenId" in from
+            ? createScreenEndpoint(from.screenId)
+            : (() => {
+              const connector = history.present.connectors.find((item) => item.id === from.connectorId);
+              const contact = connector?.contacts[from.contactIndex];
+              return contact ? { connectorId: from.connectorId, contactId: contact.id } : null;
+            })();
           const targetWire = history.present.wires.find((item) => item.id === targetWireId);
-          if (!contact || !targetWire) return;
+          if (!fromEndpoint || !targetWire) return;
           const wireId = crypto.randomUUID();
           const existingJunction = history.present.junctions.find((junction) =>
             junction.wireIds.includes(targetWireId) &&
             Math.hypot(junction.position.x - point.x, junction.position.y - point.y) < 0.01);
           const junctionId = existingJunction?.id ?? crypto.randomUUID();
-          const fromEndpoint = { connectorId: from.connectorId, contactId: contact.id };
           const toEndpoint = createJunctionEndpoint(junctionId);
           const base = createWire(wireId, fromEndpoint, toEndpoint, 100, targetWire.circuit);
           const start = wireEndpointE4Anchor(history.present, fromEndpoint);
@@ -843,7 +903,7 @@ export function HarnessDesignEditor({
         onClose={onClose ? async () => {
           if (await flushSave()) onClose();
         } : undefined}
-      />
+      /></HarnessEditorErrorBoundary>
     </div>
   );
 }
