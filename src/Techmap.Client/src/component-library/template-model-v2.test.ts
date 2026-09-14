@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  upgradeTemplateContentV1ToV2, validateTemplateContentV2,
+  repeatOccurrenceKeyV2, upgradeTemplateContentV1ToV2, validateTemplateContentV2,
   type NumericExpressionV2, type TemplateContentV2, type TemplateNodeV2,
 } from "./template-model-v2";
 
@@ -13,7 +13,8 @@ const ids = {
   size: "00000000-0000-4000-8000-00000000000b", repeater: "00000000-0000-4000-8000-00000000000c",
   asset: "00000000-0000-4000-8000-00000000000d", preset: "00000000-0000-4000-8000-00000000000e",
   image: "00000000-0000-4000-8000-00000000000f", bundle: "00000000-0000-4000-8000-000000000010",
-  secondGroup: "00000000-0000-4000-8000-000000000011",
+  secondGroup: "00000000-0000-4000-8000-000000000011", drawingPrimitive: "00000000-0000-4000-8000-000000000012",
+  drawingGroup: "00000000-0000-4000-8000-000000000013", secondRepeater: "00000000-0000-4000-8000-000000000014",
 } as const;
 
 const c = (value: number): NumericExpressionV2 => ({ kind: "constant", value });
@@ -27,18 +28,20 @@ function validDocument(): TemplateContentV2 {
   const primitive = node({ id: ids.primitive, kind: "rectangle", geometry: { x: c(10), y: c(20), width: p(ids.size), height: c(40), cornerRadii: [c(0), c(4), c(4), c(0)] } });
   const group = node({ id: ids.group, kind: "group", geometry: { childIds: [ids.primitive] } });
   const image = node({ id: ids.image, kind: "image", geometry: { assetId: ids.asset, x: c(0), y: c(0), width: c(100), height: c(80), cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, underlay: true } });
+  const drawingPrimitive = node({ id: ids.drawingPrimitive, layerId: ids.drawingLayer, kind: "ellipse", geometry: { centerX: c(10), centerY: c(20), radiusX: c(5), radiusY: c(8) } });
+  const drawingGroup = node({ id: ids.drawingGroup, layerId: ids.drawingLayer, kind: "group", geometry: { childIds: [ids.drawingPrimitive] } });
   return {
     schemaVersion: 2,
     views: [
-      { id: ids.e4, name: "Схема Э4", kind: "e4", layers: [{ id: ids.e4Layer, name: "Основной", visible: true, locked: false, nodes: [primitive, group, image] }], contactPoints: [{ id: ids.e4Point, logicalContactId: ids.contact, x: c(12), y: c(22), direction: "right" }], bundlePorts: [{ id: ids.bundle, name: "Общий выход", x: c(5), y: c(5), direction: "left" }] },
-      { id: ids.drawing, name: "Чертёж", kind: "drawing", layers: [{ id: ids.drawingLayer, name: "Основной", visible: true, locked: false, nodes: [] }], contactPoints: [{ id: ids.drawingPoint, logicalContactId: ids.contact, x: c(15), y: c(25), direction: "right" }], bundlePorts: [] },
+      { id: ids.e4, name: "Схема Э4", kind: "e4", layers: [{ id: ids.e4Layer, name: "Основной", visible: true, locked: false, nodes: [primitive, group, image] }], contactPoints: [{ id: ids.e4Point, logicalContactId: ids.contact, x: c(12), y: c(22), direction: "right" }], bundlePorts: [{ id: ids.bundle, name: "Общий выход", x: c(5), y: c(5), direction: "left" }], repeatPlacements: [{ repeatDomainId: ids.repeater, prototypeGroupId: ids.group, step: { x: c(10), y: c(0) }, contactPointIds: [ids.e4Point] }] },
+      { id: ids.drawing, name: "Чертёж", kind: "drawing", layers: [{ id: ids.drawingLayer, name: "Основной", visible: true, locked: false, nodes: [drawingPrimitive, drawingGroup] }], contactPoints: [{ id: ids.drawingPoint, logicalContactId: ids.contact, x: c(15), y: c(25), direction: "right" }], bundlePorts: [], repeatPlacements: [{ repeatDomainId: ids.repeater, prototypeGroupId: ids.drawingGroup, step: { x: c(0), y: c(12) }, contactPointIds: [ids.drawingPoint] }] },
     ],
     logicalContacts: [{ id: ids.contact, number: "1", name: "Сигнал 1", contactType: "signal" }],
     parameters: [
       { id: ids.count, name: "Количество", type: "integer", unit: "шт", defaultValue: 2, minimum: 1, maximum: 100, formula: null },
       { id: ids.size, name: "Ширина", type: "number", unit: "px", defaultValue: 50, minimum: 1, maximum: 500, formula: { kind: "binary", operator: "multiply", left: p(ids.count), right: c(25) } },
     ],
-    repeaters: [{ id: ids.repeater, prototypeGroupId: ids.group, countParameterId: ids.count, step: { x: c(10), y: c(0) }, logicalContactIds: [ids.contact], contactPointIds: [ids.e4Point] }],
+    repeaters: [{ id: ids.repeater, countParameterId: ids.count, logicalContactIds: [ids.contact] }],
     assets: [{ assetId: ids.asset, fileName: "connector.png", mediaType: "image/png", sha256: "a".repeat(64), sizeBytes: 1024 }],
     articleParameterPresets: [{ id: ids.preset, sourceId: "technology", entityType: "connector", articleKey: "B2B-XH-A", values: [{ parameterId: ids.count, value: 2 }, { parameterId: ids.size, value: 50 }] }],
   };
@@ -92,7 +95,8 @@ describe("template content v2 validation", () => {
     (second as { layerId: string }).layerId = ids.e4Layer;
     (document.views[0]!.layers[0]!.nodes as TemplateNodeV2[]).push(second);
     (document.views[0]!.layers[0]!.nodes[1] as { geometry: { childIds: string[] } }).geometry.childIds.push(ids.secondGroup);
-    document.repeaters.push({ ...document.repeaters[0]!, id: "00000000-0000-4000-8000-000000000012", prototypeGroupId: ids.secondGroup });
+    document.repeaters.push({ ...document.repeaters[0]!, id: ids.secondRepeater });
+    document.views[0]!.repeatPlacements.push({ repeatDomainId: ids.secondRepeater, prototypeGroupId: ids.secondGroup, step: { x: c(0), y: c(10) }, contactPointIds: [ids.e4Point] });
     expect(codes(document)).toEqual(expect.arrayContaining(["group_cycle", "repeated_ownership", "nested_repeater"]));
   });
 
@@ -102,6 +106,20 @@ describe("template content v2 validation", () => {
     document.views[1]!.kind = "additional";
     document.assets[0]!.mediaType = "image/svg+xml";
     expect(codes(document)).toEqual(expect.arrayContaining(["duplicate_id", "required_views", "asset_media_type"]));
+  });
+
+  it("uses only PNG assets within the backend 10 MiB limit", () => {
+    const document = validDocument();
+    document.assets[0]!.mediaType = "image/jpeg";
+    document.assets[0]!.sizeBytes = 10 * 1024 * 1024 + 1;
+    expect(codes(document)).toEqual(expect.arrayContaining(["asset_media_type", "asset_size"]));
+  });
+
+  it("derives the same cross-view occurrence key without allocating IDs", () => {
+    const e4Key = repeatOccurrenceKeyV2(ids.repeater, 7, ids.contact);
+    const drawingKey = repeatOccurrenceKeyV2(ids.repeater, 7, ids.contact);
+    expect(e4Key).toBe(drawingKey);
+    expect(e4Key).toBe(`${ids.repeater}:7:${ids.contact}`);
   });
 
   it("accepts at most the backend limit of 64 assets", () => {
