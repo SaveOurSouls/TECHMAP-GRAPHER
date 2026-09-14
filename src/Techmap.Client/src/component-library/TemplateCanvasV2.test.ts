@@ -303,4 +303,47 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain("X2");
     expect(markup).toContain("Питание · right");
   });
+
+  it("renders repeat occurrences instead of an extra prototype group and contact point", () => {
+    const document = content([]);
+    const countId = crypto.randomUUID();
+    const domainId = crypto.randomUUID();
+    const child = line(ids.child, 10);
+    const group = node({ id: ids.group, kind: "group", geometry: { childIds: [ids.child] } });
+    document.views[0]!.layers[0]!.nodes.push(child, group);
+    document.logicalContacts.push({ id: ids.contact, number: "1", name: "Контакт", contactType: "signal" });
+    document.views[0]!.contactPoints.push({ id: ids.point, logicalContactId: ids.contact, x: c(20), y: c(30), direction: "right" });
+    document.parameters.push({ id: countId, name: "Контакты", type: "integer", unit: "шт", defaultValue: 2, minimum: 1, maximum: 10, formula: null });
+    document.repeaters.push({ id: domainId, countParameterId: countId, logicalContactIds: [ids.contact] });
+    document.views[0]!.repeatPlacements.push({ repeatDomainId: domainId, prototypeGroupId: ids.group, step: { x: c(0), y: c(25) }, contactPointIds: [ids.point] });
+
+    const markup = render(document, { parameterDefaults: { [countId]: 2 } });
+
+    expect(markup.match(/data-template-repeat-index=/g)).toHaveLength(4);
+    expect(markup.match(new RegExp(`data-template-node-id="${ids.child}"`, "g"))).toHaveLength(2);
+    expect(markup.match(new RegExp(`data-template-point-id="${ids.point}"`, "g"))).toHaveLength(2);
+    expect(markup).toContain(">1</text>");
+    expect(markup).toContain(">2</text>");
+    expect(markup.match(new RegExp(`data-template-node-id="${ids.group}"`, "g"))).toHaveLength(2);
+  });
+
+  it("shows an explicit diagnostic instead of silently falling back to repeat prototypes", () => {
+    const document = content([]);
+    const countId = crypto.randomUUID();
+    const domainId = crypto.randomUUID();
+    const child = line(ids.child, 10);
+    const group = node({ id: ids.group, kind: "group", geometry: { childIds: [ids.child] } });
+    document.views[0]!.layers[0]!.nodes.push(child, group);
+    document.logicalContacts.push({ id: ids.contact, number: "1", name: "Контакт", contactType: "signal" });
+    document.views[0]!.contactPoints.push({ id: ids.point, logicalContactId: ids.contact, x: c(20), y: c(30), direction: "right" });
+    document.parameters.push({ id: countId, name: "Контакты", type: "integer", unit: "шт", defaultValue: 0, minimum: 0, maximum: 10, formula: null });
+    document.repeaters.push({ id: domainId, countParameterId: countId, logicalContactIds: [ids.contact] });
+    document.views[0]!.repeatPlacements.push({ repeatDomainId: domainId, prototypeGroupId: ids.group, step: { x: c(0), y: c(25) }, contactPointIds: [ids.point] });
+
+    const markup = render(document);
+
+    expect(markup).toContain('data-template-repeat-error="true"');
+    expect(markup).toContain("Повторы показаны как прототипы");
+    expect(markup.match(new RegExp(`data-template-node-id="${ids.child}"`, "g"))).toHaveLength(1);
+  });
 });

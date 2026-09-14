@@ -54,12 +54,14 @@ internal static partial class ComponentTemplateContentV2Validator
         var state = new ValidationState();
         ValidateParameters(parameters, state);
         ValidateParameterCycles(state.Parameters);
+        ValidateDefaultParameterValues(state);
         ValidateAssets(assets, state);
         ValidateLogicalContacts(logicalContacts, state);
         ValidateRepeatDomains(repeatDomains, state);
         ValidateViews(views, state);
         ValidateGroups(state);
         ValidateNestedRepeats(state);
+        ValidateDefaultRepeatExpansion(state);
         ValidateArticlePresets(presets, state);
     }
 
@@ -93,7 +95,12 @@ internal static partial class ComponentTemplateContentV2Validator
             var formula = parameter.GetProperty("formula");
             if (formula.ValueKind != JsonValueKind.Null && type is not ("number" or "integer"))
                 Throw("Only numeric parameters can have formulas.", path + ".formula");
-            state.Parameters.Add(id, new ParameterInfo(type, parameter.GetProperty("defaultValue"), formula));
+            state.Parameters.Add(id, new ParameterInfo(
+                type,
+                parameter.GetProperty("defaultValue"),
+                formula,
+                minimum,
+                maximum));
         }
 
         foreach (var (id, parameter) in state.Parameters)
@@ -125,6 +132,27 @@ internal static partial class ComponentTemplateContentV2Validator
         foreach (var id in parameters.Keys)
         {
             if (Visit(id)) Throw("Parameter formulas contain a dependency cycle.", "content.parameters");
+        }
+    }
+
+    private static void ValidateDefaultParameterValues(ValidationState state)
+    {
+        var resolved = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var (id, parameter) in state.Parameters)
+        {
+            if (parameter.Type is not ("number" or "integer")) continue;
+            if (!TryResolveDefaultNumericParameter(
+                    id,
+                    state,
+                    resolved,
+                    new HashSet<string>(StringComparer.Ordinal),
+                    out _))
+            {
+                var property = parameter.Formula.ValueKind == JsonValueKind.Null ? "defaultValue" : "formula";
+                Throw(
+                    "Numeric parameter default/formula must resolve to a finite in-range value of its declared type.",
+                    $"content.parameters[{state.ParameterIndex(id)}].{property}");
+            }
         }
     }
 
@@ -166,6 +194,7 @@ internal static partial class ComponentTemplateContentV2Validator
             var contactType = RequiredString(contact, "contactType", path + ".contactType");
             if (contactType.Length > 128) Throw("Contact type cannot exceed 128 characters.", path + ".contactType");
             state.LogicalContactIds.Add(id);
+            state.LogicalContacts.Add(id, new LogicalContactInfo(number));
         }
     }
 
@@ -178,14 +207,16 @@ internal static partial class ComponentTemplateContentV2Validator
             RequireExactProperties(domain, path, "id", "countParameterId", "logicalContactIds");
             var id = RequiredUniqueId(domain, "id", path + ".id", state.AllIds);
             var countParameterId = RequiredId(domain, "countParameterId", path + ".countParameterId");
+            long count = 0;
             if (!state.Parameters.TryGetValue(countParameterId, out var parameter) ||
-                parameter.Type != "integer" || !TryGetSafeInteger(parameter.DefaultValue, out var count) || count is < 1 or > 1_000)
+                parameter.Type != "integer" || !TryResolveDefaultIntegerParameter(countParameterId, state, out count) ||
+                count is < 1 or > 1_000)
             {
-                Throw("Repeat count must reference an integer parameter whose default is between 1 and 1000.", path + ".countParameterId");
+                Throw("Repeat count must resolve from defaults to an integer between 1 and 1000.", path + ".countParameterId");
             }
             var logicalIds = ValidateIdReferences(
                 domain.GetProperty("logicalContactIds"), state.LogicalContactIds, path + ".logicalContactIds");
-            state.RepeatDomains.Add(id, logicalIds);
+            state.RepeatDomains.Add(id, new RepeatDomainInfo(logicalIds, count));
         }
     }
 
@@ -215,11 +246,13 @@ internal static partial class ComponentTemplateContentV2Validator
             ValidateLayers(layers, path + ".layers", state, viewNodeIds);
 
             var pointLogicalIds = new Dictionary<string, string>(StringComparer.Ordinal);
+            var viewContactPoints = new List<ViewContactPointInfo>();
             var contactPointIds = ValidateViewContactPoints(
-                view.GetProperty("contactPoints"), path + ".contactPoints", state, pointLogicalIds);
+                view.GetProperty("contactPoints"), path + ".contactPoints", state, pointLogicalIds, viewContactPoints);
             ValidateBundlePorts(view.GetProperty("bundlePorts"), path + ".bundlePorts", state);
-            ValidateRepeatPlacements(view.GetProperty("repeatPlacements"), path + ".repeatPlacements",
+            var repeatPlacements = ValidateRepeatPlacements(view.GetProperty("repeatPlacements"), path + ".repeatPlacements",
                 state, viewNodeIds, contactPointIds, pointLogicalIds);
+            state.RepeatViews.Add(new RepeatViewInfo(path, viewNodeIds.Count, viewContactPoints, repeatPlacements));
         }
         if (e4 != 1 || drawing != 1)
             Throw("Content must contain exactly one e4 view and exactly one drawing view.", "content.views");
@@ -358,7 +391,8 @@ internal static partial class ComponentTemplateContentV2Validator
         JsonElement points,
         string path,
         ValidationState state,
-        IDictionary<string, string> pointLogicalIds)
+        IDictionary<string, string> pointLogicalIds,
+        ICollection<ViewContactPointInfo> viewContactPoints)
     {
         if (points.ValueKind != JsonValueKind.Array) Throw("Contact points must be an array.", path);
         var result = new HashSet<string>(StringComparer.Ordinal);
@@ -374,6 +408,7 @@ internal static partial class ComponentTemplateContentV2Validator
             if (!state.LogicalContactIds.Contains(logicalId)) Throw("Referenced logical contact does not exist.", pointPath + ".logicalContactId");
             if (!logicalIdsInView.Add(logicalId)) Throw("A view can contain only one point for each logical contact.", pointPath + ".logicalContactId");
             pointLogicalIds.Add(id, logicalId);
+            viewContactPoints.Add(new ViewContactPointInfo(id, logicalId));
             ValidateExpression(point.GetProperty("x"), pointPath + ".x", state);
             ValidateExpression(point.GetProperty("y"), pointPath + ".y", state);
             ValidateDirection(point, pointPath);
@@ -397,7 +432,7 @@ internal static partial class ComponentTemplateContentV2Validator
         }
     }
 
-    private static void ValidateRepeatPlacements(
+    private static IReadOnlyList<RepeatPlacementInfo> ValidateRepeatPlacements(
         JsonElement placements,
         string path,
         ValidationState state,
@@ -407,6 +442,7 @@ internal static partial class ComponentTemplateContentV2Validator
     {
         if (placements.ValueKind != JsonValueKind.Array) Throw("Repeat placements must be an array.", path);
         var domainsInView = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<RepeatPlacementInfo>();
         var index = 0;
         foreach (var placement in placements.EnumerateArray())
         {
@@ -414,9 +450,8 @@ internal static partial class ComponentTemplateContentV2Validator
             RequireExactProperties(placement, placementPath,
                 "repeatDomainId", "prototypeGroupId", "step", "contactPointIds");
             var domainId = RequiredId(placement, "repeatDomainId", placementPath + ".repeatDomainId");
-            if (!state.RepeatDomains.TryGetValue(domainId, out var domainLogicalIds))
+            if (!state.RepeatDomains.TryGetValue(domainId, out var domain))
                 Throw("Referenced repeat domain does not exist.", placementPath + ".repeatDomainId");
-            domainLogicalIds ??= [];
             if (!domainsInView.Add(domainId))
                 Throw("A repeat domain can have only one placement in a view.", placementPath + ".repeatDomainId");
             var prototypeId = RequiredId(placement, "prototypeGroupId", placementPath + ".prototypeGroupId");
@@ -424,17 +459,32 @@ internal static partial class ComponentTemplateContentV2Validator
                 Throw("Repeat prototype must reference a group in the same view.", placementPath + ".prototypeGroupId");
             if (!state.RepeatedGroups.Add(prototypeId))
                 Throw("A prototype group cannot be used by more than one repeat placement.", placementPath + ".prototypeGroupId");
-            ValidatePoint(placement.GetProperty("step"), placementPath + ".step", state);
+            var step = placement.GetProperty("step");
+            ValidatePoint(step, placementPath + ".step", state);
             var pointIds = ValidateIdReferences(
                 placement.GetProperty("contactPointIds"), contactPointIds, placementPath + ".contactPointIds");
+            var orderedPointIds = placement.GetProperty("contactPointIds").EnumerateArray()
+                .Select(point => point.GetString()!)
+                .ToArray();
+            var logicalIds = new List<string>(orderedPointIds.Length);
             var pointIndex = 0;
-            foreach (var pointId in pointIds)
+            foreach (var pointId in orderedPointIds)
             {
-                if (pointLogicalIds.TryGetValue(pointId, out var logicalId) && !domainLogicalIds.Contains(logicalId))
+                if (pointLogicalIds.TryGetValue(pointId, out var logicalId) && !domain.LogicalContactIds.Contains(logicalId))
                     Throw("Repeat point must belong to a logical contact in its repeat domain.", $"{placementPath}.contactPointIds[{pointIndex}]");
+                logicalIds.Add(logicalId!);
                 pointIndex++;
             }
+            result.Add(new RepeatPlacementInfo(
+                domainId,
+                prototypeId,
+                pointIds,
+                logicalIds,
+                step.GetProperty("x"),
+                step.GetProperty("y"),
+                placementPath));
         }
+        return result;
     }
 
     private static void ValidateGroups(ValidationState state)
@@ -492,6 +542,234 @@ internal static partial class ComponentTemplateContentV2Validator
             if (ContainsRepeatedDescendant(prototype, new HashSet<string>(StringComparer.Ordinal)))
                 Throw("Nested repeat placements are not supported.", $"group:{prototype}");
         }
+    }
+
+    private static void ValidateDefaultRepeatExpansion(ValidationState state)
+    {
+        long expandedNodes = 0;
+        long expandedContacts = 0;
+        foreach (var view in state.RepeatViews)
+        {
+            var prototypePointIds = view.Placements
+                .SelectMany(placement => placement.ContactPointIds)
+                .ToHashSet(StringComparer.Ordinal);
+            var prototypeNodeIds = new HashSet<string>(StringComparer.Ordinal);
+            long repeatedNodes = 0;
+            long repeatedContacts = 0;
+            var displayedNumbers = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            void RegisterNumber(string number, string owner, string path)
+            {
+                var normalized = number.Trim();
+                if (displayedNumbers.TryGetValue(normalized, out var previous) && previous != owner)
+                {
+                    Throw(
+                        $"Expanded contact number '{normalized}' collides with another displayed contact in the same view.",
+                        path);
+                }
+                displayedNumbers[normalized] = owner;
+            }
+
+            foreach (var point in view.ContactPoints)
+            {
+                if (prototypePointIds.Contains(point.Id)) continue;
+                RegisterNumber(
+                    state.LogicalContacts[point.LogicalContactId].Number,
+                    $"point:{point.Id}",
+                    view.Path + ".contactPoints");
+            }
+
+            foreach (var placement in view.Placements)
+            {
+                var domain = state.RepeatDomains[placement.DomainId];
+                var stepX = double.NaN;
+                var stepY = double.NaN;
+                if (!TryEvaluateDefaultExpression(
+                        placement.StepX,
+                        state,
+                        new Dictionary<string, double>(StringComparer.Ordinal),
+                        new HashSet<string>(StringComparer.Ordinal),
+                        out stepX) ||
+                    !TryEvaluateDefaultExpression(
+                        placement.StepY,
+                        state,
+                        new Dictionary<string, double>(StringComparer.Ordinal),
+                        new HashSet<string>(StringComparer.Ordinal),
+                        out stepY))
+                {
+                    Throw("Repeat step cannot be resolved from default parameter values.", placement.Path + ".step");
+                }
+                var lastOffsetX = (domain.DefaultCount - 1) * stepX;
+                var lastOffsetY = (domain.DefaultCount - 1) * stepY;
+                if (!double.IsFinite(lastOffsetX) || !double.IsFinite(lastOffsetY) ||
+                    Math.Abs(lastOffsetX) > MaximumCoordinateMagnitude ||
+                    Math.Abs(lastOffsetY) > MaximumCoordinateMagnitude)
+                {
+                    Throw("Default repeat offset exceeds the allowed coordinate range.", placement.Path + ".step");
+                }
+                var members = GroupMembers(placement.PrototypeGroupId, state.Groups);
+                prototypeNodeIds.UnionWith(members);
+                repeatedNodes += (long)domain.DefaultCount * members.Count;
+                repeatedContacts += (long)domain.DefaultCount * placement.ContactPointIds.Count;
+
+                var domainOrder = domain.LogicalContactIds
+                    .Select((logicalId, order) => (logicalId, order))
+                    .ToDictionary(item => item.logicalId, item => item.order, StringComparer.Ordinal);
+                var orderedLogicalIds = placement.LogicalContactIds
+                    .Select((logicalId, placementOrder) => (logicalId, placementOrder))
+                    .OrderBy(item => domainOrder[item.logicalId])
+                    .ThenBy(item => item.placementOrder)
+                    .Select(item => item.logicalId)
+                    .ToArray();
+                var stride = domain.LogicalContactIds.Count;
+                for (var occurrence = 0L; occurrence < domain.DefaultCount; occurrence++)
+                {
+                    foreach (var logicalId in orderedLogicalIds)
+                    {
+                        var logical = state.LogicalContacts[logicalId];
+                        var number = ExpandedContactNumber(logical.Number, occurrence, stride);
+                        RegisterNumber(
+                            number,
+                            $"repeat:{placement.DomainId}:{occurrence}:{logicalId}",
+                            placement.Path + ".contactPointIds");
+                    }
+                }
+            }
+            expandedNodes += view.NodeCount - prototypeNodeIds.Count + repeatedNodes;
+            expandedContacts += view.ContactPoints.Count - prototypePointIds.Count + repeatedContacts;
+            if (expandedNodes > MaximumNodes || expandedContacts > MaximumLogicalContacts)
+            {
+                Throw(
+                    $"Default repeat expansion cannot exceed {MaximumNodes} nodes or {MaximumLogicalContacts} contact points across all views.",
+                    view.Path + ".repeatPlacements");
+            }
+        }
+    }
+
+    private static IReadOnlySet<string> GroupMembers(string groupId, IReadOnlyDictionary<string, GroupInfo> groups)
+    {
+        var descendants = new HashSet<string>(StringComparer.Ordinal);
+        void Visit(string id)
+        {
+            if (!descendants.Add(id)) return;
+            if (!groups.TryGetValue(id, out var group)) return;
+            foreach (var childId in group.ChildIds) Visit(childId);
+        }
+        Visit(groupId);
+        return descendants;
+    }
+
+    private static string ExpandedContactNumber(string prototype, long occurrence, int stride)
+    {
+        if (prototype.Length > 0 && prototype.All(char.IsAsciiDigit) &&
+            (prototype == "0" || prototype[0] != '0') &&
+            long.TryParse(prototype, out var numeric))
+        {
+            var offset = checked(occurrence * stride);
+            if (numeric <= MaximumSafeInteger - offset) return (numeric + offset).ToString();
+        }
+        return $"{prototype}-{occurrence + 1}";
+    }
+
+    private static bool TryResolveDefaultIntegerParameter(
+        string parameterId,
+        ValidationState state,
+        out long value)
+    {
+        value = default;
+        if (!TryResolveDefaultNumericParameter(
+                parameterId,
+                state,
+                new Dictionary<string, double>(StringComparer.Ordinal),
+                new HashSet<string>(StringComparer.Ordinal),
+                out var resolved) ||
+            resolved < -MaximumSafeInteger || resolved > MaximumSafeInteger || resolved != Math.Truncate(resolved))
+        {
+            return false;
+        }
+        value = (long)resolved;
+        return true;
+    }
+
+    private static bool TryResolveDefaultNumericParameter(
+        string parameterId,
+        ValidationState state,
+        IDictionary<string, double> resolved,
+        ISet<string> resolving,
+        out double value)
+    {
+        value = default;
+        if (resolved.TryGetValue(parameterId, out value)) return true;
+        if (!state.Parameters.TryGetValue(parameterId, out var parameter) ||
+            parameter.Type is not ("number" or "integer") || !resolving.Add(parameterId))
+        {
+            return false;
+        }
+        try
+        {
+            if (parameter.Formula.ValueKind == JsonValueKind.Null)
+            {
+                if (!TryGetFiniteNumber(parameter.DefaultValue, out value)) return false;
+            }
+            else if (!TryEvaluateDefaultExpression(parameter.Formula, state, resolved, resolving, out value))
+            {
+                return false;
+            }
+            if (!double.IsFinite(value) || Math.Abs(value) > MaximumCoordinateMagnitude ||
+                parameter.Minimum.HasValue && value < parameter.Minimum.Value ||
+                parameter.Maximum.HasValue && value > parameter.Maximum.Value ||
+                parameter.Type == "integer" && value != Math.Truncate(value))
+            {
+                return false;
+            }
+            resolved[parameterId] = value;
+            return true;
+        }
+        finally
+        {
+            resolving.Remove(parameterId);
+        }
+    }
+
+    private static bool TryEvaluateDefaultExpression(
+        JsonElement expression,
+        ValidationState state,
+        IDictionary<string, double> resolved,
+        ISet<string> resolving,
+        out double value)
+    {
+        value = default;
+        switch (expression.GetProperty("kind").GetString())
+        {
+            case "constant":
+                return TryGetFiniteNumber(expression.GetProperty("value"), out value);
+            case "parameter":
+                return TryResolveDefaultNumericParameter(
+                    expression.GetProperty("parameterId").GetString()!, state, resolved, resolving, out value);
+            case "negate":
+                if (!TryEvaluateDefaultExpression(expression.GetProperty("operand"), state, resolved, resolving, out var operand))
+                    return false;
+                value = -operand;
+                break;
+            case "binary":
+                if (!TryEvaluateDefaultExpression(expression.GetProperty("left"), state, resolved, resolving, out var left) ||
+                    !TryEvaluateDefaultExpression(expression.GetProperty("right"), state, resolved, resolving, out var right))
+                {
+                    return false;
+                }
+                value = expression.GetProperty("operator").GetString() switch
+                {
+                    "add" => left + right,
+                    "subtract" => left - right,
+                    "multiply" => left * right,
+                    "divide" when right != 0 => left / right,
+                    _ => double.NaN,
+                };
+                break;
+            default:
+                return false;
+        }
+        return double.IsFinite(value) && Math.Abs(value) <= MaximumCoordinateMagnitude;
     }
 
     private static void ValidateArticlePresets(JsonElement presets, ValidationState state)
@@ -802,11 +1080,13 @@ internal static partial class ComponentTemplateContentV2Validator
         internal HashSet<string> AllIds { get; } = new(StringComparer.Ordinal);
         internal HashSet<string> AssetIds { get; } = new(StringComparer.Ordinal);
         internal HashSet<string> LogicalContactIds { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, LogicalContactInfo> LogicalContacts { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, ParameterInfo> Parameters { get; } = new(StringComparer.Ordinal);
-        internal Dictionary<string, HashSet<string>> RepeatDomains { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, RepeatDomainInfo> RepeatDomains { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, GroupInfo> Groups { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, string> NodeLayers { get; } = new(StringComparer.Ordinal);
         internal HashSet<string> RepeatedGroups { get; } = new(StringComparer.Ordinal);
+        internal List<RepeatViewInfo> RepeatViews { get; } = [];
         internal int NodeCount { get; set; }
 
         internal int ParameterIndex(string id)
@@ -826,6 +1106,27 @@ internal static partial class ComponentTemplateContentV2Validator
         internal int Nodes { get; set; }
     }
 
-    private sealed record ParameterInfo(string Type, JsonElement DefaultValue, JsonElement Formula);
+    private sealed record ParameterInfo(
+        string Type,
+        JsonElement DefaultValue,
+        JsonElement Formula,
+        double? Minimum,
+        double? Maximum);
+    private sealed record LogicalContactInfo(string Number);
+    private sealed record RepeatDomainInfo(IReadOnlySet<string> LogicalContactIds, long DefaultCount);
+    private sealed record ViewContactPointInfo(string Id, string LogicalContactId);
+    private sealed record RepeatPlacementInfo(
+        string DomainId,
+        string PrototypeGroupId,
+        IReadOnlySet<string> ContactPointIds,
+        IReadOnlyList<string> LogicalContactIds,
+        JsonElement StepX,
+        JsonElement StepY,
+        string Path);
+    private sealed record RepeatViewInfo(
+        string Path,
+        int NodeCount,
+        IReadOnlyList<ViewContactPointInfo> ContactPoints,
+        IReadOnlyList<RepeatPlacementInfo> Placements);
     private sealed record GroupInfo(string LayerId, IReadOnlyList<string> ChildIds);
 }

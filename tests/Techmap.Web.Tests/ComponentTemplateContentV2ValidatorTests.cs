@@ -85,6 +85,200 @@ public sealed class ComponentTemplateContentV2ValidatorTests
     }
 
     [Fact]
+    public void Repeat_count_formula_is_resolved_from_safe_default_ast()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["formula"] = new JsonObject
+        {
+            ["kind"] = "binary",
+            ["operator"] = "add",
+            ["left"] = Constant(1),
+            ["right"] = Constant(1),
+        };
+
+        ComponentTemplateContentV2Validator.Validate(Element(content));
+
+        content["parameters"]![0]!["formula"] = new JsonObject
+        {
+            ["kind"] = "binary",
+            ["operator"] = "divide",
+            ["left"] = Constant(3),
+            ["right"] = Constant(2),
+        };
+        var fractional = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+        Assert.Equal("content.parameters[0].formula", fractional.Field);
+    }
+
+    [Fact]
+    public void Numeric_parameters_are_resolved_without_repeat_placements_and_survive_json_round_trip()
+    {
+        var content = WithoutRepeats(ValidContent());
+        content["parameters"]![1]!["formula"] = null;
+        content["parameters"]![1]!["defaultValue"] = 500;
+        content["parameters"]![1]!["maximum"] = 500;
+        var roundTrip = JsonNode.Parse(content.ToJsonString())!;
+
+        ComponentTemplateContentV2Validator.Validate(Element(roundTrip));
+
+        content["parameters"]![1]!["formula"] = null;
+        content["parameters"]![1]!["defaultValue"] = 501;
+        var range = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+        Assert.Equal("content.parameters[1].defaultValue", range.Field);
+
+        content = WithoutRepeats(ValidContent());
+        content["parameters"]![1]!["formula"] = new JsonObject
+        {
+            ["kind"] = "binary",
+            ["operator"] = "divide",
+            ["left"] = Constant(1),
+            ["right"] = Parameter(Ids.Zero),
+        };
+        content["parameters"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = Ids.Zero,
+            ["name"] = "Zero",
+            ["type"] = "number",
+            ["unit"] = null,
+            ["defaultValue"] = 0,
+            ["minimum"] = 0,
+            ["maximum"] = 0,
+            ["formula"] = null,
+        });
+        var division = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+        Assert.Equal("content.parameters[1].formula", division.Field);
+    }
+
+    [Fact]
+    public void Repeat_step_rejects_a_default_last_offset_beyond_the_coordinate_limit()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["defaultValue"] = 3;
+        content["views"]![0]!["repeatPlacements"]![0]!["step"]!["x"] =
+            Constant(ComponentTemplateContentV2Validator.MaximumCoordinateMagnitude);
+
+        var offset = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+
+        Assert.Equal("content.views[0].repeatPlacements[0].step", offset.Field);
+    }
+
+    [Fact]
+    public void Repeat_step_accepts_a_default_last_offset_on_the_coordinate_boundary()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["defaultValue"] = 3;
+        content["views"]![0]!["repeatPlacements"]![0]!["step"]!["x"] =
+            Constant(ComponentTemplateContentV2Validator.MaximumCoordinateMagnitude / 2);
+
+        ComponentTemplateContentV2Validator.Validate(Element(content));
+    }
+
+    [Fact]
+    public void Expanded_contact_numbers_cannot_collide_with_an_ordinary_point_in_the_same_view()
+    {
+        var content = ValidContent();
+        content["logicalContacts"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = Ids.OrdinaryContact,
+            ["number"] = "2",
+            ["name"] = "Ordinary 2",
+            ["contactType"] = "signal",
+        });
+        content["views"]![0]!["contactPoints"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = Ids.OrdinaryPoint,
+            ["logicalContactId"] = Ids.OrdinaryContact,
+            ["x"] = Constant(100),
+            ["y"] = Constant(100),
+            ["direction"] = "left",
+        });
+
+        var collision = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+
+        Assert.Equal("content.views[0].repeatPlacements[0].contactPointIds", collision.Field);
+        Assert.Contains("'2'", collision.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Default_repeat_contact_budget_is_aggregate_across_views_and_counts_ordinary_points()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["defaultValue"] = 1_000;
+        content["parameters"]![0]!["maximum"] = 1_000;
+        content["parameters"]![1]!["maximum"] = 25_000;
+        content["logicalContacts"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = Ids.OrdinaryContact,
+            ["number"] = "Z",
+            ["name"] = "Ordinary Z",
+            ["contactType"] = "service",
+        });
+        content["views"]![0]!["contactPoints"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = Ids.OrdinaryPoint,
+            ["logicalContactId"] = Ids.OrdinaryContact,
+            ["x"] = Constant(100),
+            ["y"] = Constant(100),
+            ["direction"] = "left",
+        });
+
+        var budget = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+
+        Assert.Equal("content.views[1].repeatPlacements", budget.Field);
+        Assert.Contains(ComponentTemplateContentV2Validator.MaximumLogicalContacts.ToString(), budget.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Default_repeat_node_budget_counts_group_and_descendants_across_views()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["defaultValue"] = 1_000;
+        content["parameters"]![0]!["maximum"] = 1_000;
+        content["parameters"]![1]!["maximum"] = 25_000;
+        var e4Nodes = content["views"]![0]!["layers"]![0]!["nodes"]!.AsArray();
+        var e4GroupChildren = content["views"]![0]!["layers"]![0]!["nodes"]![1]!["geometry"]!["childIds"]!.AsArray();
+        var drawingNodes = content["views"]![1]!["layers"]![0]!["nodes"]!.AsArray();
+        var drawingGroupChildren = content["views"]![1]!["layers"]![0]!["nodes"]![1]!["geometry"]!["childIds"]!.AsArray();
+        for (var index = 0; index < 2; index++)
+        {
+            var e4Id = Guid.NewGuid().ToString();
+            e4Nodes.Add(RectangleNode(e4Id, Ids.E4Layer));
+            e4GroupChildren.Add(e4Id);
+            var drawingId = Guid.NewGuid().ToString();
+            drawingNodes.Add(RectangleNode(drawingId, Ids.DrawingLayer));
+            drawingGroupChildren.Add(drawingId);
+        }
+
+        var budget = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+
+        Assert.Equal("content.views[1].repeatPlacements", budget.Field);
+        Assert.Contains(ComponentTemplateContentV2Validator.MaximumNodes.ToString(), budget.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Default_repeat_node_budget_counts_non_prototype_nodes()
+    {
+        var content = ValidContent();
+        content["parameters"]![0]!["defaultValue"] = 1_000;
+        content["parameters"]![0]!["maximum"] = 1_000;
+        content["parameters"]![1]!["maximum"] = 25_000;
+        var e4Nodes = content["views"]![0]!["layers"]![0]!["nodes"]!.AsArray();
+        for (var index = 0; index < 1_001; index++)
+            e4Nodes.Add(RectangleNode(Guid.NewGuid().ToString(), Ids.E4Layer));
+
+        var budget = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(content)));
+
+        Assert.Equal("content.views[1].repeatPlacements", budget.Field);
+    }
+
+    [Fact]
     public void Formula_cycles_unknown_references_and_expression_limits_are_rejected()
     {
         var content = ValidContent();
@@ -195,6 +389,13 @@ public sealed class ComponentTemplateContentV2ValidatorTests
         };
     }
 
+    private static JsonObject WithoutRepeats(JsonObject content)
+    {
+        content["repeaters"] = new JsonArray();
+        foreach (var view in content["views"]!.AsArray()) view!["repeatPlacements"] = new JsonArray();
+        return content;
+    }
+
     private static JsonObject View(
         string id,
         string kind,
@@ -281,5 +482,8 @@ public sealed class ComponentTemplateContentV2ValidatorTests
         internal const string DrawingGroup = "00000000-0000-4000-8000-000000000010";
         internal const string SecondGroup = "00000000-0000-4000-8000-000000000011";
         internal const string SecondRepeater = "00000000-0000-4000-8000-000000000012";
+        internal const string OrdinaryContact = "00000000-0000-4000-8000-000000000013";
+        internal const string OrdinaryPoint = "00000000-0000-4000-8000-000000000014";
+        internal const string Zero = "00000000-0000-4000-8000-000000000015";
     }
 }

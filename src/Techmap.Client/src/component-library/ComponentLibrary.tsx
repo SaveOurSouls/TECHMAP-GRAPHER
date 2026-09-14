@@ -6,15 +6,18 @@ import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1 } from "./template-content";
 import { TemplateCanvasV2 } from "./TemplateCanvasV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
+import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
 import {
   addAdditionalViewV2, addBasicNodeV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
   deleteAdditionalViewV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2, editContactPointV2,
   editLogicalContactV2, editNodeV2, newTemplateContentV2,
-  moveNodeV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
+  createRepeatPrototypeV2, deleteRepeatPrototypeV2, moveNodeV2, parameterizeNodeDimensionV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
+  setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
   setLayerVisibleV2, setNodeLockedV2, type BasicNodeKindV2, type ContactPointEditV2,
   type LogicalContactEditV2, type NodeEditV2,
 } from "./template-commands-v2";
 import { validateTemplateContentV2, type ContactDirectionV2, type ImageNodeV2, type LogicalContactV2, type NumericExpressionV2, type TemplateContentV2, type TemplateNodeV2, type TemplateV2Diagnostic, type ViewContactPointV2 } from "./template-model-v2";
+import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
@@ -77,6 +80,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [assetMismatch, setAssetMismatch] = useState(false);
   const [undoStack, setUndoStack] = useState<TemplateContentV2[]>([]);
   const [binding, setBinding] = useState<ArticleBinding>({ sourceId: "", entityType: "connector", articleKey: "" });
+  const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -95,6 +99,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, articleBindings: [...item.articleBindings], assets: [...item.assets], content: structuredClone(content) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
+    setPreviewParameterValues({});
   }
 
   async function open(summary: ComponentTemplateSummary) {
@@ -115,6 +120,7 @@ export function ComponentLibrary({ config, session }: Props) {
   function startNew() {
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
     setSelectedId(null); setUndoStack([]); setDirty(true); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
+    setPreviewParameterValues({});
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
@@ -139,6 +145,8 @@ export function ComponentLibrary({ config, session }: Props) {
     if (reconciliation.diagnostics.length) { setAssetMismatch(true); setDiagnostics(reconciliation.diagnostics); setError(reconciliation.diagnostics[0]!.message); return null; }
     const validation = validateTemplateContentV2(draft.content);
     if (!validation.valid) { setDiagnostics(validation.diagnostics); setError(validation.diagnostics[0]!.message); return null; }
+    try { expandTemplateRepeatsV2(draft.content); }
+    catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: draft.articleBindings, content: draft.content };
     return draft.templateId ? api.save(draft.templateId, { expectedVersion: draft.version, ...body }) : api.create(body);
   }
@@ -234,8 +242,40 @@ export function ComponentLibrary({ config, session }: Props) {
           onToggleLocked={id => { const layer = activeView.layers.find(item => item.id === id)!; command(() => setLayerLockedV2(draft.content, activeView.id, id, !layer.locked)); }}
           onDelete={id => { const fallback = activeView.layers.find(item => item.id !== id); if (!fallback) return; command(() => deleteLayerV2(draft.content, activeView.id, id), null); setActiveLayerIds(current => ({ ...current, [activeView.id]: fallback.id })); }}
         />}
+        {activeView && <TemplateParametersPanelV2
+          content={draft.content}
+          activeViewId={activeView.id}
+          activeLayerId={selected?.layer.id ?? activeLayer?.id ?? null}
+          selectedNodeId={selected?.node.id ?? null}
+          onCreateRepeat={input => command(() => createRepeatPrototypeV2(draft.content, {
+            viewId: input.viewId,
+            layerId: input.layerId,
+            prototypeNodeId: input.prototypeNodeId,
+            prototypePointId: input.contactPointId,
+            count: input.count,
+            step: { x: constantExpressionV2(input.stepX), y: constantExpressionV2(input.stepY) },
+          })[0], null)}
+          onSetCount={(domainId, count) => {
+            command(() => setRepeatCountV2(draft.content, domainId, count));
+            setPreviewParameterValues({});
+          }}
+          onSetStep={(targetViewId, domainId, x, y) => command(() => setRepeatStepV2(
+            draft.content, targetViewId, domainId,
+            { x: constantExpressionV2(x), y: constantExpressionV2(y) },
+          ))}
+          onDeleteRepeat={domainId => {
+            command(() => deleteRepeatPrototypeV2(draft.content, domainId), null);
+            setPreviewParameterValues({});
+          }}
+          onPreviewValues={setPreviewParameterValues}
+          onParameterizeNodeDimension={input => command(() => parameterizeNodeDimensionV2(
+            draft.content, input.viewId, input.layerId, input.nodeId, input.dimension,
+            { name: input.name, unit: input.unit, defaultValue: input.defaultValue, minimum: input.minimum, maximum: input.maximum },
+          )[0])}
+          onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
+        />}
         <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button onClick={appendContact} disabled={!activeView}>Точка контакта</button><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea">{activeView && <TemplateCanvasV2 content={draft.content} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} />}
+        <div className="library-workarea">{activeView && <TemplateCanvasV2 content={draft.content} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={previewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedPoint ? "Точка / порт" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties

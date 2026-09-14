@@ -6,12 +6,14 @@ import {
   type LogicalContactV2,
   type NumericExpressionV2,
   type ParameterValueV2,
+  type PointExpressionV2,
   type TemplateContentV2,
   type TemplateNodeV2,
   type TemplateViewV2,
   type TransformV2,
   type ViewContactPointV2,
 } from "./template-model-v2";
+import { expandTemplateRepeatsV2, TemplateRepeatV2Error } from "./template-repeat-v2";
 
 export type BasicNodeKindV2 = "line" | "rectangle" | "ellipse" | "text";
 export type NodeEditV2 = Partial<Pick<TemplateNodeV2, "visible" | "locked" | "opacity" | "transform" | "stroke" | "fill">> & {
@@ -35,6 +37,27 @@ export interface ContactPointEditV2 {
   x?: NumericExpressionV2;
   y?: NumericExpressionV2;
   direction?: ContactDirectionV2;
+}
+export interface CreateRepeatPrototypeV2Input {
+  readonly viewId: string;
+  readonly layerId: string;
+  readonly prototypeNodeId: string;
+  readonly prototypePointId: string;
+  readonly count?: number;
+  readonly step: PointExpressionV2;
+}
+export interface RepeatPrototypeIdsV2 {
+  readonly groupId: string;
+  readonly countParameterId: string;
+  readonly repeatDomainId: string;
+}
+export type ParameterizableNodeDimensionV2 = "width" | "height" | "radiusX" | "radiusY";
+export interface ParameterizeNodeDimensionV2Input {
+  readonly name: string;
+  readonly unit?: string | null;
+  readonly defaultValue: number;
+  readonly minimum: number;
+  readonly maximum: number;
 }
 
 export class TemplateCommandV2Error extends Error {
@@ -156,7 +179,9 @@ export function addContactPointV2(
     direction: normalizedContactDirection(initial.direction ?? "right"),
   };
   const nextView = { ...view, contactPoints: [...view.contactPoints, point] };
-  return [{ ...replaceView(content, viewId, nextView), logicalContacts: [...content.logicalContacts, logicalContact] }, point.id];
+  const next = { ...replaceView(content, viewId, nextView), logicalContacts: [...content.logicalContacts, logicalContact] };
+  requireMaterializableRepeats(next);
+  return [next, point.id];
 }
 
 export function editLogicalContactV2(
@@ -173,7 +198,9 @@ export function editLogicalContactV2(
     name: changes.name === undefined ? logicalContact.name : normalizedName(changes.name),
     contactType: changes.contactType === undefined ? logicalContact.contactType : normalizedContactType(changes.contactType),
   };
-  return { ...content, logicalContacts: content.logicalContacts.map(item => item.id === logicalContact.id ? nextLogicalContact : item) };
+  const next = { ...content, logicalContacts: content.logicalContacts.map(item => item.id === logicalContact.id ? nextLogicalContact : item) };
+  requireMaterializableRepeats(next);
+  return next;
 }
 
 export function editContactPointV2(
@@ -210,6 +237,163 @@ export function deleteContactPointV2(content: TemplateContentV2, viewId: string,
     ...withoutPoint,
     logicalContacts: withoutPoint.logicalContacts.filter(item => item.id !== point.logicalContactId),
   };
+}
+
+export function createRepeatPrototypeV2(
+  content: TemplateContentV2,
+  input: CreateRepeatPrototypeV2Input,
+): [TemplateContentV2, RepeatPrototypeIdsV2] {
+  const { view, layer, node } = requireNode(content, input.viewId, input.layerId, input.prototypeNodeId);
+  requireEditableNode(layer, node);
+  if (node.kind === "group")
+    throw new TemplateCommandV2Error("repeat_prototype_node", "Повторяемым сегментом должен быть отдельный объект, а не группа.");
+  if (layer.nodes.some(candidate => candidate.kind === "group" && candidate.geometry.childIds.includes(node.id)))
+    throw new TemplateCommandV2Error("repeat_prototype_nested", "Повторяемый объект должен находиться на верхнем уровне слоя.");
+  if (content.views.some(candidate => candidate.repeatPlacements.some(placement =>
+    placement.prototypeGroupId === node.id || placement.contactPointIds.includes(input.prototypePointId))))
+    throw new TemplateCommandV2Error("repeat_prototype_used", "Объект или точка уже участвуют в повторе.");
+
+  const { point } = requireContactPoint(content, input.viewId, input.prototypePointId);
+  if (content.repeaters.some(domain => domain.logicalContactIds.includes(point.logicalContactId)))
+    throw new TemplateCommandV2Error("repeat_contact_used", "Логический контакт уже участвует в повторе.");
+  const count = input.count ?? 2;
+  requireRepeatCount(count);
+  if (content.parameters.length >= TEMPLATE_V2_LIMITS.parameters)
+    throw new TemplateCommandV2Error("parameter_limit", "Достигнут лимит параметров.");
+  if (content.repeaters.length >= TEMPLATE_V2_LIMITS.repeaters)
+    throw new TemplateCommandV2Error("repeater_limit", "Достигнут лимит повторов.");
+
+  const ids: RepeatPrototypeIdsV2 = {
+    groupId: crypto.randomUUID(),
+    countParameterId: crypto.randomUUID(),
+    repeatDomainId: crypto.randomUUID(),
+  };
+  const group: TemplateNodeV2 = {
+    id: ids.groupId,
+    kind: "group",
+    layerId: layer.id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    transform: identityTransform(),
+    stroke: { color: "#27445a", width: constantExpressionV2(2) },
+    fill: { color: null },
+    geometry: { childIds: [node.id] },
+  };
+  const nodeIndex = layer.nodes.findIndex(candidate => candidate.id === node.id);
+  const nodes = [...layer.nodes];
+  nodes.splice(nodeIndex + 1, 0, group);
+  const nextView: TemplateViewV2 = {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),
+    repeatPlacements: [...view.repeatPlacements, {
+      repeatDomainId: ids.repeatDomainId,
+      prototypeGroupId: ids.groupId,
+      step: input.step,
+      contactPointIds: [point.id],
+    }],
+  };
+  const next: TemplateContentV2 = {
+    ...content,
+    views: content.views.map(candidate => candidate.id === view.id ? nextView : candidate),
+    parameters: [...content.parameters, {
+      id: ids.countParameterId,
+      name: "Количество повторов",
+      type: "integer",
+      unit: "шт",
+      defaultValue: count,
+      minimum: 1,
+      maximum: 1_000,
+      formula: null,
+    }],
+    repeaters: [...content.repeaters, {
+      id: ids.repeatDomainId,
+      countParameterId: ids.countParameterId,
+      logicalContactIds: [point.logicalContactId],
+    }],
+  };
+  requireValidCommandResult(next, "invalid_repeat_prototype");
+  requireMaterializableRepeats(next);
+  return [next, ids];
+}
+
+export function deleteRepeatPrototypeV2(
+  content: TemplateContentV2,
+  repeatDomainId: string,
+): TemplateContentV2 {
+  const domain = content.repeaters.find(candidate => candidate.id === repeatDomainId);
+  if (!domain) throw new TemplateCommandV2Error("repeat_domain_not_found", "Домен повтора не найден.");
+  if (!content.views.some(view => view.repeatPlacements.some(placement => placement.repeatDomainId === repeatDomainId)))
+    throw new TemplateCommandV2Error("repeat_placement_not_found", "Размещение повтора не найдено.");
+  const views = content.views.map(view => {
+    const placements = view.repeatPlacements.filter(placement => placement.repeatDomainId === repeatDomainId);
+    if (placements.length === 0) return view;
+    const groupIds = new Set(placements.map(placement => placement.prototypeGroupId));
+    for (const groupId of groupIds) {
+      const containingLayer = view.layers.find(layer => layer.nodes.some(node => node.id === groupId));
+      const group = containingLayer?.nodes.find(node => node.id === groupId);
+      if (!containingLayer || !group || group.kind !== "group" || group.geometry.childIds.length === 0)
+        throw new TemplateCommandV2Error("repeat_prototype_group", "Группа повторяемого сегмента повреждена.");
+      requireEditableNode(containingLayer, group);
+      if (group.geometry.childIds.some(childId => !containingLayer.nodes.some(node => node.id === childId)))
+        throw new TemplateCommandV2Error("repeat_prototype_child", "Исходный объект повторяемого сегмента не найден.");
+    }
+    return {
+      ...view,
+      layers: view.layers.map(layer => ({ ...layer, nodes: layer.nodes.filter(node => !groupIds.has(node.id)) })),
+      repeatPlacements: view.repeatPlacements.filter(placement => placement.repeatDomainId !== repeatDomainId),
+    };
+  });
+  const next: TemplateContentV2 = {
+    ...content,
+    views,
+    repeaters: content.repeaters.filter(candidate => candidate.id !== repeatDomainId),
+    parameters: content.parameters.filter(parameter => parameter.id !== domain.countParameterId),
+    articleParameterPresets: content.articleParameterPresets.map(preset => ({
+      ...preset,
+      values: preset.values.filter(value => value.parameterId !== domain.countParameterId),
+    })),
+  };
+  requireValidCommandResult(next, "invalid_repeat_delete");
+  return next;
+}
+
+export function setRepeatCountV2(
+  content: TemplateContentV2,
+  repeatDomainId: string,
+  count: number,
+): TemplateContentV2 {
+  requireRepeatCount(count);
+  const domain = content.repeaters.find(candidate => candidate.id === repeatDomainId);
+  if (!domain) throw new TemplateCommandV2Error("repeat_domain_not_found", "Домен повтора не найден.");
+  const parameter = content.parameters.find(candidate => candidate.id === domain.countParameterId);
+  if (!parameter || parameter.type !== "integer" || parameter.formula !== null)
+    throw new TemplateCommandV2Error("repeat_count_parameter", "Параметр количества повтора повреждён.");
+  const next: TemplateContentV2 = {
+    ...content,
+    parameters: content.parameters.map(candidate => candidate.id === parameter.id ? { ...candidate, defaultValue: count } : candidate),
+  };
+  requireValidCommandResult(next, "invalid_repeat_count");
+  requireMaterializableRepeats(next);
+  return next;
+}
+
+export function setRepeatStepV2(
+  content: TemplateContentV2,
+  viewId: string,
+  repeatDomainId: string,
+  step: PointExpressionV2,
+): TemplateContentV2 {
+  const view = requireView(content, viewId);
+  if (!view.repeatPlacements.some(candidate => candidate.repeatDomainId === repeatDomainId))
+    throw new TemplateCommandV2Error("repeat_placement_not_found", "Размещение повтора не найдено.");
+  const next = replaceView(content, view.id, {
+    ...view,
+    repeatPlacements: view.repeatPlacements.map(candidate => candidate.repeatDomainId === repeatDomainId ? { ...candidate, step } : candidate),
+  });
+  requireValidCommandResult(next, "invalid_repeat_step");
+  requireMaterializableRepeats(next);
+  return next;
 }
 
 export function addLayerV2(content: TemplateContentV2, viewId: string, name: string): [TemplateContentV2, string] {
@@ -296,6 +480,87 @@ export function editNodeV2(content: TemplateContentV2, viewId: string, layerId: 
   requireEditableNode(layer, node);
   const next = { ...node, ...changes, id: node.id, layerId: node.layerId, kind: node.kind } as TemplateNodeV2;
   return replaceLayer(content, view, layerId, { ...layer, nodes: layer.nodes.map(item => item.id === nodeId ? next : item) });
+}
+
+export function parameterizeNodeDimensionV2(
+  content: TemplateContentV2,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  dimension: ParameterizableNodeDimensionV2,
+  input: ParameterizeNodeDimensionV2Input,
+): [TemplateContentV2, string] {
+  const { view, layer, node } = requireNode(content, viewId, layerId, nodeId);
+  requireEditableNode(layer, node);
+  const name = normalizedName(input.name);
+  const unit = normalizedParameterUnit(input.unit);
+  const { defaultValue, minimum, maximum } = input;
+  if (![defaultValue, minimum, maximum].every(Number.isFinite) ||
+      minimum <= 0 || minimum > defaultValue || defaultValue > maximum || maximum > TEMPLATE_V2_LIMITS.coordinate)
+    throw new TemplateCommandV2Error("parameter_range", "Требуется диапазон 0 < минимум ≤ начальное значение ≤ максимум ≤ допустимой координаты.");
+  if (content.parameters.length >= TEMPLATE_V2_LIMITS.parameters)
+    throw new TemplateCommandV2Error("parameter_limit", "Достигнут лимит параметров.");
+  const supported = node.kind === "rectangle" || node.kind === "image"
+    ? dimension === "width" || dimension === "height"
+    : node.kind === "ellipse"
+      ? dimension === "radiusX" || dimension === "radiusY"
+      : false;
+  if (!supported)
+    throw new TemplateCommandV2Error("unsupported_dimension", "Этот размер нельзя связать с параметром выбранного объекта.");
+  const geometry = node.geometry as typeof node.geometry & Partial<Record<ParameterizableNodeDimensionV2, NumericExpressionV2>>;
+  const expression = geometry[dimension];
+  if (!expression || expression.kind !== "constant")
+    throw new TemplateCommandV2Error("non_constant_dimension", "Размер уже параметризован или не является константой.");
+  if (!Number.isFinite(expression.value) || expression.value < 0.001 || expression.value > TEMPLATE_V2_LIMITS.coordinate)
+    throw new TemplateCommandV2Error("parameter_range", "Исходный размер должен быть от 0,001 до допустимого максимума.");
+  const parameterId = crypto.randomUUID();
+  const nextNode = {
+    ...node,
+    geometry: { ...node.geometry, [dimension]: { kind: "parameter", parameterId } },
+  } as TemplateNodeV2;
+  const next: TemplateContentV2 = {
+    ...replaceLayer(content, view, layerId, {
+      ...layer,
+      nodes: layer.nodes.map(candidate => candidate.id === node.id ? nextNode : candidate),
+    }),
+    parameters: [...content.parameters, {
+      id: parameterId,
+      name,
+      type: "number",
+      unit,
+      defaultValue,
+      minimum,
+      maximum,
+      formula: null,
+    }],
+  };
+  requireValidCommandResult(next, "invalid_parameterized_dimension");
+  requireMaterializableRepeats(next);
+  return [next, parameterId];
+}
+
+export function setTemplateParameterDefaultV2(
+  content: TemplateContentV2,
+  parameterId: string,
+  value: number,
+): TemplateContentV2 {
+  const parameter = content.parameters.find(candidate => candidate.id === parameterId);
+  if (!parameter) throw new TemplateCommandV2Error("parameter_not_found", "Параметр не найден.");
+  if (parameter.type !== "number" && parameter.type !== "integer")
+    throw new TemplateCommandV2Error("parameter_type", "Изменять числовое значение можно только у числового параметра.");
+  if (parameter.formula !== null)
+    throw new TemplateCommandV2Error("parameter_formula", "Значение вычисляемого параметра задаётся формулой.");
+  if (!Number.isFinite(value) || parameter.type === "integer" && !Number.isSafeInteger(value))
+    throw new TemplateCommandV2Error("parameter_value", "Значение не соответствует типу параметра.");
+  if (parameter.minimum !== null && value < parameter.minimum || parameter.maximum !== null && value > parameter.maximum)
+    throw new TemplateCommandV2Error("parameter_range", "Значение выходит за допустимый диапазон параметра.");
+  const next: TemplateContentV2 = {
+    ...content,
+    parameters: content.parameters.map(candidate => candidate.id === parameterId ? { ...candidate, defaultValue: value } : candidate),
+  };
+  requireValidCommandResult(next, "invalid_parameter_default");
+  requireMaterializableRepeats(next);
+  return next;
 }
 
 export function setNodeLockedV2(content: TemplateContentV2, viewId: string, layerId: string, nodeId: string, locked: boolean): TemplateContentV2 {
@@ -411,6 +676,14 @@ function normalizedName(value: string, fallback?: string): string {
   return result;
 }
 
+function normalizedParameterUnit(value: string | null | undefined): string | null {
+  if (value === null || value === undefined || value.trim() === "") return null;
+  const result = value.trim();
+  if (result.length > 32 || /[\u0000-\u001f]/.test(result))
+    throw new TemplateCommandV2Error("invalid_unit", "Единица должна быть не длиннее 32 символов.");
+  return result;
+}
+
 function normalizedContactNumber(value: string): string {
   const result = value.trim();
   if (!result || result.length > 128 || /[\u0000-\u001f]/.test(result))
@@ -443,6 +716,26 @@ function nextContactNumber(content: TemplateContentV2): string {
     if (!occupied.has(candidate)) return candidate;
   }
   throw new TemplateCommandV2Error("contact_limit", "Не удалось подобрать свободный номер контакта.");
+}
+
+function requireRepeatCount(count: number): void {
+  if (!Number.isSafeInteger(count) || count < 1 || count > 1_000)
+    throw new TemplateCommandV2Error("repeater_count", "Количество повторов должно быть целым числом от 1 до 1000.");
+}
+
+function requireMaterializableRepeats(content: TemplateContentV2): void {
+  try {
+    expandTemplateRepeatsV2(content);
+  } catch (error) {
+    if (error instanceof TemplateRepeatV2Error) throw new TemplateCommandV2Error(error.code, error.message);
+    throw error;
+  }
+}
+
+function requireValidCommandResult(content: TemplateContentV2, code: string): void {
+  const validation = validateTemplateContentV2(content);
+  if (!validation.valid)
+    throw new TemplateCommandV2Error(code, validation.diagnostics[0]?.message ?? "Команда создала некорректный шаблон.");
 }
 
 function allIds(content: TemplateContentV2): Set<string> {

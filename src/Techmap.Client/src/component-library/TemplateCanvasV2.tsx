@@ -8,6 +8,7 @@ import type {
   TemplateViewV2,
   TransformV2,
 } from "./template-model-v2";
+import { expandTemplateViewRepeatsV2, type RepeatOccurrenceDescriptorV2 } from "./template-repeat-v2";
 
 export const TEMPLATE_CANVAS_V2_WIDTH = 720;
 export const TEMPLATE_CANVAS_V2_HEIGHT = 440;
@@ -277,6 +278,20 @@ export function TemplateCanvasV2({
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
   const logicalContacts = new Map(content.logicalContacts.map(contact => [contact.id, contact]));
+  const repeatPreview = new Map<string, readonly RepeatOccurrenceDescriptorV2[]>();
+  const repeatedGroupIds = new Set<string>();
+  const repeatedPointIds = new Set<string>();
+  let repeatPreviewError: string | null = null;
+  if (view) try {
+    for (const expansion of expandTemplateViewRepeatsV2(content, view.id, { overrides: parameterDefaults })) {
+      repeatPreview.set(expansion.prototypeGroupId, expansion.occurrences);
+      repeatedGroupIds.add(expansion.prototypeGroupId);
+      const placement = view.repeatPlacements.find(item => item.prototypeGroupId === expansion.prototypeGroupId);
+      placement?.contactPointIds.forEach(id => repeatedPointIds.add(id));
+    }
+  } catch (caught) {
+    repeatPreviewError = caught instanceof Error ? caught.message : "Повторяемые сегменты не удалось развернуть.";
+  }
 
   useEffect(() => {
     dragRef.current = null;
@@ -507,9 +522,26 @@ export function TemplateCanvasV2({
       );
     }
 
+    function renderRepeatedGroup(groupId: string): ReactNode {
+      const group = nodesById.get(groupId);
+      const occurrences = repeatPreview.get(groupId);
+      if (!group || group.kind !== "group" || !occurrences) return null;
+      return occurrences.map(occurrence => (
+        <g
+          key={occurrence.group.key}
+          data-template-repeat-domain={occurrence.repeatDomainId}
+          data-template-repeat-index={occurrence.index}
+          data-template-occurrence-key={occurrence.group.key}
+          transform={`translate(${formatNumber(occurrence.offset.x)} ${formatNumber(occurrence.offset.y)})`}
+        >
+          {renderNode(group, false, new Set(), group.id, false, false)}
+        </g>
+      ));
+    }
+
     return (
       <g key={layer.id} data-template-layer-id={layer.id} data-locked={layer.locked ? "true" : undefined}>
-        {layer.nodes.map(node => ownedIds.has(node.id) ? null : renderNode(node))}
+        {layer.nodes.map(node => ownedIds.has(node.id) ? null : repeatedGroupIds.has(node.id) && repeatPreview.has(node.id) ? renderRepeatedGroup(node.id) : renderNode(node))}
       </g>
     );
   }
@@ -559,6 +591,25 @@ export function TemplateCanvasV2({
     );
   }
 
+  function renderRepeatedPoints(): ReactNode {
+    return [...repeatPreview.values()].flatMap(occurrences => occurrences.flatMap(occurrence => occurrence.contactPoints.map(point => (
+      <g
+        key={`${viewId}:${point.key}`}
+        data-template-point-id={point.prototypeContactPointId}
+        data-template-point-kind="contact"
+        data-template-occurrence-key={point.key}
+        data-template-repeat-index={occurrence.index}
+        transform={`translate(${formatNumber(point.x)} ${formatNumber(point.y)})`}
+        onPointerDown={event => select(event, point.prototypeContactPointId)}
+      >
+        <circle r="7" fill="#fff" stroke="#c54848" strokeWidth="2" />
+        <path d="M -11 0 H 11 M 0 -11 V 11" fill="none" stroke="#c54848" strokeWidth="2" />
+        <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{point.number}</text>
+        <title>{`${point.name} · ${point.direction}`}</title>
+      </g>
+    ))));
+  }
+
   return (
     <svg
       className="template-canvas-v2"
@@ -577,8 +628,14 @@ export function TemplateCanvasV2({
     >
       <rect width={width} height={height} fill="#fff" />
       {view ? view.layers.map(renderLayer) : <text x="24" y="36" fill="#7b4c16" fontSize="14">Вид шаблона не найден</text>}
-      {view?.contactPoints.map(point => renderPoint(point, "contact"))}
+      {view?.contactPoints.map(point => repeatedPointIds.has(point.id) ? null : renderPoint(point, "contact"))}
+      {view && renderRepeatedPoints()}
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
+      {repeatPreviewError && <g data-template-repeat-error="true" pointerEvents="none">
+        <rect x="16" y="16" width={Math.min(width - 32, 520)} height="42" rx="6" fill="#fff7e6" stroke="#a86519" />
+        <text x="28" y="34" fill="#7b4c16" fontSize="11" fontWeight="700">Повторы показаны как прототипы</text>
+        <text x="28" y="49" fill="#7b4c16" fontSize="9">{repeatPreviewError}</text>
+      </g>}
     </svg>
   );
 }
