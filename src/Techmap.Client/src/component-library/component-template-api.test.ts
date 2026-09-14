@@ -8,7 +8,7 @@ const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 const templateId = "12345678-1234-4123-8123-123456789abc";
 function detail(version = 1) {
-  return { templateId, version, code: "JST-XH", name: "JST XH", articleBindings: [], assets: [], content: newTemplateContent(), createdUtc: "2026-09-14T00:00:00Z", updatedUtc: "2026-09-14T00:00:00Z" };
+  return { templateId, version, versionSha256: "a".repeat(64), code: "JST-XH", name: "JST XH", articleBindings: [], assets: [], content: newTemplateContent(), createdUtc: "2026-09-14T00:00:00Z", updatedUtc: "2026-09-14T00:00:00Z" };
 }
 
 describe("component template API", () => {
@@ -47,6 +47,22 @@ describe("component template API", () => {
     const { content: _content, ...summary } = item;
     const api = createComponentTemplateApi(config, session, async () => new Response(JSON.stringify({ items: [summary] }), { status: 200, headers: { "Content-Type": "application/json" } }));
     await expect(api.list()).resolves.toMatchObject([{ templateId, code: "JST-XH", version: 1 }]);
+  });
+
+  it("reads the exact immutable version requested by a harness placement", async () => {
+    let requestedUrl: RequestInfo | URL | undefined;
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => {
+      requestedUrl = url;
+      return new Response(JSON.stringify(detail(4)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      });
+    });
+    const api = createComponentTemplateApi(config, session, fetcher);
+
+    await expect(api.getVersion(templateId, 4)).resolves.toMatchObject({ templateId, version: 4 });
+    expect(requestedUrl).toBe(`/api/v1/component-templates/${templateId}/versions/4`);
+    expect(() => api.getVersion(templateId, 0)).toThrow("Версия шаблона задана неверно");
   });
 
   it("reads schema v2 as v2 without silently upgrading schema v1", async () => {

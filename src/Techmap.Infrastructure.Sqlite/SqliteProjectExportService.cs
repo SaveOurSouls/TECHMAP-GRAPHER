@@ -12,7 +12,7 @@ namespace Techmap.Infrastructure.Sqlite;
 public sealed class SqliteProjectExportService : IProjectExportService
 {
     public const int ArchiveFormat = 1;
-    public const int SnapshotFormat = 3;
+    public const int SnapshotFormat = 4;
     public const int MaximumArchiveEntries = 4_096;
     public const long MaximumSnapshotBytes = 64L * 1024 * 1024;
     public const long MaximumTotalPayloadBytes = 4L * 1024 * 1024 * 1024;
@@ -120,7 +120,10 @@ public sealed class SqliteProjectExportService : IProjectExportService
         }
 
         var blobs = snapshot.Attachments
-            .GroupBy(item => item.ContentSha256, StringComparer.Ordinal)
+            .Select(item => new BlobPayload(item.ContentSha256, item.SizeBytes))
+            .Concat(snapshot.ComponentSnapshots.SelectMany(item => item.Assets)
+                .Select(item => new BlobPayload(item.ContentSha256, item.SizeBytes)))
+            .GroupBy(item => item.Sha256, StringComparer.Ordinal)
             .Select(group =>
             {
                 var sizes = group.Select(item => item.SizeBytes).Distinct().ToArray();
@@ -234,13 +237,135 @@ public sealed class SqliteProjectExportService : IProjectExportService
             var harnesses = ReadHarnesses(unitOfWork, projectId);
             var attachments = ReadAttachments(unitOfWork, projectId);
             var pinned = ReadPinned(unitOfWork, projectId);
+            var componentSnapshots = ReadComponentSnapshots(unitOfWork, projectId);
+            var componentPlacements = ReadComponentPlacements(unitOfWork, projectId);
             return new ProjectSnapshot(
                 SnapshotFormat,
                 project,
                 harnesses,
                 attachments,
-                pinned);
+                pinned,
+                componentSnapshots,
+                componentPlacements);
         });
+
+    private static IReadOnlyList<ExportComponentSnapshot> ReadComponentSnapshots(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity projectId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT snapshot_id, source_template_id, source_version, source_version_sha256,
+                   schema_version, code, name, content_json, content_sha256,
+                   created_utc, updated_utc
+            FROM project_component_snapshots
+            WHERE project_id = $projectId
+              AND EXISTS (
+                  SELECT 1
+                  FROM harness_component_placements p
+                  INNER JOIN harnesses h ON h.harness_id = p.harness_id
+                  INNER JOIN harness_design_documents d ON d.harness_id = p.harness_id
+                  WHERE h.project_id = $projectId
+                    AND p.snapshot_id = project_component_snapshots.snapshot_id
+                    AND EXISTS (
+                        SELECT 1 FROM json_each(json_extract(d.content_json, '$.connectors')) c
+                        WHERE json_extract(c.value, '$.id') = p.placement_id))
+            ORDER BY snapshot_id;
+            """);
+        command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        using var reader = command.ExecuteReader();
+        var rows = new List<(string SnapshotId, string TemplateId, int Version, string VersionHash,
+            int Schema, string Code, string Name, string Content, string ContentHash,
+            string CreatedUtc, string UpdatedUtc)>();
+        while (reader.Read()) rows.Add((
+            ParseGuid(reader.GetString(0)), ParseGuid(reader.GetString(1)), reader.GetInt32(2),
+            reader.GetString(3), reader.GetInt32(4), reader.GetString(5), reader.GetString(6),
+            reader.GetString(7), reader.GetString(8), NormalizeUtc(reader.GetString(9)),
+            NormalizeUtc(reader.GetString(10))));
+        reader.Close();
+        var result = new List<ExportComponentSnapshot>(rows.Count);
+        foreach (var row in rows)
+        {
+            var bindings = ReadComponentBindings(unitOfWork, row.SnapshotId);
+            var assets = ReadComponentAssets(unitOfWork, row.SnapshotId);
+            using var content = JsonDocument.Parse(row.Content);
+            if (!string.Equals(Sha256(Encoding.UTF8.GetBytes(row.Content)), row.ContentHash, StringComparison.Ordinal))
+                throw new InvalidDataException("A project component snapshot content hash is invalid.");
+            result.Add(new ExportComponentSnapshot(
+                row.SnapshotId, row.TemplateId, row.Version, row.VersionHash, row.Schema,
+                row.Code, row.Name, bindings, assets, content.RootElement.Clone(),
+                row.CreatedUtc, row.UpdatedUtc));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<ExportComponentArticleBinding> ReadComponentBindings(
+        SqliteUnitOfWork unitOfWork,
+        string snapshotId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT source_id, entity_type, article_key
+            FROM project_component_snapshot_article_bindings
+            WHERE snapshot_id = $snapshotId ORDER BY binding_ordinal;
+            """);
+        command.Parameters.AddWithValue("$snapshotId", snapshotId);
+        using var reader = command.ExecuteReader();
+        var result = new List<ExportComponentArticleBinding>();
+        while (reader.Read()) result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        return result;
+    }
+
+    private static IReadOnlyList<ExportComponentAsset> ReadComponentAssets(
+        SqliteUnitOfWork unitOfWork,
+        string snapshotId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT a.asset_id, a.file_name, a.media_type, a.content_sha256, b.size_bytes
+            FROM project_component_snapshot_asset_refs a
+            INNER JOIN attachment_blobs b ON b.content_sha256 = a.content_sha256
+            WHERE a.snapshot_id = $snapshotId ORDER BY a.asset_ordinal;
+            """);
+        command.Parameters.AddWithValue("$snapshotId", snapshotId);
+        using var reader = command.ExecuteReader();
+        var result = new List<ExportComponentAsset>();
+        while (reader.Read()) result.Add(new(
+            ParseGuid(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
+            reader.GetString(3), reader.GetInt64(4)));
+        return result;
+    }
+
+    private static IReadOnlyList<ExportComponentPlacement> ReadComponentPlacements(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity projectId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT p.placement_id, p.harness_id, p.snapshot_id, p.source_id,
+                   p.entity_type, p.article_key, p.instance_json, p.created_utc, p.updated_utc
+            FROM harness_component_placements p
+            INNER JOIN harnesses h ON h.harness_id = p.harness_id
+            INNER JOIN harness_design_documents d ON d.harness_id = p.harness_id
+            WHERE h.project_id = $projectId
+              AND EXISTS (
+                  SELECT 1 FROM json_each(json_extract(d.content_json, '$.connectors')) c
+                  WHERE json_extract(c.value, '$.id') = p.placement_id)
+            ORDER BY p.harness_id, p.placement_id;
+            """);
+        command.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+        using var reader = command.ExecuteReader();
+        var result = new List<ExportComponentPlacement>();
+        while (reader.Read())
+        {
+            using var instance = JsonDocument.Parse(reader.GetString(6));
+            result.Add(new ExportComponentPlacement(
+                ParseGuid(reader.GetString(0)), ParseGuid(reader.GetString(1)), ParseGuid(reader.GetString(2)),
+                reader.GetString(3), reader.GetString(4), reader.GetString(5), instance.RootElement.Clone(),
+                NormalizeUtc(reader.GetString(7)), NormalizeUtc(reader.GetString(8))));
+        }
+        return result;
+    }
 
     private static ExportProject ReadProject(SqliteUnitOfWork unitOfWork, ProjectIdentity projectId)
     {
@@ -819,6 +944,102 @@ public sealed class SqliteProjectExportService : IProjectExportService
             previousAttachment = (attachment.CreatedUtc, attachment.AttachmentId);
         }
 
+        var componentSnapshotIds = new HashSet<string>(StringComparer.Ordinal);
+        string? previousComponentSnapshotId = null;
+        foreach (var component in snapshot.ComponentSnapshots)
+        {
+            ValidateSha256(component.SourceVersionSha256);
+            if (ParseGuid(component.SnapshotId) != component.SnapshotId ||
+                ParseGuid(component.SourceTemplateId) != component.SourceTemplateId ||
+                component.SourceVersion <= 0 || component.SchemaVersion != 3 ||
+                !componentSnapshotIds.Add(component.SnapshotId) ||
+                previousComponentSnapshotId is not null &&
+                    string.CompareOrdinal(previousComponentSnapshotId, component.SnapshotId) >= 0 ||
+                !IsCanonicalText(component.Code, 128, false) ||
+                !IsCanonicalText(component.Name, 256, false) ||
+                component.ArticleBindings.Count > SqliteComponentTemplateStore.MaximumArticleBindings ||
+                component.Assets.Count > SqliteComponentTemplateStore.MaximumAssets ||
+                component.Content.ValueKind != JsonValueKind.Object ||
+                NormalizeUtc(component.CreatedUtc) != component.CreatedUtc ||
+                NormalizeUtc(component.UpdatedUtc) != component.UpdatedUtc)
+            {
+                throw new InvalidDataException("A project component snapshot is invalid.");
+            }
+            var bindings = component.ArticleBindings.Select(item => new ComponentTemplateArticleBinding(
+                item.SourceId, item.EntityType, item.ArticleKey)).ToArray();
+            var assets = component.Assets.Select(item =>
+            {
+                ValidateSha256(item.ContentSha256);
+                if (ParseGuid(item.AssetId) != item.AssetId ||
+                    item.SizeBytes is <= 0 or > SqliteComponentTemplateStore.MaximumAssetBytes)
+                    throw new InvalidDataException("A project component snapshot asset is invalid.");
+                if (referencedBlobs.TryGetValue(item.ContentSha256, out var size) && size != item.SizeBytes)
+                    throw new InvalidDataException("A shared component asset has conflicting size metadata.");
+                referencedBlobs[item.ContentSha256] = item.SizeBytes;
+                return new ComponentTemplateAsset(
+                    Guid.ParseExact(item.AssetId, "D"),
+                    new AttachmentContent(item.ContentSha256, item.SizeBytes),
+                    item.FileName,
+                    item.MediaType);
+            }).ToArray();
+            var canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(
+                component.Content.GetRawText(), component.SchemaVersion);
+            SqliteComponentTemplateStore.EnsureV2AssetMetadataMatches(canonical, component.SchemaVersion, assets);
+            var versionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+                Guid.ParseExact(component.SourceTemplateId, "D"), component.SourceVersion,
+                component.SchemaVersion, component.Code, component.Name, bindings, assets, canonical);
+            if (!string.Equals(component.SourceVersionSha256, versionHash, StringComparison.Ordinal))
+                throw new InvalidDataException("A project component snapshot version hash is invalid.");
+            previousComponentSnapshotId = component.SnapshotId;
+        }
+
+        var placementIds = new HashSet<string>(StringComparer.Ordinal);
+        var reachableSnapshots = new HashSet<string>(StringComparer.Ordinal);
+        (string HarnessId, string PlacementId)? previousPlacement = null;
+        foreach (var placement in snapshot.ComponentPlacements)
+        {
+            if (ParseGuid(placement.PlacementId) != placement.PlacementId ||
+                !placementIds.Add(placement.PlacementId) ||
+                !harnessIds.Contains(placement.HarnessId) ||
+                !componentSnapshotIds.Contains(placement.SnapshotId) ||
+                placement.Instance.ValueKind != JsonValueKind.Object ||
+                Encoding.UTF8.GetByteCount(placement.Instance.GetRawText()) >
+                    SqliteProjectComponentSnapshotStore.MaximumInstanceBytes ||
+                !IsCanonicalText(placement.SourceId, 128, false) ||
+                !IsCanonicalText(placement.EntityType, 64, false) ||
+                !IsCanonicalText(placement.ArticleKey, 512, false) ||
+                previousPlacement is { } prior &&
+                    Compare(prior.HarnessId, prior.PlacementId, placement.HarnessId, placement.PlacementId) >= 0 ||
+                NormalizeUtc(placement.CreatedUtc) != placement.CreatedUtc ||
+                NormalizeUtc(placement.UpdatedUtc) != placement.UpdatedUtc)
+                throw new InvalidDataException("A project component placement is invalid.");
+            var component = snapshot.ComponentSnapshots.Single(item => item.SnapshotId == placement.SnapshotId);
+            var article = component.ArticleBindings.SingleOrDefault(item =>
+                item.SourceId == placement.SourceId && item.EntityType == placement.EntityType &&
+                item.ArticleKey == placement.ArticleKey);
+            if (article is null)
+                throw new InvalidDataException("A project component placement article is invalid.");
+            try
+            {
+                SqliteProjectComponentSnapshotStore.ValidateInstanceBinding(
+                    placement.Instance.GetRawText(),
+                    Guid.ParseExact(placement.PlacementId, "D"),
+                    Guid.ParseExact(component.SourceTemplateId, "D"),
+                    component.SourceVersion,
+                    component.SourceVersionSha256,
+                    new ComponentTemplateArticleBinding(
+                        article.SourceId, article.EntityType, article.ArticleKey));
+            }
+            catch (ProjectComponentSnapshotException error)
+            {
+                throw new InvalidDataException("A project component placement binding is invalid.", error);
+            }
+            reachableSnapshots.Add(placement.SnapshotId);
+            previousPlacement = (placement.HarnessId, placement.PlacementId);
+        }
+        if (!reachableSnapshots.SetEquals(componentSnapshotIds))
+            throw new InvalidDataException("The project export contains an unreachable component snapshot.");
+
         var payloadBlobs = manifest.Files
             .Where(payload => payload.Path != SnapshotPath)
             .ToDictionary(payload => payload.Sha256, payload => payload.SizeBytes, StringComparer.Ordinal);
@@ -1226,7 +1447,9 @@ public sealed class SqliteProjectExportService : IProjectExportService
         ExportProject Project,
         IReadOnlyList<ExportHarness> Harnesses,
         IReadOnlyList<ExportAttachment> Attachments,
-        IReadOnlyList<ExportPinnedCharacteristic> PinnedCharacteristics);
+        IReadOnlyList<ExportPinnedCharacteristic> PinnedCharacteristics,
+        IReadOnlyList<ExportComponentSnapshot> ComponentSnapshots,
+        IReadOnlyList<ExportComponentPlacement> ComponentPlacements);
     private sealed record ExportProject(
         string ProjectId,
         string Designation,
@@ -1274,5 +1497,35 @@ public sealed class SqliteProjectExportService : IProjectExportService
         string CanonicalPayload,
         string PayloadSha256,
         string CapturedUtc);
+    private sealed record ExportComponentSnapshot(
+        string SnapshotId,
+        string SourceTemplateId,
+        int SourceVersion,
+        string SourceVersionSha256,
+        int SchemaVersion,
+        string Code,
+        string Name,
+        IReadOnlyList<ExportComponentArticleBinding> ArticleBindings,
+        IReadOnlyList<ExportComponentAsset> Assets,
+        JsonElement Content,
+        string CreatedUtc,
+        string UpdatedUtc);
+    private sealed record ExportComponentArticleBinding(string SourceId, string EntityType, string ArticleKey);
+    private sealed record ExportComponentAsset(
+        string AssetId,
+        string FileName,
+        string MediaType,
+        string ContentSha256,
+        long SizeBytes);
+    private sealed record ExportComponentPlacement(
+        string PlacementId,
+        string HarnessId,
+        string SnapshotId,
+        string SourceId,
+        string EntityType,
+        string ArticleKey,
+        JsonElement Instance,
+        string CreatedUtc,
+        string UpdatedUtc);
     private sealed record VerifiedExport(string ManifestSha256, string ProjectId, long ProjectRevision);
 }

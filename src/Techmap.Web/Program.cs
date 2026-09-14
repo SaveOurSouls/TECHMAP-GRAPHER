@@ -277,6 +277,8 @@ builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachment
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
 builder.Services.AddSingleton<IHarnessDesignDocumentStore, SqliteHarnessDesignDocumentStore>();
 builder.Services.AddSingleton<IComponentTemplateStore, SqliteComponentTemplateStore>();
+builder.Services.AddSingleton<IProjectComponentSnapshotStore, SqliteProjectComponentSnapshotStore>();
+builder.Services.AddSingleton<IProjectComponentSnapshotStore, SqliteProjectComponentSnapshotStore>();
 builder.Services.AddSingleton<IReferenceCatalogSnapshotStore, SqliteReferenceCatalogSnapshotStore>();
 builder.Services.AddSingleton<IReferenceCatalogSearchStore, SqliteReferenceCatalogSearchStore>();
 builder.Services.AddSingleton<IReferenceCatalogSavedFilterStore, SqliteReferenceCatalogSavedFilterStore>();
@@ -426,6 +428,7 @@ app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
 app.MapHarnessDesignEndpoints();
 app.MapComponentTemplateEndpoints();
+app.MapProjectComponentPlacementEndpoints();
 app.MapReferenceCatalogEndpoints();
 app.MapReferenceCatalogSavedFilterEndpoints();
 app.MapXlsxReferenceEndpoints();

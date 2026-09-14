@@ -119,7 +119,7 @@ public sealed class ProjectExportIntegrationTests
             archive.Entries.Select(entry => entry.FullName).ToArray());
         Assert.DoesNotContain(archive.Entries, entry => entry.FullName.Contains(unusedHash, StringComparison.Ordinal));
         using var snapshot = await ReadJsonAsync(archive, SqliteProjectExportService.SnapshotPath);
-        Assert.Equal(3, snapshot.RootElement.GetProperty("snapshotFormat").GetInt32());
+        Assert.Equal(4, snapshot.RootElement.GetProperty("snapshotFormat").GetInt32());
         Assert.Equal(2, snapshot.RootElement.GetProperty("harnesses").GetArrayLength());
         var exportedHarnesses = snapshot.RootElement.GetProperty("harnesses").EnumerateArray().ToArray();
         Assert.Equal([3L, 17L], exportedHarnesses.Select(item => item.GetProperty("quantity").GetInt64()));

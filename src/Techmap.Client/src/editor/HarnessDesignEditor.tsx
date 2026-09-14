@@ -3,6 +3,10 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
+import { createComponentPlacementApi, type PlaceComponentRequest } from "./component-placement-api";
+import { createComponentTemplateApi } from "../component-library/component-template-api";
+import { isTemplateContentV3 } from "../component-library/template-content";
+import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
 import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
@@ -41,6 +45,14 @@ export interface HarnessDesignEditorProps {
   readonly apiOverride?: HarnessDesignApi;
   readonly onClose?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
+}
+
+interface PendingComponentPlacement {
+  readonly body: PlaceComponentRequest;
+  readonly nextHistory: EditorHistory;
+  readonly connectorId: string;
+  /** Prevents a late response for a previously opened harness changing the current editor. */
+  readonly loadGeneration: number;
 }
 
 interface HarnessEditorErrorBoundaryProps {
@@ -276,6 +288,8 @@ export function HarnessDesignEditor({
   onViewChange,
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
+  const componentTemplateApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
+  const componentPlacementApi = useMemo(() => createComponentPlacementApi(config, session), [config, session]);
   const catalog = useEditorReferenceCatalog(config, session);
   const terminalLookup = useTerminalArticleLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(initialView);
@@ -301,6 +315,11 @@ export function HarnessDesignEditor({
   const loadGeneration = useRef(0);
   const previewFrameRef = useRef<number | null>(null);
   const pendingMovePreviewRef = useRef<typeof movePreview>(null);
+  const placementBusyRef = useRef(false);
+  const placementOperationRef = useRef<symbol | null>(null);
+  const pendingPlacementRef = useRef<PendingComponentPlacement | null>(null);
+  const [placementBusy, setPlacementBusy] = useState(false);
+  const [placementPending, setPlacementPending] = useState(false);
 
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { resourceRef.current = resource; }, [resource]);
@@ -308,6 +327,11 @@ export function HarnessDesignEditor({
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
+    placementOperationRef.current = null;
+    placementBusyRef.current = false;
+    pendingPlacementRef.current = null;
+    setPlacementBusy(false);
+    setPlacementPending(false);
     setResource(null);
     setHistory(null);
     setSelectedObjectId(null);
@@ -429,6 +453,7 @@ export function HarnessDesignEditor({
   }, [history, movePreview, view]);
 
   const run = useCallback((command: EditorCommand): boolean => {
+    if (placementBusyRef.current || pendingPlacementRef.current) return false;
     const current = historyRef.current;
     if (!current) return false;
     try {
@@ -476,6 +501,7 @@ export function HarnessDesignEditor({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (placementBusyRef.current || pendingPlacementRef.current) return;
       if (event.key === "Escape" && editingObjectId) {
         event.preventDefault();
         setEditingObjectId(null);
@@ -540,27 +566,202 @@ export function HarnessDesignEditor({
     ...builtInWireColors,
     ...customWireColorHexes.map((hex) => createCustomWireColor(hex)),
   ];
-  const addCatalogItem = (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
+  const placeCatalogItem = async (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
     if (item.placement !== "connector") return;
+    const generation = loadGeneration.current;
     const id = crypto.randomUUID();
     const index = history.present.connectors.length;
-    const preview = createBuiltInConnectorInstance(item.id, {
-      id,
-      designation: `XS${index + 1}`,
-      e4Position: { x: 0, y: 0 },
-      partNumber: item.defaultPartNumber,
-    });
+    let preview: ReturnType<typeof createBuiltInConnectorInstance>;
+    let isPersistentTemplate = false;
+    let templateArticle: { sourceId: string; entityType: string; articleKey: string } | null = null;
+    if (item.componentTemplateId && item.componentTemplateVersion) {
+      try {
+        const template = await componentTemplateApi.getVersion(item.componentTemplateId, item.componentTemplateVersion);
+        if (generation !== loadGeneration.current) return;
+        if (!isTemplateContentV3(template.content)) throw new Error("Для размещения в жгуте требуется шаблон v3.");
+        const variant = item.componentArticle
+          ? template.content.articleVariants.find((candidate) =>
+              candidate.sourceId === item.componentArticle!.sourceId &&
+              candidate.entityType === item.componentArticle!.entityType &&
+              candidate.articleKey === item.componentArticle!.articleKey)
+          : template.content.articleVariants[0];
+        if (!variant) throw new Error("В библиотечном шаблоне нет варианта артикула для размещения.");
+        preview = createConnectorInstanceFromComponentTemplateV3({
+          templateId: template.templateId,
+          version: template.version,
+          versionSha256: template.versionSha256,
+          code: template.code,
+          name: template.name,
+          articleBindings: template.articleBindings,
+          assets: template.assets,
+          content: template.content,
+        }, {
+          id,
+          designation: `XS${index + 1}`,
+          articleVariantId: variant.id,
+          e4Position: { x: 0, y: 0 },
+        });
+        isPersistentTemplate = true;
+        templateArticle = {
+          sourceId: variant.sourceId,
+          entityType: variant.entityType,
+          articleKey: variant.articleKey,
+        };
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Не удалось разместить библиотечный компонент.");
+        return;
+      }
+    } else {
+      preview = createBuiltInConnectorInstance(item.id, {
+        id,
+        designation: `XS${index + 1}`,
+        e4Position: { x: 0, y: 0 },
+        partNumber: item.defaultPartNumber,
+      });
+    }
     const nextE4Y = history.present.connectors.reduce((bottom, connector) => Math.max(
       bottom,
       connector.positions.e4.y + connectorE4TableGeometry(connector).height + 90,
     ), 100);
     const placement = point ?? { x: 120, y: nextE4Y };
-    run({
+    const command: EditorCommand = {
       type: "add-connector",
       connector: { ...preview, positions: { e4: placement, drawing: placement } },
-    });
+    };
+    if (isPersistentTemplate && templateArticle) {
+      const currentHistory = historyRef.current;
+      const currentResource = resourceRef.current;
+      if (!currentHistory || !currentResource) return;
+      if (!(await flushSave())) return;
+      if (generation !== loadGeneration.current) return;
+      const latestHistory = historyRef.current;
+      const latestResource = resourceRef.current;
+      if (!latestHistory || !latestResource) return;
+      let nextHistory: EditorHistory;
+      try {
+        nextHistory = executeEditorCommand(latestHistory, command);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Не удалось разместить компонент.");
+        return;
+      }
+      const pending: PendingComponentPlacement = pendingPlacementRef.current ?? {
+        body: {
+          commandId: crypto.randomUUID(),
+          expectedRevision: latestResource.revision,
+          placementId: preview.id,
+          sourceTemplateId: item.componentTemplateId!,
+          sourceVersion: item.componentTemplateVersion!,
+          sourceId: templateArticle.sourceId,
+          entityType: templateArticle.entityType,
+          articleKey: templateArticle.articleKey,
+          instance: command.connector,
+        },
+        nextHistory,
+        connectorId: preview.id,
+        loadGeneration: generation,
+      };
+      pendingPlacementRef.current = pending;
+      setPlacementPending(true);
+      try {
+        const result = await componentPlacementApi.place(projectId, harnessId, pending.body);
+        const authoritative = await api.get(projectId, harnessId);
+        if (pending.loadGeneration !== loadGeneration.current || pendingPlacementRef.current !== pending) return;
+        nextHistory = pending.nextHistory;
+        if (authoritative.revision !== result.resultingRevision ||
+            !authoritative.content.connectors.some((connector) => connector.id === pending.connectorId)) {
+          throw new Error("Сервер не подтвердил компонент в документе жгута.");
+        }
+        historyRef.current = nextHistory;
+        setHistory(nextHistory);
+        const saved = { ...authoritative, content: nextHistory.present };
+        resourceRef.current = saved;
+        setResource(saved);
+        savedJsonRef.current = JSON.stringify(nextHistory.present);
+        setSaveState("saved");
+        pendingPlacementRef.current = null;
+        setPlacementPending(false);
+      } catch (error) {
+        // The exact command is kept for the next activation. If the response was
+        // lost after the server committed it, the idempotent command journal
+        // returns the already accepted result instead of creating a duplicate.
+        if (pending.loadGeneration === loadGeneration.current && pendingPlacementRef.current === pending) {
+          setMessage(error instanceof Error ? error.message : "Не удалось закрепить компонент в проекте.");
+        }
+        return;
+      }
+    } else {
+      run(command);
+    }
     setSelectedObjectId(id);
     setSelectedObjectIds([id]);
+  };
+
+  const retryPendingPlacement = async () => {
+    if (placementBusyRef.current) return;
+    const pending = pendingPlacementRef.current;
+    if (!pending || pending.loadGeneration !== loadGeneration.current) return;
+    const operation = Symbol("component-placement-retry");
+    placementOperationRef.current = operation;
+    placementBusyRef.current = true;
+    setPlacementBusy(true);
+    try {
+      const result = await componentPlacementApi.place(projectId, harnessId, pending.body);
+      const authoritative = await api.get(projectId, harnessId);
+      if (pending.loadGeneration !== loadGeneration.current || pendingPlacementRef.current !== pending) return;
+      if (authoritative.revision !== result.resultingRevision ||
+          !authoritative.content.connectors.some((connector) => connector.id === pending.connectorId)) {
+        throw new Error("Сервер не подтвердил компонент в документе жгута.");
+      }
+      historyRef.current = pending.nextHistory;
+      setHistory(pending.nextHistory);
+      const saved = { ...authoritative, content: pending.nextHistory.present };
+      resourceRef.current = saved;
+      setResource(saved);
+      savedJsonRef.current = JSON.stringify(pending.nextHistory.present);
+      pendingPlacementRef.current = null;
+      setPlacementPending(false);
+      setSaveState("saved");
+      setMessage("");
+      setSelectedObjectId(pending.connectorId);
+      setSelectedObjectIds([pending.connectorId]);
+    } catch (error) {
+      if (pending.loadGeneration === loadGeneration.current && pendingPlacementRef.current === pending) {
+        setMessage(error instanceof Error ? error.message : "Не удалось закрепить компонент в проекте.");
+      }
+    } finally {
+      if (placementOperationRef.current === operation) {
+        placementOperationRef.current = null;
+        placementBusyRef.current = false;
+        setPlacementBusy(false);
+      }
+    }
+  };
+
+  const addCatalogItem = async (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
+    if (placementBusyRef.current) return;
+    if (pendingPlacementRef.current) {
+      await retryPendingPlacement();
+      return;
+    }
+    const persistent = Boolean(item.componentTemplateId && item.componentTemplateVersion);
+    if (!persistent) {
+      await placeCatalogItem(item, point);
+      return;
+    }
+    if (placementBusyRef.current) return;
+    const operation = Symbol("component-placement");
+    placementOperationRef.current = operation;
+    placementBusyRef.current = true;
+    setPlacementBusy(true);
+    try {
+      await placeCatalogItem(item, point);
+    } finally {
+      if (placementOperationRef.current === operation) {
+        placementOperationRef.current = null;
+        placementBusyRef.current = false;
+        setPlacementBusy(false);
+      }
+    }
   };
 
   const addRoutePoint = (point: { readonly x: number; readonly y: number }) => {
@@ -641,7 +842,7 @@ export function HarnessDesignEditor({
   };
 
   return (
-    <div className="he-host">
+    <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
       {message && <div className="he-save-message" role="alert">{message}</div>}
       <HarnessEditorErrorBoundary
         key={`${harnessId}:${uiFailureNonce}`}
@@ -904,6 +1105,11 @@ export function HarnessDesignEditor({
           if (await flushSave()) onClose();
         } : undefined}
       /></HarnessEditorErrorBoundary>
+      {(placementBusy || placementPending) && <div className={placementBusy ? "he-placement-busy" : "he-placement-pending"} role="status" aria-live="polite">
+        {placementBusy
+          ? "Закрепляем версию компонента в жгуте…"
+          : <><span>Ответ сервера не получен. Повтор запроса безопасен и не создаст копию.</span><button type="button" onClick={() => void retryPendingPlacement()}>Повторить</button></>}
+      </div>}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import {
   validateConnectorLibraryMetadata,
   type ConnectorContact,
   type ConnectorInstance,
+  type ConnectorLibraryBinding as ModelConnectorLibraryBinding,
   type HarnessDesignDocument,
 } from "./model";
 
@@ -32,9 +33,7 @@ export interface ConnectorSeries {
   readonly articles: readonly ConnectorSeriesArticle[];
 }
 
-export type ConnectorLibraryBinding =
-  | { readonly mode: "series"; readonly seriesId: string; readonly partNumber: string }
-  | { readonly mode: "free" };
+export type ConnectorLibraryBinding = Exclude<ModelConnectorLibraryBinding, { readonly mode: "template" }>;
 
 export interface ConnectorLibraryContact {
   readonly kind: ConnectorLibraryContactKind;
@@ -274,6 +273,9 @@ export function parseConnectorSeriesHarnessDesignDocument(
   if (!Array.isArray(rawDocument.connectors)) throw new Error("Соединители документа заданы неверно.");
   const rawConnectors = rawDocument.connectors;
   const connectors = parsed.connectors.map((connector, connectorIndex) => {
+    if (connector.libraryBinding?.mode === "template") {
+      throw new Error("Закреплённый экземпляр шаблона нужно читать через основную модель редактора.");
+    }
     const rawConnector = requireRecord(rawConnectors[connectorIndex], "Соединитель задан неверно.");
     const binding = parseLibraryBinding(rawConnector.libraryBinding);
     const rawContacts = rawConnector.contacts;
@@ -391,7 +393,7 @@ function parseLibraryContact(value: unknown): ConnectorLibraryContact {
 }
 
 function asSeriesInstance(connector: ConnectorInstance | ConnectorSeriesInstance): ConnectorSeriesInstance {
-  if (connector.libraryBinding !== undefined) return {
+  if (connector.libraryBinding?.mode === "series" || connector.libraryBinding?.mode === "free") return {
     ...connector,
     libraryBinding: connector.libraryBinding,
     contacts: connector.contacts.map((contact) => ({
@@ -399,6 +401,9 @@ function asSeriesInstance(connector: ConnectorInstance | ConnectorSeriesInstance
       libraryContact: contact.libraryContact ?? null,
     })),
   };
+  if (connector.libraryBinding?.mode === "template") {
+    throw new Error("Закреплённый экземпляр шаблона нельзя редактировать как устаревшую серию.");
+  }
   return createFreeConnectorInstance(connector);
 }
 

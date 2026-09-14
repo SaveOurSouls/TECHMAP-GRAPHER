@@ -1,10 +1,16 @@
 param(
-    [string]$Configuration = "Release"
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Release",
+
+    [string]$ArtifactSlice = "m3-01"
 )
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-09"
+if ($ArtifactSlice -notmatch '^[a-z0-9][a-z0-9._-]{0,63}$') {
+    throw "ArtifactSlice must contain only lowercase ASCII letters, digits, dots, underscores, and hyphens."
+}
+$artifactsRoot = Join-Path $repositoryRoot "artifacts\$ArtifactSlice"
 $clientRoot = Join-Path $repositoryRoot "src\Techmap.Client"
 $webRoot = Join-Path $repositoryRoot "src\Techmap.Web"
 $staticRoot = Join-Path $webRoot "wwwroot"

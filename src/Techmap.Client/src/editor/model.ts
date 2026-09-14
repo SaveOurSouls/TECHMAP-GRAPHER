@@ -11,7 +11,73 @@ export type ConnectorLibraryContactKind = "signal" | "power" | "third";
 
 export type ConnectorLibraryBinding =
   | { readonly mode: "series"; readonly seriesId: string; readonly partNumber: string }
+  | {
+      readonly mode: "template";
+      readonly templateId: string;
+      readonly templateVersion: number;
+      readonly versionSha256: string;
+      readonly articleVariantId: string;
+      readonly article: ComponentTemplateArticleKeySnapshot;
+      readonly snapshot: ComponentTemplateMaterializedSnapshot;
+    }
   | { readonly mode: "free" };
+
+export interface ComponentTemplateArticleKeySnapshot {
+  readonly sourceId: string;
+  readonly entityType: string;
+  readonly articleKey: string;
+}
+
+export interface ComponentTemplateAssetSnapshot {
+  readonly assetId: string;
+  readonly sha256: string;
+  readonly sizeBytes: number;
+  readonly fileName: string;
+  readonly mediaType: string;
+}
+
+export interface ComponentTemplateContactRepresentationSnapshot {
+  readonly viewId: string;
+  readonly viewName: string;
+  readonly viewKind: "e4" | "drawing" | "additional";
+  readonly pointId: string;
+  readonly occurrenceKey?: string;
+  readonly x: number;
+  readonly y: number;
+  readonly direction: "left" | "right" | "up" | "down";
+}
+
+export interface ComponentTemplateContactSnapshot {
+  /** Logical-contact ID for fixed contacts and the stable occurrence key for repeated contacts. */
+  readonly logicalContactId: string;
+  readonly prototypeLogicalContactId: string;
+  readonly sourceNumber: string;
+  readonly name: string;
+  readonly circuitText: string | null;
+  readonly contactTypeGroupId: string | null;
+  readonly contactType: string;
+  readonly allowedTerminalArticleKeys: readonly ComponentTemplateArticleKeySnapshot[];
+  readonly representations: readonly ComponentTemplateContactRepresentationSnapshot[];
+}
+
+/**
+ * Placement-owned materialization of one exact template article. The full
+ * reusable template remains in the project component snapshot; this compact
+ * copy is enough for the editor to reopen and route the instance without
+ * following a newer library head.
+ */
+export interface ComponentTemplateMaterializedSnapshot {
+  readonly templateId: string;
+  readonly templateVersion: number;
+  readonly versionSha256: string;
+  readonly code: string;
+  readonly name: string;
+  readonly articleVariantId: string;
+  readonly article: ComponentTemplateArticleKeySnapshot;
+  readonly articleBindings: readonly ComponentTemplateArticleKeySnapshot[];
+  readonly assets: readonly ComponentTemplateAssetSnapshot[];
+  readonly contacts: readonly ComponentTemplateContactSnapshot[];
+}
 
 export interface ConnectorLibraryContact {
   readonly kind: ConnectorLibraryContactKind;
@@ -128,6 +194,8 @@ export function connectorE4TableColumnWidth(
 
 export interface ConnectorContact {
   readonly id: string;
+  /** Stable template logical ID, or a repeat occurrence key for a materialized row. */
+  readonly logicalContactId?: string;
   readonly number: number;
   readonly contactType: string;
   readonly circuit: string;
@@ -796,6 +864,9 @@ function parseConnector(value: unknown): ConnectorInstance {
     const contact = requireRecord(contactValue, "Контакт соединителя задан неверно.");
     return {
       id: requireText(contact.id, "ID контакта"),
+      logicalContactId: contact.logicalContactId === undefined
+        ? undefined
+        : requireText(contact.logicalContactId, "Логический ID контакта"),
       number: requireInteger(contact.number, "Номер контакта", 1, 300),
       contactType: optionalString(contact.contactType, "Тип контакта"),
       circuit: requireString(contact.circuit, "Цепь контакта"),
@@ -815,7 +886,7 @@ function parseConnector(value: unknown): ConnectorInstance {
   const designation = requireBoundedText(record.designation, "Обозначение соединителя", 120);
   const partNumber = record.partNumber === undefined
     ? designation
-    : requireBoundedText(record.partNumber, "Артикул шаблона соединителя", 120);
+    : requireBoundedText(record.partNumber, "Артикул шаблона соединителя", 512);
   const libraryBinding = parseConnectorLibraryBinding(record.libraryBinding) ?? { mode: "free" };
   const contacts = parsedContacts.map((contact) => ({
     ...contact,
@@ -857,6 +928,10 @@ export function validateConnectorLibraryMetadata(connector: ConnectorInstance): 
     }
     return;
   }
+  if (binding.mode === "template") {
+    validateComponentTemplateBinding(connector, binding);
+    return;
+  }
   if (!binding.seriesId.trim() || !binding.partNumber.trim()) {
     throw new Error("Привязка соединителя к серии задана неверно.");
   }
@@ -887,12 +962,212 @@ function parseConnectorLibraryBinding(value: unknown): ConnectorLibraryBinding |
   if (value === undefined) return undefined;
   const record = requireRecord(value, "Привязка соединителя к библиотечной серии задана неверно.");
   if (record.mode === "free") return { mode: "free" };
+  if (record.mode === "template") {
+    const binding = {
+      mode: "template" as const,
+      templateId: requireText(record.templateId, "ID шаблона компонента"),
+      templateVersion: requireInteger(record.templateVersion, "Версия шаблона компонента", 1, 1_000_000),
+      versionSha256: parseSha256(record.versionSha256, "Хэш версии шаблона компонента"),
+      articleVariantId: requireText(record.articleVariantId, "ID варианта артикула"),
+      article: parseTemplateArticleKey(record.article, "Артикул экземпляра компонента"),
+      snapshot: parseComponentTemplateSnapshot(record.snapshot),
+    };
+    validateTemplateBindingSnapshotIdentity(binding);
+    return binding;
+  }
   if (record.mode !== "series") throw new Error("Режим библиотечного соединителя задан неверно.");
   return {
     mode: "series",
     seriesId: requireText(record.seriesId, "ID серии соединителя"),
     partNumber: requireText(record.partNumber, "Артикул соединителя серии"),
   };
+}
+
+function validateComponentTemplateBinding(
+  connector: ConnectorInstance,
+  binding: Extract<ConnectorLibraryBinding, { readonly mode: "template" }>,
+): void {
+  validateTemplateBindingSnapshotIdentity(binding);
+  if (connector.partNumber !== binding.article.articleKey) {
+    throw new Error("Артикул соединителя не совпадает с закреплённым вариантом шаблона.");
+  }
+  if (connector.libraryCode !== binding.snapshot.code) {
+    throw new Error("Код соединителя не совпадает с закреплённым шаблоном.");
+  }
+  if (connector.contacts.length !== binding.snapshot.contacts.length) {
+    throw new Error("Число контактов не совпадает с закреплённым вариантом шаблона.");
+  }
+  const logicalIds = new Set<string>();
+  connector.contacts.forEach((contact, index) => {
+    const snapshotContact = binding.snapshot.contacts[index]!;
+    if (!contact.logicalContactId || !logicalIds.add(contact.logicalContactId) ||
+        contact.logicalContactId !== snapshotContact.logicalContactId ||
+        contact.id !== `${connector.id}:contact:${contact.logicalContactId}` ||
+        contact.number !== index + 1 || contact.libraryContact !== null) {
+      throw new Error("Контакты не соответствуют закреплённой материализации шаблона.");
+    }
+    if (contact.terminalArticle && !snapshotContact.allowedTerminalArticleKeys.some((candidate) =>
+      candidate.articleKey === contact.terminalArticle)) {
+      throw new Error("Терминал контакта не входит в список совместимых терминалов закреплённого шаблона.");
+    }
+  });
+}
+
+function validateTemplateBindingSnapshotIdentity(
+  binding: Extract<ConnectorLibraryBinding, { readonly mode: "template" }>,
+): void {
+  const snapshot = binding.snapshot;
+  if (snapshot.templateId !== binding.templateId ||
+      snapshot.templateVersion !== binding.templateVersion ||
+      snapshot.versionSha256 !== binding.versionSha256 ||
+      snapshot.articleVariantId !== binding.articleVariantId ||
+      !sameTemplateArticleKey(snapshot.article, binding.article)) {
+    throw new Error("Привязка не совпадает с закреплённым снимком шаблона.");
+  }
+  if (!snapshot.articleBindings.some((candidate) => sameTemplateArticleKey(candidate, snapshot.article))) {
+    throw new Error("Артикул экземпляра отсутствует в закреплённом индексе шаблона.");
+  }
+}
+
+function sameTemplateArticleKey(
+  left: ComponentTemplateArticleKeySnapshot,
+  right: ComponentTemplateArticleKeySnapshot,
+): boolean {
+  return left.sourceId === right.sourceId && left.entityType === right.entityType &&
+    left.articleKey === right.articleKey;
+}
+
+function parseComponentTemplateSnapshot(value: unknown): ComponentTemplateMaterializedSnapshot {
+  const record = requireRecord(value, "Закреплённый снимок шаблона задан неверно.");
+  if (!Array.isArray(record.articleBindings) || !Array.isArray(record.assets) || !Array.isArray(record.contacts)) {
+    throw new Error("Состав закреплённого снимка шаблона задан неверно.");
+  }
+  const articleBindings = record.articleBindings.map((candidate) =>
+    parseTemplateArticleKey(candidate, "Артикул индекса шаблона"));
+  requireUniqueTemplateArticleKeys(articleBindings, "Артикулы индекса шаблона должны быть уникальны.");
+  const assets = record.assets.map(parseTemplateAssetSnapshot);
+  if (new Set(assets.map((asset) => asset.assetId)).size !== assets.length) {
+    throw new Error("Ресурсы закреплённого шаблона должны иметь уникальные ID.");
+  }
+  const contacts = record.contacts.map(parseTemplateContactSnapshot);
+  if (new Set(contacts.map((contact) => contact.logicalContactId)).size !== contacts.length) {
+    throw new Error("Логические ID материализованных контактов должны быть уникальны.");
+  }
+  return deepFreezeTemplateSnapshot({
+    templateId: requireText(record.templateId, "ID закреплённого шаблона"),
+    templateVersion: requireInteger(record.templateVersion, "Версия закреплённого шаблона", 1, 1_000_000),
+    versionSha256: parseSha256(record.versionSha256, "Хэш закреплённого шаблона"),
+    code: requireBoundedText(record.code, "Код закреплённого шаблона", 120),
+    name: requireBoundedText(record.name, "Название закреплённого шаблона", 256),
+    articleVariantId: requireText(record.articleVariantId, "ID варианта артикула закреплённого шаблона"),
+    article: parseTemplateArticleKey(record.article, "Артикул закреплённого шаблона"),
+    articleBindings,
+    assets,
+    contacts,
+  });
+}
+
+function parseTemplateArticleKey(value: unknown, name: string): ComponentTemplateArticleKeySnapshot {
+  const record = requireRecord(value, `${name} задан неверно.`);
+  return {
+    sourceId: requireBoundedText(record.sourceId, `${name}: источник`, 128),
+    entityType: requireBoundedText(record.entityType, `${name}: тип сущности`, 64),
+    articleKey: requireBoundedText(record.articleKey, `${name}: ключ`, 512),
+  };
+}
+
+function requireUniqueTemplateArticleKeys(
+  values: readonly ComponentTemplateArticleKeySnapshot[],
+  message: string,
+): void {
+  const keys = values.map((value) => `${value.sourceId}\0${value.entityType}\0${value.articleKey}`);
+  if (new Set(keys).size !== keys.length) throw new Error(message);
+}
+
+function parseTemplateAssetSnapshot(value: unknown): ComponentTemplateAssetSnapshot {
+  const record = requireRecord(value, "Ресурс закреплённого шаблона задан неверно.");
+  return {
+    assetId: requireText(record.assetId, "ID ресурса закреплённого шаблона"),
+    sha256: parseSha256(record.sha256, "Хэш ресурса закреплённого шаблона"),
+    sizeBytes: requireInteger(record.sizeBytes, "Размер ресурса закреплённого шаблона", 0, 10 * 1024 * 1024),
+    fileName: requireBoundedText(record.fileName, "Имя ресурса закреплённого шаблона", 255),
+    mediaType: requireBoundedText(record.mediaType, "Тип ресурса закреплённого шаблона", 120),
+  };
+}
+
+function parseTemplateContactSnapshot(value: unknown): ComponentTemplateContactSnapshot {
+  const record = requireRecord(value, "Материализованный контакт шаблона задан неверно.");
+  if (!Array.isArray(record.allowedTerminalArticleKeys) || !Array.isArray(record.representations)) {
+    throw new Error("Состав материализованного контакта шаблона задан неверно.");
+  }
+  const allowedTerminalArticleKeys = record.allowedTerminalArticleKeys.map((candidate) =>
+    parseTemplateArticleKey(candidate, "Допустимый терминал"));
+  requireUniqueTemplateArticleKeys(allowedTerminalArticleKeys, "Допустимые терминалы контакта должны быть уникальны.");
+  const representations = record.representations.map(parseTemplateContactRepresentationSnapshot);
+  return {
+    logicalContactId: requireText(record.logicalContactId, "Логический ID материализованного контакта"),
+    prototypeLogicalContactId: requireText(record.prototypeLogicalContactId, "ID прототипа материализованного контакта"),
+    sourceNumber: requireBoundedText(record.sourceNumber, "Номер материализованного контакта", 128),
+    name: requireBoundedText(record.name, "Имя материализованного контакта", 256),
+    circuitText: record.circuitText === null ? null : requireString(record.circuitText, "Цепь материализованного контакта"),
+    contactTypeGroupId: record.contactTypeGroupId === null
+      ? null
+      : requireText(record.contactTypeGroupId, "ID группы типа материализованного контакта"),
+    contactType: requireString(record.contactType, "Тип материализованного контакта"),
+    allowedTerminalArticleKeys,
+    representations,
+  };
+}
+
+function parseTemplateContactRepresentationSnapshot(
+  value: unknown,
+): ComponentTemplateContactRepresentationSnapshot {
+  const record = requireRecord(value, "Представление материализованного контакта задано неверно.");
+  if (record.viewKind !== "e4" && record.viewKind !== "drawing" && record.viewKind !== "additional") {
+    throw new Error("Вид представления материализованного контакта задан неверно.");
+  }
+  if (record.direction !== "left" && record.direction !== "right" &&
+      record.direction !== "up" && record.direction !== "down") {
+    throw new Error("Направление представления материализованного контакта задано неверно.");
+  }
+  return {
+    viewId: requireText(record.viewId, "ID вида материализованного контакта"),
+    viewName: requireBoundedText(record.viewName, "Название вида материализованного контакта", 256),
+    viewKind: record.viewKind,
+    pointId: requireText(record.pointId, "ID точки материализованного контакта"),
+    occurrenceKey: record.occurrenceKey === undefined
+      ? undefined
+      : requireText(record.occurrenceKey, "Ключ повторной точки материализованного контакта"),
+    x: requireNumber(record.x, "Координата X материализованного контакта"),
+    y: requireNumber(record.y, "Координата Y материализованного контакта"),
+    direction: record.direction,
+  };
+}
+
+function deepFreezeTemplateSnapshot(
+  snapshot: ComponentTemplateMaterializedSnapshot,
+): ComponentTemplateMaterializedSnapshot {
+  for (const article of snapshot.articleBindings) Object.freeze(article);
+  for (const terminal of snapshot.contacts.flatMap((contact) => contact.allowedTerminalArticleKeys)) Object.freeze(terminal);
+  for (const asset of snapshot.assets) Object.freeze(asset);
+  for (const contact of snapshot.contacts) {
+    for (const terminal of contact.allowedTerminalArticleKeys) Object.freeze(terminal);
+    for (const representation of contact.representations) Object.freeze(representation);
+    Object.freeze(contact.allowedTerminalArticleKeys);
+    Object.freeze(contact.representations);
+    Object.freeze(contact);
+  }
+  Object.freeze(snapshot.article);
+  Object.freeze(snapshot.articleBindings);
+  Object.freeze(snapshot.assets);
+  Object.freeze(snapshot.contacts);
+  return Object.freeze(snapshot);
+}
+
+function parseSha256(value: unknown, name: string): string {
+  const result = requireString(value, name);
+  if (!/^[0-9a-f]{64}$/.test(result)) throw new Error(`${name} задан неверно.`);
+  return result;
 }
 
 function parseConnectorLibraryContact(value: unknown): ConnectorLibraryContact | null | undefined {

@@ -2,14 +2,14 @@
   "manifestFormat": 1,
   "productId": "TECHMAP-GRAPHER",
   "delivery": "portable-web",
-  "appVersion": "0.3.12-m2-google-sheets",
+  "appVersion": "0.4.0-m3-01",
   "api": {
     "major": 1,
     "minClientMajor": 1,
     "maxClientMajor": 1
   },
   "storage": {
-    "schema": 14,
+    "schema": 15,
     "minReadableSchema": 1
   },
   "target": {

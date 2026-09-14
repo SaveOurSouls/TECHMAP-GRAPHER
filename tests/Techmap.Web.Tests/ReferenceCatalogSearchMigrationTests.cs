@@ -100,6 +100,7 @@ public sealed class ReferenceCatalogSearchMigrationTests
             Pooling = false,
         }.ToString());
         connection.Open();
+        ProjectComponentSnapshotMigrationTestSchema.Drop(connection);
         using var command = connection.CreateCommand();
         command.CommandText =
             """
@@ -127,7 +128,7 @@ public sealed class ReferenceCatalogSearchMigrationTests
             DROP TABLE reference_search_records;
             DROP TABLE reference_search_projections;
             DROP TABLE reference_catalog_saved_filters;
-            DELETE FROM schema_history WHERE version IN (8, 9, 10, 11, 12, 13, 14);
+            DELETE FROM schema_history WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15);
             PRAGMA user_version = 7;
             """;
         command.ExecuteNonQuery();

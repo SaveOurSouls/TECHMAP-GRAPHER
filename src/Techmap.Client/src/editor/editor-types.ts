@@ -50,6 +50,14 @@ export interface EditorCatalogItem {
   readonly templateKind?: "series" | "free";
   readonly seriesId?: string;
   readonly defaultPartNumber?: string;
+  /** Exact immutable persistent template version used for a library placement. */
+  readonly componentTemplateId?: string;
+  readonly componentTemplateVersion?: number;
+  readonly componentArticle?: {
+    readonly sourceId: string;
+    readonly entityType: string;
+    readonly articleKey: string;
+  };
 }
 
 export interface EditorCatalogSource {

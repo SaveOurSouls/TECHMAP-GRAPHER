@@ -16,7 +16,58 @@ import {
   wireEndpointE4Anchor,
   wireScreenConnectionGeometry,
   wireE4PathContainsPoint,
+  type ConnectorInstance,
 } from "./model";
+
+function templateConnector(): ConnectorInstance {
+  const base = createConnector("template", "X1", 1, { x: 0, y: 0 }, undefined, "XH-1");
+  const article = { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "XH-1" };
+  const contact = {
+    ...base.contacts[0]!,
+    id: "template:contact:logical-1",
+    logicalContactId: "logical-1",
+    contactType: "сигнальный",
+    libraryContact: null,
+  };
+  return {
+    ...base,
+    libraryCode: "JST-XH",
+    contacts: [contact],
+    libraryBinding: {
+      mode: "template",
+      templateId: "template-1",
+      templateVersion: 3,
+      versionSha256: "a".repeat(64),
+      articleVariantId: "variant-1",
+      article,
+      snapshot: {
+        templateId: "template-1",
+        templateVersion: 3,
+        versionSha256: "a".repeat(64),
+        code: "JST-XH",
+        name: "JST XH",
+        articleVariantId: "variant-1",
+        article,
+        articleBindings: [article],
+        assets: [],
+        contacts: [{
+          logicalContactId: "logical-1",
+          prototypeLogicalContactId: "prototype-1",
+          sourceNumber: "1",
+          name: "Сигнал",
+          circuitText: null,
+          contactTypeGroupId: "signal-group",
+          contactType: "сигнальный",
+          allowedTerminalArticleKeys: [
+            { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-1" },
+            { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-2" },
+          ],
+          representations: [],
+        }],
+      },
+    },
+  };
+}
 
 describe("shared harness editor model", () => {
   it("keeps E4 and drawing positions separate while sharing one connector", () => {
@@ -53,6 +104,73 @@ describe("shared harness editor model", () => {
     expect(() => applyEditorCommand(document, {
       type: "remove-contact", connectorId: "xs1", contactId: "xs1:contact:signal:1",
     })).toThrow(/определяются выбранным артикулом/);
+  });
+
+  it("protects template structure while allowing instance electrical fields and compatible terminals", () => {
+    const connector = templateConnector();
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
+
+    document = applyEditorCommand(document, {
+      type: "update-connector", connectorId: connector.id, designation: "X2",
+    });
+    document = applyEditorCommand(document, {
+      type: "update-contact",
+      connectorId: connector.id,
+      contactId: connector.contacts[0]!.id,
+      circuit: "CAN-H",
+      terminalArticle: "T-2",
+      wire: "UL1061 28AWG",
+      color: "красный",
+      secondaryColor: "белый",
+    });
+
+    expect(document.connectors[0]).toMatchObject({
+      designation: "X2",
+      libraryCode: "JST-XH",
+      partNumber: "XH-1",
+      libraryBinding: connector.libraryBinding,
+    });
+    expect(document.connectors[0]?.contacts[0]).toMatchObject({
+      logicalContactId: "logical-1",
+      number: 1,
+      contactType: "сигнальный",
+      circuit: "CAN-H",
+      terminalArticle: "T-2",
+      wire: "UL1061 28AWG",
+      color: "красный",
+      secondaryColor: "белый",
+    });
+    expect(() => applyEditorCommand(document, {
+      type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id,
+      terminalArticle: "T-OTHER",
+    })).toThrow(/совместимых терминалов/);
+    expect(() => applyEditorCommand(document, {
+      type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id, number: 2,
+    })).toThrow(/библиотечного контакта/);
+    expect(() => applyEditorCommand(document, {
+      type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id, contactType: "силовой",
+    })).toThrow(/библиотечного контакта/);
+    expect(() => applyEditorCommand(document, {
+      type: "update-connector", connectorId: connector.id, designation: "X2", partNumber: "FORGED",
+    })).toThrow(/закреплённого шаблона/);
+    expect(() => applyEditorCommand(document, {
+      type: "update-connector", connectorId: connector.id, designation: "X2", libraryCode: "FORGED",
+    })).toThrow(/определяется справочником/);
+    expect(() => applyEditorCommand(document, {
+      type: "remove-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id,
+    })).toThrow(/библиотечного соединителя/);
+    expect(() => applyEditorCommand(document, {
+      type: "add-contact", connectorId: connector.id, contact: { ...connector.contacts[0]!, id: "new", number: 2 },
+    })).toThrow(/библиотечного соединителя/);
+  });
+
+  it("accepts 512-character connector articles and rejects longer values", () => {
+    const article = "A".repeat(512);
+    const connector = createConnector("long", "X1", 1, { x: 0, y: 0 }, undefined, article);
+    const document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(document))).connectors[0]?.partNumber).toBe(article);
+    expect(() => createConnector("too-long", "X2", 1, { x: 0, y: 0 }, undefined, `${article}A`))
+      .toThrow(/512/);
   });
 
   it("keeps wires on retained series positions and rejects an article that removes a wired position", () => {

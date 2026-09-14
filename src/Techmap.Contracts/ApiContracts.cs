@@ -161,6 +161,53 @@ public sealed record HarnessDesignResponse(
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
 
+public sealed record PlaceComponentRequest(
+    Guid CommandId,
+    long? ExpectedRevision,
+    Guid PlacementId,
+    Guid SourceTemplateId,
+    int SourceVersion,
+    string? SourceId,
+    string? EntityType,
+    string? ArticleKey,
+    JsonElement Instance);
+
+public sealed record ProjectComponentSnapshotResponse(
+    Guid SnapshotId,
+    Guid ProjectId,
+    Guid SourceTemplateId,
+    int SourceVersion,
+    string SourceVersionSha256,
+    string Code,
+    string Name,
+    IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,
+    IReadOnlyList<ComponentTemplateAssetResponse> Assets,
+    int SchemaVersion,
+    JsonElement Content,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ProjectComponentPlacementResponse(
+    Guid PlacementId,
+    Guid HarnessId,
+    Guid SnapshotId,
+    string SourceId,
+    string EntityType,
+    string ArticleKey,
+    JsonElement Instance,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ProjectComponentPlacementCommandResponse(
+    Guid CommandId,
+    long ExpectedRevision,
+    long ResultingRevision,
+    ProjectComponentSnapshotResponse Snapshot,
+    ProjectComponentPlacementResponse Placement);
+
+public sealed record ProjectComponentPlacementListResponse(
+    IReadOnlyList<ProjectComponentPlacementResponse> Placements);
+
 public sealed record ComponentTemplateArticleBindingRequest(
     string? SourceId,
     string? EntityType,
@@ -213,6 +260,7 @@ public sealed record ComponentTemplateSummaryResponse(
 public sealed record ComponentTemplateResponse(
     Guid TemplateId,
     int Version,
+    string VersionSha256,
     string Code,
     string Name,
     IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,

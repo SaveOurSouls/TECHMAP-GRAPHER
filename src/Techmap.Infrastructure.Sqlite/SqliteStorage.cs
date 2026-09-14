@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1064,6 +1064,145 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         END;
         """;
 
+    private const string ProjectComponentSnapshotsMigrationId = "M3-01-project-component-snapshots";
+    private const string ProjectComponentSnapshotsSchemaSql =
+        """
+        CREATE TABLE project_component_snapshots (
+            snapshot_id TEXT NOT NULL PRIMARY KEY CHECK (length(snapshot_id) = 36),
+            project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            source_template_id TEXT NOT NULL CHECK (length(source_template_id) = 36),
+            source_version INTEGER NOT NULL CHECK (source_version > 0),
+            source_version_sha256 TEXT NOT NULL
+                CHECK (length(source_version_sha256) = 64)
+                CHECK (source_version_sha256 = lower(source_version_sha256))
+                CHECK (source_version_sha256 NOT GLOB '*[^0-9a-f]*'),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+            code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 128),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 256),
+            content_json TEXT NOT NULL CHECK (length(content_json) >= 2 AND json_valid(content_json)),
+            content_sha256 TEXT NOT NULL
+                CHECK (length(content_sha256) = 64)
+                CHECK (content_sha256 = lower(content_sha256))
+                CHECK (content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL,
+            UNIQUE (project_id, source_template_id, source_version, source_version_sha256)
+        ) STRICT;
+
+        CREATE INDEX ix_project_component_snapshots_project
+            ON project_component_snapshots(project_id, snapshot_id);
+
+        CREATE TABLE project_component_snapshot_article_bindings (
+            snapshot_id TEXT NOT NULL REFERENCES project_component_snapshots(snapshot_id)
+                ON UPDATE CASCADE ON DELETE CASCADE,
+            binding_ordinal INTEGER NOT NULL CHECK (binding_ordinal >= 0 AND binding_ordinal < 500),
+            source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 128),
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            article_key TEXT NOT NULL CHECK (length(article_key) BETWEEN 1 AND 512),
+            PRIMARY KEY (snapshot_id, binding_ordinal),
+            UNIQUE (snapshot_id, source_id, entity_type, article_key)
+        ) STRICT;
+
+        CREATE TABLE project_component_snapshot_asset_refs (
+            snapshot_id TEXT NOT NULL REFERENCES project_component_snapshots(snapshot_id)
+                ON UPDATE CASCADE ON DELETE CASCADE,
+            asset_ordinal INTEGER NOT NULL CHECK (asset_ordinal >= 0 AND asset_ordinal < 64),
+            asset_id TEXT NOT NULL CHECK (length(asset_id) = 36),
+            file_name TEXT NOT NULL CHECK (length(file_name) BETWEEN 1 AND 255),
+            media_type TEXT NOT NULL CHECK (length(media_type) BETWEEN 1 AND 64),
+            content_sha256 TEXT NOT NULL REFERENCES attachment_blobs(content_sha256) ON DELETE RESTRICT,
+            PRIMARY KEY (snapshot_id, asset_id),
+            UNIQUE (snapshot_id, asset_ordinal)
+        ) STRICT;
+
+        CREATE INDEX ix_project_component_snapshot_assets_content
+            ON project_component_snapshot_asset_refs(content_sha256, snapshot_id);
+
+        CREATE TABLE harness_component_placements (
+            placement_id TEXT NOT NULL PRIMARY KEY CHECK (length(placement_id) = 36),
+            harness_id TEXT NOT NULL REFERENCES harnesses(harness_id) ON DELETE CASCADE,
+            snapshot_id TEXT NOT NULL REFERENCES project_component_snapshots(snapshot_id) ON DELETE RESTRICT,
+            source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 128),
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            article_key TEXT NOT NULL CHECK (length(article_key) BETWEEN 1 AND 512),
+            instance_json TEXT NOT NULL CHECK (length(instance_json) >= 2 AND json_valid(instance_json)),
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX ix_harness_component_placements_harness
+            ON harness_component_placements(harness_id, placement_id);
+
+        CREATE TABLE component_placement_commands (
+            command_id TEXT NOT NULL PRIMARY KEY CHECK (length(command_id) = 36),
+            harness_id TEXT NOT NULL REFERENCES harnesses(harness_id) ON DELETE CASCADE,
+            placement_id TEXT NOT NULL UNIQUE REFERENCES harness_component_placements(placement_id) ON DELETE RESTRICT,
+            snapshot_id TEXT NOT NULL REFERENCES project_component_snapshots(snapshot_id) ON DELETE RESTRICT,
+            expected_revision INTEGER NOT NULL CHECK (expected_revision >= 0),
+            resulting_revision INTEGER NOT NULL CHECK (resulting_revision = expected_revision + 1),
+            request_json TEXT NOT NULL CHECK (length(request_json) >= 2 AND json_valid(request_json)),
+            request_sha256 TEXT NOT NULL
+                CHECK (length(request_sha256) = 64)
+                CHECK (request_sha256 = lower(request_sha256))
+                CHECK (request_sha256 NOT GLOB '*[^0-9a-f]*'),
+            accepted_utc TEXT NOT NULL
+        ) STRICT;
+
+        CREATE TRIGGER prevent_component_placement_command_update
+        BEFORE UPDATE ON component_placement_commands
+        BEGIN SELECT RAISE(ABORT, 'component_placement_command_immutable'); END;
+        CREATE TRIGGER prevent_component_placement_command_delete
+        BEFORE DELETE ON component_placement_commands
+        WHEN EXISTS (SELECT 1 FROM harnesses WHERE harness_id = OLD.harness_id)
+        BEGIN SELECT RAISE(ABORT, 'component_placement_command_immutable'); END;
+
+        CREATE TRIGGER enforce_component_snapshot_binding_insert
+        BEFORE INSERT ON project_component_snapshot_article_bindings
+        WHEN EXISTS (
+            SELECT 1 FROM harness_component_placements p
+            WHERE p.snapshot_id = NEW.snapshot_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'project_component_snapshot_immutable');
+        END;
+
+        CREATE TRIGGER enforce_component_snapshot_asset_insert
+        BEFORE INSERT ON project_component_snapshot_asset_refs
+        WHEN EXISTS (
+            SELECT 1 FROM harness_component_placements p
+            WHERE p.snapshot_id = NEW.snapshot_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'project_component_snapshot_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_snapshot_update
+        BEFORE UPDATE ON project_component_snapshots
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+        CREATE TRIGGER prevent_component_snapshot_delete
+        BEFORE DELETE ON project_component_snapshots
+        WHEN EXISTS (SELECT 1 FROM projects WHERE project_id = OLD.project_id)
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+        CREATE TRIGGER prevent_component_snapshot_binding_update
+        BEFORE UPDATE ON project_component_snapshot_article_bindings
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+        CREATE TRIGGER prevent_component_snapshot_binding_delete
+        BEFORE DELETE ON project_component_snapshot_article_bindings
+        WHEN EXISTS (SELECT 1 FROM project_component_snapshots WHERE snapshot_id = OLD.snapshot_id)
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+        CREATE TRIGGER prevent_component_snapshot_asset_update
+        BEFORE UPDATE ON project_component_snapshot_asset_refs
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+        CREATE TRIGGER prevent_component_snapshot_asset_delete
+        BEFORE DELETE ON project_component_snapshot_asset_refs
+        WHEN EXISTS (SELECT 1 FROM project_component_snapshots WHERE snapshot_id = OLD.snapshot_id)
+        BEGIN SELECT RAISE(ABORT, 'project_component_snapshot_immutable'); END;
+
+        CREATE TRIGGER enforce_component_placement_project
+        BEFORE INSERT ON harness_component_placements
+        WHEN (SELECT project_id FROM harnesses WHERE harness_id = NEW.harness_id) <>
+             (SELECT project_id FROM project_component_snapshots WHERE snapshot_id = NEW.snapshot_id)
+        BEGIN SELECT RAISE(ABORT, 'component_placement_project_mismatch'); END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1476,6 +1615,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 12, MigrationId: ComponentTemplateContentV2MigrationId, Sql: ComponentTemplateContentV2SchemaSql),
             (Version: 13, MigrationId: ComponentTemplateContentV3MigrationId, Sql: ComponentTemplateContentV3SchemaSql),
             (Version: 14, MigrationId: ComponentTemplateArticleIndexV2MigrationId, Sql: ComponentTemplateArticleIndexV2SchemaSql),
+            (Version: 15, MigrationId: ProjectComponentSnapshotsMigrationId, Sql: ProjectComponentSnapshotsSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1593,6 +1733,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateArticleIndexV2SchemaSql);
         }
 
+        if (schemaVersion >= 15)
+        {
+            ExecuteSchemaSql(expected, ProjectComponentSnapshotsSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1706,6 +1851,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateArticleIndexV2MigrationId,
                 Sql: ComponentTemplateArticleIndexV2SchemaSql,
                 Description: "Component template article index capacity 500"),
+            14 => (
+                Version: 15,
+                MigrationId: ProjectComponentSnapshotsMigrationId,
+                Sql: ProjectComponentSnapshotsSchemaSql,
+                Description: "Project-owned component snapshots and harness placements"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1782,7 +1932,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14))
             {
                 return false;
             }

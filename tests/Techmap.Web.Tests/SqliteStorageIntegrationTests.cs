@@ -40,7 +40,7 @@ public sealed class SqliteStorageIntegrationTests
                 """
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version IN (6, 7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 5;
                 """;
             command.ExecuteNonQuery();
@@ -115,6 +115,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M2-06D-component-template-content-v2",
                 "M2-08-component-template-content-v3",
                 "M2-08-component-template-article-index-v2",
+                "M3-01-project-component-snapshots",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -124,7 +125,7 @@ public sealed class SqliteStorageIntegrationTests
         {
             Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
             Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
-            Assert.Matches("^0\\.(1|2)\\.[0-9]+-", row.AppVersion);
+            Assert.Matches("^0\\.(1|2|3|4)\\.[0-9]+-", row.AppVersion);
             Assert.True(DateTimeOffset.TryParseExact(
                 row.AppliedUtc,
                 "O",
@@ -229,7 +230,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harnesses;
                 DROP TABLE projects;
                 DROP TABLE project_counter;
-                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -304,7 +305,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE pinned_characteristics;
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
-                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -411,7 +412,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
-                DELETE FROM schema_history WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 3;
                 """;
             command.ExecuteNonQuery();
@@ -478,7 +479,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE project_imports;
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
-                DELETE FROM schema_history WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 4;
                 """;
             command.ExecuteNonQuery();
@@ -528,7 +529,7 @@ public sealed class SqliteStorageIntegrationTests
             using var command = connection.CreateCommand();
             command.CommandText =
                 """
-                DELETE FROM schema_history WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14);
+                DELETE FROM schema_history WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14, 15);
                 PRAGMA user_version = 6;
                 """;
             command.ExecuteNonQuery();
@@ -1061,6 +1062,7 @@ public sealed class SqliteStorageIntegrationTests
 
     private static void DropReferenceSnapshotSchema(SqliteConnection connection)
     {
+        ProjectComponentSnapshotMigrationTestSchema.Drop(connection);
         DropReferenceSearchSchema(connection);
         using var command = connection.CreateCommand();
         command.CommandText =

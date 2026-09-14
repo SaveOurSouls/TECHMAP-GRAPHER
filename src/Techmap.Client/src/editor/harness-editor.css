@@ -1,3 +1,31 @@
+.he-host { position: relative; }
+.he-host.is-placement-busy .harness-editor { pointer-events: none; }
+.he-placement-busy,
+.he-placement-pending {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  bottom: 18px;
+  max-width: min(560px, calc(100% - 36px));
+  min-height: 38px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #9fc6d7;
+  border-radius: 7px;
+  background: rgb(244 251 254 / 97%);
+  color: #28566b;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 7px 24px rgb(38 75 94 / 18%);
+  transform: translateX(-50%);
+}
+.he-placement-busy { pointer-events: none; }
+.he-placement-pending { border-color: #d7b16d; background: rgb(255 250 239 / 98%); color: #6d5221; }
+.he-placement-pending button { flex: 0 0 auto; padding: 5px 9px; border: 1px solid #cda660; border-radius: 5px; background: #fff; color: #694d1b; font: inherit; cursor: pointer; }
+.he-placement-pending button:hover { background: #fff5df; }
+
 .harness-editor {
   --he-line: #d8e1e6;
   --he-muted: #6f7f8b;

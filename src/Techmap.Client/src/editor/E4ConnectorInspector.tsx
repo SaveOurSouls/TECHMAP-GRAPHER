@@ -233,10 +233,12 @@ export function E4ConnectorInspector({
       return;
     }
     const nextDesignation = designation.trim();
-    const nextLibraryCode = connector.libraryBinding?.mode === "series"
+    const hasLibraryIdentity = connector.libraryBinding?.mode === "series" ||
+      connector.libraryBinding?.mode === "template";
+    const nextLibraryCode = hasLibraryIdentity
       ? connector.libraryCode ?? "FREE"
       : libraryCode.trim();
-    const nextPartNumber = connector.libraryBinding?.mode === "series" ? connector.partNumber : partNumber.trim();
+    const nextPartNumber = hasLibraryIdentity ? connector.partNumber : partNumber.trim();
     if (!nextDesignation || !nextLibraryCode || !nextPartNumber) {
       setDesignation(connector.designation);
       setLibraryCode(connector.libraryCode ?? "FREE");
@@ -249,8 +251,8 @@ export function E4ConnectorInspector({
         type: "update-connector",
         connectorId: connector.id,
         designation: nextDesignation,
-        libraryCode: connector.libraryBinding?.mode === "series" ? undefined : nextLibraryCode,
-        partNumber: nextPartNumber,
+        libraryCode: hasLibraryIdentity ? undefined : nextLibraryCode,
+        partNumber: hasLibraryIdentity ? undefined : nextPartNumber,
       });
     }
   };
@@ -310,10 +312,12 @@ export function E4ConnectorInspector({
 
   if (mode === "canvas") {
     const isSeries = connector.libraryBinding?.mode === "series";
+    const isTemplate = connector.libraryBinding?.mode === "template";
+    const isLibrary = isSeries || isTemplate;
     const article = isSeries && series ? findConnectorSeriesArticle(series, connector.partNumber) : null;
     const displayedLibraryCode = isSeries
       ? series?.name ?? connector.libraryBinding?.seriesId ?? "СЕРИЯ"
-      : connector.libraryCode ?? "FREE";
+      : isTemplate ? connector.libraryBinding.snapshot.code : connector.libraryCode ?? "FREE";
     const colorChoices = wireColors ?? connectorColorChoices(connector);
     const geometry = connectorE4TableGeometry(connector);
     const columns = geometry.columns.map((column) => column.kind === "base"
@@ -342,10 +346,10 @@ export function E4ConnectorInspector({
           <button
             type="button"
             className="e4cce-title-add"
-            disabled={disabled || isSeries || nextContactNumber(connector) === null}
-            title={isSeries ? "Число строк задаётся выбранным артикулом серии" : "Добавить строку контакта"}
+            disabled={disabled || isLibrary || nextContactNumber(connector) === null}
+            title={isLibrary ? "Число строк задаётся выбранным библиотечным артикулом" : "Добавить строку контакта"}
             onClick={addContact}
-          >⊕ {isSeries ? "Строки из артикула" : "Добавить строку"}</button>
+          >⊕ {isLibrary ? "Строки из артикула" : "Добавить строку"}</button>
           {canvasEditing ? (
             <input
               type="text"
@@ -396,10 +400,17 @@ export function E4ConnectorInspector({
                           : column.id === "wire" ? contact.wire
                             : column.id === "color" ? contact.color
                               : contact.customValues[column.id.slice(7)] ?? "";
+                  const templateContact = isTemplate
+                    ? connector.libraryBinding.snapshot.contacts.find((candidate) =>
+                      candidate.logicalContactId === contact.logicalContactId)
+                    : undefined;
                   const terminalOptions = contact.libraryContact && article
                     ? article.allowedTerminalArticles[contact.libraryContact.kind]
-                    : [];
-                  const lockedBySeries = isSeries && (column.id === "number" || column.id === "contactType");
+                    : templateContact?.allowedTerminalArticleKeys.map((candidate) => candidate.articleKey) ?? [];
+                  const lockedByLibrary = isLibrary && (column.id === "number" || column.id === "contactType");
+                  const lockedByLibraryTitle = isTemplate
+                    ? "Номер и тип заданы закреплённым шаблоном"
+                    : "Номер и тип заданы артикулом серии";
                   const input = column.id === "color" ? (
                     <ColorCellEditor
                       contact={contact}
@@ -410,7 +421,7 @@ export function E4ConnectorInspector({
                       onOpenChange={(open) => setOpenColorContactId(open ? contact.id : null)}
                       onChange={(patch) => updateContact(contact, patch)}
                     />
-                  ) : column.id === "terminal" && isSeries ? (
+                  ) : column.id === "terminal" && isLibrary ? (
                     <select
                       value={value}
                       disabled={disabled || !canvasEditing}
@@ -419,7 +430,7 @@ export function E4ConnectorInspector({
                       onChange={(event) => updateContact(contact, { terminalArticle: event.target.value })}
                     >
                       <option value="">—</option>
-                      {!terminalOptions.includes(value) && value && <option value={value}>{value}</option>}
+                      {isSeries && !terminalOptions.includes(value) && value && <option value={value}>{value}</option>}
                       {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}
                     </select>
                   ) : column.id === "wire" ? <div className="e4cce-wire-picker">
@@ -464,9 +475,9 @@ export function E4ConnectorInspector({
                     min={column.id === "number" ? 1 : undefined}
                     max={column.id === "number" ? 300 : undefined}
                     value={value}
-                    list={column.id === "terminal" && !isSeries ? `terminal-articles-${connector.id}` : undefined}
-                    disabled={disabled || !canvasEditing || lockedBySeries}
-                    title={lockedBySeries ? "Номер и тип заданы артикулом серии" : undefined}
+                    list={column.id === "terminal" && !isLibrary ? `terminal-articles-${connector.id}` : undefined}
+                    disabled={disabled || !canvasEditing || lockedByLibrary}
+                    title={lockedByLibrary ? lockedByLibraryTitle : undefined}
                     aria-label={`${column.label}, контакт ${contact.number}`}
                     onChange={(event) => {
                       if (column.id === "number") {
@@ -499,7 +510,7 @@ export function E4ConnectorInspector({
                     >×</button>
                     <button
                       type="button"
-                      disabled={disabled || isSeries}
+                      disabled={disabled || isLibrary}
                       aria-label={`Удалить контакт ${contact.number}`}
                       title={`Удалить контакт ${contact.number}`}
                       onClick={() => onCommand({ type: "remove-contact", connectorId: connector.id, contactId: contact.id })}
@@ -510,7 +521,7 @@ export function E4ConnectorInspector({
             ))}</tbody>
             <tfoot><tr><td colSpan={Math.max(1, columns.length)}>
               <div className="e4cce-footer">
-                {canvasEditing && !isSeries ? <input
+                {canvasEditing && !isLibrary ? <input
                   className="e4cce-footer-code"
                   aria-label="Код свободного блока"
                   maxLength={120}
@@ -526,10 +537,10 @@ export function E4ConnectorInspector({
                     }
                   }}
                 /> : <span className="e4cce-footer-code" title={displayedLibraryCode}>{displayedLibraryCode}</span>}
-                {canvasEditing && !isSeries ? <input
+                {canvasEditing && !isLibrary ? <input
                   className="e4cce-footer-article"
                   aria-label="Артикул свободного блока"
-                  maxLength={120}
+                  maxLength={512}
                   disabled={disabled}
                   value={partNumber}
                   onChange={(event) => setPartNumber(event.target.value)}
@@ -581,17 +592,22 @@ export function E4ConnectorInspector({
             }}
           />
         </label>
-        <label>{connector.libraryBinding?.mode === "series" ? "Артикул серии" : "Артикул"}
+        <label>{connector.libraryBinding?.mode === "series" ? "Артикул серии" :
+          connector.libraryBinding?.mode === "template" ? "Артикул шаблона" : "Артикул"}
           {connector.libraryBinding?.mode === "series" && series ? (
             <select value={connector.partNumber} disabled={disabled} onChange={(event) => selectArticle(event.target.value)}>
               {series.articles.map((article) => (
                 <option key={article.partNumber} value={article.partNumber}>{article.partNumber}</option>
               ))}
             </select>
+          ) : connector.libraryBinding?.mode === "template" ? (
+            <span className="e4ci-readonly-value" title="Артикул закреплён выбранным вариантом шаблона">
+              {connector.partNumber}
+            </span>
           ) : (
             <input
               value={partNumber}
-              maxLength={120}
+              maxLength={512}
               disabled={disabled}
               onChange={(event) => setPartNumber(event.target.value)}
               onBlur={commitIdentity}
@@ -608,7 +624,9 @@ export function E4ConnectorInspector({
         </label>
         <span className="e4ci-readonly-note">{connector.libraryBinding?.mode === "series"
           ? "Артикул определяет число и типы контактов. Значения цепей сохраняются для совпавших строк."
-          : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</span>
+          : connector.libraryBinding?.mode === "template"
+            ? "Артикул, код, число и типы контактов закреплены версией шаблона. Цепи, провода, цвета и совместимые терминалы можно редактировать."
+            : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</span>
       </div>
 
       <div className="e4ci-canvas-edit-note">

@@ -1,0 +1,229 @@
+import { describe, expect, it } from "vitest";
+import {
+  addBasicNodeV2,
+  addContactPointV2,
+  constantExpressionV2,
+  createRepeatPrototypeV2,
+  linkLogicalContactPointV2,
+  newTemplateContentV2,
+} from "../component-library/template-commands-v2";
+import { upgradeTemplateContentV2ToV3 } from "../component-library/template-upgrade-v3";
+import type { ArticleVariantV3, TemplateContentV3 } from "../component-library/template-model-v3";
+import {
+  createConnectorInstanceFromComponentTemplateV3,
+  type ComponentTemplatePlacementEnvelopeV3,
+} from "./component-template-placement";
+import { parseHarnessDesignDocument } from "./model";
+
+function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
+  let v2 = newTemplateContentV2();
+  const e4 = v2.views[0]!;
+  const drawing = v2.views[1]!;
+  let fixedPointId: string;
+  [v2, fixedPointId] = addContactPointV2(v2, e4.id, {
+    number: "1", name: "Сигнал", contactType: "signal",
+    x: constantExpressionV2(12), y: constantExpressionV2(18), direction: "right",
+  });
+  const fixedContactId = v2.views[0]!.contactPoints.find(point => point.id === fixedPointId)!.logicalContactId;
+  let repeatedPointId: string;
+  [v2, repeatedPointId] = addContactPointV2(v2, e4.id, {
+    number: "2", name: "Повтор", contactType: "signal",
+    x: constantExpressionV2(30), y: constantExpressionV2(40), direction: "left",
+  });
+  let prototypeNodeId: string;
+  [v2, prototypeNodeId] = addBasicNodeV2(v2, e4.id, e4.layers[0]!.id, "rectangle");
+  if (target > 2) {
+    [v2] = createRepeatPrototypeV2(v2, {
+      viewId: e4.id,
+      layerId: e4.layers[0]!.id,
+      prototypeNodeId,
+      prototypePointId: repeatedPointId,
+      count: target - 1,
+      step: { x: constantExpressionV2(0), y: constantExpressionV2(10) },
+    });
+  }
+  [v2] = linkLogicalContactPointV2(v2, drawing.id, fixedContactId, {
+    x: constantExpressionV2(50), y: constantExpressionV2(60), direction: "right",
+  });
+
+  const content = upgradeTemplateContentV2ToV3(v2).content;
+  const asset = {
+    assetId: "10000000-0000-4000-8000-000000000099",
+    fileName: "front.png",
+    mediaType: "image/png",
+    sha256: "b".repeat(64),
+    sizeBytes: 123,
+  };
+  content.assets.push(asset);
+  const groupId = content.contactTypeGroups[0]!.id;
+  const variant: ArticleVariantV3 = {
+    id: crypto.randomUUID(), sourceId: "БД.СОЕД", entityType: "connector", articleKey: `XH-${target}`,
+    parameterValues: [],
+    contactGroups: [{
+      contactTypeGroupId: groupId,
+      contactCount: target,
+      allowedTerminalArticleKeys: [
+        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-1" },
+        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-2" },
+      ],
+    }],
+  };
+  const v3: TemplateContentV3 = { ...content, articleVariants: [...content.articleVariants, variant] };
+  return {
+    templateId: "template-component-1",
+    version: 7,
+    versionSha256: "a".repeat(64),
+    code: "JST-XH",
+    name: "JST XH",
+    articleBindings: [{ sourceId: variant.sourceId, entityType: variant.entityType, articleKey: variant.articleKey }],
+    assets: [asset],
+    content: v3,
+  };
+}
+
+describe("component template placement", () => {
+  it.each([2, 10])("materializes a %i-contact article and preserves stable logical IDs", target => {
+    const template = fixture(target);
+    const connector = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: `J${target}`,
+      designation: `X${target}`,
+      articleVariant: template.content.articleVariants.at(-1)!.id,
+      e4Position: { x: 12, y: 18 },
+    });
+
+    expect(connector.contacts).toHaveLength(target);
+    expect(connector.contacts[0]).toMatchObject({
+      id: `J${target}:contact:${connector.contacts[0]!.logicalContactId}`,
+      logicalContactId: connector.contacts[0]!.logicalContactId,
+      number: 1,
+      terminalArticle: "",
+    });
+    expect(new Set(connector.contacts.map(contact => contact.logicalContactId)).size).toBe(target);
+    expect(connector.libraryBinding).toMatchObject({
+      mode: "template", templateId: "template-component-1", templateVersion: 7,
+      versionSha256: "a".repeat(64),
+    });
+    if (target === 10) {
+      expect(connector.contacts[1]!.logicalContactId).toContain(":0:");
+      expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[1]!.sourceNumber).toBe("2");
+    }
+  });
+
+  it("keeps the exact article, terminal compatibility and representations in the immutable snapshot", () => {
+    const template = fixture(2);
+    const connector = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J1", designation: "X1", articleVariant: template.content.articleVariants.at(-1)!, e4Position: { x: 1, y: 2 },
+    });
+    expect(connector.partNumber).toBe("XH-2");
+    expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[0]!.allowedTerminalArticleKeys)
+      .toEqual([
+        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-1" },
+        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-2" },
+      ]);
+    expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[0]!.representations)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ viewKind: "e4", x: 12, y: 18 })]));
+    expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.assets[0])
+      .toEqual(expect.objectContaining({ fileName: "front.png", sha256: "b".repeat(64) }));
+    expect(Object.isFrozen(connector.libraryBinding)).toBe(true);
+    expect(Object.isFrozen(connector.libraryBinding?.mode === "template" ? connector.libraryBinding.snapshot : null)).toBe(true);
+  });
+
+  it("round-trips the template binding through the existing schema-1 harness parser", () => {
+    const template = fixture(2);
+    const connector = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J1", designation: "X1", articleVariant: template.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    });
+    const document = {
+      schemaVersion: 1 as const,
+      connectors: [connector], wires: [], junctions: [], diffPairs: [], screens: [],
+      views: {
+        e4: { layers: [
+          { id: "connectors", name: "Соединители", order: 1, visible: true, locked: false },
+          { id: "wires", name: "Провода", order: 0, visible: true, locked: false },
+          { id: "dimensions", name: "Размеры", order: 2, visible: true, locked: false },
+        ], wireCrossingStyle: "none" as const },
+        drawing: { layers: [
+          { id: "connectors", name: "Соединители", order: 1, visible: true, locked: false },
+          { id: "wires", name: "Провода", order: 0, visible: true, locked: false },
+          { id: "dimensions", name: "Размеры", order: 2, visible: true, locked: false },
+        ], wireCrossingStyle: "none" as const },
+      },
+    };
+    const parsed = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+    expect(parsed.connectors[0]).toMatchObject({
+      libraryBinding: { mode: "template", templateId: "template-component-1", templateVersion: 7 },
+    });
+    expect(parsed.connectors[0]!.contacts[0]!.logicalContactId).toBe(connector.contacts[0]!.logicalContactId);
+  });
+
+  it("round-trips a 512-character template article through the harness parser", () => {
+    const template = fixture(2);
+    const articleKey = "A".repeat(512);
+    const selected = template.content.articleVariants.at(-1)!;
+    selected.articleKey = articleKey;
+    const longArticleTemplate = {
+      ...template,
+      articleBindings: [{ sourceId: selected.sourceId, entityType: selected.entityType, articleKey }],
+    };
+    const connector = createConnectorInstanceFromComponentTemplateV3(longArticleTemplate, {
+      id: "J-long", designation: "X1", articleVariantId: selected.id, e4Position: { x: 0, y: 0 },
+    });
+    const document = {
+      schemaVersion: 1 as const,
+      connectors: [connector], wires: [], junctions: [], diffPairs: [], screens: [],
+      views: {
+        e4: { layers: [
+          { id: "connectors", name: "Соединители", order: 1, visible: true, locked: false },
+          { id: "wires", name: "Провода", order: 0, visible: true, locked: false },
+          { id: "dimensions", name: "Размеры", order: 2, visible: true, locked: false },
+        ], wireCrossingStyle: "none" as const },
+        drawing: { layers: [
+          { id: "connectors", name: "Соединители", order: 1, visible: true, locked: false },
+          { id: "wires", name: "Провода", order: 0, visible: true, locked: false },
+          { id: "dimensions", name: "Размеры", order: 2, visible: true, locked: false },
+        ], wireCrossingStyle: "none" as const },
+      },
+    };
+
+    expect(connector.partNumber).toBe(articleKey);
+    const parsed = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+    expect(parsed.connectors[0]?.partNumber).toBe(articleKey);
+    expect(parsed.connectors[0]?.libraryBinding).toMatchObject({
+      mode: "template",
+      article: { articleKey },
+      snapshot: { article: { articleKey } },
+    });
+  });
+
+  it("does not mutate the template or the selected variant", () => {
+    const template = fixture(2);
+    const before = structuredClone(template);
+    createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J1", designation: "X1", articleVariant: template.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    });
+    expect(template).toEqual(before);
+  });
+
+  it("does not follow later library mutations and rejects a mismatched asset envelope", () => {
+    const template = fixture(2);
+    const connector = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J1", designation: "X1", articleVariantId: template.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    });
+    template.content.logicalContacts[0]!.name = "Изменённая библиотека";
+    template.content.articleVariants.at(-1)!.articleKey = "NEW";
+    expect(connector.partNumber).toBe("XH-2");
+    expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[0]!.name)
+      .toBe("Сигнал");
+
+    const damaged = fixture(2);
+    // Asset metadata is immutable by contract; emulate a corrupted payload at the
+    // boundary where untrusted JSON is decoded instead of mutating the typed model.
+    const damagedPayload = structuredClone(damaged) as unknown as {
+      assets: Array<{ sha256: string; [key: string]: unknown }>;
+    };
+    damagedPayload.assets[0] = { ...damagedPayload.assets[0]!, sha256: "c".repeat(64) };
+    expect(() => createConnectorInstanceFromComponentTemplateV3(damagedPayload as unknown as typeof damaged, {
+      id: "J2", designation: "X2", articleVariantId: damaged.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    })).toThrow(/Ресурсы шаблона не совпадают/);
+  });
+});

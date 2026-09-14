@@ -6,6 +6,78 @@ import {
   builtInConnectorSeries,
   createBuiltInConnectorInstance,
 } from "./connector-series-demo";
+import type { ConnectorInstance } from "./model";
+
+function openingTag(markup: string, ariaLabel: string): string {
+  const marker = `aria-label="${ariaLabel}"`;
+  const markerIndex = markup.indexOf(marker);
+  expect(markerIndex).toBeGreaterThanOrEqual(0);
+  return markup.slice(markup.lastIndexOf("<", markerIndex), markup.indexOf(">", markerIndex) + 1);
+}
+
+function selectMarkup(markup: string, ariaLabel: string): string {
+  const marker = `aria-label="${ariaLabel}"`;
+  const markerIndex = markup.indexOf(marker);
+  expect(markerIndex).toBeGreaterThanOrEqual(0);
+  const start = markup.lastIndexOf("<select", markerIndex);
+  const end = markup.indexOf("</select>", markerIndex);
+  return markup.slice(start, end + "</select>".length);
+}
+
+function templateConnector(reverseRuntimeContacts = false): ConnectorInstance {
+  const base = createBuiltInConnectorInstance("catalog-connector-free", {
+    id: "template1", designation: "X1", e4Position: { x: 20, y: 30 }, freeContactCount: 2,
+  });
+  const article = { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "XH-2" };
+  const contacts = base.contacts.map((contact, index) => ({
+    ...contact,
+    id: `${base.id}:contact:logical-${index + 1}`,
+    logicalContactId: `logical-${index + 1}`,
+    contactType: index === 0 ? "сигнальный" : "силовой",
+    libraryContact: null,
+  }));
+  const snapshotContacts = contacts.map((contact, index) => ({
+    logicalContactId: contact.logicalContactId!,
+    prototypeLogicalContactId: `prototype-${index + 1}`,
+    sourceNumber: String(index + 1),
+    name: `Контакт ${index + 1}`,
+    circuitText: null,
+    contactTypeGroupId: `group-${index + 1}`,
+    contactType: contact.contactType,
+    allowedTerminalArticleKeys: [{
+      sourceId: "БД.ТЕР",
+      entityType: "terminal",
+      articleKey: index === 0 ? "T-1" : "T-2",
+    }],
+    representations: [],
+  }));
+  return {
+    ...base,
+    libraryCode: "JST-XH",
+    partNumber: article.articleKey,
+    contacts: reverseRuntimeContacts ? [...contacts].reverse() : contacts,
+    libraryBinding: {
+      mode: "template",
+      templateId: "template-1",
+      templateVersion: 3,
+      versionSha256: "a".repeat(64),
+      articleVariantId: "variant-1",
+      article,
+      snapshot: {
+        templateId: "template-1",
+        templateVersion: 3,
+        versionSha256: "a".repeat(64),
+        code: "JST-XH",
+        name: "JST XH",
+        articleVariantId: "variant-1",
+        article,
+        articleBindings: [article],
+        assets: [],
+        contacts: snapshotContacts,
+      },
+    },
+  };
+}
 
 describe("E4 connector inline editing", () => {
   it("renders the series article selector in the side panel", () => {
@@ -53,6 +125,7 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("e4cce-footer-article");
     expect(markup).toContain('aria-label="Код свободного блока"');
     expect(markup).toContain('aria-label="Артикул свободного блока"');
+    expect(markup).toContain('maxLength="512"');
     expect(markup).toContain("e4cce-wire-picker");
     expect(markup).toContain("XS9");
   });
@@ -90,6 +163,62 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("силовой");
     expect(markup).toContain("коаксиальный");
     expect(markup).toContain("Строки из артикула");
+  });
+
+  it("renders a template placement with immutable library structure and compatible terminal choices", () => {
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: templateConnector(),
+      disabled: false,
+      onCommand: vi.fn(),
+      mode: "canvas",
+      editing: true,
+    }));
+
+    expect(markup).toContain("Строки из артикула");
+    expect(markup).toMatch(/class="e4cce-title-add"[^>]*disabled/);
+    expect(markup).not.toContain('aria-label="Код свободного блока"');
+    expect(markup).not.toContain('aria-label="Артикул свободного блока"');
+    expect(markup).toContain("JST-XH");
+    expect(markup).toContain("XH-2");
+    expect(markup).toContain("T-1");
+    expect(markup).toContain("T-2");
+    expect(markup).toContain("Номер и тип заданы закреплённым шаблоном");
+    expect(markup).toContain('aria-label="Цепь, контакт 1"');
+    expect(markup).toContain('aria-label="Провод, контакт 1"');
+    expect(openingTag(markup, "№, контакт 1")).toContain("disabled");
+    expect(openingTag(markup, "Тип, контакт 1")).toContain("disabled");
+    expect(openingTag(markup, "Удалить контакт 1")).toContain("disabled");
+    expect(openingTag(markup, "Цепь, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Провод, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Цвет, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Терминал, контакт 1")).not.toContain("disabled");
+  });
+
+  it("maps template terminal choices by logical contact ID", () => {
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: templateConnector(true),
+      disabled: false,
+      onCommand: vi.fn(),
+      mode: "canvas",
+      editing: true,
+    }));
+
+    const secondContact = selectMarkup(markup, "Терминал, контакт 2");
+    expect(secondContact).toContain("T-2");
+    expect(secondContact).not.toContain("T-1");
+  });
+
+  it("shows a template article as read-only in the side panel", () => {
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: templateConnector(),
+      disabled: false,
+      onCommand: vi.fn(),
+    }));
+
+    expect(markup).toContain("Артикул шаблона");
+    expect(markup).toContain("XH-2");
+    expect(markup).toContain("закреплены версией шаблона");
+    expect(markup).not.toContain('value="XH-2"');
   });
 
   it("renders actual controls only after the canvas enters editing mode", () => {

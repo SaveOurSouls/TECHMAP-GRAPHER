@@ -253,8 +253,9 @@ public sealed class ComponentTemplateMigrationTests
             }
 
             using (var connection = Open(databasePath))
-            using (var command = connection.CreateCommand())
             {
+                ProjectComponentSnapshotMigrationTestSchema.Drop(connection);
+                using var command = connection.CreateCommand();
                 command.CommandText =
                     """
                     DROP TRIGGER prevent_component_template_asset_delete;
@@ -271,7 +272,7 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE component_templates;
-                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14);
+                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

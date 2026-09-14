@@ -31,8 +31,9 @@ public sealed class HarnessDesignMigrationTests
             }
 
             using (var connection = Open(databasePath))
-            using (var downgrade = connection.CreateCommand())
             {
+                ProjectComponentSnapshotMigrationTestSchema.Drop(connection);
+                using var downgrade = connection.CreateCommand();
                 downgrade.CommandText =
                     """
                     DROP TRIGGER prevent_component_template_asset_delete;
@@ -51,7 +52,7 @@ public sealed class HarnessDesignMigrationTests
                     DROP TABLE component_templates;
                     DROP TRIGGER create_harness_design_document;
                     DROP TABLE harness_design_documents;
-                    DELETE FROM schema_history WHERE version IN (9, 10, 11, 12, 13, 14);
+                    DELETE FROM schema_history WHERE version IN (9, 10, 11, 12, 13, 14, 15);
                     PRAGMA user_version = 8;
                     """;
                 downgrade.ExecuteNonQuery();

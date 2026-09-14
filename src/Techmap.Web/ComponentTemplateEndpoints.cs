@@ -268,6 +268,7 @@ public static class ComponentTemplateEndpoints
         return new ComponentTemplateResponse(
             value.TemplateId,
             value.Version,
+            value.VersionSha256,
             value.Code,
             value.Name,
             value.ArticleBindings.Select(ToResponse).ToArray(),

@@ -6,6 +6,10 @@ import {
   type ReferenceCatalogSearchRecord,
 } from "../reference-catalog-api";
 import type { RuntimeConfig } from "../runtime-config";
+import {
+  createComponentTemplateApi,
+  type ComponentTemplateSummary,
+} from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
 import type { EditorCatalogItem, EditorCatalogSource } from "./editor-types";
 
@@ -18,6 +22,12 @@ const localSource: EditorCatalogSource = {
   id: "built-in-connectors",
   label: "Соединители",
   description: "Универсальные соединители до подключения профильной базы",
+};
+
+const componentLibrarySource: EditorCatalogSource = {
+  id: "component-library",
+  label: "Библиотека",
+  description: "Версионируемые компоненты с общими видами Э4 и чертежа",
 };
 
 export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
@@ -51,7 +61,11 @@ export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
   },
 ];
 
-export const editorCatalogSources: readonly EditorCatalogSource[] = [localSource, ...remoteEditorCatalogSources];
+export const editorCatalogSources: readonly EditorCatalogSource[] = [
+  componentLibrarySource,
+  localSource,
+  ...remoteEditorCatalogSources,
+];
 
 export const builtInConnectorItems: readonly EditorCatalogItem[] = builtInConnectorTemplates.map((template) => ({
   id: template.id,
@@ -157,6 +171,43 @@ export function filterBuiltInConnectors(query: string): readonly EditorCatalogIt
     `${item.title} ${item.subtitle}`.toLocaleLowerCase("ru").includes(normalized));
 }
 
+export function componentTemplateSummaryToEditorCatalogItem(
+  template: ComponentTemplateSummary,
+): EditorCatalogItem {
+  return componentTemplateSummaryToEditorCatalogItems(template)[0]!;
+}
+
+export function componentTemplateSummaryToEditorCatalogItems(
+  template: ComponentTemplateSummary,
+): readonly EditorCatalogItem[] {
+  const bindings = template.articleBindings.length > 0 ? template.articleBindings : [undefined];
+  return bindings.map((article) => ({
+    id: article
+      ? `component-template:${template.templateId}:${template.version}:${article.sourceId}:${article.entityType}:${article.articleKey}`
+      : `component-template:${template.templateId}:${template.version}`,
+    title: article?.articleKey ?? template.name,
+    subtitle: article
+      ? `${template.name} · ${template.code} · версия ${template.version}`
+      : `${template.code} · версия ${template.version}`,
+    category: componentLibrarySource.label,
+    accent: "#496b88",
+    placement: "connector",
+    componentTemplateId: template.templateId,
+    componentTemplateVersion: template.version,
+    componentArticle: article,
+  }));
+}
+
+export function filterComponentTemplates(
+  templates: readonly ComponentTemplateSummary[],
+  query: string,
+): readonly EditorCatalogItem[] {
+  const normalized = query.trim().toLocaleLowerCase("ru");
+  return templates
+    .flatMap(componentTemplateSummaryToEditorCatalogItems)
+    .filter((item) => !normalized || `${item.title} ${item.subtitle}`.toLocaleLowerCase("ru").includes(normalized));
+}
+
 type CatalogLoadState = "idle" | "loading" | "loading-more" | "ready" | "unpublished" | "error";
 
 export interface EditorReferenceCatalogState {
@@ -229,16 +280,19 @@ export function useEditorReferenceCatalog(
   session: LocalSession,
 ): EditorReferenceCatalogState {
   const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
-  const [selectedSourceId, setSelectedSourceId] = useState(localSource.id);
+  const componentApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
+  const [selectedSourceId, setSelectedSourceId] = useState(componentLibrarySource.id);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [remoteItems, setRemoteItems] = useState<readonly EditorCatalogItem[]>([]);
+  const [componentTemplates, setComponentTemplates] = useState<readonly ComponentTemplateSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<CatalogLoadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const requestGeneration = useRef(0);
   const source = remoteEditorCatalogSources.find((item) => item.id === selectedSourceId) ?? null;
+  const isComponentLibrary = selectedSourceId === componentLibrarySource.id;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query), 300);
@@ -246,6 +300,25 @@ export function useEditorReferenceCatalog(
   }, [query]);
 
   useEffect(() => {
+    if (!isComponentLibrary) return;
+    const generation = ++requestGeneration.current;
+    setComponentTemplates([]);
+    setNextCursor(null);
+    setLoadState("loading");
+    setMessage(null);
+    void componentApi.list().then((templates) => {
+      if (requestGeneration.current !== generation) return;
+      setComponentTemplates(templates);
+      setLoadState("ready");
+    }).catch((error: unknown) => {
+      if (requestGeneration.current !== generation) return;
+      setLoadState("error");
+      setMessage(error instanceof Error ? error.message : "Не удалось загрузить библиотеку компонентов.");
+    });
+  }, [componentApi, isComponentLibrary, reloadToken]);
+
+  useEffect(() => {
+    if (isComponentLibrary) return;
     if (!source) {
       requestGeneration.current += 1;
       setRemoteItems([]);
@@ -285,7 +358,7 @@ export function useEditorReferenceCatalog(
       setMessage(error instanceof Error ? error.message : "Не удалось загрузить справочник.");
     });
     return () => controller.abort();
-  }, [api, debouncedQuery, reloadToken, source]);
+  }, [api, debouncedQuery, isComponentLibrary, reloadToken, source]);
 
   const loadMore = useCallback(() => {
     if (!source || !nextCursor || loadState === "loading" || loadState === "loading-more") return;
@@ -328,10 +401,12 @@ export function useEditorReferenceCatalog(
     sources: editorCatalogSources,
     selectedSourceId,
     query,
-    items: source ? remoteItems : filterBuiltInConnectors(query),
+    items: isComponentLibrary
+      ? filterComponentTemplates(componentTemplates, query)
+      : source ? remoteItems : filterBuiltInConnectors(query),
     loadState,
     message,
-    hasMore: source !== null && nextCursor !== null,
+    hasMore: !isComponentLibrary && source !== null && nextCursor !== null,
     selectSource: (sourceId) => {
       if (editorCatalogSources.some((item) => item.id === sourceId)) {
         requestGeneration.current += 1;

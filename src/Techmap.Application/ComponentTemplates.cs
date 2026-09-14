@@ -30,7 +30,8 @@ public sealed record ComponentTemplateVersion(
     int SchemaVersion,
     string ContentJson,
     DateTimeOffset CreatedUtc,
-    DateTimeOffset UpdatedUtc);
+    DateTimeOffset UpdatedUtc,
+    string VersionSha256 = "");
 
 public interface IComponentTemplateStore
 {

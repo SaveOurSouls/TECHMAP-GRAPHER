@@ -71,8 +71,126 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     current.Revision);
             }
 
+            // Keep the project-owned component placement index aligned with the
+            // design document in the same transaction. A normal editor save can
+            // move or remove a template-backed connector without going through
+            // the placement command endpoint; stale rows must not leak into the
+            // project export or a subsequent list request.
+            ReconcileComponentPlacements(unitOfWork, harnessId, canonicalJson, now);
+
             return Read(unitOfWork, projectId, harnessId);
         });
+    }
+
+    private static void ReconcileComponentPlacements(
+        SqliteUnitOfWork unitOfWork,
+        HarnessIdentity harnessId,
+        string designJson,
+        string updatedUtc)
+    {
+        var liveInstances = new Dictionary<Guid, string>();
+        using (var document = JsonDocument.Parse(designJson))
+        {
+            if (!document.RootElement.TryGetProperty("connectors", out var connectors) ||
+                connectors.ValueKind != JsonValueKind.Array)
+            {
+                throw Invalid("invalid_design_content", "The harness design connector collection is invalid.", "content.connectors");
+            }
+            foreach (var connector in connectors.EnumerateArray())
+            {
+                if (connector.ValueKind != JsonValueKind.Object ||
+                    !connector.TryGetProperty("id", out var idValue) ||
+                    !Guid.TryParse(idValue.GetString(), out var id) ||
+                    id == Guid.Empty)
+                {
+                    continue;
+                }
+                var isTemplate = connector.TryGetProperty("libraryBinding", out var binding) &&
+                    binding.ValueKind == JsonValueKind.Object &&
+                    binding.TryGetProperty("mode", out var mode) &&
+                    mode.ValueKind == JsonValueKind.String &&
+                    string.Equals(mode.GetString(), "template", StringComparison.Ordinal);
+                if (isTemplate) liveInstances[id] = connector.GetRawText();
+            }
+        }
+
+        var placements = new List<(Guid Id, string InstanceJson, Guid SourceTemplateId, int SourceVersion,
+            string VersionHash, ComponentTemplateArticleBinding Article)>();
+        using (var select = unitOfWork.CreateCommand(
+                   """
+                   SELECT p.placement_id, p.instance_json, s.source_template_id, s.source_version,
+                          s.source_version_sha256, p.source_id, p.entity_type, p.article_key
+                   FROM harness_component_placements p
+                   INNER JOIN project_component_snapshots s ON s.snapshot_id = p.snapshot_id
+                   WHERE p.harness_id = $harnessId;
+                   """))
+        {
+            select.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+            {
+                if (Guid.TryParse(reader.GetString(0), out var placementId))
+                    placements.Add((placementId, reader.GetString(1), Guid.Parse(reader.GetString(2)), reader.GetInt32(3),
+                        reader.GetString(4), new ComponentTemplateArticleBinding(
+                            reader.GetString(5), reader.GetString(6), reader.GetString(7))));
+            }
+        }
+
+        foreach (var placement in placements)
+        {
+            var placementId = placement.Id;
+            if (liveInstances.TryGetValue(placementId, out var instanceJson))
+            {
+                try
+                {
+                    SqliteProjectComponentSnapshotStore.ValidateInstanceBinding(
+                        instanceJson, placementId, placement.SourceTemplateId, placement.SourceVersion,
+                        placement.VersionHash, placement.Article);
+                }
+                catch (ProjectComponentSnapshotException error)
+                {
+                    throw new HarnessDesignDocumentException(
+                        error.Code, error.Message, error.Field, innerException: error);
+                }
+                liveInstances.Remove(placementId);
+                if (string.Equals(placement.InstanceJson, instanceJson, StringComparison.Ordinal)) continue;
+                using var update = unitOfWork.CreateCommand(
+                    """
+                    UPDATE harness_component_placements
+                    SET instance_json = $instanceJson, updated_utc = $updatedUtc
+                    WHERE placement_id = $placementId AND harness_id = $harnessId;
+                    """);
+                update.Parameters.AddWithValue("$instanceJson", instanceJson);
+                update.Parameters.AddWithValue("$updatedUtc", updatedUtc);
+                update.Parameters.AddWithValue("$placementId", Format(placementId));
+                update.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
+                update.ExecuteNonQuery();
+                continue;
+            }
+
+            // Placement commands are immutable audit records. Rows without a
+            // command can be removed; commanded rows remain as history but are
+            // filtered from list/export by their absence from the live design.
+            using var delete = unitOfWork.CreateCommand(
+                """
+                DELETE FROM harness_component_placements
+                WHERE placement_id = $placementId AND harness_id = $harnessId
+                  AND NOT EXISTS (
+                      SELECT 1 FROM component_placement_commands
+                      WHERE placement_id = $placementId);
+                """);
+            delete.Parameters.AddWithValue("$placementId", Format(placementId));
+            delete.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
+            delete.ExecuteNonQuery();
+        }
+
+        if (liveInstances.Count != 0)
+        {
+            throw Invalid(
+                "component_placement_missing",
+                "A template-backed connector does not have a project component placement.",
+                "content.connectors");
+        }
     }
 
     private static string ValidateContent(string contentJson, int schemaVersion)

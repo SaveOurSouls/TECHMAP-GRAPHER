@@ -349,6 +349,10 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         {
             ValidateComponentTemplates(connection, schemaVersion);
         }
+        if (schemaVersion >= 15)
+        {
+            ValidateProjectComponentSnapshots(connection);
+        }
 
         var revisions = new List<StorageBackupProjectRevision>();
         if (schemaVersion >= 2)
@@ -385,7 +389,23 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
             using var attachments = connection.CreateCommand();
             attachments.CommandText =
-                schemaVersion >= 11
+                schemaVersion >= 15
+                    ?
+                    """
+                    SELECT b.content_sha256, b.size_bytes
+                    FROM attachment_blobs b
+                    WHERE EXISTS (
+                        SELECT 1 FROM project_attachments pa
+                        WHERE pa.content_sha256 = b.content_sha256)
+                       OR EXISTS (
+                        SELECT 1 FROM component_template_asset_refs ar
+                        WHERE ar.content_sha256 = b.content_sha256)
+                       OR EXISTS (
+                        SELECT 1 FROM project_component_snapshot_asset_refs ar
+                        WHERE ar.content_sha256 = b.content_sha256)
+                    ORDER BY b.content_sha256;
+                    """
+                    : schemaVersion >= 11
                     ?
                     """
                     SELECT b.content_sha256, b.size_bytes
@@ -420,6 +440,46 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         }
 
         return new SnapshotInventory(schemaVersion, revisions, blobs);
+    }
+
+    private static void ValidateProjectComponentSnapshots(SqliteConnection connection)
+    {
+        using (var closure = connection.CreateCommand())
+        {
+            closure.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM project_component_snapshots s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM harness_component_placements p WHERE p.snapshot_id = s.snapshot_id)
+                   OR EXISTS (
+                    SELECT 1 FROM harness_component_placements p
+                    JOIN harnesses h ON h.harness_id = p.harness_id
+                    WHERE p.snapshot_id = s.snapshot_id AND h.project_id <> s.project_id);
+                """;
+            if (Convert.ToInt32(closure.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidDataException("The SQLite backup has an invalid project component ownership graph.");
+        }
+        using var sequences = connection.CreateCommand();
+        sequences.CommandText =
+            """
+            SELECT COUNT(*) FROM project_component_snapshots s
+            WHERE s.schema_version <> 3
+               OR (SELECT COUNT(*) FROM project_component_snapshot_article_bindings b
+                   WHERE b.snapshot_id = s.snapshot_id) > 500
+               OR (SELECT COUNT(*) FROM project_component_snapshot_asset_refs a
+                   WHERE a.snapshot_id = s.snapshot_id) > 64
+               OR EXISTS (
+                   SELECT 1 FROM project_component_snapshot_article_bindings b
+                   WHERE b.snapshot_id = s.snapshot_id GROUP BY b.snapshot_id
+                   HAVING MIN(binding_ordinal) <> 0 OR MAX(binding_ordinal) <> COUNT(*) - 1)
+               OR EXISTS (
+                   SELECT 1 FROM project_component_snapshot_asset_refs a
+                   WHERE a.snapshot_id = s.snapshot_id GROUP BY a.snapshot_id
+                   HAVING MIN(asset_ordinal) <> 0 OR MAX(asset_ordinal) <> COUNT(*) - 1);
+            """;
+        if (Convert.ToInt32(sequences.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            throw new InvalidDataException("The SQLite backup has invalid project component snapshot rows.");
     }
 
     private static void ValidateComponentTemplates(SqliteConnection connection, int storageSchemaVersion)

@@ -1228,7 +1228,8 @@ public sealed class SqliteComponentTemplateStore(
         _ = NormalizeText(name, 256, "name");
         return new ComponentTemplateVersion(
             templateId, version, code, name, bindings, assets,
-            schemaVersion, content, templateCreatedUtc, currentUpdatedUtc ?? versionCreated);
+            schemaVersion, content, templateCreatedUtc, currentUpdatedUtc ?? versionCreated,
+            versionHash);
     }
 
     internal static void EnsureV2AssetMetadataMatches(

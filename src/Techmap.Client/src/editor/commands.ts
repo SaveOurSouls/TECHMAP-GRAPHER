@@ -86,7 +86,7 @@ export function createConnector(
   const normalizedDesignation = designation.trim();
   requireConnectorText(normalizedDesignation, "Укажите обозначение соединителя.");
   const normalizedPartNumber = partNumber.trim();
-  requireConnectorText(normalizedPartNumber, "Укажите артикул шаблона соединителя.");
+  requirePartNumberText(normalizedPartNumber, "Укажите артикул шаблона соединителя.");
   const contacts: ConnectorContact[] = Array.from({ length: contactCount }, (_, index) => ({
     id: `${id}:contact:${index + 1}`,
     number: index + 1,
@@ -174,7 +174,7 @@ export function applyEditorCommand(
       const designation = command.designation.trim();
       requireConnectorText(designation, "Укажите обозначение соединителя.");
       const partNumber = command.partNumber?.trim();
-      if (partNumber !== undefined) requireConnectorText(partNumber, "Укажите артикул шаблона соединителя.");
+      if (partNumber !== undefined) requirePartNumberText(partNumber, "Укажите артикул шаблона соединителя.");
       const libraryCode = command.libraryCode?.trim();
       if (libraryCode !== undefined) requireConnectorText(libraryCode, "Укажите код свободного блока.");
       return updateConnectorE4Geometry(document, command.connectorId, (connector) => {
@@ -182,7 +182,11 @@ export function applyEditorCommand(
               partNumber !== connector.libraryBinding.partNumber) {
             throw new Error("Артикул библиотечного соединителя можно изменить только выбором артикула серии.");
           }
-          if (libraryCode !== undefined && connector.libraryBinding?.mode === "series") {
+          if (partNumber !== undefined && connector.libraryBinding?.mode === "template" &&
+              partNumber !== connector.partNumber) {
+            throw new Error("Артикул закреплённого шаблона определяется выбранным вариантом библиотеки.");
+          }
+          if (libraryCode !== undefined && (connector.libraryBinding?.mode === "series" || connector.libraryBinding?.mode === "template")) {
             throw new Error("Код библиотечной серии определяется справочником.");
           }
           return {
@@ -195,7 +199,7 @@ export function applyEditorCommand(
     }
     case "apply-connector-article": {
       const partNumber = command.partNumber.trim();
-      requireConnectorText(partNumber, "Укажите артикул соединителя.");
+      requirePartNumberText(partNumber, "Укажите артикул соединителя.");
       const connector = document.connectors.find((item) => item.id === command.connectorId);
       if (!connector) throw new Error("Соединитель не найден.");
       if (command.libraryBinding.mode !== "series") {
@@ -244,7 +248,8 @@ export function applyEditorCommand(
       }));
     case "update-contact": {
       const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
-        if (connector.libraryBinding?.mode === "series" && (command.number !== undefined || command.contactType !== undefined)) {
+        if ((connector.libraryBinding?.mode === "series" || connector.libraryBinding?.mode === "template") &&
+            (command.number !== undefined || command.contactType !== undefined)) {
           throw new Error("Номер и тип библиотечного контакта определяются выбранным артикулом серии.");
         }
         if (command.number !== undefined) requireContactNumber(command.number);
@@ -262,7 +267,11 @@ export function applyEditorCommand(
           circuit: command.circuit === undefined ? contact.circuit : normalizeValue(command.circuit, "Цепь контакта"),
           terminalArticle: command.terminalArticle === undefined
             ? contact.terminalArticle
-            : normalizeValue(command.terminalArticle, "Артикул терминала"),
+            : normalizeTemplateTerminalArticle(
+              connector,
+              contact,
+              normalizeValue(command.terminalArticle, "Артикул терминала"),
+            ),
           wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
           color: command.color === undefined ? contact.color : normalizeValue(command.color, "Цвет провода контакта"),
           secondaryColor: command.secondaryColor === undefined
@@ -278,7 +287,7 @@ export function applyEditorCommand(
     }
     case "add-contact": {
       const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
-        if (connector.libraryBinding?.mode === "series") {
+        if (connector.libraryBinding?.mode === "series" || connector.libraryBinding?.mode === "template") {
           throw new Error("Число контактов библиотечного соединителя определяется выбранным артикулом серии.");
         }
         const contact = normalizeContact(command.contact, connector.schematic.customFields);
@@ -293,7 +302,7 @@ export function applyEditorCommand(
     }
     case "remove-contact": {
       const connector = document.connectors.find((item) => item.id === command.connectorId);
-      if (connector?.libraryBinding?.mode === "series") {
+      if (connector?.libraryBinding?.mode === "series" || connector?.libraryBinding?.mode === "template") {
         throw new Error("Строки библиотечного соединителя определяются выбранным артикулом серии.");
       }
       if (document.wires.some((wire) =>
@@ -839,6 +848,26 @@ function normalizeValue(value: string, name: string): string {
 function requireConnectorText(value: string, emptyMessage: string): void {
   if (!value) throw new Error(emptyMessage);
   if (value.length > 120) throw new Error("Значение соединителя не должно быть длиннее 120 символов.");
+}
+
+function requirePartNumberText(value: string, emptyMessage: string): void {
+  if (!value) throw new Error(emptyMessage);
+  if (value.length > 512) throw new Error("Артикул соединителя не должен быть длиннее 512 символов.");
+}
+
+function normalizeTemplateTerminalArticle(
+  connector: ConnectorInstance,
+  contact: ConnectorContact,
+  value: string,
+): string {
+  if (connector.libraryBinding?.mode !== "template" || !value) return value;
+  const snapshotContact = connector.libraryBinding.snapshot.contacts.find((candidate) =>
+    candidate.logicalContactId === contact.logicalContactId);
+  const allowed = snapshotContact?.allowedTerminalArticleKeys.map((article) => article.articleKey) ?? [];
+  if (!allowed.includes(value)) {
+    throw new Error("Артикул терминала не входит в список совместимых терминалов закреплённого шаблона.");
+  }
+  return value;
 }
 
 function isConnectorEndpoint(endpoint: WireEndpoint, connectorId: string, contactId?: string): boolean {

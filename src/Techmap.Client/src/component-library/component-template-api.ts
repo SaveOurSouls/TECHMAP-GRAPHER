@@ -15,12 +15,14 @@ export interface ComponentTemplateSummary {
   readonly articleBindings: readonly ArticleBinding[]; readonly createdUtc: string; readonly updatedUtc?: string;
 }
 export interface ComponentTemplate extends ComponentTemplateSummary {
+  readonly versionSha256: string;
   readonly assets: readonly TemplateAsset[];
   readonly content: ComponentTemplateContent;
 }
 export interface ComponentTemplateApi {
   list(): Promise<readonly ComponentTemplateSummary[]>;
   get(templateId: string): Promise<ComponentTemplate>;
+  getVersion(templateId: string, version: number): Promise<ComponentTemplate>;
   create(body: { code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
   save(templateId: string, body: { expectedVersion: number; code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
   addAsset(templateId: string, body: { expectedVersion: number; fileName: string; mediaType: TemplateAsset["mediaType"]; contentBase64: string }): Promise<ComponentTemplate>;
@@ -66,14 +68,16 @@ function parseTemplate(value: unknown): ComponentTemplate {
   if (!idPattern.test(templateId)) throw new Error("Поле ответа «templateId» задано неверно.");
   const bindings = Array.isArray(r.articleBindings) ? r.articleBindings.map(parseBinding) : [];
   const assets = Array.isArray(r.assets) ? r.assets.map(parseAsset) : [];
+  const versionSha256 = stringField(r, "versionSha256");
+  if (!/^[0-9a-f]{64}$/.test(versionSha256)) throw new Error("Поле ответа «versionSha256» задано неверно.");
   const content = parseComponentTemplateContent(r.content);
-  return Object.freeze({ templateId, version: integerField(r, "version"), code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, assets, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
+  return Object.freeze({ templateId, version: integerField(r, "version"), versionSha256, code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, assets, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
 }
 function parseList(value: unknown): readonly ComponentTemplateSummary[] {
   const r = record(value);
   if (!Array.isArray(r.items)) throw new Error("Сервер вернул повреждённый список шаблонов.");
   return r.items.map(item => {
-    const parsed = parseTemplate({ ...record(item), content: { schemaVersion: 1, views: [] } });
+    const parsed = parseTemplate({ ...record(item), versionSha256: "0".repeat(64), content: { schemaVersion: 1, views: [] } });
     return { templateId: parsed.templateId, version: parsed.version, code: parsed.code, name: parsed.name, articleBindings: parsed.articleBindings, createdUtc: parsed.createdUtc, updatedUtc: parsed.updatedUtc };
   });
 }
@@ -95,6 +99,10 @@ export function createComponentTemplateApi(config: RuntimeConfig, session: Local
   const api: ComponentTemplateApi = {
     list: () => request("", { method: "GET", headers: { Accept: "application/json" } }, parseList),
     get: id => request(`/${encodeURIComponent(id)}`, { method: "GET", headers: { Accept: "application/json" } }, parseTemplate),
+    getVersion: (id, version) => {
+      if (!Number.isSafeInteger(version) || version < 1) throw new Error("Версия шаблона задана неверно.");
+      return request(`/${encodeURIComponent(id)}/versions/${version}`, { method: "GET", headers: { Accept: "application/json" } }, parseTemplate);
+    },
     create: body => request("", { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),
     save: (id, body) => request(`/${encodeURIComponent(id)}`, { method: "PUT", headers, body: JSON.stringify(body) }, parseTemplate),
     addAsset: (id, body) => request(`/${encodeURIComponent(id)}/assets`, { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),

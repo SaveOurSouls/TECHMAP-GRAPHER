@@ -394,6 +394,21 @@ public sealed class SqliteProjectImportService : IProjectImportService
     {
         var increment = AllocateIncrement(unitOfWork);
         var name = AllocateName(unitOfWork, snapshot.Project.Name, increment);
+        var componentPlacements = snapshot.ComponentPlacements ?? [];
+        var placementIdMap = componentPlacements.ToDictionary(
+            placement => Guid.ParseExact(placement.PlacementId, "D"),
+            placement => DeterministicGuid(
+                journal.OperationGuid, "component-placement", placement.PlacementId));
+        var remappedDesigns = snapshot.Harnesses.ToDictionary(
+            harness => harness.HarnessId,
+            harness => ProjectComponentPlacementRemapper.RemapHarnessDesign(
+                harness.Design!.Content.GetRawText(),
+                componentPlacements
+                    .Where(placement => placement.HarnessId == harness.HarnessId)
+                    .ToDictionary(
+                        placement => Guid.ParseExact(placement.PlacementId, "D"),
+                        placement => placementIdMap[Guid.ParseExact(placement.PlacementId, "D")])),
+            StringComparer.Ordinal);
         using (var insert = unitOfWork.CreateCommand(
                    """
                    INSERT INTO projects
@@ -444,7 +459,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
                        """))
             {
                 updateDesign.Parameters.AddWithValue("$schemaVersion", harness.Design!.SchemaVersion);
-                updateDesign.Parameters.AddWithValue("$contentJson", harness.Design.Content.GetRawText());
+                updateDesign.Parameters.AddWithValue("$contentJson", remappedDesigns[harness.HarnessId].DesignJson);
                 updateDesign.Parameters.AddWithValue("$utc", journal.ImportedUtc);
                 updateDesign.Parameters.AddWithValue(
                     "$harnessId",
@@ -543,6 +558,91 @@ public sealed class SqliteProjectImportService : IProjectImportService
             insert.Parameters.AddWithValue("$sha256", pinned.PayloadSha256);
             insert.Parameters.AddWithValue("$capturedUtc", pinned.CapturedUtc);
             RequireSingle(insert.ExecuteNonQuery(), "pinned characteristic");
+        }
+
+        var snapshotIdMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var component in snapshot.ComponentSnapshots ?? [])
+        {
+            var destinationSnapshotId = Format(DeterministicGuid(journal.OperationGuid, "component-snapshot", component.SnapshotId));
+            snapshotIdMap.Add(component.SnapshotId, destinationSnapshotId);
+            using var insert = unitOfWork.CreateCommand(
+                """
+                INSERT INTO project_component_snapshots
+                    (snapshot_id, project_id, source_template_id, source_version, source_version_sha256,
+                     schema_version, code, name, content_json, content_sha256, created_utc, updated_utc)
+                VALUES ($snapshotId, $projectId, $templateId, $version, $versionHash, $schema,
+                        $code, $name, $content, $contentHash, $createdUtc, $updatedUtc);
+                """);
+            insert.Parameters.AddWithValue("$snapshotId", destinationSnapshotId);
+            insert.Parameters.AddWithValue("$projectId", journal.DestinationProjectId);
+            insert.Parameters.AddWithValue("$templateId", component.SourceTemplateId);
+            insert.Parameters.AddWithValue("$version", component.SourceVersion);
+            insert.Parameters.AddWithValue("$versionHash", component.SourceVersionSha256);
+            insert.Parameters.AddWithValue("$schema", component.SchemaVersion);
+            insert.Parameters.AddWithValue("$code", component.Code);
+            insert.Parameters.AddWithValue("$name", component.Name);
+            insert.Parameters.AddWithValue("$content", component.Content.GetRawText());
+            insert.Parameters.AddWithValue("$contentHash", Sha256(Encoding.UTF8.GetBytes(component.Content.GetRawText())));
+            insert.Parameters.AddWithValue("$createdUtc", component.CreatedUtc);
+            insert.Parameters.AddWithValue("$updatedUtc", component.UpdatedUtc);
+            RequireSingle(insert.ExecuteNonQuery(), "component snapshot");
+            for (var index = 0; index < component.ArticleBindings.Count; index++)
+            {
+                var binding = component.ArticleBindings[index];
+                using var bindingInsert = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO project_component_snapshot_article_bindings
+                        (snapshot_id, binding_ordinal, source_id, entity_type, article_key)
+                    VALUES ($snapshotId, $ordinal, $sourceId, $entityType, $articleKey);
+                    """);
+                bindingInsert.Parameters.AddWithValue("$snapshotId", destinationSnapshotId);
+                bindingInsert.Parameters.AddWithValue("$ordinal", index);
+                bindingInsert.Parameters.AddWithValue("$sourceId", binding.SourceId);
+                bindingInsert.Parameters.AddWithValue("$entityType", binding.EntityType);
+                bindingInsert.Parameters.AddWithValue("$articleKey", binding.ArticleKey);
+                RequireSingle(bindingInsert.ExecuteNonQuery(), "component snapshot binding");
+            }
+            for (var index = 0; index < component.Assets.Count; index++)
+            {
+                var asset = component.Assets[index];
+                using var assetInsert = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO project_component_snapshot_asset_refs
+                        (snapshot_id, asset_ordinal, asset_id, file_name, media_type, content_sha256)
+                    VALUES ($snapshotId, $ordinal, $assetId, $fileName, $mediaType, $sha256);
+                    """);
+                assetInsert.Parameters.AddWithValue("$snapshotId", destinationSnapshotId);
+                assetInsert.Parameters.AddWithValue("$ordinal", index);
+                assetInsert.Parameters.AddWithValue("$assetId", asset.AssetId);
+                assetInsert.Parameters.AddWithValue("$fileName", asset.FileName);
+                assetInsert.Parameters.AddWithValue("$mediaType", asset.MediaType);
+                assetInsert.Parameters.AddWithValue("$sha256", asset.ContentSha256);
+                RequireSingle(assetInsert.ExecuteNonQuery(), "component snapshot asset");
+            }
+        }
+        foreach (var placement in componentPlacements)
+        {
+            var sourcePlacementId = Guid.ParseExact(placement.PlacementId, "D");
+            using var insert = unitOfWork.CreateCommand(
+                """
+                INSERT INTO harness_component_placements
+                    (placement_id, harness_id, snapshot_id, source_id, entity_type, article_key,
+                     instance_json, created_utc, updated_utc)
+                VALUES ($placementId, $harnessId, $snapshotId, $sourceId, $entityType, $articleKey,
+                        $instance, $createdUtc, $updatedUtc);
+                """);
+            insert.Parameters.AddWithValue("$placementId", Format(placementIdMap[sourcePlacementId]));
+            insert.Parameters.AddWithValue("$harnessId", Format(DeterministicGuid(journal.OperationGuid, "harness", placement.HarnessId)));
+            insert.Parameters.AddWithValue("$snapshotId", snapshotIdMap[placement.SnapshotId]);
+            insert.Parameters.AddWithValue("$sourceId", placement.SourceId);
+            insert.Parameters.AddWithValue("$entityType", placement.EntityType);
+            insert.Parameters.AddWithValue("$articleKey", placement.ArticleKey);
+            insert.Parameters.AddWithValue(
+                "$instance",
+                remappedDesigns[placement.HarnessId].InstancesBySourcePlacementId[sourcePlacementId]);
+            insert.Parameters.AddWithValue("$createdUtc", placement.CreatedUtc);
+            insert.Parameters.AddWithValue("$updatedUtc", placement.UpdatedUtc);
+            RequireSingle(insert.ExecuteNonQuery(), "component placement");
         }
 
         using (var insert = unitOfWork.CreateCommand(
@@ -808,7 +908,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
         if (manifest.ManifestFormat != SqliteProjectExportService.ArchiveFormat ||
             manifest.ProductId != ProductId ||
             manifest.ArchiveKind != ArchiveKind ||
-            manifest.SnapshotFormat is not (1 or 2 or SqliteProjectExportService.SnapshotFormat) ||
+            manifest.SnapshotFormat is not (1 or 2 or 3 or SqliteProjectExportService.SnapshotFormat) ||
             manifest.SourceStorageSchemaVersion is <= 0 or > 1_000_000 ||
             !IsCanonicalText(manifest.SourceAppVersion, 128, allowEmpty: false) ||
             ParseGuid(manifest.SourceProjectId) != manifest.SourceProjectId ||
@@ -947,14 +1047,6 @@ public sealed class SqliteProjectImportService : IProjectImportService
             previousAttachment = (item.CreatedUtc, item.AttachmentId);
         }
 
-        var payloadBlobs = manifest.Files.Where(item => item.Path != SnapshotPath)
-            .ToDictionary(item => item.Sha256, item => item.SizeBytes, StringComparer.Ordinal);
-        if (payloadBlobs.Count != referenced.Count ||
-            referenced.Any(item => !payloadBlobs.TryGetValue(item.Key, out var size) || size != item.Value))
-        {
-            throw Invalid("import_blob_reference_invalid", "The archive has missing or unreferenced attachment blobs.");
-        }
-
         var pinnedIds = new HashSet<string>(StringComparer.Ordinal);
         (string, string)? previousPinned = null;
         foreach (var item in snapshot.PinnedCharacteristics)
@@ -984,6 +1076,109 @@ public sealed class SqliteProjectImportService : IProjectImportService
 
             previousPinned = (item.CapturedUtc, item.SnapshotId);
         }
+
+        var componentSnapshots = snapshot.ComponentSnapshots ?? [];
+        var componentPlacements = snapshot.ComponentPlacements ?? [];
+        if (snapshot.SnapshotFormat == SqliteProjectExportService.SnapshotFormat)
+        {
+            var componentSnapshotIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var component in componentSnapshots)
+            {
+                ValidateSha256(component.SourceVersionSha256);
+                if (ParseGuid(component.SnapshotId) != component.SnapshotId ||
+                    ParseGuid(component.SourceTemplateId) != component.SourceTemplateId ||
+                    component.SourceVersion <= 0 || component.SchemaVersion != 3 ||
+                    !componentSnapshotIds.Add(component.SnapshotId) ||
+                    !IsCanonicalText(component.Code, 128, false) ||
+                    !IsCanonicalText(component.Name, 256, false) ||
+                    component.ArticleBindings.Count > SqliteComponentTemplateStore.MaximumArticleBindings ||
+                    component.Assets.Count > SqliteComponentTemplateStore.MaximumAssets ||
+                    component.Content.ValueKind != JsonValueKind.Object ||
+                    NormalizeUtc(component.CreatedUtc) != component.CreatedUtc ||
+                    NormalizeUtc(component.UpdatedUtc) != component.UpdatedUtc)
+                    throw Invalid("import_snapshot_invalid", "A project component snapshot is invalid.");
+
+                var bindings = component.ArticleBindings.Select(item => new ComponentTemplateArticleBinding(
+                    item.SourceId, item.EntityType, item.ArticleKey)).ToArray();
+                var assets = component.Assets.Select(item =>
+                {
+                    ValidateSha256(item.ContentSha256);
+                    if (ParseGuid(item.AssetId) != item.AssetId ||
+                        item.SizeBytes is <= 0 or > SqliteComponentTemplateStore.MaximumAssetBytes)
+                        throw Invalid("import_snapshot_invalid", "A project component asset is invalid.");
+                    if (referenced.TryGetValue(item.ContentSha256, out var priorSize) && priorSize != item.SizeBytes)
+                        throw Invalid("import_snapshot_invalid", "A shared component asset has conflicting size metadata.");
+                    referenced[item.ContentSha256] = item.SizeBytes;
+                    return new ComponentTemplateAsset(
+                        Guid.ParseExact(item.AssetId, "D"),
+                        new AttachmentContent(item.ContentSha256, item.SizeBytes), item.FileName, item.MediaType);
+                }).ToArray();
+                var canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(
+                    component.Content.GetRawText(), component.SchemaVersion);
+                SqliteComponentTemplateStore.EnsureV2AssetMetadataMatches(canonical, component.SchemaVersion, assets);
+                var versionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+                    Guid.ParseExact(component.SourceTemplateId, "D"), component.SourceVersion,
+                    component.SchemaVersion, component.Code, component.Name, bindings, assets, canonical);
+                if (!string.Equals(versionHash, component.SourceVersionSha256, StringComparison.Ordinal))
+                    throw Invalid("import_snapshot_invalid", "A project component snapshot hash is invalid.");
+            }
+
+            var reachable = new HashSet<string>(StringComparer.Ordinal);
+            var placementIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var placement in componentPlacements)
+            {
+                if (ParseGuid(placement.PlacementId) != placement.PlacementId ||
+                    !placementIds.Add(placement.PlacementId) ||
+                    !harnessIds.Contains(placement.HarnessId) ||
+                    !componentSnapshotIds.Contains(placement.SnapshotId) ||
+                    placement.Instance.ValueKind != JsonValueKind.Object ||
+                    Encoding.UTF8.GetByteCount(placement.Instance.GetRawText()) >
+                        SqliteProjectComponentSnapshotStore.MaximumInstanceBytes ||
+                    !IsCanonicalText(placement.SourceId, 128, false) ||
+                    !IsCanonicalText(placement.EntityType, 64, false) ||
+                    !IsCanonicalText(placement.ArticleKey, 512, false))
+                    throw Invalid("import_snapshot_invalid", "A project component placement is invalid.");
+                var component = componentSnapshots.Single(item => item.SnapshotId == placement.SnapshotId);
+                var article = component.ArticleBindings.SingleOrDefault(item =>
+                    item.SourceId == placement.SourceId && item.EntityType == placement.EntityType &&
+                    item.ArticleKey == placement.ArticleKey);
+                if (article is null)
+                    throw Invalid("import_snapshot_invalid", "A project component placement article is invalid.");
+                try
+                {
+                    SqliteProjectComponentSnapshotStore.ValidateInstanceBinding(
+                        placement.Instance.GetRawText(),
+                        Guid.ParseExact(placement.PlacementId, "D"),
+                        Guid.ParseExact(component.SourceTemplateId, "D"),
+                        component.SourceVersion,
+                        component.SourceVersionSha256,
+                        new ComponentTemplateArticleBinding(
+                            article.SourceId, article.EntityType, article.ArticleKey));
+                }
+                catch (ProjectComponentSnapshotException error)
+                {
+                    throw Invalid(
+                        "import_snapshot_invalid",
+                        "A project component placement binding is invalid.",
+                        inner: error);
+                }
+                reachable.Add(placement.SnapshotId);
+            }
+            if (!reachable.SetEquals(componentSnapshotIds))
+                throw Invalid("import_snapshot_invalid", "The archive contains an unreachable component snapshot.");
+        }
+        else if (componentSnapshots.Count != 0 || componentPlacements.Count != 0)
+        {
+            throw Invalid("import_snapshot_invalid", "A legacy archive cannot contain component snapshots.");
+        }
+
+        var payloadBlobs = manifest.Files.Where(item => item.Path != SnapshotPath)
+            .ToDictionary(item => item.Sha256, item => item.SizeBytes, StringComparer.Ordinal);
+        if (payloadBlobs.Count != referenced.Count ||
+            referenced.Any(item => !payloadBlobs.TryGetValue(item.Key, out var size) || size != item.Value))
+        {
+            throw Invalid("import_blob_reference_invalid", "The archive has missing or unreferenced attachment blobs.");
+        }
     }
 
     private static ProjectSnapshot MigrateSnapshotToCurrent(ProjectSnapshot snapshot)
@@ -993,7 +1188,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
             return snapshot;
         }
 
-        if (snapshot.SnapshotFormat is not (1 or 2))
+        if (snapshot.SnapshotFormat is not (1 or 2 or 3))
         {
             throw Invalid("import_snapshot_version_unsupported", "The project snapshot version is unsupported.");
         }
@@ -1014,8 +1209,10 @@ public sealed class SqliteProjectImportService : IProjectImportService
                             harness.CreatedUtc,
                             harness.UpdatedUtc)).ToArray()
                     : harness.Documents,
-                Design = CreateEmptyHarnessDesign(),
+                Design = legacyFormat is 1 or 2 ? CreateEmptyHarnessDesign() : harness.Design,
             }).ToArray(),
+            ComponentSnapshots = [],
+            ComponentPlacements = [],
         };
     }
 
@@ -1110,7 +1307,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
             !IsCanonicalText(journal.SourceAppVersion, 128, false) ||
             !IsCanonicalText(journal.ImportAppVersion, 128, false) ||
             NormalizeUtc(journal.ImportedUtc) != journal.ImportedUtc ||
-            journal.SnapshotFormat is not (1 or 2 or SqliteProjectExportService.SnapshotFormat) ||
+            journal.SnapshotFormat is not (1 or 2 or 3 or SqliteProjectExportService.SnapshotFormat) ||
             journal.HarnessCount is < 0 or > ProjectRules.MaximumHarnesses ||
             journal.AttachmentCount is < 0 or > MaximumArchiveEntries - 2 ||
             journal.PinnedCharacteristicCount is < 0 or > MaximumArchiveEntries ||
@@ -1980,7 +2177,9 @@ public sealed class SqliteProjectImportService : IProjectImportService
         ExportProject Project,
         IReadOnlyList<ExportHarness> Harnesses,
         IReadOnlyList<ExportAttachment> Attachments,
-        IReadOnlyList<ExportPinnedCharacteristic> PinnedCharacteristics);
+        IReadOnlyList<ExportPinnedCharacteristic> PinnedCharacteristics,
+        IReadOnlyList<ExportComponentSnapshot>? ComponentSnapshots = null,
+        IReadOnlyList<ExportComponentPlacement>? ComponentPlacements = null);
     private sealed record ExportProject(
         string ProjectId,
         string Designation,
@@ -2028,6 +2227,36 @@ public sealed class SqliteProjectImportService : IProjectImportService
         string CanonicalPayload,
         string PayloadSha256,
         string CapturedUtc);
+    private sealed record ExportComponentSnapshot(
+        string SnapshotId,
+        string SourceTemplateId,
+        int SourceVersion,
+        string SourceVersionSha256,
+        int SchemaVersion,
+        string Code,
+        string Name,
+        IReadOnlyList<ExportComponentArticleBinding> ArticleBindings,
+        IReadOnlyList<ExportComponentAsset> Assets,
+        JsonElement Content,
+        string CreatedUtc,
+        string UpdatedUtc);
+    private sealed record ExportComponentArticleBinding(string SourceId, string EntityType, string ArticleKey);
+    private sealed record ExportComponentAsset(
+        string AssetId,
+        string FileName,
+        string MediaType,
+        string ContentSha256,
+        long SizeBytes);
+    private sealed record ExportComponentPlacement(
+        string PlacementId,
+        string HarnessId,
+        string SnapshotId,
+        string SourceId,
+        string EntityType,
+        string ArticleKey,
+        JsonElement Instance,
+        string CreatedUtc,
+        string UpdatedUtc);
     private sealed record ImportBlob(string Sha256, long SizeBytes, bool ExistedBefore);
     private sealed record OwnedRow(string Id, string Relation);
     private sealed record ImportJournal(

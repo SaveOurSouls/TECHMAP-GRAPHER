@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ReferenceCatalogSearchRecord } from "../reference-catalog-api";
 import {
   builtInConnectorItems,
+  componentTemplateSummaryToEditorCatalogItem,
+  componentTemplateSummaryToEditorCatalogItems,
+  filterComponentTemplates,
   filterBuiltInConnectors,
   referenceRecordToEditorCatalogItem,
   remoteEditorCatalogSources,
@@ -18,6 +21,52 @@ function record(entityType: string, sourceKey: string, payload: Readonly<Record<
 }
 
 describe("editor reference catalog", () => {
+  it("exposes exact immutable component template versions for placement", () => {
+    const template = {
+      templateId: "12345678-1234-4123-8123-123456789abc",
+      version: 7,
+      code: "JST-XH",
+      name: "JST XH",
+      articleBindings: [],
+      createdUtc: "2026-09-14T00:00:00Z",
+    };
+    expect(componentTemplateSummaryToEditorCatalogItem(template)).toMatchObject({
+      id: `component-template:${template.templateId}:7`,
+      title: "JST XH",
+      subtitle: "JST-XH · версия 7",
+      placement: "connector",
+      componentTemplateId: template.templateId,
+      componentTemplateVersion: 7,
+    });
+    expect(filterComponentTemplates([template], "xh")).toHaveLength(1);
+    expect(filterComponentTemplates([template], "unknown")).toEqual([]);
+  });
+
+  it("creates a separate catalog card for every article variant", () => {
+    const template = {
+      templateId: "12345678-1234-4123-8123-123456789abc",
+      version: 7,
+      code: "JST-XH",
+      name: "JST XH",
+      articleBindings: [
+        { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "B2B-XH-A" },
+        { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "B10B-XH-A" },
+      ],
+      createdUtc: "2026-09-14T00:00:00Z",
+    };
+
+    const items = componentTemplateSummaryToEditorCatalogItems(template);
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.title)).toEqual(["B2B-XH-A", "B10B-XH-A"]);
+    expect(items[1]).toMatchObject({
+      componentTemplateId: template.templateId,
+      componentTemplateVersion: 7,
+      componentArticle: template.articleBindings[1],
+    });
+    expect(filterComponentTemplates([template], "b10b").map((item) => item.title)).toEqual(["B10B-XH-A"]);
+    expect(filterComponentTemplates([template], "jst")).toHaveLength(2);
+  });
+
   it("keeps built-in connector cards and searches them locally", () => {
     expect(builtInConnectorItems.map((item) => item.title)).toEqual(["Серия XS", "JST XH", "Свободный соединитель"]);
     expect(filterBuiltInConnectors("XS-10").map((item) => item.title)).toEqual(["Серия XS"]);

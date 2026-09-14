@@ -196,6 +196,8 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
 
             CopyAttachments(unitOfWork, sourceProjectId, destinationId, now);
             CopyPinnedCharacteristics(unitOfWork, sourceProjectId, destinationId);
+            CopyComponentSnapshotsAndPlacements(
+                unitOfWork, sourceProjectId, destinationId, source.Harnesses, now);
 
             return ReadProject(unitOfWork, destinationId);
         });
@@ -1202,6 +1204,184 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             insert.Parameters.AddWithValue("$payloadSha256", row.Hash);
             insert.Parameters.AddWithValue("$capturedUtc", row.CapturedUtc);
             insert.ExecuteNonQuery();
+        }
+    }
+
+    private static void CopyComponentSnapshotsAndPlacements(
+        SqliteUnitOfWork unitOfWork,
+        ProjectIdentity sourceProjectId,
+        ProjectIdentity destinationProjectId,
+        IReadOnlyList<HarnessSummary> sourceHarnesses,
+        string timestamp)
+    {
+        var harnessMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var destinationHarnesses = unitOfWork.CreateCommand(
+                   """
+                   SELECT harness_id, sort_order FROM harnesses
+                   WHERE project_id = $projectId ORDER BY sort_order, harness_id;
+                   """))
+        {
+            destinationHarnesses.Parameters.AddWithValue("$projectId", Format(destinationProjectId.Value));
+            using var reader = destinationHarnesses.ExecuteReader();
+            var destinationByOrder = new Dictionary<int, string>();
+            while (reader.Read()) destinationByOrder.Add(reader.GetInt32(1), reader.GetString(0));
+            foreach (var sourceHarness in sourceHarnesses)
+            {
+                harnessMap.Add(
+                    Format(sourceHarness.HarnessId.Value),
+                    destinationByOrder.TryGetValue(sourceHarness.SortOrder, out var destinationHarnessId)
+                        ? destinationHarnessId
+                        : throw new InvalidDataException("A copied harness is missing."));
+            }
+        }
+
+        var snapshotMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var snapshots = unitOfWork.CreateCommand(
+                   """
+                   SELECT snapshot_id, source_template_id, source_version, source_version_sha256,
+                          schema_version, code, name, content_json, content_sha256
+                   FROM project_component_snapshots
+                   WHERE project_id = $projectId
+                     AND EXISTS (
+                         SELECT 1
+                         FROM harness_component_placements p
+                         INNER JOIN harnesses h ON h.harness_id = p.harness_id
+                         INNER JOIN harness_design_documents d ON d.harness_id = p.harness_id
+                         WHERE h.project_id = $projectId
+                           AND p.snapshot_id = project_component_snapshots.snapshot_id
+                           AND EXISTS (
+                               SELECT 1
+                               FROM json_each(json_extract(d.content_json, '$.connectors')) connector
+                               WHERE json_extract(connector.value, '$.id') = p.placement_id))
+                   ORDER BY snapshot_id;
+                   """))
+        {
+            snapshots.Parameters.AddWithValue("$projectId", Format(sourceProjectId.Value));
+            using var reader = snapshots.ExecuteReader();
+            var rows = new List<(string Id, string TemplateId, int Version, string VersionHash,
+                int Schema, string Code, string Name, string Content, string ContentHash)>();
+            while (reader.Read()) rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
+                reader.GetString(3), reader.GetInt32(4), reader.GetString(5), reader.GetString(6),
+                reader.GetString(7), reader.GetString(8)));
+            reader.Close();
+            foreach (var row in rows)
+            {
+                var destinationSnapshotId = Format(Guid.NewGuid());
+                using var insert = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO project_component_snapshots
+                        (snapshot_id, project_id, source_template_id, source_version,
+                         source_version_sha256, schema_version, code, name, content_json,
+                         content_sha256, created_utc, updated_utc)
+                    VALUES ($snapshotId, $projectId, $templateId, $version, $versionHash,
+                            $schema, $code, $name, $content, $contentHash, $timestamp, $timestamp);
+                    """);
+                insert.Parameters.AddWithValue("$snapshotId", destinationSnapshotId);
+                insert.Parameters.AddWithValue("$projectId", Format(destinationProjectId.Value));
+                insert.Parameters.AddWithValue("$templateId", row.TemplateId);
+                insert.Parameters.AddWithValue("$version", row.Version);
+                insert.Parameters.AddWithValue("$versionHash", row.VersionHash);
+                insert.Parameters.AddWithValue("$schema", row.Schema);
+                insert.Parameters.AddWithValue("$code", row.Code);
+                insert.Parameters.AddWithValue("$name", row.Name);
+                insert.Parameters.AddWithValue("$content", row.Content);
+                insert.Parameters.AddWithValue("$contentHash", row.ContentHash);
+                insert.Parameters.AddWithValue("$timestamp", timestamp);
+                insert.ExecuteNonQuery();
+                snapshotMap.Add(row.Id, destinationSnapshotId);
+            }
+        }
+
+        foreach (var (sourceSnapshotId, destinationSnapshotId) in snapshotMap)
+        {
+            using (var bindings = unitOfWork.CreateCommand(
+                       """
+                       INSERT INTO project_component_snapshot_article_bindings
+                           (snapshot_id, binding_ordinal, source_id, entity_type, article_key)
+                       SELECT $destinationSnapshotId, binding_ordinal, source_id, entity_type, article_key
+                       FROM project_component_snapshot_article_bindings
+                       WHERE snapshot_id = $sourceSnapshotId ORDER BY binding_ordinal;
+                       """))
+            {
+                bindings.Parameters.AddWithValue("$destinationSnapshotId", destinationSnapshotId);
+                bindings.Parameters.AddWithValue("$sourceSnapshotId", sourceSnapshotId);
+                bindings.ExecuteNonQuery();
+            }
+            using var assets = unitOfWork.CreateCommand(
+                """
+                INSERT INTO project_component_snapshot_asset_refs
+                    (snapshot_id, asset_ordinal, asset_id, file_name, media_type, content_sha256)
+                SELECT $destinationSnapshotId, asset_ordinal, asset_id, file_name, media_type, content_sha256
+                FROM project_component_snapshot_asset_refs
+                WHERE snapshot_id = $sourceSnapshotId ORDER BY asset_ordinal;
+                """);
+            assets.Parameters.AddWithValue("$destinationSnapshotId", destinationSnapshotId);
+            assets.Parameters.AddWithValue("$sourceSnapshotId", sourceSnapshotId);
+            assets.ExecuteNonQuery();
+        }
+
+        foreach (var (sourceHarnessId, destinationHarnessId) in harnessMap)
+        {
+            using var placements = unitOfWork.CreateCommand(
+                """
+                SELECT placement_id, snapshot_id, source_id, entity_type, article_key,
+                       instance_json
+                FROM harness_component_placements
+                WHERE harness_id = $harnessId
+                  AND EXISTS (
+                      SELECT 1
+                      FROM harness_design_documents d,
+                           json_each(json_extract(d.content_json, '$.connectors')) connector
+                      WHERE d.harness_id = harness_component_placements.harness_id
+                        AND json_extract(connector.value, '$.id') = harness_component_placements.placement_id)
+                ORDER BY placement_id;
+                """);
+            placements.Parameters.AddWithValue("$harnessId", sourceHarnessId);
+            using var reader = placements.ExecuteReader();
+            var rows = new List<(Guid PlacementId, string SnapshotId, string SourceId, string EntityType, string ArticleKey)>();
+            while (reader.Read()) rows.Add((
+                ReadGuid(reader.GetString(0), "component placement"), reader.GetString(1),
+                reader.GetString(2), reader.GetString(3), reader.GetString(4)));
+            reader.Close();
+            var placementIdMap = rows.ToDictionary(row => row.PlacementId, _ => Guid.NewGuid());
+            string designJson;
+            using (var design = unitOfWork.CreateCommand(
+                       "SELECT content_json FROM harness_design_documents WHERE harness_id = $harnessId;"))
+            {
+                design.Parameters.AddWithValue("$harnessId", destinationHarnessId);
+                designJson = design.ExecuteScalar() as string
+                    ?? throw new InvalidDataException("A copied harness design document is missing.");
+            }
+            var remapped = ProjectComponentPlacementRemapper.RemapHarnessDesign(designJson, placementIdMap);
+            using (var design = unitOfWork.CreateCommand(
+                       "UPDATE harness_design_documents SET content_json = $content WHERE harness_id = $harnessId;"))
+            {
+                design.Parameters.AddWithValue("$content", remapped.DesignJson);
+                design.Parameters.AddWithValue("$harnessId", destinationHarnessId);
+                if (design.ExecuteNonQuery() != 1)
+                    throw new InvalidDataException("A copied harness design document is missing.");
+            }
+            foreach (var row in rows)
+            {
+                var destinationPlacementId = placementIdMap[row.PlacementId];
+                using var insert = unitOfWork.CreateCommand(
+                    """
+                    INSERT INTO harness_component_placements
+                        (placement_id, harness_id, snapshot_id, source_id, entity_type,
+                         article_key, instance_json, created_utc, updated_utc)
+                    VALUES ($placementId, $harnessId, $snapshotId, $sourceId, $entityType,
+                            $articleKey, $instance, $timestamp, $timestamp);
+                    """);
+                insert.Parameters.AddWithValue("$placementId", Format(destinationPlacementId));
+                insert.Parameters.AddWithValue("$harnessId", destinationHarnessId);
+                insert.Parameters.AddWithValue("$snapshotId", snapshotMap[row.SnapshotId]);
+                insert.Parameters.AddWithValue("$sourceId", row.SourceId);
+                insert.Parameters.AddWithValue("$entityType", row.EntityType);
+                insert.Parameters.AddWithValue("$articleKey", row.ArticleKey);
+                insert.Parameters.AddWithValue("$instance", remapped.InstancesBySourcePlacementId[row.PlacementId]);
+                insert.Parameters.AddWithValue("$timestamp", timestamp);
+                insert.ExecuteNonQuery();
+            }
         }
     }
 
