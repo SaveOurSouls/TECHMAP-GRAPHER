@@ -8,6 +8,7 @@ import {
 } from "./autosave-controller";
 import type { LocalSession } from "./local-session";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
+import { ComponentLibrary } from "./component-library/ComponentLibrary";
 import { HarnessDesignEditor } from "./editor/HarnessDesignEditor";
 import {
   createProjectApi,
@@ -39,6 +40,7 @@ interface ProjectEditDraft {
 const sections = [
   { id: "projects", label: "Проекты" },
   { id: "references", label: "Справочники" },
+  { id: "library", label: "Библиотека" },
 ] as const;
 export type AppSection = typeof sections[number]["id"];
 const harnessTabs = [
@@ -885,8 +887,10 @@ export function App({ config, session }: AppProps) {
             )}
           </div>
             </>
-          ) : (
+          ) : activeSection === "references" ? (
             <ReferenceImportPanel config={config} session={session} />
+          ) : (
+            <ComponentLibrary config={config} session={session} />
           )}
         </main>
       </div>
