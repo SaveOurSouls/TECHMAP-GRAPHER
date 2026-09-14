@@ -30,6 +30,8 @@ describe("component library UI", () => {
     expect(markup).toContain("Точка контакта");
     expect(markup).toContain("Отменить");
     expect(markup).toContain("Связи с артикулами");
+    expect(markup).toContain("Изображения");
+    expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Сохранить");
   });
 });

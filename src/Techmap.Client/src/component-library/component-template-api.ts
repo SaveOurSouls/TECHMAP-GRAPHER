@@ -3,16 +3,29 @@ import { buildApiUrl, type RuntimeConfig } from "../runtime-config";
 import type { TemplateContent } from "./template-model";
 
 export interface ArticleBinding { readonly sourceId: string; readonly entityType: string; readonly articleKey: string; }
+export interface TemplateAsset {
+  readonly assetId: string;
+  readonly sha256: string;
+  readonly sizeBytes: number;
+  readonly fileName: string;
+  readonly mediaType: "image/png";
+}
 export interface ComponentTemplateSummary {
   readonly templateId: string; readonly version: number; readonly code: string; readonly name: string;
   readonly articleBindings: readonly ArticleBinding[]; readonly createdUtc: string; readonly updatedUtc?: string;
 }
-export interface ComponentTemplate extends ComponentTemplateSummary { readonly content: TemplateContent; }
+export interface ComponentTemplate extends ComponentTemplateSummary {
+  readonly assets: readonly TemplateAsset[];
+  readonly content: TemplateContent;
+}
 export interface ComponentTemplateApi {
   list(): Promise<readonly ComponentTemplateSummary[]>;
   get(templateId: string): Promise<ComponentTemplate>;
   create(body: { code: string; name: string; articleBindings: ArticleBinding[]; content: TemplateContent }): Promise<ComponentTemplate>;
   save(templateId: string, body: { expectedVersion: number; code: string; name: string; articleBindings: ArticleBinding[]; content: TemplateContent }): Promise<ComponentTemplate>;
+  addAsset(templateId: string, body: { expectedVersion: number; fileName: string; mediaType: TemplateAsset["mediaType"]; contentBase64: string }): Promise<ComponentTemplate>;
+  removeAsset(templateId: string, assetId: string, expectedVersion: number): Promise<ComponentTemplate>;
+  assetContentUrl(templateId: string, version: number, assetId: string): string;
   remove(templateId: string, expectedVersion: number): Promise<void>;
 }
 
@@ -34,14 +47,28 @@ function parseBinding(value: unknown): ArticleBinding {
   const r = record(value);
   return Object.freeze({ sourceId: stringField(r, "sourceId"), entityType: stringField(r, "entityType"), articleKey: stringField(r, "articleKey") });
 }
+function parseAsset(value: unknown): TemplateAsset {
+  const r = record(value);
+  const assetId = stringField(r, "assetId");
+  const sha256 = stringField(r, "sha256");
+  const fileName = stringField(r, "fileName");
+  const mediaType = stringField(r, "mediaType");
+  const sizeBytes = integerField(r, "sizeBytes");
+  if (!idPattern.test(assetId) || !/^[0-9a-f]{64}$/.test(sha256) || !fileName.trim() ||
+      mediaType !== "image/png") {
+    throw new Error("Сервер вернул повреждённое изображение шаблона.");
+  }
+  return Object.freeze({ assetId, sha256, sizeBytes, fileName, mediaType: mediaType as TemplateAsset["mediaType"] });
+}
 function parseTemplate(value: unknown): ComponentTemplate {
   const r = record(value);
   const templateId = stringField(r, "templateId");
   if (!idPattern.test(templateId)) throw new Error("Поле ответа «templateId» задано неверно.");
   const bindings = Array.isArray(r.articleBindings) ? r.articleBindings.map(parseBinding) : [];
+  const assets = Array.isArray(r.assets) ? r.assets.map(parseAsset) : [];
   const content = record(r.content) as unknown as TemplateContent;
   if (content.schemaVersion !== 1 || !Array.isArray(content.views)) throw new Error("Шаблон имеет неподдерживаемую схему содержимого.");
-  return Object.freeze({ templateId, version: integerField(r, "version"), code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
+  return Object.freeze({ templateId, version: integerField(r, "version"), code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, assets, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
 }
 function parseList(value: unknown): readonly ComponentTemplateSummary[] {
   const r = record(value);
@@ -71,6 +98,9 @@ export function createComponentTemplateApi(config: RuntimeConfig, session: Local
     get: id => request(`/${encodeURIComponent(id)}`, { method: "GET", headers: { Accept: "application/json" } }, parseTemplate),
     create: body => request("", { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),
     save: (id, body) => request(`/${encodeURIComponent(id)}`, { method: "PUT", headers, body: JSON.stringify(body) }, parseTemplate),
+    addAsset: (id, body) => request(`/${encodeURIComponent(id)}/assets`, { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),
+    removeAsset: (id, assetId, expectedVersion) => request(`/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`, { method: "DELETE", headers, body: JSON.stringify({ expectedVersion }) }, parseTemplate),
+    assetContentUrl: (id, version, assetId) => buildApiUrl(config, `component-templates/${encodeURIComponent(id)}/versions/${version}/assets/${encodeURIComponent(assetId)}/content`),
     remove: async (id, expectedVersion) => { await request(`/${encodeURIComponent(id)}`, { method: "DELETE", headers, body: JSON.stringify({ expectedVersion }) }, () => undefined); },
   };
   return Object.freeze(api);
