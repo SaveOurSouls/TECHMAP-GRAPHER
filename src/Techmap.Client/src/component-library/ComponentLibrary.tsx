@@ -3,29 +3,46 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
-import { isTemplateContentV1, isTemplateContentV2, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1 } from "./template-content";
+import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
 import { TemplateCanvasV2 } from "./TemplateCanvasV2";
 import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
 import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
+import { TemplateSeriesPanelV3 } from "./TemplateSeriesPanelV3";
+import { materializeArticleVariantV3 } from "./template-article-materialization-v3";
+import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
 import {
-  addAdditionalViewV2, addBasicNodeV2, addBundlePortV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
-  deleteAdditionalViewV2, deleteBundlePortV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2, editBundlePortV2, editContactPointV2,
-  editLogicalContactV2, editNodeV2, linkLogicalContactPointV2, newTemplateContentV2,
-  attachRepeatDomainV2, createRepeatPrototypeV2, deleteRepeatPrototypeV2, moveNodeV2, parameterizeNodeDimensionV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
-  setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
-  setLayerVisibleV2, setNodeLockedV2, type BasicNodeKindV2, type ContactPointEditV2,
-  type BundlePortEditV2, type LogicalContactEditV2, type NodeEditV2,
-} from "./template-commands-v2";
-import { validateTemplateContentV2, type BundlePortV2, type ContactDirectionV2, type ImageNodeV2, type LogicalContactV2, type NumericExpressionV2, type TemplateContentV2, type TemplateNodeV2, type TemplateV2Diagnostic, type ViewContactPointV2 } from "./template-model-v2";
+  addAdditionalViewV3 as addAdditionalViewV2, addBasicNodeV3 as addBasicNodeV2, addBundlePortV3 as addBundlePortV2,
+  addContactPointV3 as addContactPointV2, addContactTypeGroupV3, addLayerV3 as addLayerV2, addNodeV3 as addNodeV2,
+  attachRepeatDomainV3 as attachRepeatDomainV2, constantExpressionV3 as constantExpressionV2,
+  createRepeatPrototypeV3 as createRepeatPrototypeV2, deleteAdditionalViewV3 as deleteAdditionalViewV2,
+  deleteBundlePortV3 as deleteBundlePortV2, deleteContactPointV3 as deleteContactPointV2,
+  deleteContactTypeGroupV3, deleteLayerV3 as deleteLayerV2, deleteNodeV3 as deleteNodeV2,
+  deleteRepeatPrototypeV3 as deleteRepeatPrototypeV2, editBundlePortV3 as editBundlePortV2,
+  editContactPointV3 as editContactPointV2, editLogicalContactV3 as editLogicalContactV2,
+  editNodeV3 as editNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2,
+  moveNodeV3 as moveNodeV2, newTemplateContentV3 as newTemplateContentV2,
+  parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, projectTemplateContentV3CoreToV2,
+  removeArticleVariantContactGroupV3, removeArticleVariantV3, renameContactTypeGroupV3,
+  renameLayerV3 as renameLayerV2, renameViewV3 as renameViewV2, reorderLayerV3 as reorderLayerV2,
+  reorderNodeV3 as reorderNodeV2, setArticleVariantContactGroupV3, setLayerLockedV3 as setLayerLockedV2,
+  setLayerVisibleV3 as setLayerVisibleV2, setNodeLockedV3 as setNodeLockedV2,
+  setRepeatCountV3 as setRepeatCountV2, setRepeatStepV3 as setRepeatStepV2,
+  setTemplateParameterDefaultV3 as setTemplateParameterDefaultV2, upsertArticleVariantV3,
+  type BasicNodeKindV3 as BasicNodeKindV2, type BundlePortEditV3 as BundlePortEditV2,
+  type ContactPointEditV3 as ContactPointEditV2, type LogicalContactEditV3 as LogicalContactEditV2,
+  type NodeEditV3 as NodeEditV2,
+} from "./template-commands-v3";
+import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
+import { validateTemplateContentV3 as validateTemplateContentV2, type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { templateId: string | null; version: number; code: string; name: string; articleBindings: ArticleBinding[]; assets: TemplateAsset[]; content: TemplateContentV2; }
+interface Draft { templateId: string | null; version: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; }
 type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "rectangle" | "ellipse" | "text" | "image" }>;
 
-const newDraft = (): Draft => ({ templateId: null, version: 0, code: "", name: "Новый компонент", articleBindings: [], assets: [], content: newTemplateContentV2() });
+const newDraft = (): Draft => ({ templateId: null, version: 0, code: "", name: "Новый компонент", assets: [], content: newTemplateContentV2() });
 const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content.views.map(view => [view.id, view.layers[0]!.id]));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
 const constantValue = (expression: NumericExpressionV2) => expression.kind === "constant" ? expression.value : null;
@@ -39,9 +56,33 @@ export const isTemplateUndoShortcut = (
   return !isTextEditor && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
 };
 
-export function isTemplateAssetReferencedV2(content: TemplateContentV2, assetId: string): boolean {
+export function isTemplateAssetReferencedV2(content: TemplateContentV2 | LegacyTemplateContentV2, assetId: string): boolean {
   return content.views.some(view => view.layers.some(layer => layer.nodes.some(node =>
     node.kind === "image" && node.geometry.assetId === assetId)));
+}
+
+const articleIdentity = (value: Pick<ArticleBinding, "sourceId" | "entityType" | "articleKey">) =>
+  `${value.sourceId}\0${value.entityType}\0${value.articleKey}`;
+
+/**
+ * Old template envelopes used articleBindings as their lookup index. During the
+ * explicit v1/v2 upgrade those identities become legacy v3 variants. From v3
+ * onward articleVariants is the sole editable authority and the envelope index
+ * is derived when the immutable version is saved.
+ */
+export function addLegacyArticleBindingsToV3(content: TemplateContentV2, bindings: readonly ArticleBinding[]): TemplateContentV2 {
+  let next = content;
+  const known = new Set(next.articleVariants.map(articleIdentity));
+  for (const binding of bindings) {
+    if (known.has(articleIdentity(binding))) continue;
+    [next] = upsertArticleVariantV3(next, binding);
+    known.add(articleIdentity(binding));
+  }
+  return next;
+}
+
+export function articleBindingsFromTemplateV3(content: TemplateContentV2): ArticleBinding[] {
+  return content.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey }));
 }
 
 export function createTemplateImageNodeV2(assetId: string, layerId: string): ImageNodeV2 {
@@ -80,8 +121,8 @@ export function ComponentLibrary({ config, session }: Props) {
   const [upgradedFromV1, setUpgradedFromV1] = useState(false);
   const [assetMismatch, setAssetMismatch] = useState(false);
   const [undoStack, setUndoStack] = useState<TemplateContentV2[]>([]);
-  const [binding, setBinding] = useState<ArticleBinding>({ sourceId: "", entityType: "connector", articleKey: "" });
   const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
+  const [selectedArticleVariantId, setSelectedArticleVariantId] = useState<string | null>(null);
   const [pendingLogicalContactId, setPendingLogicalContactId] = useState<string | null>(null);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
@@ -93,14 +134,38 @@ export function ComponentLibrary({ config, session }: Props) {
   const selectedPoint = selectedContactPoint ?? selectedBundlePort;
   const selectedLogicalContact = selectedContactPoint ? draft.content.logicalContacts.find(contact => contact.id === selectedContactPoint.logicalContactId) : undefined;
   const editableNode = selected?.node && isEditableConstantNode(selected.node) ? selected.node : null;
+  const compatibilityContent = useMemo(() => projectTemplateContentV3CoreToV2(draft.content), [draft.content]);
+  const articlePreview = useMemo(() => {
+    if (!selectedArticleVariantId) return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: null };
+    try {
+      const materialized = materializeArticleVariantV3(draft.content, selectedArticleVariantId);
+      const rows = materializeArticleContactRowsV3(draft.content, materialized.variant);
+      const groupNames = new Map(draft.content.contactTypeGroups.map(group => [group.id, group.name]));
+      const counts = materialized.repeatCounts.map(item => `${groupNames.get(item.contactTypeGroupId) ?? "Группа"}: ${item.requestedContactCount}`);
+      const configured = materialized.variant.contactGroups?.reduce((sum, group) => sum + group.contactCount, 0);
+      const summary = counts.length ? counts.join(" · ") : configured === undefined ? "используются параметры шаблона" : `${configured} контактов`;
+      return { values: materialized.overrides, rows, message: `${materialized.variant.articleKey}: ${summary}`, error: null };
+    } catch (caught) {
+      return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: errorText(caught) };
+    }
+  }, [draft.content, selectedArticleVariantId]);
+  const effectivePreviewParameterValues = useMemo<Readonly<Record<string, ParameterValueV2>>>(() => ({
+    ...previewParameterValues,
+    ...articlePreview.values,
+  }), [articlePreview.values, previewParameterValues]);
 
   async function loadList() { try { setItems(await api.list()); setError(null); } catch (caught) { setError(errorText(caught)); } }
   useEffect(() => { void loadList(); }, [api]);
+  useEffect(() => {
+    if (selectedArticleVariantId && !draft.content.articleVariants.some(variant => variant.id === selectedArticleVariantId))
+      setSelectedArticleVariantId(null);
+  }, [draft.content.articleVariants, selectedArticleVariantId]);
 
   function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean) {
-    setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, articleBindings: [...item.articleBindings], assets: [...item.assets], content: structuredClone(content) });
+    setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(content) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setPendingLogicalContactId(null);
+    setSelectedArticleVariantId(null);
     setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
   }
@@ -110,12 +175,18 @@ export function ComponentLibrary({ config, session }: Props) {
     try {
       const item = await api.get(summary.templateId);
       if (isTemplateContentV1(item.content)) {
-        const upgraded = upgradeComponentTemplateContentV1(item.content, item.assets);
-        setLoadedDraft(item, upgraded.content, upgraded.diagnostics, true, false); setError(null);
-      } else {
+        const upgraded = upgradeComponentTemplateContentV1ToV3(item.content, item.assets);
+        setLoadedDraft(item, addLegacyArticleBindingsToV3(upgraded.content, item.articleBindings), upgraded.diagnostics, true, false); setError(null);
+      } else if (isTemplateContentV2(item.content)) {
+        const upgraded = upgradeComponentTemplateContentV2(item.content);
+        const content = addLegacyArticleBindingsToV3(upgraded.content, item.articleBindings);
+        const reconciliation = reconcileTemplateEnvelopeAssets(content, item.assets), mismatch = reconciliation.diagnostics.length > 0;
+        setLoadedDraft(item, content, [...upgraded.diagnostics, ...reconciliation.diagnostics], true, mismatch);
+        setError(mismatch ? "Метаданные изображений расходятся с версией шаблона. Сохранение заблокировано." : null);
+      } else if (isTemplateContentV3(item.content)) {
         const reconciliation = reconcileTemplateEnvelopeAssets(item.content, item.assets), mismatch = reconciliation.diagnostics.length > 0;
         setLoadedDraft(item, item.content, reconciliation.diagnostics, false, mismatch);
-        setError(mismatch ? "Метаданные изображений v2 расходятся с версией шаблона. Сохранение заблокировано." : null);
+        setError(mismatch ? "Метаданные изображений расходятся с версией шаблона. Сохранение заблокировано." : null);
       }
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
@@ -124,6 +195,7 @@ export function ComponentLibrary({ config, session }: Props) {
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
     setSelectedId(null); setUndoStack([]); setDirty(true); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
     setPendingLogicalContactId(null);
+    setSelectedArticleVariantId(null);
     setPreviewParameterValues({});
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
@@ -149,17 +221,24 @@ export function ComponentLibrary({ config, session }: Props) {
     if (reconciliation.diagnostics.length) { setAssetMismatch(true); setDiagnostics(reconciliation.diagnostics); setError(reconciliation.diagnostics[0]!.message); return null; }
     const validation = validateTemplateContentV2(draft.content);
     if (!validation.valid) { setDiagnostics(validation.diagnostics); setError(validation.diagnostics[0]!.message); return null; }
-    try { expandTemplateRepeatsV2(draft.content); }
+    try {
+      expandTemplateRepeatsV2(compatibilityContent);
+      for (const variant of draft.content.articleVariants) {
+        const materialized = materializeArticleVariantV3(draft.content, variant);
+        expandTemplateRepeatsV2(materialized.repeatContent, materialized.repeatOptions);
+        materializeArticleContactRowsV3(draft.content, materialized.variant);
+      }
+    }
     catch (caught) { setError(errorText(caught)); return null; }
-    const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: draft.articleBindings, content: draft.content };
+    const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: draft.content };
     return draft.templateId ? api.save(draft.templateId, { expectedVersion: draft.version, ...body }) : api.create(body);
   }
 
   function applyPersisted(result: ComponentTemplate, resetUndo = false) {
-    if (!isTemplateContentV2(result.content)) throw new Error("Сервер вернул устаревший формат после сохранения v2.");
+    if (!isTemplateContentV3(result.content)) throw new Error("Сервер вернул устаревший формат после сохранения v3.");
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, articleBindings: [...result.articleBindings], assets: [...result.assets], content: structuredClone(result.content) });
+    setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(result.content) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
@@ -223,29 +302,38 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!activeView) return;
     try { const [content, id] = addLayerV2(draft.content, activeView.id, ""); changeContent(content, null); setActiveLayerIds(current => ({ ...current, [activeView.id]: id })); } catch (caught) { setError(errorText(caught)); }
   }
-  function addBinding() {
-    const next = { sourceId: binding.sourceId.trim(), entityType: binding.entityType.trim(), articleKey: binding.articleKey.trim() };
-    if (!next.sourceId || !next.entityType || !next.articleKey) { setError("Для связи заполните источник, тип записи и артикул."); return; }
-    if (draft.articleBindings.some(item => item.sourceId === next.sourceId && item.entityType === next.entityType && item.articleKey === next.articleKey)) { setError("Такая связь с артикулом уже добавлена."); return; }
-    setDraft(current => ({ ...current, articleBindings: [...current.articleBindings, next] })); setBinding(current => ({ ...current, articleKey: "" })); markDirty(); setError(null);
-  }
   const resolveAssetUrl = (assetId: string) => draft.templateId && draft.version > 0 ? api.assetContentUrl(draft.templateId, draft.version, assetId) : "";
 
   return <div className="component-library">
-    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · ГРАФИЧЕСКИЕ ШАБЛОНЫ V2</p><h1>Библиотека</h1><p>Виды Э4, чертежа и монтажные изображения хранятся отдельно от справочных характеристик.</p></div><button className="primary-action" type="button" onClick={startNew} disabled={busy}>+ Новый шаблон</button></header>
+    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · ГРАФИЧЕСКИЕ ШАБЛОНЫ V3</p><h1>Библиотека</h1><p>Виды Э4, чертежа и монтажные изображения хранятся отдельно от справочных характеристик.</p></div><button className="primary-action" type="button" onClick={startNew} disabled={busy}>+ Новый шаблон</button></header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="Закрыть">×</button></div>}
-    {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыт шаблон v1.</strong><span>Он преобразован только в памяти и будет сохранён как новая версия v2.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
+    {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыта прежняя версия шаблона.</strong><span>Она преобразована только в памяти и будет сохранена как новая версия v3.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
     {!upgradedFromV1 && diagnostics.length > 0 && <div className="library-diagnostics" role="alert">{diagnostics.map(item => <span key={`${item.code}/${item.path}`}>{item.path}: {item.message}</span>)}</div>}
     {saved && <div className="success-banner" role="status"><span>{saved}. Размещённые ранее экземпляры сохранят закреплённую версию.</span><button onClick={() => setSaved(null)} aria-label="Закрыть">×</button></div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
       <section className="library-editor" aria-busy={busy} inert={busy}>
         <div className="library-metadata"><label>Код / серия<input value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Название<input value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} /></label><div><span>{draft.templateId ? `Версия ${draft.version}` : "Новый шаблон"}</span><button className="primary-action" onClick={() => void save()} disabled={busy || assetMismatch}>{busy ? "Сохраняем…" : draft.templateId ? "Создать версию" : "Сохранить"}</button></div></div>
-        <Bindings draft={draft} binding={binding} setBinding={setBinding} addBinding={addBinding} setDraft={setDraft} markDirty={markDirty} />
+        <TemplateSeriesPanelV3
+          content={draft.content}
+          selectedArticleVariantId={selectedArticleVariantId}
+          articlePreviewMessage={articlePreview.message}
+          articlePreviewError={articlePreview.error}
+          articlePreviewRows={articlePreview.rows}
+          onSelectArticleVariant={variantId => { setSelectedArticleVariantId(variantId); setPreviewParameterValues({}); }}
+          onAddContactTypeGroup={name => command(() => addContactTypeGroupV3(draft.content, name)[0])}
+          onRenameContactTypeGroup={(groupId, name) => command(() => renameContactTypeGroupV3(draft.content, groupId, name))}
+          onDeleteContactTypeGroup={groupId => command(() => deleteContactTypeGroupV3(draft.content, groupId))}
+          onAddArticleVariant={input => command(() => upsertArticleVariantV3(draft.content, input)[0])}
+          onUpdateArticleVariant={(variantId, input) => command(() => upsertArticleVariantV3(draft.content, { id: variantId, ...input })[0])}
+          onDeleteArticleVariant={variantId => { if (selectedArticleVariantId === variantId) setSelectedArticleVariantId(null); command(() => removeArticleVariantV3(draft.content, variantId)); }}
+          onSetArticleContactGroup={(variantId, groupId, count, terminals) => command(() => setArticleVariantContactGroupV3(draft.content, variantId, groupId, count, terminals))}
+          onRemoveArticleContactGroup={(variantId, groupId) => command(() => removeArticleVariantContactGroupV3(draft.content, variantId, groupId))}
+        />
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
         <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
         {activeView && <TemplateContactsPanelV2
           key={`${activeView.id}:${pendingLogicalContactId ?? ""}`}
-          content={draft.content}
+          content={compatibilityContent}
           activeViewId={activeView.id}
           preferredLogicalContactId={pendingLogicalContactId}
           onCreateLogicalContact={appendContact}
@@ -267,7 +355,7 @@ export function ComponentLibrary({ config, session }: Props) {
           onDelete={id => { const fallback = activeView.layers.find(item => item.id !== id); if (!fallback) return; command(() => deleteLayerV2(draft.content, activeView.id, id), null); setActiveLayerIds(current => ({ ...current, [activeView.id]: fallback.id })); }}
         />}
         {activeView && <TemplateParametersPanelV2
-          content={draft.content}
+          content={compatibilityContent}
           activeViewId={activeView.id}
           activeLayerId={selected?.layer.id ?? activeLayer?.id ?? null}
           selectedNodeId={selected?.node.id ?? null}
@@ -309,12 +397,13 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
         <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={draft.content} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={previewParameterValues} />}
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
                point={selectedContactPoint}
                logical={selectedLogicalContact}
+               groups={draft.content.contactTypeGroups}
                editLogical={changes => command(() => editLogicalContactV2(draft.content, selectedLogicalContact.id, changes))}
                editPoint={changes => command(() => editContactPointV2(draft.content, activeView.id, selectedContactPoint.id, changes))}
                remove={() => command(() => deleteContactPointV2(draft.content, activeView.id, selectedContactPoint.id), null)}
@@ -331,21 +420,20 @@ export function ComponentLibrary({ config, session }: Props) {
   </div>;
 }
 
-function Bindings({ draft, binding, setBinding, addBinding, setDraft, markDirty }: { draft: Draft; binding: ArticleBinding; setBinding: React.Dispatch<React.SetStateAction<ArticleBinding>>; addBinding: () => void; setDraft: React.Dispatch<React.SetStateAction<Draft>>; markDirty: () => void }) {
-  return <details className="library-bindings"><summary>Связи с артикулами <span>{draft.articleBindings.length}</span></summary><div className="binding-form"><label>Источник<input value={binding.sourceId} onChange={event => setBinding(current => ({ ...current, sourceId: event.target.value }))} placeholder="БД.СОЕД" /></label><label>Тип записи<input value={binding.entityType} onChange={event => setBinding(current => ({ ...current, entityType: event.target.value }))} /></label><label>Артикул<input value={binding.articleKey} onChange={event => setBinding(current => ({ ...current, articleKey: event.target.value }))} placeholder="B2B-XH-A" /></label><button className="secondary-action" type="button" onClick={addBinding}>Добавить связь</button></div>{draft.articleBindings.length > 0 && <div className="binding-list">{draft.articleBindings.map((item, index) => <span key={`${item.sourceId}/${item.entityType}/${item.articleKey}`}>{item.sourceId} · {item.entityType} · <strong>{item.articleKey}</strong><button type="button" aria-label={`Удалить связь ${item.articleKey}`} onClick={() => { setDraft(current => ({ ...current, articleBindings: current.articleBindings.filter((_, bindingIndex) => bindingIndex !== index) })); markDirty(); }}>×</button></span>)}</div>}</details>;
-}
-
 function ViewAndLayerProperties({ content, viewId, layerId, change, command, selectLayer, selectView }: { content: TemplateContentV2; viewId: string; layerId: string | null; change: (content: TemplateContentV2, selection?: string | null) => void; command: (action: () => TemplateContentV2, selection?: string | null) => void; selectLayer: (id: string) => void; selectView: (id: string) => void }) {
   const view = content.views.find(item => item.id === viewId)!, layer = view.layers.find(item => item.id === layerId);
   return <><label>Название вида<input value={view.name} onChange={event => command(() => renameViewV2(content, view.id, event.target.value))} /></label>{view.kind === "additional" && <button className="danger-action" onClick={() => { const fallback = content.views.find(item => item.id !== view.id)!; command(() => deleteAdditionalViewV2(content, view.id), null); selectView(fallback.id); }}>Удалить дополнительный вид</button>}{layer && <><label>Название слоя<input value={layer.name} disabled={layer.locked} onChange={event => command(() => renameLayerV2(content, view.id, layer.id, event.target.value))} /></label><div className="property-order"><button disabled={layer.locked || view.layers[0]!.id === layer.id} onClick={() => command(() => reorderLayerV2(content, view.id, layer.id, view.layers.indexOf(layer) - 1))}>Выше</button><button disabled={layer.locked || view.layers.at(-1)!.id === layer.id} onClick={() => command(() => reorderLayerV2(content, view.id, layer.id, view.layers.indexOf(layer) + 1))}>Ниже</button></div><button className="danger-action" disabled={layer.locked || view.layers.length === 1} onClick={() => { const fallback = view.layers.find(item => item.id !== layer.id)!; change(deleteLayerV2(content, view.id, layer.id), null); selectLayer(fallback.id); }}>Удалить слой</button></>}</>;
 }
 
-function ContactPointProperties({ point, logical, editLogical, editPoint, remove }: { point: ViewContactPointV2; logical: LogicalContactV2; editLogical: (changes: LogicalContactEditV2) => void; editPoint: (changes: ContactPointEditV2) => void; remove: () => void }) {
+function ContactPointProperties({ point, logical, groups, editLogical, editPoint, remove }: { point: ViewContactPointV2; logical: LogicalContactV2; groups: TemplateContentV2["contactTypeGroups"]; editLogical: (changes: LogicalContactEditV2) => void; editPoint: (changes: ContactPointEditV2) => void; remove: () => void }) {
   const x = constantValue(point.x), y = constantValue(point.y);
   return <>
+    <strong>Общие данные контакта</strong>
     <label>Номер контакта<input value={logical.number} onChange={event => editLogical({ number: event.target.value })} /></label>
     <label>Название<input value={logical.name} onChange={event => editLogical({ name: event.target.value })} /></label>
-    <label>Тип контакта<input value={logical.contactType} onChange={event => editLogical({ contactType: event.target.value })} placeholder="Сигнальный" /></label>
+    <label>Цепь<input value={logical.circuitText ?? ""} onChange={event => editLogical({ circuitText: event.target.value })} placeholder="Например, DATA+" /></label>
+    <label>Группа контакта<select value={logical.contactTypeGroupId ?? ""} onChange={event => editLogical({ contactTypeGroupId: event.target.value || null })}><option value="">Не задана</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+    <strong>Точка в активном виде</strong>
     {x !== null && y !== null ? <div className="coordinate-grid">
       <NumericField label="X" value={x} change={value => editPoint({ x: constantExpressionV2(value) })} />
       <NumericField label="Y" value={y} change={value => editPoint({ y: constantExpressionV2(value) })} />

@@ -482,7 +482,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                 SELECT COUNT(*)
                 FROM component_template_versions v
                 WHERE (SELECT COUNT(*) FROM component_template_article_bindings b
-                       WHERE b.template_id = v.template_id AND b.version = v.version) > 64
+                       WHERE b.template_id = v.template_id AND b.version = v.version) > 500
                    OR EXISTS (
                        SELECT 1 FROM component_template_article_bindings b
                        WHERE b.template_id = v.template_id AND b.version = v.version

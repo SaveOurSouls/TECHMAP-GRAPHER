@@ -84,6 +84,7 @@ M2-03: [индекс, API поиска и сохранённые фильтры]
 M2-05/M2-06: [библиотека и первый редактор шаблонов](docs/m2-05-component-library.md),
 [изображения и рабочий формат v2](docs/m2-06-template-assets.md).
 M2-07: [параметры и повторяемые сегменты](docs/m2-07-template-repeat.md).
+M2-08: [общие контакты видов и варианты артикула](docs/m2-08-template-contacts.md).
 Выпуск ТЗ и инструкции требует отдельной команды владельца.
 
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
@@ -93,7 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-15.ps1
 ```
 
 Готовый локальный артефакт создаётся в
-`artifacts/m2-07/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
+`artifacts/m2-08/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
 Внутри ZIP находится `Examples/reference-catalog.xlsx` с инструкцией для проверки
 универсального импорта.
 

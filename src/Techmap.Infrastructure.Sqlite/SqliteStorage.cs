@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1013,6 +1013,57 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             "schema_version IN (1, 2, 3)",
             StringComparison.Ordinal);
 
+    private const string ComponentTemplateArticleIndexV2MigrationId = "M2-08-component-template-article-index-v2";
+    private const string ComponentTemplateArticleIndexV2SchemaSql =
+        """
+        DROP TRIGGER prevent_component_template_binding_late_insert;
+        DROP TRIGGER prevent_component_template_binding_update;
+        DROP TRIGGER prevent_component_template_binding_delete;
+        DROP INDEX ix_component_template_bindings_article;
+
+        ALTER TABLE component_template_article_bindings RENAME TO component_template_article_bindings_v1;
+        CREATE TABLE component_template_article_bindings (
+            template_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            binding_ordinal INTEGER NOT NULL CHECK (binding_ordinal >= 0 AND binding_ordinal < 500),
+            source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 128),
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            article_key TEXT NOT NULL CHECK (length(article_key) BETWEEN 1 AND 512),
+            PRIMARY KEY (template_id, version, binding_ordinal),
+            UNIQUE (template_id, version, source_id, entity_type, article_key),
+            FOREIGN KEY (template_id, version)
+                REFERENCES component_template_versions(template_id, version)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        ) STRICT;
+        INSERT INTO component_template_article_bindings
+            (template_id, version, binding_ordinal, source_id, entity_type, article_key)
+        SELECT template_id, version, binding_ordinal, source_id, entity_type, article_key
+        FROM component_template_article_bindings_v1;
+        DROP TABLE component_template_article_bindings_v1;
+
+        CREATE INDEX ix_component_template_bindings_article
+            ON component_template_article_bindings(source_id, entity_type, article_key);
+        CREATE TRIGGER prevent_component_template_binding_late_insert
+        BEFORE INSERT ON component_template_article_bindings
+        WHEN NEW.version <= (
+            SELECT current_version
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+        CREATE TRIGGER prevent_component_template_binding_update
+        BEFORE UPDATE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+        CREATE TRIGGER prevent_component_template_binding_delete
+        BEFORE DELETE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1424,6 +1475,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 11, MigrationId: ComponentTemplateAssetMigrationId, Sql: ComponentTemplateAssetSchemaSql),
             (Version: 12, MigrationId: ComponentTemplateContentV2MigrationId, Sql: ComponentTemplateContentV2SchemaSql),
             (Version: 13, MigrationId: ComponentTemplateContentV3MigrationId, Sql: ComponentTemplateContentV3SchemaSql),
+            (Version: 14, MigrationId: ComponentTemplateArticleIndexV2MigrationId, Sql: ComponentTemplateArticleIndexV2SchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1536,6 +1588,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateContentV3SchemaSql);
         }
 
+        if (schemaVersion >= 14)
+        {
+            ExecuteSchemaSql(expected, ComponentTemplateArticleIndexV2SchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1644,6 +1701,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateContentV3MigrationId,
                 Sql: ComponentTemplateContentV3SchemaSql,
                 Description: "Component template content schema version 3"),
+            13 => (
+                Version: 14,
+                MigrationId: ComponentTemplateArticleIndexV2MigrationId,
+                Sql: ComponentTemplateArticleIndexV2SchemaSql,
+                Description: "Component template article index capacity 500"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1720,7 +1782,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13))
             {
                 return false;
             }

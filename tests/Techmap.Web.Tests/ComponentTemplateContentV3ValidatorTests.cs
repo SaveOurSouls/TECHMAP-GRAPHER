@@ -133,6 +133,83 @@ public sealed class ComponentTemplateContentV3ValidatorTests
         Assert.Equal("content.articleVariants[0].contactGroups", error.Field);
     }
 
+    [Fact]
+    public void Repeat_domains_require_one_explicit_contact_type_group()
+    {
+        var missing = ValidContent();
+        AddCountParameter(missing, "10000000-0000-4000-8000-000000000007");
+        missing["logicalContacts"]![0]!["contactTypeGroupId"] = null;
+        missing["repeaters"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = "10000000-0000-4000-8000-000000000008",
+            ["countParameterId"] = "10000000-0000-4000-8000-000000000007",
+            ["logicalContactIds"] = new JsonArray(ContactId),
+        });
+        var missingError = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV3Validator.Validate(Element(missing)));
+        Assert.Equal("content.repeaters[0].logicalContactIds[0]", missingError.Field);
+
+        var mixed = ValidContent();
+        AddCountParameter(mixed, "10000000-0000-4000-8000-000000000007");
+        mixed["contactTypeGroups"]!.AsArray().Add(new JsonObject { ["id"] = OtherGroupId, ["name"] = "Силовой" });
+        mixed["logicalContacts"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = "10000000-0000-4000-8000-000000000008", ["number"] = "2", ["name"] = "Контакт 2",
+            ["circuitText"] = null, ["contactTypeGroupId"] = OtherGroupId,
+        });
+        mixed["repeaters"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = "10000000-0000-4000-8000-000000000009",
+            ["countParameterId"] = "10000000-0000-4000-8000-000000000007",
+            ["logicalContactIds"] = new JsonArray(ContactId, "10000000-0000-4000-8000-000000000008"),
+        });
+        var mixedError = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV3Validator.Validate(Element(mixed)));
+        Assert.Equal("content.repeaters[0].logicalContactIds", mixedError.Field);
+    }
+
+    [Fact]
+    public void Article_materialization_validates_overrides_and_the_aggregate_contact_budget()
+    {
+        var invalidOverride = ValidContent();
+        AddCountParameter(invalidOverride, "10000000-0000-4000-8000-000000000007", maximum: 10);
+        invalidOverride["articleVariants"]![0]!["parameterValues"] = new JsonArray(new JsonObject
+        {
+            ["parameterId"] = "10000000-0000-4000-8000-000000000007", ["value"] = 11,
+        });
+        var overrideError = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV3Validator.Validate(Element(invalidOverride)));
+        Assert.Equal("content.articleVariants[0].parameterValues", overrideError.Field);
+
+        var budget = ValidContent();
+        const string secondContactId = "10000000-0000-4000-8000-000000000007";
+        const string fixedContactId = "10000000-0000-4000-8000-000000000008";
+        const string signalCountId = "10000000-0000-4000-8000-000000000009";
+        const string powerCountId = "10000000-0000-4000-8000-00000000000a";
+        budget["contactTypeGroups"]!.AsArray().Add(new JsonObject { ["id"] = OtherGroupId, ["name"] = "Силовой" });
+        budget["logicalContacts"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = secondContactId, ["number"] = "2", ["name"] = "Контакт 2", ["circuitText"] = null,
+            ["contactTypeGroupId"] = OtherGroupId,
+        });
+        budget["logicalContacts"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = fixedContactId, ["number"] = "3", ["name"] = "Служебный", ["circuitText"] = null,
+            ["contactTypeGroupId"] = null,
+        });
+        AddCountParameter(budget, signalCountId);
+        AddCountParameter(budget, powerCountId);
+        budget["repeaters"] = new JsonArray(
+            new JsonObject { ["id"] = "10000000-0000-4000-8000-00000000000b", ["countParameterId"] = signalCountId, ["logicalContactIds"] = new JsonArray(ContactId) },
+            new JsonObject { ["id"] = "10000000-0000-4000-8000-00000000000c", ["countParameterId"] = powerCountId, ["logicalContactIds"] = new JsonArray(secondContactId) });
+        budget["articleVariants"]![0]!["contactGroups"] = new JsonArray(
+            new JsonObject { ["contactTypeGroupId"] = SignalGroupId, ["contactCount"] = 1_000, ["allowedTerminalArticleKeys"] = new JsonArray() },
+            new JsonObject { ["contactTypeGroupId"] = OtherGroupId, ["contactCount"] = 1_000, ["allowedTerminalArticleKeys"] = new JsonArray() });
+        var budgetError = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV3Validator.Validate(Element(budget)));
+        Assert.Equal("content.articleVariants[0].contactGroups", budgetError.Field);
+    }
+
     internal static JsonObject ValidContent()
     {
         var content = JsonNode.Parse(ComponentTemplateV2StoreTests.V2Content)!.AsObject();
@@ -186,11 +263,21 @@ public sealed class ComponentTemplateContentV3ValidatorTests
 
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
+    internal static IReadOnlyList<ComponentTemplateArticleBinding> ValidArticleBindings =>
+        [new("technology-database", "connector", "B2B-XH-A")];
+
     private static JsonObject Constant(double value) => new()
     {
         ["kind"] = "constant",
         ["value"] = value,
     };
+
+    private static void AddCountParameter(JsonObject content, string id, int maximum = 1_000) =>
+        content["parameters"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = id, ["name"] = "Количество", ["type"] = "integer", ["unit"] = "шт",
+            ["defaultValue"] = 1, ["minimum"] = 1, ["maximum"] = maximum, ["formula"] = null,
+        });
 
     private static JsonElement Element(JsonNode value)
     {

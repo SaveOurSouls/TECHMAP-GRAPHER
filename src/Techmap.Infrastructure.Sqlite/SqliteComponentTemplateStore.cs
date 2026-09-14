@@ -20,7 +20,7 @@ public sealed class SqliteComponentTemplateStore(
     public const int MaximumContentBytes = 1024 * 1024;
     public const int MaximumTemplates = 500;
     public const int MaximumVersionsPerTemplate = 100;
-    public const int MaximumArticleBindings = 64;
+    public const int MaximumArticleBindings = 500;
     public const int MaximumViews = 34;
     public const int MaximumPrimitives = 5_000;
     public const int MaximumContactPoints = 2_000;
@@ -437,6 +437,10 @@ public sealed class SqliteComponentTemplateStore(
             return entity != 0 ? entity : StringComparer.Ordinal.Compare(left.ArticleKey, right.ArticleKey);
         });
         var canonicalContent = ValidateAndCanonicalizeContent(contentJson, schemaVersion);
+        if (schemaVersion == CurrentContentSchemaVersion)
+        {
+            ValidateArticleBindingsAuthority(canonicalContent, normalizedBindings);
+        }
         return new ValidatedInput(
             normalizedCode,
             normalizedCode.ToUpperInvariant(),
@@ -445,6 +449,30 @@ public sealed class SqliteComponentTemplateStore(
             schemaVersion,
             canonicalContent,
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalContent))));
+    }
+
+    private static void ValidateArticleBindingsAuthority(
+        string canonicalContent,
+        IReadOnlyList<ComponentTemplateArticleBinding> normalizedBindings)
+    {
+        using var document = JsonDocument.Parse(canonicalContent);
+        var variants = document.RootElement.GetProperty("articleVariants");
+        var identities = variants.EnumerateArray()
+            .Select(variant => new ComponentTemplateArticleBinding(
+                NormalizeKey(variant.GetProperty("sourceId").GetString()!, 128, "content.articleVariants.sourceId", lower: true),
+                NormalizeKey(variant.GetProperty("entityType").GetString()!, 64, "content.articleVariants.entityType", lower: true),
+                NormalizeKey(variant.GetProperty("articleKey").GetString()!, 512, "content.articleVariants.articleKey", lower: false)))
+            .OrderBy(binding => binding.SourceId, StringComparer.Ordinal)
+            .ThenBy(binding => binding.EntityType, StringComparer.Ordinal)
+            .ThenBy(binding => binding.ArticleKey, StringComparer.Ordinal)
+            .ToArray();
+        if (!identities.SequenceEqual(normalizedBindings))
+        {
+            throw Invalid(
+                "component_template_bindings_invalid",
+                "For schemaVersion 3 articleBindings must exactly match articleVariants.",
+                "articleBindings");
+        }
     }
 
     internal static string ValidateAndCanonicalizeContent(string contentJson, int schemaVersion)

@@ -42,8 +42,9 @@ internal static partial class ComponentTemplateContentV3Validator
         var groupNames = ValidateContactTypeGroups(groups);
         var groupIds = groupNames.Keys.ToHashSet(StringComparer.Ordinal);
         var contactGroups = ValidateLogicalContacts(contacts, groupIds);
-        ValidateArticleVariants(repeaters, variants, groupIds, contactGroups);
         ValidateV2CompatibleCore(content, groupNames);
+        var materializations = ValidateArticleVariants(repeaters, variants, groupIds, contactGroups);
+        ValidateArticleMaterializations(content, groupNames, repeaters, contactGroups, materializations);
         ValidateNewIdsAgainstCore(content);
     }
 
@@ -88,7 +89,7 @@ internal static partial class ComponentTemplateContentV3Validator
         return result;
     }
 
-    private static void ValidateArticleVariants(
+    private static IReadOnlyList<ArticleMaterialization> ValidateArticleVariants(
         JsonElement repeaters,
         JsonElement variants,
         IReadOnlySet<string> validGroupIds,
@@ -96,35 +97,37 @@ internal static partial class ComponentTemplateContentV3Validator
     {
         var repeatCountParameterIds = new HashSet<string>(StringComparer.Ordinal);
         var domainsByGroup = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        var repeatDomainByGroup = new Dictionary<string, string>(StringComparer.Ordinal);
         var repeatedContactIds = new HashSet<string>(StringComparer.Ordinal);
+        var domainIndex = 0;
         foreach (var domain in repeaters.EnumerateArray())
         {
-            if (domain.ValueKind != JsonValueKind.Object || !domain.TryGetProperty("countParameterId", out var countId) ||
-                countId.ValueKind != JsonValueKind.String || !domain.TryGetProperty("logicalContactIds", out var ids) ||
-                ids.ValueKind != JsonValueKind.Array)
-            {
-                continue; // The shared v2 structural validator reports the exact error.
-            }
+            var domainPath = $"content.repeaters[{domainIndex++}]";
+            var countId = domain.GetProperty("countParameterId");
+            var ids = domain.GetProperty("logicalContactIds");
             repeatCountParameterIds.Add(countId.GetString()!);
             string? domainGroup = null;
-            var homogeneous = true;
             var stride = 0;
+            var contactIndex = 0;
             foreach (var idValue in ids.EnumerateArray())
             {
-                if (idValue.ValueKind != JsonValueKind.String) { homogeneous = false; continue; }
                 var contactId = idValue.GetString()!;
                 repeatedContactIds.Add(contactId);
-                if (!contactGroups.TryGetValue(contactId, out var groupId) || groupId is null) { homogeneous = false; continue; }
+                var groupId = contactGroups[contactId];
+                if (groupId is null)
+                    Throw("Every repeated contact must belong to a contact type group.", $"{domainPath}.logicalContactIds[{contactIndex}]");
                 if (domainGroup is null) domainGroup = groupId;
-                else if (!string.Equals(domainGroup, groupId, StringComparison.Ordinal)) homogeneous = false;
+                else if (!string.Equals(domainGroup, groupId, StringComparison.Ordinal))
+                    Throw("A repeat domain cannot contain contacts from different contact type groups.", domainPath + ".logicalContactIds");
                 stride++;
+                contactIndex++;
             }
-            if (homogeneous && domainGroup is not null && stride > 0)
-            {
-                if (!domainsByGroup.TryGetValue(domainGroup, out var groupDomains))
-                    domainsByGroup.Add(domainGroup, groupDomains = []);
-                groupDomains.Add(stride);
-            }
+            if (domainGroup is null || stride == 0)
+                Throw("A repeat domain must contain at least one contact with a contact type group.", domainPath + ".logicalContactIds");
+            if (!domainsByGroup.TryGetValue(domainGroup, out var groupDomains))
+                domainsByGroup.Add(domainGroup, groupDomains = []);
+            groupDomains.Add(stride);
+            repeatDomainByGroup.TryAdd(domainGroup, countId.GetString()!);
         }
 
         var fixedCounts = validGroupIds.ToDictionary(id => id, _ => 0, StringComparer.Ordinal);
@@ -134,6 +137,7 @@ internal static partial class ComponentTemplateContentV3Validator
         }
 
         var identities = new HashSet<string>(StringComparer.Ordinal);
+        var materializations = new List<ArticleMaterialization>();
         var variantIndex = 0;
         foreach (var variant in variants.EnumerateArray())
         {
@@ -148,8 +152,22 @@ internal static partial class ComponentTemplateContentV3Validator
                 Throw("An article variant identity cannot be repeated.", path + ".articleKey");
 
             var parameterValues = RequiredArray(variant, "parameterValues", path + ".parameterValues");
+            var overrides = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var parameterValue in parameterValues.EnumerateArray())
+            {
+                // The baseline v2 projection above already validated the exact
+                // entry shape, references and uniqueness. Keep the construction
+                // deterministic so malformed input never leaks ArgumentException.
+                overrides.TryAdd(
+                    parameterValue.GetProperty("parameterId").GetString()!,
+                    parameterValue.GetProperty("value").Clone());
+            }
             var contactConfiguration = variant.GetProperty("contactGroups");
-            if (contactConfiguration.ValueKind == JsonValueKind.Null) continue;
+            if (contactConfiguration.ValueKind == JsonValueKind.Null)
+            {
+                materializations.Add(new ArticleMaterialization(path, overrides));
+                continue;
+            }
             if (contactConfiguration.ValueKind != JsonValueKind.Array)
                 Throw("Article contactGroups must be null or an array.", path + ".contactGroups");
 
@@ -206,6 +224,41 @@ internal static partial class ComponentTemplateContentV3Validator
                 var repeatedCount = targetCount - fixedCount;
                 if (repeatedCount <= 0 || repeatedCount % groupDomains[0] != 0 || repeatedCount / groupDomains[0] > 1_000)
                     Throw("Article contact count cannot be produced by the contact group's repeat domain.", path + ".contactGroups");
+                overrides[repeatDomainByGroup[groupId]] =
+                    JsonSerializer.SerializeToElement(repeatedCount / groupDomains[0]);
+            }
+            materializations.Add(new ArticleMaterialization(path, overrides));
+        }
+        return materializations;
+    }
+
+    private static void ValidateArticleMaterializations(
+        JsonElement content,
+        IReadOnlyDictionary<string, string> groupNames,
+        JsonElement repeaters,
+        IReadOnlyDictionary<string, string?> contactGroups,
+        IReadOnlyList<ArticleMaterialization> materializations)
+    {
+        var repeatedContactIds = repeaters.EnumerateArray()
+            .SelectMany(domain => domain.GetProperty("logicalContactIds").EnumerateArray())
+            .Select(value => value.GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+        var fixedRows = contactGroups.Keys.Count(id => !repeatedContactIds.Contains(id));
+        foreach (var materialization in materializations)
+        {
+            var repeatCounts = ValidateV2CompatibleCore(content, groupNames, materialization.Overrides, materialization.Path);
+            long materializedRows = fixedRows;
+            foreach (var domain in repeaters.EnumerateArray())
+            {
+                var domainId = domain.GetProperty("id").GetString()!;
+                materializedRows += checked(
+                    repeatCounts[domainId] * domain.GetProperty("logicalContactIds").GetArrayLength());
+                if (materializedRows > ComponentTemplateContentV2Validator.MaximumLogicalContacts)
+                {
+                    Throw(
+                        $"An article cannot materialize more than {ComponentTemplateContentV2Validator.MaximumLogicalContacts} contact rows.",
+                        materialization.Path + ".contactGroups");
+                }
             }
         }
     }
@@ -228,7 +281,11 @@ internal static partial class ComponentTemplateContentV3Validator
         }
     }
 
-    private static void ValidateV2CompatibleCore(JsonElement content, IReadOnlyDictionary<string, string> groupNames)
+    private static IReadOnlyDictionary<string, long> ValidateV2CompatibleCore(
+        JsonElement content,
+        IReadOnlyDictionary<string, string> groupNames,
+        IReadOnlyDictionary<string, JsonElement>? parameterOverrides = null,
+        string? materializationPath = null)
     {
         var root = JsonNode.Parse(content.GetRawText())!.AsObject();
         root["schemaVersion"] = 2;
@@ -268,13 +325,18 @@ internal static partial class ComponentTemplateContentV3Validator
         using var projected = JsonDocument.Parse(root.ToJsonString());
         try
         {
-            ComponentTemplateContentV2Validator.Validate(projected.RootElement);
+            return ComponentTemplateContentV2Validator.ValidateMaterialized(projected.RootElement, parameterOverrides);
         }
         catch (ComponentTemplateException error)
         {
-            var field = error.Field?
+            var projectedField = error.Field?
                 .Replace("content.articleParameterPresets", "content.articleVariants", StringComparison.Ordinal)
                 .Replace(".values", ".parameterValues", StringComparison.Ordinal);
+            var field = materializationPath is null
+                ? projectedField
+                : projectedField?.StartsWith("content.articleVariants", StringComparison.Ordinal) == true
+                    ? projectedField
+                    : materializationPath + ".parameterValues";
             throw new ComponentTemplateException(error.Code, error.Message, field, error.CurrentVersion, error);
         }
     }
@@ -325,6 +387,10 @@ internal static partial class ComponentTemplateContentV3Validator
         RegisterArrayIds(content.GetProperty("contactTypeGroups"), "content.contactTypeGroups", "id");
         RegisterArrayIds(content.GetProperty("articleVariants"), "content.articleVariants", "id");
     }
+
+    private sealed record ArticleMaterialization(
+        string Path,
+        IReadOnlyDictionary<string, JsonElement> Overrides);
 
     private static JsonElement RequiredArray(JsonElement owner, string property, string path)
     {

@@ -8,7 +8,7 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateMigrationTests
 {
     [Fact]
-    public async Task Schema_twelve_migrates_directly_to_v3_without_rewriting_v2_template_versions()
+    public async Task Schema_twelve_migrates_to_current_without_rewriting_v2_template_versions()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-v3-migration", Guid.NewGuid().ToString("N"));
         var dataRoot = Path.Combine(root, "data");
@@ -71,12 +71,12 @@ public sealed class ComponentTemplateMigrationTests
             var store = new SqliteComponentTemplateStore(migrated, TimeProvider.System);
             var historical = store.GetVersion(templateId, 1);
             var v3 = store.Create(
-                "MIG-13", "New v3 template", [], 3,
+                "MIG-13", "New v3 template", ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 3,
                 ComponentTemplateContentV3ValidatorTests.ValidContentJson);
 
             Assert.True(migration.Migrated);
             Assert.Equal(12, migration.SourceSchemaVersion);
-            Assert.Equal(13, migration.TargetSchemaVersion);
+            Assert.Equal(SqliteStorage.CurrentSchemaVersion, migration.TargetSchemaVersion);
             Assert.Equal(2, historical.SchemaVersion);
             Assert.Equal(canonical, historical.ContentJson);
             Assert.Equal(3, v3.SchemaVersion);
@@ -85,6 +85,72 @@ public sealed class ComponentTemplateMigrationTests
         finally
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Schema_thirteen_to_fourteen_preserves_bindings_and_expands_the_ordinal_limit()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"techmap-schema-14-{Guid.NewGuid():N}.db");
+        try
+        {
+            File.WriteAllBytes(databasePath, []);
+            using var connection = Open(databasePath);
+            SqliteStorage.InitializeSchemaAtVersion(connection, 13);
+            using (var seed = connection.CreateCommand())
+            {
+                seed.CommandText =
+                    """
+                    INSERT INTO component_templates
+                        (template_id, current_version, current_code, current_name, normalized_code,
+                         created_utc, updated_utc, deleted_utc)
+                    VALUES ('10000000-0000-4000-8000-000000000001', 0, 'OLD', 'Old', 'OLD', 'now', 'now', NULL);
+                    INSERT INTO component_template_versions
+                        (template_id, version, schema_version, code, name, content_json,
+                         content_sha256, version_sha256, created_utc)
+                    VALUES ('10000000-0000-4000-8000-000000000001', 1, 1, 'OLD', 'Old', '{"schemaVersion":1}',
+                            lower(hex(randomblob(32))), lower(hex(randomblob(32))), 'now');
+                    INSERT INTO component_template_article_bindings
+                        (template_id, version, binding_ordinal, source_id, entity_type, article_key)
+                    VALUES ('10000000-0000-4000-8000-000000000001', 1, 63, 'db', 'connector', 'OLD-63');
+                    UPDATE component_templates SET current_version = 1
+                    WHERE template_id = '10000000-0000-4000-8000-000000000001';
+                    """;
+                seed.ExecuteNonQuery();
+            }
+
+            Assert.Equal(14, SqliteStorage.ApplyNextMigration(connection, 13));
+
+            using var verify = connection.CreateCommand();
+            verify.CommandText =
+                """
+                SELECT COUNT(*) FROM component_template_article_bindings
+                WHERE binding_ordinal = 63 AND article_key = 'OLD-63';
+                """;
+            Assert.Equal(1L, (long)verify.ExecuteScalar()!);
+
+            using var extended = connection.CreateCommand();
+            extended.CommandText =
+                """
+                INSERT INTO component_templates
+                    (template_id, current_version, current_code, current_name, normalized_code,
+                     created_utc, updated_utc, deleted_utc)
+                VALUES ('10000000-0000-4000-8000-000000000002', 0, 'NEW', 'New', 'NEW', 'now', 'now', NULL);
+                INSERT INTO component_template_versions
+                    (template_id, version, schema_version, code, name, content_json,
+                     content_sha256, version_sha256, created_utc)
+                VALUES ('10000000-0000-4000-8000-000000000002', 1, 1, 'NEW', 'New', '{"schemaVersion":1}',
+                        lower(hex(randomblob(32))), lower(hex(randomblob(32))), 'now');
+                INSERT INTO component_template_article_bindings
+                    (template_id, version, binding_ordinal, source_id, entity_type, article_key)
+                VALUES ('10000000-0000-4000-8000-000000000002', 1, 64, 'db', 'connector', 'NEW-64');
+                """;
+            extended.ExecuteNonQuery();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(databasePath)) File.Delete(databasePath);
         }
     }
 
@@ -205,7 +271,7 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE component_templates;
-                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13);
+                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

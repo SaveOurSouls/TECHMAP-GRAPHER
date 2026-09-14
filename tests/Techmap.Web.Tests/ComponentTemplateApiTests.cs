@@ -20,14 +20,28 @@ public sealed class ComponentTemplateApiTests
         var csrf = await StartSessionAsync(client);
         using var v3Content = JsonDocument.Parse(ComponentTemplateContentV3ValidatorTests.ValidContentJson);
 
+        using var mismatch = await SendAsync(
+            client, HttpMethod.Post, "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("V3-MISMATCH", "Version 3 mismatch", [], v3Content.RootElement.Clone()), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, mismatch.StatusCode);
+        var mismatchError = await mismatch.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("component_template_bindings_invalid", mismatchError?.Error);
+        Assert.Equal("articleBindings", mismatchError?.Field);
+
         using var create = await SendAsync(
             client, HttpMethod.Post, "/api/v1/component-templates",
-            new CreateComponentTemplateRequest("V3", "Version 3", [], v3Content.RootElement.Clone()), csrf);
+            new CreateComponentTemplateRequest(
+                "V3", "Version 3",
+                [new(" Technology-Database ", " CONNECTOR ", "B2B-XH-A")],
+                v3Content.RootElement.Clone()), csrf);
 
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var created = Assert.IsType<ComponentTemplateResponse>(await create.Content
             .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
         Assert.Equal(3, created.Content.GetProperty("schemaVersion").GetInt32());
+        var binding = Assert.Single(created.ArticleBindings);
+        Assert.Equal("technology-database", binding.SourceId);
+        Assert.Equal("connector", binding.EntityType);
         Assert.Equal("DATA+", created.Content.GetProperty("logicalContacts")[0]
             .GetProperty("circuitText").GetString());
     }

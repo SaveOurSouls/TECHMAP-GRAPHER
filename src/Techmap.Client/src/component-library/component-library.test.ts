@@ -3,9 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
-import { ComponentLibrary, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut } from "./ComponentLibrary";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
+import { newTemplateContentV3, upsertArticleVariantV3 } from "./template-commands-v3";
 
 const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "1", apiVersion: "1", schemaVersion: "7" });
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
@@ -37,11 +38,35 @@ describe("component library UI", () => {
     expect(markup).toContain("Выход пучка");
     expect(markup).toContain('role="tabpanel"');
     expect(markup).toContain("Отменить");
-    expect(markup).toContain("Связи с артикулами");
+    expect(markup).toContain("Серия и артикулы");
+    expect(markup).toContain("Группы контактов");
+    expect(markup).toContain("Артикул для предпросмотра");
+    expect(markup).toContain("ГРАФИЧЕСКИЕ ШАБЛОНЫ V3");
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Добавить слой");
     expect(markup).toContain("Сохранить");
+  });
+
+  it("uses v3 article variants as the saved lookup index and imports legacy bindings once", () => {
+    const legacy = [
+      { sourceId: "db", entityType: "connector", articleKey: "A-01" },
+      { sourceId: "db", entityType: "connector", articleKey: "A-02" },
+    ];
+    let content = addLegacyArticleBindingsToV3(newTemplateContentV3(), legacy);
+    content = addLegacyArticleBindingsToV3(content, legacy);
+    [content] = upsertArticleVariantV3(content, {
+      id: content.articleVariants[0]!.id,
+      sourceId: "db",
+      entityType: "connector",
+      articleKey: "A-01-RENAMED",
+    });
+
+    expect(content.articleVariants).toHaveLength(2);
+    expect(articleBindingsFromTemplateV3(content)).toEqual([
+      { sourceId: "db", entityType: "connector", articleKey: "A-01-RENAMED" },
+      { sourceId: "db", entityType: "connector", articleKey: "A-02" },
+    ]);
   });
 
   it("creates a valid underlay image and detects its references", () => {

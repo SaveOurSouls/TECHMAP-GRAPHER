@@ -17,7 +17,9 @@ $runName = "r-{0}" -f [Guid]::NewGuid().ToString("N").Substring(0, 8)
 $artifactsRoot = Join-Path $expectedArtifactsRoot $runName
 $defaultPreviousArchive = Join-Path $repositoryRoot "artifacts\checkpoints\TECHMAP-GRAPHER-M1-13-check.zip"
 $defaultPreviousArchiveSha256 = "be5322cca6a0d16c624e787f529e098d7e8a1f781c7d36cce968b0b8077d8322"
-$defaultCurrentArchive = Join-Path $repositoryRoot "artifacts\m2-07\TECHMAP-GRAPHER-win-x64.zip"
+$defaultCurrentArchive = Join-Path $repositoryRoot "artifacts\m2-08\TECHMAP-GRAPHER-win-x64.zip"
+$expectedCurrentVersion = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") |
+    ConvertFrom-Json
 $verifyPackageScript = Join-Path $PSScriptRoot "verify-package.ps1"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
@@ -1092,11 +1094,11 @@ $currentPackage = Expand-TechmapArchive `
 $previousVersion = Get-PackageVersion `
     -PackageRoot $previousPackage -ExpectedSchema 4 -Description "Previous package"
 $currentVersion = Get-PackageVersion `
-    -PackageRoot $currentPackage -ExpectedSchema 6 -Description "Current package"
+    -PackageRoot $currentPackage -ExpectedSchema ([int]$expectedCurrentVersion.storage.schema) -Description "Current package"
 Assert-Equal ([string]$previousVersion.appVersion) "0.1.0-m1.13" `
     "The update fixture is not the accepted M1-13 package."
-Assert-Equal ([string]$currentVersion.appVersion) "0.1.0-m1.15" `
-    "The current package does not identify the M1-15 acceptance build."
+Assert-Equal ([string]$currentVersion.appVersion) ([string]$expectedCurrentVersion.appVersion) `
+    "The current package does not identify the repository acceptance build."
 $packageBytes = (Get-ChildItem -LiteralPath $currentPackage -Recurse -File |
     Measure-Object -Property Length -Sum).Sum
 Assert-True ($packageBytes -le 200MB) "M1 unpacked budget exceeded: $packageBytes bytes."

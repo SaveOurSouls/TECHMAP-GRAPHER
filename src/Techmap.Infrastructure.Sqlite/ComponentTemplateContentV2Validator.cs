@@ -31,6 +31,13 @@ internal static partial class ComponentTemplateContentV2Validator
 
     internal static void Validate(JsonElement content)
     {
+        _ = ValidateMaterialized(content, null);
+    }
+
+    internal static IReadOnlyDictionary<string, long> ValidateMaterialized(
+        JsonElement content,
+        IReadOnlyDictionary<string, JsonElement>? parameterOverrides)
+    {
         RequireExactProperties(content, "content", RootProperties);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var schemaVersion) || schemaVersion != 2)
@@ -54,6 +61,7 @@ internal static partial class ComponentTemplateContentV2Validator
         var state = new ValidationState();
         ValidateParameters(parameters, state);
         ValidateParameterCycles(state.Parameters);
+        ValidateParameterOverrides(parameterOverrides, state);
         ValidateDefaultParameterValues(state);
         ValidateAssets(assets, state);
         ValidateLogicalContacts(logicalContacts, state);
@@ -63,6 +71,32 @@ internal static partial class ComponentTemplateContentV2Validator
         ValidateNestedRepeats(state);
         ValidateDefaultRepeatExpansion(state);
         ValidateArticlePresets(presets, state);
+        return state.RepeatDomains.ToDictionary(item => item.Key, item => item.Value.DefaultCount, StringComparer.Ordinal);
+    }
+
+    private static void ValidateParameterOverrides(
+        IReadOnlyDictionary<string, JsonElement>? overrides,
+        ValidationState state)
+    {
+        if (overrides is null) return;
+        foreach (var (parameterId, value) in overrides)
+        {
+            if (!state.Parameters.TryGetValue(parameterId, out var parameter))
+                Throw("Referenced parameter does not exist.", "content.parameters");
+            ValidateParameterValue(value, parameter.Type, "content.parameters");
+            if (parameter.Type is "number" or "integer")
+            {
+                if (!TryGetFiniteNumber(value, out var number) ||
+                    Math.Abs(number) > MaximumCoordinateMagnitude ||
+                    parameter.Minimum.HasValue && number < parameter.Minimum.Value ||
+                    parameter.Maximum.HasValue && number > parameter.Maximum.Value ||
+                    parameter.Type == "integer" && number != Math.Truncate(number))
+                {
+                    Throw("Parameter override must be a finite in-range value of its declared type.", "content.parameters");
+                }
+            }
+            state.ParameterOverrides[parameterId] = value;
+        }
     }
 
     private static void ValidateParameters(JsonElement parameters, ValidationState state)
@@ -707,7 +741,11 @@ internal static partial class ComponentTemplateContentV2Validator
         }
         try
         {
-            if (parameter.Formula.ValueKind == JsonValueKind.Null)
+            if (state.ParameterOverrides.TryGetValue(parameterId, out var overridden))
+            {
+                if (!TryGetFiniteNumber(overridden, out value)) return false;
+            }
+            else if (parameter.Formula.ValueKind == JsonValueKind.Null)
             {
                 if (!TryGetFiniteNumber(parameter.DefaultValue, out value)) return false;
             }
@@ -1082,6 +1120,7 @@ internal static partial class ComponentTemplateContentV2Validator
         internal HashSet<string> LogicalContactIds { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, LogicalContactInfo> LogicalContacts { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, ParameterInfo> Parameters { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, JsonElement> ParameterOverrides { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, RepeatDomainInfo> RepeatDomains { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, GroupInfo> Groups { get; } = new(StringComparer.Ordinal);
         internal Dictionary<string, string> NodeLayers { get; } = new(StringComparer.Ordinal);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addContactPointV2, newTemplateContentV2 } from "./template-commands-v2";
-import { validateTemplateContentV3, type TemplateContentV3 } from "./template-model-v3";
+import { validateTemplateContentV3, validateTemplateContentV3Structure, type TemplateContentV3 } from "./template-model-v3";
 import { upgradeTemplateContentV2ToV3 } from "./template-upgrade-v3";
 
 function validDocument(): TemplateContentV3 {
@@ -129,5 +129,74 @@ describe("template content v3 validation", () => {
     document.articleVariants[0]!.contactGroups!.push(structuredClone(document.articleVariants[0]!.contactGroups![0]!));
 
     expect(codes(document)).toEqual(expect.arrayContaining(["invalid_contact_count", "duplicate_variant_contact_group"]));
+  });
+
+  it("rejects zero occurrences for a group represented by a repeat domain", () => {
+    const document = validDocument();
+    const logicalContactId = document.logicalContacts[0]!.id;
+    const countParameterId = crypto.randomUUID();
+    document.parameters.push({
+      id: countParameterId, name: "Контакты", type: "integer", unit: "шт",
+      defaultValue: 1, minimum: 1, maximum: 1_000, formula: null,
+    });
+    document.repeaters.push({
+      id: crypto.randomUUID(), countParameterId, logicalContactIds: [logicalContactId],
+    });
+    document.articleVariants[0]!.contactGroups![0]!.contactCount = 0;
+
+    expect(codes(document)).toContain("unproducible_contact_count");
+  });
+
+  it("requires every repeat domain to contain contacts from one explicit type group", () => {
+    const missing = validDocument(), countParameterId = crypto.randomUUID();
+    missing.parameters.push({
+      id: countParameterId, name: "Контакты", type: "integer", unit: "шт",
+      defaultValue: 1, minimum: 1, maximum: 1_000, formula: null,
+    });
+    missing.logicalContacts[0]!.contactTypeGroupId = null;
+    missing.repeaters.push({ id: crypto.randomUUID(), countParameterId, logicalContactIds: [missing.logicalContacts[0]!.id] });
+    expect(codes(missing)).toContain("repeat_contact_group_missing");
+    expect(validateTemplateContentV3Structure(missing).diagnostics.map(item => item.code))
+      .toContain("repeat_contact_group_missing");
+
+    const mixed = validDocument(), secondId = crypto.randomUUID();
+    mixed.parameters.push({
+      id: countParameterId, name: "Контакты", type: "integer", unit: "шт",
+      defaultValue: 1, minimum: 1, maximum: 1_000, formula: null,
+    });
+    mixed.logicalContacts.push({
+      id: secondId, number: "2", name: "Силовой", circuitText: null,
+      contactTypeGroupId: mixed.contactTypeGroups[1]!.id,
+    });
+    mixed.repeaters.push({
+      id: crypto.randomUUID(), countParameterId,
+      logicalContactIds: [mixed.logicalContacts[0]!.id, secondId],
+    });
+    expect(codes(mixed)).toContain("mixed_repeat_contact_groups");
+  });
+
+  it("enforces one 2000-row materialization budget across all contact groups", () => {
+    const document = validDocument();
+    document.articleVariants[0]!.contactGroups = [
+      { contactTypeGroupId: document.contactTypeGroups[0]!.id, contactCount: 1_000, allowedTerminalArticleKeys: [] },
+      { contactTypeGroupId: document.contactTypeGroups[1]!.id, contactCount: 1_001, allowedTerminalArticleKeys: [] },
+    ];
+    const repeated = document.logicalContacts[0]!;
+    const second = { ...repeated, id: crypto.randomUUID(), number: "2", contactTypeGroupId: document.contactTypeGroups[1]!.id };
+    document.logicalContacts.push(second);
+    [repeated, second].forEach((contact, index) => {
+      const parameterId = crypto.randomUUID();
+      document.parameters.push({
+        id: parameterId, name: `Count ${index}`, type: "integer", unit: "шт",
+        defaultValue: 1, minimum: 1, maximum: 1_000, formula: null,
+      });
+      document.repeaters.push({ id: crypto.randomUUID(), countParameterId: parameterId, logicalContactIds: [contact.id] });
+    });
+
+    expect(validateTemplateContentV3(document).diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "article_contact_row_budget" }),
+    ]));
+    expect(validateTemplateContentV3Structure(document).diagnostics.map(item => item.code))
+      .not.toContain("article_contact_row_budget");
   });
 });

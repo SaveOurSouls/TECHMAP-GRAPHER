@@ -196,27 +196,52 @@ function validateArticleKey(raw: unknown, path: string, diagnostics: TemplateV3D
 function repeatedContactModel(
   repeaters: unknown[],
   contactGroups: ReadonlyMap<string, string | null>,
+  diagnostics: TemplateV3Diagnostic[],
 ): { readonly repeatedContactIds: Set<string>; readonly repeatCountParameterIds: Set<string>; readonly stridesByGroup: Map<string, number[]> } {
   const repeatedContactIds = new Set<string>(), repeatCountParameterIds = new Set<string>(), stridesByGroup = new Map<string, number[]>();
-  for (const raw of repeaters) {
-    if (!isRecord(raw) || typeof raw.countParameterId !== "string" || !Array.isArray(raw.logicalContactIds)) continue;
+  repeaters.forEach((raw, domainIndex) => {
+    if (!isRecord(raw) || typeof raw.countParameterId !== "string" || !Array.isArray(raw.logicalContactIds)) return;
     repeatCountParameterIds.add(raw.countParameterId);
     let groupId: string | null = null, homogeneous = true, stride = 0;
-    for (const candidate of raw.logicalContactIds) {
-      if (typeof candidate !== "string") { homogeneous = false; continue; }
+    raw.logicalContactIds.forEach((candidate, contactIndex) => {
+      if (typeof candidate !== "string") { homogeneous = false; return; }
       repeatedContactIds.add(candidate);
       const candidateGroup = contactGroups.get(candidate);
-      if (!candidateGroup) { homogeneous = false; continue; }
+      if (candidateGroup === undefined) { homogeneous = false; return; }
+      if (candidateGroup === null) {
+        homogeneous = false;
+        diagnostics.push({
+          code: "repeat_contact_group_missing",
+          path: `$.repeaters[${domainIndex}].logicalContactIds[${contactIndex}]`,
+          message: "Каждый контакт повтора должен принадлежать группе типов.",
+        });
+        return;
+      }
       if (groupId === null) groupId = candidateGroup;
-      else if (groupId !== candidateGroup) homogeneous = false;
+      else if (groupId !== candidateGroup) {
+        homogeneous = false;
+        diagnostics.push({
+          code: "mixed_repeat_contact_groups",
+          path: `$.repeaters[${domainIndex}].logicalContactIds`,
+          message: "Один повтор не может содержать контакты разных групп типов.",
+        });
+      }
       stride += 1;
+    });
+    if (raw.logicalContactIds.length === 0) {
+      homogeneous = false;
+      diagnostics.push({
+        code: "repeat_contact_group_missing",
+        path: `$.repeaters[${domainIndex}].logicalContactIds`,
+        message: "Повтор должен содержать хотя бы один контакт с группой типов.",
+      });
     }
     if (homogeneous && groupId && stride > 0) {
       const strides = stridesByGroup.get(groupId) ?? [];
       strides.push(stride);
       stridesByGroup.set(groupId, strides);
     }
-  }
+  });
   return { repeatedContactIds, repeatCountParameterIds, stridesByGroup };
 }
 
@@ -227,11 +252,13 @@ function validateArticleVariants(
   validGroupIds: ReadonlySet<string>,
   diagnostics: TemplateV3Diagnostic[],
   occupiedIds: Set<string>,
+  validateMaterializedCounts: boolean,
 ): void {
   const identities = new Set<string>();
-  const repeated = repeatedContactModel(rawRepeaters, contactGroups);
+  const repeated = repeatedContactModel(rawRepeaters, contactGroups, diagnostics);
   const fixedCounts = new Map<string, number>([...validGroupIds].map(id => [id, 0]));
   for (const [contactId, groupId] of contactGroups) if (groupId && !repeated.repeatedContactIds.has(contactId)) fixedCounts.set(groupId, (fixedCounts.get(groupId) ?? 0) + 1);
+  const fixedUngroupedCount = [...contactGroups].filter(([contactId, groupId]) => groupId === null && !repeated.repeatedContactIds.has(contactId)).length;
 
   rawVariants.forEach((raw, index) => {
     const path = `$.articleVariants[${index}]`;
@@ -284,6 +311,8 @@ function validateArticleVariants(
       });
     });
 
+    if (!validateMaterializedCounts) return;
+
     for (const groupId of validGroupIds) {
       const target = configuredCounts.get(groupId) ?? 0, fixed = fixedCounts.get(groupId) ?? 0;
       const strides = repeated.stridesByGroup.get(groupId) ?? [];
@@ -293,9 +322,18 @@ function validateArticleVariants(
         diagnostics.push({ code: "ambiguous_contact_repeat", path: `${path}.contactGroups`, message: "Для явного варианта допустим не более одного повтора на группу контактов." });
       else if (strides.length === 1) {
         const repeatedCount = target - fixed, stride = strides[0]!;
-        if (repeatedCount < 0 || repeatedCount % stride !== 0 || repeatedCount / stride > 1_000)
+        if (repeatedCount <= 0 || repeatedCount % stride !== 0 || repeatedCount / stride > 1_000)
           diagnostics.push({ code: "unproducible_contact_count", path: `${path}.contactGroups`, message: "Количество контактов варианта нельзя получить повтором группы." });
       }
+    }
+    const materializedRows = fixedUngroupedCount + [...validGroupIds]
+      .reduce((sum, groupId) => sum + (configuredCounts.get(groupId) ?? 0), 0);
+    if (materializedRows > TEMPLATE_V2_LIMITS.contacts) {
+      diagnostics.push({
+        code: "article_contact_row_budget",
+        path: `${path}.contactGroups`,
+        message: `Артикул не может содержать больше ${TEMPLATE_V2_LIMITS.contacts} материализованных строк контактов.`,
+      });
     }
   });
 }
@@ -333,8 +371,7 @@ function mapCoreDiagnostic(diagnostic: TemplateV2Diagnostic): TemplateV3Diagnost
   };
 }
 
-/** Strict client boundary for the persisted component-template schema v3. */
-export function validateTemplateContentV3(value: unknown): TemplateV3Validation {
+function validateTemplateContentV3Internal(value: unknown, validateMaterializedCounts: boolean): TemplateV3Validation {
   const diagnostics: TemplateV3Diagnostic[] = [];
   if (!exact(value, ROOT_KEYS, "$", diagnostics)) return { valid: false, diagnostics };
   if (value.schemaVersion !== 3) diagnostics.push({ code: "schema_version", path: "$.schemaVersion", message: "Поддерживается только schemaVersion 3." });
@@ -349,9 +386,19 @@ export function validateTemplateContentV3(value: unknown): TemplateV3Validation 
   const occupiedIds = new Set(collectCoreIds(value));
   const groupNames = validateContactTypeGroups(groups, diagnostics, occupiedIds);
   const contactGroups = validateLogicalContactsV3(contacts, new Set(groupNames.keys()), diagnostics);
-  validateArticleVariants(variants, value.repeaters as unknown[], contactGroups, new Set(groupNames.keys()), diagnostics, occupiedIds);
+  validateArticleVariants(variants, value.repeaters as unknown[], contactGroups, new Set(groupNames.keys()), diagnostics, occupiedIds, validateMaterializedCounts);
 
   const core = projectV3ToV2(value, groupNames);
   if (core) diagnostics.push(...validateTemplateContentV2(core).diagnostics.map(mapCoreDiagnostic));
   return { valid: diagnostics.length === 0, diagnostics };
+}
+
+/** Structural command boundary; it permits temporarily stale article contact totals while the template is edited. */
+export function validateTemplateContentV3Structure(value: unknown): TemplateV3Validation {
+  return validateTemplateContentV3Internal(value, false);
+}
+
+/** Strict client boundary for the persisted component-template schema v3. */
+export function validateTemplateContentV3(value: unknown): TemplateV3Validation {
+  return validateTemplateContentV3Internal(value, true);
 }
