@@ -8,7 +8,7 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateMigrationTests
 {
     [Fact]
-    public async Task Schema_ten_migrates_existing_template_versions_to_empty_asset_sets()
+    public async Task Schema_ten_migrates_existing_v1_template_versions_without_rewriting_them()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-asset-migration", Guid.NewGuid().ToString("N"));
         var dataRoot = Path.Combine(root, "data");
@@ -16,32 +16,52 @@ public sealed class ComponentTemplateMigrationTests
         Directory.CreateDirectory(root);
         try
         {
-            string databasePath;
-            Guid templateId;
-            using (var storage = SqliteStorage.Open(dataRoot))
-            {
-                databasePath = storage.Layout.DatabasePath;
-                templateId = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
-                    "MIG-10", "Existing template", [], 1,
-                    """
-                    {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
-                    """).TemplateId;
-            }
-
+            var generationName = StorageGenerationLayout.InitialGenerationName;
+            var databasePath = Path.Combine(dataRoot, "generations", generationName, "app.db");
+            Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+            File.WriteAllBytes(databasePath, []);
+            var templateId = Guid.NewGuid();
+            const string content =
+                """
+                {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
+                """;
+            var canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(content, 1);
+            var contentHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(canonical)));
+            var versionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+                templateId, 1, 1, "MIG-10", "Existing template", [], canonical);
+            var now = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
             using (var connection = Open(databasePath))
-            using (var command = connection.CreateCommand())
             {
+                SqliteStorage.InitializeSchemaAtVersion(connection, 10);
+                using var command = connection.CreateCommand();
                 command.CommandText =
                     """
-                    DROP TRIGGER prevent_component_template_asset_delete;
-                    DROP TRIGGER prevent_component_template_asset_update;
-                    DROP TRIGGER prevent_component_template_asset_late_insert;
-                    DROP TABLE component_template_asset_refs;
-                    DELETE FROM schema_history WHERE version = 11;
-                    PRAGMA user_version = 10;
+                    INSERT INTO component_templates
+                        (template_id, current_version, current_code, current_name, normalized_code,
+                         created_utc, updated_utc, deleted_utc)
+                    VALUES ($templateId, 0, 'MIG-10', 'Existing template', 'MIG-10', $now, $now, NULL);
+                    INSERT INTO component_template_versions
+                        (template_id, version, schema_version, code, name, content_json,
+                         content_sha256, version_sha256, created_utc)
+                    VALUES ($templateId, 1, 1, 'MIG-10', 'Existing template', $content,
+                            $contentHash, $versionHash, $now);
+                    UPDATE component_templates
+                    SET current_version = 1
+                    WHERE template_id = $templateId;
                     """;
+                command.Parameters.AddWithValue("$templateId", templateId.ToString("D"));
+                command.Parameters.AddWithValue("$now", now);
+                command.Parameters.AddWithValue("$content", canonical);
+                command.Parameters.AddWithValue("$contentHash", contentHash);
+                command.Parameters.AddWithValue("$versionHash", versionHash);
                 command.ExecuteNonQuery();
             }
+
+            File.WriteAllText(
+                Path.Combine(Path.GetDirectoryName(databasePath)!, StorageGenerationLayout.ReadyMarkerFileName),
+                "ready\n");
+            File.WriteAllText(Path.Combine(dataRoot, StorageGenerationLayout.CurrentPointerFileName), generationName + "\n");
 
             await using var lease = DataRootLease.Acquire(dataRoot);
             var migrationService = new SqliteStorageMigrationService(lease);
@@ -54,7 +74,9 @@ public sealed class ComponentTemplateMigrationTests
 
             Assert.True(migration.Migrated);
             Assert.Equal(10, migration.SourceSchemaVersion);
-            Assert.Equal(11, migration.TargetSchemaVersion);
+            Assert.Equal(SqliteStorage.CurrentSchemaVersion, migration.TargetSchemaVersion);
+            Assert.Equal(1, template.SchemaVersion);
+            Assert.Equal(canonical, template.ContentJson);
             Assert.Empty(template.Assets);
             migrationService.CompleteSuccessfulStartup(migration);
         }
@@ -102,7 +124,7 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE component_templates;
-                    DELETE FROM schema_history WHERE version IN (10, 11);
+                    DELETE FROM schema_history WHERE version IN (10, 11, 12);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

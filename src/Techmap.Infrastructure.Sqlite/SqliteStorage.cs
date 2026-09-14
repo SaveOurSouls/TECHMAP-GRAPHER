@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -820,6 +820,192 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         END;
         """;
 
+    private const string ComponentTemplateContentV2MigrationId = "M2-06D-component-template-content-v2";
+    private const string ComponentTemplateContentV2SchemaSql =
+        """
+        DROP TRIGGER enforce_component_template_version_append;
+        DROP TRIGGER enforce_component_template_head_publish;
+        DROP TRIGGER prevent_component_template_binding_late_insert;
+        DROP TRIGGER prevent_component_template_version_update;
+        DROP TRIGGER prevent_component_template_version_delete;
+        DROP TRIGGER prevent_component_template_binding_update;
+        DROP TRIGGER prevent_component_template_binding_delete;
+        DROP TRIGGER prevent_component_template_asset_late_insert;
+        DROP TRIGGER prevent_component_template_asset_update;
+        DROP TRIGGER prevent_component_template_asset_delete;
+        DROP INDEX ix_component_template_versions_template;
+        DROP INDEX ix_component_template_bindings_article;
+        DROP INDEX ix_component_template_assets_content;
+
+        ALTER TABLE component_template_article_bindings RENAME TO component_template_article_bindings_v1;
+        ALTER TABLE component_template_asset_refs RENAME TO component_template_asset_refs_v1;
+        ALTER TABLE component_template_versions RENAME TO component_template_versions_v1;
+
+        CREATE TABLE component_template_versions (
+            template_id TEXT NOT NULL REFERENCES component_templates(template_id)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            version INTEGER NOT NULL CHECK (version > 0),
+            schema_version INTEGER NOT NULL CHECK (schema_version IN (1, 2)),
+            code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 128),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 256),
+            content_json TEXT NOT NULL CHECK (length(content_json) BETWEEN 2 AND 1048576)
+                CHECK (json_valid(content_json)),
+            content_sha256 TEXT NOT NULL
+                CHECK (length(content_sha256) = 64)
+                CHECK (content_sha256 = lower(content_sha256))
+                CHECK (content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            version_sha256 TEXT NOT NULL
+                CHECK (length(version_sha256) = 64)
+                CHECK (version_sha256 = lower(version_sha256))
+                CHECK (version_sha256 NOT GLOB '*[^0-9a-f]*'),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            PRIMARY KEY (template_id, version)
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_versions_template
+            ON component_template_versions(template_id, version DESC);
+
+        CREATE TABLE component_template_article_bindings (
+            template_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            binding_ordinal INTEGER NOT NULL CHECK (binding_ordinal >= 0 AND binding_ordinal < 64),
+            source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 128),
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            article_key TEXT NOT NULL CHECK (length(article_key) BETWEEN 1 AND 512),
+            PRIMARY KEY (template_id, version, binding_ordinal),
+            UNIQUE (template_id, version, source_id, entity_type, article_key),
+            FOREIGN KEY (template_id, version)
+                REFERENCES component_template_versions(template_id, version)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_bindings_article
+            ON component_template_article_bindings(source_id, entity_type, article_key);
+
+        CREATE TABLE component_template_asset_refs (
+            template_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            asset_ordinal INTEGER NOT NULL CHECK (asset_ordinal >= 0 AND asset_ordinal < 64),
+            asset_id TEXT NOT NULL CHECK (length(asset_id) = 36),
+            file_name TEXT NOT NULL CHECK (length(file_name) BETWEEN 1 AND 255),
+            media_type TEXT NOT NULL CHECK (media_type = 'image/png'),
+            content_sha256 TEXT NOT NULL
+                REFERENCES attachment_blobs(content_sha256) ON UPDATE CASCADE ON DELETE RESTRICT,
+            PRIMARY KEY (template_id, version, asset_id),
+            UNIQUE (template_id, version, asset_ordinal),
+            FOREIGN KEY (template_id, version)
+                REFERENCES component_template_versions(template_id, version)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_assets_content
+            ON component_template_asset_refs(content_sha256, template_id, version);
+
+        INSERT INTO component_template_versions
+            (template_id, version, schema_version, code, name, content_json,
+             content_sha256, version_sha256, created_utc)
+        SELECT template_id, version, schema_version, code, name, content_json,
+               content_sha256, version_sha256, created_utc
+        FROM component_template_versions_v1;
+
+        INSERT INTO component_template_article_bindings
+            (template_id, version, binding_ordinal, source_id, entity_type, article_key)
+        SELECT template_id, version, binding_ordinal, source_id, entity_type, article_key
+        FROM component_template_article_bindings_v1;
+
+        INSERT INTO component_template_asset_refs
+            (template_id, version, asset_ordinal, asset_id, file_name, media_type, content_sha256)
+        SELECT template_id, version, asset_ordinal, asset_id, file_name, media_type, content_sha256
+        FROM component_template_asset_refs_v1;
+
+        DROP TABLE component_template_asset_refs_v1;
+        DROP TABLE component_template_article_bindings_v1;
+        DROP TABLE component_template_versions_v1;
+
+        CREATE TRIGGER enforce_component_template_version_append
+        BEFORE INSERT ON component_template_versions
+        WHEN NEW.version <> (
+            SELECT current_version + 1
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_not_append');
+        END;
+
+        CREATE TRIGGER enforce_component_template_head_publish
+        BEFORE UPDATE OF current_version ON component_templates
+        WHEN NEW.current_version <> OLD.current_version
+        BEGIN
+            SELECT CASE
+                WHEN NEW.current_version <> OLD.current_version + 1
+                  OR NOT EXISTS (
+                      SELECT 1
+                      FROM component_template_versions v
+                      WHERE v.template_id = NEW.template_id
+                        AND v.version = NEW.current_version
+                        AND v.code = NEW.current_code
+                        AND v.name = NEW.current_name)
+                THEN RAISE(ABORT, 'component_template_head_invalid')
+            END;
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_late_insert
+        BEFORE INSERT ON component_template_article_bindings
+        WHEN NEW.version <= (
+            SELECT current_version
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_version_update
+        BEFORE UPDATE ON component_template_versions
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_version_delete
+        BEFORE DELETE ON component_template_versions
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_update
+        BEFORE UPDATE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_delete
+        BEFORE DELETE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_asset_late_insert
+        BEFORE INSERT ON component_template_asset_refs
+        WHEN NEW.version <= (
+            SELECT current_version
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_asset_update
+        BEFORE UPDATE ON component_template_asset_refs
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_asset_delete
+        BEFORE DELETE ON component_template_asset_refs
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1229,6 +1415,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 9, MigrationId: HarnessDesignMigrationId, Sql: HarnessDesignSchemaSql),
             (Version: 10, MigrationId: ComponentTemplateMigrationId, Sql: ComponentTemplateSchemaSql),
             (Version: 11, MigrationId: ComponentTemplateAssetMigrationId, Sql: ComponentTemplateAssetSchemaSql),
+            (Version: 12, MigrationId: ComponentTemplateContentV2MigrationId, Sql: ComponentTemplateContentV2SchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1331,6 +1518,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateAssetSchemaSql);
         }
 
+        if (schemaVersion >= 12)
+        {
+            ExecuteSchemaSql(expected, ComponentTemplateContentV2SchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1429,6 +1621,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateAssetMigrationId,
                 Sql: ComponentTemplateAssetSchemaSql,
                 Description: "Immutable component template image assets"),
+            11 => (
+                Version: 12,
+                MigrationId: ComponentTemplateContentV2MigrationId,
+                Sql: ComponentTemplateContentV2SchemaSql,
+                Description: "Component template content schema version 2"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1505,7 +1702,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11))
             {
                 return false;
             }

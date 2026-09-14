@@ -550,7 +550,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
             var versionHash = stored.VersionSha256;
             if (!Guid.TryParseExact(templateId, "D", out var parsedId) || parsedId == Guid.Empty ||
                 version is < 1 or > SqliteComponentTemplateStore.MaximumVersionsPerTemplate ||
-                schemaVersion != SqliteComponentTemplateStore.CurrentContentSchemaVersion ||
+                !SqliteComponentTemplateStore.IsSupportedContentSchemaVersion(schemaVersion) ||
                 string.IsNullOrWhiteSpace(code) || code.Length > 128 || code.Any(char.IsControl) ||
                 string.IsNullOrWhiteSpace(name) || name.Length > 256 || name.Any(char.IsControl) ||
                 !IsSha256(hash) || !IsSha256(versionHash) ||

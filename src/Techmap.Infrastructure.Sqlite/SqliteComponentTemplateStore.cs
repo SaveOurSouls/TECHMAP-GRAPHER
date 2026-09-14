@@ -14,7 +14,8 @@ public sealed class SqliteComponentTemplateStore(
     TimeProvider timeProvider,
     IAttachmentContentStore? attachmentContentStore = null) : IComponentTemplateStore
 {
-    public const int CurrentContentSchemaVersion = 1;
+    public const int CurrentContentSchemaVersion = 2;
+    public const int MinimumSupportedContentSchemaVersion = 1;
     public const int MaximumContentBytes = 1024 * 1024;
     public const int MaximumTemplates = 500;
     public const int MaximumVersionsPerTemplate = 100;
@@ -377,11 +378,11 @@ public sealed class SqliteComponentTemplateStore(
     {
         var normalizedCode = NormalizeText(code, 128, "code");
         var normalizedName = NormalizeText(name, 256, "name");
-        if (schemaVersion != CurrentContentSchemaVersion)
+        if (!IsSupportedContentSchemaVersion(schemaVersion))
         {
             throw Invalid(
                 "component_template_schema_version_unsupported",
-                $"The supported component template schema version is {CurrentContentSchemaVersion}.",
+                $"Supported component template schema versions are {MinimumSupportedContentSchemaVersion} and {CurrentContentSchemaVersion}.",
                 "schemaVersion");
         }
         ArgumentNullException.ThrowIfNull(bindings);
@@ -430,6 +431,13 @@ public sealed class SqliteComponentTemplateStore(
 
     internal static string ValidateAndCanonicalizeContent(string contentJson, int schemaVersion)
     {
+        if (!IsSupportedContentSchemaVersion(schemaVersion))
+        {
+            throw Invalid(
+                "component_template_schema_version_unsupported",
+                $"Supported component template schema versions are {MinimumSupportedContentSchemaVersion} and {CurrentContentSchemaVersion}.",
+                "schemaVersion");
+        }
         if (string.IsNullOrWhiteSpace(contentJson))
             throw Invalid("component_template_content_invalid", "Template content is required.", "content");
         if (Encoding.UTF8.GetByteCount(contentJson) > MaximumContentBytes)
@@ -450,7 +458,6 @@ public sealed class SqliteComponentTemplateStore(
             });
             var root = document.RootElement;
             RejectDuplicateProperties(root);
-            RequireExactProperties(root, "content", "schemaVersion", "views");
             if (!root.TryGetProperty("schemaVersion", out var version) ||
                 version.ValueKind != JsonValueKind.Number ||
                 !version.TryGetInt32(out var parsedVersion) ||
@@ -461,7 +468,47 @@ public sealed class SqliteComponentTemplateStore(
                     "Content schemaVersion must match the request schemaVersion.",
                     "content.schemaVersion");
             }
-            if (!root.TryGetProperty("views", out var views) || views.ValueKind != JsonValueKind.Array ||
+            if (schemaVersion == 2)
+            {
+                ComponentTemplateContentV2Validator.Validate(root);
+            }
+            else
+            {
+                ValidateV1Content(root);
+            }
+
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false }))
+            {
+                WriteCanonical(writer, root);
+            }
+            if (buffer.Length > MaximumContentBytes)
+                throw Invalid("component_template_content_too_large", "Canonical template content is too large.", "content");
+            return Encoding.UTF8.GetString(buffer.ToArray());
+        }
+        catch (JsonException error)
+        {
+            throw new ComponentTemplateException(
+                "component_template_content_invalid",
+                "Template content is not valid JSON.",
+                "content",
+                innerException: error);
+        }
+        catch (OverflowException error)
+        {
+            throw new ComponentTemplateException(
+                "component_template_content_invalid",
+                "Template content contains too many objects.",
+                "content",
+                innerException: error);
+        }
+    }
+
+    private static void ValidateV1Content(JsonElement root)
+    {
+        RequireExactProperties(root, "content", "schemaVersion", "views");
+        var views = root.GetProperty("views");
+        if (views.ValueKind != JsonValueKind.Array ||
                 views.GetArrayLength() is < 2 or > MaximumViews)
             {
                 throw Invalid(
@@ -527,32 +574,10 @@ public sealed class SqliteComponentTemplateStore(
                     "content.views");
             }
 
-            using var buffer = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false }))
-            {
-                WriteCanonical(writer, root);
-            }
-            if (buffer.Length > MaximumContentBytes)
-                throw Invalid("component_template_content_too_large", "Canonical template content is too large.", "content");
-            return Encoding.UTF8.GetString(buffer.ToArray());
-        }
-        catch (JsonException error)
-        {
-            throw new ComponentTemplateException(
-                "component_template_content_invalid",
-                "Template content is not valid JSON.",
-                "content",
-                innerException: error);
-        }
-        catch (OverflowException error)
-        {
-            throw new ComponentTemplateException(
-                "component_template_content_invalid",
-                "Template content contains too many objects.",
-                "content",
-                innerException: error);
-        }
     }
+
+    internal static bool IsSupportedContentSchemaVersion(int schemaVersion) =>
+        schemaVersion is MinimumSupportedContentSchemaVersion or CurrentContentSchemaVersion;
 
     private static void ValidatePrimitive(JsonElement primitive, ISet<string> ids)
     {

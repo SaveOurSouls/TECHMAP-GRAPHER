@@ -12,6 +12,46 @@ public sealed class ComponentTemplateApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Fact]
+    public async Task Api_creates_and_reads_v2_content_and_rejects_invalid_v2()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var v2Content = JsonDocument.Parse(ComponentTemplateV2StoreTests.V2Content);
+
+        using var create = await SendAsync(
+            client,
+            HttpMethod.Post,
+            "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("V2", "Version 2", [], v2Content.RootElement.Clone()),
+            csrf);
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var created = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(2, created.Content.GetProperty("schemaVersion").GetInt32());
+        var read = await client.GetFromJsonAsync<ComponentTemplateResponse>(
+            $"/api/v1/component-templates/{created.TemplateId:D}",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(created.Content.GetRawText(), Assert.IsType<ComponentTemplateResponse>(read).Content.GetRawText());
+
+        using var invalidContent = JsonDocument.Parse(ComponentTemplateV2StoreTests.V2Content.Replace(
+            "\"logicalContacts\":[]",
+            "\"logicalContacts\":[],\"unexpected\":true",
+            StringComparison.Ordinal));
+        using var invalid = await SendAsync(
+            client,
+            HttpMethod.Post,
+            "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("INVALID-V2", "Invalid", [], invalidContent.RootElement.Clone()),
+            csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        var error = await invalid.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("component_template_content_invalid", error?.Error);
+        Assert.Equal("content", error?.Field);
+    }
+
+    [Fact]
     public async Task Crud_preserves_immutable_versions_and_multiple_article_bindings()
     {
         await using var factory = new TechmapWebApplicationFactory();
