@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AutosaveConflictError,
   AutosaveController,
@@ -8,7 +8,6 @@ import {
 } from "./autosave-controller";
 import type { LocalSession } from "./local-session";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
-import { ComponentLibrary } from "./component-library/ComponentLibrary";
 import { HarnessDesignEditor } from "./editor/HarnessDesignEditor";
 import {
   createProjectApi,
@@ -20,6 +19,11 @@ import {
 } from "./project-api";
 import type { RuntimeConfig } from "./runtime-config";
 import { TransitionGate } from "./transition-gate";
+
+const ComponentLibrary = lazy(async () => {
+  const module = await import("./component-library/ComponentLibrary");
+  return { default: module.ComponentLibrary };
+});
 
 interface AppProps {
   readonly config: RuntimeConfig;
@@ -890,7 +894,9 @@ export function App({ config, session }: AppProps) {
           ) : activeSection === "references" ? (
             <ReferenceImportPanel config={config} session={session} />
           ) : (
-            <ComponentLibrary config={config} session={session} />
+            <Suspense fallback={<p className="panel-message" role="status">Открываем библиотеку…</p>}>
+              <ComponentLibrary config={config} session={session} />
+            </Suspense>
           )}
         </main>
       </div>
