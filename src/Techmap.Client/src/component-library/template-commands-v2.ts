@@ -1,6 +1,7 @@
 import {
   TEMPLATE_V2_LIMITS,
   validateTemplateContentV2,
+  type BundlePortV2,
   type LayerV2,
   type ContactDirectionV2,
   type LogicalContactV2,
@@ -38,6 +39,18 @@ export interface ContactPointEditV2 {
   y?: NumericExpressionV2;
   direction?: ContactDirectionV2;
 }
+export interface NewBundlePortV2 {
+  name?: string;
+  x?: NumericExpressionV2;
+  y?: NumericExpressionV2;
+  direction?: ContactDirectionV2;
+}
+export interface BundlePortEditV2 {
+  name?: string;
+  x?: NumericExpressionV2;
+  y?: NumericExpressionV2;
+  direction?: ContactDirectionV2;
+}
 export interface CreateRepeatPrototypeV2Input {
   readonly viewId: string;
   readonly layerId: string;
@@ -50,6 +63,14 @@ export interface RepeatPrototypeIdsV2 {
   readonly groupId: string;
   readonly countParameterId: string;
   readonly repeatDomainId: string;
+}
+export interface AttachRepeatDomainV2Input {
+  readonly viewId: string;
+  readonly layerId: string;
+  readonly prototypeNodeId: string;
+  readonly repeatDomainId: string;
+  readonly contactPointIds?: readonly string[];
+  readonly step: PointExpressionV2;
 }
 export type ParameterizableNodeDimensionV2 = "width" | "height" | "radiusX" | "radiusY";
 export interface ParameterizeNodeDimensionV2Input {
@@ -184,6 +205,30 @@ export function addContactPointV2(
   return [next, point.id];
 }
 
+/** Adds a view-specific point for an existing logical contact without copying the logical record. */
+export function linkLogicalContactPointV2(
+  content: TemplateContentV2,
+  viewId: string,
+  logicalContactId: string,
+  initial: ContactPointEditV2 = {},
+): [TemplateContentV2, string] {
+  const view = requireView(content, viewId);
+  requireLogicalContact(content, logicalContactId);
+  if (view.contactPoints.some(point => point.logicalContactId === logicalContactId))
+    throw new TemplateCommandV2Error("duplicate_contact_point", "В выбранном виде уже есть точка этого логического контакта.");
+  const point: ViewContactPointV2 = {
+    id: crypto.randomUUID(),
+    logicalContactId,
+    x: initial.x ?? constantExpressionV2(260),
+    y: initial.y ?? constantExpressionV2(200),
+    direction: normalizedContactDirection(initial.direction ?? "right"),
+  };
+  const next = replaceView(content, view.id, { ...view, contactPoints: [...view.contactPoints, point] });
+  requireValidCommandResult(next, "invalid_contact_link");
+  requireMaterializableRepeats(next);
+  return [next, point.id];
+}
+
 export function editLogicalContactV2(
   content: TemplateContentV2,
   logicalContactId: string,
@@ -237,6 +282,61 @@ export function deleteContactPointV2(content: TemplateContentV2, viewId: string,
     ...withoutPoint,
     logicalContacts: withoutPoint.logicalContacts.filter(item => item.id !== point.logicalContactId),
   };
+}
+
+export function addBundlePortV2(
+  content: TemplateContentV2,
+  viewId: string,
+  initial: NewBundlePortV2 = {},
+): [TemplateContentV2, string] {
+  const view = requireView(content, viewId);
+  if (view.bundlePorts.length >= TEMPLATE_V2_LIMITS.contacts)
+    throw new TemplateCommandV2Error("bundle_port_limit", "Достигнут лимит общих точек жгута в виде.");
+  const port: BundlePortV2 = {
+    id: crypto.randomUUID(),
+    name: normalizedName(initial.name ?? "", `Порт жгута ${view.bundlePorts.length + 1}`),
+    x: initial.x ?? constantExpressionV2(260),
+    y: initial.y ?? constantExpressionV2(200),
+    direction: normalizedContactDirection(initial.direction ?? "right"),
+  };
+  const next = replaceView(content, view.id, { ...view, bundlePorts: [...view.bundlePorts, port] });
+  requireValidCommandResult(next, "invalid_bundle_port");
+  requireMaterializableRepeats(next);
+  return [next, port.id];
+}
+
+export function editBundlePortV2(
+  content: TemplateContentV2,
+  viewId: string,
+  portId: string,
+  changes: BundlePortEditV2,
+): TemplateContentV2 {
+  const { view, port } = requireBundlePort(content, viewId, portId);
+  const nextPort: BundlePortV2 = {
+    ...port,
+    name: changes.name === undefined ? port.name : normalizedName(changes.name),
+    x: changes.x ?? port.x,
+    y: changes.y ?? port.y,
+    direction: changes.direction === undefined ? port.direction : normalizedContactDirection(changes.direction),
+  };
+  const next = replaceView(content, view.id, {
+    ...view,
+    bundlePorts: view.bundlePorts.map(candidate => candidate.id === port.id ? nextPort : candidate),
+  });
+  requireValidCommandResult(next, "invalid_bundle_port");
+  requireMaterializableRepeats(next);
+  return next;
+}
+
+export function deleteBundlePortV2(content: TemplateContentV2, viewId: string, portId: string): TemplateContentV2 {
+  const { view } = requireBundlePort(content, viewId, portId);
+  const next = replaceView(content, view.id, {
+    ...view,
+    bundlePorts: view.bundlePorts.filter(candidate => candidate.id !== portId),
+  });
+  requireValidCommandResult(next, "invalid_bundle_port_delete");
+  requireMaterializableRepeats(next);
+  return next;
 }
 
 export function createRepeatPrototypeV2(
@@ -315,6 +415,81 @@ export function createRepeatPrototypeV2(
   requireValidCommandResult(next, "invalid_repeat_prototype");
   requireMaterializableRepeats(next);
   return [next, ids];
+}
+
+/** Places an existing repeat domain in another view using already-linked contact points. */
+export function attachRepeatDomainV2(
+  content: TemplateContentV2,
+  input: AttachRepeatDomainV2Input,
+): [TemplateContentV2, string] {
+  const domain = content.repeaters.find(candidate => candidate.id === input.repeatDomainId);
+  if (!domain) throw new TemplateCommandV2Error("repeat_domain_not_found", "Домен повтора не найден.");
+  const { view, layer, node } = requireNode(content, input.viewId, input.layerId, input.prototypeNodeId);
+  requireEditableNode(layer, node);
+  if (view.repeatPlacements.some(placement => placement.repeatDomainId === domain.id))
+    throw new TemplateCommandV2Error("duplicate_repeat_placement", "В выбранном виде уже есть размещение этого домена повтора.");
+  if (layer.nodes.some(candidate => candidate.kind === "group" && candidate.geometry.childIds.includes(node.id)))
+    throw new TemplateCommandV2Error("repeat_prototype_nested", "Прототип повтора должен находиться на верхнем уровне слоя.");
+
+  const linkedByLogicalId = new Map(view.contactPoints.map(point => [point.logicalContactId, point]));
+  const inferredPointIds = domain.logicalContactIds.map(logicalContactId => {
+    const point = linkedByLogicalId.get(logicalContactId);
+    if (!point)
+      throw new TemplateCommandV2Error("repeat_contact_missing", "В выбранном виде отсутствует точка логического контакта домена повтора.");
+    return point.id;
+  });
+  const requestedPointIds = input.contactPointIds === undefined ? inferredPointIds : [...input.contactPointIds];
+  if (new Set(requestedPointIds).size !== requestedPointIds.length)
+    throw new TemplateCommandV2Error("duplicate_reference", "Точка прототипа повтора указана повторно.");
+  if (requestedPointIds.length !== inferredPointIds.length ||
+      requestedPointIds.some(pointId => !inferredPointIds.includes(pointId)))
+    throw new TemplateCommandV2Error("repeat_contact_mismatch", "Размещение должно включать по одной точке каждого контакта домена повтора.");
+  if (content.views.some(candidate => candidate.repeatPlacements.some(placement =>
+    placement.contactPointIds.some(pointId => requestedPointIds.includes(pointId)))))
+    throw new TemplateCommandV2Error("repeat_contact_used", "Одна из точек уже участвует в другом размещении повтора.");
+
+  const repeatedGroupIds = new Set(content.views.flatMap(candidate =>
+    candidate.repeatPlacements.map(placement => placement.prototypeGroupId)));
+  const descendants = node.kind === "group" ? groupDescendantIds(layer, node.id) : new Set<string>();
+  if (repeatedGroupIds.has(node.id) || [...descendants].some(id => repeatedGroupIds.has(id)))
+    throw new TemplateCommandV2Error("repeat_prototype_used", "Объект или вложенная группа уже участвует в повторе.");
+
+  let prototypeGroupId = node.id;
+  let nodes = layer.nodes;
+  if (node.kind !== "group") {
+    prototypeGroupId = crypto.randomUUID();
+    const group: TemplateNodeV2 = {
+      id: prototypeGroupId,
+      kind: "group",
+      layerId: layer.id,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      transform: identityTransform(),
+      stroke: { color: "#27445a", width: constantExpressionV2(2) },
+      fill: { color: null },
+      geometry: { childIds: [node.id] },
+    };
+    const nodeIndex = layer.nodes.findIndex(candidate => candidate.id === node.id);
+    nodes = [...layer.nodes];
+    nodes.splice(nodeIndex + 1, 0, group);
+  }
+  const pointOrder = new Map(inferredPointIds.map((id, index) => [id, index]));
+  const contactPointIds = [...requestedPointIds].sort((left, right) => pointOrder.get(left)! - pointOrder.get(right)!);
+  const nextView: TemplateViewV2 = {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),
+    repeatPlacements: [...view.repeatPlacements, {
+      repeatDomainId: domain.id,
+      prototypeGroupId,
+      step: input.step,
+      contactPointIds,
+    }],
+  };
+  const next = replaceView(content, view.id, nextView);
+  requireValidCommandResult(next, "invalid_repeat_attachment");
+  requireMaterializableRepeats(next);
+  return [next, prototypeGroupId];
 }
 
 export function deleteRepeatPrototypeV2(
@@ -641,6 +816,28 @@ function requireContactPoint(
   const point = view.contactPoints.find(item => item.id === pointId);
   if (!point) throw new TemplateCommandV2Error("contact_point_not_found", "Точка логического контакта не найдена в выбранном виде.");
   return { view, point, logicalContact: requireLogicalContact(content, point.logicalContactId) };
+}
+
+function requireBundlePort(
+  content: TemplateContentV2,
+  viewId: string,
+  portId: string,
+): { view: TemplateViewV2; port: BundlePortV2 } {
+  const view = requireView(content, viewId);
+  const port = view.bundlePorts.find(item => item.id === portId);
+  if (!port) throw new TemplateCommandV2Error("bundle_port_not_found", "Общая точка жгута не найдена в выбранном виде.");
+  return { view, port };
+}
+
+function groupDescendantIds(layer: LayerV2, groupId: string, result = new Set<string>()): Set<string> {
+  const group = layer.nodes.find(candidate => candidate.id === groupId);
+  if (!group || group.kind !== "group") return result;
+  for (const childId of group.geometry.childIds) {
+    if (result.has(childId)) continue;
+    result.add(childId);
+    groupDescendantIds(layer, childId, result);
+  }
+  return result;
 }
 
 function requireUnlockedLayer(layer: LayerV2): void {

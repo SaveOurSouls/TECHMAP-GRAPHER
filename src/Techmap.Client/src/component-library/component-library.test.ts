@@ -32,7 +32,10 @@ describe("component library UI", () => {
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Прямоугольник");
     expect(markup).toContain("Эллипс");
-    expect(markup).toContain("Точка контакта");
+    expect(markup).toContain("Создать контакт");
+    expect(markup).toContain("Разместить связанную точку");
+    expect(markup).toContain("Выход пучка");
+    expect(markup).toContain('role="tabpanel"');
     expect(markup).toContain("Отменить");
     expect(markup).toContain("Связи с артикулами");
     expect(markup).toContain("Изображения");

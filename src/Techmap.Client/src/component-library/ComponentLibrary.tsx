@@ -5,18 +5,19 @@ import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate
 import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1 } from "./template-content";
 import { TemplateCanvasV2 } from "./TemplateCanvasV2";
+import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
 import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
 import {
-  addAdditionalViewV2, addBasicNodeV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
-  deleteAdditionalViewV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2, editContactPointV2,
-  editLogicalContactV2, editNodeV2, newTemplateContentV2,
+  addAdditionalViewV2, addBasicNodeV2, addBundlePortV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
+  deleteAdditionalViewV2, deleteBundlePortV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2, editBundlePortV2, editContactPointV2,
+  editLogicalContactV2, editNodeV2, linkLogicalContactPointV2, newTemplateContentV2,
   createRepeatPrototypeV2, deleteRepeatPrototypeV2, moveNodeV2, parameterizeNodeDimensionV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
   setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
   setLayerVisibleV2, setNodeLockedV2, type BasicNodeKindV2, type ContactPointEditV2,
-  type LogicalContactEditV2, type NodeEditV2,
+  type BundlePortEditV2, type LogicalContactEditV2, type NodeEditV2,
 } from "./template-commands-v2";
-import { validateTemplateContentV2, type ContactDirectionV2, type ImageNodeV2, type LogicalContactV2, type NumericExpressionV2, type TemplateContentV2, type TemplateNodeV2, type TemplateV2Diagnostic, type ViewContactPointV2 } from "./template-model-v2";
+import { validateTemplateContentV2, type BundlePortV2, type ContactDirectionV2, type ImageNodeV2, type LogicalContactV2, type NumericExpressionV2, type TemplateContentV2, type TemplateNodeV2, type TemplateV2Diagnostic, type ViewContactPointV2 } from "./template-model-v2";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
@@ -81,6 +82,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [undoStack, setUndoStack] = useState<TemplateContentV2[]>([]);
   const [binding, setBinding] = useState<ArticleBinding>({ sourceId: "", entityType: "connector", articleKey: "" });
   const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
+  const [pendingLogicalContactId, setPendingLogicalContactId] = useState<string | null>(null);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -98,6 +100,7 @@ export function ComponentLibrary({ config, session }: Props) {
   function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean) {
     setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, articleBindings: [...item.articleBindings], assets: [...item.assets], content: structuredClone(content) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
+    setPendingLogicalContactId(null);
     setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
   }
@@ -120,6 +123,7 @@ export function ComponentLibrary({ config, session }: Props) {
   function startNew() {
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
     setSelectedId(null); setUndoStack([]); setDirty(true); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
+    setPendingLogicalContactId(null);
     setPreviewParameterValues({});
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
@@ -193,6 +197,14 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!activeView) return;
     try { const [content, id] = addContactPointV2(draft.content, activeView.id); changeContent(content, id); } catch (caught) { setError(errorText(caught)); }
   }
+  function placeLinkedContact(logicalContactId: string) {
+    if (!activeView) return;
+    try { const [content, id] = linkLogicalContactPointV2(draft.content, activeView.id, logicalContactId); changeContent(content, id); setPendingLogicalContactId(null); } catch (caught) { setError(errorText(caught)); }
+  }
+  function appendBundlePort() {
+    if (!activeView) return;
+    try { const [content, id] = addBundlePortV2(draft.content, activeView.id); changeContent(content, id); } catch (caught) { setError(errorText(caught)); }
+  }
   function placeAsset(asset: TemplateAsset) {
     if (!activeView || !activeLayer) return;
     const node = createTemplateImageNodeV2(asset.assetId, activeLayer.id);
@@ -230,7 +242,19 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-metadata"><label>Код / серия<input value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Название<input value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} /></label><div><span>{draft.templateId ? `Версия ${draft.version}` : "Новый шаблон"}</span><button className="primary-action" onClick={() => void save()} disabled={busy || assetMismatch}>{busy ? "Сохраняем…" : draft.templateId ? "Создать версию" : "Сохранить"}</button></div></div>
         <Bindings draft={draft} binding={binding} setBinding={setBinding} addBinding={addBinding} setDraft={setDraft} markDirty={markDirty} />
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
-        <div className="library-view-tabs" role="tablist">{draft.content.views.map(view => <button key={view.id} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
+        <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
+        {activeView && <TemplateContactsPanelV2
+          key={`${activeView.id}:${pendingLogicalContactId ?? ""}`}
+          content={draft.content}
+          activeViewId={activeView.id}
+          preferredLogicalContactId={pendingLogicalContactId}
+          onCreateLogicalContact={appendContact}
+          onPlaceLinkedContact={placeLinkedContact}
+          onAddBundlePort={appendBundlePort}
+          onNavigateToMissingPoint={(targetViewId, logicalContactId) => { setViewId(targetViewId); setSelectedId(null); setPendingLogicalContactId(logicalContactId); }}
+          onSelectContactPoint={setSelectedId}
+          onSelectBundlePort={setSelectedId}
+        />}
         {activeView && <TemplateLayersPanelV2
           layers={activeView.layers}
           activeLayerId={activeLayer?.id ?? null}
@@ -274,9 +298,9 @@ export function ComponentLibrary({ config, session }: Props) {
           )[0])}
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
-        <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button onClick={appendContact} disabled={!activeView}>Точка контакта</button><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea">{activeView && <TemplateCanvasV2 content={draft.content} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={previewParameterValues} />}
-          <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedPoint ? "Точка / порт" : activeLayer ? "Слой" : "Вид"}</h3>
+        <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={draft.content} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={previewParameterValues} />}
+          <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
                point={selectedContactPoint}
@@ -286,7 +310,7 @@ export function ComponentLibrary({ config, session }: Props) {
                remove={() => command(() => deleteContactPointV2(draft.content, activeView.id, selectedContactPoint.id), null)}
              />}
              {selectedContactPoint && !selectedLogicalContact && <p className="readonly-note">Логический контакт точки не найден. Проверьте диагностику шаблона.</p>}
-             {selectedBundlePort && <p className="readonly-note">Редактирование порта жгута будет добавлено вместе с инструментами повторов.</p>}
+             {selectedBundlePort && activeView && <BundlePortProperties port={selectedBundlePort} edit={changes => command(() => editBundlePortV2(draft.content, activeView.id, selectedBundlePort.id, changes))} remove={() => command(() => deleteBundlePortV2(draft.content, activeView.id, selectedBundlePort.id), null)} />}
             {selected?.node && !editableNode && <><p className="readonly-note">Сложный или параметризованный объект доступен только для чтения. Его данные сохраняются без потерь.</p><label>Тип<input value={selected.node.kind} readOnly /></label></>}
             {editableNode && selected && <NodeProperties node={editableNode} disabled={selected.layer.locked || editableNode.locked} edit={changes => command(() => editNodeV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, changes))} move={(x, y) => command(() => setNodePosition(draft.content, activeView!.id, selected.layer.id, editableNode, x, y))} toggleLock={() => command(() => setNodeLockedV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, !editableNode.locked))} />}
             {selected && <><div className="property-order"><button onClick={() => command(() => reorderNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id, 0))} disabled={selected.layer.locked || selected.node.locked}>На задний план</button><button onClick={() => command(() => reorderNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id, selected.layer.nodes.length - 1))} disabled={selected.layer.locked || selected.node.locked}>На передний план</button></div><button className="danger-action" onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked}>Удалить объект</button></>}
@@ -317,7 +341,21 @@ function ContactPointProperties({ point, logical, editLogical, editPoint, remove
       <NumericField label="Y" value={y} change={value => editPoint({ y: constantExpressionV2(value) })} />
     </div> : <p className="readonly-note">Положение задано параметрами и сохраняется только для чтения.</p>}
     <label>Направление<select value={point.direction} onChange={event => editPoint({ direction: event.target.value as ContactDirectionV2 })}><option value="left">Влево</option><option value="right">Вправо</option><option value="up">Вверх</option><option value="down">Вниз</option></select></label>
-    <button className="danger-action" type="button" onClick={remove}>Удалить точку</button>
+    <button className="danger-action" type="button" onClick={remove}>Удалить точку из вида</button>
+  </>;
+}
+
+function BundlePortProperties({ port, edit, remove }: { port: BundlePortV2; edit: (changes: BundlePortEditV2) => void; remove: () => void }) {
+  const x = constantValue(port.x), y = constantValue(port.y);
+  return <>
+    <label>Название<input value={port.name} onChange={event => edit({ name: event.target.value })} /></label>
+    {x !== null && y !== null ? <div className="coordinate-grid">
+      <NumericField label="X" value={x} change={value => edit({ x: constantExpressionV2(value) })} />
+      <NumericField label="Y" value={y} change={value => edit({ y: constantExpressionV2(value) })} />
+    </div> : <p className="readonly-note">Положение задано параметрами и сохраняется только для чтения.</p>}
+    <label>Направление<select value={port.direction} onChange={event => edit({ direction: event.target.value as ContactDirectionV2 })}><option value="left">Влево</option><option value="right">Вправо</option><option value="up">Вверх</option><option value="down">Вниз</option></select></label>
+    <p className="readonly-note">Общий выход связывает геометрию жгута и не создаёт электрический контакт.</p>
+    <button className="danger-action" type="button" onClick={remove}>Удалить общий выход из вида</button>
   </>;
 }
 

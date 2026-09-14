@@ -301,7 +301,23 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain(`data-template-point-id="${ids.point}"`);
     expect(markup).toContain('data-selected="true"');
     expect(markup).toContain("X2");
-    expect(markup).toContain("Питание · right");
+    expect(markup).toContain("Контакт X2: Питание; направление right");
+    expect(markup).toContain('role="button"');
+    expect(markup).toContain('tabindex="0"');
+  });
+
+  it("renders a bundle port as a distinct non-electrical diamond", () => {
+    const document = content([]);
+    const portId = crypto.randomUUID();
+    document.views[0]!.bundlePorts.push({ id: portId, name: "Кабель", x: c(120), y: c(80), direction: "up" });
+
+    const markup = render(document, { selectedId: portId });
+
+    expect(markup).toContain(`data-template-point-id="${portId}"`);
+    expect(markup).toContain('data-template-point-kind="bundle"');
+    expect(markup).toContain('d="M 0 -8 L 8 0 L 0 8 L -8 0 Z"');
+    expect(markup).toContain("Общий выход пучка: Кабель; направление up");
+    expect(markup).not.toContain("Контакт без номера: Кабель");
   });
 
   it("renders repeat occurrences instead of an extra prototype group and contact point", () => {

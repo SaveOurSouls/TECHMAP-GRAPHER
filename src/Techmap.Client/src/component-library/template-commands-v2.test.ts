@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  addBasicNodeV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
+  addBasicNodeV2, addBundlePortV2, addContactPointV2, addLayerV2, addNodeV2, attachRepeatDomainV2, constantExpressionV2,
   createRepeatPrototypeV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2,
-  deleteRepeatPrototypeV2, editContactPointV2, editLogicalContactV2,
+  deleteBundlePortV2, deleteRepeatPrototypeV2, editBundlePortV2, editContactPointV2, editLogicalContactV2,
   editNodeV2, evaluateNumericExpressionV2, moveNodeV2, newTemplateContentV2, renameLayerV2,
-  parameterizeNodeDimensionV2,
+  linkLogicalContactPointV2, parameterizeNodeDimensionV2,
   reorderLayerV2, reorderNodeV2, setLayerLockedV2, setLayerVisibleV2, setNodeLockedV2,
   setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
   TemplateCommandV2Error,
 } from "./template-commands-v2";
 import { TEMPLATE_V2_LIMITS, validateTemplateContentV2, type GroupNodeV2, type RectangleNodeV2, type TemplateContentV2, type TemplateNodeV2 } from "./template-model-v2";
+import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 
 describe("template v2 immutable commands", () => {
   it("creates stable UUIDs, mandatory views and one Main layer in each", () => {
@@ -225,21 +226,58 @@ describe("template v2 immutable commands", () => {
     const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
     const [created, e4PointId] = addContactPointV2(initial, e4.id);
     const logicalId = created.logicalContacts[0]!.id;
-    const drawingPointId = crypto.randomUUID();
-    const linked = {
-      ...created,
-      views: created.views.map(view => view.id === drawing.id ? {
-        ...view,
-        contactPoints: [...view.contactPoints, {
-          id: drawingPointId, logicalContactId: logicalId,
-          x: constantExpressionV2(100), y: constantExpressionV2(120), direction: "left" as const,
-        }],
-      } : view),
-    };
+    const [linked, drawingPointId] = linkLogicalContactPointV2(created, drawing.id, logicalId, {
+      x: constantExpressionV2(100), y: constantExpressionV2(120), direction: "left",
+    });
 
     const removed = deleteContactPointV2(linked, e4.id, e4PointId);
     expect(removed.logicalContacts).toHaveLength(1);
     expect(removed.views[1]!.contactPoints[0]).toMatchObject({ id: drawingPointId, logicalContactId: logicalId });
+    expect(validateTemplateContentV2(removed).valid).toBe(true);
+  });
+
+  it("links one stable view point to an existing logical contact without duplicating the contact", () => {
+    const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
+    const [created] = addContactPointV2(initial, e4.id, { number: "A1", name: "Экран", contactType: "shield" });
+    const logical = created.logicalContacts[0]!;
+    const original = structuredClone(created);
+    const [linked, pointId] = linkLogicalContactPointV2(created, drawing.id, logical.id, {
+      x: constantExpressionV2(45), y: constantExpressionV2(70), direction: "up",
+    });
+
+    expect(created).toEqual(original);
+    expect(linked.logicalContacts).toEqual(created.logicalContacts);
+    expect(linked.views[1]!.contactPoints).toEqual([{
+      id: pointId, logicalContactId: logical.id,
+      x: constantExpressionV2(45), y: constantExpressionV2(70), direction: "up",
+    }]);
+    expect(editContactPointV2(linked, drawing.id, pointId, { direction: "down" }).views[1]!.contactPoints[0]!.id).toBe(pointId);
+    expect(() => linkLogicalContactPointV2(linked, drawing.id, logical.id))
+      .toThrowError(expect.objectContaining({ code: "duplicate_contact_point" }));
+    expect(() => linkLogicalContactPointV2(linked, drawing.id, crypto.randomUUID()))
+      .toThrowError(expect.objectContaining({ code: "logical_contact_not_found" }));
+    expect(linked.logicalContacts).toHaveLength(1);
+    expect(validateTemplateContentV2(linked).valid).toBe(true);
+  });
+
+  it("adds, edits and deletes an independent bundle port immutably", () => {
+    const initial = newTemplateContentV2(), view = initial.views[1]!, original = structuredClone(initial);
+    const [created, portId] = addBundlePortV2(initial, view.id, {
+      name: "Общий выход", x: constantExpressionV2(12), y: constantExpressionV2(34), direction: "left",
+    });
+    const edited = editBundlePortV2(created, view.id, portId, {
+      name: "Выход пучка", y: constantExpressionV2(56), direction: "down",
+    });
+    const removed = deleteBundlePortV2(edited, view.id, portId);
+
+    expect(initial).toEqual(original);
+    expect(created.logicalContacts).toEqual([]);
+    expect(edited.views[1]!.bundlePorts[0]).toEqual({
+      id: portId, name: "Выход пучка", x: constantExpressionV2(12), y: constantExpressionV2(56), direction: "down",
+    });
+    expect(created.views[1]!.bundlePorts[0]).toMatchObject({ id: portId, name: "Общий выход", direction: "left" });
+    expect(removed.views[1]!.bundlePorts).toEqual([]);
+    expect(validateTemplateContentV2(edited).valid).toBe(true);
     expect(validateTemplateContentV2(removed).valid).toBe(true);
   });
 
@@ -343,6 +381,164 @@ describe("template v2 immutable commands", () => {
     });
     expect(() => setRepeatCountV2(created, ids.repeatDomainId, 0)).toThrowError(expect.objectContaining({ code: "repeater_count" }));
     expect(validateTemplateContentV2(stepped).valid).toBe(true);
+  });
+
+  it("attaches one repeat domain across views with shared 2/10 contact occurrence keys", () => {
+    const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
+    const [withE4Node, e4NodeId] = addBasicNodeV2(initial, e4.id, e4.layers[0]!.id, "line");
+    const [withE4Point, e4PointId] = addContactPointV2(withE4Node, e4.id, { number: "1", name: "Сигнал" });
+    const [repeated, ids] = createRepeatPrototypeV2(withE4Point, {
+      viewId: e4.id, layerId: e4.layers[0]!.id, prototypeNodeId: e4NodeId, prototypePointId: e4PointId,
+      count: 2, step: { x: constantExpressionV2(12), y: constantExpressionV2(0) },
+    });
+    const logicalId = repeated.logicalContacts[0]!.id;
+    const [withDrawingNode, drawingNodeId] = addBasicNodeV2(repeated, drawing.id, drawing.layers[0]!.id, "rectangle");
+    const [withDrawingPoint, drawingPointId] = linkLogicalContactPointV2(withDrawingNode, drawing.id, logicalId, {
+      x: constantExpressionV2(40), y: constantExpressionV2(50), direction: "left",
+    });
+    const beforeAttach = structuredClone(withDrawingPoint);
+    const [attached, drawingGroupId] = attachRepeatDomainV2(withDrawingPoint, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: drawingNodeId,
+      repeatDomainId: ids.repeatDomainId, step: { x: constantExpressionV2(0), y: constantExpressionV2(20) },
+    });
+
+    expect(withDrawingPoint).toEqual(beforeAttach);
+    expect(attached.logicalContacts).toEqual(repeated.logicalContacts);
+    expect(attached.repeaters).toEqual(repeated.repeaters);
+    expect(attached.views[1]!.repeatPlacements[0]).toEqual({
+      repeatDomainId: ids.repeatDomainId, prototypeGroupId: drawingGroupId,
+      step: { x: constantExpressionV2(0), y: constantExpressionV2(20) }, contactPointIds: [drawingPointId],
+    });
+    expect(attached.views[1]!.layers[0]!.nodes.find(node => node.id === drawingGroupId)).toMatchObject({
+      kind: "group", geometry: { childIds: [drawingNodeId] },
+    });
+
+    for (const count of [2, 10]) {
+      const counted = setRepeatCountV2(attached, ids.repeatDomainId, count);
+      const expansion = expandTemplateRepeatsV2(counted);
+      const e4Occurrences = expansion.find(view => view.viewId === e4.id)!.placements[0]!.occurrences;
+      const drawingOccurrences = expansion.find(view => view.viewId === drawing.id)!.placements[0]!.occurrences;
+      expect(e4Occurrences).toHaveLength(count);
+      expect(drawingOccurrences).toHaveLength(count);
+      expect(e4Occurrences.map(item => item.contactPoints[0]!.key))
+        .toEqual(drawingOccurrences.map(item => item.contactPoints[0]!.key));
+      expect(e4Occurrences.map(item => item.contactPoints[0]!.number))
+        .toEqual(Array.from({ length: count }, (_, index) => String(index + 1)));
+      expect(drawingOccurrences.at(-1)!.offset).toEqual({ x: 0, y: (count - 1) * 20 });
+    }
+
+    const removed = deleteRepeatPrototypeV2(attached, ids.repeatDomainId);
+    expect(removed.repeaters).toEqual([]);
+    expect(removed.logicalContacts).toEqual(repeated.logicalContacts);
+    expect(removed.views[0]!.contactPoints.map(point => point.id)).toEqual([e4PointId]);
+    expect(removed.views[1]!.contactPoints.map(point => point.id)).toEqual([drawingPointId]);
+    expect(removed.views[0]!.layers[0]!.nodes.some(node => node.id === e4NodeId)).toBe(true);
+    expect(removed.views[1]!.layers[0]!.nodes.some(node => node.id === drawingNodeId)).toBe(true);
+    expect(validateTemplateContentV2(removed).valid).toBe(true);
+  });
+
+  it("reuses an editable top-level group and rejects unsafe repeat attachments atomically", () => {
+    const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
+    const [withE4Node, e4NodeId] = addBasicNodeV2(initial, e4.id, e4.layers[0]!.id, "line");
+    const [withE4Point, e4PointId] = addContactPointV2(withE4Node, e4.id);
+    const [repeated, ids] = createRepeatPrototypeV2(withE4Point, {
+      viewId: e4.id, layerId: e4.layers[0]!.id, prototypeNodeId: e4NodeId, prototypePointId: e4PointId,
+      step: { x: constantExpressionV2(8), y: constantExpressionV2(0) },
+    });
+    const [withChild, childId] = addBasicNodeV2(repeated, drawing.id, drawing.layers[0]!.id, "line");
+    const groupId = crypto.randomUUID();
+    const group: GroupNodeV2 = {
+      id: groupId, kind: "group", layerId: drawing.layers[0]!.id, visible: true, locked: false, opacity: 1,
+      transform: { translateX: constantExpressionV2(0), translateY: constantExpressionV2(0), rotationDegrees: constantExpressionV2(0), scaleX: constantExpressionV2(1), scaleY: constantExpressionV2(1) },
+      stroke: { color: "#27445a", width: constantExpressionV2(2) }, fill: { color: null }, geometry: { childIds: [childId] },
+    };
+    const withGroup = addNodeV2(withChild, drawing.id, drawing.layers[0]!.id, group);
+    const logicalId = withGroup.logicalContacts[0]!.id;
+    const [linked, drawingPointId] = linkLogicalContactPointV2(withGroup, drawing.id, logicalId);
+    const original = structuredClone(linked);
+    const [attached, attachedGroupId] = attachRepeatDomainV2(linked, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: groupId,
+      repeatDomainId: ids.repeatDomainId, contactPointIds: [drawingPointId],
+      step: { x: constantExpressionV2(0), y: constantExpressionV2(9) },
+    });
+
+    expect(attachedGroupId).toBe(groupId);
+    expect(attached.views[1]!.layers[0]!.nodes).toHaveLength(linked.views[1]!.layers[0]!.nodes.length);
+    expect(() => attachRepeatDomainV2(attached, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: groupId,
+      repeatDomainId: ids.repeatDomainId, contactPointIds: [drawingPointId],
+      step: { x: constantExpressionV2(0), y: constantExpressionV2(9) },
+    })).toThrowError(expect.objectContaining({ code: "duplicate_repeat_placement" }));
+    expect(linked).toEqual(original);
+
+    const withoutLinkedPoint = deleteContactPointV2(linked, drawing.id, drawingPointId);
+    const beforeMissing = structuredClone(withoutLinkedPoint);
+    expect(() => attachRepeatDomainV2(withoutLinkedPoint, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: groupId,
+      repeatDomainId: ids.repeatDomainId, step: { x: constantExpressionV2(0), y: constantExpressionV2(9) },
+    })).toThrowError(expect.objectContaining({ code: "repeat_contact_missing" }));
+    expect(withoutLinkedPoint).toEqual(beforeMissing);
+
+    const locked = setNodeLockedV2(linked, drawing.id, drawing.layers[0]!.id, groupId, true);
+    const beforeLocked = structuredClone(locked);
+    expect(() => attachRepeatDomainV2(locked, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: groupId,
+      repeatDomainId: ids.repeatDomainId, step: { x: constantExpressionV2(0), y: constantExpressionV2(9) },
+    })).toThrowError(expect.objectContaining({ code: "node_locked" }));
+    expect(locked).toEqual(beforeLocked);
+  });
+
+  it("rejects a cross-view repeat attachment that would collide with an ordinary contact number", () => {
+    const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
+    const [withE4Node, e4NodeId] = addBasicNodeV2(initial, e4.id, e4.layers[0]!.id, "line");
+    const [withPrototype, e4PointId] = addContactPointV2(withE4Node, e4.id, { number: "1" });
+    const [repeated, ids] = createRepeatPrototypeV2(withPrototype, {
+      viewId: e4.id, layerId: e4.layers[0]!.id, prototypeNodeId: e4NodeId, prototypePointId: e4PointId,
+      count: 2, step: { x: constantExpressionV2(10), y: constantExpressionV2(0) },
+    });
+    const logicalId = repeated.logicalContacts[0]!.id;
+    const [withDrawingNode, drawingNodeId] = addBasicNodeV2(repeated, drawing.id, drawing.layers[0]!.id, "line");
+    const [withLinkedPoint] = linkLogicalContactPointV2(withDrawingNode, drawing.id, logicalId);
+    const [withCollision] = addContactPointV2(withLinkedPoint, drawing.id, { number: "2" });
+    const before = structuredClone(withCollision);
+
+    expect(() => attachRepeatDomainV2(withCollision, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: drawingNodeId,
+      repeatDomainId: ids.repeatDomainId, step: { x: constantExpressionV2(0), y: constantExpressionV2(10) },
+    })).toThrowError(expect.objectContaining({ code: "duplicate_expanded_contact_number" }));
+    expect(withCollision).toEqual(before);
+  });
+
+  it("enforces the aggregate materialized budget when attaching a repeat to another view", () => {
+    const initial = newTemplateContentV2(), e4 = initial.views[0]!, drawing = initial.views[1]!;
+    const [withE4Node, e4NodeId] = addBasicNodeV2(initial, e4.id, e4.layers[0]!.id, "line");
+    const [withE4Point, e4PointId] = addContactPointV2(withE4Node, e4.id);
+    const [repeated, ids] = createRepeatPrototypeV2(withE4Point, {
+      viewId: e4.id, layerId: e4.layers[0]!.id, prototypeNodeId: e4NodeId, prototypePointId: e4PointId,
+      count: 1_000, step: { x: constantExpressionV2(1), y: constantExpressionV2(0) },
+    });
+    let withDrawingNodes = repeated;
+    const childIds: string[] = [];
+    for (let index = 0; index < 3; index++) {
+      const result = addBasicNodeV2(withDrawingNodes, drawing.id, drawing.layers[0]!.id, "line");
+      withDrawingNodes = result[0];
+      childIds.push(result[1]);
+    }
+    const groupId = crypto.randomUUID();
+    const group: GroupNodeV2 = {
+      id: groupId, kind: "group", layerId: drawing.layers[0]!.id, visible: true, locked: false, opacity: 1,
+      transform: { translateX: constantExpressionV2(0), translateY: constantExpressionV2(0), rotationDegrees: constantExpressionV2(0), scaleX: constantExpressionV2(1), scaleY: constantExpressionV2(1) },
+      stroke: { color: "#27445a", width: constantExpressionV2(2) }, fill: { color: null }, geometry: { childIds },
+    };
+    const withGroup = addNodeV2(withDrawingNodes, drawing.id, drawing.layers[0]!.id, group);
+    const [linked] = linkLogicalContactPointV2(withGroup, drawing.id, withGroup.logicalContacts[0]!.id);
+    const before = structuredClone(linked);
+
+    expect(() => attachRepeatDomainV2(linked, {
+      viewId: drawing.id, layerId: drawing.layers[0]!.id, prototypeNodeId: groupId,
+      repeatDomainId: ids.repeatDomainId, step: { x: constantExpressionV2(0), y: constantExpressionV2(1) },
+    })).toThrowError(expect.objectContaining({ code: "expanded_budget" }));
+    expect(linked).toEqual(before);
   });
 
   it("checks aggregate expansion before accepting create and count changes", () => {

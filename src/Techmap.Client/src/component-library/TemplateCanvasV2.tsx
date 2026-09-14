@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type {
   NumericExpressionV2,
   ParameterValueV2,
@@ -304,6 +304,13 @@ export function TemplateCanvasV2({
     onSelect(id);
   };
 
+  const selectFromKeyboard = (event: ReactKeyboardEvent<SVGElement>, id: string) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect(id);
+  };
+
   const pointFromEvent = (event: ReactPointerEvent<SVGElement>): SvgPoint | null => {
     const svg = event.currentTarget.ownerSVGElement ??
       (event.currentTarget.tagName.toLowerCase() === "svg" ? event.currentTarget as SVGSVGElement : null);
@@ -574,6 +581,12 @@ export function TemplateCanvasV2({
       : undefined;
     const name = kind === "bundle" && "name" in point ? point.name : logical?.name ?? "Контакт";
     const number = logical?.number ?? "";
+    const label = kind === "contact"
+      ? `Контакт ${number || "без номера"}: ${name}; направление ${point.direction}`
+      : `Общий выход пучка: ${name}; направление ${point.direction}`;
+    const stem = point.direction === "left" ? "M -13 0 H -5"
+      : point.direction === "right" ? "M 5 0 H 13"
+        : point.direction === "up" ? "M 0 -13 V -5" : "M 0 5 V 13";
     return (
       <g
         key={point.id}
@@ -582,11 +595,17 @@ export function TemplateCanvasV2({
         data-selected={selectedId === point.id ? "true" : undefined}
         transform={`translate(${formatNumber(x)} ${formatNumber(y)})`}
         onPointerDown={event => select(event, point.id)}
+        onKeyDown={event => selectFromKeyboard(event, point.id)}
+        role="button"
+        tabIndex={0}
+        aria-label={label}
       >
-        <circle r="7" fill="#fff" stroke={kind === "contact" ? "#c54848" : "#36708e"} strokeWidth="2" />
-        <path d="M -11 0 H 11 M 0 -11 V 11" fill="none" stroke={kind === "contact" ? "#c54848" : "#36708e"} strokeWidth="2" />
+        {kind === "contact"
+          ? <circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
+          : <path d="M 0 -8 L 8 0 L 0 8 L -8 0 Z" fill="#edf7fb" stroke="#36708e" strokeWidth="2" />}
+        <path d={stem} fill="none" stroke={kind === "contact" ? "#c54848" : "#36708e"} strokeWidth="2" />
         {number && <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{number}</text>}
-        <title>{`${name} · ${point.direction}`}</title>
+        <title>{label}</title>
       </g>
     );
   }
@@ -601,9 +620,13 @@ export function TemplateCanvasV2({
         data-template-repeat-index={occurrence.index}
         transform={`translate(${formatNumber(point.x)} ${formatNumber(point.y)})`}
         onPointerDown={event => select(event, point.prototypeContactPointId)}
+        onKeyDown={event => selectFromKeyboard(event, point.prototypeContactPointId)}
+        role="button"
+        tabIndex={0}
+        aria-label={`Контакт ${point.number}: ${point.name}; направление ${point.direction}; повтор ${occurrence.index + 1}`}
       >
-        <circle r="7" fill="#fff" stroke="#c54848" strokeWidth="2" />
-        <path d="M -11 0 H 11 M 0 -11 V 11" fill="none" stroke="#c54848" strokeWidth="2" />
+        <circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
+        <path d={point.direction === "left" ? "M -13 0 H -5" : point.direction === "right" ? "M 5 0 H 13" : point.direction === "up" ? "M 0 -13 V -5" : "M 0 5 V 13"} fill="none" stroke="#c54848" strokeWidth="2" />
         <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{point.number}</text>
         <title>{`${point.name} · ${point.direction}`}</title>
       </g>
