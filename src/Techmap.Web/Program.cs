@@ -194,6 +194,7 @@ if (startupBackup is null && existingDatabase)
 }
 
 using var storage = SqliteStorage.Open(dataRoot);
+_ = SqliteAttachmentGarbageCollector.Prune(storage, TimeProvider.System);
 if (packagedSchemaVersion != storage.Diagnostics.SchemaVersion)
 {
     throw new InvalidDataException("The packaged and live storage schema versions do not match.");

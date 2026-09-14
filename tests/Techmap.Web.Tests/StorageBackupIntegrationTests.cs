@@ -13,6 +13,78 @@ namespace Techmap.Web.Tests;
 public sealed class StorageBackupIntegrationTests
 {
     [Fact]
+    public async Task Backup_includes_global_template_assets_without_a_project_and_rejects_tampered_asset_metadata()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var templates = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+        var template = templates.Create(
+            "ASSET", "Asset template", [], 1,
+            """
+            {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
+            """);
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        var withAsset = await templates.AddAssetAsync(
+            template.TemplateId,
+            1,
+            new MemoryStream(png),
+            "symbol.png",
+            "image/png",
+            TestContext.Current.CancellationToken);
+        var asset = Assert.Single(withAsset.Assets);
+
+        using (var service = fixture.Service(storage.Layout.DatabasePath))
+        {
+            var backup = await service.CreateAsync(
+                new StorageBackupRequest(fixture.BackupRoot, "0.3.8-m2.06"),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(1, backup.ReferencedBlobCount);
+            Assert.Empty(backup.ProjectRevisions);
+            Assert.Equal(png, await File.ReadAllBytesAsync(
+                BackupBlobPath(backup.BackupPath, asset.Content.Sha256),
+                TestContext.Current.CancellationToken));
+        }
+
+        const string invalidFileName = "folder/symbol.png";
+        var tamperedAssets = withAsset.Assets
+            .Select(item => item with { FileName = invalidFileName })
+            .ToArray();
+        var matchingVersionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+            withAsset.TemplateId,
+            withAsset.Version,
+            withAsset.SchemaVersion,
+            withAsset.Code,
+            withAsset.Name,
+            withAsset.ArticleBindings,
+            tamperedAssets,
+            withAsset.ContentJson);
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                DROP TRIGGER prevent_component_template_asset_update;
+                DROP TRIGGER prevent_component_template_version_update;
+                UPDATE component_template_asset_refs
+                SET file_name = $fileName
+                WHERE template_id = $templateId AND version = 2;
+                UPDATE component_template_versions
+                SET version_sha256 = $versionSha256
+                WHERE template_id = $templateId AND version = 2;
+                """);
+            command.Parameters.AddWithValue("$templateId", template.TemplateId.ToString("D"));
+            command.Parameters.AddWithValue("$fileName", invalidFileName);
+            command.Parameters.AddWithValue("$versionSha256", matchingVersionHash);
+            command.ExecuteNonQuery();
+        });
+        using var corrupted = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => corrupted.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.3.8-m2.06"),
+            TestContext.Current.CancellationToken));
+        Assert.Equal("backup_failed", error.Code);
+    }
+
+    [Fact]
     public async Task Backup_verifies_complete_component_template_versions_and_rejects_tampered_bindings()
     {
         using var fixture = BackupFixture.Create();
@@ -42,7 +114,7 @@ public sealed class StorageBackupIntegrationTests
             var valid = await service.CreateAsync(
                 new StorageBackupRequest(fixture.BackupRoot, "0.3.7-m2.05"),
                 TestContext.Current.CancellationToken);
-            Assert.Equal(10, valid.SchemaVersion);
+            Assert.Equal(SqliteStorage.CurrentSchemaVersion, valid.SchemaVersion);
         }
 
         storage.ExecuteInTransaction(unitOfWork =>

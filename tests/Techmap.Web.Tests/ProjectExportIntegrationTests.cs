@@ -14,6 +14,36 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectExportIntegrationTests
 {
     [Fact]
+    public async Task Export_does_not_include_global_component_template_assets()
+    {
+        using var fixture = ExportFixture.Create();
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        using var storage = SqliteStorage.Open(lease.CanonicalPath);
+        var project = new SqliteProjectCatalog(storage).CreateProject(new CreateProjectCommand(
+            "ПР-ЭКСП-ASSET", "Project without attachments", 1, ProjectStatus.Draft));
+        var templates = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+        var template = templates.Create(
+            "GLOBAL", "Global template", [], 1,
+            """
+            {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
+            """);
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        var asset = Assert.Single((await templates.AddAssetAsync(
+            template.TemplateId, 1, new MemoryStream(png), "global.png", "image/png",
+            TestContext.Current.CancellationToken)).Assets);
+
+        var destination = fixture.Destination("no-global-library.techmap-project.zip");
+        await new SqliteProjectExportService(lease, storage).ExportAsync(
+            new ProjectExportRequest(project.ProjectId, destination, "0.3.8-m2.06"),
+            TestContext.Current.CancellationToken);
+
+        using var archive = ZipFile.OpenRead(destination);
+        Assert.DoesNotContain(archive.Entries, entry =>
+            entry.FullName.Contains(asset.Content.Sha256, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Exports_two_harnesses_pinned_data_and_only_referenced_blobs()
     {
         using var fixture = ExportFixture.Create();

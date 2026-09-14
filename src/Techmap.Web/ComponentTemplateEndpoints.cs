@@ -7,7 +7,8 @@ namespace Techmap.Web;
 
 public static class ComponentTemplateEndpoints
 {
-    public const long MaximumRequestBytes = SqliteComponentTemplateStore.MaximumContentBytes + 128 * 1024L;
+    public const long MaximumRequestBytes =
+        ((SqliteComponentTemplateStore.MaximumAssetBytes + 2L) / 3L) * 4L + 128 * 1024L;
 
     public static void MapComponentTemplateEndpoints(this WebApplication app)
     {
@@ -92,6 +93,68 @@ public static class ComponentTemplateEndpoints
             store.Delete(templateId, request.ExpectedVersion.Value);
             return Results.NoContent();
         }));
+
+        app.MapPost(route + "/{templateId:guid}/assets", async (
+            HttpContext context,
+            Guid templateId,
+            IComponentTemplateStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            var request = await ReadRequestAsync<AddComponentTemplateAssetRequest>(
+                context.Request, cancellationToken);
+            if (request?.ExpectedVersion is null)
+                throw Invalid("component_template_expected_version_invalid", "Expected version is required.", "expectedVersion");
+            var bytes = DecodeAsset(request.ContentBase64);
+            await using var source = new MemoryStream(bytes, writable: false);
+            var result = await store.AddAssetAsync(
+                templateId,
+                request.ExpectedVersion.Value,
+                source,
+                Required(request.FileName, "fileName"),
+                Required(request.MediaType, "mediaType"),
+                cancellationToken);
+            return Results.Ok(ToResponse(result));
+        }));
+
+        app.MapDelete(route + "/{templateId:guid}/assets/{assetId:guid}", async (
+            HttpContext context,
+            Guid templateId,
+            Guid assetId,
+            IComponentTemplateStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            var request = await ReadRequestAsync<RemoveComponentTemplateAssetRequest>(
+                context.Request, cancellationToken);
+            if (request?.ExpectedVersion is null)
+                throw Invalid("component_template_expected_version_invalid", "Expected version is required.", "expectedVersion");
+            return Results.Ok(ToResponse(store.RemoveAsset(
+                templateId, request.ExpectedVersion.Value, assetId)));
+        }));
+
+        app.MapGet(route + "/{templateId:guid}/versions/{version:int}/assets/{assetId:guid}/content", async (
+            HttpContext context,
+            Guid templateId,
+            int version,
+            Guid assetId,
+            LocalHttpSession session,
+            IComponentTemplateStore store,
+            CancellationToken cancellationToken) =>
+        {
+            if (!session.HasValidCookie(context.Request))
+                return Results.Json(new ApiErrorResponse("invalid_session"), statusCode: StatusCodes.Status401Unauthorized);
+            try
+            {
+                var template = store.GetVersion(templateId, version);
+                var asset = template.Assets.SingleOrDefault(item => item.AssetId == assetId)
+                    ?? throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+                var stream = await store.OpenAssetAsync(templateId, version, assetId, cancellationToken);
+                return Results.Stream(stream, asset.MediaType, enableRangeProcessing: false);
+            }
+            catch (Exception error) when (IsHandled(error))
+            {
+                return Error(error);
+            }
+        });
     }
 
     private static IResult HasSession(
@@ -167,6 +230,26 @@ public static class ComponentTemplateEndpoints
         return content.GetRawText();
     }
 
+    private static byte[] DecodeAsset(string? encoded)
+    {
+        if (encoded is null)
+            throw Invalid("component_template_asset_content_invalid", "Image content is required.", "contentBase64");
+        var maximumEncodedLength = ((SqliteComponentTemplateStore.MaximumAssetBytes + 2L) / 3L) * 4L;
+        if (encoded.Length > maximumEncodedLength)
+            throw Invalid("component_template_asset_too_large", "The image asset is too large.", "contentBase64");
+        try
+        {
+            var bytes = Convert.FromBase64String(encoded);
+            if (bytes.Length > SqliteComponentTemplateStore.MaximumAssetBytes)
+                throw Invalid("component_template_asset_too_large", "The image asset is too large.", "contentBase64");
+            return bytes;
+        }
+        catch (FormatException)
+        {
+            throw Invalid("component_template_asset_content_invalid", "Image content is not valid Base64.", "contentBase64");
+        }
+    }
+
     private static string Required(string? value, string field) =>
         value ?? throw Invalid("component_template_invalid", $"{field} is required.", field);
 
@@ -188,6 +271,7 @@ public static class ComponentTemplateEndpoints
             value.Code,
             value.Name,
             value.ArticleBindings.Select(ToResponse).ToArray(),
+            value.Assets.Select(ToResponse).ToArray(),
             content.RootElement.Clone(),
             value.CreatedUtc,
             value.UpdatedUtc);
@@ -196,34 +280,47 @@ public static class ComponentTemplateEndpoints
     private static ComponentTemplateArticleBindingResponse ToResponse(ComponentTemplateArticleBinding value) =>
         new(value.SourceId, value.EntityType, value.ArticleKey);
 
+    private static ComponentTemplateAssetResponse ToResponse(ComponentTemplateAsset value) =>
+        new(value.AssetId, value.Content.Sha256, value.Content.SizeBytes, value.FileName, value.MediaType);
+
     private static IResult Execute(Func<IResult> operation)
     {
         try { return operation(); }
-        catch (ComponentTemplateException error) { return Error(error); }
+        catch (Exception error) when (IsHandled(error)) { return Error(error); }
     }
 
     private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> operation)
     {
         try { return await operation(); }
-        catch (ComponentTemplateException error) { return Error(error); }
+        catch (Exception error) when (IsHandled(error)) { return Error(error); }
     }
 
-    private static IResult Error(ComponentTemplateException error)
+    private static bool IsHandled(Exception error) =>
+        error is ComponentTemplateException or FileNotFoundException or InvalidDataException;
+
+    private static IResult Error(Exception error)
     {
-        var status = error.Code switch
+        if (error is FileNotFoundException or InvalidDataException)
+            return Results.Json(
+                new ApiErrorResponse("component_template_asset_content_corrupt", Message: "The image content is missing or corrupt."),
+                statusCode: StatusCodes.Status409Conflict);
+        var templateError = (ComponentTemplateException)error;
+        var status = templateError.Code switch
         {
-            "component_template_not_found" or "component_template_version_not_found" => StatusCodes.Status404NotFound,
-            "component_template_version_conflict" or "component_template_code_conflict" => StatusCodes.Status409Conflict,
-            "component_template_content_too_large" => StatusCodes.Status413PayloadTooLarge,
+            "component_template_not_found" or "component_template_version_not_found" or
+                "component_template_asset_not_found" => StatusCodes.Status404NotFound,
+            "component_template_version_conflict" or "component_template_code_conflict" or
+                "component_template_asset_conflict" => StatusCodes.Status409Conflict,
+            "component_template_content_too_large" or "component_template_asset_too_large" => StatusCodes.Status413PayloadTooLarge,
             "component_template_corrupt" => StatusCodes.Status500InternalServerError,
             _ => StatusCodes.Status400BadRequest,
         };
         return Results.Json(
             new ApiErrorResponse(
-                error.Code,
-                error.Field,
-                error.Message,
-                CurrentVersion: error.CurrentVersion),
+                templateError.Code,
+                templateError.Field,
+                templateError.Message,
+                CurrentVersion: templateError.CurrentVersion),
             statusCode: status);
     }
 

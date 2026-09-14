@@ -35,6 +35,10 @@ public sealed class HarnessDesignMigrationTests
             {
                 downgrade.CommandText =
                     """
+                    DROP TRIGGER prevent_component_template_asset_delete;
+                    DROP TRIGGER prevent_component_template_asset_update;
+                    DROP TRIGGER prevent_component_template_asset_late_insert;
+                    DROP TABLE component_template_asset_refs;
                     DROP TRIGGER prevent_component_template_binding_delete;
                     DROP TRIGGER prevent_component_template_binding_late_insert;
                     DROP TRIGGER enforce_component_template_head_publish;
@@ -47,7 +51,7 @@ public sealed class HarnessDesignMigrationTests
                     DROP TABLE component_templates;
                     DROP TRIGGER create_harness_design_document;
                     DROP TABLE harness_design_documents;
-                    DELETE FROM schema_history WHERE version IN (9, 10);
+                    DELETE FROM schema_history WHERE version IN (9, 10, 11);
                     PRAGMA user_version = 8;
                     """;
                 downgrade.ExecuteNonQuery();
@@ -64,7 +68,7 @@ public sealed class HarnessDesignMigrationTests
 
             Assert.True(migration.Migrated);
             Assert.Equal(8, migration.SourceSchemaVersion);
-            Assert.Equal(10, migration.TargetSchemaVersion);
+            Assert.Equal(SqliteStorage.CurrentSchemaVersion, migration.TargetSchemaVersion);
             Assert.Equal(0, design.Revision);
             Assert.Equal(1, design.SchemaVersion);
             Assert.Equal(SqliteStorage.EmptyHarnessDesignJson, design.ContentJson);

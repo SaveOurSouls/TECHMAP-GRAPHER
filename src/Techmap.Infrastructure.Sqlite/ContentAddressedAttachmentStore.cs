@@ -111,6 +111,41 @@ public sealed class ContentAddressedAttachmentStore : IAttachmentContentStore
         }
     }
 
+    internal int PruneUnreferencedBlobs(
+        IReadOnlySet<string> referencedSha256,
+        DateTimeOffset olderThanUtc)
+    {
+        ArgumentNullException.ThrowIfNull(referencedSha256);
+        var removed = 0;
+        foreach (var shardPath in Directory.EnumerateDirectories(blobsPath, "*", SearchOption.TopDirectoryOnly))
+        {
+            RejectReparsePoint(shardPath, "An attachment blob shard must not be a reparse point.");
+            var shard = Path.GetFileName(shardPath);
+            if (shard.Length != 2 || shard.Any(character => character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+                continue;
+            foreach (var path in Directory.EnumerateFiles(shardPath, "*", SearchOption.TopDirectoryOnly))
+            {
+                RejectReparsePoint(path, "An attachment blob must not be a reparse point.");
+                var hash = Path.GetFileName(path);
+                if (hash.Length != 64 || !hash.StartsWith(shard, StringComparison.Ordinal) ||
+                    hash.Any(character => character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
+                    referencedSha256.Contains(hash) ||
+                    File.GetLastWriteTimeUtc(path) >= olderThanUtc.UtcDateTime)
+                    continue;
+                try
+                {
+                    File.Delete(path);
+                    removed++;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    // Orphan cleanup is maintenance. A locked/read-only file must not block startup.
+                }
+            }
+        }
+        return removed;
+    }
+
     async Task<AttachmentContent> IAttachmentContentStore.WriteAsync(
         Stream source,
         CancellationToken cancellationToken)

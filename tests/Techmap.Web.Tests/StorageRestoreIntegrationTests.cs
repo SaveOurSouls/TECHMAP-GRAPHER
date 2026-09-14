@@ -13,6 +13,52 @@ namespace Techmap.Web.Tests;
 public sealed class StorageRestoreIntegrationTests
 {
     [Fact]
+    public async Task Dry_run_restores_global_template_image_assets_without_projects()
+    {
+        using var fixture = RestoreFixture.Create();
+        StorageBackupResult backup;
+        Guid templateId;
+        Guid assetId;
+        string assetHash;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            databasePath = storage.Layout.DatabasePath;
+            var templates = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var template = templates.Create(
+                "RESTORE-ASSET", "Restore asset", [], 1,
+                """
+                {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
+                """);
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+            var asset = Assert.Single((await templates.AddAssetAsync(
+                template.TemplateId, 1, new MemoryStream(png), "restored.png", "image/png",
+                TestContext.Current.CancellationToken)).Assets);
+            templateId = template.TemplateId;
+            assetId = asset.AssetId;
+            assetHash = asset.Content.Sha256;
+            using var backupService = new SqliteStorageBackupService(fixture.DataRoot, databasePath);
+            backup = await backupService.CreateAsync(
+                new StorageBackupRequest(fixture.BackupRoot, "0.3.8-m2.06"),
+                TestContext.Current.CancellationToken);
+        }
+
+        using var service = new SqliteStorageBackupService(fixture.DataRoot, databasePath);
+        using var restore = new SqliteStorageRestoreService(fixture.DataRoot, service);
+        _ = await restore.DryRunAsync(
+            new StorageDryRunRestoreRequest(backup.BackupPath, fixture.RecoveryRoot),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(Path.Combine(
+            fixture.RecoveryRoot, "attachments", "blobs", assetHash[..2], assetHash)));
+        using var recovered = SqliteStorage.Open(fixture.RecoveryRoot);
+        var recoveredAsset = Assert.Single(new SqliteComponentTemplateStore(recovered, TimeProvider.System)
+            .Get(templateId).Assets);
+        Assert.Equal(assetId, recoveredAsset.AssetId);
+    }
+
+    [Fact]
     public async Task Dry_run_restores_verified_backup_to_new_root_without_changing_live_root()
     {
         using var fixture = RestoreFixture.Create();

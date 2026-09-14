@@ -146,6 +146,10 @@ public sealed class ReferenceCatalogSearchProjectionTests
         using var command = connection.CreateCommand();
         command.CommandText =
             """
+            DROP TRIGGER prevent_component_template_asset_delete;
+            DROP TRIGGER prevent_component_template_asset_update;
+            DROP TRIGGER prevent_component_template_asset_late_insert;
+            DROP TABLE component_template_asset_refs;
             DROP TRIGGER prevent_component_template_binding_delete;
             DROP TRIGGER prevent_component_template_binding_late_insert;
             DROP TRIGGER enforce_component_template_head_publish;
@@ -166,7 +170,7 @@ public sealed class ReferenceCatalogSearchProjectionTests
             DROP TABLE reference_search_records;
             DROP TABLE reference_search_projections;
             DROP TABLE reference_catalog_saved_filters;
-            DELETE FROM schema_history WHERE version IN (8, 9, 10);
+            DELETE FROM schema_history WHERE version IN (8, 9, 10, 11);
             PRAGMA user_version = 7;
             """;
         command.ExecuteNonQuery();

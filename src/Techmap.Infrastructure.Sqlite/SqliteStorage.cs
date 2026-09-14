@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 [assembly: InternalsVisibleTo("Techmap.Web.Tests")]
+[assembly: InternalsVisibleTo("Techmap.Server")]
 
 namespace Techmap.Infrastructure.Sqlite;
 
@@ -19,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -774,6 +775,51 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         END;
         """;
 
+    private const string ComponentTemplateAssetMigrationId = "M2-06A-component-template-assets";
+    private const string ComponentTemplateAssetSchemaSql =
+        """
+        CREATE TABLE component_template_asset_refs (
+            template_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            asset_ordinal INTEGER NOT NULL CHECK (asset_ordinal >= 0 AND asset_ordinal < 64),
+            asset_id TEXT NOT NULL CHECK (length(asset_id) = 36),
+            file_name TEXT NOT NULL CHECK (length(file_name) BETWEEN 1 AND 255),
+            media_type TEXT NOT NULL CHECK (media_type = 'image/png'),
+            content_sha256 TEXT NOT NULL
+                REFERENCES attachment_blobs(content_sha256) ON UPDATE CASCADE ON DELETE RESTRICT,
+            PRIMARY KEY (template_id, version, asset_id),
+            UNIQUE (template_id, version, asset_ordinal),
+            FOREIGN KEY (template_id, version)
+                REFERENCES component_template_versions(template_id, version)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_assets_content
+            ON component_template_asset_refs(content_sha256, template_id, version);
+
+        CREATE TRIGGER prevent_component_template_asset_late_insert
+        BEFORE INSERT ON component_template_asset_refs
+        WHEN NEW.version <= (
+            SELECT current_version
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_asset_update
+        BEFORE UPDATE ON component_template_asset_refs
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_asset_delete
+        BEFORE DELETE ON component_template_asset_refs
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_asset_immutable');
+        END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1182,6 +1228,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 8, MigrationId: ReferenceSearchMigrationId, Sql: ReferenceSearchSchemaSql),
             (Version: 9, MigrationId: HarnessDesignMigrationId, Sql: HarnessDesignSchemaSql),
             (Version: 10, MigrationId: ComponentTemplateMigrationId, Sql: ComponentTemplateSchemaSql),
+            (Version: 11, MigrationId: ComponentTemplateAssetMigrationId, Sql: ComponentTemplateAssetSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1279,6 +1326,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateSchemaSql);
         }
 
+        if (schemaVersion >= 11)
+        {
+            ExecuteSchemaSql(expected, ComponentTemplateAssetSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1372,6 +1424,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateMigrationId,
                 Sql: ComponentTemplateSchemaSql,
                 Description: "Versioned component template library"),
+            10 => (
+                Version: 11,
+                MigrationId: ComponentTemplateAssetMigrationId,
+                Sql: ComponentTemplateAssetSchemaSql,
+                Description: "Immutable component template image assets"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1448,7 +1505,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10))
             {
                 return false;
             }

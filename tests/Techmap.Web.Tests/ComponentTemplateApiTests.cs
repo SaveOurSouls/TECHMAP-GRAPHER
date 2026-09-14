@@ -181,6 +181,189 @@ public sealed class ComponentTemplateApiTests
             .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
     }
 
+    [Fact]
+    public async Task Image_assets_are_signature_checked_versioned_and_read_from_immutable_history()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var content = Content("line");
+        using var create = await SendAsync(
+            client,
+            HttpMethod.Post,
+            "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("IMG", "Images", [], content.RootElement.Clone()),
+            csrf);
+        var created = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Empty(created.Assets);
+
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        using var add = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/component-templates/{created.TemplateId:D}/assets",
+            new AddComponentTemplateAssetRequest(1, "contact.png", "image/png", Convert.ToBase64String(png)),
+            csrf);
+        Assert.Equal(HttpStatusCode.OK, add.StatusCode);
+        var withAsset = Assert.IsType<ComponentTemplateResponse>(await add.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(2, withAsset.Version);
+        var asset = Assert.Single(withAsset.Assets);
+        Assert.Equal("image/png", asset.MediaType);
+        Assert.Equal(png.Length, asset.SizeBytes);
+
+        using var read = await client.GetAsync(
+            $"/api/v1/component-templates/{created.TemplateId:D}/versions/2/assets/{asset.AssetId:D}/content",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        Assert.Equal("image/png", read.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(png, await read.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
+
+        using var updateContent = Content("line-updated");
+        using var update = await SendAsync(
+            client,
+            HttpMethod.Put,
+            $"/api/v1/component-templates/{created.TemplateId:D}",
+            new UpdateComponentTemplateRequest(
+                2, "IMG", "Images updated", [], updateContent.RootElement.Clone()),
+            csrf);
+        var updated = Assert.IsType<ComponentTemplateResponse>(await update.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(asset.AssetId, Assert.Single(updated.Assets).AssetId);
+
+        using var remove = await SendAsync(
+            client,
+            HttpMethod.Delete,
+            $"/api/v1/component-templates/{created.TemplateId:D}/assets/{asset.AssetId:D}",
+            new RemoveComponentTemplateAssetRequest(3),
+            csrf);
+        var withoutAsset = Assert.IsType<ComponentTemplateResponse>(await remove.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(4, withoutAsset.Version);
+        Assert.Empty(withoutAsset.Assets);
+        Assert.Single((await client.GetFromJsonAsync<ComponentTemplateResponse>(
+            $"/api/v1/component-templates/{created.TemplateId:D}/versions/2",
+            TestContext.Current.CancellationToken))!.Assets);
+
+        using var invalid = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/component-templates/{created.TemplateId:D}/assets",
+            new AddComponentTemplateAssetRequest(4, "fake.png", "image/png", Convert.ToBase64String("not png"u8.ToArray())),
+            csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal("component_template_asset_content_invalid", (await invalid.Content
+            .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
+    }
+
+    [Fact]
+    public async Task Image_assets_reject_truncated_containers_and_oversized_dimensions()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var content = Content("image-validation");
+        using var create = await SendAsync(
+            client, HttpMethod.Post, "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("IMG-INVALID", "Invalid images", [], content.RootElement.Clone()),
+            csrf);
+        var template = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+
+        var validPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        foreach (var invalidBytes in new[]
+                 {
+                     validPng[..^8],
+                     PngWithDimensions(20_000, 1),
+                     PngWithDimensions(11_000, 10_000),
+                     PngWithInvalidImageData(),
+                     IndexedPngWithoutPalette(),
+                 })
+        {
+            using var response = await SendAsync(
+                client,
+                HttpMethod.Post,
+                $"/api/v1/component-templates/{template.TemplateId:D}/assets",
+                new AddComponentTemplateAssetRequest(
+                    1, "invalid.png", "image/png", Convert.ToBase64String(invalidBytes)),
+                csrf);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("component_template_asset_content_invalid", (await response.Content
+                .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
+        }
+
+        using var jpeg = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/component-templates/{template.TemplateId:D}/assets",
+            new AddComponentTemplateAssetRequest(
+                1, "empty-scan.jpg", "image/jpeg", Convert.ToBase64String(JpegWithoutEntropy())),
+            csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, jpeg.StatusCode);
+        Assert.Equal("component_template_asset_type_unsupported", (await jpeg.Content
+            .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
+
+        var current = await client.GetFromJsonAsync<ComponentTemplateResponse>(
+            $"/api/v1/component-templates/{template.TemplateId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(1, current?.Version);
+        Assert.Empty(current!.Assets);
+    }
+
+    private static byte[] PngWithDimensions(int width, int height)
+    {
+        var bytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(16, 4), width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(20, 4), height);
+        var crc = PngCrc(bytes.AsSpan(12, 17));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(29, 4), crc);
+        return bytes;
+    }
+
+    private static byte[] PngWithInvalidImageData()
+    {
+        var bytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        bytes[41] = 0;
+        var crc = PngCrc(bytes.AsSpan(37, 15));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(52, 4), crc);
+        return bytes;
+    }
+
+    private static byte[] IndexedPngWithoutPalette()
+    {
+        var bytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        bytes[24] = 8;
+        bytes[25] = 3;
+        var crc = PngCrc(bytes.AsSpan(12, 17));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(29, 4), crc);
+        return bytes;
+    }
+
+    private static byte[] JpegWithoutEntropy() =>
+    [
+        0xff, 0xd8,
+        0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00,
+        0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+        0xff, 0xd9,
+    ];
+
+    private static uint PngCrc(ReadOnlySpan<byte> value)
+    {
+        var crc = uint.MaxValue;
+        foreach (var octet in value)
+        {
+            crc ^= octet;
+            for (var bit = 0; bit < 8; bit++)
+                crc = (crc & 1) != 0 ? 0xedb88320U ^ (crc >> 1) : crc >> 1;
+        }
+        return ~crc;
+    }
+
     private static JsonDocument Content(string primitiveId) => JsonDocument.Parse(
         $$"""
         {"schemaVersion":1,"views":[

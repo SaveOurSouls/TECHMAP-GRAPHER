@@ -5,6 +5,12 @@ public sealed record ComponentTemplateArticleBinding(
     string EntityType,
     string ArticleKey);
 
+public sealed record ComponentTemplateAsset(
+    Guid AssetId,
+    AttachmentContent Content,
+    string FileName,
+    string MediaType);
+
 public sealed record ComponentTemplateSummary(
     Guid TemplateId,
     int Version,
@@ -20,6 +26,7 @@ public sealed record ComponentTemplateVersion(
     string Code,
     string Name,
     IReadOnlyList<ComponentTemplateArticleBinding> ArticleBindings,
+    IReadOnlyList<ComponentTemplateAsset> Assets,
     int SchemaVersion,
     string ContentJson,
     DateTimeOffset CreatedUtc,
@@ -50,6 +57,25 @@ public interface IComponentTemplateStore
         IReadOnlyCollection<ComponentTemplateArticleBinding> articleBindings,
         int schemaVersion,
         string contentJson);
+
+    Task<ComponentTemplateVersion> AddAssetAsync(
+        Guid templateId,
+        int expectedVersion,
+        Stream source,
+        string fileName,
+        string mediaType,
+        CancellationToken cancellationToken = default);
+
+    ComponentTemplateVersion RemoveAsset(
+        Guid templateId,
+        int expectedVersion,
+        Guid assetId);
+
+    Task<Stream> OpenAssetAsync(
+        Guid templateId,
+        int version,
+        Guid assetId,
+        CancellationToken cancellationToken = default);
 
     void Delete(Guid templateId, int expectedVersion);
 }

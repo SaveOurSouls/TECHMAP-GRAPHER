@@ -347,7 +347,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
         if (schemaVersion >= 10)
         {
-            ValidateComponentTemplates(connection);
+            ValidateComponentTemplates(connection, schemaVersion);
         }
 
         var revisions = new List<StorageBackupProjectRevision>();
@@ -385,12 +385,26 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
             using var attachments = connection.CreateCommand();
             attachments.CommandText =
-                """
-                SELECT DISTINCT b.content_sha256, b.size_bytes
-                FROM project_attachments pa
-                JOIN attachment_blobs b ON b.content_sha256 = pa.content_sha256
-                ORDER BY b.content_sha256;
-                """;
+                schemaVersion >= 11
+                    ?
+                    """
+                    SELECT b.content_sha256, b.size_bytes
+                    FROM attachment_blobs b
+                    WHERE EXISTS (
+                        SELECT 1 FROM project_attachments pa
+                        WHERE pa.content_sha256 = b.content_sha256)
+                       OR EXISTS (
+                        SELECT 1 FROM component_template_asset_refs ar
+                        WHERE ar.content_sha256 = b.content_sha256)
+                    ORDER BY b.content_sha256;
+                    """
+                    :
+                    """
+                    SELECT DISTINCT b.content_sha256, b.size_bytes
+                    FROM project_attachments pa
+                    JOIN attachment_blobs b ON b.content_sha256 = pa.content_sha256
+                    ORDER BY b.content_sha256;
+                    """;
             using var reader = attachments.ExecuteReader();
             while (reader.Read())
             {
@@ -408,7 +422,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         return new SnapshotInventory(schemaVersion, revisions, blobs);
     }
 
-    private static void ValidateComponentTemplates(SqliteConnection connection)
+    private static void ValidateComponentTemplates(SqliteConnection connection, int storageSchemaVersion)
     {
         using (var heads = connection.CreateCommand())
         {
@@ -478,6 +492,26 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                 """;
             if (Convert.ToInt32(bindings.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
                 throw new InvalidDataException("The SQLite backup has invalid component template bindings.");
+        }
+
+        if (storageSchemaVersion >= 11)
+        {
+            using var assets = connection.CreateCommand();
+            assets.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM component_template_versions v
+                WHERE (SELECT COUNT(*) FROM component_template_asset_refs a
+                       WHERE a.template_id = v.template_id AND a.version = v.version) > 64
+                   OR EXISTS (
+                       SELECT 1 FROM component_template_asset_refs a
+                       WHERE a.template_id = v.template_id AND a.version = v.version
+                       GROUP BY a.template_id, a.version
+                       HAVING MIN(a.asset_ordinal) <> 0
+                          OR MAX(a.asset_ordinal) <> COUNT(*) - 1);
+                """;
+            if (Convert.ToInt32(assets.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidDataException("The SQLite backup has invalid component template image assets.");
         }
 
         var versions = new List<ComponentTemplateBackupHeader>();
@@ -557,8 +591,45 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                         bindingReader.GetString(0), bindingReader.GetString(1), bindingReader.GetString(2)));
                 }
             }
+            var persistedAssets = new List<ComponentTemplateAsset>();
+            if (storageSchemaVersion >= 11)
+            {
+                using var assetCommand = connection.CreateCommand();
+                assetCommand.CommandText =
+                    """
+                    SELECT a.asset_id, a.content_sha256, b.size_bytes, a.file_name, a.media_type
+                    FROM component_template_asset_refs a
+                    JOIN attachment_blobs b ON b.content_sha256 = a.content_sha256
+                    WHERE a.template_id = $templateId AND a.version = $version
+                    ORDER BY a.asset_ordinal;
+                    """;
+                assetCommand.Parameters.AddWithValue("$templateId", templateId);
+                assetCommand.Parameters.AddWithValue("$version", version);
+                using var assetReader = assetCommand.ExecuteReader();
+                while (assetReader.Read())
+                {
+                    if (!Guid.TryParseExact(assetReader.GetString(0), "D", out var assetId) || assetId == Guid.Empty)
+                        throw new InvalidDataException($"Component template '{templateId}' has an invalid image asset ID.");
+                    var persistedAsset = new ComponentTemplateAsset(
+                        assetId,
+                        new AttachmentContent(assetReader.GetString(1), assetReader.GetInt64(2)),
+                        assetReader.GetString(3),
+                        assetReader.GetString(4));
+                    try
+                    {
+                        SqliteComponentTemplateStore.ValidatePersistedAsset(persistedAsset);
+                    }
+                    catch (ComponentTemplateException error)
+                    {
+                        throw new InvalidDataException(
+                            $"Component template '{templateId}' has invalid persisted image asset metadata.",
+                            error);
+                    }
+                    persistedAssets.Add(persistedAsset);
+                }
+            }
             var actualVersionHash = SqliteComponentTemplateStore.ComputeVersionHash(
-                parsedId, version, schemaVersion, code, name, persistedBindings, content);
+                parsedId, version, schemaVersion, code, name, persistedBindings, persistedAssets, content);
             if (!string.Equals(content, canonical, StringComparison.Ordinal) ||
                 !string.Equals(hash, actualHash, StringComparison.Ordinal) ||
                 !string.Equals(versionHash, actualVersionHash, StringComparison.Ordinal))

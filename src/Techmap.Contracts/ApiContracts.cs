@@ -181,10 +181,25 @@ public sealed record UpdateComponentTemplateRequest(
 
 public sealed record DeleteComponentTemplateRequest(int? ExpectedVersion);
 
+public sealed record AddComponentTemplateAssetRequest(
+    int? ExpectedVersion,
+    string? FileName,
+    string? MediaType,
+    string? ContentBase64);
+
+public sealed record RemoveComponentTemplateAssetRequest(int? ExpectedVersion);
+
 public sealed record ComponentTemplateArticleBindingResponse(
     string SourceId,
     string EntityType,
     string ArticleKey);
+
+public sealed record ComponentTemplateAssetResponse(
+    Guid AssetId,
+    string Sha256,
+    long SizeBytes,
+    string FileName,
+    string MediaType);
 
 public sealed record ComponentTemplateSummaryResponse(
     Guid TemplateId,
@@ -201,6 +216,7 @@ public sealed record ComponentTemplateResponse(
     string Code,
     string Name,
     IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,
+    IReadOnlyList<ComponentTemplateAssetResponse> Assets,
     JsonElement Content,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);

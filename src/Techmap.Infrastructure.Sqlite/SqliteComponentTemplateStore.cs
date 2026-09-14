@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,7 +11,8 @@ namespace Techmap.Infrastructure.Sqlite;
 
 public sealed class SqliteComponentTemplateStore(
     SqliteStorage storage,
-    TimeProvider timeProvider) : IComponentTemplateStore
+    TimeProvider timeProvider,
+    IAttachmentContentStore? attachmentContentStore = null) : IComponentTemplateStore
 {
     public const int CurrentContentSchemaVersion = 1;
     public const int MaximumContentBytes = 1024 * 1024;
@@ -19,7 +22,14 @@ public sealed class SqliteComponentTemplateStore(
     public const int MaximumViews = 34;
     public const int MaximumPrimitives = 5_000;
     public const int MaximumContactPoints = 2_000;
+    public const int MaximumAssets = 64;
+    public const int MaximumAssetBytes = 10 * 1024 * 1024;
+    public const int MaximumImageDimension = 16_384;
+    public const long MaximumImagePixels = 100_000_000;
+    public const long MaximumDecodedImageBytes = 256L * 1024 * 1024;
     public const double MaximumCoordinateMagnitude = 1_000_000;
+    private readonly IAttachmentContentStore contentStore = attachmentContentStore
+        ?? new ContentAddressedAttachmentStore(storage.Layout.DataRootPath);
 
     public IReadOnlyList<ComponentTemplateSummary> List() => storage.ExecuteRead(unitOfWork =>
     {
@@ -154,7 +164,7 @@ public sealed class SqliteComponentTemplateStore(
                     head.ExecuteNonQuery();
                 }
 
-                InsertVersion(unitOfWork, templateId, 1, input, now);
+                InsertVersion(unitOfWork, templateId, 1, input, [], now);
                 using (var publish = unitOfWork.CreateCommand(
                            "UPDATE component_templates SET current_version = 1 WHERE template_id = $templateId;"))
                 {
@@ -202,7 +212,8 @@ public sealed class SqliteComponentTemplateStore(
                 }
 
                 var nextVersion = checked(expectedVersion + 1);
-                InsertVersion(unitOfWork, templateId, nextVersion, input, now);
+                var assets = ReadAssets(unitOfWork, templateId, expectedVersion);
+                InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
                 using var update = unitOfWork.CreateCommand(
                     """
                     UPDATE component_templates
@@ -255,6 +266,106 @@ public sealed class SqliteComponentTemplateStore(
             command.Parameters.AddWithValue("$expectedVersion", expectedVersion);
             if (command.ExecuteNonQuery() != 1) throw Conflict(ReadHead(unitOfWork, templateId, false).CurrentVersion);
         });
+    }
+
+    public async Task<ComponentTemplateVersion> AddAssetAsync(
+        Guid templateId,
+        int expectedVersion,
+        Stream source,
+        string fileName,
+        string mediaType,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTemplateId(templateId);
+        ValidateExpectedVersion(expectedVersion);
+        ArgumentNullException.ThrowIfNull(source);
+        var normalizedFileName = NormalizeFileName(fileName);
+        var normalizedMediaType = NormalizeMediaType(mediaType);
+        var imageBytes = await ReadAndValidateImageAsync(source, normalizedMediaType, cancellationToken)
+            .ConfigureAwait(false);
+        var now = CanonicalUtc(timeProvider.GetUtcNow());
+
+        try
+        {
+            return await storage.ExecuteInTransactionAsync(async (unitOfWork, token) =>
+            {
+                var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
+                EnsureExpectedVersion(head, expectedVersion);
+                var current = ReadVersion(unitOfWork, templateId, expectedVersion, head.CreatedUtc, head.UpdatedUtc);
+                if (current.Assets.Count >= MaximumAssets)
+                {
+                    throw Invalid(
+                        "component_template_asset_limit_reached",
+                        $"A component template version cannot have more than {MaximumAssets} image assets.");
+                }
+
+                await using var image = new MemoryStream(imageBytes, writable: false);
+                var content = await contentStore.WriteAsync(image, token).ConfigureAwait(false);
+                var asset = new ComponentTemplateAsset(
+                    Guid.NewGuid(), content, normalizedFileName, normalizedMediaType);
+                var assets = current.Assets.Append(asset).ToArray();
+                var input = ValidateInput(
+                    current.Code, current.Name, current.ArticleBindings,
+                    current.SchemaVersion, current.ContentJson);
+                var nextVersion = checked(expectedVersion + 1);
+                InsertOrValidateBlob(unitOfWork, content, now);
+                InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
+                PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
+                return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqliteException error) when (IsConstraint(error))
+        {
+            throw new ComponentTemplateException(
+                "component_template_asset_conflict",
+                "The image asset could not be attached to the component template.",
+                "asset",
+                innerException: error);
+        }
+    }
+
+    public ComponentTemplateVersion RemoveAsset(Guid templateId, int expectedVersion, Guid assetId)
+    {
+        ValidateTemplateId(templateId);
+        ValidateExpectedVersion(expectedVersion);
+        if (assetId == Guid.Empty)
+            throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+        var now = CanonicalUtc(timeProvider.GetUtcNow());
+        return storage.ExecuteInTransaction(unitOfWork =>
+        {
+            var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
+            EnsureExpectedVersion(head, expectedVersion);
+            var current = ReadVersion(unitOfWork, templateId, expectedVersion, head.CreatedUtc, head.UpdatedUtc);
+            var assets = current.Assets.Where(item => item.AssetId != assetId).ToArray();
+            if (assets.Length == current.Assets.Count)
+                throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+            var input = ValidateInput(
+                current.Code, current.Name, current.ArticleBindings,
+                current.SchemaVersion, current.ContentJson);
+            var nextVersion = checked(expectedVersion + 1);
+            InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
+            PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
+            return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
+        });
+    }
+
+    public async Task<Stream> OpenAssetAsync(
+        Guid templateId,
+        int version,
+        Guid assetId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTemplateId(templateId);
+        if (version <= 0 || assetId == Guid.Empty)
+            throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+        var asset = storage.ExecuteRead(unitOfWork =>
+        {
+            _ = ReadHead(unitOfWork, templateId, includeDeleted: true);
+            return ReadAssets(unitOfWork, templateId, version)
+                .SingleOrDefault(item => item.AssetId == assetId)
+                ?? throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+        });
+        return await contentStore.OpenReadVerifiedAsync(asset.Content, cancellationToken).ConfigureAwait(false);
     }
 
     private static ValidatedInput ValidateInput(
@@ -603,11 +714,333 @@ public sealed class SqliteComponentTemplateStore(
         return lower ? result.ToLowerInvariant() : result;
     }
 
+    private static string NormalizeFileName(string value)
+    {
+        var result = NormalizeText(value, 255, "fileName");
+        if (!string.Equals(Path.GetFileName(result), result, StringComparison.Ordinal) ||
+            result.IndexOfAny(['/', '\\', ':']) >= 0)
+        {
+            throw Invalid(
+                "component_template_asset_invalid",
+                "The image file name must not contain a path.",
+                "fileName");
+        }
+        return result;
+    }
+
+    private static string NormalizeMediaType(string value)
+    {
+        var result = NormalizeText(value, 64, "mediaType").ToLowerInvariant();
+        return result == "image/png"
+            ? result
+            : throw Invalid(
+                "component_template_asset_type_unsupported",
+                "Only structurally validated PNG image assets are supported.",
+                "mediaType");
+    }
+
+    private static async Task<byte[]> ReadAndValidateImageAsync(
+        Stream source,
+        string mediaType,
+        CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[64 * 1024];
+        while (true)
+        {
+            var count = await source.ReadAsync(chunk, cancellationToken).ConfigureAwait(false);
+            if (count == 0) break;
+            if (buffer.Length + count > MaximumAssetBytes)
+            {
+                throw Invalid(
+                    "component_template_asset_too_large",
+                    $"An image asset cannot exceed {MaximumAssetBytes} bytes.",
+                    "contentBase64");
+            }
+            buffer.Write(chunk, 0, count);
+        }
+
+        var bytes = buffer.ToArray();
+        try
+        {
+            var dimensions = mediaType switch
+            {
+                "image/png" => ValidatePng(bytes),
+                _ => throw new InvalidDataException(),
+            };
+            ValidateDimensions(dimensions.Width, dimensions.Height);
+        }
+        catch (Exception error) when (
+            error is InvalidDataException or IOException or OverflowException or ArgumentException)
+        {
+            throw new ComponentTemplateException(
+                "component_template_asset_content_invalid",
+                "The image is truncated, malformed, too large, or does not match the declared media type.",
+                "contentBase64",
+                innerException: error);
+        }
+        return bytes;
+    }
+
+    private static ImageDimensions ValidatePng(ReadOnlySpan<byte> bytes)
+    {
+        ReadOnlySpan<byte> signature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (bytes.Length < 45 || !bytes[..8].SequenceEqual(signature)) throw new InvalidDataException();
+        var offset = 8;
+        var seenHeader = false;
+        var seenImageData = false;
+        var endedImageData = false;
+        var seenEnd = false;
+        var seenPalette = false;
+        var colorType = -1;
+        var bitDepth = 0;
+        var width = 0;
+        var height = 0;
+        using var compressed = new MemoryStream();
+        while (offset < bytes.Length)
+        {
+            if (bytes.Length - offset < 12) throw new InvalidDataException();
+            var lengthValue = BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(offset, 4));
+            if (lengthValue > int.MaxValue) throw new InvalidDataException();
+            var length = (int)lengthValue;
+            if (length > bytes.Length - offset - 12) throw new InvalidDataException();
+            var type = bytes.Slice(offset + 4, 4);
+            if (!IsPngChunkTypeByte(type[0]) || !IsPngChunkTypeByte(type[1]) ||
+                !IsPngChunkTypeByte(type[2]) || !IsPngChunkTypeByte(type[3]) ||
+                (type[2] & 0x20) != 0)
+                throw new InvalidDataException();
+            var data = bytes.Slice(offset + 8, length);
+            var storedCrc = BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(offset + 8 + length, 4));
+            if (PngCrc(type, data) != storedCrc) throw new InvalidDataException();
+
+            if (!seenHeader)
+            {
+                if (!type.SequenceEqual("IHDR"u8) || length != 13) throw new InvalidDataException();
+                var rawWidth = BinaryPrimitives.ReadUInt32BigEndian(data[..4]);
+                var rawHeight = BinaryPrimitives.ReadUInt32BigEndian(data.Slice(4, 4));
+                if (rawWidth > int.MaxValue || rawHeight > int.MaxValue) throw new InvalidDataException();
+                width = (int)rawWidth;
+                height = (int)rawHeight;
+                bitDepth = data[8];
+                colorType = data[9];
+                var validDepth = colorType switch
+                {
+                    0 => bitDepth is 1 or 2 or 4 or 8 or 16,
+                    2 => bitDepth is 8 or 16,
+                    3 => bitDepth is 1 or 2 or 4 or 8,
+                    4 or 6 => bitDepth is 8 or 16,
+                    _ => false,
+                };
+                if (!validDepth || data[10] != 0 || data[11] != 0 || data[12] != 0)
+                    throw new InvalidDataException();
+                ValidateDimensions(width, height);
+                seenHeader = true;
+            }
+            else if (type.SequenceEqual("IHDR"u8))
+            {
+                throw new InvalidDataException();
+            }
+
+            if ((type[0] & 0x20) == 0 &&
+                !type.SequenceEqual("IHDR"u8) && !type.SequenceEqual("PLTE"u8) &&
+                !type.SequenceEqual("IDAT"u8) && !type.SequenceEqual("IEND"u8))
+                throw new InvalidDataException();
+
+            if (type.SequenceEqual("PLTE"u8))
+            {
+                if (seenPalette || seenImageData || colorType is 0 or 4 ||
+                    length is < 3 or > 768 || length % 3 != 0)
+                    throw new InvalidDataException();
+                if (colorType == 3 && length / 3 > 1 << bitDepth)
+                    throw new InvalidDataException();
+                seenPalette = true;
+            }
+            else if (type.SequenceEqual("IDAT"u8))
+            {
+                if (endedImageData || length == 0) throw new InvalidDataException();
+                seenImageData = true;
+                compressed.Write(data);
+            }
+            else if (seenImageData && !type.SequenceEqual("IEND"u8))
+            {
+                endedImageData = true;
+            }
+            if (type.SequenceEqual("IEND"u8))
+            {
+                if (length != 0 || !seenImageData || colorType == 3 && !seenPalette)
+                    throw new InvalidDataException();
+                seenEnd = true;
+                offset += 12;
+                break;
+            }
+            offset = checked(offset + length + 12);
+        }
+        if (!seenHeader || !seenEnd || offset != bytes.Length) throw new InvalidDataException();
+        ValidatePngImageData(compressed.ToArray(), width, height, colorType, bitDepth);
+        return new ImageDimensions(width, height);
+    }
+
+    private static bool IsPngChunkTypeByte(byte value) =>
+        value is (>= (byte)'A' and <= (byte)'Z') or (>= (byte)'a' and <= (byte)'z');
+
+    private static void ValidatePngImageData(
+        byte[] compressed,
+        int width,
+        int height,
+        int colorType,
+        int bitDepth)
+    {
+        var channels = colorType switch { 0 => 1, 2 => 3, 3 => 1, 4 => 2, 6 => 4, _ => 0 };
+        var rowBytes = checked((checked(width * channels * bitDepth) + 7) / 8);
+        var decodedBytes = checked((long)(rowBytes + 1) * height);
+        if (rowBytes <= 0 || decodedBytes > MaximumDecodedImageBytes) throw new InvalidDataException();
+        using var input = new MemoryStream(compressed, writable: false);
+        using var zlib = new ZLibStream(input, CompressionMode.Decompress, leaveOpen: false);
+        var row = new byte[rowBytes];
+        for (var y = 0; y < height; y++)
+        {
+            var filter = zlib.ReadByte();
+            if (filter is < 0 or > 4) throw new InvalidDataException();
+            ReadExactly(zlib, row);
+        }
+        if (zlib.ReadByte() != -1) throw new InvalidDataException();
+    }
+
+    private static void ReadExactly(Stream stream, Span<byte> buffer)
+    {
+        while (!buffer.IsEmpty)
+        {
+            var count = stream.Read(buffer);
+            if (count == 0) throw new InvalidDataException();
+            buffer = buffer[count..];
+        }
+    }
+
+    private static uint PngCrc(ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
+    {
+        var crc = uint.MaxValue;
+        foreach (var value in type) crc = UpdatePngCrc(crc, value);
+        foreach (var value in data) crc = UpdatePngCrc(crc, value);
+        return ~crc;
+    }
+
+    private static uint UpdatePngCrc(uint crc, byte value)
+    {
+        crc ^= value;
+        for (var bit = 0; bit < 8; bit++)
+            crc = (crc & 1) != 0 ? 0xedb88320U ^ (crc >> 1) : crc >> 1;
+        return crc;
+    }
+
+    private static void ValidateDimensions(int width, int height)
+    {
+        if (width <= 0 || height <= 0 || width > MaximumImageDimension || height > MaximumImageDimension ||
+            (long)width * height > MaximumImagePixels)
+            throw new InvalidDataException();
+    }
+
+    internal static void ValidatePersistedAsset(ComponentTemplateAsset asset)
+    {
+        string normalizedFileName;
+        string normalizedMediaType;
+        try
+        {
+            normalizedFileName = NormalizeFileName(asset.FileName);
+            normalizedMediaType = NormalizeMediaType(asset.MediaType);
+        }
+        catch (ComponentTemplateException error)
+        {
+            throw Corrupt(innerException: error);
+        }
+        if (!string.Equals(asset.FileName, normalizedFileName, StringComparison.Ordinal) ||
+            !string.Equals(asset.MediaType, normalizedMediaType, StringComparison.Ordinal) ||
+            asset.AssetId == Guid.Empty || asset.Content.SizeBytes is <= 0 or > MaximumAssetBytes ||
+            asset.Content.Sha256.Length != 64 ||
+            asset.Content.Sha256.Any(character => character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        {
+            throw Corrupt();
+        }
+    }
+
+    private static void ValidateExpectedVersion(int expectedVersion)
+    {
+        if (expectedVersion <= 0)
+            throw Invalid(
+                "component_template_expected_version_invalid",
+                "Expected version must be positive.",
+                "expectedVersion");
+        if (expectedVersion >= MaximumVersionsPerTemplate)
+            throw Invalid(
+                "component_template_version_limit_reached",
+                $"A component template cannot exceed {MaximumVersionsPerTemplate} versions.");
+    }
+
+    private static void EnsureExpectedVersion(Head head, int expectedVersion)
+    {
+        if (head.CurrentVersion != expectedVersion) throw Conflict(head.CurrentVersion);
+    }
+
+    private static void InsertOrValidateBlob(
+        SqliteUnitOfWork unitOfWork,
+        AttachmentContent content,
+        string now)
+    {
+        using (var insert = unitOfWork.CreateCommand(
+                   """
+                   INSERT INTO attachment_blobs (content_sha256, size_bytes, created_utc)
+                   VALUES ($sha256, $sizeBytes, $now)
+                   ON CONFLICT (content_sha256) DO NOTHING;
+                   """))
+        {
+            insert.Parameters.AddWithValue("$sha256", content.Sha256);
+            insert.Parameters.AddWithValue("$sizeBytes", content.SizeBytes);
+            insert.Parameters.AddWithValue("$now", now);
+            insert.ExecuteNonQuery();
+        }
+
+        using var check = unitOfWork.CreateCommand(
+            "SELECT size_bytes FROM attachment_blobs WHERE content_sha256 = $sha256;");
+        check.Parameters.AddWithValue("$sha256", content.Sha256);
+        if (Convert.ToInt64(check.ExecuteScalar(), CultureInfo.InvariantCulture) != content.SizeBytes)
+            throw Corrupt();
+    }
+
+    private static void PublishVersion(
+        SqliteUnitOfWork unitOfWork,
+        Guid templateId,
+        int expectedVersion,
+        int nextVersion,
+        ValidatedInput input,
+        string now)
+    {
+        using var update = unitOfWork.CreateCommand(
+            """
+            UPDATE component_templates
+            SET current_version = $nextVersion,
+                current_code = $code,
+                current_name = $name,
+                normalized_code = $normalizedCode,
+                updated_utc = $now
+            WHERE template_id = $templateId
+              AND current_version = $expectedVersion
+              AND deleted_utc IS NULL;
+            """);
+        update.Parameters.AddWithValue("$nextVersion", nextVersion);
+        update.Parameters.AddWithValue("$code", input.Code);
+        update.Parameters.AddWithValue("$name", input.Name);
+        update.Parameters.AddWithValue("$normalizedCode", input.NormalizedCode);
+        update.Parameters.AddWithValue("$now", now);
+        update.Parameters.AddWithValue("$templateId", Format(templateId));
+        update.Parameters.AddWithValue("$expectedVersion", expectedVersion);
+        if (update.ExecuteNonQuery() != 1) throw Conflict(ReadHead(unitOfWork, templateId, false).CurrentVersion);
+    }
+
     private static void InsertVersion(
         SqliteUnitOfWork unitOfWork,
         Guid templateId,
         int version,
         ValidatedInput input,
+        IReadOnlyList<ComponentTemplateAsset> assets,
         string now)
     {
         using (var command = unitOfWork.CreateCommand(
@@ -629,7 +1062,7 @@ public sealed class SqliteComponentTemplateStore(
             command.Parameters.AddWithValue("$contentSha256", input.ContentSha256);
             command.Parameters.AddWithValue("$versionSha256", ComputeVersionHash(
                 templateId, version, input.SchemaVersion, input.Code, input.Name,
-                input.Bindings, input.ContentJson));
+                input.Bindings, assets, input.ContentJson));
             command.Parameters.AddWithValue("$now", now);
             command.ExecuteNonQuery();
         }
@@ -649,6 +1082,25 @@ public sealed class SqliteComponentTemplateStore(
             command.Parameters.AddWithValue("$sourceId", binding.SourceId);
             command.Parameters.AddWithValue("$entityType", binding.EntityType);
             command.Parameters.AddWithValue("$articleKey", binding.ArticleKey);
+            command.ExecuteNonQuery();
+        }
+        for (var index = 0; index < assets.Count; index++)
+        {
+            var asset = assets[index];
+            using var command = unitOfWork.CreateCommand(
+                """
+                INSERT INTO component_template_asset_refs
+                    (template_id, version, asset_ordinal, asset_id, file_name, media_type, content_sha256)
+                VALUES
+                    ($templateId, $version, $ordinal, $assetId, $fileName, $mediaType, $contentSha256);
+                """);
+            command.Parameters.AddWithValue("$templateId", Format(templateId));
+            command.Parameters.AddWithValue("$version", version);
+            command.Parameters.AddWithValue("$ordinal", index);
+            command.Parameters.AddWithValue("$assetId", Format(asset.AssetId));
+            command.Parameters.AddWithValue("$fileName", asset.FileName);
+            command.Parameters.AddWithValue("$mediaType", asset.MediaType);
+            command.Parameters.AddWithValue("$contentSha256", asset.Content.Sha256);
             command.ExecuteNonQuery();
         }
     }
@@ -679,19 +1131,51 @@ public sealed class SqliteComponentTemplateStore(
         var versionCreated = ParseUtc(reader.GetString(6));
         reader.Close();
         var bindings = ReadBindings(unitOfWork, templateId, version);
+        var assets = ReadAssets(unitOfWork, templateId, version);
         var canonical = ValidateAndCanonicalizeContent(content, schemaVersion);
         if (!string.Equals(content, canonical, StringComparison.Ordinal) ||
             !string.Equals(Hash(content), hash, StringComparison.Ordinal) ||
             !string.Equals(
-                ComputeVersionHash(templateId, version, schemaVersion, code, name, bindings, content),
+                ComputeVersionHash(templateId, version, schemaVersion, code, name, bindings, assets, content),
                 versionHash,
                 StringComparison.Ordinal))
             throw Corrupt();
         _ = NormalizeText(code, 128, "code");
         _ = NormalizeText(name, 256, "name");
         return new ComponentTemplateVersion(
-            templateId, version, code, name, bindings,
+            templateId, version, code, name, bindings, assets,
             schemaVersion, content, templateCreatedUtc, currentUpdatedUtc ?? versionCreated);
+    }
+
+    private static IReadOnlyList<ComponentTemplateAsset> ReadAssets(
+        SqliteUnitOfWork unitOfWork,
+        Guid templateId,
+        int version)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT r.asset_id, r.content_sha256, b.size_bytes, r.file_name, r.media_type
+            FROM component_template_asset_refs r
+            JOIN attachment_blobs b ON b.content_sha256 = r.content_sha256
+            WHERE r.template_id = $templateId AND r.version = $version
+            ORDER BY r.asset_ordinal;
+            """);
+        command.Parameters.AddWithValue("$templateId", Format(templateId));
+        command.Parameters.AddWithValue("$version", version);
+        using var reader = command.ExecuteReader();
+        var result = new List<ComponentTemplateAsset>();
+        while (reader.Read())
+        {
+            result.Add(new ComponentTemplateAsset(
+                ParseGuid(reader.GetString(0)),
+                new AttachmentContent(reader.GetString(1), reader.GetInt64(2)),
+                reader.GetString(3),
+                reader.GetString(4)));
+        }
+        if (result.Count > MaximumAssets || result.Select(item => item.AssetId).Distinct().Count() != result.Count)
+            throw Corrupt();
+        foreach (var asset in result) ValidatePersistedAsset(asset);
+        return result;
     }
 
     private static IReadOnlyList<ComponentTemplateArticleBinding> ReadBindings(
@@ -744,6 +1228,7 @@ public sealed class SqliteComponentTemplateStore(
         string code,
         string name,
         IReadOnlyList<ComponentTemplateArticleBinding> bindings,
+        IReadOnlyList<ComponentTemplateAsset> assets,
         string contentJson)
     {
         using var buffer = new MemoryStream();
@@ -766,6 +1251,22 @@ public sealed class SqliteComponentTemplateStore(
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
+            if (assets.Count > 0)
+            {
+                writer.WritePropertyName("assets");
+                writer.WriteStartArray();
+                foreach (var asset in assets)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("assetId", asset.AssetId);
+                    writer.WriteString("fileName", asset.FileName);
+                    writer.WriteString("mediaType", asset.MediaType);
+                    writer.WriteString("sha256", asset.Content.Sha256);
+                    writer.WriteNumber("sizeBytes", asset.Content.SizeBytes);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
             writer.WritePropertyName("content");
             using var content = JsonDocument.Parse(contentJson);
             content.RootElement.WriteTo(writer);
@@ -773,6 +1274,16 @@ public sealed class SqliteComponentTemplateStore(
         }
         return Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
     }
+
+    internal static string ComputeVersionHash(
+        Guid templateId,
+        int version,
+        int schemaVersion,
+        string code,
+        string name,
+        IReadOnlyList<ComponentTemplateArticleBinding> bindings,
+        string contentJson) =>
+        ComputeVersionHash(templateId, version, schemaVersion, code, name, bindings, [], contentJson);
 
     private static string Format(Guid value) => value.ToString("D", CultureInfo.InvariantCulture);
 
@@ -806,14 +1317,17 @@ public sealed class SqliteComponentTemplateStore(
         "expectedVersion",
         currentVersion);
 
-    private static ComponentTemplateException Corrupt() => new(
+    private static ComponentTemplateException Corrupt(Exception? innerException = null) => new(
         "component_template_corrupt",
-        "The stored component template is corrupt.");
+        "The stored component template is corrupt.",
+        innerException: innerException);
 
     private static ComponentTemplateException Invalid(string code, string message, string? field = null) =>
         new(code, message, field);
 
     private sealed record Head(int CurrentVersion, DateTimeOffset CreatedUtc, DateTimeOffset UpdatedUtc);
+
+    private readonly record struct ImageDimensions(int Width, int Height);
 
     private sealed record ValidatedInput(
         string Code,

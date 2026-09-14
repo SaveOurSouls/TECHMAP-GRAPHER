@@ -154,6 +154,32 @@ public sealed class ContentAddressedAttachmentStoreTests
         Assert.True(File.Exists(recent));
     }
 
+    [Fact]
+    public void Orphan_cleanup_skips_a_read_only_blob_without_blocking_startup_maintenance()
+    {
+        using var fixture = AttachmentFixture.Create();
+        var hash = new string('a', 64);
+        var path = Path.Combine(fixture.DataRoot, "attachments", "blobs", "aa", hash);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "orphan");
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            var store = new ContentAddressedAttachmentStore(fixture.DataRoot);
+            var removed = store.PruneUnreferencedBlobs(
+                new HashSet<string>(StringComparer.Ordinal),
+                DateTimeOffset.UtcNow.AddDays(-1));
+
+            Assert.Equal(0, removed);
+            Assert.True(File.Exists(path));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.SetAttributes(path, FileAttributes.Normal);
+        }
+    }
+
     private sealed class AttachmentFixture : IDisposable
     {
         private AttachmentFixture(string root)
