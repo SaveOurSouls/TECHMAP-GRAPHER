@@ -3,6 +3,7 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
+import { DesignSaveCoordinator } from "./design-save-coordinator";
 import { createComponentPlacementApi, type PlaceComponentRequest } from "./component-placement-api";
 import { createComponentTemplateApi } from "../component-library/component-template-api";
 import { isTemplateContentV3 } from "../component-library/template-content";
@@ -310,8 +311,7 @@ export function HarnessDesignEditor({
   const resourceRef = useRef<HarnessDesignResource | null>(null);
   const savedJsonRef = useRef("");
   const savingRef = useRef(false);
-  const savePromiseRef = useRef<Promise<boolean> | null>(null);
-  const queuedRef = useRef(false);
+  const saveCoordinatorRef = useRef<DesignSaveCoordinator | null>(null);
   const loadGeneration = useRef(0);
   const previewFrameRef = useRef<number | null>(null);
   const pendingMovePreviewRef = useRef<typeof movePreview>(null);
@@ -355,28 +355,20 @@ export function HarnessDesignEditor({
     return () => { loadGeneration.current += 1; };
   }, [api, harnessId, projectId]);
 
-  const flushSave = useCallback((): Promise<boolean> => {
-    if (savePromiseRef.current) {
-      queuedRef.current = true;
-      return savePromiseRef.current;
-    }
-    const promise = (async () => {
+  const saveOnce = useCallback(async (): Promise<boolean> => {
       savingRef.current = true;
       try {
-        do {
-          queuedRef.current = false;
-          const currentHistory = historyRef.current;
-          const currentResource = resourceRef.current;
-          if (!currentHistory || !currentResource) break;
-          const content = currentHistory.present;
-          const serialized = JSON.stringify(content);
-          if (serialized === savedJsonRef.current) break;
-          setSaveState("saving");
-          const saved = await api.save(projectId, harnessId, currentResource.revision, content);
-          savedJsonRef.current = serialized;
-          resourceRef.current = saved;
-          setResource(saved);
-        } while (queuedRef.current || (historyRef.current && JSON.stringify(historyRef.current.present) !== savedJsonRef.current));
+        const currentHistory = historyRef.current;
+        const currentResource = resourceRef.current;
+        if (!currentHistory || !currentResource) return true;
+        const content = currentHistory.present;
+        const serialized = JSON.stringify(content);
+        if (serialized === savedJsonRef.current) return true;
+        setSaveState("saving");
+        const saved = await api.save(projectId, harnessId, currentResource.revision, content);
+        savedJsonRef.current = serialized;
+        resourceRef.current = saved;
+        setResource(saved);
         setSaveState("saved");
         setMessage("");
         return true;
@@ -387,13 +379,18 @@ export function HarnessDesignEditor({
       } finally {
         savingRef.current = false;
       }
-    })();
-    savePromiseRef.current = promise;
-    void promise.finally(() => {
-      if (savePromiseRef.current === promise) savePromiseRef.current = null;
-    });
-    return promise;
   }, [api, harnessId, projectId]);
+
+  const flushSave = useCallback((): Promise<boolean> => {
+    if (!saveCoordinatorRef.current) {
+      saveCoordinatorRef.current = new DesignSaveCoordinator(saveOnce);
+    }
+    return saveCoordinatorRef.current.flush();
+  }, [saveOnce]);
+
+  useEffect(() => {
+    saveCoordinatorRef.current = null;
+  }, [saveOnce]);
 
   useEffect(() => {
     if (!history) return;

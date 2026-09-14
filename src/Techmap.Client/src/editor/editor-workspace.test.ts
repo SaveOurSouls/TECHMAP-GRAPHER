@@ -26,6 +26,7 @@ import {
   hitTestWireRoutePoint,
   handleEditorViewportWheel,
   containInlineEditorPointerEvent,
+  drawE4DifferentialPairs,
   inlineObjectDragDestination,
   inlineObjectDragMoved,
   isInlineEditorControlTarget,
@@ -47,7 +48,7 @@ import {
   zoomEditorCameraFromWheel,
 } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
-import type { EditorLayer, EditorSceneObject } from "./editor-types";
+import type { EditorLayer, EditorPoint, EditorSceneObject } from "./editor-types";
 import { HarnessEditorWorkspace, reconcileWorkspaceSelection } from "./HarnessEditorWorkspace";
 
 const layers: readonly EditorLayer[] = [
@@ -585,6 +586,51 @@ describe("harness editor workspace", () => {
     expect(getE4DifferentialPairLayout({
       id: "dp-overlap", wireIds: ["h1", "h1"], step: 25, amplitude: 6, variant: 1,
     }, wires)).toMatchObject({ crossMinimum: 34, crossMaximum: 46 });
+  });
+
+  it("isolates both differential-pair traces from a wire between contacts 2 and 4", () => {
+    const wires: readonly EditorSceneObject[] = [
+      { id: "xs1:2", layerId: "bottom", kind: "wire", label: "PAIR-P", x: 0, y: 0, width: 0, height: 0, color: "#c000c0", points: [{ x: 0, y: 40 }, { x: 120, y: 40 }], metadata: { view: "e4" } },
+      { id: "xs1:3-xs3:3", layerId: "bottom", kind: "wire", label: "SINGLE", x: 0, y: 0, width: 0, height: 0, color: "#0077bb", points: [{ x: 0, y: 60 }, { x: 120, y: 60 }], metadata: { view: "e4" } },
+      { id: "xs1:4", layerId: "bottom", kind: "wire", label: "PAIR-N", x: 0, y: 0, width: 0, height: 0, color: "#0044cc", points: [{ x: 0, y: 80 }, { x: 120, y: 80 }], metadata: { view: "e4" } },
+    ];
+    const strokes: { readonly color: string; readonly width: number; readonly points: readonly EditorPoint[] }[] = [];
+    let points: EditorPoint[] = [];
+    const contextState = {
+      strokeStyle: "",
+      lineWidth: 1,
+      lineCap: "butt",
+      lineJoin: "miter",
+      save: () => undefined,
+      restore: () => undefined,
+      beginPath: () => { points = []; },
+      moveTo: (x: number, y: number) => { points.push({ x, y }); },
+      lineTo: (x: number, y: number) => { points.push({ x, y }); },
+      bezierCurveTo: (_x1: number, _y1: number, _x2: number, _y2: number, x: number, y: number) => { points.push({ x, y }); },
+      stroke: () => {
+        strokes.push({ color: String(contextState.strokeStyle), width: contextState.lineWidth, points: [...points] });
+      },
+    };
+    const context = contextState as unknown as CanvasRenderingContext2D;
+
+    drawE4DifferentialPairs(context, [{
+      id: "pair", wireIds: ["xs1:2", "xs1:4"], step: 25, amplitude: 6, variant: 2,
+    }], wires);
+
+    const crossingStrokes = strokes.filter((stroke) => stroke.points.some((point, index) => {
+      const previous = stroke.points[index - 1];
+      return previous !== undefined && previous.x !== point.x && previous.y !== point.y;
+    }));
+    expect(crossingStrokes.map(({ color, width }) => ({ color, width }))).toEqual([
+      { color: "#f8fafb", width: 7 },
+      { color: "#c000c0", width: 3 },
+      { color: "#f8fafb", width: 7 },
+      { color: "#0044cc", width: 3 },
+      { color: "#f8fafb", width: 7 },
+      { color: "#c000c0", width: 3 },
+      { color: "#f8fafb", width: 7 },
+      { color: "#0044cc", width: 3 },
+    ]);
   });
 
   it("reports one bridge at a polyline vertex and only suppresses a junction for its own wires", () => {

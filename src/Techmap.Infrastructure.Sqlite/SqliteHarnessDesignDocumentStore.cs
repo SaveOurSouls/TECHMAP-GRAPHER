@@ -64,6 +64,16 @@ public sealed class SqliteHarnessDesignDocumentStore(
             if (update.ExecuteNonQuery() != 1)
             {
                 var current = Read(unitOfWork, projectId, harnessId);
+                // A navigation flush can join an autosave whose response was
+                // already accepted, and a lost response can also make the
+                // client retry the same PUT with its previous revision. Treat
+                // that exact replay as acknowledged while preserving the
+                // optimistic conflict for any different document.
+                if (current.SchemaVersion == schemaVersion &&
+                    string.Equals(current.ContentJson, canonicalJson, StringComparison.Ordinal))
+                {
+                    return current;
+                }
                 throw new HarnessDesignDocumentException(
                     "design_revision_conflict",
                     "The harness design changed after it was read.",

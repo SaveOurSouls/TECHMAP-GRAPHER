@@ -69,7 +69,7 @@ public sealed class HarnessDesignApiTests
     }
 
     [Fact]
-    public async Task Put_rejects_stale_revision_invalid_content_and_wrong_harness_ownership()
+    public async Task Put_acknowledges_an_identical_retry_but_rejects_a_divergent_stale_revision()
     {
         await using var factory = new TechmapWebApplicationFactory();
         using var client = factory.CreateLocalClient();
@@ -86,9 +86,21 @@ public sealed class HarnessDesignApiTests
             Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         }
 
-        using (var stale = await SendAsync(
+        using (var replay = await SendAsync(
                    client, HttpMethod.Put, Route(first.ProjectId, first.HarnessId),
                    new PutHarnessDesignRequest(0, 1, valid.RootElement.Clone()), csrf))
+        {
+            var acknowledged = await replay.Content.ReadFromJsonAsync<HarnessDesignResponse>(
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+            Assert.Equal(1, Assert.IsType<HarnessDesignResponse>(acknowledged).Revision);
+        }
+
+        using var divergent = JsonDocument.Parse(
+            "{\"schemaVersion\":1,\"connectors\":[{\"id\":\"XS1\"}],\"wires\":[],\"views\":{\"e4\":{\"layers\":[]},\"drawing\":{\"layers\":[]}}}");
+        using (var stale = await SendAsync(
+                   client, HttpMethod.Put, Route(first.ProjectId, first.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, divergent.RootElement.Clone()), csrf))
         {
             var error = await stale.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);

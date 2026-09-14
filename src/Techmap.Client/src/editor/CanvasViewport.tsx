@@ -1730,7 +1730,7 @@ function drawE4BridgeCrossings(
   }
 }
 
-function drawE4DifferentialPairs(
+export function drawE4DifferentialPairs(
   context: CanvasRenderingContext2D,
   groups: readonly E4DifferentialPairOverlay[],
   objects: readonly EditorSceneObject[],
@@ -1788,8 +1788,17 @@ function drawE4DifferentialPairs(
       // feet of an X.
       const firstStartsOnMinimum = motifIndex % 2 === 0;
       traceMotif(!firstStartsOnMinimum, true, true);
+      // Both conductors need a halo against the scene painted below. Without
+      // this first stroke, a third wire running between the pair's lanes looks
+      // electrically joined to the first diagonal at their intersection.
+      context.strokeStyle = "#f8fafb";
+      context.lineWidth = 7;
+      context.lineCap = "butt";
+      context.stroke();
+      traceMotif(!firstStartsOnMinimum, true, true);
       context.strokeStyle = first.color;
       context.lineWidth = 3;
+      context.lineCap = "round";
       context.stroke();
       traceMotif(firstStartsOnMinimum, true, true);
       context.strokeStyle = "#f8fafb";
