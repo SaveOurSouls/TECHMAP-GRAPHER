@@ -147,6 +147,39 @@ describe("template content v3 validation", () => {
     expect(codes(document)).toContain("unproducible_contact_count");
   });
 
+  it("explains that an explicit total needs fixed contacts or one repeat domain and clears after repair", () => {
+    const document = validDocument();
+    const variant = document.articleVariants[0]!;
+    const group = document.contactTypeGroups[0]!;
+    const second = {
+      id: crypto.randomUUID(),
+      number: "2",
+      name: "Second signal",
+      circuitText: null,
+      contactTypeGroupId: group.id,
+    };
+    document.logicalContacts.push(second);
+    variant.contactGroups![0]!.contactCount = 3;
+
+    const invalid = validateTemplateContentV3(document);
+    expect(invalid.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: "unproducible_contact_count",
+      path: "$.articleVariants[0].contactGroups[0].contactCount",
+      message: `Для группы «${group.name}» задано 3 контакта, но шаблон содержит 2 контакта и не имеет повторяемого сегмента. Создайте прототип контакта и один домен повтора этой группы либо укажите 2.`,
+    })]));
+
+    document.logicalContacts.push({
+      id: crypto.randomUUID(),
+      number: "3",
+      name: "Third signal",
+      circuitText: null,
+      contactTypeGroupId: group.id,
+    });
+    expect(validateTemplateContentV3(document).diagnostics)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ code: "unproducible_contact_count" })]));
+    expect(validateTemplateContentV3(document).valid).toBe(true);
+  });
+
   it("requires every repeat domain to contain contacts from one explicit type group", () => {
     const missing = validDocument(), countParameterId = crypto.randomUUID();
     missing.parameters.push({

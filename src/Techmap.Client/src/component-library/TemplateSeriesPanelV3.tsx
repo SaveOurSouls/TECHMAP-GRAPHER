@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { ArticleKeyV3, TemplateContentV3 } from "./template-model-v3";
+import { articleContactCountIssueV3, articleContactCountRuleV3 } from "./template-model-v3";
 import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
 import "./TemplateSeriesPanelV3.css";
 
@@ -141,6 +142,26 @@ export function articleContactGroupEditorValueV3(
   }
 }
 
+export function articleContactGroupCountHelpV3(
+  content: TemplateContentV3,
+  groupId: string,
+  requested: number,
+  inherited: boolean,
+): { readonly text: string; readonly invalid: boolean } {
+  const issue = inherited ? null : articleContactCountIssueV3(content, groupId, requested);
+  if (issue) return { text: issue, invalid: true };
+  const rule = articleContactCountRuleV3(content, groupId);
+  const source = rule.repeatStrides.length === 0
+    ? `Сейчас допустимо только значение ${rule.fixedContactCount}. Другое количество требует прототипа контакта и домена повтора этой группы.`
+    : rule.repeatStrides.length === 1
+      ? `Итог состоит из ${rule.fixedContactCount} фиксированных контактов и повторяемого сегмента по ${rule.repeatStrides[0]} контакта.`
+      : "Для группы найдено несколько доменов повтора; перед сохранением оставьте один.";
+  return {
+    text: inherited ? `Количество наследуется из шаблона. ${source}` : source,
+    invalid: rule.repeatStrides.length > 1,
+  };
+}
+
 function GroupNameEditor({ id, name, onRename, onDelete }: {
   readonly id: string; readonly name: string;
   readonly onRename: (id: string, name: string) => void;
@@ -166,6 +187,12 @@ function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
   const count = String(editor.contactCount);
   const configuredTerminals = editor.allowedTerminalArticleKeys;
   const parsedCount = editor.contactCount;
+  const countHelp = articleContactGroupCountHelpV3(
+    content,
+    groupId,
+    editor.contactCount,
+    editor.inherited,
+  );
   const setCountValue = (value: string) => {
     const parsed = Number(value);
     if (Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 2_000)
@@ -185,8 +212,8 @@ function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
   };
   return <section className={editor.configured ? "series-v3-contact-group configured" : "series-v3-contact-group"} aria-label={`Группа ${group.name} артикула ${variant.articleKey}`}>
     <header><strong>{group.name}</strong><span>{editor.inherited ? "наследуется из шаблона" : editor.configured ? "собственная настройка" : "не включена в артикул"}</span></header>
-    <label>Количество контактов {editor.inherited ? "(наследуемое)" : ""}<input type="number" min="0" max="2000" step="1" value={count} aria-describedby={`contact-count-help-${variant.id}-${group.id}`} onChange={event => setCountValue(event.target.value)} /></label>
-    <small id={`contact-count-help-${variant.id}-${group.id}`}>{editor.inherited ? "Изменение создаст собственную настройку артикула." : "Изменение сразу применяется к артикулу."}</small>
+    <label>Итоговое количество контактов {editor.inherited ? "(наследуемое)" : ""}<input type="number" min="0" max="2000" step="1" value={count} aria-invalid={countHelp.invalid || undefined} aria-describedby={`contact-count-help-${variant.id}-${group.id}`} onChange={event => setCountValue(event.target.value)} /></label>
+    <small id={`contact-count-help-${variant.id}-${group.id}`} role={countHelp.invalid ? "alert" : undefined}>{countHelp.text}</small>
     <div className="series-v3-terminal-heading"><strong>Допустимые терминалы</strong><button type="button" aria-label={`Добавить терминал для группы ${group.name} артикула ${variant.articleKey}`} onClick={addTerminal}>+ Терминал</button></div>
     {configuredTerminals.length === 0 && <small>Терминалы не заданы.</small>}
     <div className="series-v3-terminal-list">
@@ -243,6 +270,19 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
   return <details className="template-series-v3">
     <summary>Серия и артикулы <span>{props.content.articleVariants.length}</span></summary>
     <div className="template-series-v3-body">
+      <details className="series-v3-guide">
+        <summary>Как заполнить шаблон</summary>
+        <ol aria-label="Порядок заполнения шаблона">
+          <li>Создайте группы контактов.</li>
+          <li>В виде Э4 создайте логический контакт-прототип, назначьте ему группу, нарисуйте и сгруппируйте строку контакта, затем создайте повтор с параметром количества. В виде Чертеж разместите связанную с прототипом точку контакта.</li>
+          <li>Добавьте артикулы и задайте количество контактов в каждой группе.</li>
+          <li>Укажите допустимые терминалы для групп артикула.</li>
+          <li>Выберите конкретный артикул для предпросмотра.</li>
+          <li>Проверьте виды Э4 и Чертеж для выбранного артикула.</li>
+          <li>Создайте новую версию.</li>
+        </ol>
+        <p>Если повтор не задан, количество контактов артикула может быть только фактическим числом фиксированных контактов шаблона.</p>
+      </details>
       <section className="series-v3-preview" aria-label="Предпросмотр артикула серии">
         <label>Артикул для предпросмотра<select value={props.selectedArticleVariantId ?? ""} onChange={event => props.onSelectArticleVariant?.(event.target.value || null)}>
           <option value="">Параметры шаблона</option>

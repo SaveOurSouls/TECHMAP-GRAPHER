@@ -73,6 +73,11 @@ export type TemplateV3Diagnostic = TemplateV2Diagnostic;
 export interface TemplateV3Validation { readonly valid: boolean; readonly diagnostics: TemplateV3Diagnostic[]; }
 export interface TemplateV3Upgrade { readonly content: TemplateContentV3; readonly diagnostics: TemplateV3Diagnostic[]; }
 
+export interface ArticleContactCountRuleV3 {
+  readonly fixedContactCount: number;
+  readonly repeatStrides: readonly number[];
+}
+
 export const TEMPLATE_V3_LIMITS = Object.freeze({
   ...TEMPLATE_V2_LIMITS,
   contactTypeGroups: 128,
@@ -113,6 +118,61 @@ function optionalText(value: unknown, path: string, diagnostics: TemplateV3Diagn
 
 function compositeKey(value: ArticleKeyV3): string {
   return `${value.sourceId}\0${value.entityType}\0${value.articleKey}`;
+}
+
+function russianContactCount(value: number): string {
+  const mod100 = Math.abs(value) % 100, mod10 = mod100 % 10;
+  const word = mod100 >= 11 && mod100 <= 14 ? "контактов"
+    : mod10 === 1 ? "контакт"
+      : mod10 >= 2 && mod10 <= 4 ? "контакта"
+        : "контактов";
+  return `${value} ${word}`;
+}
+
+function contactCountIssueMessage(
+  groupName: string,
+  requested: number,
+  fixed: number,
+  strides: readonly number[],
+): string | null {
+  if (strides.length === 0) return requested === fixed ? null
+    : `Для группы «${groupName}» задано ${russianContactCount(requested)}, но шаблон содержит ${russianContactCount(fixed)} и не имеет повторяемого сегмента. Создайте прототип контакта и один домен повтора этой группы либо укажите ${fixed}.`;
+  if (strides.length > 1)
+    return `Для группы «${groupName}» найдено несколько доменов повтора. Оставьте один домен, чтобы количество контактов определялось однозначно.`;
+  const repeatedCount = requested - fixed, stride = strides[0]!;
+  return repeatedCount > 0 && repeatedCount % stride === 0 && repeatedCount / stride <= 1_000
+    ? null
+    : `Для группы «${groupName}» задано ${russianContactCount(requested)}. Шаблон формирует ${russianContactCount(fixed)} и повторяемый сегмент по ${stride}; итог должен иметь вид ${fixed} + ${stride} × N, где N — целое от 1 до 1000.`;
+}
+
+/** Describes how a typed template can produce the contact total of one group. */
+export function articleContactCountRuleV3(
+  content: Pick<TemplateContentV3, "logicalContacts" | "repeaters">,
+  groupId: string,
+): ArticleContactCountRuleV3 {
+  const contactsById = new Map(content.logicalContacts.map(contact => [contact.id, contact]));
+  const repeatedContactIds = new Set(content.repeaters.flatMap(repeater => repeater.logicalContactIds));
+  const fixedContactCount = content.logicalContacts.filter(contact =>
+    contact.contactTypeGroupId === groupId && !repeatedContactIds.has(contact.id)).length;
+  const repeatStrides = content.repeaters.flatMap(repeater => {
+    const contacts = repeater.logicalContactIds.map(id => contactsById.get(id));
+    return contacts.length > 0 && contacts.every(contact => contact?.contactTypeGroupId === groupId)
+      ? [contacts.length]
+      : [];
+  });
+  return { fixedContactCount, repeatStrides };
+}
+
+/** Returns an actionable explanation when an explicit article total has no geometry source. */
+export function articleContactCountIssueV3(
+  content: Pick<TemplateContentV3, "logicalContacts" | "repeaters" | "contactTypeGroups">,
+  groupId: string,
+  requested: number,
+): string | null {
+  const group = content.contactTypeGroups.find(candidate => candidate.id === groupId);
+  if (!group) return null;
+  const rule = articleContactCountRuleV3(content, groupId);
+  return contactCountIssueMessage(group.name, requested, rule.fixedContactCount, rule.repeatStrides);
 }
 
 function collectCoreIds(value: Record<string, unknown>): string[] {
@@ -249,12 +309,13 @@ function validateArticleVariants(
   rawVariants: unknown[],
   rawRepeaters: unknown[],
   contactGroups: ReadonlyMap<string, string | null>,
-  validGroupIds: ReadonlySet<string>,
+  validGroups: ReadonlyMap<string, string>,
   diagnostics: TemplateV3Diagnostic[],
   occupiedIds: Set<string>,
   validateMaterializedCounts: boolean,
 ): void {
   const identities = new Set<string>();
+  const validGroupIds = new Set(validGroups.keys());
   const repeated = repeatedContactModel(rawRepeaters, contactGroups, diagnostics);
   const fixedCounts = new Map<string, number>([...validGroupIds].map(id => [id, 0]));
   for (const [contactId, groupId] of contactGroups) if (groupId && !repeated.repeatedContactIds.has(contactId)) fixedCounts.set(groupId, (fixedCounts.get(groupId) ?? 0) + 1);
@@ -283,7 +344,8 @@ function validateArticleVariants(
     if (Array.isArray(raw.parameterValues) && raw.parameterValues.some(entry => isRecord(entry) && typeof entry.parameterId === "string" && repeated.repeatCountParameterIds.has(entry.parameterId)))
       diagnostics.push({ code: "variant_repeat_count_conflict", path: `${path}.parameterValues`, message: "Явная конфигурация групп контактов не может одновременно переопределять количество повторов." });
 
-    const configuredCounts = new Map<string, number>(), configuredGroupIds = new Set<string>();
+    const configuredCounts = new Map<string, number>(), configuredCountPaths = new Map<string, string>();
+    const configuredGroupIds = new Set<string>();
     raw.contactGroups.forEach((rawGroup, groupIndex) => {
       const groupPath = `${path}.contactGroups[${groupIndex}]`;
       if (!exact(rawGroup, ["contactTypeGroupId", "contactCount", "allowedTerminalArticleKeys"], groupPath, diagnostics)) return;
@@ -296,7 +358,10 @@ function validateArticleVariants(
       }
       if (!Number.isSafeInteger(rawGroup.contactCount) || Number(rawGroup.contactCount) < 0 || Number(rawGroup.contactCount) > TEMPLATE_V2_LIMITS.contacts)
         diagnostics.push({ code: "invalid_contact_count", path: `${groupPath}.contactCount`, message: `Количество контактов должно быть целым числом от 0 до ${TEMPLATE_V2_LIMITS.contacts}.` });
-      else if (groupId && !configuredCounts.has(groupId)) configuredCounts.set(groupId, Number(rawGroup.contactCount));
+      else if (groupId && !configuredCounts.has(groupId)) {
+        configuredCounts.set(groupId, Number(rawGroup.contactCount));
+        configuredCountPaths.set(groupId, `${groupPath}.contactCount`);
+      }
       if (!Array.isArray(rawGroup.allowedTerminalArticleKeys)) { diagnostics.push({ code: "array_required", path: `${groupPath}.allowedTerminalArticleKeys`, message: "Ожидается массив." }); return; }
       if (rawGroup.allowedTerminalArticleKeys.length > TEMPLATE_V3_LIMITS.terminalArticlesPerGroup)
         diagnostics.push({ code: "limit", path: `${groupPath}.allowedTerminalArticleKeys`, message: `Превышен лимит ${TEMPLATE_V3_LIMITS.terminalArticlesPerGroup}.` });
@@ -316,15 +381,12 @@ function validateArticleVariants(
     for (const groupId of validGroupIds) {
       const target = configuredCounts.get(groupId) ?? 0, fixed = fixedCounts.get(groupId) ?? 0;
       const strides = repeated.stridesByGroup.get(groupId) ?? [];
-      if (strides.length === 0 && target !== fixed)
-        diagnostics.push({ code: "unproducible_contact_count", path: `${path}.contactGroups`, message: "Количество контактов варианта нельзя получить из шаблона." });
-      else if (strides.length > 1)
-        diagnostics.push({ code: "ambiguous_contact_repeat", path: `${path}.contactGroups`, message: "Для явного варианта допустим не более одного повтора на группу контактов." });
-      else if (strides.length === 1) {
-        const repeatedCount = target - fixed, stride = strides[0]!;
-        if (repeatedCount <= 0 || repeatedCount % stride !== 0 || repeatedCount / stride > 1_000)
-          diagnostics.push({ code: "unproducible_contact_count", path: `${path}.contactGroups`, message: "Количество контактов варианта нельзя получить повтором группы." });
-      }
+      const issue = contactCountIssueMessage(validGroups.get(groupId) ?? groupId, target, fixed, strides);
+      if (issue) diagnostics.push({
+        code: strides.length > 1 ? "ambiguous_contact_repeat" : "unproducible_contact_count",
+        path: configuredCountPaths.get(groupId) ?? `${path}.contactGroups`,
+        message: issue,
+      });
     }
     const materializedRows = fixedUngroupedCount + [...validGroupIds]
       .reduce((sum, groupId) => sum + (configuredCounts.get(groupId) ?? 0), 0);
@@ -386,7 +448,7 @@ function validateTemplateContentV3Internal(value: unknown, validateMaterializedC
   const occupiedIds = new Set(collectCoreIds(value));
   const groupNames = validateContactTypeGroups(groups, diagnostics, occupiedIds);
   const contactGroups = validateLogicalContactsV3(contacts, new Set(groupNames.keys()), diagnostics);
-  validateArticleVariants(variants, value.repeaters as unknown[], contactGroups, new Set(groupNames.keys()), diagnostics, occupiedIds, validateMaterializedCounts);
+  validateArticleVariants(variants, value.repeaters as unknown[], contactGroups, groupNames, diagnostics, occupiedIds, validateMaterializedCounts);
 
   const core = projectV3ToV2(value, groupNames);
   if (core) diagnostics.push(...validateTemplateContentV2(core).diagnostics.map(mapCoreDiagnostic));

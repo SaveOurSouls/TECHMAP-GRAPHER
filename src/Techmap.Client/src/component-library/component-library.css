@@ -1,7 +1,8 @@
-.component-library { min-width: 0; }
+.component-library { width: 100%; min-width: 0; }
 .library-heading { align-items: center; }
-.library-layout { margin-top: 22px; display: grid; grid-template-columns: 250px minmax(680px, 1fr); gap: 18px; align-items: start; }
-.library-catalog, .library-editor { border: 1px solid #dce4ea; border-radius: 12px; background: #fff; box-shadow: 0 8px 30px rgb(40 64 81 / 6%); overflow: hidden; }
+.library-layout { min-width: 0; margin-top: 22px; display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.library-catalog, .library-editor { min-width: 0; border: 1px solid #dce4ea; border-radius: 12px; background: #fff; box-shadow: 0 8px 30px rgb(40 64 81 / 6%); overflow: hidden; }
+.library-editor { container: component-library-editor / inline-size; }
 .library-template-list { max-height: calc(100vh - 245px); overflow: auto; border-top: 1px solid #e3e9ed; }
 .library-template { width: 100%; padding: 13px 16px; display: grid; gap: 4px; border: 0; border-bottom: 1px solid #e5ebef; background: #fff; color: #30495d; text-align: left; cursor: pointer; }
 .library-template:hover { background: #f4f9fb; }
@@ -72,4 +73,21 @@
 .property-order { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .check-field { grid-template-columns: auto 1fr !important; align-items: center; }
 .check-field input { width: 16px; height: 16px; }
-@media (max-width: 1050px) { .library-layout { grid-template-columns: 210px minmax(620px, 1fr); } .library-metadata { grid-template-columns: 1fr 1fr; } .library-metadata > div { grid-column: 1 / -1; justify-content: flex-end; } }
+@media (max-width: 1180px) {
+  .library-layout { grid-template-columns: 1fr; }
+  .library-template-list { max-height: 260px; }
+  .library-metadata { grid-template-columns: 1fr 1fr; }
+  .library-metadata > div { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (max-width: 700px) {
+  .library-metadata, .binding-form { grid-template-columns: 1fr; }
+  .library-metadata > div { grid-column: auto; align-items: stretch; flex-direction: column; }
+  .library-metadata > div .primary-action { width: 100%; }
+  .asset-upload { align-items: flex-start; flex-direction: column; }
+  .asset-list { grid-template-columns: 1fr; }
+  .library-tools { align-items: stretch; flex-wrap: wrap; }
+  .library-tools span { width: 100%; }
+  .library-tools .undo-tool { margin-left: 0; }
+  .library-workarea { grid-template-columns: 1fr; }
+  .library-properties { border-top: 1px solid #ccd8de; border-left: 0; }
+}

@@ -30,12 +30,44 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("Сигнальные");
     expect(markup).toContain("B2B-XH-A");
     expect(markup).toContain("SXH-001T-P0.6");
-    expect(markup).toContain("Количество контактов");
+    expect(markup).toContain("Итоговое количество контактов");
+    expect(markup).toContain("не имеет повторяемого сегмента");
+    expect(markup).toContain("Создайте прототип контакта и один домен повтора");
+    expect(markup).toContain("либо укажите 0");
+    expect(markup).toContain('aria-invalid="true"');
     expect(markup).toContain("Допустимые терминалы");
     expect(markup).toContain("Артикул для предпросмотра");
     expect(markup).toContain("B2B-XH-A: 2 контакта");
     expect(markup).toContain("Материализованные строки контактов");
     expect(markup).toContain("NET-DATA+");
+    expect(markup).toContain('class="series-v3-terminal-heading"');
+    expect(markup).toContain('class="series-v3-terminal-list"');
+    expect(markup).toContain('class="series-v3-terminal-row"');
+
+    const guideStart = markup.indexOf('<details class="series-v3-guide">');
+    const guideEnd = markup.indexOf("</details>", guideStart);
+    const guideMarkup = markup.slice(guideStart, guideEnd);
+    expect(guideStart).toBeGreaterThan(-1);
+    expect(guideMarkup).not.toContain(" open=");
+    expect(guideMarkup).toContain("<summary>Как заполнить шаблон</summary>");
+    expect(guideMarkup).toContain('<ol aria-label="Порядок заполнения шаблона">');
+    const guideSteps = [
+      "Создайте группы контактов.",
+      "В виде Э4 создайте логический контакт-прототип, назначьте ему группу, нарисуйте и сгруппируйте строку контакта, затем создайте повтор с параметром количества. В виде Чертеж разместите связанную с прототипом точку контакта.",
+      "Добавьте артикулы и задайте количество контактов в каждой группе.",
+      "Укажите допустимые терминалы для групп артикула.",
+      "Выберите конкретный артикул для предпросмотра.",
+      "Проверьте виды Э4 и Чертеж для выбранного артикула.",
+      "Создайте новую версию.",
+    ];
+    expect(guideMarkup.match(/<li>/g)).toHaveLength(guideSteps.length);
+    guideSteps.reduce((previousIndex, step) => {
+      const stepIndex = guideMarkup.indexOf(step);
+      expect(stepIndex).toBeGreaterThan(previousIndex);
+      return stepIndex;
+    }, -1);
+    expect(guideMarkup).toContain("Если повтор не задан, количество контактов артикула может быть только фактическим числом фиксированных контактов шаблона.");
+    expect(guideMarkup).not.toContain("опубликуйте");
   });
 
   it("parses terminal keys without silently accepting invalid or duplicate rows", () => {
