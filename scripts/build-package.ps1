@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-08"
+$artifactsRoot = Join-Path $repositoryRoot "artifacts\m2-09"
 $clientRoot = Join-Path $repositoryRoot "src\Techmap.Client"
 $webRoot = Join-Path $repositoryRoot "src\Techmap.Web"
 $staticRoot = Join-Path $webRoot "wwwroot"

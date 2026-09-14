@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   bytesToBase64,
   createReferenceCatalogApi,
+  isAbortError,
   ReferenceCatalogApiError,
+  type GoogleSheetsProfilePreviewRequest,
   type XlsxPreviewRequest,
   type XlsxProfilePreviewRequest,
 } from "./reference-catalog-api";
@@ -37,6 +39,10 @@ const request: XlsxPreviewRequest = {
 const profileRequest: XlsxProfilePreviewRequest = {
   fileName: "База данных. Технология.xlsx",
   contentBase64: "UEsDBA==",
+  profileId: "technology.operations",
+};
+const googleSheetsProfileRequest: GoogleSheetsProfilePreviewRequest = {
+  url: "https://docs.google.com/spreadsheets/d/reference-sheet/edit?gid=0",
   profileId: "technology.operations",
 };
 
@@ -157,6 +163,68 @@ describe("reference catalog API", () => {
       "/techmap/api/v1/reference-sources/technology-operations/xlsx-profile-previews",
       expect.objectContaining({ method: "POST", body: JSON.stringify(profileRequest) }),
     );
+  });
+
+  it("previews a public Google Sheets link through the selected profile", async () => {
+    const response = {
+      ...preview(),
+      sourceId: "technology-operations",
+      fileName: "google-sheets.xlsx",
+      selectedSheet: "БД.ОП",
+      columns: [{ header: "Name", columnIndex: 2, targetProperty: "name", valueKind: "textscalar" }],
+    };
+    const fetcher = vi.fn(async () => jsonResponse(response));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    await expect(api.previewGoogleSheetsProfile("technology-operations", googleSheetsProfileRequest)).resolves.toEqual(
+      expect.objectContaining({
+        sourceId: "technology-operations",
+        selectedSheet: "БД.ОП",
+        columns: [expect.objectContaining({ valueKind: "textscalar" })],
+      }),
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-sources/technology-operations/google-sheets-profile-previews",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify(googleSheetsProfileRequest),
+        headers: expect.objectContaining({ "X-Techmap-CSRF": session.csrfNonce }),
+      }),
+    );
+  });
+
+  it("forwards cancellation to XLSX and Google previews without masking AbortError", async () => {
+    const xlsxController = new AbortController();
+    const googleController = new AbortController();
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const rejectCancelled = () => reject(new DOMException("Cancelled", "AbortError"));
+      if (init?.signal?.aborted) rejectCancelled();
+      else init?.signal?.addEventListener("abort", rejectCancelled, { once: true });
+    }));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    const xlsxResult = api.previewXlsx("technology-database", request, xlsxController.signal).catch(error => error);
+    expect(fetcher).toHaveBeenLastCalledWith(
+      "/techmap/api/v1/reference-sources/technology-database/xlsx-previews",
+      expect.objectContaining({ signal: xlsxController.signal }),
+    );
+    xlsxController.abort();
+    expect(isAbortError(await xlsxResult)).toBe(true);
+
+    const googleResult = api.previewGoogleSheetsProfile(
+      "technology-operations",
+      googleSheetsProfileRequest,
+      googleController.signal,
+    ).catch(error => error);
+    expect(fetcher).toHaveBeenLastCalledWith(
+      "/techmap/api/v1/reference-sources/technology-operations/google-sheets-profile-previews",
+      expect.objectContaining({ signal: googleController.signal }),
+    );
+    googleController.abort();
+    const googleError = await googleResult;
+    expect(isAbortError(googleError)).toBe(true);
+    expect(googleError).not.toBeInstanceOf(ReferenceCatalogApiError);
   });
 
   it("searches an active reference source with server pagination and cancellation", async () => {

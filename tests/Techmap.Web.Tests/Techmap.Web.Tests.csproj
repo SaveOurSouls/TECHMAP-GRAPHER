@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="../../src/Techmap.Infrastructure.Xlsx/Techmap.Infrastructure.Xlsx.csproj" />
+    <ProjectReference Include="../../src/Techmap.Infrastructure.GoogleSheets/Techmap.Infrastructure.GoogleSheets.csproj" />
     <ProjectReference Include="../../src/Techmap.Web/Techmap.Web.csproj" />
   </ItemGroup>
   <ItemGroup>

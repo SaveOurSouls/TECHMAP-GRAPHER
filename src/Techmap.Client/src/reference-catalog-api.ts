@@ -43,6 +43,11 @@ export interface XlsxProfilePreviewRequest {
   readonly profileId: string;
 }
 
+export interface GoogleSheetsProfilePreviewRequest {
+  readonly url: string;
+  readonly profileId: string;
+}
+
 export interface ReferenceCatalogDiagnostic {
   readonly diagnosticId: string;
   readonly severity: ReferenceDiagnosticSeverity;
@@ -87,7 +92,7 @@ export interface XlsxResolvedColumn {
   readonly valueKind: XlsxResolvedValueKind;
 }
 
-export type XlsxResolvedValueKind = "rawscalar" | "text" | "int64" | "decimal" | "boolean";
+export type XlsxResolvedValueKind = "rawscalar" | "text" | "textscalar" | "int64" | "decimal" | "boolean";
 
 export interface XlsxPreviewRecord {
   readonly rowNumber: number;
@@ -168,8 +173,9 @@ export interface ReferenceCatalogSearchPage {
 export interface ReferenceCatalogApi {
   getXlsxProfiles(): Promise<readonly XlsxImportProfile[]>;
   getActive(sourceId: string): Promise<ReferenceCatalogSnapshot | null>;
-  previewXlsx(sourceId: string, request: XlsxPreviewRequest): Promise<XlsxReferencePreview>;
-  previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest): Promise<XlsxReferencePreview>;
+  previewXlsx(sourceId: string, request: XlsxPreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
+  previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
+  previewGoogleSheetsProfile(sourceId: string, request: GoogleSheetsProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   publishXlsx(sourceId: string, request: PublishXlsxPreviewRequest): Promise<ReferenceCatalogPublication>;
   searchCatalog(
     sourceId: string,
@@ -204,7 +210,7 @@ const sha256Pattern = /^[0-9a-f]{64}$/i;
 const severities = new Set<ReferenceDiagnosticSeverity>(["warning", "error"]);
 const publicationStatuses = new Set(["published", "unchanged"]);
 const resolvedValueKinds = new Set<XlsxResolvedValueKind>([
-  "rawscalar", "text", "int64", "decimal", "boolean",
+  "rawscalar", "text", "textscalar", "int64", "decimal", "boolean",
 ]);
 const errorMessages: Readonly<Record<string, string>> = {
   invalid_origin: "Откройте приложение через его локальный адрес.",
@@ -220,6 +226,17 @@ const errorMessages: Readonly<Record<string, string>> = {
   xlsx_mapping_invalid: "Проверьте настройки листа, строк и сопоставления полей.",
   xlsx_profile_not_found: "Выбранный профиль импорта больше недоступен. Обновите список.",
   xlsx_profile_source_mismatch: "Профиль не соответствует выбранному справочнику.",
+  google_sheets_url_required: "Вставьте публичную ссылку Google Sheets.",
+  google_sheets_url_invalid: "Укажите ссылку на таблицу Google Sheets.",
+  google_sheets_not_public: "Таблица Google Sheets недоступна без авторизации. Откройте публичный доступ по ссылке.",
+  google_sheets_fetch_failed: "Не удалось прочитать публичную таблицу Google Sheets.",
+  google_sheets_access_denied: "Таблица Google Sheets недоступна без авторизации. Откройте публичный доступ по ссылке.",
+  google_sheets_not_found: "Таблица Google Sheets не найдена. Проверьте публичную ссылку.",
+  google_sheets_unavailable: "Google Sheets временно недоступна. Повторите попытку позже.",
+  google_sheets_download_timeout: "Google Sheets не ответила вовремя. Повторите попытку.",
+  google_sheets_not_xlsx: "Google Sheets не вернула поддерживаемую рабочую книгу.",
+  google_sheets_profile_source_mismatch: "Профиль не соответствует выбранному справочнику.",
+  google_sheets_import_busy: "Дождитесь завершения текущей проверки справочника.",
   xlsx_preview_expired: "Предварительный просмотр истёк. Проверьте файл ещё раз.",
   xlsx_preview_active_mismatch: "Активная версия изменилась. Проверьте файл ещё раз.",
   xlsx_publication_invalid: "Данные предварительного просмотра неполны. Проверьте файл ещё раз.",
@@ -234,6 +251,10 @@ const errorMessages: Readonly<Record<string, string>> = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isAbortError(value: unknown): boolean {
+  return value instanceof Error && value.name === "AbortError";
 }
 
 function requireRecord(value: unknown, message: string): Record<string, unknown> {
@@ -532,7 +553,8 @@ export function createReferenceCatalogApi(
         cache: "no-store",
         ...init,
       });
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) throw error;
       throw new ReferenceCatalogApiError("Не удалось связаться с локальным сервером.");
     }
     if (!response.ok) throw await responseError(response);
@@ -566,14 +588,19 @@ export function createReferenceCatalogApi(
         throw error;
       }
     },
-    previewXlsx: (sourceId: string, body: XlsxPreviewRequest) => request(
+    previewXlsx: (sourceId: string, body: XlsxPreviewRequest, signal?: AbortSignal) => request(
       resource(sourceId, "xlsx-previews"),
-      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
       parsePreview,
     ),
-    previewXlsxProfile: (sourceId: string, body: XlsxProfilePreviewRequest) => request(
+    previewXlsxProfile: (sourceId: string, body: XlsxProfilePreviewRequest, signal?: AbortSignal) => request(
       resource(sourceId, "xlsx-profile-previews"),
-      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
+      parsePreview,
+    ),
+    previewGoogleSheetsProfile: (sourceId: string, body: GoogleSheetsProfilePreviewRequest, signal?: AbortSignal) => request(
+      resource(sourceId, "google-sheets-profile-previews"),
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
       parsePreview,
     ),
     publishXlsx: (sourceId: string, body: PublishXlsxPreviewRequest) => request(

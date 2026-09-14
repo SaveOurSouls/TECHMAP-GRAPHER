@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Techmap.Contracts;
 
 public sealed record XlsxProfilePreviewRequest(
@@ -13,3 +15,7 @@ public sealed record XlsxKnownProfileResponse(
     string EntityType,
     string KeyColumn,
     string Description);
+
+public sealed record GoogleSheetsProfilePreviewRequest(
+    [property: JsonPropertyName("url")] string? Url,
+    string? ProfileId);

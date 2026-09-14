@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Techmap.Application;
 using Techmap.Contracts;
+using Techmap.Infrastructure.GoogleSheets;
 using Techmap.Infrastructure.Sqlite;
 using Techmap.Web;
 
@@ -281,6 +282,8 @@ builder.Services.AddSingleton<IReferenceCatalogSearchStore, SqliteReferenceCatal
 builder.Services.AddSingleton<IReferenceCatalogSavedFilterStore, SqliteReferenceCatalogSavedFilterStore>();
 builder.Services.AddSingleton<ReferenceCatalogSearchCursorCodec>();
 builder.Services.AddSingleton<XlsxPreviewCatalog>();
+builder.Services.AddSingleton<IGoogleSheetsWorkbookDownloader>(_ =>
+    GoogleSheetsWorkbookDownloader.CreateDefault());
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(storage);
 builder.Services.AddSingleton(productVersion);
@@ -426,6 +429,7 @@ app.MapComponentTemplateEndpoints();
 app.MapReferenceCatalogEndpoints();
 app.MapReferenceCatalogSavedFilterEndpoints();
 app.MapXlsxReferenceEndpoints();
+app.MapGoogleSheetsReferenceEndpoints();
 app.Map("/api/{**path}", () => Results.Json(
     new ApiErrorResponse("api_route_not_found"),
     statusCode: StatusCodes.Status404NotFound));

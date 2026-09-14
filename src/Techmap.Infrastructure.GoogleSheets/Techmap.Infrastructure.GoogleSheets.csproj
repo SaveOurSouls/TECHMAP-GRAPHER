@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Techmap.Infrastructure.Xlsx/Techmap.Infrastructure.Xlsx.csproj" />
+  </ItemGroup>
+</Project>

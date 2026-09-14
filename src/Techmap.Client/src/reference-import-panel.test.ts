@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   canPublishXlsxPreview,
   fileSelectionLabel,
+  googleSheetsProfilePreviewRequest,
   profileCountLabel,
   ReferenceImportPanel,
   XlsxProfilePicker,
@@ -38,11 +39,15 @@ describe("reference import panel", () => {
     expect(markup).toContain('aria-current="page"');
   });
 
-  it("renders profile-first XLSX import and keeps manual mapping as an advanced disclosure", () => {
+  it("renders XLSX and experimental public Google Sheets inputs while keeping manual XLSX mapping", () => {
     const markup = renderToStaticMarkup(createElement(ReferenceImportPanel, { config, session }));
 
     expect(markup).toContain("Справочники");
     expect(markup).toContain("Выбрать рабочую книгу");
+    expect(markup).toContain("Google Sheets");
+    expect(markup).toContain("экспериментально");
+    expect(markup).toContain("публичной ссылке");
+    expect(markup).toContain("только для чтения");
     expect(markup).toContain("Какой файл нужен");
     expect(markup).toContain("База данных. Технология.xlsx");
     expect(markup).toContain("Что загрузить");
@@ -53,8 +58,22 @@ describe("reference import panel", () => {
     expect(markup).toContain("Обычные ссылки на сайты разрешены");
     expect(markup).toContain("generic-record");
     expect(markup).toContain("Проверить таблицу");
-    expect(markup).toContain("Сначала проверьте файл");
+    expect(markup).toContain("Сначала проверьте файл или источник");
     expect(markup).toContain('accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"');
+  });
+
+  it("normalizes a Google Sheets profile request and rejects missing input", () => {
+    expect(googleSheetsProfilePreviewRequest(
+      "  https://docs.google.com/spreadsheets/d/reference/edit  ",
+      "  technology.operations  ",
+    )).toEqual({
+      url: "https://docs.google.com/spreadsheets/d/reference/edit",
+      profileId: "technology.operations",
+    });
+    expect(() => googleSheetsProfilePreviewRequest("   ", "technology.operations"))
+      .toThrow("публичную ссылку Google Sheets");
+    expect(() => googleSheetsProfilePreviewRequest("https://docs.google.com/spreadsheets/d/reference", "  "))
+      .toThrow("Выберите профиль");
   });
 
   it("renders backend-provided profiles and their exact automatic mapping", () => {

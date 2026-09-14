@@ -2,7 +2,9 @@ import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useR
 import type { LocalSession } from "./local-session";
 import {
   createReferenceCatalogApi,
+  isAbortError,
   ReferenceCatalogApiError,
+  type GoogleSheetsProfilePreviewRequest,
   type ReferenceCatalogSnapshot,
   type XlsxFieldMapping,
   type XlsxFieldValueKind,
@@ -27,6 +29,7 @@ interface ImportSettings {
 }
 
 type Notice = { readonly tone: "success" | "error" | "info"; readonly text: string };
+type ReferenceInputMode = "xlsx" | "google-sheets";
 
 const initialSettings: ImportSettings = {
   sourceId: "technology-database",
@@ -126,6 +129,17 @@ export function profileCountLabel(count: number): string {
   return `${count} ${noun}`;
 }
 
+export function googleSheetsProfilePreviewRequest(
+  url: string,
+  profileId: string,
+): GoogleSheetsProfilePreviewRequest {
+  const normalizedUrl = url.trim();
+  const normalizedProfileId = profileId.trim();
+  if (!normalizedUrl) throw new Error("Вставьте публичную ссылку Google Sheets.");
+  if (!normalizedProfileId) throw new Error("Выберите профиль таблицы Google Sheets.");
+  return { url: normalizedUrl, profileId: normalizedProfileId };
+}
+
 interface XlsxProfilePickerProps {
   readonly profiles: readonly XlsxImportProfile[] | undefined;
   readonly error: string | null;
@@ -150,7 +164,7 @@ export function XlsxProfilePicker({
   return (
     <div className="xlsx-profile-picker">
       <label>
-        Таблица рабочей книги
+        Профиль справочника
         <select value={selectedProfileId} onChange={(event) => onSelect(event.target.value)} disabled={disabled}>
           {profiles.map((profile) => <option value={profile.profileId} key={profile.profileId}>{profile.displayName}</option>)}
         </select>
@@ -175,6 +189,8 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [profiles, setProfiles] = useState<readonly XlsxImportProfile[] | undefined>(undefined);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [inputMode, setInputMode] = useState<ReferenceInputMode>("xlsx");
+  const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
   const [manualMode, setManualMode] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sheetOptions, setSheetOptions] = useState<readonly { readonly name: string; readonly hidden: boolean }[]>([]);
@@ -190,8 +206,11 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [notice, setNotice] = useState<Notice | null>(null);
   const [now, setNow] = useState(Date.now());
   const activeRequestRef = useRef(0);
+  const previewAbortRef = useRef<AbortController | null>(null);
   const selectedProfile = profiles?.find((profile) => profile.profileId === selectedProfileId) ?? null;
-  const activeSourceId = manualMode ? settings.sourceId.trim() : selectedProfile?.sourceId ?? "";
+  const activeSourceId = inputMode === "xlsx" && manualMode
+    ? settings.sourceId.trim()
+    : selectedProfile?.sourceId ?? "";
 
   useEffect(() => {
     let cancelled = false;
@@ -268,6 +287,12 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     return () => window.clearInterval(timer);
   }, [preview]);
 
+  useEffect(() => () => {
+    const request = previewAbortRef.current;
+    previewAbortRef.current = null;
+    request?.abort();
+  }, []);
+
   const invalidatePreview = () => {
     setPreview(null);
     setAcknowledgedWarnings(new Set());
@@ -287,7 +312,20 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   };
 
   const changeImportMode = (manual: boolean) => {
+    const request = previewAbortRef.current;
+    previewAbortRef.current = null;
+    request?.abort();
+    setBusy((current) => current === "preview" ? null : current);
     setManualMode(manual);
+    invalidatePreview();
+  };
+
+  const changeInputMode = (mode: ReferenceInputMode) => {
+    const request = previewAbortRef.current;
+    previewAbortRef.current = null;
+    request?.abort();
+    setBusy((current) => current === "preview" ? null : current);
+    setInputMode(mode);
     invalidatePreview();
   };
 
@@ -321,24 +359,34 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
   const submitPreview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!file) {
+    if (inputMode === "xlsx" && !file) {
       setNotice({ tone: "error", text: "Выберите файл XLSX." });
       return;
     }
-    if (!manualMode && !selectedProfile) {
-      setNotice({ tone: "error", text: "Выберите таблицу, которую нужно загрузить из рабочей книги." });
+    if ((inputMode === "google-sheets" || !manualMode) && !selectedProfile) {
+      setNotice({ tone: "error", text: "Выберите профиль справочника." });
       return;
     }
 
+    previewAbortRef.current?.abort();
+    const previewController = new AbortController();
+    previewAbortRef.current = previewController;
     setBusy("preview");
     setNotice(null);
     setAcknowledgedWarnings(new Set());
     setPreviewStale(false);
     setPreviewPublished(false);
     try {
-      const contentBase64 = await xlsxFileToBase64(file);
       let result: XlsxReferencePreview;
-      if (manualMode) {
+      if (inputMode === "google-sheets") {
+        const profile = selectedProfile!;
+        result = await api.previewGoogleSheetsProfile(
+          profile.sourceId,
+          googleSheetsProfilePreviewRequest(googleSheetsUrl, profile.profileId),
+          previewController.signal,
+        );
+      } else if (manualMode) {
+        const contentBase64 = await xlsxFileToBase64(file!);
         const sourceId = settings.sourceId.trim();
         const entityType = settings.entityType.trim();
         const keyColumn = settings.keyColumn.trim();
@@ -359,7 +407,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           throw new Error("Заполните исходный столбец и поле назначения во всех строках сопоставления.");
         }
         result = await api.previewXlsx(sourceId, {
-          fileName: file.name,
+          fileName: file!.name,
           contentBase64,
           sheetName: settings.sheetName.trim() || null,
           headerRow,
@@ -367,22 +415,25 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           entityType,
           keyColumn,
           fields: mappedFields,
-        });
+        }, previewController.signal);
       } else {
+        const contentBase64 = await xlsxFileToBase64(file!);
         const profile = selectedProfile!;
         result = await api.previewXlsxProfile(profile.sourceId, {
-          fileName: file.name,
+          fileName: file!.name,
           contentBase64,
           profileId: profile.profileId,
-        });
+        }, previewController.signal);
       }
+      if (previewAbortRef.current !== previewController) return;
       setPreview(result);
       setSheetOptions(result.sheets);
       setNow(Date.now());
       setNotice(result.canPublish
         ? { tone: "success", text: `Проверка завершена: подготовлено записей — ${result.recordCount}.` }
-        : { tone: "error", text: "Файл проверен, но содержит блокирующие ошибки. Активная версия не изменена." });
+        : { tone: "error", text: "Источник проверен, но содержит блокирующие ошибки. Активная версия не изменена." });
     } catch (error) {
+      if (isAbortError(error) || previewAbortRef.current !== previewController) return;
       setPreview(null);
       const diagnostics = error instanceof ReferenceCatalogApiError ? error.diagnostics : [];
       setNotice({
@@ -392,7 +443,10 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           : errorText(error),
       });
     } finally {
-      setBusy(null);
+      if (previewAbortRef.current === previewController) {
+        previewAbortRef.current = null;
+        setBusy(null);
+      }
     }
   };
 
@@ -471,7 +525,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div>
           <p className="eyebrow">ТЕКУЩЕЕ СОСТОЯНИЕ</p>
           <h2 id="active-reference-title">Активная версия</h2>
-          {!manualMode && selectedProfile && <span className="active-reference-profile">{selectedProfile.displayName}</span>}
+          {(inputMode === "google-sheets" || !manualMode) && selectedProfile && <span className="active-reference-profile">{selectedProfile.displayName}</span>}
         </div>
         {activeError ? (
           <p className="reference-state error">{activeError}</p>
@@ -493,23 +547,58 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div className="section-title-row reference-card-title">
           <div>
             <p className="eyebrow">ШАГ 1</p>
-            <h2>Выбор таблицы и файла</h2>
+            <h2>Выбор таблицы и источника</h2>
           </div>
-          <span className="selected-file" title={file?.name}>{fileSelectionLabel(file)}</span>
+          <span className="selected-file" title={inputMode === "xlsx" ? file?.name : googleSheetsUrl}>
+            {inputMode === "xlsx" ? fileSelectionLabel(file) : "Публичная Google Sheets"}
+          </span>
         </div>
 
-        <div className="xlsx-format-guide" role="note" aria-label="Какой XLSX выбрать">
-          <strong>Какой файл нужен</strong>
-          <p>
-            Выберите рабочую книгу <code>База данных. Технология.xlsx</code> целиком.
-            Ниже укажите, какую таблицу из книги загрузить: приложение само выберет лист,
-            строки, ключ и характеристики.
-          </p>
-          <p>
-            В списке показываются все готовые профили. Новые таблицы будут появляться здесь
-            автоматически по мере подготовки правил импорта.
-          </p>
-        </div>
+        <fieldset className="reference-source-switch">
+          <legend>Источник данных</legend>
+          <button type="button" className={inputMode === "xlsx" ? "selected" : ""} aria-pressed={inputMode === "xlsx"} onClick={() => changeInputMode("xlsx")} disabled={busy !== null && busy !== "preview"}>
+            Файл XLSX
+          </button>
+          <button type="button" className={inputMode === "google-sheets" ? "selected" : ""} aria-pressed={inputMode === "google-sheets"} onClick={() => changeInputMode("google-sheets")} disabled={busy !== null && busy !== "preview"}>
+            Google Sheets <span>экспериментально</span>
+          </button>
+          <small>Google Sheets читается только по публичной ссылке и остаётся источником только для чтения.</small>
+        </fieldset>
+
+        {inputMode === "xlsx" ? (
+          <div className="xlsx-format-guide" role="note" aria-label="Какой XLSX выбрать">
+            <strong>Какой файл нужен</strong>
+            <p>
+              Выберите рабочую книгу <code>База данных. Технология.xlsx</code> целиком.
+              Ниже укажите, какую таблицу из книги загрузить: приложение само выберет лист,
+              строки, ключ и характеристики.
+            </p>
+            <p>
+              В списке показываются все готовые профили. Новые таблицы будут появляться здесь
+              автоматически по мере подготовки правил импорта.
+            </p>
+          </div>
+        ) : (
+          <div className="google-sheets-guide" role="note" aria-label="Импорт из Google Sheets">
+            <div><strong>Публичная Google Sheets</strong><span>ЭКСПЕРИМЕНТАЛЬНО</span></div>
+            <p>Откройте доступ «Все, у кого есть ссылка», затем вставьте ссылку на таблицу. Приложение только читает источник и не изменяет данные в Google.</p>
+            <label>
+              Ссылка на Google Sheets
+              <input
+                type="url"
+                inputMode="url"
+                placeholder="docs.google.com/spreadsheets/d/…"
+                value={googleSheetsUrl}
+                onChange={(event) => {
+                  setGoogleSheetsUrl(event.target.value);
+                  invalidatePreview();
+                }}
+                disabled={busy !== null}
+                required
+              />
+            </label>
+          </div>
+        )}
 
         <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
           <div className="xlsx-profile-heading">
@@ -517,26 +606,26 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
               <strong id="xlsx-profile-heading">Что загрузить</strong>
               <span>Одна публикация обновляет один справочник.</span>
             </div>
-            {!manualMode && profiles && <span>{profileCountLabel(profiles.length)}</span>}
+            {(inputMode === "google-sheets" || !manualMode) && profiles && <span>{profileCountLabel(profiles.length)}</span>}
           </div>
           <XlsxProfilePicker
             profiles={profiles}
             error={profileError}
             selectedProfileId={selectedProfileId}
-            disabled={busy !== null || manualMode}
+            disabled={busy !== null || (inputMode === "xlsx" && manualMode)}
             onSelect={selectProfile}
           />
         </section>
 
-        <div className="reference-form-grid profile-file-grid">
-          <label className="file-picker wide-reference-field">
-            <span>Файл XLSX</span>
-            <span className="file-picker-control"><strong>Выбрать рабочую книгу</strong><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={busy !== null} /></span>
-            <small>До 25 МиБ. Обычные ссылки на сайты разрешены; внешние книги, подключения к данным и макросы запрещены.</small>
-          </label>
-        </div>
+        {inputMode === "xlsx" && <div className="reference-form-grid profile-file-grid">
+            <label className="file-picker wide-reference-field">
+              <span>Файл XLSX</span>
+              <span className="file-picker-control"><strong>Выбрать рабочую книгу</strong><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={selectFile} disabled={busy !== null} /></span>
+              <small>До 25 МиБ. Обычные ссылки на сайты разрешены; внешние книги, подключения к данным и макросы запрещены.</small>
+            </label>
+          </div>}
 
-        <details className="manual-import-details" open={manualMode} onToggle={(event) => {
+        {inputMode === "xlsx" && <details className="manual-import-details" open={manualMode} onToggle={(event) => {
           if (event.currentTarget.open !== manualMode) changeImportMode(event.currentTarget.open);
         }}>
           <summary>
@@ -624,11 +713,15 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
             </div>
           )}
           </div>
-        </details>
+        </details>}
 
         <div className="reference-form-actions">
-          <button className="primary-action" type="submit" disabled={busy !== null}>
-            {busy === "preview" ? "Проверяем файл…" : manualMode ? "Проверить универсальный импорт" : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
+          <button className="primary-action" type="submit" disabled={busy !== null && busy !== "preview"}>
+            {busy === "preview"
+              ? inputMode === "google-sheets" ? "Читаем Google Sheets…" : "Проверяем файл…"
+              : inputMode === "google-sheets" ? "Проверить Google Sheets"
+                : manualMode ? "Проверить универсальный импорт"
+                  : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
           </button>
           <span>Публикация выполняется отдельным действием после проверки.</span>
         </div>
@@ -636,7 +729,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
       {!preview && (
         <section className="reference-preview-card preview-empty" aria-label="Предварительный просмотр">
-          <strong>Сначала проверьте файл</strong>
+          <strong>Сначала проверьте файл или источник</strong>
           <span>Здесь появятся строки, сопоставленные поля и адресные сообщения проверки.</span>
         </section>
       )}

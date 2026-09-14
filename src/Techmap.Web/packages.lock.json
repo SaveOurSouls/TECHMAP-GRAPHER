@@ -106,6 +106,12 @@
       "techmap.domain": {
         "type": "Project"
       },
+      "techmap.infrastructure.googlesheets": {
+        "type": "Project",
+        "dependencies": {
+          "Techmap.Infrastructure.Xlsx": "[0.1.0, )"
+        }
+      },
       "techmap.infrastructure.sqlite": {
         "type": "Project",
         "dependencies": {

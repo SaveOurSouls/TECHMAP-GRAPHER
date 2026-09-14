@@ -4,6 +4,7 @@
     <Project Path="src/Techmap.Application/Techmap.Application.csproj" />
     <Project Path="src/Techmap.Infrastructure.Sqlite/Techmap.Infrastructure.Sqlite.csproj" />
     <Project Path="src/Techmap.Infrastructure.Xlsx/Techmap.Infrastructure.Xlsx.csproj" />
+    <Project Path="src/Techmap.Infrastructure.GoogleSheets/Techmap.Infrastructure.GoogleSheets.csproj" />
     <Project Path="src/Techmap.Contracts/Techmap.Contracts.csproj" />
     <Project Path="src/Techmap.Web/Techmap.Web.csproj" />
   </Folder>

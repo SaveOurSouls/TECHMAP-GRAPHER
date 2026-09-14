@@ -290,6 +290,19 @@ input::placeholder { color: #8795a3; }
 .active-reference-facts dd, .preview-facts dd { margin: 0; color: #29445a; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .reference-import-card, .reference-preview-card { padding: 22px 24px; }
 .reference-card-title { padding-bottom: 16px; border-bottom: 1px solid #e3e9ed; }
+.reference-source-switch { margin: 16px 0 0; padding: 12px 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; border: 1px solid #cbdde5; border-radius: 9px; background: #f8fbfc; }
+.reference-source-switch legend { padding: 0 4px; color: #294b5e; font-size: 12px; font-weight: 800; }
+.reference-source-switch button { min-height: 34px; padding: 7px 11px; border: 1px solid #bfd1da; border-radius: 7px; background: #fff; color: #456174; font-size: 11px; font-weight: 750; cursor: pointer; }
+.reference-source-switch button.selected { border-color: #3c8aae; background: #eaf5f9; color: #205d78; box-shadow: 0 0 0 1px #9fc8d8; }
+.reference-source-switch button span { color: #9a6726; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.reference-source-switch > small { flex-basis: 100%; color: #778894; font-size: 11px; line-height: 1.4; }
+.google-sheets-guide { margin-top: 16px; padding: 14px 15px; display: grid; gap: 8px; border: 1px solid #d8cda9; border-left: 3px solid #b9953f; border-radius: 8px; background: #fffaf0; color: #695c3e; font-size: 12px; line-height: 1.5; }
+.google-sheets-guide > div { display: flex; align-items: center; gap: 8px; }
+.google-sheets-guide > div strong { color: #59491e; font-size: 13px; }
+.google-sheets-guide > div span { padding: 3px 6px; border-radius: 8px; background: #f2e3b7; color: #87691c; font-size: 11px; font-weight: 850; letter-spacing: .04em; }
+.google-sheets-guide p { margin: 0; }
+.google-sheets-guide label { display: grid; gap: 6px; color: #5d5239; font-size: 11px; font-weight: 750; }
+.google-sheets-guide input { width: 100%; }
 .xlsx-format-guide { margin-top: 16px; padding: 13px 15px; border: 1px solid #cbdfe9; border-radius: 8px; background: #f3f8fb; color: #4c6475; font-size: 12px; line-height: 1.5; }
 .xlsx-format-guide strong { color: #274b61; font-size: 13px; }
 .xlsx-format-guide p { margin: 4px 0 0; }

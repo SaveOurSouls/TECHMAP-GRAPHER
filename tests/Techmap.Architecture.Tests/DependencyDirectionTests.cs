@@ -29,6 +29,10 @@ public sealed class DependencyDirectionTests
         AssertOnlyProductReferences<Techmap.Infrastructure.Xlsx.XlsxInfrastructureBoundary>(
             "Techmap.Application",
             "Techmap.Domain");
+        AssertOnlyProductReferences<Techmap.Infrastructure.GoogleSheets.GoogleSheetsInfrastructureBoundary>(
+            "Techmap.Application",
+            "Techmap.Domain",
+            "Techmap.Infrastructure.Xlsx");
     }
 
     private static void AssertOnlyProductReferences<T>(params string[] allowed)
