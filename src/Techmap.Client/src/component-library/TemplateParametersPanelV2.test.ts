@@ -5,9 +5,11 @@ import {
   TemplateParametersPanelV2,
   availableNodeDimensionsV2,
   availableRepeatContactPointsV2,
+  canUseNodeForRepeatPlacementV2,
   canCreateRepeatV2,
   calculatedRepeatContactCountV2,
   isTopLevelNodeV2,
+  missingRepeatLogicalContactIdsV2,
   parseRepeatCountV2,
   parseRepeatStepV2,
   parseTemplateDimensionRangeV2,
@@ -15,6 +17,7 @@ import {
   parameterizeDimensionFormKeyV2,
   repeatPlacementViewNamesV2,
   repeatPreviewValuesV2,
+  unplacedRepeatDomainsV2,
   type TemplateParametersPanelV2Props,
 } from "./TemplateParametersPanelV2";
 import type { NumericExpressionV2, TemplateContentV2, TemplateNodeV2, TransformV2 } from "./template-model-v2";
@@ -28,6 +31,7 @@ const ids = {
   domain: "00000000-0000-4000-8000-00000000000b",
   logical2: "00000000-0000-4000-8000-00000000000c", point2: "00000000-0000-4000-8000-00000000000d",
   size: "00000000-0000-4000-8000-00000000000e", ellipse: "00000000-0000-4000-8000-00000000000f",
+  drawingNode: "00000000-0000-4000-8000-000000000010", drawingPoint: "00000000-0000-4000-8000-000000000011",
 } as const;
 
 const c = (value: number): NumericExpressionV2 => ({ kind: "constant", value });
@@ -97,6 +101,35 @@ describe("TemplateParametersPanelV2", () => {
     expect(markup).toContain("2 · Питание");
     expect(markup).not.toContain("1 · Сигнал");
     expect(markup).toContain("из всех видов");
+  });
+
+  it("offers an existing repeat domain in another view when its logical point and a prototype are ready", () => {
+    const document = fixture(true);
+    document.views[1]!.layers[0]!.nodes.push({ ...line(ids.drawingNode), layerId: ids.drawingLayer });
+    document.views[1]!.contactPoints.push({ id: ids.drawingPoint, logicalContactId: ids.logical, x: c(20), y: c(0), direction: "left" });
+    const markup = renderToStaticMarkup(createElement(TemplateParametersPanelV2, {
+      content: document, activeViewId: ids.drawing, activeLayerId: ids.drawingLayer, selectedNodeId: ids.drawingNode,
+      ...callbacks(), onPlaceRepeatInActiveView: vi.fn(),
+    }));
+
+    expect(markup).toContain('aria-label="Разместить повтор в этом виде"');
+    expect(markup).toContain("Контакты · 1 конт.");
+    expect(markup).toContain('value="0"');
+    expect(markup).toContain('value="20"');
+    expect(markup).toContain('<button type="submit">Разместить повтор в этом виде</button>');
+    expect(markup).not.toContain("Сначала разместите в этом виде точки логических контактов домена");
+  });
+
+  it("explains missing logical points and disables placement until they exist in the active view", () => {
+    const document = fixture(true);
+    document.views[1]!.layers[0]!.nodes.push({ ...line(ids.drawingNode), layerId: ids.drawingLayer });
+    const markup = renderToStaticMarkup(createElement(TemplateParametersPanelV2, {
+      content: document, activeViewId: ids.drawing, activeLayerId: ids.drawingLayer, selectedNodeId: ids.drawingNode,
+      ...callbacks(), onPlaceRepeatInActiveView: vi.fn(),
+    }));
+
+    expect(markup).toContain("Сначала разместите в этом виде точки логических контактов домена: 1 · Сигнал.");
+    expect(markup).toContain('<button type="submit" disabled="">Разместить повтор в этом виде</button>');
   });
 
   it("renders the resolved formula count as read-only", () => {
@@ -234,6 +267,24 @@ describe("TemplateParametersPanelV2 helpers", () => {
     expect(markup).toContain("Нет размещения в активном виде");
     expect(markup).toContain("Охват: 1 · Чертёж");
     expect(markup).toContain(`aria-label="Удалить повтор Контакты из всех видов"`);
+    expect(markup).not.toContain('aria-label="Разместить повтор в этом виде"');
+  });
+
+  it("finds domains absent from a view and checks their logical point coverage", () => {
+    const document = fixture(true);
+    expect(unplacedRepeatDomainsV2(document, ids.e4)).toEqual([]);
+    expect(unplacedRepeatDomainsV2(document, ids.drawing).map(domain => domain.id)).toEqual([ids.domain]);
+    expect(missingRepeatLogicalContactIdsV2(document, ids.drawing, ids.domain)).toEqual([ids.logical]);
+    document.views[1]!.contactPoints.push({ id: ids.drawingPoint, logicalContactId: ids.logical, x: c(0), y: c(0), direction: "left" });
+    expect(missingRepeatLogicalContactIdsV2(document, ids.drawing, ids.domain)).toEqual([]);
+  });
+
+  it("accepts only an editable free top-level node as a cross-view repeat prototype", () => {
+    const document = fixture(true);
+    document.views[1]!.layers[0]!.nodes.push({ ...line(ids.drawingNode), layerId: ids.drawingLayer });
+    expect(canUseNodeForRepeatPlacementV2(document, ids.drawing, ids.drawingLayer, ids.drawingNode)).toBe(true);
+    document.views[1]!.layers[0]!.locked = true;
+    expect(canUseNodeForRepeatPlacementV2(document, ids.drawing, ids.drawingLayer, ids.drawingNode)).toBe(false);
   });
 
   it("detects parameterizable dimensions and validates editable defaults", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
-import { TEMPLATE_V2_LIMITS, type TemplateContentV2, type TemplateNodeV2, type TemplateParameterV2, type ViewContactPointV2 } from "./template-model-v2";
+import { TEMPLATE_V2_LIMITS, type RepeatDomainV2, type TemplateContentV2, type TemplateNodeV2, type TemplateParameterV2, type ViewContactPointV2 } from "./template-model-v2";
 import { resolveTemplateParameterValuesV2 } from "./template-repeat-v2";
 import "./TemplateParametersPanelV2.css";
 
@@ -9,6 +9,13 @@ export interface CreateTemplateRepeatInputV2 {
   readonly prototypeNodeId: string;
   readonly contactPointId: string;
   readonly count: number;
+  readonly stepX: number;
+  readonly stepY: number;
+}
+
+export interface PlaceTemplateRepeatInActiveViewInputV2 {
+  readonly repeatDomainId: string;
+  readonly prototypeNodeId: string;
   readonly stepX: number;
   readonly stepY: number;
 }
@@ -33,6 +40,7 @@ export interface TemplateParametersPanelV2Props {
   readonly activeLayerId: string | null;
   readonly selectedNodeId: string | null;
   readonly onCreateRepeat: (input: CreateTemplateRepeatInputV2) => void;
+  readonly onPlaceRepeatInActiveView?: (input: PlaceTemplateRepeatInActiveViewInputV2) => void;
   readonly onSetCount: (domainId: string, count: number) => void;
   readonly onSetStep: (viewId: string, domainId: string, x: number, y: number) => void;
   readonly onDeleteRepeat: (domainId: string) => void;
@@ -116,6 +124,24 @@ export function repeatPlacementViewNamesV2(content: TemplateContentV2, domainId:
   return content.views
     .filter(view => view.repeatPlacements.some(placement => placement.repeatDomainId === domainId))
     .map(view => view.name);
+}
+
+export function unplacedRepeatDomainsV2(content: TemplateContentV2, viewId: string): readonly RepeatDomainV2[] {
+  const placedDomainIds = new Set(content.views.find(view => view.id === viewId)?.repeatPlacements.map(placement => placement.repeatDomainId) ?? []);
+  return content.repeaters.filter(domain => !placedDomainIds.has(domain.id));
+}
+
+export function missingRepeatLogicalContactIdsV2(content: TemplateContentV2, viewId: string, domainId: string): readonly string[] {
+  const domain = content.repeaters.find(item => item.id === domainId);
+  const placedLogicalContactIds = new Set(content.views.find(view => view.id === viewId)?.contactPoints.map(point => point.logicalContactId) ?? []);
+  return domain?.logicalContactIds.filter(logicalContactId => !placedLogicalContactIds.has(logicalContactId)) ?? [];
+}
+
+export function canUseNodeForRepeatPlacementV2(content: TemplateContentV2, viewId: string, layerId: string | null, nodeId: string | null): boolean {
+  if (!isTopLevelNodeV2(content, viewId, layerId, nodeId) || !layerId || !nodeId) return false;
+  const layer = content.views.find(view => view.id === viewId)?.layers.find(item => item.id === layerId);
+  const node = layer?.nodes.find(item => item.id === nodeId);
+  return Boolean(layer && !layer.locked && node && !node.locked && !repeatedPrototypeNodeIdsV2(content).has(nodeId));
 }
 
 const dimensionLabels: Readonly<Record<TemplateNodeDimensionV2, string>> = {
@@ -348,6 +374,56 @@ function CreateRepeatForm({ content, activeViewId, activeLayerId, selectedNodeId
   );
 }
 
+interface PlaceRepeatFormProps extends Pick<TemplateParametersPanelV2Props,
+  "content" | "activeViewId" | "activeLayerId" | "selectedNodeId" | "onPlaceRepeatInActiveView"> {
+  readonly domains: readonly RepeatDomainV2[];
+}
+
+function PlaceRepeatInActiveViewForm({ content, activeViewId, activeLayerId, selectedNodeId, domains, onPlaceRepeatInActiveView }: PlaceRepeatFormProps) {
+  const [chosenDomainId, setChosenDomainId] = useState(domains[0]?.id ?? "");
+  const [stepX, setStepX] = useState("0");
+  const [stepY, setStepY] = useState("20");
+  const domain = domains.find(item => item.id === chosenDomainId) ?? domains[0] ?? null;
+  const domainId = domain?.id ?? "";
+  const missingLogicalContactIds = domain ? missingRepeatLogicalContactIdsV2(content, activeViewId, domain.id) : [];
+  const selectedNodeReady = canUseNodeForRepeatPlacementV2(content, activeViewId, activeLayerId, selectedNodeId);
+  const stepXValue = parseRepeatStepV2(stepX), stepYValue = parseRepeatStepV2(stepY);
+  const ready = Boolean(onPlaceRepeatInActiveView && domain && selectedNodeId && selectedNodeReady && !missingLogicalContactIds.length && stepXValue !== null && stepYValue !== null);
+  const missingLabels = missingLogicalContactIds.map(id => {
+    const logical = content.logicalContacts.find(item => item.id === id);
+    return logical ? `${logical.number} · ${logical.name}` : id;
+  });
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!onPlaceRepeatInActiveView || !domain || !selectedNodeId || !selectedNodeReady || missingLogicalContactIds.length || stepXValue === null || stepYValue === null) return;
+    onPlaceRepeatInActiveView({ repeatDomainId: domain.id, prototypeNodeId: selectedNodeId, stepX: stepXValue, stepY: stepYValue });
+  };
+
+  return (
+    <form className="template-repeat-v2-place" aria-label="Разместить повтор в этом виде" onSubmit={submit}>
+      <strong>Разместить повтор в этом виде</strong>
+      <p>Выбранный объект станет прототипом геометрии для существующего домена.</p>
+      <label>
+        Домен повтора
+        <select value={domainId} onChange={event => setChosenDomainId(event.target.value)}>
+          {domains.map(item => {
+            const parameter = content.parameters.find(parameter => parameter.id === item.countParameterId);
+            return <option key={item.id} value={item.id}>{parameter?.name || "Количество повторов"} · {item.logicalContactIds.length} конт.</option>;
+          })}
+        </select>
+      </label>
+      <div className="template-repeat-v2-grid">
+        <label>Шаг X<input type="number" value={stepX} aria-invalid={stepXValue === null} onChange={event => setStepX(event.target.value)} /></label>
+        <label>Шаг Y<input type="number" value={stepY} aria-invalid={stepYValue === null} onChange={event => setStepY(event.target.value)} /></label>
+      </div>
+      {!selectedNodeReady && <p className="template-repeat-v2-hint">Выберите свободный объект верхнего уровня в незаблокированном слое.</p>}
+      {missingLabels.length > 0 && <p className="template-repeat-v2-hint">Сначала разместите в этом виде точки логических контактов домена: {missingLabels.join(", ")}.</p>}
+      {(stepXValue === null || stepYValue === null) && <p className="template-repeat-v2-error" role="alert">Шаг должен быть конечным числом в допустимом диапазоне.</p>}
+      <button type="submit" disabled={!ready}>Разместить повтор в этом виде</button>
+    </form>
+  );
+}
+
 interface RepeatCardProps {
   readonly content: TemplateContentV2;
   readonly activeViewId: string;
@@ -433,6 +509,7 @@ export function TemplateParametersPanelV2(props: TemplateParametersPanelV2Props)
   const selectedLayer = content.views.find(view => view.id === activeViewId)?.layers.find(layer => layer.id === activeLayerId);
   const selectedNode = selectedLayer?.nodes.find(node => node.id === selectedNodeId) ?? null;
   const availableDimensions = availableNodeDimensionsV2(selectedNode);
+  const unplacedDomains = unplacedRepeatDomainsV2(content, activeViewId);
 
   return (
     <section className="template-parameters-v2" aria-label="Параметры и повторы шаблона">
@@ -447,6 +524,7 @@ export function TemplateParametersPanelV2(props: TemplateParametersPanelV2Props)
           {content.repeaters.map(domain => <RepeatCard key={domain.id} content={content} activeViewId={activeViewId} domainId={domain.id} onSetCount={props.onSetCount} onSetStep={props.onSetStep} onDeleteRepeat={props.onDeleteRepeat} onPreviewValues={props.onPreviewValues} />)}
         </div>
       )}
+      {props.onPlaceRepeatInActiveView && unplacedDomains.length > 0 && <PlaceRepeatInActiveViewForm content={content} activeViewId={activeViewId} activeLayerId={activeLayerId} selectedNodeId={selectedNodeId} domains={unplacedDomains} onPlaceRepeatInActiveView={props.onPlaceRepeatInActiveView} />}
       {canCreate && <CreateRepeatForm content={content} activeViewId={activeViewId} activeLayerId={activeLayerId} selectedNodeId={selectedNodeId} contactPoints={availableContactPoints} onCreateRepeat={props.onCreateRepeat} />}
       {content.repeaters.length === 0 && !canCreate && (
         <p className="template-repeat-v2-empty" role="status">Выберите объект верхнего уровня в активном слое, чтобы настроить повторение.</p>

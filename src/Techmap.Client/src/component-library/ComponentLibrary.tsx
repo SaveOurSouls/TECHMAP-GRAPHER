@@ -12,7 +12,7 @@ import {
   addAdditionalViewV2, addBasicNodeV2, addBundlePortV2, addContactPointV2, addLayerV2, addNodeV2, constantExpressionV2,
   deleteAdditionalViewV2, deleteBundlePortV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2, editBundlePortV2, editContactPointV2,
   editLogicalContactV2, editNodeV2, linkLogicalContactPointV2, newTemplateContentV2,
-  createRepeatPrototypeV2, deleteRepeatPrototypeV2, moveNodeV2, parameterizeNodeDimensionV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
+  attachRepeatDomainV2, createRepeatPrototypeV2, deleteRepeatPrototypeV2, moveNodeV2, parameterizeNodeDimensionV2, renameLayerV2, renameViewV2, reorderLayerV2, reorderNodeV2, setLayerLockedV2,
   setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
   setLayerVisibleV2, setNodeLockedV2, type BasicNodeKindV2, type ContactPointEditV2,
   type BundlePortEditV2, type LogicalContactEditV2, type NodeEditV2,
@@ -279,6 +279,16 @@ export function ComponentLibrary({ config, session }: Props) {
             count: input.count,
             step: { x: constantExpressionV2(input.stepX), y: constantExpressionV2(input.stepY) },
           })[0], null)}
+          onPlaceRepeatInActiveView={input => {
+            if (!activeLayer) return;
+            command(() => attachRepeatDomainV2(draft.content, {
+              viewId: activeView.id,
+              layerId: activeLayer.id,
+              prototypeNodeId: input.prototypeNodeId,
+              repeatDomainId: input.repeatDomainId,
+              step: { x: constantExpressionV2(input.stepX), y: constantExpressionV2(input.stepY) },
+            })[0], null);
+          }}
           onSetCount={(domainId, count) => {
             command(() => setRepeatCountV2(draft.content, domainId, count));
             setPreviewParameterValues({});
