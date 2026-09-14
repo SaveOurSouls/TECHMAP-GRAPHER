@@ -4,6 +4,7 @@ import {
   isTemplateContentV1,
   isTemplateContentV2,
   parseComponentTemplateContent,
+  reconcileTemplateEnvelopeAssets,
   upgradeComponentTemplateContentV1,
 } from "./template-content";
 import { newTemplateContent, type TemplateContent } from "./template-model";
@@ -63,5 +64,30 @@ describe("component template content boundary", () => {
       expect(error).toBeInstanceOf(ComponentTemplateContentError);
       expect((error as ComponentTemplateContentError).diagnostics.length).toBeGreaterThan(0);
     }
+  });
+
+  it("requires exact v2 asset metadata equality with the version envelope", () => {
+    const asset = {
+      assetId: crypto.randomUUID(), fileName: "connector.png", mediaType: "image/png",
+      sha256: "a".repeat(64), sizeBytes: 128,
+    };
+    const content = upgradeComponentTemplateContentV1(newTemplateContent(), [asset]).content;
+
+    expect(reconcileTemplateEnvelopeAssets(content, [asset]).diagnostics).toEqual([]);
+    expect(reconcileTemplateEnvelopeAssets(content, [{ ...asset, sizeBytes: 129 }]).diagnostics)
+      .toEqual([expect.objectContaining({ code: "asset_envelope_mismatch", path: "$.assets" })]);
+    expect(reconcileTemplateEnvelopeAssets({ ...content, assets: [] }, [asset]).diagnostics)
+      .toEqual([expect.objectContaining({ code: "asset_envelope_mismatch" })]);
+  });
+
+  it("copies normalized envelope asset metadata only during an explicit v1 upgrade", () => {
+    const assets = [{
+      assetId: crypto.randomUUID(), fileName: "connector.png", mediaType: "image/png",
+      sha256: "b".repeat(64), sizeBytes: 256,
+    }];
+    const v1 = newTemplateContent();
+
+    expect(parseComponentTemplateContent(v1).schemaVersion).toBe(1);
+    expect(upgradeComponentTemplateContentV1(v1, assets).content.assets).toEqual(assets);
   });
 });
