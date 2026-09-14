@@ -8,11 +8,12 @@ describe("component template image assets", () => {
   });
 
   it("accepts a server-supported raster media type", async () => {
-    const file = new File([new Uint8Array([1, 2, 3])], "contact.png", { type: "image/png" });
+    const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="), character => character.charCodeAt(0));
+    const file = new File([png], "contact.png", { type: "image/png" });
     await expect(readTemplateAsset(file)).resolves.toEqual({
       fileName: "contact.png",
       mediaType: "image/png",
-      contentBase64: "AQID",
+      contentBase64: bytesToBase64(png),
     });
   });
 
@@ -21,5 +22,7 @@ describe("component template image assets", () => {
       .rejects.toThrow("PNG");
     await expect(readTemplateAsset(new File([], "empty.png", { type: "image/png" })))
       .rejects.toThrow("от 1 байта");
+    await expect(readTemplateAsset(new File([new Uint8Array(45)], "broken.png", { type: "image/png" })))
+      .rejects.toThrow("повреждён");
   });
 });

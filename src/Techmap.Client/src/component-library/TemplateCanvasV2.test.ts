@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   TemplateCanvasV2,
+  clientPointToTemplateCoordinatesV2,
+  completedTemplateNodeDragV2,
   createTemplateNumericEvaluatorV2,
   type TemplateCanvasV2Props,
 } from "./TemplateCanvasV2";
@@ -113,6 +115,53 @@ function render(document: TemplateContentV2, overrides: Partial<TemplateCanvasV2
 }
 
 describe("TemplateCanvasV2", () => {
+  it("converts client coordinates through the fitted SVG viewBox including letterboxing", () => {
+    expect(clientPointToTemplateCoordinatesV2(
+      { left: 10, top: 20, width: 360, height: 440 },
+      190,
+      240,
+      720,
+      440,
+    )).toEqual({ x: 360, y: 220 });
+    expect(clientPointToTemplateCoordinatesV2(
+      { left: 10, top: 20, width: 360, height: 440 },
+      60,
+      140,
+      720,
+      440,
+    )).toEqual({ x: 100, y: 20 });
+    expect(clientPointToTemplateCoordinatesV2(
+      { left: 10, top: 20, width: 1440, height: 440 },
+      370,
+      240,
+      720,
+      440,
+    )).toEqual({ x: 0, y: 220 });
+    expect(clientPointToTemplateCoordinatesV2(
+      { left: 0, top: 0, width: 0, height: 100 },
+      10,
+      10,
+      720,
+      440,
+    )).toBeNull();
+  });
+
+  it("commits only a completed drag beyond the client-pixel threshold", () => {
+    const start = { clientX: 10, clientY: 20, templateX: 100, templateY: 200 };
+    expect(completedTemplateNodeDragV2(start, {
+      clientX: 12,
+      clientY: 22,
+      templateX: 104,
+      templateY: 204,
+    })).toBeNull();
+    expect(completedTemplateNodeDragV2(start, {
+      clientX: 13,
+      clientY: 24,
+      templateX: 106,
+      templateY: 208,
+    })).toEqual({ deltaX: 6, deltaY: 8 });
+  });
+
   it("renders visible layers and nodes in array order and preserves node opacity", () => {
     const first = line(ids.line, 10);
     first.opacity = 0.4;
@@ -190,6 +239,34 @@ describe("TemplateCanvasV2", () => {
     expect(markup.indexOf(ids.sibling)).toBeLessThan(markup.indexOf(ids.group));
     expect(markup.indexOf(ids.group)).toBeLessThan(markup.indexOf(ids.child));
     expect(markup).toContain('data-template-group="true"');
+  });
+
+  it("exposes drag only for movable top-level nodes and groups", () => {
+    const movable = line(ids.line, 0);
+    const locked = line(ids.sibling, 30);
+    locked.locked = true;
+    const child = line(ids.child, 60);
+    const group = node({ id: ids.group, kind: "group", geometry: { childIds: [ids.child] } });
+    const markup = render(content([movable, locked, child, group]), { onNodeMove: () => undefined });
+
+    expect(markup.match(/data-draggable="true"/g)).toHaveLength(2);
+    expect(markup).toContain(`data-template-node-id="${ids.sibling}"`);
+    expect(markup).toContain('data-locked="true"');
+    expect(markup).not.toMatch(new RegExp(`data-template-node-id="${ids.sibling}"[^>]*pointer-events="none"`));
+    expect(markup).toMatch(new RegExp(`data-template-node-id="${ids.group}"[^>]*data-draggable="true"[^>]*data-template-group="true"`));
+    expect(markup.indexOf(`data-template-node-id="${ids.child}" data-template-node-kind="line" data-draggable`)).toBe(-1);
+  });
+
+  it("makes a nested group the single draggable root and preserves explicit canvas fitting", () => {
+    const child = line(ids.child, 60);
+    const nestedId = crypto.randomUUID();
+    const nested = node({ id: nestedId, kind: "group", geometry: { childIds: [ids.child] } });
+    const root = node({ id: ids.group, kind: "group", geometry: { childIds: [nestedId] } });
+    const markup = render(content([child, nested, root]), { onNodeMove: () => undefined });
+
+    expect(markup.match(/data-draggable="true"/g)).toHaveLength(1);
+    expect(markup).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(markup).toMatch(new RegExp(`data-template-node-id="${ids.group}"[^>]*data-draggable="true"`));
   });
 
   it("renders versioned image URLs, normalized crop, transform and underlay metadata without reordering nodes", () => {

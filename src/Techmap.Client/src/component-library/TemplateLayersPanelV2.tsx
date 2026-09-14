@@ -116,7 +116,8 @@ export function TemplateLayersPanelV2({
                   <button
                     type="button"
                     aria-label={`Переименовать слой ${layer.name}`}
-                    title="Переименовать слой"
+                    title={layer.locked ? "Сначала разблокируйте слой" : "Переименовать слой"}
+                    disabled={layer.locked}
                     onClick={() => beginRename(layer)}
                   >
                     <span>{layer.name}</span>
@@ -149,14 +150,14 @@ export function TemplateLayersPanelV2({
                   type="button"
                   aria-label={`Переместить слой ${layer.name} ниже`}
                   title="Ниже"
-                  disabled={index === 0}
+                  disabled={layer.locked || index === 0}
                   onClick={() => onMove(layer.id, index - 1)}
                 >↓</button>
                 <button
                   type="button"
                   aria-label={`Переместить слой ${layer.name} выше`}
                   title="Выше"
-                  disabled={index === layers.length - 1}
+                  disabled={layer.locked || index === layers.length - 1}
                   onClick={() => onMove(layer.id, index + 1)}
                 >↑</button>
               </span>
@@ -164,8 +165,8 @@ export function TemplateLayersPanelV2({
                 type="button"
                 className="template-layer-v2-delete"
                 aria-label={`Удалить слой ${layer.name}`}
-                title={layers.length === 1 ? "В виде должен остаться хотя бы один слой" : "Удалить слой"}
-                disabled={layers.length === 1}
+                title={layer.locked ? "Сначала разблокируйте слой" : layers.length === 1 ? "В виде должен остаться хотя бы один слой" : "Удалить слой"}
+                disabled={layer.locked || layers.length === 1}
                 onClick={() => onDelete(layer.id)}
               >×</button>
             </li>

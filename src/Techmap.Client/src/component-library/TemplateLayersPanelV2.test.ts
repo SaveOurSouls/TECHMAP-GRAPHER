@@ -49,25 +49,28 @@ describe("TemplateLayersPanelV2", () => {
     expect(markup).toContain('aria-label="Добавить слой"');
     expect(markup).toContain('aria-label="Переименовать слой Основной"');
     expect(markup).toContain('title="Переименовать слой"');
+    expect(markup).toContain('aria-label="Переименовать слой Подложка" title="Сначала разблокируйте слой" disabled=""');
   });
 
   it("maps visual up/down controls to valid adjacent target positions", () => {
     const markup = render();
 
     expect(markup).toContain('aria-label="Переместить слой Подложка ниже" title="Ниже" disabled=""');
-    expect(markup).toContain('aria-label="Переместить слой Подложка выше" title="Выше"');
+    expect(markup).toContain('aria-label="Переместить слой Подложка выше" title="Выше" disabled=""');
     expect(markup).toContain('aria-label="Переместить слой Подписи выше" title="Выше" disabled=""');
     expect(markup).toContain('aria-label="Переместить слой Основной ниже" title="Ниже"');
     expect(markup).toContain('aria-label="Переместить слой Основной выше" title="Выше"');
   });
 
   it("disables delete only when the last layer remains", () => {
-    const single = render([layers[0]!], layers[0]!.id);
+    const unlockedSingle = { ...layers[0]!, locked: false };
+    const single = render([unlockedSingle], unlockedSingle.id);
     const several = render();
 
     expect(single).toContain('aria-label="Удалить слой Подложка"');
     expect(single).toContain('title="В виде должен остаться хотя бы один слой" disabled=""');
     expect(several).toContain('aria-label="Удалить слой Основной" title="Удалить слой"');
+    expect(several).toContain('aria-label="Удалить слой Подложка" title="Сначала разблокируйте слой" disabled=""');
     expect(several).not.toContain('title="Удалить слой" disabled=""');
   });
 

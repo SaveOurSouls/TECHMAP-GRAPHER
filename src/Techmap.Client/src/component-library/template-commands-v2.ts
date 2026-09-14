@@ -2,12 +2,15 @@ import {
   TEMPLATE_V2_LIMITS,
   validateTemplateContentV2,
   type LayerV2,
+  type ContactDirectionV2,
+  type LogicalContactV2,
   type NumericExpressionV2,
   type ParameterValueV2,
   type TemplateContentV2,
   type TemplateNodeV2,
   type TemplateViewV2,
   type TransformV2,
+  type ViewContactPointV2,
 } from "./template-model-v2";
 
 export type BasicNodeKindV2 = "line" | "rectangle" | "ellipse" | "text";
@@ -15,6 +18,24 @@ export type NodeEditV2 = Partial<Pick<TemplateNodeV2, "visible" | "locked" | "op
   geometry?: TemplateNodeV2["geometry"];
 };
 export type ExpressionValuesV2 = ReadonlyMap<string, ParameterValueV2> | Readonly<Record<string, ParameterValueV2>>;
+export interface NewContactPointV2 {
+  number?: string;
+  name?: string;
+  contactType?: string;
+  x?: NumericExpressionV2;
+  y?: NumericExpressionV2;
+  direction?: ContactDirectionV2;
+}
+export interface LogicalContactEditV2 {
+  number?: string;
+  name?: string;
+  contactType?: string;
+}
+export interface ContactPointEditV2 {
+  x?: NumericExpressionV2;
+  y?: NumericExpressionV2;
+  direction?: ContactDirectionV2;
+}
 
 export class TemplateCommandV2Error extends Error {
   constructor(readonly code: string, message: string) {
@@ -89,6 +110,108 @@ export function newTemplateContentV2(): TemplateContentV2 {
   return content;
 }
 
+export function addAdditionalViewV2(content: TemplateContentV2, name = ""): [TemplateContentV2, string] {
+  if (content.views.length >= TEMPLATE_V2_LIMITS.views)
+    throw new TemplateCommandV2Error("view_limit", "Достигнут лимит видов.");
+  const view: TemplateViewV2 = {
+    id: crypto.randomUUID(), name: normalizedName(name, `Дополнительный вид ${content.views.length - 1}`),
+    kind: "additional", layers: [newLayer()], contactPoints: [], bundlePorts: [], repeatPlacements: [],
+  };
+  return [{ ...content, views: [...content.views, view] }, view.id];
+}
+
+export function renameViewV2(content: TemplateContentV2, viewId: string, name: string): TemplateContentV2 {
+  const view = requireView(content, viewId);
+  return replaceView(content, viewId, { ...view, name: normalizedName(name) });
+}
+
+export function deleteAdditionalViewV2(content: TemplateContentV2, viewId: string): TemplateContentV2 {
+  const view = requireView(content, viewId);
+  if (view.kind !== "additional")
+    throw new TemplateCommandV2Error("mandatory_view", "Виды Э4 и Чертёж удалять нельзя.");
+  return { ...content, views: content.views.filter(item => item.id !== viewId) };
+}
+
+export function addContactPointV2(
+  content: TemplateContentV2,
+  viewId: string,
+  initial: NewContactPointV2 = {},
+): [TemplateContentV2, string] {
+  const view = requireView(content, viewId);
+  if (content.logicalContacts.length >= TEMPLATE_V2_LIMITS.contacts)
+    throw new TemplateCommandV2Error("contact_limit", "Достигнут лимит логических контактов.");
+  const number = initial.number === undefined ? nextContactNumber(content) : normalizedContactNumber(initial.number);
+  requireUniqueContactNumber(content, number);
+  const logicalContact: LogicalContactV2 = {
+    id: crypto.randomUUID(),
+    number,
+    name: initial.name === undefined ? `Контакт ${number}` : normalizedName(initial.name),
+    contactType: normalizedContactType(initial.contactType ?? ""),
+  };
+  const point: ViewContactPointV2 = {
+    id: crypto.randomUUID(),
+    logicalContactId: logicalContact.id,
+    x: initial.x ?? constantExpressionV2(260),
+    y: initial.y ?? constantExpressionV2(200),
+    direction: normalizedContactDirection(initial.direction ?? "right"),
+  };
+  const nextView = { ...view, contactPoints: [...view.contactPoints, point] };
+  return [{ ...replaceView(content, viewId, nextView), logicalContacts: [...content.logicalContacts, logicalContact] }, point.id];
+}
+
+export function editLogicalContactV2(
+  content: TemplateContentV2,
+  logicalContactId: string,
+  changes: LogicalContactEditV2,
+): TemplateContentV2 {
+  const logicalContact = requireLogicalContact(content, logicalContactId);
+  const number = changes.number === undefined ? logicalContact.number : normalizedContactNumber(changes.number);
+  if (number !== logicalContact.number) requireUniqueContactNumber(content, number, logicalContact.id);
+  const nextLogicalContact: LogicalContactV2 = {
+    ...logicalContact,
+    number,
+    name: changes.name === undefined ? logicalContact.name : normalizedName(changes.name),
+    contactType: changes.contactType === undefined ? logicalContact.contactType : normalizedContactType(changes.contactType),
+  };
+  return { ...content, logicalContacts: content.logicalContacts.map(item => item.id === logicalContact.id ? nextLogicalContact : item) };
+}
+
+export function editContactPointV2(
+  content: TemplateContentV2,
+  viewId: string,
+  pointId: string,
+  changes: ContactPointEditV2,
+): TemplateContentV2 {
+  const { view, point } = requireContactPoint(content, viewId, pointId);
+  const nextPoint: ViewContactPointV2 = {
+    ...point,
+    x: changes.x ?? point.x,
+    y: changes.y ?? point.y,
+    direction: changes.direction === undefined ? point.direction : normalizedContactDirection(changes.direction),
+  };
+  return replaceView(content, viewId, { ...view, contactPoints: view.contactPoints.map(item => item.id === pointId ? nextPoint : item) });
+}
+
+export function deleteContactPointV2(content: TemplateContentV2, viewId: string, pointId: string): TemplateContentV2 {
+  const { view, point } = requireContactPoint(content, viewId, pointId);
+  const nextView: TemplateViewV2 = {
+    ...view,
+    contactPoints: view.contactPoints.filter(item => item.id !== pointId),
+    repeatPlacements: view.repeatPlacements.map(placement => ({
+      ...placement,
+      contactPointIds: placement.contactPointIds.filter(id => id !== pointId),
+    })),
+  };
+  const withoutPoint = replaceView(content, viewId, nextView);
+  const isReferenced = withoutPoint.views.some(item =>
+    item.contactPoints.some(candidate => candidate.logicalContactId === point.logicalContactId)) ||
+    withoutPoint.repeaters.some(repeater => repeater.logicalContactIds.includes(point.logicalContactId));
+  return isReferenced ? withoutPoint : {
+    ...withoutPoint,
+    logicalContacts: withoutPoint.logicalContacts.filter(item => item.id !== point.logicalContactId),
+  };
+}
+
 export function addLayerV2(content: TemplateContentV2, viewId: string, name: string): [TemplateContentV2, string] {
   const view = requireView(content, viewId);
   if (view.layers.length >= TEMPLATE_V2_LIMITS.layers)
@@ -135,12 +258,17 @@ export function deleteLayerV2(content: TemplateContentV2, viewId: string, layerI
   return replaceView(content, viewId, { ...view, layers: view.layers.filter(item => item.id !== layerId) });
 }
 
-export function addNodeV2(content: TemplateContentV2, viewId: string, layerId: string, node: TemplateNodeV2): TemplateContentV2 {
+export function addNodeV2(content: TemplateContentV2, viewId: string, layerId: string, node: TemplateNodeV2, atIndex?: number): TemplateContentV2 {
   const { view, layer } = requireLayer(content, viewId, layerId);
   requireUnlockedLayer(layer);
   if (node.layerId !== layerId) throw new TemplateCommandV2Error("layer_reference", "Новый объект должен ссылаться на выбранный слой.");
   if (allIds(content).has(node.id)) throw new TemplateCommandV2Error("duplicate_id", "Идентификатор объекта уже используется.");
-  return replaceLayer(content, view, layerId, { ...layer, nodes: [...layer.nodes, node] });
+  const index = atIndex ?? layer.nodes.length;
+  if (!Number.isSafeInteger(index) || index < 0 || index > layer.nodes.length)
+    throw new TemplateCommandV2Error("insert_index", "Позиция вставки выходит за границы слоя.");
+  const nodes = [...layer.nodes];
+  nodes.splice(index, 0, node);
+  return replaceLayer(content, view, layerId, { ...layer, nodes });
 }
 
 export function addBasicNodeV2(content: TemplateContentV2, viewId: string, layerId: string, kind: BasicNodeKindV2): [TemplateContentV2, string] {
@@ -204,24 +332,9 @@ export function reorderNodeV2(content: TemplateContentV2, viewId: string, layerI
 }
 
 function moveNodeGeometry(node: TemplateNodeV2, deltaX: number, deltaY: number): TemplateNodeV2 {
-  requireConstant(node.transform.translateX); requireConstant(node.transform.translateY);
   const shifted = (expression: NumericExpressionV2, delta: number) => constantExpressionV2(requireConstant(expression) + delta);
-  switch (node.kind) {
-    case "line":
-    case "polyline":
-    case "bezier":
-    case "closedContour":
-      return { ...node, geometry: { ...node.geometry, points: node.geometry.points.map(point => ({ x: shifted(point.x, deltaX), y: shifted(point.y, deltaY) })) } } as TemplateNodeV2;
-    case "rectangle":
-    case "text":
-    case "image":
-      return { ...node, geometry: { ...node.geometry, x: shifted(node.geometry.x, deltaX), y: shifted(node.geometry.y, deltaY) } } as TemplateNodeV2;
-    case "ellipse":
-      return { ...node, geometry: { ...node.geometry, centerX: shifted(node.geometry.centerX, deltaX), centerY: shifted(node.geometry.centerY, deltaY) } };
-    case "group":
-      return { ...node, transform: { ...node.transform,
-        translateX: shifted(node.transform.translateX, deltaX), translateY: shifted(node.transform.translateY, deltaY) } };
-  }
+  return { ...node, transform: { ...node.transform,
+    translateX: shifted(node.transform.translateX, deltaX), translateY: shifted(node.transform.translateY, deltaY) } };
 }
 
 function requireConstant(expression: NumericExpressionV2): number {
@@ -246,6 +359,23 @@ function requireNode(content: TemplateContentV2, viewId: string, layerId: string
   const { view, layer } = requireLayer(content, viewId, layerId), node = layer.nodes.find(item => item.id === nodeId);
   if (!node) throw new TemplateCommandV2Error("node_not_found", "Объект не найден.");
   return { view, layer, node };
+}
+
+function requireLogicalContact(content: TemplateContentV2, logicalContactId: string): LogicalContactV2 {
+  const logicalContact = content.logicalContacts.find(item => item.id === logicalContactId);
+  if (!logicalContact) throw new TemplateCommandV2Error("logical_contact_not_found", "Логический контакт не найден.");
+  return logicalContact;
+}
+
+function requireContactPoint(
+  content: TemplateContentV2,
+  viewId: string,
+  pointId: string,
+): { view: TemplateViewV2; point: ViewContactPointV2; logicalContact: LogicalContactV2 } {
+  const view = requireView(content, viewId);
+  const point = view.contactPoints.find(item => item.id === pointId);
+  if (!point) throw new TemplateCommandV2Error("contact_point_not_found", "Точка логического контакта не найдена в выбранном виде.");
+  return { view, point, logicalContact: requireLogicalContact(content, point.logicalContactId) };
 }
 
 function requireUnlockedLayer(layer: LayerV2): void {
@@ -279,6 +409,40 @@ function normalizedName(value: string, fallback?: string): string {
   if (!result || result.length > 256 || /[\u0000-\u001f]/.test(result))
     throw new TemplateCommandV2Error("invalid_name", "Нужно непустое название не длиннее 256 символов.");
   return result;
+}
+
+function normalizedContactNumber(value: string): string {
+  const result = value.trim();
+  if (!result || result.length > 128 || /[\u0000-\u001f]/.test(result))
+    throw new TemplateCommandV2Error("invalid_contact_number", "Нужен непустой номер контакта не длиннее 128 символов.");
+  return result;
+}
+
+function normalizedContactType(value: string): string {
+  const result = value.trim();
+  if (result.length > 128 || /[\u0000-\u001f]/.test(result))
+    throw new TemplateCommandV2Error("invalid_contact_type", "Тип контакта должен быть не длиннее 128 символов.");
+  return result;
+}
+
+function normalizedContactDirection(value: ContactDirectionV2): ContactDirectionV2 {
+  if (!(["left", "right", "up", "down"] as const).includes(value))
+    throw new TemplateCommandV2Error("invalid_contact_direction", "Неизвестное направление точки контакта.");
+  return value;
+}
+
+function requireUniqueContactNumber(content: TemplateContentV2, number: string, exceptId?: string): void {
+  if (content.logicalContacts.some(contact => contact.id !== exceptId && contact.number === number))
+    throw new TemplateCommandV2Error("duplicate_contact_number", `Номер контакта ${number} уже используется.`);
+}
+
+function nextContactNumber(content: TemplateContentV2): string {
+  const occupied = new Set(content.logicalContacts.map(contact => contact.number));
+  for (let value = 1; value <= TEMPLATE_V2_LIMITS.contacts + 1; value++) {
+    const candidate = String(value);
+    if (!occupied.has(candidate)) return candidate;
+  }
+  throw new TemplateCommandV2Error("contact_limit", "Не удалось подобрать свободный номер контакта.");
 }
 
 function allIds(content: TemplateContentV2): Set<string> {

@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type {
   NumericExpressionV2,
   ParameterValueV2,
@@ -21,6 +21,7 @@ export interface TemplateCanvasV2Props {
   viewId: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   resolveAssetUrl: (assetId: string) => string;
   parameterDefaults?: TemplateParameterDefaultsV2;
   width?: number;
@@ -29,6 +30,67 @@ export interface TemplateCanvasV2Props {
 
 type NumericEvaluator = (expression: NumericExpressionV2) => number | null;
 type SvgPoint = readonly [number, number];
+
+interface DragStateV2 {
+  readonly id: string;
+  readonly pointerId: number;
+  readonly startClientX: number;
+  readonly startClientY: number;
+  readonly start: SvgPoint;
+  readonly latest: SvgPoint;
+}
+
+interface DragPreviewV2 {
+  readonly id: string;
+  readonly deltaX: number;
+  readonly deltaY: number;
+}
+
+export interface TemplateCanvasClientRectV2 {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface TemplateNodeDragSampleV2 {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly templateX: number;
+  readonly templateY: number;
+}
+
+export function clientPointToTemplateCoordinatesV2(
+  rect: TemplateCanvasClientRectV2,
+  clientX: number,
+  clientY: number,
+  viewBoxWidth: number,
+  viewBoxHeight: number,
+): { x: number; y: number } | null {
+  if (![rect.left, rect.top, rect.width, rect.height, clientX, clientY, viewBoxWidth, viewBoxHeight].every(Number.isFinite) ||
+      rect.width <= 0 || rect.height <= 0 || viewBoxWidth <= 0 || viewBoxHeight <= 0) return null;
+  const scale = Math.min(rect.width / viewBoxWidth, rect.height / viewBoxHeight);
+  if (!Number.isFinite(scale) || scale <= 0) return null;
+  const offsetX = rect.left + (rect.width - viewBoxWidth * scale) / 2;
+  const offsetY = rect.top + (rect.height - viewBoxHeight * scale) / 2;
+  return { x: (clientX - offsetX) / scale, y: (clientY - offsetY) / scale };
+}
+
+export function completedTemplateNodeDragV2(
+  start: TemplateNodeDragSampleV2,
+  end: TemplateNodeDragSampleV2,
+  thresholdInClientPixels = 3,
+): { deltaX: number; deltaY: number } | null {
+  const values = [
+    start.clientX, start.clientY, start.templateX, start.templateY,
+    end.clientX, end.clientY, end.templateX, end.templateY, thresholdInClientPixels,
+  ];
+  if (!values.every(Number.isFinite) || thresholdInClientPixels < 0) return null;
+  if (Math.hypot(end.clientX - start.clientX, end.clientY - start.clientY) < thresholdInClientPixels) return null;
+  const deltaX = end.templateX - start.templateX;
+  const deltaY = end.templateY - start.templateY;
+  return deltaX === 0 && deltaY === 0 ? null : { deltaX, deltaY };
+}
 
 function suppliedDefault(
   defaults: TemplateParameterDefaultsV2 | undefined,
@@ -203,21 +265,94 @@ export function TemplateCanvasV2({
   viewId,
   selectedId,
   onSelect,
+  onNodeMove,
   resolveAssetUrl,
   parameterDefaults,
   width = TEMPLATE_CANVAS_V2_WIDTH,
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
+  const dragRef = useRef<DragStateV2 | null>(null);
+  const [dragPreview, setDragPreview] = useState<DragPreviewV2 | null>(null);
   const view = content.views.find(candidate => candidate.id === viewId);
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
   const logicalContacts = new Map(content.logicalContacts.map(contact => [contact.id, contact]));
+
+  useEffect(() => {
+    dragRef.current = null;
+    setDragPreview(null);
+  }, [viewId]);
 
   const select = (event: ReactPointerEvent<SVGElement>, id: string, interactive = true) => {
     if (!interactive) return;
     event.stopPropagation();
     onSelect(id);
   };
+
+  const pointFromEvent = (event: ReactPointerEvent<SVGElement>): SvgPoint | null => {
+    const svg = event.currentTarget.ownerSVGElement ??
+      (event.currentTarget.tagName.toLowerCase() === "svg" ? event.currentTarget as SVGSVGElement : null);
+    if (!svg) return null;
+    const point = clientPointToTemplateCoordinatesV2(svg.getBoundingClientRect(), event.clientX, event.clientY, width, height);
+    return point ? [point.x, point.y] : null;
+  };
+
+  const beginNodeGesture = (event: ReactPointerEvent<SVGElement>, id: string, selectable: boolean, movable: boolean) => {
+    select(event, id, selectable);
+    if (!movable || !onNodeMove) return;
+    const start = pointFromEvent(event);
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!start || !svg) return;
+    try { svg.setPointerCapture(event.pointerId); } catch { /* Capture can fail for a pointer that already ended. */ }
+    dragRef.current = {
+      id,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      start,
+      latest: start,
+    };
+    setDragPreview({ id, deltaX: 0, deltaY: 0 });
+  };
+
+  const moveNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const point = pointFromEvent(event);
+    if (!point) return;
+    dragRef.current = { ...drag, latest: point };
+    setDragPreview({ id: drag.id, deltaX: point[0] - drag.start[0], deltaY: point[1] - drag.start[1] });
+  };
+
+  const clearNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (drag && drag.pointerId !== event.pointerId) return;
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch { /* The browser can release capture before React handles the terminal event. */ }
+    dragRef.current = null;
+    setDragPreview(null);
+  };
+
+  const endNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const finalPoint = pointFromEvent(event) ?? drag.latest;
+    const completed = completedTemplateNodeDragV2(
+      { clientX: drag.startClientX, clientY: drag.startClientY, templateX: drag.start[0], templateY: drag.start[1] },
+      { clientX: event.clientX, clientY: event.clientY, templateX: finalPoint[0], templateY: finalPoint[1] },
+    );
+    clearNodeGesture(event);
+    if (completed) onNodeMove?.(drag.id, completed.deltaX, completed.deltaY);
+  };
+
+  const previewTransform = (nodeId: string, transform: string, topLevel: boolean): string => {
+    if (!topLevel || dragPreview?.id !== nodeId) return transform;
+    return `translate(${formatNumber(dragPreview.deltaX)} ${formatNumber(dragPreview.deltaY)}) ${transform}`;
+  };
+
+  const hasMovableTransform = (node: TemplateNodeV2) =>
+    node.transform.translateX.kind === "constant" && node.transform.translateY.kind === "constant";
 
   function renderLayer(layer: TemplateViewV2["layers"][number]): ReactNode {
     if (!layer.visible) return null;
@@ -227,7 +362,14 @@ export function TemplateCanvasV2({
       if (node.kind === "group") for (const childId of node.geometry.childIds) ownedIds.add(childId);
     }
 
-    function renderNode(node: TemplateNodeV2, ancestorLocked = false, ancestors = new Set<string>()): ReactNode {
+    function renderNode(
+      node: TemplateNodeV2,
+      ancestorLocked = false,
+      ancestors = new Set<string>(),
+      rootNodeId = node.id,
+      topLevel = true,
+      rootMovable = hasMovableTransform(node),
+    ): ReactNode {
       if (!node.visible) return null;
       const locked = ancestorLocked || layer.locked || node.locked;
       const transform = evaluateTransform(node.transform, evaluate);
@@ -242,9 +384,10 @@ export function TemplateCanvasV2({
         "data-selected": selectedId === node.id ? "true" : undefined,
         "data-locked": locked ? "true" : undefined,
         opacity: node.opacity,
-        transform,
-        pointerEvents: locked ? "none" as const : undefined,
-        onPointerDown: (event: ReactPointerEvent<SVGElement>) => select(event, node.id, !locked),
+        transform: previewTransform(node.id, transform, topLevel),
+        pointerEvents: layer.locked ? "none" as const : undefined,
+        "data-draggable": topLevel && !locked && onNodeMove && rootMovable ? "true" : undefined,
+        onPointerDown: (event: ReactPointerEvent<SVGElement>) => beginNodeGesture(event, rootNodeId, !layer.locked, !locked && rootMovable),
       };
       const shape = {
         fill: node.fill.color ?? "none",
@@ -359,7 +502,7 @@ export function TemplateCanvasV2({
       if (missingChild) return placeholder(node, width, height, "Группа ссылается на отсутствующий узел.");
       return (
         <g {...common} data-template-group="true">
-          {layer.nodes.map(child => childIds.has(child.id) ? renderNode(child, locked, nextAncestors) : null)}
+          {layer.nodes.map(child => childIds.has(child.id) ? renderNode(child, locked, nextAncestors, rootNodeId, false, rootMovable) : null)}
         </g>
       );
     }
@@ -420,13 +563,17 @@ export function TemplateCanvasV2({
     <svg
       className="template-canvas-v2"
       viewBox={`0 0 ${formatNumber(width)} ${formatNumber(height)}`}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={view ? `Редактор вида ${view.name}` : "Вид шаблона не найден"}
       data-template-view-id={view?.id}
       width="100%"
       height="100%"
-      style={{ display: "block" }}
+      style={{ display: "block", touchAction: "none" }}
       onPointerDown={() => onSelect(null)}
+      onPointerMove={moveNodeGesture}
+      onPointerUp={endNodeGesture}
+      onPointerCancel={clearNodeGesture}
     >
       <rect width={width} height={height} fill="#fff" />
       {view ? view.layers.map(renderLayer) : <text x="24" y="36" fill="#7b4c16" fontSize="14">Вид шаблона не найден</text>}
