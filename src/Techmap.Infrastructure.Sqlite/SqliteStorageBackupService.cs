@@ -345,6 +345,11 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
             ValidateReferenceCatalog(connection);
         }
 
+        if (schemaVersion >= 10)
+        {
+            ValidateComponentTemplates(connection);
+        }
+
         var revisions = new List<StorageBackupProjectRevision>();
         if (schemaVersion >= 2)
         {
@@ -402,6 +407,178 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
         return new SnapshotInventory(schemaVersion, revisions, blobs);
     }
+
+    private static void ValidateComponentTemplates(SqliteConnection connection)
+    {
+        using (var heads = connection.CreateCommand())
+        {
+            heads.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM component_templates h
+                LEFT JOIN component_template_versions v
+                  ON v.template_id = h.template_id AND v.version = h.current_version
+                WHERE v.template_id IS NULL
+                   OR h.current_version < 1
+                   OR h.current_version > 100
+                   OR h.current_code <> v.code
+                   OR h.current_name <> v.name
+                   OR h.updated_utc < h.created_utc
+                   OR (h.deleted_utc IS NOT NULL AND h.deleted_utc < h.created_utc);
+                """;
+            if (Convert.ToInt32(heads.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidDataException("The SQLite backup has an invalid component template head.");
+        }
+
+        using (var metadata = connection.CreateCommand())
+        {
+            metadata.CommandText = "SELECT template_id, current_code, normalized_code FROM component_templates;";
+            using var reader = metadata.ExecuteReader();
+            while (reader.Read())
+            {
+                var id = reader.GetString(0);
+                var code = reader.GetString(1);
+                var normalized = reader.GetString(2);
+                if (!string.Equals(normalized, code.ToUpperInvariant(), StringComparison.Ordinal))
+                    throw new InvalidDataException($"Component template '{id}' has invalid normalized metadata.");
+            }
+        }
+
+        using (var limits = connection.CreateCommand())
+        {
+            limits.CommandText =
+                """
+                SELECT
+                    (SELECT CASE WHEN COUNT(*) > 500 THEN 1 ELSE 0 END
+                     FROM component_templates WHERE deleted_utc IS NULL)
+                    +
+                    (SELECT COUNT(*) FROM component_templates h
+                     WHERE h.current_version <> (
+                         SELECT COUNT(*) FROM component_template_versions v
+                         WHERE v.template_id = h.template_id));
+                """;
+            if (Convert.ToInt32(limits.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidDataException("The SQLite backup has an invalid component template version sequence.");
+        }
+
+        using (var bindings = connection.CreateCommand())
+        {
+            bindings.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM component_template_versions v
+                WHERE (SELECT COUNT(*) FROM component_template_article_bindings b
+                       WHERE b.template_id = v.template_id AND b.version = v.version) > 64
+                   OR EXISTS (
+                       SELECT 1 FROM component_template_article_bindings b
+                       WHERE b.template_id = v.template_id AND b.version = v.version
+                       GROUP BY b.template_id, b.version
+                       HAVING MIN(b.binding_ordinal) <> 0
+                          OR MAX(b.binding_ordinal) <> COUNT(*) - 1);
+                """;
+            if (Convert.ToInt32(bindings.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidDataException("The SQLite backup has invalid component template bindings.");
+        }
+
+        var versions = new List<ComponentTemplateBackupHeader>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                """
+                SELECT v.template_id, v.version, v.schema_version, v.code, v.name,
+                       v.content_json, v.content_sha256, v.version_sha256, v.created_utc,
+                       h.created_utc, h.updated_utc, h.deleted_utc
+                FROM component_template_versions v
+                JOIN component_templates h ON h.template_id = v.template_id
+                ORDER BY v.template_id, v.version;
+                """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                versions.Add(new ComponentTemplateBackupHeader(
+                    reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2),
+                    reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                    reader.GetString(6), reader.GetString(7), reader.GetString(8),
+                    reader.GetString(9), reader.GetString(10),
+                    reader.IsDBNull(11) ? null : reader.GetString(11)));
+            }
+        }
+
+        foreach (var stored in versions)
+        {
+            var templateId = stored.TemplateId;
+            var version = stored.Version;
+            var schemaVersion = stored.SchemaVersion;
+            var code = stored.Code;
+            var name = stored.Name;
+            var content = stored.ContentJson;
+            var hash = stored.ContentSha256;
+            var versionHash = stored.VersionSha256;
+            if (!Guid.TryParseExact(templateId, "D", out var parsedId) || parsedId == Guid.Empty ||
+                version is < 1 or > SqliteComponentTemplateStore.MaximumVersionsPerTemplate ||
+                schemaVersion != SqliteComponentTemplateStore.CurrentContentSchemaVersion ||
+                string.IsNullOrWhiteSpace(code) || code.Length > 128 || code.Any(char.IsControl) ||
+                string.IsNullOrWhiteSpace(name) || name.Length > 256 || name.Any(char.IsControl) ||
+                !IsSha256(hash) || !IsSha256(versionHash) ||
+                !IsCanonicalUtc(stored.VersionCreatedUtc) ||
+                !IsCanonicalUtc(stored.TemplateCreatedUtc) ||
+                !IsCanonicalUtc(stored.UpdatedUtc) ||
+                stored.DeletedUtc is not null && !IsCanonicalUtc(stored.DeletedUtc))
+            {
+                throw new InvalidDataException($"Component template '{templateId}' has invalid persisted metadata.");
+            }
+
+            string canonical;
+            try
+            {
+                canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(content, schemaVersion);
+            }
+            catch (ComponentTemplateException error)
+            {
+                throw new InvalidDataException($"Component template '{templateId}' has invalid content.", error);
+            }
+            var actualHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
+            var persistedBindings = new List<ComponentTemplateArticleBinding>();
+            using (var bindingCommand = connection.CreateCommand())
+            {
+                bindingCommand.CommandText =
+                    """
+                    SELECT source_id, entity_type, article_key
+                    FROM component_template_article_bindings
+                    WHERE template_id = $templateId AND version = $version
+                    ORDER BY binding_ordinal;
+                    """;
+                bindingCommand.Parameters.AddWithValue("$templateId", templateId);
+                bindingCommand.Parameters.AddWithValue("$version", version);
+                using var bindingReader = bindingCommand.ExecuteReader();
+                while (bindingReader.Read())
+                {
+                    persistedBindings.Add(new ComponentTemplateArticleBinding(
+                        bindingReader.GetString(0), bindingReader.GetString(1), bindingReader.GetString(2)));
+                }
+            }
+            var actualVersionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+                parsedId, version, schemaVersion, code, name, persistedBindings, content);
+            if (!string.Equals(content, canonical, StringComparison.Ordinal) ||
+                !string.Equals(hash, actualHash, StringComparison.Ordinal) ||
+                !string.Equals(versionHash, actualVersionHash, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"Component template '{templateId}' has corrupt canonical content.");
+            }
+        }
+    }
+
+    private static bool IsCanonicalUtc(string value) =>
+        DateTimeOffset.TryParseExact(
+            value,
+            "O",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed) &&
+        string.Equals(
+            parsed.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            value,
+            StringComparison.Ordinal);
 
     private static void ValidateReferenceCatalog(SqliteConnection connection)
     {
@@ -857,6 +1034,20 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         string ProvenanceJson,
         string Lifecycle,
         string CapturedUtc);
+
+    private sealed record ComponentTemplateBackupHeader(
+        string TemplateId,
+        int Version,
+        int SchemaVersion,
+        string Code,
+        string Name,
+        string ContentJson,
+        string ContentSha256,
+        string VersionSha256,
+        string VersionCreatedUtc,
+        string TemplateCreatedUtc,
+        string UpdatedUtc,
+        string? DeletedUtc);
 
     private static bool HasTable(SqliteConnection connection, string name)
     {

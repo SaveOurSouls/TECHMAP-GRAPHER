@@ -1,39 +1,35 @@
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
-using Techmap.Domain;
 using Techmap.Infrastructure.Sqlite;
 using Xunit;
 
 namespace Techmap.Web.Tests;
 
-public sealed class HarnessDesignMigrationTests
+public sealed class ComponentTemplateMigrationTests
 {
     [Fact]
-    public async Task Schema_eight_harnesses_receive_valid_empty_design_documents()
+    public async Task Schema_nine_migrates_to_empty_template_library_without_changing_existing_rows()
     {
-        var root = Path.Combine(Path.GetTempPath(), "techmap-design-migration", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-migration", Guid.NewGuid().ToString("N"));
         var dataRoot = Path.Combine(root, "data");
         var backupRoot = Path.Combine(root, "backups");
         Directory.CreateDirectory(root);
         try
         {
             string databasePath;
-            ProjectIdentity projectId;
-            HarnessIdentity harnessId;
+            Guid projectId;
             using (var storage = SqliteStorage.Open(dataRoot))
             {
                 databasePath = storage.Layout.DatabasePath;
-                var catalog = new SqliteProjectCatalog(storage);
-                var project = catalog.CreateProject(new CreateProjectCommand(
-                    "ПР-E01", "Migration", 1, ProjectStatus.Draft));
-                projectId = project.ProjectId;
-                harnessId = catalog.AddHarness(projectId, "Жгут", 1).Harnesses.Single().HarnessId;
+                var project = new SqliteProjectCatalog(storage).CreateProject(new CreateProjectCommand(
+                    "M2-05", "Preserved project", 3, Techmap.Domain.ProjectStatus.Active));
+                projectId = project.ProjectId.Value;
             }
 
             using (var connection = Open(databasePath))
-            using (var downgrade = connection.CreateCommand())
+            using (var command = connection.CreateCommand())
             {
-                downgrade.CommandText =
+                command.CommandText =
                     """
                     DROP TRIGGER prevent_component_template_binding_delete;
                     DROP TRIGGER prevent_component_template_binding_late_insert;
@@ -45,29 +41,26 @@ public sealed class HarnessDesignMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE component_templates;
-                    DROP TRIGGER create_harness_design_document;
-                    DROP TABLE harness_design_documents;
-                    DELETE FROM schema_history WHERE version IN (9, 10);
-                    PRAGMA user_version = 8;
+                    DELETE FROM schema_history WHERE version = 10;
+                    PRAGMA user_version = 9;
                     """;
-                downgrade.ExecuteNonQuery();
+                command.ExecuteNonQuery();
             }
 
             await using var lease = DataRootLease.Acquire(dataRoot);
             var migrationService = new SqliteStorageMigrationService(lease);
             var migration = await migrationService.MigrateIfRequiredAsync(
-                new StorageMigrationRequest(backupRoot, "0.3.0-e01", SqliteStorage.CurrentSchemaVersion),
+                new StorageMigrationRequest(backupRoot, "0.3.7-m2.05", 10),
                 TestContext.Current.CancellationToken);
             using var migrated = SqliteStorage.Open(dataRoot);
-            var design = new SqliteHarnessDesignDocumentStore(migrated, TimeProvider.System)
-                .Get(projectId, harnessId);
+            var templates = new SqliteComponentTemplateStore(migrated, TimeProvider.System);
 
             Assert.True(migration.Migrated);
-            Assert.Equal(8, migration.SourceSchemaVersion);
+            Assert.Equal(9, migration.SourceSchemaVersion);
             Assert.Equal(10, migration.TargetSchemaVersion);
-            Assert.Equal(0, design.Revision);
-            Assert.Equal(1, design.SchemaVersion);
-            Assert.Equal(SqliteStorage.EmptyHarnessDesignJson, design.ContentJson);
+            Assert.Empty(templates.List());
+            Assert.Equal("Preserved project", new SqliteProjectCatalog(migrated)
+                .GetProject(new Techmap.Domain.ProjectIdentity(projectId)).Name);
             migrationService.CompleteSuccessfulStartup(migration);
         }
         finally

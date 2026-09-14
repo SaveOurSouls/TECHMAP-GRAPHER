@@ -274,6 +274,7 @@ builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
 builder.Services.AddSingleton<IHarnessDesignDocumentStore, SqliteHarnessDesignDocumentStore>();
+builder.Services.AddSingleton<IComponentTemplateStore, SqliteComponentTemplateStore>();
 builder.Services.AddSingleton<IReferenceCatalogSnapshotStore, SqliteReferenceCatalogSnapshotStore>();
 builder.Services.AddSingleton<IReferenceCatalogSearchStore, SqliteReferenceCatalogSearchStore>();
 builder.Services.AddSingleton<IReferenceCatalogSavedFilterStore, SqliteReferenceCatalogSavedFilterStore>();
@@ -420,6 +421,7 @@ app.MapPost("/api/v1/browser-lifecycle", async (
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
 app.MapHarnessDesignEndpoints();
+app.MapComponentTemplateEndpoints();
 app.MapReferenceCatalogEndpoints();
 app.MapReferenceCatalogSavedFilterEndpoints();
 app.MapXlsxReferenceEndpoints();

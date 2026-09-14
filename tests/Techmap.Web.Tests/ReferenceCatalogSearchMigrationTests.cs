@@ -103,6 +103,16 @@ public sealed class ReferenceCatalogSearchMigrationTests
         using var command = connection.CreateCommand();
         command.CommandText =
             """
+            DROP TRIGGER prevent_component_template_binding_delete;
+            DROP TRIGGER prevent_component_template_binding_late_insert;
+            DROP TRIGGER enforce_component_template_head_publish;
+            DROP TRIGGER enforce_component_template_version_append;
+            DROP TRIGGER prevent_component_template_binding_update;
+            DROP TRIGGER prevent_component_template_version_delete;
+            DROP TRIGGER prevent_component_template_version_update;
+            DROP TABLE component_template_article_bindings;
+            DROP TABLE component_template_versions;
+            DROP TABLE component_templates;
             DROP TRIGGER create_harness_design_document;
             DROP TABLE harness_design_documents;
             DROP TRIGGER reference_search_records_au;
@@ -113,7 +123,7 @@ public sealed class ReferenceCatalogSearchMigrationTests
             DROP TABLE reference_search_records;
             DROP TABLE reference_search_projections;
             DROP TABLE reference_catalog_saved_filters;
-            DELETE FROM schema_history WHERE version IN (8, 9);
+            DELETE FROM schema_history WHERE version IN (8, 9, 10);
             PRAGMA user_version = 7;
             """;
         command.ExecuteNonQuery();

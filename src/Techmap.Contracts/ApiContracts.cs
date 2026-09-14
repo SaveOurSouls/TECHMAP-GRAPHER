@@ -30,7 +30,8 @@ public sealed record ApiErrorResponse(
     string? Field = null,
     string? Message = null,
     long? CurrentRevision = null,
-    IReadOnlyList<ReferenceCatalogDiagnosticResponse>? Diagnostics = null);
+    IReadOnlyList<ReferenceCatalogDiagnosticResponse>? Diagnostics = null,
+    int? CurrentVersion = null);
 
 public sealed record SessionBootstrapResponse(string CsrfNonce, string InstanceId);
 
@@ -159,6 +160,56 @@ public sealed record HarnessDesignResponse(
     JsonElement Content,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
+
+public sealed record ComponentTemplateArticleBindingRequest(
+    string? SourceId,
+    string? EntityType,
+    string? ArticleKey);
+
+public sealed record CreateComponentTemplateRequest(
+    string? Code,
+    string? Name,
+    IReadOnlyList<ComponentTemplateArticleBindingRequest>? ArticleBindings,
+    JsonElement Content);
+
+public sealed record UpdateComponentTemplateRequest(
+    int? ExpectedVersion,
+    string? Code,
+    string? Name,
+    IReadOnlyList<ComponentTemplateArticleBindingRequest>? ArticleBindings,
+    JsonElement Content);
+
+public sealed record DeleteComponentTemplateRequest(int? ExpectedVersion);
+
+public sealed record ComponentTemplateArticleBindingResponse(
+    string SourceId,
+    string EntityType,
+    string ArticleKey);
+
+public sealed record ComponentTemplateSummaryResponse(
+    Guid TemplateId,
+    int Version,
+    string Code,
+    string Name,
+    IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ComponentTemplateResponse(
+    Guid TemplateId,
+    int Version,
+    string Code,
+    string Name,
+    IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,
+    JsonElement Content,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ComponentTemplateListResponse(
+    IReadOnlyList<ComponentTemplateSummaryResponse> Items);
+
+public sealed record ComponentTemplateVersionListResponse(
+    IReadOnlyList<ComponentTemplateResponse> Items);
 
 public sealed record ReferenceCatalogRecordInputRequest(
     string? EntityType,

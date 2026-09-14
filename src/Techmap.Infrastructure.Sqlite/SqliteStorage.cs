@@ -19,7 +19,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -653,6 +653,127 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         END;
         """;
 
+    private const string ComponentTemplateMigrationId = "M2-05-component-template-library";
+    private const string ComponentTemplateSchemaSql =
+        """
+        CREATE TABLE component_templates (
+            template_id TEXT NOT NULL PRIMARY KEY CHECK (length(template_id) = 36),
+            current_version INTEGER NOT NULL CHECK (current_version >= 0),
+            current_code TEXT NOT NULL CHECK (length(current_code) BETWEEN 1 AND 128),
+            current_name TEXT NOT NULL CHECK (length(current_name) BETWEEN 1 AND 256),
+            normalized_code TEXT NOT NULL CHECK (length(normalized_code) BETWEEN 1 AND 128),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            updated_utc TEXT NOT NULL CHECK (length(updated_utc) BETWEEN 1 AND 64),
+            deleted_utc TEXT NULL CHECK (deleted_utc IS NULL OR length(deleted_utc) BETWEEN 1 AND 64)
+        ) STRICT;
+
+        CREATE UNIQUE INDEX ux_component_templates_active_code
+            ON component_templates(normalized_code)
+            WHERE deleted_utc IS NULL;
+
+        CREATE TABLE component_template_versions (
+            template_id TEXT NOT NULL REFERENCES component_templates(template_id)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            version INTEGER NOT NULL CHECK (version > 0),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+            code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 128),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 256),
+            content_json TEXT NOT NULL CHECK (length(content_json) BETWEEN 2 AND 1048576)
+                CHECK (json_valid(content_json)),
+            content_sha256 TEXT NOT NULL
+                CHECK (length(content_sha256) = 64)
+                CHECK (content_sha256 = lower(content_sha256))
+                CHECK (content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            version_sha256 TEXT NOT NULL
+                CHECK (length(version_sha256) = 64)
+                CHECK (version_sha256 = lower(version_sha256))
+                CHECK (version_sha256 NOT GLOB '*[^0-9a-f]*'),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            PRIMARY KEY (template_id, version)
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_versions_template
+            ON component_template_versions(template_id, version DESC);
+
+        CREATE TABLE component_template_article_bindings (
+            template_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            binding_ordinal INTEGER NOT NULL CHECK (binding_ordinal >= 0 AND binding_ordinal < 64),
+            source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 128),
+            entity_type TEXT NOT NULL CHECK (length(entity_type) BETWEEN 1 AND 64),
+            article_key TEXT NOT NULL CHECK (length(article_key) BETWEEN 1 AND 512),
+            PRIMARY KEY (template_id, version, binding_ordinal),
+            UNIQUE (template_id, version, source_id, entity_type, article_key),
+            FOREIGN KEY (template_id, version)
+                REFERENCES component_template_versions(template_id, version)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        ) STRICT;
+
+        CREATE INDEX ix_component_template_bindings_article
+            ON component_template_article_bindings(source_id, entity_type, article_key);
+
+        CREATE TRIGGER enforce_component_template_version_append
+        BEFORE INSERT ON component_template_versions
+        WHEN NEW.version <> (
+            SELECT current_version + 1
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_not_append');
+        END;
+
+        CREATE TRIGGER enforce_component_template_head_publish
+        BEFORE UPDATE OF current_version ON component_templates
+        WHEN NEW.current_version <> OLD.current_version
+        BEGIN
+            SELECT CASE
+                WHEN NEW.current_version <> OLD.current_version + 1
+                  OR NOT EXISTS (
+                      SELECT 1
+                      FROM component_template_versions v
+                      WHERE v.template_id = NEW.template_id
+                        AND v.version = NEW.current_version
+                        AND v.code = NEW.current_code
+                        AND v.name = NEW.current_name)
+                THEN RAISE(ABORT, 'component_template_head_invalid')
+            END;
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_late_insert
+        BEFORE INSERT ON component_template_article_bindings
+        WHEN NEW.version <= (
+            SELECT current_version
+            FROM component_templates
+            WHERE template_id = NEW.template_id)
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_version_update
+        BEFORE UPDATE ON component_template_versions
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_version_delete
+        BEFORE DELETE ON component_template_versions
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_version_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_update
+        BEFORE UPDATE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+
+        CREATE TRIGGER prevent_component_template_binding_delete
+        BEFORE DELETE ON component_template_article_bindings
+        BEGIN
+            SELECT RAISE(ABORT, 'component_template_binding_immutable');
+        END;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1060,6 +1181,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 7, MigrationId: ReferenceSnapshotMigrationId, Sql: ReferenceSnapshotSchemaSql),
             (Version: 8, MigrationId: ReferenceSearchMigrationId, Sql: ReferenceSearchSchemaSql),
             (Version: 9, MigrationId: HarnessDesignMigrationId, Sql: HarnessDesignSchemaSql),
+            (Version: 10, MigrationId: ComponentTemplateMigrationId, Sql: ComponentTemplateSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1152,6 +1274,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, HarnessDesignSchemaSql);
         }
 
+        if (schemaVersion >= 10)
+        {
+            ExecuteSchemaSql(expected, ComponentTemplateSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1240,6 +1367,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: HarnessDesignMigrationId,
                 Sql: HarnessDesignSchemaSql,
                 Description: "Shared harness design documents"),
+            9 => (
+                Version: 10,
+                MigrationId: ComponentTemplateMigrationId,
+                Sql: ComponentTemplateSchemaSql,
+                Description: "Versioned component template library"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1316,7 +1448,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9))
             {
                 return false;
             }

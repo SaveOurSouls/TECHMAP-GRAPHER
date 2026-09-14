@@ -13,6 +13,63 @@ namespace Techmap.Web.Tests;
 public sealed class StorageBackupIntegrationTests
 {
     [Fact]
+    public async Task Backup_verifies_complete_component_template_versions_and_rejects_tampered_bindings()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var templates = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+        var content =
+            """
+            {"schemaVersion":1,"views":[{"id":"e4","name":"E4","kind":"e4","primitives":[],"contactPoints":[]},{"id":"drawing","name":"Drawing","kind":"drawing","primitives":[],"contactPoints":[]}]}
+            """;
+        var created = templates.Create(
+            "JST XH",
+            "JST XH series",
+            [new ComponentTemplateArticleBinding("technology-database", "connector", "B2B-XH-A")],
+            1,
+            content);
+        _ = templates.Update(
+            created.TemplateId,
+            1,
+            "JST XH",
+            "JST XH series revised",
+            created.ArticleBindings,
+            1,
+            content);
+
+        using (var service = fixture.Service(storage.Layout.DatabasePath))
+        {
+            var valid = await service.CreateAsync(
+                new StorageBackupRequest(fixture.BackupRoot, "0.3.7-m2.05"),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(10, valid.SchemaVersion);
+        }
+
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                DROP TRIGGER prevent_component_template_binding_update;
+                UPDATE component_template_article_bindings
+                SET article_key = 'TAMPERED'
+                WHERE template_id = $templateId AND version = 1;
+                CREATE TRIGGER prevent_component_template_binding_update
+                BEFORE UPDATE ON component_template_article_bindings
+                BEGIN
+                    SELECT RAISE(ABORT, 'component_template_binding_immutable');
+                END;
+                """);
+            command.Parameters.AddWithValue("$templateId", created.TemplateId.ToString("D"));
+            command.ExecuteNonQuery();
+        });
+
+        using var corruptedService = fixture.Service(storage.Layout.DatabasePath);
+        await Assert.ThrowsAsync<StorageBackupException>(() => corruptedService.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.3.7-m2.05"),
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Backup_contains_consistent_database_exact_referenced_blobs_and_manifest()
     {
         using var fixture = BackupFixture.Create();
