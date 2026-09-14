@@ -1,6 +1,6 @@
 import { createMutationHeaders, type LocalSession } from "../local-session";
 import { buildApiUrl, type RuntimeConfig } from "../runtime-config";
-import type { TemplateContent } from "./template-model";
+import { parseComponentTemplateContent, type ComponentTemplateContent } from "./template-content";
 
 export interface ArticleBinding { readonly sourceId: string; readonly entityType: string; readonly articleKey: string; }
 export interface TemplateAsset {
@@ -16,13 +16,13 @@ export interface ComponentTemplateSummary {
 }
 export interface ComponentTemplate extends ComponentTemplateSummary {
   readonly assets: readonly TemplateAsset[];
-  readonly content: TemplateContent;
+  readonly content: ComponentTemplateContent;
 }
 export interface ComponentTemplateApi {
   list(): Promise<readonly ComponentTemplateSummary[]>;
   get(templateId: string): Promise<ComponentTemplate>;
-  create(body: { code: string; name: string; articleBindings: ArticleBinding[]; content: TemplateContent }): Promise<ComponentTemplate>;
-  save(templateId: string, body: { expectedVersion: number; code: string; name: string; articleBindings: ArticleBinding[]; content: TemplateContent }): Promise<ComponentTemplate>;
+  create(body: { code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
+  save(templateId: string, body: { expectedVersion: number; code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
   addAsset(templateId: string, body: { expectedVersion: number; fileName: string; mediaType: TemplateAsset["mediaType"]; contentBase64: string }): Promise<ComponentTemplate>;
   removeAsset(templateId: string, assetId: string, expectedVersion: number): Promise<ComponentTemplate>;
   assetContentUrl(templateId: string, version: number, assetId: string): string;
@@ -66,8 +66,7 @@ function parseTemplate(value: unknown): ComponentTemplate {
   if (!idPattern.test(templateId)) throw new Error("Поле ответа «templateId» задано неверно.");
   const bindings = Array.isArray(r.articleBindings) ? r.articleBindings.map(parseBinding) : [];
   const assets = Array.isArray(r.assets) ? r.assets.map(parseAsset) : [];
-  const content = record(r.content) as unknown as TemplateContent;
-  if (content.schemaVersion !== 1 || !Array.isArray(content.views)) throw new Error("Шаблон имеет неподдерживаемую схему содержимого.");
+  const content = parseComponentTemplateContent(r.content);
   return Object.freeze({ templateId, version: integerField(r, "version"), code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, assets, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
 }
 function parseList(value: unknown): readonly ComponentTemplateSummary[] {

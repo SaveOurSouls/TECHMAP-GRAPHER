@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseRuntimeConfig } from "../runtime-config";
 import { createComponentTemplateApi } from "./component-template-api";
+import { upgradeComponentTemplateContentV1 } from "./template-content";
 import { newTemplateContent } from "./template-model";
 
 const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "1", apiVersion: "1", schemaVersion: "7" });
@@ -46,6 +47,18 @@ describe("component template API", () => {
     const { content: _content, ...summary } = item;
     const api = createComponentTemplateApi(config, session, async () => new Response(JSON.stringify({ items: [summary] }), { status: 200, headers: { "Content-Type": "application/json" } }));
     await expect(api.list()).resolves.toMatchObject([{ templateId, code: "JST-XH", version: 1 }]);
+  });
+
+  it("reads schema v2 as v2 without silently upgrading schema v1", async () => {
+    const v1 = newTemplateContent();
+    const v2 = upgradeComponentTemplateContentV1(v1).content;
+    const responses = [detail(), { ...detail(2), content: v2 }];
+    const api = createComponentTemplateApi(config, session, async () => new Response(
+      JSON.stringify(responses.shift()), { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 1 } });
+    await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 2 } });
   });
 
   it("uploads, reads and removes immutable image assets", async () => {

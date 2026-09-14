@@ -3,6 +3,7 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
+import { isTemplateContentV1 } from "./template-content";
 import { TemplateCanvas } from "./TemplateCanvas";
 import {
   addContactPoint, addPrimitive, addView, newTemplateContent, updateView, validateTemplate,
@@ -41,6 +42,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setBusy(true);
     try {
       const item = await api.get(summary.templateId);
+      if (!isTemplateContentV1(item.content)) throw new Error("Редактор шаблонов v2 пока не подключён. Содержимое прочитано без автоматического преобразования.");
       setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, articleBindings: [...item.articleBindings], assets: [...item.assets], content: structuredClone(item.content) });
       setViewId(item.content.views[0]!.id); setSelectedId(null); setUndoStack([]); setDirty(false); setError(null); setSaved(null);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
@@ -76,6 +78,7 @@ export function ComponentLibrary({ config, session }: Props) {
     return result;
   }
   function applyPersisted(result: ComponentTemplate) {
+    if (!isTemplateContentV1(result.content)) throw new Error("Сервер вернул шаблон v2 для редактора v1.");
     setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, articleBindings: [...result.articleBindings], assets: [...result.assets], content: structuredClone(result.content) });
     setDirty(false); setSaved(`Сохранена версия ${result.version}`); setError(null);
   }
