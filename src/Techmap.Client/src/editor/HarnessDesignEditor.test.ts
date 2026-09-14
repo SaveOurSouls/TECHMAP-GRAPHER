@@ -10,6 +10,7 @@ import {
   buildProjectComponentSnapshotLookup,
   ComponentGraphErrorAlert,
   designToScene,
+  editorWireUpdateCommand,
   HarnessEditorErrorBoundary,
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
@@ -189,6 +190,92 @@ describe("harness design scene adapter", () => {
     expect(drawing.find((item) => item.id === "dimension:w1")?.label).toBe("350 мм");
     expect(drawing.find((item) => item.id === "w1")?.points?.[0]?.x).toBe(218);
     expect(drawing.find((item) => item.id === "dimension:w1")?.points?.[0]?.x).toBe(218);
+  });
+
+  it("projects wire cut corrections, rounding and material status into the inspector scene", () => {
+    const x1 = createConnector("cut-x1", "XS1", 1, { x: 10, y: 20 });
+    const x2 = createConnector("cut-x2", "XS2", 1, { x: 500, y: 20 });
+    const wire = createWire(
+      "cut-wire",
+      { connectorId: x1.id, contactId: x1.contacts[0]!.id },
+      { connectorId: x2.id, contactId: x2.contacts[0]!.id },
+      1_000.1,
+      "",
+      "#334155",
+      10,
+      20,
+      1,
+    );
+    const document = { ...createEmptyHarnessDesign(), connectors: [x1, x2], wires: [wire] };
+
+    expect(designToScene(document, "e4").find((item) => item.id === wire.id)?.metadata).toMatchObject({
+      lengthKnown: "true",
+      lengthMm: "1000.1",
+      endCorrectionFromMm: "10",
+      endCorrectionToMm: "20",
+      cutRoundingStepMm: "1",
+      cutLengthMm: "1031",
+      materialStatus: "included",
+    });
+  });
+
+  it("projects an unknown wire length as incomplete and excluded from materials", () => {
+    const x1 = createConnector("unknown-x1", "XS1", 1, { x: 10, y: 20 });
+    const x2 = createConnector("unknown-x2", "XS2", 1, { x: 500, y: 20 });
+    const wire = createWire(
+      "unknown-wire",
+      { connectorId: x1.id, contactId: x1.contacts[0]!.id },
+      { connectorId: x2.id, contactId: x2.contacts[0]!.id },
+      null,
+    );
+    const document = { ...createEmptyHarnessDesign(), connectors: [x1, x2], wires: [wire] };
+    const scene = designToScene(document, "drawing");
+
+    expect(scene.find((item) => item.id === wire.id)?.metadata).toMatchObject({
+      lengthKnown: "false",
+      lengthMm: "",
+      cutLengthMm: "",
+      materialStatus: "excluded",
+    });
+    expect(scene.find((item) => item.id === `dimension:${wire.id}`)?.label).toBe("Длина не задана");
+  });
+
+  it("translates known, unknown and corrected inspector values without losing null semantics", () => {
+    const original = {
+      id: "wire-command",
+      layerId: "wires",
+      kind: "wire" as const,
+      label: "CAN-H",
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      color: "#334155",
+      metadata: {
+        lengthKnown: "true", lengthMm: "100", endCorrectionFromMm: "0",
+        endCorrectionToMm: "0", cutRoundingStepMm: "1",
+      },
+    };
+
+    expect(editorWireUpdateCommand({
+      ...original,
+      metadata: { ...original.metadata, lengthKnown: "false", lengthMm: "" },
+    }, original)).toMatchObject({ lengthMm: null });
+    expect(editorWireUpdateCommand({
+      ...original,
+      metadata: {
+        ...original.metadata,
+        lengthMm: "350.25",
+        endCorrectionFromMm: "-2",
+        endCorrectionToMm: "3",
+        cutRoundingStepMm: "0.5",
+      },
+    }, original)).toMatchObject({
+      lengthMm: 350.25,
+      endCorrectionFromMm: -2,
+      endCorrectionToMm: 3,
+      cutRoundingStepMm: 0.5,
+    });
   });
 
   it("snaps an added route point to a 15 degree direction", () => {

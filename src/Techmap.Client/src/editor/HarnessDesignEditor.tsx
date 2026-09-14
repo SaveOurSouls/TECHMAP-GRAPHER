@@ -33,6 +33,7 @@ import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEdito
 import {
   connectorContactPosition,
   connectorE4TableGeometry,
+  calculateWireCutLength,
   createJunctionEndpoint,
   createScreenEndpoint,
   createOrthogonalE4Route,
@@ -345,6 +346,7 @@ export function designToScene(
     const points = view === "drawing" ? [start, ...wire.drawingRoute, end] : [start, ...wire.e4Route, end];
     const fromAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.from) : null;
     const toAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.to) : null;
+    const cutLength = calculateWireCutLength(wire);
     return [{
       id: wire.id,
       layerId: wire.layerIds[view],
@@ -357,7 +359,13 @@ export function designToScene(
       color: wire.color,
       points,
       metadata: {
-        lengthMm: String(wire.lengthMm),
+        lengthKnown: String(cutLength.isComplete),
+        lengthMm: cutLength.sourceLengthMm === null ? "" : String(cutLength.sourceLengthMm),
+        endCorrectionFromMm: String(cutLength.endCorrectionFromMm),
+        endCorrectionToMm: String(cutLength.endCorrectionToMm),
+        cutRoundingStepMm: String(cutLength.cutRoundingStepMm),
+        cutLengthMm: cutLength.cutLengthMm === null ? "" : String(cutLength.cutLengthMm),
+        materialStatus: cutLength.materialConsumptionMm === null ? "excluded" : "included",
         e4LabelPosition: String(wire.e4LabelPosition ?? 0.5),
         ...(view === "e4" ? {
           view: "e4",
@@ -373,16 +381,55 @@ export function designToScene(
     const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds);
     if (!start || !end) return [];
     const y = Math.max(start.y, end.y) + 70;
+    const cutLength = calculateWireCutLength(wire);
     return [{
       id: `dimension:${wire.id}`,
       layerId: "dimensions",
       kind: "dimension" as const,
-      label: `${wire.lengthMm} мм`,
+      label: cutLength.sourceLengthMm === null ? "Длина не задана" : `${cutLength.sourceLengthMm} мм`,
       x: 0, y: 0, width: 0, height: 0, color: "#55798e",
       points: [{ x: start.x, y }, { x: end.x, y }],
     }];
   }) : [];
   return [...connectors, ...wires, ...dimensions];
+}
+
+type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
+
+/** Translates inspector metadata into a command while preserving omitted-versus-null length semantics. */
+export function editorWireUpdateCommand(
+  selected: EditorSceneObject,
+  previous: EditorSceneObject,
+): WireUpdateCommand {
+  const parseMetadataNumber = (key: string): number | undefined => {
+    const value = selected.metadata?.[key];
+    if (value === undefined || value.trim() === "") return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const lengthKnownChanged = selected.metadata?.lengthKnown !== previous.metadata?.lengthKnown;
+  const lengthChanged = selected.metadata?.lengthMm !== previous.metadata?.lengthMm;
+  const lengthMm = parseMetadataNumber("lengthMm");
+  const endCorrectionFromMm = parseMetadataNumber("endCorrectionFromMm");
+  const endCorrectionToMm = parseMetadataNumber("endCorrectionToMm");
+  const cutRoundingStepMm = parseMetadataNumber("cutRoundingStepMm");
+  return {
+    type: "update-wire",
+    wireId: selected.id,
+    circuit: selected.label === previous.label ? undefined : selected.label,
+    color: selected.color === previous.color ? undefined : selected.color,
+    lengthMm: lengthKnownChanged && selected.metadata?.lengthKnown === "false"
+      ? null
+      : selected.metadata?.lengthKnown === "true" && (lengthKnownChanged || lengthChanged) && lengthMm !== undefined
+        ? lengthMm
+        : undefined,
+    endCorrectionFromMm: selected.metadata?.endCorrectionFromMm !== previous.metadata?.endCorrectionFromMm
+      ? endCorrectionFromMm : undefined,
+    endCorrectionToMm: selected.metadata?.endCorrectionToMm !== previous.metadata?.endCorrectionToMm
+      ? endCorrectionToMm : undefined,
+    cutRoundingStepMm: selected.metadata?.cutRoundingStepMm !== previous.metadata?.cutRoundingStepMm
+      ? cutRoundingStepMm : undefined,
+  };
 }
 
 function fromUiLayers(layers: readonly UiLayer[], previous: readonly EditorLayer[]): readonly EditorLayer[] {
@@ -972,7 +1019,7 @@ export function HarnessDesignEditor({
     });
     const circuit = contactValues.find((contact) => contact.circuit.trim())?.circuit ?? "";
     const colorName = contactValues.find((contact) => contact.color.trim())?.color ?? "";
-    const wire = createWire(id, from, to, 100, circuit, resolveWireColorHex(colorName));
+    const wire = createWire(id, from, to, null, circuit, resolveWireColorHex(colorName));
     const start = wireEndpointE4Anchor(history.present, from);
     const end = wireEndpointE4Anchor(history.present, to);
     return start && end ? { ...wire, e4Route: createOrthogonalE4Route(start, end) } : wire;
@@ -1179,7 +1226,7 @@ export function HarnessDesignEditor({
             Math.hypot(junction.position.x - point.x, junction.position.y - point.y) < 0.01);
           const junctionId = existingJunction?.id ?? crypto.randomUUID();
           const toEndpoint = createJunctionEndpoint(junctionId);
-          const base = createWire(wireId, fromEndpoint, toEndpoint, 100, targetWire.circuit);
+          const base = createWire(wireId, fromEndpoint, toEndpoint, null, targetWire.circuit);
           const start = wireEndpointE4Anchor(history.present, fromEndpoint);
           const branchWire = start ? {
             ...base,
@@ -1283,15 +1330,7 @@ export function HarnessDesignEditor({
               run({ type: "update-connector", connectorId: selected.id, designation: selected.label });
             }
           } else if (selected.kind === "wire") {
-            const lengthMm = Number(selected.metadata?.lengthMm);
-            run({
-              type: "update-wire",
-              wireId: selected.id,
-              circuit: selected.label === previous.label ? undefined : selected.label,
-              color: selected.color === previous.color ? undefined : selected.color,
-              lengthMm: Number.isFinite(lengthMm) && lengthMm > 0 && selected.metadata?.lengthMm !== previous.metadata?.lengthMm
-                ? lengthMm : undefined,
-            });
+            run(editorWireUpdateCommand(selected, previous));
           }
         }}
         onLayersChange={(nextLayers) => run({

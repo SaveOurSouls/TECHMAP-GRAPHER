@@ -17,7 +17,7 @@ $runName = "r-{0}" -f [Guid]::NewGuid().ToString("N").Substring(0, 8)
 $artifactsRoot = Join-Path $expectedArtifactsRoot $runName
 $defaultPreviousArchive = Join-Path $repositoryRoot "artifacts\checkpoints\TECHMAP-GRAPHER-M1-13-check.zip"
 $defaultPreviousArchiveSha256 = "be5322cca6a0d16c624e787f529e098d7e8a1f781c7d36cce968b0b8077d8322"
-$defaultCurrentArchive = Join-Path $repositoryRoot "artifacts\m3-02-r1\TECHMAP-GRAPHER-win-x64.zip"
+$defaultCurrentArchive = Join-Path $repositoryRoot "artifacts\m3-03\TECHMAP-GRAPHER-win-x64.zip"
 $expectedCurrentVersion = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") |
     ConvertFrom-Json
 $verifyPackageScript = Join-Path $PSScriptRoot "verify-package.ps1"

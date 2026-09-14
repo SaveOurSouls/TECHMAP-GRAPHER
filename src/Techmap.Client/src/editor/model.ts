@@ -266,7 +266,14 @@ export interface WireInstance {
   readonly to: WireEndpoint;
   readonly circuit: string;
   readonly color: string;
-  readonly lengthMm: number;
+  /** Physical source length. Null means that the wire is intentionally incomplete. */
+  readonly lengthMm: number | null;
+  /** Signed technological correction at the `from` end, in millimetres. */
+  readonly endCorrectionFromMm: number;
+  /** Signed technological correction at the `to` end, in millimetres. */
+  readonly endCorrectionToMm: number;
+  /** Positive step used to round only the final cut length upwards. */
+  readonly cutRoundingStepMm: number;
   readonly e4Route: readonly Point[];
   /** Missing in older documents and treated as automatic. */
   readonly e4RouteMode?: "auto" | "manual";
@@ -274,6 +281,59 @@ export interface WireInstance {
   readonly e4LabelPosition?: number;
   readonly drawingRoute: readonly Point[];
   readonly layerIds: Readonly<Record<EditorView, string>>;
+}
+
+export interface WireCutLengthCalculation {
+  readonly sourceLengthMm: number | null;
+  readonly endCorrectionFromMm: number;
+  readonly endCorrectionToMm: number;
+  readonly cutRoundingStepMm: number;
+  readonly unroundedTotalMm: number | null;
+  readonly cutLengthMm: number | null;
+  readonly materialConsumptionMm: number | null;
+  readonly isComplete: boolean;
+}
+
+export const defaultWireCutRoundingStepMm = 1;
+const maximumWireLengthMm = 1_000_000_000;
+const micrometresPerMillimetre = 1_000;
+
+/** Mirrors the exact M1 domain calculation without deriving physical length from canvas geometry. */
+export function calculateWireCutLength(wire: Pick<WireInstance,
+  "lengthMm" | "endCorrectionFromMm" | "endCorrectionToMm" | "cutRoundingStepMm"
+>): WireCutLengthCalculation {
+  const sourceLengthMm = validateWirePhysicalLength(wire.lengthMm);
+  const endCorrectionFromMm = validateWireCorrection(wire.endCorrectionFromMm, "Поправка начала провода");
+  const endCorrectionToMm = validateWireCorrection(wire.endCorrectionToMm, "Поправка конца провода");
+  const cutRoundingStepMm = validateWireRoundingStep(wire.cutRoundingStepMm);
+  const common = { sourceLengthMm, endCorrectionFromMm, endCorrectionToMm, cutRoundingStepMm };
+  if (sourceLengthMm === null) {
+    return {
+      ...common,
+      unroundedTotalMm: null,
+      cutLengthMm: null,
+      materialConsumptionMm: null,
+      isComplete: false,
+    };
+  }
+  const totalMicrometres = toExactMicrometres(sourceLengthMm, "Длина провода") +
+    toExactMicrometres(endCorrectionFromMm, "Поправка начала провода") +
+    toExactMicrometres(endCorrectionToMm, "Поправка конца провода");
+  if (totalMicrometres < 0n) throw new Error("Итоговая длина провода не должна быть отрицательной.");
+  const stepMicrometres = toExactMicrometres(cutRoundingStepMm, "Шаг округления длины резки");
+  const remainder = totalMicrometres % stepMicrometres;
+  const roundedMicrometres = remainder === 0n
+    ? totalMicrometres
+    : totalMicrometres + stepMicrometres - remainder;
+  const unroundedTotalMm = Number(totalMicrometres) / micrometresPerMillimetre;
+  const cutLengthMm = Number(roundedMicrometres) / micrometresPerMillimetre;
+  return {
+    ...common,
+    unroundedTotalMm,
+    cutLengthMm,
+    materialConsumptionMm: cutLengthMm,
+    isComplete: true,
+  };
 }
 
 export interface EditorLayer {
@@ -1260,8 +1320,19 @@ function parseWire(value: unknown): WireInstance {
   if (!Array.isArray(record.drawingRoute) || (record.e4Route !== undefined && !Array.isArray(record.e4Route))) {
     throw new Error("Трасса провода задана неверно.");
   }
-  const lengthMm = requireNumber(record.lengthMm, "Длина провода");
-  if (lengthMm <= 0 || lengthMm > 1_000_000_000) throw new Error("Длина провода задана неверно.");
+  const lengthMm = record.lengthMm === undefined || record.lengthMm === null
+    ? null
+    : validateWirePhysicalLength(requireNumber(record.lengthMm, "Длина провода"));
+  const endCorrectionFromMm = record.endCorrectionFromMm === undefined
+    ? 0
+    : validateWireCorrection(requireNumber(record.endCorrectionFromMm, "Поправка начала провода"), "Поправка начала провода");
+  const endCorrectionToMm = record.endCorrectionToMm === undefined
+    ? 0
+    : validateWireCorrection(requireNumber(record.endCorrectionToMm, "Поправка конца провода"), "Поправка конца провода");
+  const cutRoundingStepMm = record.cutRoundingStepMm === undefined
+    ? defaultWireCutRoundingStepMm
+    : validateWireRoundingStep(requireNumber(record.cutRoundingStepMm, "Шаг округления длины резки"));
+  calculateWireCutLength({ lengthMm, endCorrectionFromMm, endCorrectionToMm, cutRoundingStepMm });
   return {
     id: requireText(record.id, "ID провода"),
     from: parseEndpoint(record.from),
@@ -1269,6 +1340,9 @@ function parseWire(value: unknown): WireInstance {
     circuit: requireString(record.circuit, "Цепь провода"),
     color: requireText(record.color, "Цвет провода"),
     lengthMm,
+    endCorrectionFromMm,
+    endCorrectionToMm,
+    cutRoundingStepMm,
     e4Route: record.e4Route === undefined ? [] : record.e4Route.map(parsePoint),
     e4RouteMode: record.e4RouteMode === undefined || record.e4RouteMode === "auto"
       ? "auto"
@@ -1282,6 +1356,51 @@ function parseWire(value: unknown): WireInstance {
       drawing: requireText(layerIds.drawing, "Слой провода чертежа"),
     },
   };
+}
+
+function validateWirePhysicalLength(value: number | null): number | null {
+  if (value === null) return null;
+  if (!Number.isFinite(value) || value < 0 || value > maximumWireLengthMm) {
+    throw new Error("Длина провода должна быть неотрицательным числом в миллиметрах или неизвестной.");
+  }
+  toExactMicrometres(value, "Длина провода");
+  return value;
+}
+
+function validateWireCorrection(value: number, name: string): number {
+  if (!Number.isFinite(value) || Math.abs(value) > maximumWireLengthMm) {
+    throw new Error(`${name} задана неверно.`);
+  }
+  toExactMicrometres(value, name);
+  return value;
+}
+
+function validateWireRoundingStep(value: number): number {
+  if (!Number.isFinite(value) || value <= 0 || value > maximumWireLengthMm) {
+    throw new Error("Шаг округления длины резки должен быть положительным числом в миллиметрах.");
+  }
+  toExactMicrometres(value, "Шаг округления длины резки");
+  return value;
+}
+
+function toExactMicrometres(value: number, name: string): bigint {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(value.toString());
+  if (!match) {
+    throw new Error(`${name} должна задаваться с точностью не более 0,001 мм.`);
+  }
+  const sign = match[1] === "-" ? -1n : 1n;
+  const fraction = match[3] ?? "";
+  const exponent = Number(match[4] ?? "0");
+  const digits = BigInt(`${match[2]}${fraction}`);
+  const micrometreExponent = exponent - fraction.length + 3;
+  if (micrometreExponent >= 0) {
+    return sign * digits * 10n ** BigInt(micrometreExponent);
+  }
+  const divisor = 10n ** BigInt(-micrometreExponent);
+  if (digits % divisor !== 0n) {
+    throw new Error(`${name} должна задаваться с точностью не более 0,001 мм.`);
+  }
+  return sign * (digits / divisor);
 }
 
 function parseNormalizedPosition(value: unknown, name: string): number {

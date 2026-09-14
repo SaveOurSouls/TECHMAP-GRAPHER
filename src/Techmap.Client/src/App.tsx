@@ -19,6 +19,8 @@ import {
 } from "./project-api";
 import type { RuntimeConfig } from "./runtime-config";
 import { TransitionGate } from "./transition-gate";
+import { createHarnessCutListApi } from "./harness-cut-list-api";
+import { HarnessCutListPanel } from "./HarnessCutListPanel";
 
 const ComponentLibrary = lazy(async () => {
   const module = await import("./component-library/ComponentLibrary");
@@ -178,6 +180,7 @@ export function HarnessDocumentTabs({
 
 export function App({ config, session }: AppProps) {
   const api = useMemo(() => createProjectApi(config, session), [config, session]);
+  const cutListApi = useMemo(() => createHarnessCutListApi(config, session), [config, session]);
   const [activeSection, setActiveSection] = useState<AppSection>("projects");
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectDetails | null>(null);
@@ -871,6 +874,11 @@ export function App({ config, session }: AppProps) {
                             ));
                             setEditorOpen(true);
                           }}
+                        />
+                        <HarnessCutListPanel
+                          api={cutListApi}
+                          projectId={selectedProject.projectId}
+                          harnessId={selectedHarness.harnessId}
                         />
                       </section>
                     ) : (

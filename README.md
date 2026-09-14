@@ -88,6 +88,9 @@ M2-08: [общие контакты видов и варианты артику�
 M2-09: [read-only адаптер публичной Google Sheets](docs/m2-09-google-sheets.md).
 M3-01: [закреплённый библиотечный компонент в жгуте](docs/m3-01-component-placement.md).
 M3-02: [закреплённые библиотечные виды в жгуте](docs/m3-02-library-instance-views.md).
+M3-03: [длина провода и первая карта резки](docs/m3-03-wire-cut-length.md).
+
+Практическая инструкция: [заполнение библиотечного шаблона](docs/component-template-filling-guide.md).
 Выпуск ТЗ и инструкции требует отдельной команды владельца.
 
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
@@ -97,7 +100,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-15.ps1
 ```
 
 Готовый локальный артефакт создаётся в
-`artifacts/m3-02-r1/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
+`artifacts/m3-03/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
 Внутри ZIP находится `Examples/reference-catalog.xlsx` с инструкцией для проверки
 универсального импорта.
 

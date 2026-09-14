@@ -2,7 +2,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
-    [string]$ArtifactSlice = "m3-02-r1"
+    [string]$ArtifactSlice = "m3-03"
 )
 
 $ErrorActionPreference = "Stop"

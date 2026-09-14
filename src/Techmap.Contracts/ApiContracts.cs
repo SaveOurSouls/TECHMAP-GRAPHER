@@ -161,6 +161,27 @@ public sealed record HarnessDesignResponse(
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc);
 
+public sealed record HarnessCutListItemResponse(
+    string WireId,
+    string Circuit,
+    string Material,
+    decimal? SourceLengthMm,
+    decimal EndCorrectionFromMm,
+    decimal EndCorrectionToMm,
+    decimal RoundingStepMm,
+    decimal? CutLengthMm,
+    long Pieces,
+    decimal? TotalMetres,
+    string Status);
+
+public sealed record HarnessCutListResponse(
+    Guid ProjectId,
+    Guid HarnessId,
+    long HarnessQuantity,
+    string Status,
+    string Warning,
+    IReadOnlyList<HarnessCutListItemResponse> Items);
+
 public sealed record PlaceComponentRequest(
     Guid CommandId,
     long? ExpectedRevision,

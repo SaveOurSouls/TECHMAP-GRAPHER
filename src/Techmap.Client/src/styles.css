@@ -250,6 +250,26 @@ input::placeholder { color: #8795a3; }
 .document-empty-state strong { margin-top: 12px; color: #314b5f; font-size: 15px; }
 .document-empty-state p { max-width: 360px; margin: 5px 0; color: #526779; font-size: 12px; line-height: 1.45; }
 .document-empty-state > span:not(.document-icon) { font-size: 11px; }
+.harness-cut-list { border-top: 1px solid #dfe6eb; background: #fff; }
+.harness-cut-list > summary { padding: 12px 18px; display: flex; align-items: center; gap: 7px; color: #31556b; font-size: 12px; font-weight: 800; cursor: pointer; list-style-position: inside; }
+.harness-cut-list > summary span { margin-left: auto; min-width: 22px; padding: 2px 6px; border-radius: 9px; background: #e8f1f6; color: #487187; text-align: center; font-size: 10px; }
+.cut-list-body { padding: 0 18px 17px; }
+.cut-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cut-list-heading p { margin: 0; color: #617382; font-size: 11px; line-height: 1.4; }
+.cut-list-heading .refresh-button { flex: 0 0 auto; }
+.cut-list-warning, .cut-list-error { margin: 12px 0 0; padding: 9px 10px; border-left: 3px solid #c88a2c; border-radius: 5px; background: #fff8ea; color: #76551f; font-size: 11px; line-height: 1.4; }
+.cut-list-error { border-left-color: #b43f3f; background: #fff3f3; color: #7d3030; }
+.cut-list-loading, .cut-list-empty { margin: 12px 0 0; color: #71808e; font-size: 11px; }
+.cut-list-scroll { margin-top: 12px; overflow: auto; border: 1px solid #dfe6eb; border-radius: 7px; }
+.cut-list-table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
+.cut-list-table th { padding: 7px 8px; background: #edf3f6; color: #456174; text-align: left; }
+.cut-list-table td { padding: 8px; border-top: 1px solid #e5ebef; color: #455b6b; vertical-align: top; font-variant-numeric: tabular-nums; }
+.cut-list-table td:first-child { min-width: 118px; white-space: normal; }
+.cut-list-table td:first-child strong, .cut-list-table td:first-child span, .cut-list-table td small { display: block; }
+.cut-list-table td:first-child span { margin-top: 2px; color: #738493; }
+.cut-list-table td small { margin-top: 3px; color: #8a672c; font-size: 9px; }
+.cut-list-status { padding: 3px 6px; border-radius: 8px; background: #e3f4ed; color: #1d7657; font-weight: 800; }
+.cut-list-status.incomplete { background: #fff0da; color: #945f16; }
 .document-icon { position: relative; width: 40px; height: 48px; border: 2px solid #80aac0; border-radius: 4px; background: #fff; }
 .document-icon::before, .document-icon::after { content: ""; position: absolute; background: #bad1dd; }
 .document-icon::before { left: 7px; right: 7px; top: 13px; height: 2px; box-shadow: 0 8px #bad1dd, 0 16px #bad1dd; }
@@ -436,6 +456,8 @@ input::placeholder { color: #8795a3; }
   .add-harness-form .secondary-action { width: 100%; }
   .harness-parameters { align-items: stretch; flex-direction: column; }
   .harness-parameters label, .harness-parameters .quantity-control, .harness-parameters .secondary-action { width: 100%; }
+  .cut-list-heading { align-items: stretch; flex-direction: column; }
+  .cut-list-heading .refresh-button { width: 100%; }
   .harness-tab { font-size: 11px; }
   .reference-form-grid { grid-template-columns: 1fr; }
   .xlsx-profile-heading { align-items: flex-start; flex-direction: column; }

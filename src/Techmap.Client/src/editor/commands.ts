@@ -1,6 +1,7 @@
 import {
   connectorBaseColumnKeys,
   connectorE4TableGeometry,
+  calculateWireCutLength,
   createOrthogonalE4Route,
   createJunctionEndpoint,
   createDefaultConnectorBaseColumns,
@@ -49,7 +50,7 @@ export type EditorCommand =
   | { readonly type: "remove-connector"; readonly connectorId: string }
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
-  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number }
+  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -121,24 +122,31 @@ export function createWire(
   id: string,
   from: WireEndpoint,
   to: WireEndpoint,
-  lengthMm = 100,
+  lengthMm: number | null = 100,
   circuit = "",
   color = "#334155",
+  endCorrectionFromMm = 0,
+  endCorrectionToMm = 0,
+  cutRoundingStepMm = 1,
 ): WireInstance {
-  requireLength(lengthMm);
-  return {
+  const wire: WireInstance = {
     id,
     from,
     to,
     circuit: circuit.trim(),
     color,
     lengthMm,
+    endCorrectionFromMm,
+    endCorrectionToMm,
+    cutRoundingStepMm,
     e4Route: [],
     e4RouteMode: "auto",
     e4LabelPosition: 0.5,
     drawingRoute: [],
     layerIds: { e4: defaultLayerIds.wires, drawing: defaultLayerIds.wires },
   };
+  calculateWireCutLength(wire);
+  return wire;
 }
 
 export function applyEditorCommand(
@@ -403,17 +411,25 @@ export function applyEditorCommand(
         ...attachedWireIds.filter((wireId) => cleaned.wires.some((wire) => wire.id === wireId)),
       ]);
     }
-    case "update-wire":
-      if (command.lengthMm !== undefined) requireLength(command.lengthMm);
-      return normalizeJunctionCircuits({
+    case "update-wire": {
+      const changed = {
         ...document,
-        wires: replaceRequired(document.wires, command.wireId, (wire) => ({
-          ...wire,
-          circuit: command.circuit === undefined ? wire.circuit : command.circuit.trim(),
-          color: command.color ?? wire.color,
-          lengthMm: command.lengthMm ?? wire.lengthMm,
-        }), "Провод не найден."),
-      });
+        wires: replaceRequired(document.wires, command.wireId, (wire) => {
+          const updated = {
+            ...wire,
+            circuit: command.circuit === undefined ? wire.circuit : command.circuit.trim(),
+            color: command.color ?? wire.color,
+            lengthMm: command.lengthMm === undefined ? wire.lengthMm : command.lengthMm,
+            endCorrectionFromMm: command.endCorrectionFromMm ?? wire.endCorrectionFromMm,
+            endCorrectionToMm: command.endCorrectionToMm ?? wire.endCorrectionToMm,
+            cutRoundingStepMm: command.cutRoundingStepMm ?? wire.cutRoundingStepMm,
+          };
+          calculateWireCutLength(updated);
+          return updated;
+        }, "Провод не найден."),
+      };
+      return normalizeJunctionCircuits(changed);
+    }
     case "set-e4-wire-label-position": {
       const changed = {
         ...document,
@@ -1566,7 +1582,7 @@ function validateWire(document: HarnessDesignDocument, wire: WireInstance, pendi
   }
   requireEndpoint(document, wire.from, pendingJunctionId);
   requireEndpoint(document, wire.to, pendingJunctionId);
-  requireLength(wire.lengthMm);
+  calculateWireCutLength(wire);
 }
 
 function requireEndpoint(document: HarnessDesignDocument, endpoint: WireEndpoint, pendingJunctionId?: string): void {
@@ -1603,12 +1619,6 @@ function sameEndpoint(left: WireEndpoint, right: WireEndpoint): boolean {
   if (isScreenEndpoint(left)) return isScreenEndpoint(right) && left.screenId === right.screenId;
   return !isJunctionEndpoint(right) && !isScreenEndpoint(right) &&
     left.connectorId === right.connectorId && left.contactId === right.contactId;
-}
-
-function requireLength(lengthMm: number): void {
-  if (!Number.isFinite(lengthMm) || lengthMm <= 0 || lengthMm > 1_000_000_000) {
-    throw new Error("Длина провода должна быть положительным числом в миллиметрах.");
-  }
 }
 
 function replaceRequired<T extends { readonly id: string }>(

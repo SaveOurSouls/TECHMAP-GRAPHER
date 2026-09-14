@@ -7,6 +7,7 @@ import { selectConnectorSeriesArticle } from "./connector-series";
 import {
   connectorContactPosition,
   connectorE4TableGeometry,
+  calculateWireCutLength,
   createJunctionEndpoint,
   createScreenEndpoint,
   createOrthogonalE4Route,
@@ -268,6 +269,139 @@ describe("shared harness editor model", () => {
     document = applyEditorCommand(document, { type: "set-wire-route", wireId: "w1", route: [{ x: 100, y: 90 }] });
     expect(document.wires[0]?.drawingRoute).toEqual([{ x: 100, y: 90 }]);
     expect(document.wires[0]?.lengthMm).toBe(350);
+  });
+
+  it("updates structured wire length fields atomically and supports an unknown source length", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 800, y: 0 });
+    let document = createEmptyHarnessDesign();
+    document = applyEditorCommand(document, { type: "add-connector", connector: x1 });
+    document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    document = applyEditorCommand(document, {
+      type: "update-wire",
+      wireId: "w1",
+      lengthMm: null,
+      endCorrectionFromMm: -2,
+      endCorrectionToMm: 3,
+      cutRoundingStepMm: 0.5,
+    });
+    expect(document.wires[0]).toMatchObject({
+      lengthMm: null,
+      endCorrectionFromMm: -2,
+      endCorrectionToMm: 3,
+      cutRoundingStepMm: 0.5,
+    });
+    expect(calculateWireCutLength(document.wires[0]!)).toMatchObject({
+      unroundedTotalMm: null,
+      cutLengthMm: null,
+      materialConsumptionMm: null,
+      isComplete: false,
+    });
+
+    expect(() => applyEditorCommand(document, {
+      type: "update-wire", wireId: "w1", lengthMm: 1, endCorrectionFromMm: -2, endCorrectionToMm: 0,
+    })).toThrow(/не должна быть отрицательной/);
+    expect(document.wires[0]?.lengthMm).toBeNull();
+  });
+
+  it("calculates cut length in exact millimetres and rounds only the final sum upwards", () => {
+    const result = calculateWireCutLength({
+      lengthMm: 1000.125,
+      endCorrectionFromMm: -0.025,
+      endCorrectionToMm: 0.1,
+      cutRoundingStepMm: 0.5,
+    });
+    expect(result).toEqual({
+      sourceLengthMm: 1000.125,
+      endCorrectionFromMm: -0.025,
+      endCorrectionToMm: 0.1,
+      cutRoundingStepMm: 0.5,
+      unroundedTotalMm: 1000.2,
+      cutLengthMm: 1000.5,
+      materialConsumptionMm: 1000.5,
+      isComplete: true,
+    });
+    expect(calculateWireCutLength({
+      lengthMm: 0,
+      endCorrectionFromMm: 0,
+      endCorrectionToMm: 0,
+      cutRoundingStepMm: 1,
+    }).cutLengthMm).toBe(0);
+    expect(calculateWireCutLength({
+      lengthMm: 1.001,
+      endCorrectionFromMm: 0,
+      endCorrectionToMm: 0,
+      cutRoundingStepMm: 0.001,
+    }).cutLengthMm).toBe(1.001);
+    expect(() => calculateWireCutLength({
+      lengthMm: 1.0001,
+      endCorrectionFromMm: 0,
+      endCorrectionToMm: 0,
+      cutRoundingStepMm: 1,
+    })).toThrow(/0,001 мм/);
+  });
+
+  it("normalizes legacy and incomplete wire length JSON without inventing a physical value", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 800, y: 0 });
+    const base = {
+      ...createEmptyHarnessDesign(),
+      connectors: [x1, x2],
+    };
+    const currentWire = {
+      ...createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }, 350),
+      e4Route: createOrthogonalE4Route(
+        wireEndpointE4Anchor({ ...base, wires: [] }, { connectorId: "x1", contactId: "x1:contact:1" })!,
+        wireEndpointE4Anchor({ ...base, wires: [] }, { connectorId: "x2", contactId: "x2:contact:1" })!,
+      ),
+    };
+    const {
+      endCorrectionFromMm: _from,
+      endCorrectionToMm: _to,
+      cutRoundingStepMm: _step,
+      ...legacyWire
+    } = currentWire;
+    const legacy = parseHarnessDesignDocument({ ...base, wires: [legacyWire] });
+    expect(legacy.wires[0]).toMatchObject({
+      lengthMm: 350,
+      endCorrectionFromMm: 0,
+      endCorrectionToMm: 0,
+      cutRoundingStepMm: 1,
+    });
+
+    const structured = parseHarnessDesignDocument({
+      ...base,
+      wires: [{
+        ...legacyWire,
+        lengthMm: 350.125,
+        endCorrectionFromMm: -0.025,
+        endCorrectionToMm: 0.4,
+        cutRoundingStepMm: 0.5,
+      }],
+    });
+    expect(structured.wires[0]).toMatchObject({
+      lengthMm: 350.125,
+      endCorrectionFromMm: -0.025,
+      endCorrectionToMm: 0.4,
+      cutRoundingStepMm: 0.5,
+    });
+
+    const { lengthMm: _length, ...wireWithoutLength } = legacyWire;
+    const incomplete = parseHarnessDesignDocument({ ...base, wires: [wireWithoutLength] });
+    expect(incomplete.wires[0]).toMatchObject({
+      lengthMm: null,
+      endCorrectionFromMm: 0,
+      endCorrectionToMm: 0,
+      cutRoundingStepMm: 1,
+    });
+    expect(() => parseHarnessDesignDocument({
+      ...base,
+      wires: [{ ...legacyWire, cutRoundingStepMm: 0 }],
+    })).toThrow(/Шаг округления/);
   });
 
   it("reconnects one end of an existing wire and preserves its properties", () => {

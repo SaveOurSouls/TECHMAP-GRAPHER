@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
 
 export interface ObjectInspectorProps {
@@ -22,6 +23,49 @@ function finiteNumber(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Returns null for valid intermediate text that must stay editable but must not reach the document. */
+export function parseWireCorrectionDraft(value: string): number | null {
+  const normalized = value.trim();
+  if (normalized === "" || normalized === "-" || normalized === "+" ||
+      normalized === "." || normalized === "-." || normalized === "+.") return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function WireCorrectionInput({
+  label,
+  value,
+  disabled,
+  onCommit,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return <label>
+    {label}
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={label}
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => {
+        const next = event.target.value;
+        setDraft(next);
+        const parsed = parseWireCorrectionDraft(next);
+        if (parsed !== null) onCommit(String(parsed));
+      }}
+      onBlur={() => {
+        if (parseWireCorrectionDraft(draft) === null) setDraft(value);
+      }}
+    />
+  </label>;
+}
+
 export function ObjectInspector({ view, selectedObject, disabled, onChange }: ObjectInspectorProps) {
   if (!selectedObject) {
     return (
@@ -32,6 +76,9 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
       </div>
     );
   }
+
+  const wireLengthKnown = selectedObject.kind === "wire" && selectedObject.metadata?.lengthKnown !== "false";
+  const wireCutLengthMm = selectedObject.kind === "wire" ? selectedObject.metadata?.cutLengthMm : undefined;
 
   return (
     <form className="he-property-form" onSubmit={(event) => event.preventDefault()}>
@@ -51,19 +98,84 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
         />
       </label>
       {selectedObject.kind === "wire" && (
-        <label>
-          Абсолютная длина, мм
-          <input
-            type="number"
-            min="0.001"
-            step="0.1"
-            value={selectedObject.metadata?.lengthMm ?? ""}
-            disabled={disabled}
-            onChange={(event) => onChange(selectedObject.id, {
-              metadata: { ...selectedObject.metadata, lengthMm: event.target.value },
-            })}
-          />
-        </label>
+        <>
+          <label className="he-toggle-field">
+            <input
+              type="checkbox"
+              aria-label="Длина задана"
+              checked={wireLengthKnown}
+              disabled={disabled}
+              onChange={(event) => onChange(selectedObject.id, {
+                metadata: {
+                  ...selectedObject.metadata,
+                  lengthKnown: String(event.target.checked),
+                  lengthMm: event.target.checked ? selectedObject.metadata?.lengthMm || "0" : "",
+                },
+              })}
+            />
+            <span>Длина задана</span>
+          </label>
+          <label>
+            Абсолютная длина, мм
+            <input
+              type="number"
+              aria-label="Абсолютная длина, мм"
+              min="0"
+              step="0.001"
+              value={selectedObject.metadata?.lengthMm ?? ""}
+              disabled={disabled || !wireLengthKnown}
+              onChange={(event) => onChange(selectedObject.id, {
+                metadata: { ...selectedObject.metadata, lengthMm: event.target.value },
+              })}
+            />
+          </label>
+          <div className="he-field-pair">
+            <WireCorrectionInput
+              key={`${selectedObject.id}:from`}
+              label="Поправка начала, мм"
+              value={selectedObject.metadata?.endCorrectionFromMm ?? "0"}
+              disabled={disabled}
+              onCommit={(value) => onChange(selectedObject.id, {
+                metadata: { ...selectedObject.metadata, endCorrectionFromMm: value },
+              })}
+            />
+            <WireCorrectionInput
+              key={`${selectedObject.id}:to`}
+              label="Поправка конца, мм"
+              value={selectedObject.metadata?.endCorrectionToMm ?? "0"}
+              disabled={disabled}
+              onCommit={(value) => onChange(selectedObject.id, {
+                metadata: { ...selectedObject.metadata, endCorrectionToMm: value },
+              })}
+            />
+          </div>
+          <label>
+            Шаг округления длины резки, мм
+            <input
+              type="number"
+              aria-label="Шаг округления длины резки, мм"
+              min="0.001"
+              step="0.001"
+              value={selectedObject.metadata?.cutRoundingStepMm ?? "1"}
+              disabled={disabled}
+              onChange={(event) => onChange(selectedObject.id, {
+                metadata: { ...selectedObject.metadata, cutRoundingStepMm: event.target.value },
+              })}
+            />
+          </label>
+          {wireLengthKnown ? (
+            <div className="he-wire-length-status is-complete" role="status">
+              <span>Расчётная длина резки</span>
+              <strong>{wireCutLengthMm || "—"} мм</strong>
+              <small>Длина готова для карты резки</small>
+            </div>
+          ) : (
+            <div className="he-wire-length-status is-incomplete" role="alert">
+              <strong>Длина провода не задана</strong>
+              <span>Провод исключён из материалов до заполнения длины.</span>
+            </div>
+          )}
+        </>
       )}
       {(selectedObject.kind === "connector" || selectedObject.kind === "text") && (
         <div className="he-field-pair">
