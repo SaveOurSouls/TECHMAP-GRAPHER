@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
 using Techmap.Domain;
@@ -12,6 +13,50 @@ namespace Techmap.Web.Tests;
 
 public sealed class StorageBackupIntegrationTests
 {
+    [Fact]
+    public async Task Backup_rejects_v2_content_asset_metadata_that_differs_from_top_level_refs()
+    {
+        using var fixture = BackupFixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var templates = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+        var created = templates.Create(
+            "V2-ASSET-MISMATCH", "V2 asset mismatch", [], 2, ComponentTemplateV2StoreTests.V2Content);
+        var withAsset = await templates.AddAssetAsync(
+            created.TemplateId, 1, new MemoryStream(ComponentTemplateV2StoreTests.Png),
+            "symbol.png", "image/png", TestContext.Current.CancellationToken);
+        var assets = withAsset.Assets;
+        var tamperedNode = JsonNode.Parse(withAsset.ContentJson)!.AsObject();
+        tamperedNode["assets"]![0]!["fileName"] = "different.png";
+        var tamperedContent = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(
+            tamperedNode.ToJsonString(), 2);
+        var contentHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(tamperedContent)));
+        var versionHash = SqliteComponentTemplateStore.ComputeVersionHash(
+            withAsset.TemplateId, withAsset.Version, withAsset.SchemaVersion, withAsset.Code, withAsset.Name,
+            withAsset.ArticleBindings, assets, tamperedContent);
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                DROP TRIGGER prevent_component_template_version_update;
+                UPDATE component_template_versions
+                SET content_json = $content, content_sha256 = $contentHash, version_sha256 = $versionHash
+                WHERE template_id = $templateId AND version = 2;
+                """);
+            command.Parameters.AddWithValue("$content", tamperedContent);
+            command.Parameters.AddWithValue("$contentHash", contentHash);
+            command.Parameters.AddWithValue("$versionHash", versionHash);
+            command.Parameters.AddWithValue("$templateId", created.TemplateId.ToString("D"));
+            command.ExecuteNonQuery();
+        });
+
+        using var service = fixture.Service(storage.Layout.DatabasePath);
+        var error = await Assert.ThrowsAsync<StorageBackupException>(() => service.CreateAsync(
+            new StorageBackupRequest(fixture.BackupRoot, "0.4.0-m2.06i"),
+            TestContext.Current.CancellationToken));
+        Assert.Equal("backup_failed", error.Code);
+        Assert.Empty(Directory.EnumerateDirectories(fixture.BackupRoot, "backup-*"));
+    }
+
     [Fact]
     public async Task Backup_includes_global_template_assets_without_a_project_and_rejects_tampered_asset_metadata()
     {

@@ -628,6 +628,17 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
                     persistedAssets.Add(persistedAsset);
                 }
             }
+            try
+            {
+                SqliteComponentTemplateStore.EnsureV2AssetMetadataMatches(
+                    canonical, schemaVersion, persistedAssets);
+            }
+            catch (ComponentTemplateException error)
+            {
+                throw new InvalidDataException(
+                    $"Component template '{templateId}' has mismatched image asset metadata.",
+                    error);
+            }
             var actualVersionHash = SqliteComponentTemplateStore.ComputeVersionHash(
                 parsedId, version, schemaVersion, code, name, persistedBindings, persistedAssets, content);
             if (!string.Equals(content, canonical, StringComparison.Ordinal) ||

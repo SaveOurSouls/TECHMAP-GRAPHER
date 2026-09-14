@@ -310,7 +310,8 @@ public static class ComponentTemplateEndpoints
             "component_template_not_found" or "component_template_version_not_found" or
                 "component_template_asset_not_found" => StatusCodes.Status404NotFound,
             "component_template_version_conflict" or "component_template_code_conflict" or
-                "component_template_asset_conflict" => StatusCodes.Status409Conflict,
+                "component_template_asset_conflict" or "component_template_asset_in_use" =>
+                StatusCodes.Status409Conflict,
             "component_template_content_too_large" or "component_template_asset_too_large" => StatusCodes.Status413PayloadTooLarge,
             "component_template_corrupt" => StatusCodes.Status500InternalServerError,
             _ => StatusCodes.Status400BadRequest,

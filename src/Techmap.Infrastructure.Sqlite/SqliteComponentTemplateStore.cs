@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
 
@@ -300,16 +301,23 @@ public sealed class SqliteComponentTemplateStore(
                         $"A component template version cannot have more than {MaximumAssets} image assets.");
                 }
 
-                await using var image = new MemoryStream(imageBytes, writable: false);
-                var content = await contentStore.WriteAsync(image, token).ConfigureAwait(false);
+                var expectedContent = new AttachmentContent(
+                    Convert.ToHexStringLower(SHA256.HashData(imageBytes)),
+                    imageBytes.LongLength);
                 var asset = new ComponentTemplateAsset(
-                    Guid.NewGuid(), content, normalizedFileName, normalizedMediaType);
+                    Guid.NewGuid(), expectedContent, normalizedFileName, normalizedMediaType);
                 var assets = current.Assets.Append(asset).ToArray();
+                var nextContent = current.SchemaVersion == 2
+                    ? RewriteV2ContentAssets(current.ContentJson, assets)
+                    : current.ContentJson;
                 var input = ValidateInput(
                     current.Code, current.Name, current.ArticleBindings,
-                    current.SchemaVersion, current.ContentJson);
+                    current.SchemaVersion, nextContent);
                 var nextVersion = checked(expectedVersion + 1);
-                InsertOrValidateBlob(unitOfWork, content, now);
+                await using var image = new MemoryStream(imageBytes, writable: false);
+                var storedContent = await contentStore.WriteAsync(image, token).ConfigureAwait(false);
+                if (storedContent != expectedContent) throw Corrupt();
+                InsertOrValidateBlob(unitOfWork, storedContent, now);
                 InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
                 PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
                 return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
@@ -340,9 +348,19 @@ public sealed class SqliteComponentTemplateStore(
             var assets = current.Assets.Where(item => item.AssetId != assetId).ToArray();
             if (assets.Length == current.Assets.Count)
                 throw Invalid("component_template_asset_not_found", "The image asset does not exist.", "assetId");
+            if (current.SchemaVersion == 2 && FindV2ImageReferencePath(current.ContentJson, assetId) is { } referencePath)
+            {
+                throw Invalid(
+                    "component_template_asset_in_use",
+                    "The image asset is still referenced by a template image node.",
+                    referencePath);
+            }
+            var nextContent = current.SchemaVersion == 2
+                ? RewriteV2ContentAssets(current.ContentJson, assets)
+                : current.ContentJson;
             var input = ValidateInput(
                 current.Code, current.Name, current.ArticleBindings,
-                current.SchemaVersion, current.ContentJson);
+                current.SchemaVersion, nextContent);
             var nextVersion = checked(expectedVersion + 1);
             InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
             PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
@@ -1068,6 +1086,7 @@ public sealed class SqliteComponentTemplateStore(
         IReadOnlyList<ComponentTemplateAsset> assets,
         string now)
     {
+        EnsureV2AssetMetadataMatches(input.ContentJson, input.SchemaVersion, assets);
         using (var command = unitOfWork.CreateCommand(
                    """
                    INSERT INTO component_template_versions
@@ -1158,6 +1177,14 @@ public sealed class SqliteComponentTemplateStore(
         var bindings = ReadBindings(unitOfWork, templateId, version);
         var assets = ReadAssets(unitOfWork, templateId, version);
         var canonical = ValidateAndCanonicalizeContent(content, schemaVersion);
+        try
+        {
+            EnsureV2AssetMetadataMatches(canonical, schemaVersion, assets);
+        }
+        catch (ComponentTemplateException error)
+        {
+            throw Corrupt(error);
+        }
         if (!string.Equals(content, canonical, StringComparison.Ordinal) ||
             !string.Equals(Hash(content), hash, StringComparison.Ordinal) ||
             !string.Equals(
@@ -1170,6 +1197,94 @@ public sealed class SqliteComponentTemplateStore(
         return new ComponentTemplateVersion(
             templateId, version, code, name, bindings, assets,
             schemaVersion, content, templateCreatedUtc, currentUpdatedUtc ?? versionCreated);
+    }
+
+    internal static void EnsureV2AssetMetadataMatches(
+        string contentJson,
+        int schemaVersion,
+        IReadOnlyList<ComponentTemplateAsset> assets)
+    {
+        if (schemaVersion != 2) return;
+        using var document = JsonDocument.Parse(contentJson);
+        var contentAssets = document.RootElement.GetProperty("assets");
+        if (contentAssets.GetArrayLength() != assets.Count)
+        {
+            throw Invalid(
+                "component_template_asset_metadata_mismatch",
+                "Content image metadata must exactly match the attached template assets.",
+                "content.assets");
+        }
+
+        var assetsById = assets.ToDictionary(asset => Format(asset.AssetId), StringComparer.Ordinal);
+        var index = 0;
+        foreach (var contentAsset in contentAssets.EnumerateArray())
+        {
+            var contentAssetId = contentAsset.GetProperty("assetId").GetString()!;
+            if (!assetsById.TryGetValue(contentAssetId, out var asset) ||
+                !string.Equals(contentAsset.GetProperty("fileName").GetString(), asset.FileName, StringComparison.Ordinal) ||
+                !string.Equals(contentAsset.GetProperty("mediaType").GetString(), asset.MediaType, StringComparison.Ordinal) ||
+                !string.Equals(contentAsset.GetProperty("sha256").GetString(), asset.Content.Sha256, StringComparison.Ordinal) ||
+                !contentAsset.GetProperty("sizeBytes").TryGetInt64(out var sizeBytes) ||
+                sizeBytes != asset.Content.SizeBytes)
+            {
+                throw Invalid(
+                    "component_template_asset_metadata_mismatch",
+                    "Content image metadata must exactly match the attached template assets.",
+                    $"content.assets[{index}]");
+            }
+            index++;
+        }
+    }
+
+    private static string RewriteV2ContentAssets(
+        string contentJson,
+        IReadOnlyList<ComponentTemplateAsset> assets)
+    {
+        var root = JsonNode.Parse(contentJson)?.AsObject() ?? throw Corrupt();
+        var contentAssets = new JsonArray();
+        foreach (var asset in assets.OrderBy(item => Format(item.AssetId), StringComparer.Ordinal))
+        {
+            contentAssets.Add(new JsonObject
+            {
+                ["assetId"] = Format(asset.AssetId),
+                ["fileName"] = asset.FileName,
+                ["mediaType"] = asset.MediaType,
+                ["sha256"] = asset.Content.Sha256,
+                ["sizeBytes"] = asset.Content.SizeBytes,
+            });
+        }
+        root["assets"] = contentAssets;
+        return root.ToJsonString();
+    }
+
+    private static string? FindV2ImageReferencePath(string contentJson, Guid assetId)
+    {
+        using var document = JsonDocument.Parse(contentJson);
+        var expectedId = Format(assetId);
+        var viewIndex = 0;
+        foreach (var view in document.RootElement.GetProperty("views").EnumerateArray())
+        {
+            var layerIndex = 0;
+            foreach (var layer in view.GetProperty("layers").EnumerateArray())
+            {
+                var nodeIndex = 0;
+                foreach (var node in layer.GetProperty("nodes").EnumerateArray())
+                {
+                    if (node.GetProperty("kind").GetString() == "image" &&
+                        string.Equals(
+                            node.GetProperty("geometry").GetProperty("assetId").GetString(),
+                            expectedId,
+                            StringComparison.Ordinal))
+                    {
+                        return $"content.views[{viewIndex}].layers[{layerIndex}].nodes[{nodeIndex}].geometry.assetId";
+                    }
+                    nodeIndex++;
+                }
+                layerIndex++;
+            }
+            viewIndex++;
+        }
+        return null;
     }
 
     private static IReadOnlyList<ComponentTemplateAsset> ReadAssets(

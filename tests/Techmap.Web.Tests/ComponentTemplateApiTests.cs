@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Techmap.Contracts;
 using Techmap.Web;
 using Xunit;
@@ -49,6 +50,69 @@ public sealed class ComponentTemplateApiTests
         var error = await invalid.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
         Assert.Equal("component_template_content_invalid", error?.Error);
         Assert.Equal("content", error?.Field);
+    }
+
+    [Fact]
+    public async Task Api_v2_asset_metadata_is_atomic_and_in_use_removal_is_a_conflict()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var v2Content = JsonDocument.Parse(ComponentTemplateV2StoreTests.V2Content);
+        using var create = await SendAsync(
+            client, HttpMethod.Post, "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("V2-ASSET", "V2 asset", [], v2Content.RootElement.Clone()), csrf);
+        var created = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+
+        using var add = await SendAsync(
+            client, HttpMethod.Post, $"/api/v1/component-templates/{created.TemplateId:D}/assets",
+            new AddComponentTemplateAssetRequest(
+                1, "symbol.png", "image/png", Convert.ToBase64String(ComponentTemplateV2StoreTests.Png)), csrf);
+        Assert.Equal(HttpStatusCode.OK, add.StatusCode);
+        var withAsset = Assert.IsType<ComponentTemplateResponse>(await add.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        var asset = Assert.Single(withAsset.Assets);
+        var contentAsset = Assert.Single(withAsset.Content.GetProperty("assets").EnumerateArray());
+        Assert.Equal(asset.AssetId, contentAsset.GetProperty("assetId").GetGuid());
+        Assert.Equal(asset.Sha256, contentAsset.GetProperty("sha256").GetString());
+
+        var mismatchNode = JsonNode.Parse(withAsset.Content.GetRawText())!.AsObject();
+        mismatchNode["assets"]![0]!["fileName"] = "mismatch.png";
+        using var mismatchContent = JsonDocument.Parse(mismatchNode.ToJsonString());
+        using var mismatch = await SendAsync(
+            client, HttpMethod.Put, $"/api/v1/component-templates/{created.TemplateId:D}",
+            new UpdateComponentTemplateRequest(
+                2, "V2-ASSET", "V2 asset", [], mismatchContent.RootElement.Clone()), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, mismatch.StatusCode);
+        var mismatchError = await mismatch.Content
+            .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("component_template_asset_metadata_mismatch", mismatchError?.Error);
+        Assert.Equal("content.assets[0]", mismatchError?.Field);
+
+        var referencedNode = JsonNode.Parse(withAsset.Content.GetRawText())!.AsObject();
+        referencedNode["views"]![0]!["layers"]![0]!["nodes"]!.AsArray()
+            .Add(ComponentTemplateV2StoreTests.ImageNode(asset.AssetId));
+        using var referencedContent = JsonDocument.Parse(referencedNode.ToJsonString());
+        using var save = await SendAsync(
+            client, HttpMethod.Put, $"/api/v1/component-templates/{created.TemplateId:D}",
+            new UpdateComponentTemplateRequest(
+                2, "V2-ASSET", "V2 asset", [], referencedContent.RootElement.Clone()), csrf);
+        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+
+        using var remove = await SendAsync(
+            client, HttpMethod.Delete,
+            $"/api/v1/component-templates/{created.TemplateId:D}/assets/{asset.AssetId:D}",
+            new RemoveComponentTemplateAssetRequest(3), csrf);
+        Assert.Equal(HttpStatusCode.Conflict, remove.StatusCode);
+        var removeError = await remove.Content
+            .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("component_template_asset_in_use", removeError?.Error);
+        Assert.Equal("content.views[0].layers[0].nodes[0].geometry.assetId", removeError?.Field);
+        var current = await client.GetFromJsonAsync<ComponentTemplateResponse>(
+            $"/api/v1/component-templates/{created.TemplateId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(3, current?.Version);
+        Assert.Single(current!.Assets);
     }
 
     [Fact]
