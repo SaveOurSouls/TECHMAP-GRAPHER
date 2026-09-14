@@ -120,12 +120,43 @@ describe("E4 obstacle router", () => {
 
   it("permits perpendicular crossings of different wires", () => {
     const request = horizontalRequest({
-      occupiedRoutes: [{ id: "W1", points: [{ x: 50, y: -20 }, { x: 50, y: 20 }] }],
+      occupiedRoutes: [{ id: "W1", points: [{ x: 50, y: -1_000 }, { x: 50, y: 1_000 }] }],
     });
     const route = routeE4Wire(request);
 
     expect(route.points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
     expect(route.length).toBe(100);
+  });
+
+  it("prefers a short parallel lane instead of creating an avoidable automatic crossing", () => {
+    const request = horizontalRequest({
+      occupiedRoutes: [{
+        id: "W1",
+        points: [{ x: 50, y: -20 }, { x: 50, y: 20 }],
+      }],
+      options: { leadLength: 10, wireClearance: 8 },
+    });
+
+    const route = routeE4Wire(request);
+
+    expect(route.points).not.toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(route.points.some((point) => Math.abs(point.y) > 20)).toBe(true);
+    expect(route.length).toBeLessThan(200);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
+  it("uses a crossing when avoiding it would require a materially longer detour", () => {
+    const request = horizontalRequest({
+      occupiedRoutes: [{
+        id: "W1",
+        points: [{ x: 50, y: -1_000 }, { x: 50, y: 1_000 }],
+      }],
+      options: { leadLength: 10, wireClearance: 8 },
+    });
+
+    const route = routeE4Wire(request);
+
+    expect(route.points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
   });
 
   it("never uses a collinear overlap, even when clearance is zero", () => {

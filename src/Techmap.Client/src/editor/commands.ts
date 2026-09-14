@@ -55,6 +55,7 @@ export type EditorCommand =
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
   | { readonly type: "set-e4-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
   | { readonly type: "move-e4-wire-route-point"; readonly wireId: string; readonly pointIndex: number; readonly position: Point }
+  | { readonly type: "remove-e4-wire-route-point"; readonly wireId: string; readonly pointIndex: number }
   | { readonly type: "move-e4-wire-segment"; readonly wireId: string; readonly segmentIndex: number; readonly position: Point }
   | { readonly type: "set-wire-crossing-style"; readonly view: EditorView; readonly style: WireCrossingStyle }
   | { readonly type: "create-junction"; readonly junction: E4Junction; readonly branchWire?: WireInstance }
@@ -397,7 +398,10 @@ export function applyEditorCommand(
         wires: removeRequired(document.wires, command.wireId, "Провод не найден."),
       };
       const cleaned = cleanupWireReferences(changed, [command.wireId]);
-      return rerouteE4WireBatch(cleaned, attachedWireIds.filter((wireId) => cleaned.wires.some((wire) => wire.id === wireId)));
+      return rerouteE4WireBatch(cleaned, [
+        ...cleaned.wires.filter((wire) => wire.e4RouteMode !== "manual").map((wire) => wire.id),
+        ...attachedWireIds.filter((wireId) => cleaned.wires.some((wire) => wire.id === wireId)),
+      ]);
     }
     case "update-wire":
       if (command.lengthMm !== undefined) requireLength(command.lengthMm);
@@ -456,6 +460,8 @@ export function applyEditorCommand(
       return setE4WireRoute(document, command.wireId, wire.e4Route.map((point, index) =>
         index === command.pointIndex ? { ...command.position } : point));
     }
+    case "remove-e4-wire-route-point":
+      return removeE4WireRoutePoint(document, command.wireId, command.pointIndex);
     case "move-e4-wire-segment": {
       const wire = findWire(document, command.wireId);
       if (!Number.isSafeInteger(command.segmentIndex) || command.segmentIndex < 1 || command.segmentIndex >= wire.e4Route.length) {
@@ -740,35 +746,77 @@ function rebuildConnectorE4Wires(
   // Keep manually arranged routes when they remain valid. A route becomes an
   // affected route when its contact anchor moved or a changed/new table now
   // covers it. Completed reroutes reserve their clearance immediately.
+  let working = document;
+  const preservedManualWireIds = new Set<string>();
+  if (changedConnectorId !== undefined && previousConnector !== undefined) {
+    for (const wire of working.wires) {
+      if (wire.e4RouteMode !== "manual" ||
+          (!isConnectorEndpoint(wire.from, changedConnectorId) && !isConnectorEndpoint(wire.to, changedConnectorId))) continue;
+      try {
+        const preserved = preserveManualE4WireAfterConnectorMove(working, wire.id);
+        if (preserved !== null) {
+          working = preserved;
+          preservedManualWireIds.add(wire.id);
+        }
+      } catch {
+        // The moved table made these guide points invalid. This wire falls
+        // through to the ordinary obstacle-aware reroute below.
+      }
+    }
+  }
   const currentConnector = changedConnectorId
-    ? document.connectors.find((connector) => connector.id === changedConnectorId)
+    ? working.connectors.find((connector) => connector.id === changedConnectorId)
     : undefined;
-  const affectedWireIds = document.wires.flatMap((wire) => {
+  const affectedWireIds = working.wires.flatMap((wire) => {
     const isAutomatic = wire.e4RouteMode !== "manual";
     const connectedToChanged = changedConnectorId !== undefined &&
       (isConnectorEndpoint(wire.from, changedConnectorId) || isConnectorEndpoint(wire.to, changedConnectorId));
     const closeToChangedObstacle = isAutomatic && changedConnectorId !== undefined &&
       [previousConnector, currentConnector].some((connector) => connector !== undefined &&
-        wireRouteTouchesConnector(document, wire, connector));
-    if (connectedToChanged || closeToChangedObstacle || (isAutomatic && changedConnectorId === undefined)) return [wire.id];
-    if (isAutomatic && changedConnectorId !== undefined) return [];
-    const start = wireEndpointE4Anchor(document, wire.from);
-    const end = wireEndpointE4Anchor(document, wire.to);
+        wireRouteTouchesConnector(working, wire, connector));
+    if (connectedToChanged && preservedManualWireIds.has(wire.id)) return [];
+    if (connectedToChanged || closeToChangedObstacle || isAutomatic) return [wire.id];
+    const start = wireEndpointE4Anchor(working, wire.from);
+    const end = wireEndpointE4Anchor(working, wire.to);
     if (!start || !end) return [wire.id];
     try {
       validateE4Route(
         [start.position, ...wire.e4Route, end.position],
-        createE4RoutingRequest(document, wire, wire.id),
+        createE4RoutingRequest(working, wire, wire.id),
       );
       return [];
     } catch {
       return [wire.id];
     }
   });
-  return rerouteE4WireBatch(document, [
+  return rerouteE4WireBatch(working, [
     ...affectedWireIds,
-    ...screenAttachmentWireIds(document, affectedWireIds),
+    ...screenAttachmentWireIds(working, [...affectedWireIds, ...preservedManualWireIds]),
   ]);
+}
+
+function preserveManualE4WireAfterConnectorMove(
+  document: HarnessDesignDocument,
+  wireId: string,
+): HarnessDesignDocument | null {
+  const wire = findWire(document, wireId);
+  // End points in e4Route are generated contact leads. The points between
+  // them are the bends and offsets positioned by the operator.
+  const guidePoints = wire.e4Route.slice(1, -1);
+  if (guidePoints.length === 0) return null;
+  const request = createE4RoutingRequest(document, wire, wireId);
+  const routed = routeE4WireThroughWaypoints(request, guidePoints);
+  const start = wireEndpointE4Anchor(document, wire.from);
+  const end = wireEndpointE4Anchor(document, wire.to);
+  if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+  validateOrthogonalE4Route(start, routed.intermediate, end);
+  validateE4Route(routed.points, request);
+  return {
+    ...document,
+    wires: document.wires.map((item) => item.id === wireId
+      ? { ...item, e4Route: routed.intermediate, e4RouteMode: "manual" as const }
+      : item),
+  };
 }
 
 function screenAttachmentWireIds(document: HarnessDesignDocument, changedWireIds: readonly string[]): readonly string[] {
@@ -898,6 +946,80 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   for (const junction of changed.junctions.filter((item) => item.wireIds.includes(wireId))) validateJunctionAgainstWires(changed, junction);
   validateWireGroups(changed);
   return rerouteE4WireBatch(changed, screenAttachmentWireIds(changed, [wireId]));
+}
+
+function removeE4WireRoutePoint(
+  document: HarnessDesignDocument,
+  wireId: string,
+  pointIndex: number,
+): HarnessDesignDocument {
+  const wire = findWire(document, wireId);
+  if (!Number.isSafeInteger(pointIndex) || pointIndex < 0 || pointIndex >= wire.e4Route.length) {
+    throw new Error("Точка маршрута Э4 не найдена.");
+  }
+  const start = wireEndpointE4Anchor(document, wire.from);
+  const end = wireEndpointE4Anchor(document, wire.to);
+  if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
+  const points = [start.position, ...wire.e4Route, end.position];
+  const fullIndex = pointIndex + 1;
+  const previous = points[fullIndex - 1]!;
+  const selected = points[fullIndex]!;
+  const next = points[fullIndex + 1]!;
+  const reduced = [...points.slice(1, fullIndex), ...points.slice(fullIndex + 1, -1)];
+  if (previous.x !== next.x && previous.y !== next.y) {
+    const alternate = selected.x === next.x
+      ? { x: previous.x, y: next.y }
+      : { x: next.x, y: previous.y };
+    const candidates: Point[][] = [];
+    // Removing one bend changes the neighboring bend to the other corner of
+    // the rectangle. This really removes a stored point instead of replacing
+    // it with an indistinguishable copy at the same coordinates.
+    if (pointIndex + 1 < wire.e4Route.length) {
+      candidates.push(simplifyE4IntermediateRoute(start.position,
+        reduced.map((point, index) => index === pointIndex ? alternate : point), end.position));
+    }
+    if (pointIndex > 0) {
+      candidates.push(simplifyE4IntermediateRoute(start.position,
+        reduced.map((point, index) => index === pointIndex - 1 ? alternate : point), end.position));
+    }
+    for (const candidate of candidates) {
+      try {
+        return setE4WireRoute(document, wireId, candidate);
+      } catch {
+        // Try adapting the bend on the other side before a full reroute.
+      }
+    }
+    const retainedGuides = reduced.slice(1, -1).filter((_, index) =>
+      index !== pointIndex - 1 && index !== pointIndex);
+    const routed = routeE4WireThroughWaypoints(
+      createE4RoutingRequest(document, wire, wireId),
+      retainedGuides,
+    );
+    return setE4WireRoute(document, wireId, routed.intermediate);
+  }
+  return setE4WireRoute(document, wireId, reduced);
+}
+
+function simplifyE4IntermediateRoute(
+  start: Point,
+  intermediate: readonly Point[],
+  end: Point,
+): Point[] {
+  const result: Point[] = [{ ...start }];
+  for (const point of [...intermediate, end]) {
+    const last = result.at(-1)!;
+    if (last.x === point.x && last.y === point.y) continue;
+    result.push({ ...point });
+    while (result.length >= 3) {
+      const first = result[result.length - 3]!;
+      const middle = result[result.length - 2]!;
+      const third = result[result.length - 1]!;
+      if (!((first.x === middle.x && middle.x === third.x) ||
+          (first.y === middle.y && middle.y === third.y))) break;
+      result.splice(result.length - 2, 1);
+    }
+  }
+  return result.slice(1, -1);
 }
 
 function rerouteWireE4(document: HarnessDesignDocument, wireId: string): HarnessDesignDocument {

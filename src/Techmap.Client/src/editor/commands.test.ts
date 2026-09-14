@@ -647,6 +647,49 @@ describe("shared harness editor model", () => {
     expect(document.wires[0]?.e4Route).toEqual(autoRoute);
   });
 
+  it("reoptimizes every automatic wire after a connector lands on a snapped position", () => {
+    let document = connectionDocument();
+    const needlessHump = [
+      { x: 648, y: 88 }, { x: 700, y: 88 }, { x: 700, y: 200 },
+      { x: 900, y: 200 }, { x: 900, y: 88 }, { x: 976, y: 88 },
+    ];
+    document = {
+      ...document,
+      connectors: [...document.connectors, createConnector("moving", "X3", 1, { x: 1_500, y: 200 })],
+      wires: document.wires.map((wire) => wire.id === "w2"
+        ? { ...wire, e4Route: needlessHump, e4RouteMode: "auto" as const }
+        : wire),
+    };
+
+    document = applyEditorCommand(document, {
+      type: "move-connector", connectorId: "moving", view: "e4", position: { x: 1_500, y: 0 },
+    });
+
+    const route = document.wires.find((wire) => wire.id === "w2")!.e4Route;
+    expect(route).not.toEqual(needlessHump);
+    expect(route).toEqual([]);
+  });
+
+  it("removes a stale automatic hump after a neighboring connection is deleted", () => {
+    let document = connectionDocument();
+    const needlessHump = [
+      { x: 648, y: 88 }, { x: 700, y: 88 }, { x: 700, y: 200 },
+      { x: 900, y: 200 }, { x: 900, y: 88 }, { x: 976, y: 88 },
+    ];
+    document = {
+      ...document,
+      wires: document.wires.map((wire) => wire.id === "w2"
+        ? { ...wire, e4Route: needlessHump, e4RouteMode: "auto" as const }
+        : wire),
+    };
+
+    document = applyEditorCommand(document, { type: "remove-wire", wireId: "w1" });
+
+    const remaining = document.wires.find((wire) => wire.id === "w2")!;
+    expect(remaining.e4Route).toEqual([]);
+    expect(remaining.e4RouteMode).toBe("auto");
+  });
+
   it("stores, moves segments and repairs E4 routes after connector movement", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {
@@ -668,6 +711,62 @@ describe("shared harness editor model", () => {
       wire.e4Route,
       { position: connectorContactPosition(document.connectors[1]!, "x2:contact:1", "e4")!, leadDirection: "left" },
     )).not.toThrow();
+  });
+
+  it("preserves manual E4 guide geometry when a connected connector moves", () => {
+    let document = singleWireConnectionDocument();
+    const manualRoute = [
+      { x: 648, y: 64 }, { x: 700, y: 64 }, { x: 700, y: 200 },
+      { x: 900, y: 200 }, { x: 900, y: 64 }, { x: 976, y: 64 },
+    ];
+    document = applyEditorCommand(document, {
+      type: "set-e4-wire-route", wireId: "w1", route: manualRoute,
+    });
+
+    document = applyEditorCommand(document, {
+      type: "move-connector", connectorId: "x1", view: "e4", position: { x: 0, y: -16 },
+    });
+
+    const wire = document.wires[0]!;
+    expect(wire.e4RouteMode).toBe("manual");
+    expect(wire.e4Route).toEqual(expect.arrayContaining([
+      { x: 700, y: 200 }, { x: 900, y: 200 },
+    ]));
+    expect(wire.e4Route.some((point) => point.x === 700)).toBe(true);
+    expect(wire.e4Route.some((point) => point.x === 900)).toBe(true);
+    expect(() => validateOrthogonalE4Route(
+      { position: connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")!, leadDirection: "right" },
+      wire.e4Route,
+      { position: connectorContactPosition(document.connectors[1]!, "x2:contact:1", "e4")!, leadDirection: "left" },
+    )).not.toThrow();
+  });
+
+  it("removes a manual E4 bend and rejects an invalid route-point index", () => {
+    let document = singleWireConnectionDocument();
+    const manualRoute = [
+      { x: 648, y: 64 }, { x: 700, y: 64 }, { x: 700, y: 200 },
+      { x: 900, y: 200 }, { x: 900, y: 64 }, { x: 976, y: 64 },
+    ];
+    document = applyEditorCommand(document, {
+      type: "set-e4-wire-route", wireId: "w1", route: manualRoute,
+    });
+
+    document = applyEditorCommand(document, {
+      type: "remove-e4-wire-route-point", wireId: "w1", pointIndex: 2,
+    });
+
+    const wire = document.wires[0]!;
+    expect(wire.e4RouteMode).toBe("manual");
+    expect(wire.e4Route.length).toBeLessThan(manualRoute.length);
+    expect(wire.e4Route).not.toContainEqual({ x: 700, y: 200 });
+    expect(() => validateOrthogonalE4Route(
+      { position: connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")!, leadDirection: "right" },
+      wire.e4Route,
+      { position: connectorContactPosition(document.connectors[1]!, "x2:contact:1", "e4")!, leadDirection: "left" },
+    )).not.toThrow();
+    expect(() => applyEditorCommand(document, {
+      type: "remove-e4-wire-route-point", wireId: "w1", pointIndex: 99,
+    })).toThrow(/Точка маршрута Э4 не найдена/);
   });
 
   it("moves junctions attached to a dragged internal segment and reroutes their branches", () => {
@@ -1128,4 +1227,19 @@ function connectionDocument() {
   document = applyEditorCommand(document, { type: "set-e4-wire-route", wireId: "w1", route: [{ x: 648, y: 64 }, { x: 976, y: 64 }] });
   document = applyEditorCommand(document, { type: "set-e4-wire-route", wireId: "w2", route: [{ x: 648, y: 88 }, { x: 976, y: 88 }] });
   return document;
+}
+
+function singleWireConnectionDocument() {
+  let document = createEmptyHarnessDesign();
+  document = applyEditorCommand(document, {
+    type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+  });
+  document = applyEditorCommand(document, {
+    type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 1000, y: 0 }),
+  });
+  document = applyEditorCommand(document, { type: "flip-connector-orientation", connectorId: "x2" });
+  return applyEditorCommand(document, {
+    type: "add-wire",
+    wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+  });
 }

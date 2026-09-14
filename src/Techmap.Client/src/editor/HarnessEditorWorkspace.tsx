@@ -124,6 +124,7 @@ export interface HarnessEditorWorkspaceProps {
     point: EditorPoint,
   ) => void;
   readonly onE4WireSegmentMove?: (wireId: string, segmentIndex: number, coordinate: number) => void;
+  readonly onE4WireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onE4WireLabelPositionChange?: (wireId: string, position: number) => void;
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly e4Overlays?: E4SceneOverlays;
@@ -213,6 +214,7 @@ export function HarnessEditorWorkspace({
   onWireConnectToWire,
   onWireReconnectToWire,
   onE4WireSegmentMove,
+  onE4WireRoutePointRemove,
   onE4WireLabelPositionChange,
   onE4ScreenPositionChange,
   e4Overlays,
@@ -475,6 +477,7 @@ export function HarnessEditorWorkspace({
           onWireConnectToWire={onWireConnectToWire}
           onWireReconnectToWire={onWireReconnectToWire}
           onE4WireSegmentMove={onE4WireSegmentMove}
+          onE4WireRoutePointRemove={onE4WireRoutePointRemove}
           onE4WireLabelPositionChange={onE4WireLabelPositionChange}
           onE4ScreenPositionChange={onE4ScreenPositionChange}
           onWireToolRequest={() => setTool("wire")}

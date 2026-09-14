@@ -1,11 +1,16 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { E4ConnectorInspector } from "./E4ConnectorInspector";
+import {
+  E4ConnectorInspector,
+  updateWireQueryState,
+  wireColorSwatchBackground,
+} from "./E4ConnectorInspector";
 import {
   builtInConnectorSeries,
   createBuiltInConnectorInstance,
 } from "./connector-series-demo";
+import { builtInWireColors } from "./wire-reference-catalog";
 import type { ConnectorInstance } from "./model";
 
 function openingTag(markup: string, ariaLabel: string): string {
@@ -80,6 +85,22 @@ function templateConnector(reverseRuntimeContacts = false): ConnectorInstance {
 }
 
 describe("E4 connector inline editing", () => {
+  it("updates and dismisses wire suggestions without reading a pooled event", () => {
+    const initial = Object.freeze({ other: "UL1061 30AWG" });
+    const focused = updateWireQueryState(initial, "contact-1", "НВ-4 0,2 мм²");
+    expect(focused).toEqual({ other: "UL1061 30AWG", "contact-1": "НВ-4 0,2 мм²" });
+    expect(initial).toEqual({ other: "UL1061 30AWG" });
+    expect(updateWireQueryState(focused, "contact-1", null)).toEqual({ other: "UL1061 30AWG" });
+    expect(updateWireQueryState(initial, "missing", null)).toBe(initial);
+  });
+
+  it("keeps mono and two-color swatches deterministic", () => {
+    expect(wireColorSwatchBackground("красный", "", builtInWireColors)).toBe("#D32F2F");
+    expect(wireColorSwatchBackground("красный", "черный", builtInWireColors)).toBe(
+      "linear-gradient(225deg, #D32F2F 0 49%, #8da0aa 49% 51%, #202124 51% 100%)",
+    );
+  });
+
   it("renders the series article selector in the side panel", () => {
     const connector = createBuiltInConnectorInstance("catalog-connector-series:xs-demo-series", {
       id: "xs1", designation: "XS1", e4Position: { x: 20, y: 30 },

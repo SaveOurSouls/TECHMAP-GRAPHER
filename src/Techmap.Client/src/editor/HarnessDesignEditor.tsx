@@ -1036,6 +1036,11 @@ export function HarnessDesignEditor({
           segmentIndex,
           position: { x: coordinate, y: coordinate },
         })}
+        onE4WireRoutePointRemove={(wireId, routeIndex) => run({
+          type: "remove-e4-wire-route-point",
+          wireId,
+          pointIndex: routeIndex,
+        })}
         onE4WireLabelPositionChange={(wireId, position) => run({
           type: "set-e4-wire-label-position",
           wireId,

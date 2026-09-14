@@ -70,6 +70,7 @@ export interface CanvasViewportProps {
     point: EditorPoint,
   ) => void;
   readonly onE4WireSegmentMove?: (wireId: string, segmentIndex: number, coordinate: number) => void;
+  readonly onE4WireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onE4WireLabelPositionChange?: (wireId: string, position: number) => void;
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly onWireToolRequest?: () => void;
@@ -110,6 +111,13 @@ export function isInlineEditorReadonlyTarget(target: EventTarget | null): boolea
   const candidate = target as { closest?: (selector: string) => unknown } | null;
   return typeof candidate?.closest === "function" &&
     candidate.closest(".e4-connector-canvas-editor.is-readonly") !== null;
+}
+
+/** Controls keep their native text selection, copy and popup interaction. */
+export function isInlineEditorControlTarget(target: EventTarget | null): boolean {
+  const candidate = target as { closest?: (selector: string) => unknown } | null;
+  return typeof candidate?.closest === "function" &&
+    candidate.closest("input, textarea, select, button, [contenteditable='true']") !== null;
 }
 
 export function inlineObjectDragMoved(deltaX: number, deltaY: number, threshold = 3): boolean {
@@ -954,16 +962,10 @@ function containsPoint(
     const marker = e4ContactMarker(row.status, e4Layout.connectionSide);
     if (!marker) return false;
     const anchor = e4Layout.contactPoints[rowIndex]!;
-    const lineStart = { x: anchor.x + marker.lineStart.x, y: anchor.y + marker.lineStart.y };
-    const lineEnd = { x: anchor.x + marker.lineEnd.x, y: anchor.y + marker.lineEnd.y };
     const crossCenter = { x: anchor.x + marker.crossCenter.x, y: anchor.y + marker.crossCenter.y };
-    const crossStartA = { x: crossCenter.x - marker.crossSize, y: crossCenter.y - marker.crossSize };
-    const crossEndA = { x: crossCenter.x + marker.crossSize, y: crossCenter.y + marker.crossSize };
-    const crossStartB = { x: crossCenter.x - marker.crossSize, y: crossCenter.y + marker.crossSize };
-    const crossEndB = { x: crossCenter.x + marker.crossSize, y: crossCenter.y - marker.crossSize };
-    return pointToSegmentDistance(point, lineStart, lineEnd) <= tolerance ||
-      pointToSegmentDistance(point, crossStartA, crossEndA) <= tolerance ||
-      pointToSegmentDistance(point, crossStartB, crossEndB) <= tolerance;
+    // The marker is a single semantic object. Centre its hit target on the X
+    // instead of deriving a thin target from the decorative lead and strokes.
+    return Math.hypot(point.x - crossCenter.x, point.y - crossCenter.y) <= marker.crossSize + tolerance;
   });
 }
 
@@ -2099,6 +2101,7 @@ export function CanvasViewport({
   onWireConnectToWire,
   onWireReconnectToWire,
   onE4WireSegmentMove,
+  onE4WireRoutePointRemove,
   onE4WireLabelPositionChange,
   onE4ScreenPositionChange,
   onWireToolRequest,
@@ -2530,6 +2533,17 @@ export function CanvasViewport({
 
   const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    if (view === "e4" && tool === "select" && onE4WireRoutePointRemove) {
+      const selectedWire = objects.find((item) => item.id === selectedObjectId);
+      const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
+      const routeIndex = selectedLayer?.locked === true
+        ? null
+        : hitTestWireRoutePoint(selectedWire, point, camera.zoom);
+      if (selectedWire && routeIndex !== null) {
+        onE4WireRoutePointRemove(selectedWire.id, routeIndex);
+        return;
+      }
+    }
     if (view === "e4" && tool === "select" && onObjectEditRequest) {
       const objectId = hitTestEditorScene(objects, layers, point, camera.zoom, view);
       const object = objects.find((item) => item.id === objectId);
@@ -2556,6 +2570,7 @@ export function CanvasViewport({
 
   const inlinePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     containInlineEditorPointerEvent(event);
+    if (isInlineEditorControlTarget(event.target)) return;
     if (event.button === 0 && view === "e4" && tool === "select" && onWireToolRequest) {
       const endpoint = hitTestConnectorContact(
         objects,
@@ -2653,6 +2668,7 @@ export function CanvasViewport({
 
   const inlineDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
+    if (isInlineEditorControlTarget(event.target)) return;
     if (!inlineObject || Date.now() <= suppressInlineDoubleClickUntilRef.current) {
       event.preventDefault();
       return;
@@ -2683,8 +2699,10 @@ export function CanvasViewport({
             : wireStart ? "Выберите второй контакт"
               : "Выберите два контакта; конец выбранного провода можно переподключить"
           : tool === "pan" ? "Тяните поле мышью"
-            : view === "drawing" && objects.find((item) => item.id === selectedObjectId)?.kind === "wire"
-              ? "Точки трассы: перетащить; двойной щелчок — удалить"
+            : objects.find((item) => item.id === selectedObjectId)?.kind === "wire"
+              ? view === "drawing"
+                ? "Точки трассы: перетащить; двойной щелчок — удалить"
+                : "Сегменты: перетащить; двойной щелчок по изгибу — удалить"
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}

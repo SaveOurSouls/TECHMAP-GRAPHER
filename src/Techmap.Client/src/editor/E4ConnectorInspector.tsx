@@ -53,6 +53,29 @@ function colorHex(value: string, choices: readonly WireColorReference[]): string
   return choices.find((choice) => normalizedColorKey(choice.name) === normalizedColorKey(value))?.hex ?? "#D9E2E7";
 }
 
+export function wireColorSwatchBackground(
+  primary: string,
+  secondary: string,
+  choices: readonly WireColorReference[],
+): string {
+  const primaryHex = colorHex(primary, choices);
+  return secondary
+    ? `linear-gradient(225deg, ${primaryHex} 0 49%, #8da0aa 49% 51%, ${colorHex(secondary, choices)} 51% 100%)`
+    : primaryHex;
+}
+
+export function updateWireQueryState(
+  current: Readonly<Record<string, string>>,
+  contactId: string,
+  query: string | null,
+): Readonly<Record<string, string>> {
+  if (query !== null) return { ...current, [contactId]: query };
+  if (current[contactId] === undefined) return current;
+  const next = { ...current };
+  delete next[contactId];
+  return next;
+}
+
 function connectorColorChoices(connector: ConnectorInstance): readonly WireColorReference[] {
   const known = new Set(builtInWireColors.map((color) => normalizedColorKey(color.name)));
   const customValues = connector.contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""])
@@ -88,13 +111,11 @@ function ColorCellEditor({
   const primary = contact.color;
   const secondary = contact.secondaryColor ?? "";
   const swatchStyle = {
-    background: secondary
-      ? `linear-gradient(225deg, ${colorHex(primary, choices)} 0 49%, #8da0aa 49% 51%, ${colorHex(secondary, choices)} 51% 100%)`
-      : colorHex(primary, choices),
+    background: wireColorSwatchBackground(primary, secondary, choices),
   };
   if (!editing) {
     return <span className="e4cce-color-readonly" title={[primary, secondary].filter(Boolean).join(" / ")}>
-      <i style={swatchStyle} aria-hidden="true" />
+      <i className="e4cce-color-swatch" style={swatchStyle} aria-hidden="true" />
       <span>{[primary, secondary].filter(Boolean).join(" / ") || " "}</span>
     </span>;
   }
@@ -108,7 +129,7 @@ function ColorCellEditor({
         title="Основной и второй цвет провода"
         onClick={() => onOpenChange(!open)}
       >
-        <i style={swatchStyle} aria-hidden="true" />
+        <i className="e4cce-color-swatch" style={swatchStyle} aria-hidden="true" />
         <span>{[primary, secondary].filter(Boolean).join(" / ") || "—"}</span>
       </button>
       <div className="e4cce-color-popover" hidden={!open}>
@@ -138,17 +159,20 @@ function ColorCellEditor({
             {choices.map((choice) => <option key={choice.id} value={choice.name}>{choice.name}</option>)}
           </select>
         </label>
-        <label className="e4cce-palette">Новый цвет
-          <input
-            type="color"
-            aria-label={`Новый цвет из палитры, контакт ${contact.number}`}
-            disabled={disabled}
-            value={colorHex(primary, choices)}
-            onChange={(event) => {
-              onChange({ color: event.target.value.toUpperCase(), secondaryColor: secondary });
-              onOpenChange(false);
-            }}
-          />
+        <label className="e4cce-palette"><span>Новый цвет</span>
+          <span className="e4cce-palette-control">
+            <i className="e4cce-color-swatch" style={{ background: colorHex(primary, choices) }} aria-hidden="true" />
+            <input
+              type="color"
+              aria-label={`Новый цвет из палитры, контакт ${contact.number}`}
+              disabled={disabled}
+              value={colorHex(primary, choices)}
+              onChange={(event) => {
+                onChange({ color: event.currentTarget.value.toUpperCase(), secondaryColor: secondary });
+                onOpenChange(false);
+              }}
+            />
+          </span>
         </label>
       </div>
     </div>
@@ -441,17 +465,19 @@ export function E4ConnectorInspector({
                       aria-label={`${column.label}, контакт ${contact.number}`}
                       autoComplete="off"
                       onChange={(event) => {
-                        const query = event.target.value;
+                        const query = event.currentTarget.value;
                         updateContact(contact, { wire: query });
-                        setWireQueries((current) => ({ ...current, [contact.id]: query }));
+                        setWireQueries((current) => updateWireQueryState(current, contact.id, query));
                         onWireSearch?.(query);
                       }}
-                      onFocus={(event) => setWireQueries((current) => ({ ...current, [contact.id]: event.currentTarget.value }))}
-                      onBlur={() => setTimeout(() => setWireQueries((current) => {
-                        const next = { ...current };
-                        delete next[contact.id];
-                        return next;
-                      }), 120)}
+                      onFocus={(event) => {
+                        // React clears currentTarget after the handler. Capture
+                        // the value before scheduling the functional update.
+                        const query = event.currentTarget.value;
+                        setWireQueries((current) => updateWireQueryState(current, contact.id, query));
+                      }}
+                      onBlur={() => setTimeout(() => setWireQueries((current) =>
+                        updateWireQueryState(current, contact.id, null)), 120)}
                     />
                     {wireQueries[contact.id] !== undefined && <div className="e4cce-wire-suggestions" role="listbox" aria-label={`Подсказки проводов, контакт ${contact.number}`}>
                       {filterWireSuggestions(wireQueries[contact.id] ?? "")
@@ -462,11 +488,7 @@ export function E4ConnectorInspector({
                           onPointerDown={(event) => event.preventDefault()}
                           onClick={() => {
                             updateContact(contact, { wire: wire.designation });
-                            setWireQueries((current) => {
-                              const next = { ...current };
-                              delete next[contact.id];
-                              return next;
-                            });
+                            setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
                         >{wire.designation}</button>)}
                     </div>}

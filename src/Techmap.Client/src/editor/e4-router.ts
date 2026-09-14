@@ -87,6 +87,7 @@ interface OccupiedSegment extends Segment {
 
 interface QueueItem {
   readonly state: number;
+  /** Routing score: physical length plus an ECAD crossing surcharge. */
   readonly length: number;
   readonly bends: number;
 }
@@ -350,8 +351,16 @@ function buildGridCoordinates(
   for (const segment of input.occupiedSegments) {
     if (segment.orientation === "horizontal") {
       ys.push(segment.start.y - input.options.wireClearance, segment.start.y + input.options.wireClearance);
+      xs.push(
+        Math.min(segment.start.x, segment.end.x) - input.options.wireClearance,
+        Math.max(segment.start.x, segment.end.x) + input.options.wireClearance,
+      );
     } else {
       xs.push(segment.start.x - input.options.wireClearance, segment.start.x + input.options.wireClearance);
+      ys.push(
+        Math.min(segment.start.y, segment.end.y) - input.options.wireClearance,
+        Math.max(segment.start.y, segment.end.y) + input.options.wireClearance,
+      );
     }
   }
   const currentXs = uniqueSorted(xs);
@@ -426,7 +435,12 @@ function findShortestGridPath(
       const segment = createSegment(from, to, "Ребро сетки");
       if (!gridSegmentIsAvailable(segment, input, fixedLeads)) continue;
       const nextDirection = neighbor.direction;
-      const nextLength = current.length + neighbor.length;
+      // A crossing remains legal for the explicit/manual editor, but the
+      // automatic ECAD route should prefer a nearby parallel detour. Grid
+      // edges often meet on the occupied route coordinate, so endpoint hits
+      // count as half and the two adjacent edges form one crossing.
+      const nextLength = current.length + neighbor.length +
+        automaticCrossingSurcharge(segment, input.occupiedSegments, input.options.wireClearance);
       const nextBends = current.bends +
         (previousDirection !== NO_DIRECTION && previousDirection !== nextDirection ? 1 : 0);
       const nextPhase = advancePhase(phase, neighbor.node);
@@ -461,6 +475,24 @@ function findShortestGridPath(
   }
   if (!samePoint(reversed.at(-1)!, pointForNode(xs, ys, startNode))) return null;
   return reversed.reverse();
+}
+
+function automaticCrossingSurcharge(
+  segment: Segment,
+  occupiedSegments: readonly OccupiedSegment[],
+  wireClearance: number,
+): number {
+  const crossingCost = wireClearance * 4;
+  let result = 0;
+  for (const occupied of occupiedSegments) {
+    if (!occupied.allowCrossings || occupied.orientation === segment.orientation) continue;
+    const intersection = segmentIntersection(segment, occupied);
+    if (intersection.kind !== "point") continue;
+    const atRouteEndpoint = samePoint(intersection.point, segment.start) ||
+      samePoint(intersection.point, segment.end);
+    result += atRouteEndpoint ? crossingCost / 2 : crossingCost;
+  }
+  return result;
 }
 
 function directionCode(segment: Segment): number {

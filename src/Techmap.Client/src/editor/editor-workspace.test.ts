@@ -28,6 +28,7 @@ import {
   containInlineEditorPointerEvent,
   inlineObjectDragDestination,
   inlineObjectDragMoved,
+  isInlineEditorControlTarget,
   isInlineEditorReadonlyTarget,
   moveE4OrthogonalSegment,
   objectsInPaintOrder,
@@ -247,6 +248,16 @@ describe("harness editor workspace", () => {
     expect(isInlineEditorReadonlyTarget(null)).toBe(false);
   });
 
+  it("leaves input selection, copy and native popup controls interactive", () => {
+    const input = {};
+    const closest = vi.fn((selector: string) =>
+      selector === "input, textarea, select, button, [contenteditable='true']" ? input : null);
+    expect(isInlineEditorControlTarget({ closest } as unknown as EventTarget)).toBe(true);
+    expect(closest).toHaveBeenCalledWith("input, textarea, select, button, [contenteditable='true']");
+    expect(isInlineEditorControlTarget({ closest: () => null } as unknown as EventTarget)).toBe(false);
+    expect(isInlineEditorControlTarget(null)).toBe(false);
+  });
+
   it("fits actual E4 table and wire bounds into the available viewport", () => {
     const connector: EditorSceneObject = {
       id: "X-fit", layerId: "top", kind: "connector", label: "X-fit",
@@ -428,6 +439,14 @@ describe("harness editor workspace", () => {
       x: leftLayout.contactPoints[1]!.x - 16,
       y: leftLayout.contactPoints[1]!.y,
     }, 1, "e4")).toBe("X-left");
+    expect(hitTestEditorScene([right], layers, {
+      x: rightLayout.contactPoints[1]!.x + 16,
+      y: rightLayout.contactPoints[1]!.y + 8,
+    }, 1, "e4")).toBe("X-right");
+    expect(hitTestEditorScene([right], layers, {
+      x: rightLayout.contactPoints[1]!.x + 8,
+      y: rightLayout.contactPoints[1]!.y + 11,
+    }, 1, "e4")).toBeNull();
   });
 
   it("supports hidden and custom E4 columns while preserving Drawing connector fallback", () => {
