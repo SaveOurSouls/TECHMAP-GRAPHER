@@ -3,9 +3,12 @@ import {
   ComponentTemplateContentError,
   isTemplateContentV1,
   isTemplateContentV2,
+  isTemplateContentV3,
   parseComponentTemplateContent,
   reconcileTemplateEnvelopeAssets,
   upgradeComponentTemplateContentV1,
+  upgradeComponentTemplateContentV1ToV3,
+  upgradeComponentTemplateContentV2,
 } from "./template-content";
 import { newTemplateContent, type TemplateContent } from "./template-model";
 
@@ -29,6 +32,29 @@ describe("component template content boundary", () => {
 
     expect(isTemplateContentV2(parsed)).toBe(true);
     expect(parsed).toBe(upgraded.content);
+  });
+
+  it("recognizes strict v3 while preserving readable v2 content", () => {
+    const v2 = upgradeComponentTemplateContentV1(newTemplateContent()).content;
+    const v3 = upgradeComponentTemplateContentV2(v2).content;
+
+    expect(isTemplateContentV2(parseComponentTemplateContent(v2))).toBe(true);
+    const parsed = parseComponentTemplateContent(v3);
+    expect(isTemplateContentV3(parsed)).toBe(true);
+    expect(parsed).toBe(v3);
+  });
+
+  it("upgrades v1 through v2 to v3 and installs envelope assets", () => {
+    const asset = {
+      assetId: crypto.randomUUID(), fileName: "drawing.png", mediaType: "image/png",
+      sha256: "c".repeat(64), sizeBytes: 512,
+    };
+
+    const result = upgradeComponentTemplateContentV1ToV3(newTemplateContent(), [asset]);
+
+    expect(result.content.schemaVersion).toBe(3);
+    expect(result.content.assets).toEqual([asset]);
+    expect(isTemplateContentV3(parseComponentTemplateContent(result.content))).toBe(true);
   });
 
   it("returns inferred cross-view contact diagnostics from the explicit upgrade", () => {
@@ -66,6 +92,19 @@ describe("component template content boundary", () => {
     }
   });
 
+  it("rejects invalid v3 content with addressable diagnostics", () => {
+    const invalid = { schemaVersion: 3, views: [] };
+
+    expect(() => parseComponentTemplateContent(invalid)).toThrow(ComponentTemplateContentError);
+    try {
+      parseComponentTemplateContent(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ComponentTemplateContentError);
+      expect((error as ComponentTemplateContentError).diagnostics)
+        .toEqual(expect.arrayContaining([expect.objectContaining({ path: "$.logicalContacts" })]));
+    }
+  });
+
   it("requires exact v2 asset metadata equality with the version envelope", () => {
     const asset = {
       assetId: crypto.randomUUID(), fileName: "connector.png", mediaType: "image/png",
@@ -89,5 +128,17 @@ describe("component template content boundary", () => {
 
     expect(parseComponentTemplateContent(v1).schemaVersion).toBe(1);
     expect(upgradeComponentTemplateContentV1(v1, assets).content.assets).toEqual(assets);
+  });
+
+  it("uses the same immutable asset envelope rule for v3", () => {
+    const asset = {
+      assetId: crypto.randomUUID(), fileName: "connector.png", mediaType: "image/png",
+      sha256: "d".repeat(64), sizeBytes: 256,
+    };
+    const content = upgradeComponentTemplateContentV1ToV3(newTemplateContent(), [asset]).content;
+
+    expect(reconcileTemplateEnvelopeAssets(content, [asset]).diagnostics).toEqual([]);
+    expect(reconcileTemplateEnvelopeAssets(content, [{ ...asset, sizeBytes: 257 }]).diagnostics)
+      .toEqual([expect.objectContaining({ code: "asset_envelope_mismatch", message: expect.stringContaining("v3") })]);
   });
 });

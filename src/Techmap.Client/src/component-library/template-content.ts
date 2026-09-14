@@ -7,8 +7,14 @@ import {
   type TemplateV2Diagnostic,
   type TemplateV2Upgrade,
 } from "./template-model-v2";
+import {
+  validateTemplateContentV3,
+  type TemplateContentV3,
+  type TemplateV3Upgrade,
+} from "./template-model-v3";
+import { upgradeTemplateContentV1ToV3, upgradeTemplateContentV2ToV3 } from "./template-upgrade-v3";
 
-export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2;
+export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2 | TemplateContentV3;
 export type TemplateEnvelopeAsset = Readonly<TemplateAssetV2>;
 export interface TemplateAssetReconciliation {
   readonly assets: TemplateAssetV2[];
@@ -40,6 +46,12 @@ export function parseComponentTemplateContent(value: unknown): ComponentTemplate
       throw new ComponentTemplateContentError("Шаблон v2 не прошёл проверку содержимого.", validation.diagnostics);
     return value as TemplateContentV2;
   }
+  if (candidate.schemaVersion === 3) {
+    const validation = validateTemplateContentV3(value);
+    if (!validation.valid)
+      throw new ComponentTemplateContentError("Шаблон v3 не прошёл проверку содержимого.", validation.diagnostics);
+    return value as TemplateContentV3;
+  }
   throw new ComponentTemplateContentError("Шаблон имеет неподдерживаемую схему содержимого.");
 }
 
@@ -51,6 +63,10 @@ export function isTemplateContentV2(content: ComponentTemplateContent): content 
   return content.schemaVersion === 2;
 }
 
+export function isTemplateContentV3(content: ComponentTemplateContent): content is TemplateContentV3 {
+  return content.schemaVersion === 3;
+}
+
 export function upgradeComponentTemplateContentV1(
   content: TemplateContentV1,
   envelopeAssets: readonly TemplateEnvelopeAsset[] = [],
@@ -60,6 +76,23 @@ export function upgradeComponentTemplateContentV1(
   const result = { ...upgraded, content: { ...upgraded.content, assets } };
   const validation = validateTemplateContentV2(result.content);
   return validation.valid ? result : { ...result, diagnostics: [...result.diagnostics, ...validation.diagnostics] };
+}
+
+export function upgradeComponentTemplateContentV2(content: TemplateContentV2): TemplateV3Upgrade {
+  return upgradeTemplateContentV2ToV3(content);
+}
+
+export function upgradeComponentTemplateContentV1ToV3(
+  content: TemplateContentV1,
+  envelopeAssets: readonly TemplateEnvelopeAsset[] = [],
+): TemplateV3Upgrade {
+  const upgraded = upgradeTemplateContentV1ToV3(content);
+  const result = { ...upgraded, content: { ...upgraded.content, assets: normalizeTemplateEnvelopeAssets(envelopeAssets) } };
+  const validation = validateTemplateContentV3(result.content);
+  return validation.valid ? result : {
+    ...result,
+    diagnostics: [...result.diagnostics, ...validation.diagnostics.map(item => ({ ...item, code: `upgrade_${item.code}` }))],
+  };
 }
 
 export function normalizeTemplateEnvelopeAssets(assets: readonly TemplateEnvelopeAsset[]): TemplateAssetV2[] {
@@ -82,6 +115,6 @@ export function reconcileTemplateEnvelopeAssets(
     asset.sizeBytes === assets[index]!.sizeBytes);
   return matches ? { assets, diagnostics: [] } : { assets, diagnostics: [{
     code: "asset_envelope_mismatch", path: "$.assets",
-    message: "Метаданные assets внутри шаблона v2 не совпадают с assets версии шаблона.",
+    message: `Метаданные assets внутри шаблона v${content.schemaVersion} не совпадают с assets версии шаблона.`,
   }] };
 }
