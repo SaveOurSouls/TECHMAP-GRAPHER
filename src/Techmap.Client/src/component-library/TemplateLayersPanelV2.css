@@ -1,0 +1,22 @@
+.template-layers-v2 { padding: 12px; display: grid; gap: 8px; color: #355365; }
+.template-layers-v2-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.template-layers-v2-heading strong { font-size: 12px; }
+.template-layers-v2-heading button { min-height: 28px; padding: 4px 8px; border: 1px solid #b8cdd7; border-radius: 5px; background: #fff; color: #276681; font-size: 10px; font-weight: 700; cursor: pointer; }
+.template-layers-v2-note, .template-layers-v2-empty { margin: 0; color: #71808d; font-size: 9px; line-height: 1.4; }
+.template-layers-v2-list { margin: 0; padding: 0; display: grid; gap: 4px; list-style: none; }
+.template-layer-v2 { min-width: 0; min-height: 42px; padding: 4px; display: grid; grid-template-columns: 24px minmax(90px, 1fr) 26px 26px 38px 26px; align-items: center; gap: 3px; border: 1px solid #dce5e9; border-radius: 6px; background: #fff; }
+.template-layer-v2.active { border-color: #8eb9cc; background: #edf7fb; }
+.template-layer-v2 button { cursor: pointer; }
+.template-layer-v2 button:disabled { opacity: .4; cursor: default; }
+.template-layer-v2-activate, .template-layer-v2-control, .template-layer-v2-delete, .template-layer-v2-order button { width: 24px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #71808d; }
+.template-layer-v2-activate[aria-pressed="true"], .template-layer-v2-control[aria-pressed="true"] { color: #1676a1; }
+.template-layer-v2-name { min-width: 0; }
+.template-layer-v2-name > button { width: 100%; padding: 2px 4px; display: grid; gap: 2px; border: 0; background: transparent; color: #355365; text-align: left; }
+.template-layer-v2-name span, .template-layer-v2-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.template-layer-v2-name span { font-size: 10px; font-weight: 700; }
+.template-layer-v2-name small { color: #7b8992; font-size: 8px; }
+.template-layer-v2-name input { width: 100%; min-width: 0; height: 28px; padding: 4px 6px; border: 1px solid #68a7c3; border-radius: 4px; color: #355365; font-size: 10px; }
+.template-layer-v2-order { display: flex; }
+.template-layer-v2-order button { width: 19px; }
+.template-layer-v2-delete { color: #a23e3e; }
+@media (hover: hover) { .template-layer-v2 button:hover:not(:disabled) { background: #deedf3; } }
