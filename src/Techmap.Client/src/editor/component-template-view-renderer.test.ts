@@ -1,0 +1,287 @@
+import { describe, expect, it, vi } from "vitest";
+import { newTemplateContentV3 } from "../component-library/template-commands-v3";
+import type { TemplateContentV3, TemplateNodeV3 } from "../component-library/template-model-v3";
+import {
+  ComponentTemplateImageCache,
+  drawProjectedComponentTemplateView,
+  projectComponentTemplateView,
+  type ComponentTemplateViewInstance,
+} from "./component-template-view-renderer";
+import { getEditorSceneBounds, hitTestEditorScene } from "./CanvasViewport";
+import type { EditorLayer, EditorSceneObject } from "./editor-types";
+
+let nextId = 1;
+const id = () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`;
+const constant = (value: number) => ({ kind: "constant", value } as const);
+const parameter = (parameterId: string) => ({ kind: "parameter", parameterId } as const);
+
+function base(kind: TemplateNodeV3["kind"], layerId: string) {
+  return {
+    id: id(), kind, layerId, visible: true, locked: false, opacity: 1,
+    transform: {
+      translateX: constant(0), translateY: constant(0), rotationDegrees: constant(0),
+      scaleX: constant(1), scaleY: constant(1),
+    },
+    stroke: { color: "#123456", width: constant(2) }, fill: { color: null },
+  };
+}
+
+function rectangle(layerId: string): TemplateNodeV3 {
+  return {
+    ...base("rectangle", layerId), kind: "rectangle",
+    geometry: {
+      x: constant(3), y: constant(4), width: constant(12), height: constant(8),
+      cornerRadii: [constant(0), constant(0), constant(0), constant(0)],
+    },
+  };
+}
+
+function imageNode(layerId: string, assetId: string, underlay: boolean): TemplateNodeV3 {
+  return {
+    ...base("image", layerId), kind: "image",
+    geometry: {
+      assetId, x: constant(2), y: constant(3), width: constant(40), height: constant(20),
+      cropX: 0, cropY: 0, cropWidth: 1, cropHeight: 1, underlay,
+    },
+  };
+}
+
+function fixture(): { readonly content: TemplateContentV3; readonly instance: ComponentTemplateViewInstance } {
+  const content = newTemplateContentV3();
+  const variant = { id: id(), sourceId: "test", entityType: "connector", articleKey: "A-1", parameterValues: [], contactGroups: null };
+  const withVariant = { ...content, articleVariants: [variant] };
+  return {
+    content: withVariant,
+    instance: { objectId: "connector-1", snapshotId: "project-snapshot-1", articleVariantId: variant.id, content: withVariant },
+  };
+}
+
+describe("project component template view", () => {
+  it("selects only the matching E4 or drawing view and keeps layer paint order at instance origin", () => {
+    const { content, instance } = fixture();
+    const [e4, drawing] = content.views;
+    const hidden = { ...rectangle(e4!.layers[0]!.id), id: id() };
+    const e4Back = { ...rectangle(e4!.layers[0]!.id), id: id(), stroke: { color: "#111111", width: constant(2) } };
+    const e4Front = { ...rectangle(e4!.layers[0]!.id), id: id(), stroke: { color: "#222222", width: constant(2) } };
+    const drawingNode = { ...rectangle(drawing!.layers[0]!.id), id: id(), stroke: { color: "#333333", width: constant(2) } };
+    const custom = {
+      ...content,
+      views: [
+        { ...e4!, layers: [
+          { ...e4!.layers[0]!, nodes: [e4Back] },
+          { id: id(), name: "hidden", visible: false, locked: false, nodes: [hidden] },
+          { id: id(), name: "front", visible: true, locked: false, nodes: [e4Front] },
+        ] },
+        { ...drawing!, layers: [{ ...drawing!.layers[0]!, nodes: [drawingNode] }] },
+        { id: id(), kind: "additional" as const, name: "Extra", layers: [{ id: id(), name: "layer", visible: true, locked: false, nodes: [rectangle(id())] }], contactPoints: [], bundlePorts: [], repeatPlacements: [] },
+      ],
+    };
+    const e4Projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 100, y: 200 })!;
+    const drawingProjection = projectComponentTemplateView({ ...instance, content: custom }, "drawing", { x: 100, y: 200 })!;
+    expect(e4Projection.commands.map(command => command.nodeId)).toEqual([e4Back.id, e4Front.id]);
+    expect(e4Projection.commands.map(command => command.stroke)).toEqual(["#111111", "#222222"]);
+    expect(e4Projection.bounds).toEqual({ minX: 102, minY: 203, maxX: 116, maxY: 213 });
+    expect(drawingProjection.commands.map(command => command.nodeId)).toEqual([drawingNode.id]);
+    expect(projectComponentTemplateView({ ...instance, content: { ...custom, views: [custom.views[2]!] } }, "e4", { x: 0, y: 0 })).toBeNull();
+    expect(projectComponentTemplateView(instance, "e4", { x: 0, y: 0 })).toBeNull();
+
+    const sceneObject: EditorSceneObject = {
+      id: instance.objectId, layerId: "scene", kind: "connector", label: "Library",
+      x: 100, y: 200, width: 1, height: 1, color: "#000000",
+    };
+    const sceneLayers: readonly EditorLayer[] = [{ id: "scene", label: "Scene", visible: true, locked: false }];
+    const exactInstance = { ...instance, content: custom };
+    expect(hitTestEditorScene(
+      [sceneObject], sceneLayers, { x: 114, y: 210 }, 1, "e4", [exactInstance],
+    )).toBe(instance.objectId);
+    expect(getEditorSceneBounds(
+      [sceneObject], sceneLayers, "e4", undefined, [exactInstance],
+    )).toEqual(e4Projection.bounds);
+  });
+
+  it("resolves article dimensions, nested group transform/opacity and repeat occurrence offsets", () => {
+    const { content, instance } = fixture();
+    const countId = id();
+    const widthId = id();
+    const domainId = id();
+    const groupId = id();
+    const logicalId = id();
+    const pointId = id();
+    const groupTypeId = id();
+    const e4 = content.views[0]!;
+    const layer = e4.layers[0]!;
+    const node = {
+      ...rectangle(layer.id),
+      geometry: { ...rectangle(layer.id).geometry, width: parameter(widthId) },
+    } as TemplateNodeV3;
+    const group: TemplateNodeV3 = {
+      ...base("group", layer.id), id: groupId, kind: "group",
+      opacity: 0.5,
+      transform: { ...base("group", layer.id).transform, translateX: constant(7), translateY: constant(9) },
+      geometry: { childIds: [node.id] },
+    };
+    const custom: TemplateContentV3 = {
+      ...content,
+      views: [{
+        ...e4,
+        layers: [{ ...layer, nodes: [node, group] }],
+        contactPoints: [{ id: pointId, logicalContactId: logicalId, x: constant(0), y: constant(0), direction: "left" }],
+        repeatPlacements: [{ repeatDomainId: domainId, prototypeGroupId: groupId, step: { x: constant(20), y: constant(0) }, contactPointIds: [pointId] }],
+      }, content.views[1]!],
+      parameters: [
+        { id: countId, name: "Count", type: "integer", unit: null, defaultValue: 2, minimum: 1, maximum: 10, formula: null },
+        { id: widthId, name: "Width", type: "number", unit: null, defaultValue: 5, minimum: 1, maximum: 100, formula: null },
+      ],
+      repeaters: [{ id: domainId, countParameterId: countId, logicalContactIds: [logicalId] }],
+      contactTypeGroups: [{ id: groupTypeId, name: "Signal" }],
+      logicalContacts: [{ id: logicalId, number: "1", name: "Contact", circuitText: null, contactTypeGroupId: groupTypeId }],
+      articleVariants: [{ ...content.articleVariants[0]!, parameterValues: [{ parameterId: widthId, value: 14 }] }],
+    };
+    const projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 100, y: 200 })!;
+    expect(projection.commands).toHaveLength(2);
+    expect(projection.commands.map(command => command.transform.e)).toEqual([107, 127]);
+    expect(projection.commands.map(command => command.opacity)).toEqual([0.5, 0.5]);
+    expect(projection.commands.map(command => command.kind === "rectangle" ? command.width : null)).toEqual([14, 14]);
+  });
+
+  it("requests PNG only from the scoped resolver and retains drawable placeholders for missing URLs/assets", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!;
+    const assetId = id();
+    const image: TemplateNodeV3 = {
+      ...base("image", e4.layers[0]!.id), kind: "image",
+      geometry: {
+        assetId, x: constant(2), y: constant(3), width: constant(40), height: constant(20),
+        cropX: 0.1, cropY: 0.2, cropWidth: 0.6, cropHeight: 0.4, underlay: false,
+      },
+    };
+    const custom = {
+      ...content,
+      views: [{ ...e4, layers: [{ ...e4.layers[0]!, nodes: [image] }] }, content.views[1]!],
+      assets: [{ assetId, fileName: "part.png", mediaType: "image/png", sha256: "a".repeat(64), sizeBytes: 42 }],
+    };
+    const resolver = vi.fn(() => "/project/snapshot/asset");
+    const ready = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 }, resolver)!;
+    expect(resolver).toHaveBeenCalledExactlyOnceWith(instance.snapshotId, assetId);
+    expect(ready.commands[0]).toMatchObject({ kind: "image", url: "/project/snapshot/asset", error: null });
+    expect(projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 }, () => "")!.commands[0]).toMatchObject({ kind: "image", url: null, error: "URL изображения пуст." });
+    expect(projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 }, () => { throw Error("network"); })!.commands[0]).toMatchObject({ kind: "image", url: null, error: "URL изображения не удалось получить." });
+    resolver.mockClear();
+    const missing = projectComponentTemplateView({ ...instance, content: { ...custom, assets: [] } }, "e4", { x: 0, y: 0 }, resolver)!;
+    expect(missing.commands[0]).toMatchObject({ kind: "image", url: null, error: "Asset изображения отсутствует в закреплённом шаблоне." });
+    expect(resolver).not.toHaveBeenCalled();
+
+    const events: string[] = [];
+    const context = {
+      save: () => undefined, restore: () => undefined, transform: () => undefined,
+      globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textBaseline: "alphabetic",
+      fillRect: () => events.push("fillRect"), strokeRect: () => events.push("strokeRect"),
+      beginPath: () => undefined, moveTo: () => undefined, lineTo: () => undefined,
+      stroke: () => undefined, fillText: () => undefined,
+    } as unknown as CanvasRenderingContext2D;
+    drawProjectedComponentTemplateView(context, missing, new ComponentTemplateImageCache(null));
+    expect(events).toEqual(["fillRect", "strokeRect"]);
+  });
+
+  it("paints PNG underlays first while retaining stable order for underlays and foreground nodes", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!;
+    const backAssetId = id();
+    const secondBackAssetId = id();
+    const frontAssetId = id();
+    const foregroundRectangle = { ...rectangle(e4.layers[0]!.id), id: id() };
+    const firstUnderlay = imageNode(e4.layers[0]!.id, backAssetId, true);
+    const secondUnderlay = imageNode(e4.layers[0]!.id, secondBackAssetId, true);
+    const foregroundImage = imageNode(e4.layers[0]!.id, frontAssetId, false);
+    const custom = {
+      ...content,
+      views: [{
+        ...e4,
+        layers: [{
+          ...e4.layers[0]!,
+          nodes: [foregroundRectangle, firstUnderlay, secondUnderlay, foregroundImage],
+        }],
+      }, content.views[1]!],
+      assets: [backAssetId, secondBackAssetId, frontAssetId].map(assetId => ({
+        assetId, fileName: `${assetId}.png`, mediaType: "image/png", sha256: "a".repeat(64), sizeBytes: 42,
+      })),
+    };
+    const projection = projectComponentTemplateView(
+      { ...instance, content: custom }, "e4", { x: 0, y: 0 }, (_, assetId) => `/${assetId}.png`,
+    )!;
+    expect(projection.commands.map(command => command.nodeId)).toEqual([
+      firstUnderlay.id,
+      secondUnderlay.id,
+      foregroundRectangle.id,
+      foregroundImage.id,
+    ]);
+    expect(projection.commands.filter(command => command.kind === "image").map(command => command.underlay))
+      .toEqual([true, true, false]);
+
+    const images: Array<{ naturalWidth: number; naturalHeight: number; onload: (() => void) | null; onerror: (() => void) | null; src: string }> = [];
+    const cache = new ComponentTemplateImageCache(() => {
+      const image = { naturalWidth: 100, naturalHeight: 50, onload: null, onerror: null, src: "" };
+      images.push(image);
+      return image as unknown as HTMLImageElement;
+    });
+    const events: string[] = [];
+    const context = {
+      save: () => undefined, restore: () => undefined, transform: () => undefined,
+      globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textBaseline: "alphabetic",
+      fillRect: () => undefined, strokeRect: () => undefined, beginPath: () => undefined,
+      moveTo: () => undefined, lineTo: () => undefined, quadraticCurveTo: () => undefined,
+      closePath: () => undefined, fill: () => undefined, fillText: () => undefined,
+      stroke: () => events.push("rectangle"),
+      drawImage: (image: HTMLImageElement) => events.push(image.src),
+    } as unknown as CanvasRenderingContext2D;
+    drawProjectedComponentTemplateView(context, projection, cache);
+    images.forEach(image => image.onload?.());
+    events.length = 0;
+    drawProjectedComponentTemplateView(context, projection, cache);
+    expect(events).toEqual([
+      `/${backAssetId}.png`,
+      `/${secondBackAssetId}.png`,
+      "rectangle",
+      `/${frontAssetId}.png`,
+    ]);
+  });
+
+  it("repaints a loaded PNG with the normalized crop and remains stable on load failure", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!;
+    const assetId = id();
+    const image: TemplateNodeV3 = {
+      ...base("image", e4.layers[0]!.id), kind: "image",
+      geometry: { assetId, x: constant(1), y: constant(2), width: constant(30), height: constant(40), cropX: 0.1, cropY: 0.2, cropWidth: 0.5, cropHeight: 0.25, underlay: false },
+    };
+    const custom = {
+      ...content,
+      views: [{ ...e4, layers: [{ ...e4.layers[0]!, nodes: [image] }] }, content.views[1]!],
+      assets: [{ assetId, fileName: "part.png", mediaType: "image/png", sha256: "a".repeat(64), sizeBytes: 42 }],
+    };
+    const projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 }, () => "/exact.png")!;
+    const fakeImage = { naturalWidth: 200, naturalHeight: 100, onload: null as (() => void) | null, onerror: null as (() => void) | null, src: "" };
+    const invalidate = vi.fn();
+    const cache = new ComponentTemplateImageCache(() => fakeImage as unknown as HTMLImageElement);
+    cache.setInvalidate(invalidate);
+    const drawImage = vi.fn();
+    const context = {
+      save: () => undefined, restore: () => undefined, transform: () => undefined,
+      globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textBaseline: "alphabetic",
+      fillRect: () => undefined, strokeRect: () => undefined, beginPath: () => undefined,
+      moveTo: () => undefined, lineTo: () => undefined, stroke: () => undefined,
+      fillText: () => undefined, drawImage,
+    } as unknown as CanvasRenderingContext2D;
+    drawProjectedComponentTemplateView(context, projection, cache);
+    expect(fakeImage.src).toBe("/exact.png");
+    expect(drawImage).not.toHaveBeenCalled();
+    fakeImage.onload?.();
+    expect(invalidate).toHaveBeenCalledOnce();
+    drawProjectedComponentTemplateView(context, projection, cache);
+    expect(drawImage).toHaveBeenCalledWith(fakeImage, 20, 20, 100, 25, 1, 2, 30, 40);
+    fakeImage.onerror?.();
+    drawImage.mockClear();
+    drawProjectedComponentTemplateView(context, projection, cache);
+    expect(drawImage).not.toHaveBeenCalled();
+  });
+});

@@ -5,6 +5,10 @@ import {
   type E4ConnectableEndpoint,
   type E4SceneOverlays,
 } from "./CanvasViewport";
+import type {
+  ComponentTemplateViewInstance,
+  ResolveComponentTemplateAssetUrl,
+} from "./component-template-view-renderer";
 import { CatalogDock } from "./CatalogDock";
 import { fitEditorCameraToBounds, zoomEditorCameraAt, type EditorViewportSize } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
@@ -128,6 +132,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly onE4WireLabelPositionChange?: (wireId: string, position: number) => void;
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly e4Overlays?: E4SceneOverlays;
+  readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
+  readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly onE4CrossingStyleChange?: (style: "none" | "bridge") => void;
   readonly onE4DifferentialPairChange?: (state: E4DifferentialPairState | null) => void;
   readonly onE4ScreenChange?: (state: E4ScreenState | null) => void;
@@ -218,6 +224,8 @@ export function HarnessEditorWorkspace({
   onE4WireLabelPositionChange,
   onE4ScreenPositionChange,
   e4Overlays,
+  componentTemplateViewInstances,
+  resolveComponentTemplateAssetUrl,
   onE4CrossingStyleChange,
   onE4DifferentialPairChange,
   onE4ScreenChange,
@@ -378,7 +386,8 @@ export function HarnessEditorWorkspace({
   }, []);
   const fitView = () => setCamera((current) => fitEditorCameraToBounds(
     current,
-    getEditorSceneBounds(viewportObjects, layers, view, e4Overlays),
+    getEditorSceneBounds(viewportObjects, layers, view, e4Overlays,
+      componentTemplateViewInstances, resolveComponentTemplateAssetUrl),
     viewportSize,
   ));
   const setZoom = (zoom: number) => setCamera((current) =>
@@ -463,6 +472,8 @@ export function HarnessEditorWorkspace({
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
           e4Overlays={e4Overlays}
+          componentTemplateViewInstances={componentTemplateViewInstances}
+          resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}
           diagnosticOverlay={diagnosticOverlay}
           onCameraChange={setCamera}

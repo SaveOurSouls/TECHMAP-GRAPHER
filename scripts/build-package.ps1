@@ -2,7 +2,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
-    [string]$ArtifactSlice = "m3-01-r2"
+    [string]$ArtifactSlice = "m3-02"
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,7 +64,8 @@ try {
 
     dotnet restore "Techmap-Grapher.slnx" --locked-mode --runtime win-x64 -p:NuGetAudit=false
     if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with code $LASTEXITCODE" }
-    dotnet test "Techmap-Grapher.slnx" --configuration $Configuration --no-restore
+    dotnet test "Techmap-Grapher.slnx" --configuration $Configuration --no-restore -- `
+        --minimum-expected-tests 1
     if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with code $LASTEXITCODE" }
     dotnet publish (Join-Path $webRoot "Techmap.Web.csproj") `
         --configuration $Configuration `

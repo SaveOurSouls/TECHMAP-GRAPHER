@@ -1,3 +1,5 @@
+import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
+
 export type EditorView = "e4" | "drawing";
 
 export interface Point {
@@ -552,10 +554,12 @@ function wireEndpointE4AnchorInternal(
   }
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   if (!connector) return null;
-  const position = connectorContactPosition(connector, endpoint.contactId, "e4");
+  const materialized = materializedContactWorldRepresentation(connector, endpoint.contactId, "e4");
+  const position = materialized?.position ?? connectorContactPosition(connector, endpoint.contactId, "e4");
   return position ? {
     position,
-    leadDirection: connector.schematic.orientation === "contacts-left" ? "left" : "right",
+    leadDirection: materialized?.direction ??
+      (connector.schematic.orientation === "contacts-left" ? "left" : "right"),
   } : null;
 }
 
@@ -834,6 +838,8 @@ export function connectorContactPosition(
 ): Point | null {
   const index = connector.contacts.findIndex((contact) => contact.id === contactId);
   if (index < 0) return null;
+  const materialized = materializedContactWorldRepresentation(connector, contactId, view);
+  if (materialized) return materialized.position;
   const origin = connector.positions[view];
   if (view === "e4") {
     const point = connectorE4TableGeometry(connector).contactPoints[contactId];

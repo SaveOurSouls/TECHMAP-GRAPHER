@@ -12,6 +12,7 @@ import {
   getE4ScreenLayout,
   getVisibleE4SceneOverlays,
   getE4ConnectorLayout,
+  getMaterializedConnectorContactPoints,
   getE4WireCrossings,
   getE4WireRoute,
   hitTestE4DifferentialPair,
@@ -27,6 +28,7 @@ import {
   handleEditorViewportWheel,
   containInlineEditorPointerEvent,
   drawE4DifferentialPairs,
+  drawEditorSceneObject,
   inlineObjectDragDestination,
   inlineObjectDragMoved,
   isInlineEditorControlTarget,
@@ -631,6 +633,67 @@ describe("harness editor workspace", () => {
       { color: "#f8fafb", width: 7 },
       { color: "#0044cc", width: 3 },
     ]);
+    const coloredCrossings = crossingStrokes.filter(stroke => stroke.width === 3);
+    expect(coloredCrossings.map(stroke => ({
+      color: stroke.color,
+      fromY: stroke.points[0]!.y,
+      toY: stroke.points.at(-1)!.y,
+    }))).toEqual([
+      { color: "#c000c0", fromY: 40, toY: 80 },
+      { color: "#0044cc", fromY: 80, toY: 40 },
+      { color: "#c000c0", fromY: 80, toY: 40 },
+      { color: "#0044cc", fromY: 40, toY: 80 },
+    ]);
+    expect(strokes.some(stroke => stroke.color === "#0077bb")).toBe(false);
+  });
+
+  it("mixes nullable materialized contacts with indexed fallback anchors and hits an external X", () => {
+    const connector: EditorSceneObject = {
+      id: "library", layerId: "top", kind: "connector", label: "XS1",
+      x: 100, y: 200, width: 60, height: 90, color: "#334455",
+      metadata: {
+        contactCount: "3",
+        materializedContactPoints: JSON.stringify([
+          null,
+          { x: -30, y: 20, direction: "left", status: "not-connected" },
+          { x: 30, y: 40, direction: "right", status: "available" },
+        ]),
+      },
+    };
+    expect(getMaterializedConnectorContactPoints(connector)).toEqual([
+      null,
+      { x: 70, y: 220, direction: "left", status: "not-connected" },
+      { x: 130, y: 240, direction: "right", status: "available" },
+    ]);
+    expect(hitTestConnectorContact([connector], layers, { x: 160, y: 228 }, 1, "drawing")).toEqual({
+      connectorId: "library", contactIndex: 0,
+    });
+    expect(hitTestConnectorContact([connector], layers, { x: 70, y: 220 }, 1, "drawing")).toBeNull();
+    expect(hitTestConnectorContact([connector], layers, { x: 130, y: 240 }, 1, "drawing")).toEqual({
+      connectorId: "library", contactIndex: 2,
+    });
+
+    expect(hitTestEditorScene([connector], layers, { x: 58, y: 220 }, 1, "drawing")).toBe("library");
+    expect(getEditorSceneBounds([connector], layers, "drawing")!.minX).toBe(55);
+
+    const arcs: EditorPoint[] = [];
+    const path: EditorPoint[] = [];
+    const context = {
+      save: () => undefined, restore: () => undefined, beginPath: () => undefined,
+      moveTo: (x: number, y: number) => path.push({ x, y }),
+      lineTo: (x: number, y: number) => path.push({ x, y }), quadraticCurveTo: () => undefined,
+      closePath: () => undefined, fill: () => undefined, stroke: () => undefined,
+      fillText: () => undefined, arc: (x: number, y: number) => arcs.push({ x, y }),
+      fillStyle: "", strokeStyle: "", lineWidth: 1, lineCap: "butt", font: "",
+    } as unknown as CanvasRenderingContext2D;
+    drawEditorSceneObject(context, connector, false, "drawing");
+    expect(arcs).toEqual([
+      { x: 160, y: 228 },
+      { x: 100, y: 228 },
+      { x: 130, y: 240 },
+    ]);
+    expect(path).toContainEqual({ x: 70, y: 220 });
+    expect(path).toContainEqual({ x: 58, y: 220 });
   });
 
   it("reports one bridge at a polyline vertex and only suppresses a junction for its own wires", () => {

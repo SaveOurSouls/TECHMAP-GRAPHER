@@ -1,17 +1,133 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { newTemplateContentV2 } from "../component-library/template-commands-v2";
+import { upgradeTemplateContentV2ToV3 } from "../component-library/template-upgrade-v3";
 import { createConnector, createWire, applyEditorCommand } from "./commands";
 import {
+  acceptProjectComponentSnapshotLookup,
+  buildComponentTemplateViewInstances,
+  buildProjectComponentSnapshotLookup,
+  ComponentGraphErrorAlert,
   designToScene,
   HarnessEditorErrorBoundary,
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
   snapRoutePoint,
 } from "./HarnessDesignEditor";
+import type {
+  ProjectComponentPlacementGraph,
+  ProjectComponentSnapshotResource,
+} from "./component-placement-api";
+import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
 import { connectorE4TableGeometry, createEmptyHarnessDesign } from "./model";
 
 describe("harness design scene adapter", () => {
+  it("shows an explicit retry action when component graph loading fails", () => {
+    const markup = renderToStaticMarkup(createElement(ComponentGraphErrorAlert, {
+      message: "Не удалось загрузить закреплённые виды компонентов.",
+      onRetry: vi.fn(),
+    }));
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Не удалось загрузить закреплённые виды компонентов.");
+    expect(markup).toContain("Повторить загрузку видов");
+  });
+
+  it("maps a placement to the exact project-owned component snapshot", () => {
+    const graph = projectComponentGraph();
+    const lookup = buildProjectComponentSnapshotLookup(graph);
+
+    expect(lookup.get(graph.placements[0]!.placementId)).toBe(graph.snapshots[0]);
+    expect(lookup.get(graph.placements[0]!.placementId)).toMatchObject({
+      sourceVersion: 7,
+      sourceVersionSha256: "a".repeat(64),
+    });
+  });
+
+  it("does not replace the current component snapshot lookup with a stale harness response", () => {
+    const currentSnapshot = projectComponentGraph().snapshots[0]!;
+    const current = new Map([["current-placement", currentSnapshot]]);
+
+    expect(acceptProjectComponentSnapshotLookup(current, projectComponentGraph(), 4, 5)).toBe(current);
+    expect(acceptProjectComponentSnapshotLookup(current, projectComponentGraph(), 5, 5))
+      .not.toBe(current);
+  });
+
+  it("rejects a placement graph whose pinned snapshot is missing", () => {
+    const graph = projectComponentGraph();
+    expect(() => buildProjectComponentSnapshotLookup({ ...graph, snapshots: [] }))
+      .toThrow(/отсутствует закреплённый снимок/);
+  });
+
+  it("renders only a component whose immutable binding matches the exact project snapshot", () => {
+    const graph = projectComponentGraph();
+    const snapshot = graph.snapshots[0]!;
+    if (snapshot.content.schemaVersion !== 3) throw new Error("test fixture must be v3");
+    const variant = {
+      id: crypto.randomUUID(),
+      sourceId: "technology-database",
+      entityType: "connector",
+      articleKey: "B2B-XH-A",
+      parameterValues: [],
+      contactGroups: null,
+    };
+    snapshot.content.logicalContacts.push({
+      id: crypto.randomUUID(),
+      number: "1",
+      name: "Contact",
+      circuitText: null,
+      contactTypeGroupId: null,
+    });
+    snapshot.content.articleVariants.push(variant);
+    const connector = createConnectorInstanceFromComponentTemplateV3({
+      templateId: snapshot.sourceTemplateId,
+      version: snapshot.sourceVersion,
+      versionSha256: snapshot.sourceVersionSha256,
+      code: snapshot.code,
+      name: snapshot.name,
+      articleBindings: snapshot.articleBindings,
+      assets: snapshot.assets,
+      content: snapshot.content,
+    }, {
+      id: graph.placements[0]!.placementId,
+      designation: "XS1",
+      articleVariantId: variant.id,
+      e4Position: { x: 10, y: 20 },
+    });
+    const document = { ...createEmptyHarnessDesign(), connectors: [connector] };
+    const lookup = buildProjectComponentSnapshotLookup(graph);
+
+    expect(buildComponentTemplateViewInstances(document, lookup)).toEqual([{
+      objectId: connector.id,
+      snapshotId: snapshot.snapshotId,
+      articleVariantId: variant.id,
+      content: snapshot.content,
+    }]);
+    expect(buildComponentTemplateViewInstances(document, new Map([[connector.id, {
+      ...snapshot,
+      sourceVersion: snapshot.sourceVersion + 1,
+    }]]))).toEqual([]);
+
+    if (connector.libraryBinding?.mode !== "template") throw new Error("test fixture must be template-bound");
+    const tamperedConnector = {
+      ...connector,
+      libraryBinding: {
+        ...connector.libraryBinding,
+        snapshot: {
+          ...connector.libraryBinding.snapshot,
+          contacts: connector.libraryBinding.snapshot.contacts.map((contact, index) => index === 0
+            ? { ...contact, name: "Tampered contact" }
+            : contact),
+        },
+      },
+    };
+    expect(buildComponentTemplateViewInstances(
+      { ...document, connectors: [tamperedConnector] },
+      lookup,
+    )).toEqual([]);
+  });
+
   it("shows a recoverable error instead of an empty editor surface", () => {
     const boundary = new HarnessEditorErrorBoundary({
       children: createElement("div", null, "editor"),
@@ -135,4 +251,162 @@ describe("harness design scene adapter", () => {
       .filter((object) => object.kind === "connector")
       .map((object) => object.metadata?.diagnostic)).toEqual([undefined, undefined]);
   });
+
+  it("passes nullable local library contact anchors without shifting contact indexes", () => {
+    const graph = projectComponentGraph();
+    const snapshot = graph.snapshots[0]!;
+    if (snapshot.content.schemaVersion !== 3) throw new Error("test fixture must be v3");
+    const logicalId = crypto.randomUUID();
+    const connector = {
+      ...createConnector("library-1", "XS1", 2, { x: 10, y: 20 }),
+      libraryBinding: {
+        mode: "template" as const,
+        templateId: snapshot.sourceTemplateId,
+        templateVersion: snapshot.sourceVersion,
+        versionSha256: snapshot.sourceVersionSha256,
+        articleVariantId: crypto.randomUUID(),
+        article: { sourceId: "source", entityType: "connector", articleKey: "part" },
+        snapshot: {
+          templateId: snapshot.sourceTemplateId,
+          templateVersion: snapshot.sourceVersion,
+          versionSha256: snapshot.sourceVersionSha256,
+          code: "LIB",
+          name: "Library",
+          articleVariantId: crypto.randomUUID(),
+          article: { sourceId: "source", entityType: "connector", articleKey: "part" },
+          articleBindings: [],
+          assets: [],
+          contacts: [{
+            logicalContactId: logicalId,
+            prototypeLogicalContactId: logicalId,
+            sourceNumber: "2",
+            name: "Second",
+            circuitText: null,
+            contactTypeGroupId: null,
+            contactType: "",
+            allowedTerminalArticleKeys: [],
+            representations: [{
+              viewId: crypto.randomUUID(), viewName: "E4", viewKind: "e4" as const,
+              pointId: crypto.randomUUID(), x: 70, y: 35, direction: "left" as const,
+            }, {
+              viewId: crypto.randomUUID(), viewName: "Drawing", viewKind: "drawing" as const,
+              pointId: crypto.randomUUID(), x: 80, y: 90, direction: "down" as const,
+            }],
+          }],
+        },
+      },
+      contacts: [
+        { ...createConnector("unused", "X", 1, { x: 0, y: 0 }).contacts[0]!, logicalContactId: crypto.randomUUID() },
+        { ...createConnector("unused2", "X", 1, { x: 0, y: 0 }).contacts[0]!, id: "library-1:contact:2", logicalContactId: logicalId },
+      ],
+    };
+    const other = createConnector("other", "XS2", 1, { x: 400, y: 20 });
+    const wire = createWire(
+      "wire",
+      { connectorId: connector.id, contactId: connector.contacts[1]!.id },
+      { connectorId: other.id, contactId: other.contacts[0]!.id },
+    );
+    const document = { ...createEmptyHarnessDesign(), connectors: [connector, other], wires: [wire] };
+    const object = designToScene(document, "e4")[0]!;
+
+    expect(JSON.parse(object.metadata!.materializedContactPoints!)).toEqual([
+      null,
+      { x: 70, y: 35, direction: "left", status: "available" },
+    ]);
+    expect(designToScene(document, "drawing").find((candidate) => candidate.id === wire.id)?.points?.[0])
+      .toEqual({ x: 90, y: 110 });
+  });
+
+  it("uses ordinary contact geometry when the project snapshot graph is unavailable", () => {
+    const graph = projectComponentGraph();
+    const snapshot = graph.snapshots[0]!;
+    const logicalId = crypto.randomUUID();
+    const connector = {
+      ...createConnector("library-fallback", "XS1", 1, { x: 10, y: 20 }),
+      libraryBinding: {
+        mode: "template" as const,
+        templateId: snapshot.sourceTemplateId,
+        templateVersion: snapshot.sourceVersion,
+        versionSha256: snapshot.sourceVersionSha256,
+        articleVariantId: crypto.randomUUID(),
+        article: { sourceId: "source", entityType: "connector", articleKey: "part" },
+        snapshot: {
+          templateId: snapshot.sourceTemplateId,
+          templateVersion: snapshot.sourceVersion,
+          versionSha256: snapshot.sourceVersionSha256,
+          code: "LIB",
+          name: "Library",
+          articleVariantId: crypto.randomUUID(),
+          article: { sourceId: "source", entityType: "connector", articleKey: "part" },
+          articleBindings: [],
+          assets: [],
+          contacts: [{
+            logicalContactId: logicalId,
+            prototypeLogicalContactId: logicalId,
+            sourceNumber: "1",
+            name: "Contact",
+            circuitText: null,
+            contactTypeGroupId: null,
+            contactType: "",
+            allowedTerminalArticleKeys: [],
+            representations: [{
+              viewId: crypto.randomUUID(), viewName: "Drawing", viewKind: "drawing" as const,
+              pointId: crypto.randomUUID(), x: 500, y: 600, direction: "left" as const,
+            }],
+          }],
+        },
+      },
+      contacts: [{
+        ...createConnector("unused", "X", 1, { x: 0, y: 0 }).contacts[0]!,
+        id: "library-fallback:contact:1",
+        logicalContactId: logicalId,
+      }],
+    };
+    const other = createConnector("other-fallback", "XS2", 1, { x: 400, y: 20 });
+    const wire = createWire(
+      "fallback-wire",
+      { connectorId: connector.id, contactId: connector.contacts[0]!.id },
+      { connectorId: other.id, contactId: other.contacts[0]!.id },
+    );
+    const document = { ...createEmptyHarnessDesign(), connectors: [connector, other], wires: [wire] };
+    const scene = designToScene(document, "drawing", new Set(), new Set());
+
+    expect(scene[0]!.metadata?.materializedContactPoints).toBeUndefined();
+    expect(scene.find((candidate) => candidate.id === wire.id)?.points?.[0]).toEqual({ x: 128, y: 48 });
+  });
 });
+
+function projectComponentGraph(): ProjectComponentPlacementGraph {
+  const placementId = "33333333-3333-4333-8333-333333333333";
+  const snapshotId = "22222222-2222-4222-8222-222222222222";
+  const content = upgradeTemplateContentV2ToV3(newTemplateContentV2()).content;
+  const snapshot: ProjectComponentSnapshotResource = {
+    snapshotId,
+    projectId: "project",
+    sourceTemplateId: "44444444-4444-4444-8444-444444444444",
+    sourceVersion: 7,
+    sourceVersionSha256: "a".repeat(64),
+    code: "XH",
+    name: "JST XH",
+    articleBindings: [{ sourceId: "technology-database", entityType: "connector", articleKey: "B2B-XH-A" }],
+    assets: [],
+    schemaVersion: 3,
+    content,
+    createdUtc: "2026-09-14T00:00:00Z",
+    updatedUtc: "2026-09-14T00:00:00Z",
+  };
+  return {
+    placements: [{
+      placementId,
+      harnessId: "harness",
+      snapshotId,
+      sourceId: "technology-database",
+      entityType: "connector",
+      articleKey: "B2B-XH-A",
+      instance: { id: placementId },
+      createdUtc: "2026-09-14T00:00:00Z",
+      updatedUtc: "2026-09-14T00:00:00Z",
+    }],
+    snapshots: [snapshot],
+  };
+}

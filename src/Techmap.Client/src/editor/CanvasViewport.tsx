@@ -28,6 +28,13 @@ import {
   type E4ConnectorSnapTarget,
 } from "./e4-connector-snap";
 import { resolveWireColorHex } from "./wire-reference-catalog";
+import {
+  ComponentTemplateImageCache,
+  drawProjectedComponentTemplateView,
+  projectComponentTemplateView,
+  type ComponentTemplateViewInstance,
+  type ResolveComponentTemplateAssetUrl,
+} from "./component-template-view-renderer";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -38,6 +45,10 @@ export interface CanvasViewportProps {
   readonly selectedObjectId: string | null;
   readonly selectedObjectIds?: readonly string[];
   readonly e4Overlays?: E4SceneOverlays;
+  /** Exact project snapshots keyed to connector scene-object ids. */
+  readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
+  /** Resolves an asset inside the exact project snapshot. */
+  readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly overlay?: ReactNode;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
@@ -952,6 +963,11 @@ function containsPoint(
     }
     return false;
   }
+  for (const contact of connectorCanvasContactPoints(object, view)) {
+    if (!contact || contact.status !== "not-connected") continue;
+    const cross = contactCrossCenter(contact);
+    if (Math.hypot(point.x - cross.x, point.y - cross.y) <= contact.crossSize + tolerance) return true;
+  }
   const e4Layout = view === "drawing" ? null : getE4ConnectorLayout(object);
   const width = e4Layout?.width ?? object.width;
   const height = e4Layout?.height ?? object.height;
@@ -1244,6 +1260,139 @@ function legacyConnectorContactPoints(object: EditorSceneObject): readonly Edito
   }));
 }
 
+export interface MaterializedConnectorContactPoint extends EditorPoint {
+  readonly direction: "left" | "right" | "up" | "down";
+  readonly status: "available" | "not-connected";
+}
+
+interface ConnectorCanvasContactPoint extends MaterializedConnectorContactPoint {
+  readonly secondaryPoint: EditorPoint | null;
+  readonly crossOffset: number;
+  readonly crossSize: number;
+}
+
+/** Parses local article-materialized coordinates without compacting contact indexes. */
+export function getMaterializedConnectorContactPoints(
+  object: EditorSceneObject,
+): readonly (MaterializedConnectorContactPoint | null)[] | null {
+  if (object.kind !== "connector" || !object.metadata?.materializedContactPoints) return null;
+  const parsed = parseJson(object.metadata.materializedContactPoints);
+  if (!Array.isArray(parsed)) return null;
+  const result: (MaterializedConnectorContactPoint | null)[] = [];
+  for (const candidate of parsed) {
+    if (candidate === null) {
+      result.push(null);
+      continue;
+    }
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    const record = candidate as Record<string, unknown>;
+    if (typeof record.x !== "number" || !Number.isFinite(record.x) ||
+        typeof record.y !== "number" || !Number.isFinite(record.y) ||
+        !["left", "right", "up", "down"].includes(String(record.direction)) ||
+        !["available", "not-connected"].includes(String(record.status))) return null;
+    result.push({
+      x: object.x + record.x,
+      y: object.y + record.y,
+      direction: record.direction as MaterializedConnectorContactPoint["direction"],
+      status: record.status as MaterializedConnectorContactPoint["status"],
+    });
+  }
+  return result.some(Boolean) ? result : null;
+}
+
+function connectorCanvasContactPoints(
+  object: EditorSceneObject,
+  view: HarnessEditorView | undefined,
+): readonly (ConnectorCanvasContactPoint | null)[] {
+  const materialized = getMaterializedConnectorContactPoints(object);
+  const e4Layout = view === "drawing" ? null : getE4ConnectorLayout(object);
+  const legacy = e4Layout ? e4Layout.contactPoints : legacyConnectorContactPoints(object);
+  const count = Math.max(materialized?.length ?? 0, legacy.length);
+  return Array.from({ length: count }, (_, index): ConnectorCanvasContactPoint | null => {
+    const pinned = materialized?.[index];
+    if (pinned) return {
+      ...pinned,
+      secondaryPoint: null,
+      crossOffset: 12,
+      crossSize: 3,
+    };
+    const fallback = legacy[index];
+    if (!fallback) return null;
+    if (e4Layout) return {
+      ...fallback,
+      direction: e4Layout.connectionSide,
+      status: e4Layout.rows[index]?.status ?? "available",
+      secondaryPoint: null,
+      crossOffset: 16,
+      crossSize: 5,
+    };
+    return {
+      ...fallback,
+      direction: "right",
+      status: "available",
+      secondaryPoint: { x: object.x, y: fallback.y },
+      crossOffset: 12,
+      crossSize: 3,
+    };
+  });
+}
+
+function contactOutward(direction: MaterializedConnectorContactPoint["direction"]): EditorPoint {
+  return direction === "left" ? { x: -1, y: 0 }
+    : direction === "right" ? { x: 1, y: 0 }
+      : direction === "up" ? { x: 0, y: -1 }
+        : { x: 0, y: 1 };
+}
+
+function contactCrossCenter(point: ConnectorCanvasContactPoint): EditorPoint {
+  const outward = contactOutward(point.direction);
+  return {
+    x: point.x + outward.x * point.crossOffset,
+    y: point.y + outward.y * point.crossOffset,
+  };
+}
+
+function drawConnectorContactOverrides(
+  context: CanvasRenderingContext2D,
+  object: EditorSceneObject,
+  view: HarnessEditorView,
+  includeFallback: boolean,
+): void {
+  const points = connectorCanvasContactPoints(object, view);
+  const materialized = getMaterializedConnectorContactPoints(object);
+  context.save();
+  context.lineCap = "round";
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    if (!point) continue;
+    if (!includeFallback && !materialized?.[index]) continue;
+    if (point.status === "available") {
+      context.fillStyle = object.color;
+      context.beginPath();
+      context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
+      context.fill();
+      if (point.secondaryPoint) {
+        context.beginPath();
+        context.arc(point.secondaryPoint.x, point.secondaryPoint.y, 3.5, 0, Math.PI * 2);
+        context.fill();
+      }
+      continue;
+    }
+    const cross = contactCrossCenter(point);
+    context.strokeStyle = "#2c3fbd";
+    context.lineWidth = 1.7;
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+    context.lineTo(cross.x, cross.y);
+    context.moveTo(cross.x - point.crossSize, cross.y - point.crossSize);
+    context.lineTo(cross.x + point.crossSize, cross.y + point.crossSize);
+    context.moveTo(cross.x - point.crossSize, cross.y + point.crossSize);
+    context.lineTo(cross.x + point.crossSize, cross.y - point.crossSize);
+    context.stroke();
+  }
+  context.restore();
+}
+
 export function hitTestConnectorContact(
   objects: readonly EditorSceneObject[],
   layers: readonly EditorLayer[],
@@ -1255,18 +1404,13 @@ export function hitTestConnectorContact(
   const tolerance = 10 / zoom;
   for (const object of [...objects].reverse()) {
     if (object.kind !== "connector" || layerMap.get(object.layerId)?.visible !== true) continue;
-    const e4Layout = view === "drawing" ? null : getE4ConnectorLayout(object);
-    const points = e4Layout?.contactPoints ?? legacyConnectorContactPoints(object);
+    const points = connectorCanvasContactPoints(object, view);
     for (let index = 0; index < points.length; index += 1) {
       const candidate = points[index]!;
-      if (e4Layout?.rows[index]?.status === "not-connected") continue;
-      if (e4Layout && Math.hypot(point.x - candidate.x, point.y - candidate.y) <= tolerance) {
-        return { connectorId: object.id, contactIndex: index };
-      }
-      if (e4Layout) continue;
-      const left = { x: object.x, y: candidate.y };
+      if (!candidate || candidate.status === "not-connected") continue;
       if (Math.hypot(point.x - candidate.x, point.y - candidate.y) <= tolerance ||
-          Math.hypot(point.x - left.x, point.y - left.y) <= tolerance) {
+          candidate.secondaryPoint !== null &&
+          Math.hypot(point.x - candidate.secondaryPoint.x, point.y - candidate.secondaryPoint.y) <= tolerance) {
         return { connectorId: object.id, contactIndex: index };
       }
     }
@@ -1298,11 +1442,20 @@ export function hitTestEditorScene(
   point: EditorPoint,
   zoom: number,
   view?: HarnessEditorView,
+  componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
+  resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
 ): string | null {
   const paintOrder = objectsInPaintOrder(objects, layers);
+  const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const tolerance = 7 / zoom;
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
     const object = paintOrder[index];
+    const instance = object?.kind === "connector" ? componentViews.get(object.id) : undefined;
+    const projection = object && instance && view
+      ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
+      : null;
+    if (projection && point.x >= projection.bounds.minX - tolerance && point.x <= projection.bounds.maxX + tolerance &&
+        point.y >= projection.bounds.minY - tolerance && point.y <= projection.bounds.maxY + tolerance) return object!.id;
     if (object && containsPoint(object, point, tolerance, view)) return object.id;
   }
   return null;
@@ -1527,6 +1680,7 @@ function drawE4Connector(
       if (column.id === "color") drawE4ColorCell(context, row, column, rowY, layout.rowHeight);
       else drawE4CellText(context, e4CellText(row, column.id), column.x, rowY, column.width, layout.rowHeight);
     }
+    if (getMaterializedConnectorContactPoints(object)?.[rowIndex]) return;
     const point = layout.contactPoints[rowIndex]!;
     const marker = e4ContactMarker(row.status, layout.connectionSide);
     if (marker) {
@@ -1568,13 +1722,27 @@ function drawE4Connector(
   });
 }
 
-function drawObject(
+export function drawEditorSceneObject(
   context: CanvasRenderingContext2D,
   object: EditorSceneObject,
   selected: boolean,
   view: HarnessEditorView,
+  componentTemplateViewInstance?: ComponentTemplateViewInstance,
+  resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
+  componentTemplateImageCache = new ComponentTemplateImageCache(),
 ) {
   context.save();
+  if (object.kind === "connector" && componentTemplateViewInstance) {
+    const projection = projectComponentTemplateView(
+      componentTemplateViewInstance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl,
+    );
+    if (projection) {
+      drawProjectedComponentTemplateView(context, projection, componentTemplateImageCache, selected);
+      drawConnectorContactOverrides(context, object, view, true);
+      context.restore();
+      return;
+    }
+  }
   if (object.kind === "wire" || object.kind === "dimension") {
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
@@ -1624,6 +1792,7 @@ function drawObject(
     const e4Layout = view === "e4" ? getE4ConnectorLayout(object) : null;
     if (e4Layout) {
       drawE4Connector(context, object, e4Layout, selected);
+      drawConnectorContactOverrides(context, object, view, false);
       context.restore();
       return;
     }
@@ -1637,8 +1806,10 @@ function drawObject(
     context.font = "700 13px Inter, Arial, sans-serif";
     context.fillText(object.label, object.x + 12, object.y + 22);
     context.fillStyle = object.color;
+    const materializedPoints = getMaterializedConnectorContactPoints(object);
     const points = legacyConnectorContactPoints(object);
     for (let index = 0; index < points.length; index += 1) {
+      if (materializedPoints?.[index]) continue;
       const point = points[index]!;
       context.beginPath();
       context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
@@ -1651,6 +1822,7 @@ function drawObject(
       context.fillText(String(index + 1), object.x + 9, point.y + 3);
       context.fillStyle = object.color;
     }
+    if (materializedPoints) drawConnectorContactOverrides(context, object, view, false);
   } else {
     context.fillStyle = object.color;
     context.font = "600 14px Inter, Arial, sans-serif";
@@ -1927,9 +2099,12 @@ export function getEditorSceneBounds(
   layers: readonly EditorLayer[],
   view: HarnessEditorView,
   e4Overlays?: E4SceneOverlays,
+  componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
+  resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
 ): EditorSceneBounds | null {
   let bounds: EditorSceneBounds | null = null;
   const visibleObjects = objectsInPaintOrder(objects, layers);
+  const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of visibleObjects) {
     if (object.kind === "wire" || object.kind === "dimension") {
       const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
@@ -1941,6 +2116,39 @@ export function getEditorSceneBounds(
         const position = Number.isFinite(rawPosition) && rawPosition >= 0 && rawPosition <= 1 ? rawPosition : 0.5;
         const label = getE4WireLabelLayout(points, object.label, position);
         if (label) bounds = expandSceneBounds(bounds, label.x, label.y, label.x + label.width, label.y + label.height);
+      }
+      continue;
+    }
+    const instance = object.kind === "connector" ? componentViews.get(object.id) : undefined;
+    const projection = instance
+      ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
+      : null;
+    if (projection) {
+      bounds = expandSceneBounds(
+        bounds,
+        projection.bounds.minX,
+        projection.bounds.minY,
+        projection.bounds.maxX,
+        projection.bounds.maxY,
+      );
+      for (const point of connectorCanvasContactPoints(object, view)) {
+        if (!point) continue;
+        const cross = point.status === "not-connected" ? contactCrossCenter(point) : point;
+        const markerRadius = point.status === "not-connected" ? point.crossSize : 4;
+        bounds = expandSceneBounds(
+          bounds,
+          Math.min(point.x, cross.x) - markerRadius,
+          Math.min(point.y, cross.y) - markerRadius,
+          Math.max(point.x, cross.x) + markerRadius,
+          Math.max(point.y, cross.y) + markerRadius,
+        );
+        if (point.secondaryPoint) bounds = expandSceneBounds(
+          bounds,
+          point.secondaryPoint.x - 4,
+          point.secondaryPoint.y - 4,
+          point.secondaryPoint.x + 4,
+          point.secondaryPoint.y + 4,
+        );
       }
       continue;
     }
@@ -1957,6 +2165,25 @@ export function getEditorSceneBounds(
       }
     }
     bounds = expandSceneBounds(bounds, minX, object.y, maxX, object.y + Math.max(1, height));
+    for (const point of connectorCanvasContactPoints(object, view)) {
+      if (!point) continue;
+      const cross = point.status === "not-connected" ? contactCrossCenter(point) : point;
+      const markerRadius = point.status === "not-connected" ? point.crossSize : 4;
+      bounds = expandSceneBounds(
+        bounds,
+        Math.min(point.x, cross.x) - markerRadius,
+        Math.min(point.y, cross.y) - markerRadius,
+        Math.max(point.x, cross.x) + markerRadius,
+        Math.max(point.y, cross.y) + markerRadius,
+      );
+      if (point.secondaryPoint) bounds = expandSceneBounds(
+        bounds,
+        point.secondaryPoint.x - 4,
+        point.secondaryPoint.y - 4,
+        point.secondaryPoint.x + 4,
+        point.secondaryPoint.y + 4,
+      );
+    }
   }
 
   if (view !== "e4") return bounds;
@@ -2015,6 +2242,9 @@ function redrawCanvas(
   selectedObjectIds: ReadonlySet<string>,
   e4Overlays?: E4SceneOverlays,
   alignmentGuides?: E4ConnectorSnapGuides,
+  componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
+  resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
+  componentTemplateImageCache = new ComponentTemplateImageCache(),
 ) {
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -2032,8 +2262,17 @@ function redrawCanvas(
   context.save();
   context.translate(camera.offsetX, camera.offsetY);
   context.scale(camera.zoom, camera.zoom);
+  const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of objectsInPaintOrder(objects, layers)) {
-    drawObject(context, object, selectedObjectIds.has(object.id), view);
+    drawEditorSceneObject(
+      context,
+      object,
+      selectedObjectIds.has(object.id),
+      view,
+      object.kind === "connector" ? componentViews.get(object.id) : undefined,
+      resolveComponentTemplateAssetUrl,
+      componentTemplateImageCache,
+    );
   }
   if (view === "e4") {
     const overlays = e4Overlays ?? parseE4SceneOverlays(objects);
@@ -2096,6 +2335,8 @@ export function CanvasViewport({
   selectedObjectId,
   selectedObjectIds,
   e4Overlays,
+  componentTemplateViewInstances = [],
+  resolveComponentTemplateAssetUrl,
   overlay,
   diagnosticOverlay,
   inlineEditor,
@@ -2122,6 +2363,10 @@ export function CanvasViewport({
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const componentTemplateImageCacheRef = useRef<ComponentTemplateImageCache | null>(null);
+  if (!componentTemplateImageCacheRef.current) {
+    componentTemplateImageCacheRef.current = new ComponentTemplateImageCache();
+  }
   const dragRef = useRef<PointerDrag | ObjectPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | null>(null);
   const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
@@ -2145,7 +2390,16 @@ export function CanvasViewport({
     if (onObjectGroupSelect) onObjectGroupSelect(wireIds);
     else onObjectSelect(wireIds.at(-1) ?? null, false);
   };
-  const inlineObject = view === "e4" && tool === "select" && selectedObjectId
+  const selectedObject = objects.find(object => object.id === selectedObjectId);
+  const selectedComponentTemplateInstance = componentTemplateViewInstances.find(instance => instance.objectId === selectedObjectId);
+  const selectedHasComponentTemplateView = !!selectedObject && !!selectedComponentTemplateInstance &&
+    projectComponentTemplateView(
+      selectedComponentTemplateInstance,
+      view,
+      { x: selectedObject.x, y: selectedObject.y },
+      resolveComponentTemplateAssetUrl,
+    ) !== null;
+  const inlineObject = view === "e4" && tool === "select" && selectedObjectId && !selectedHasComponentTemplateView
     ? objects.find((object) => object.id === selectedObjectId && object.kind === "connector") ?? null
     : null;
   const inlineLayout = inlineObject ? getE4ConnectorLayout(inlineObject) : null;
@@ -2172,17 +2426,33 @@ export function CanvasViewport({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const redraw = () => {
-      redrawCanvas(canvas, view, camera, displayObjects, layers, selectedSet, e4Overlays, connectorAlignmentGuides);
+      redrawCanvas(
+        canvas,
+        view,
+        camera,
+        displayObjects,
+        layers,
+        selectedSet,
+        e4Overlays,
+        connectorAlignmentGuides,
+        componentTemplateViewInstances,
+        resolveComponentTemplateAssetUrl,
+        componentTemplateImageCacheRef.current!,
+      );
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
         height: Math.max(1, Math.round(canvas.clientHeight)),
       });
     };
+    componentTemplateImageCacheRef.current!.setInvalidate(redraw);
     redraw();
     const observer = new ResizeObserver(redraw);
     observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [camera, connectorAlignmentGuides, displayObjects, e4Overlays, inlineObject?.id, layers, onViewportSizeChange, selectedObjectIds, selectedObjectId, view]);
+    return () => {
+      observer.disconnect();
+      componentTemplateImageCacheRef.current?.setInvalidate(null);
+    };
+  }, [camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, e4Overlays, inlineObject?.id, layers, onViewportSizeChange, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -2410,6 +2680,8 @@ export function CanvasViewport({
         worldPoint,
         camera.zoom,
         view,
+        componentTemplateViewInstances,
+        resolveComponentTemplateAssetUrl,
       );
       const selectedObject = objects.find((item) => item.id === selectedObjectId);
       const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
@@ -2554,7 +2826,15 @@ export function CanvasViewport({
       }
     }
     if (view === "e4" && tool === "select" && onObjectEditRequest) {
-      const objectId = hitTestEditorScene(objects, layers, point, camera.zoom, view);
+      const objectId = hitTestEditorScene(
+        objects,
+        layers,
+        point,
+        camera.zoom,
+        view,
+        componentTemplateViewInstances,
+        resolveComponentTemplateAssetUrl,
+      );
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if (object?.kind === "connector" && layer?.locked !== true) {

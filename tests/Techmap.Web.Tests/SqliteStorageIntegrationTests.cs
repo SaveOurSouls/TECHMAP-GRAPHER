@@ -125,7 +125,7 @@ public sealed class SqliteStorageIntegrationTests
         {
             Assert.Equal(32, Convert.FromHexString(row.ScriptSha256).Length);
             Assert.Equal(row.ScriptSha256.ToLowerInvariant(), row.ScriptSha256);
-            Assert.Matches("^0\\.(1|2|3|4)\\.[0-9]+-", row.AppVersion);
+            Assert.Matches("^0\\.[1-9][0-9]*\\.[0-9]+-", row.AppVersion);
             Assert.True(DateTimeOffset.TryParseExact(
                 row.AppliedUtc,
                 "O",

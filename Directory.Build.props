@@ -3,8 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>0.4.2</VersionPrefix>
-    <InformationalVersion>0.4.2-m3-01-r2</InformationalVersion>
+    <VersionPrefix>0.5.0</VersionPrefix>
+    <InformationalVersion>0.5.0-m3-02</InformationalVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>

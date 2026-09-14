@@ -4,10 +4,20 @@ import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
 import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
 import { DesignSaveCoordinator } from "./design-save-coordinator";
-import { createComponentPlacementApi, type PlaceComponentRequest } from "./component-placement-api";
+import {
+  createComponentPlacementApi,
+  type PlaceComponentRequest,
+  type ProjectComponentPlacementGraph,
+  type ProjectComponentSnapshotResource,
+} from "./component-placement-api";
 import { createComponentTemplateApi } from "../component-library/component-template-api";
 import { isTemplateContentV3 } from "../component-library/template-content";
 import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
+import {
+  materializedContactWorldRepresentation,
+  selectMaterializedContactRepresentation,
+} from "./materialized-contact-representation";
+import type { ComponentTemplateViewInstance } from "./component-template-view-renderer";
 import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
@@ -44,8 +54,90 @@ export interface HarnessDesignEditorProps {
   readonly harnessDesignation: string;
   readonly initialView: HarnessEditorView;
   readonly apiOverride?: HarnessDesignApi;
+  readonly componentPlacementApiOverride?: ReturnType<typeof createComponentPlacementApi>;
   readonly onClose?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
+}
+
+export type ProjectComponentSnapshotLookup = ReadonlyMap<string, ProjectComponentSnapshotResource>;
+
+/** Resolves every project placement to the exact immutable snapshot returned for this harness. */
+export function buildProjectComponentSnapshotLookup(
+  graph: ProjectComponentPlacementGraph,
+): ProjectComponentSnapshotLookup {
+  const snapshots = new Map(graph.snapshots.map((snapshot) => [snapshot.snapshotId, snapshot]));
+  const result = new Map<string, ProjectComponentSnapshotResource>();
+  for (const placement of graph.placements) {
+    const snapshot = snapshots.get(placement.snapshotId);
+    if (!snapshot) throw new Error("Для библиотечного компонента отсутствует закреплённый снимок.");
+    if (result.has(placement.placementId)) {
+      throw new Error("Сервер вернул повторяющееся размещение библиотечного компонента.");
+    }
+    result.set(placement.placementId, snapshot);
+  }
+  return result;
+}
+
+/** Keeps a graph response from an editor generation that is no longer visible out of current state. */
+export function acceptProjectComponentSnapshotLookup(
+  current: ProjectComponentSnapshotLookup,
+  graph: ProjectComponentPlacementGraph,
+  responseGeneration: number,
+  currentGeneration: number,
+): ProjectComponentSnapshotLookup {
+  return responseGeneration === currentGeneration
+    ? buildProjectComponentSnapshotLookup(graph)
+    : current;
+}
+
+/** Builds render inputs only when the editable instance still matches its project-owned snapshot. */
+export function buildComponentTemplateViewInstances(
+  document: HarnessDesignDocument,
+  snapshotsByPlacement: ProjectComponentSnapshotLookup,
+): readonly ComponentTemplateViewInstance[] {
+  return document.connectors.flatMap((connector): readonly ComponentTemplateViewInstance[] => {
+    const binding = connector.libraryBinding;
+    const snapshot = snapshotsByPlacement.get(connector.id);
+    if (binding?.mode !== "template" || !snapshot || !isTemplateContentV3(snapshot.content)) return [];
+    const articleVariant = snapshot.content.articleVariants.find((candidate) => candidate.id === binding.articleVariantId);
+    const exactVersion = binding.templateId === snapshot.sourceTemplateId &&
+      binding.templateVersion === snapshot.sourceVersion &&
+      binding.versionSha256 === snapshot.sourceVersionSha256;
+    const exactArticle = articleVariant?.sourceId === binding.article.sourceId &&
+      articleVariant.entityType === binding.article.entityType &&
+      articleVariant.articleKey === binding.article.articleKey;
+    if (!exactVersion || !exactArticle) return [];
+    try {
+      const materialized = createConnectorInstanceFromComponentTemplateV3({
+        templateId: snapshot.sourceTemplateId,
+        version: snapshot.sourceVersion,
+        versionSha256: snapshot.sourceVersionSha256,
+        code: snapshot.code,
+        name: snapshot.name,
+        articleBindings: snapshot.articleBindings,
+        assets: snapshot.assets,
+        content: snapshot.content,
+      }, {
+        id: connector.id,
+        designation: connector.designation,
+        articleVariantId: binding.articleVariantId,
+        e4Position: connector.positions.e4,
+        drawingPosition: connector.positions.drawing,
+        layerIds: connector.layerIds,
+      });
+      const exactMaterialization = materialized.libraryBinding?.mode === "template" &&
+        JSON.stringify(binding.snapshot) === JSON.stringify(materialized.libraryBinding.snapshot);
+      if (!exactMaterialization) return [];
+    } catch {
+      return [];
+    }
+    return [{
+      objectId: connector.id,
+      snapshotId: snapshot.snapshotId,
+      articleVariantId: binding.articleVariantId,
+      content: snapshot.content,
+    }];
+  });
 }
 
 interface PendingComponentPlacement {
@@ -133,6 +225,7 @@ function contactPointForWire(
   endpoint: WireEndpoint,
   otherEndpoint: WireEndpoint,
   view: HarnessEditorView,
+  materializedConnectorIds?: ReadonlySet<string>,
 ) {
   if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return findWireEndpoint(document, endpoint, view);
   const connectorId = endpoint.connectorId;
@@ -143,7 +236,16 @@ function contactPointForWire(
   const connector = document.connectors.find((item) => item.id === connectorId);
   const other = document.connectors.find((item) => item.id === otherConnectorId);
   if (!connector) return null;
-  const point = connectorContactPosition(connector, contactId, view);
+  const useMaterialized = connector.libraryBinding?.mode === "template" &&
+    (materializedConnectorIds === undefined || materializedConnectorIds.has(connector.id));
+  const materialized = useMaterialized
+    ? materializedContactWorldRepresentation(connector, contactId, view)
+    : null;
+  if (materialized) return materialized.position;
+  const fallbackConnector = connector.libraryBinding?.mode === "template"
+    ? { ...connector, libraryBinding: { mode: "free" as const } }
+    : connector;
+  const point = connectorContactPosition(fallbackConnector, contactId, view);
   if (!point) return null;
   if (view === "e4") return point;
   const height = Math.max(72, 44 + connector.contacts.length * 16);
@@ -154,15 +256,45 @@ function contactPointForWire(
   };
 }
 
+/** Graph failures are retryable without replacing the editable harness document. */
+export function ComponentGraphErrorAlert({
+  message,
+  onRetry,
+}: {
+  readonly message: string;
+  readonly onRetry: () => void;
+}) {
+  return <div className="he-save-message" role="alert">
+    <span>{message}</span>
+    <button type="button" onClick={onRetry}>Повторить загрузку видов</button>
+  </div>;
+}
+
 export function designToScene(
   document: HarnessDesignDocument,
   view: HarnessEditorView,
   diagnosticObjectIds: ReadonlySet<string> = new Set(),
+  materializedConnectorIds?: ReadonlySet<string>,
 ): readonly EditorSceneObject[] {
   const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
     const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
     const seriesBinding = connector.libraryBinding?.mode === "series" ? connector.libraryBinding : null;
     const metadata: Record<string, string> = { contactCount: String(connector.contacts.length) };
+    if (connector.libraryBinding?.mode === "template" &&
+        (materializedConnectorIds === undefined || materializedConnectorIds.has(connector.id))) {
+      const materializedContactPoints = connector.contacts.map((contact) => {
+        const representation = selectMaterializedContactRepresentation(connector, contact.id, view);
+        return representation ? {
+          x: representation.x,
+          y: representation.y,
+          direction: representation.direction,
+          status: contact.connectionStatus,
+        } : null;
+      });
+      if (materializedContactPoints.some((point) => point !== null)) {
+        metadata.materializedContactPoints = JSON.stringify(materializedContactPoints);
+      }
+    }
     if (view === "e4" && geometry) {
       const columnIds = geometry.columns.map((column) => column.kind === "base"
         ? column.key
@@ -207,8 +339,8 @@ export function designToScene(
     };
   });
   const wires: EditorSceneObject[] = document.wires.flatMap((wire, index) => {
-    const start = contactPointForWire(document, wire.from, wire.to, view);
-    const end = contactPointForWire(document, wire.to, wire.from, view);
+    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds);
+    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds);
     if (!start || !end) return [];
     const points = view === "drawing" ? [start, ...wire.drawingRoute, end] : [start, ...wire.e4Route, end];
     const fromAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.from) : null;
@@ -237,8 +369,8 @@ export function designToScene(
     }];
   });
   const dimensions: EditorSceneObject[] = view === "drawing" ? document.wires.flatMap((wire) => {
-    const start = contactPointForWire(document, wire.from, wire.to, view);
-    const end = contactPointForWire(document, wire.to, wire.from, view);
+    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds);
+    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds);
     if (!start || !end) return [];
     const y = Math.max(start.y, end.y) + 70;
     return [{
@@ -285,12 +417,16 @@ export function HarnessDesignEditor({
   harnessDesignation,
   initialView,
   apiOverride,
+  componentPlacementApiOverride,
   onClose,
   onViewChange,
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
   const componentTemplateApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
-  const componentPlacementApi = useMemo(() => createComponentPlacementApi(config, session), [config, session]);
+  const componentPlacementApi = useMemo(
+    () => componentPlacementApiOverride ?? createComponentPlacementApi(config, session),
+    [componentPlacementApiOverride, config, session],
+  );
   const catalog = useEditorReferenceCatalog(config, session);
   const terminalLookup = useTerminalArticleLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(initialView);
@@ -307,12 +443,16 @@ export function HarnessDesignEditor({
     readonly point: { readonly x: number; readonly y: number };
   } | null>(null);
   const [message, setMessage] = useState("Загружаем документ жгута…");
+  const [componentSnapshotsByPlacement, setComponentSnapshotsByPlacement] =
+    useState<ProjectComponentSnapshotLookup>(() => new Map());
+  const [componentGraphMessage, setComponentGraphMessage] = useState("");
   const historyRef = useRef<EditorHistory | null>(null);
   const resourceRef = useRef<HarnessDesignResource | null>(null);
   const savedJsonRef = useRef("");
   const savingRef = useRef(false);
   const saveCoordinatorRef = useRef<DesignSaveCoordinator | null>(null);
   const loadGeneration = useRef(0);
+  const componentGraphRequestGeneration = useRef(0);
   const previewFrameRef = useRef<number | null>(null);
   const pendingMovePreviewRef = useRef<typeof movePreview>(null);
   const placementBusyRef = useRef(false);
@@ -324,6 +464,30 @@ export function HarnessDesignEditor({
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { resourceRef.current = resource; }, [resource]);
   useEffect(() => setView(initialView), [initialView]);
+
+  const refreshComponentGraph = useCallback(async (editorGeneration: number): Promise<void> => {
+    const requestGeneration = ++componentGraphRequestGeneration.current;
+    try {
+      const graph = await componentPlacementApi.list(projectId, harnessId);
+      if (editorGeneration !== loadGeneration.current ||
+          requestGeneration !== componentGraphRequestGeneration.current) return;
+      setComponentSnapshotsByPlacement((current) =>
+        acceptProjectComponentSnapshotLookup(current, graph, editorGeneration, loadGeneration.current));
+      setComponentGraphMessage("");
+    } catch (error) {
+      if (editorGeneration !== loadGeneration.current ||
+          requestGeneration !== componentGraphRequestGeneration.current) return;
+      setComponentSnapshotsByPlacement(new Map());
+      setComponentGraphMessage(error instanceof Error
+        ? `Не удалось загрузить закреплённые виды компонентов: ${error.message}`
+        : "Не удалось загрузить закреплённые виды компонентов.");
+    }
+  }, [componentPlacementApi, harnessId, projectId]);
+  const resolveComponentTemplateAssetUrl = useCallback(
+    (snapshotId: string, assetId: string) =>
+      componentPlacementApi.assetContentUrl(projectId, harnessId, snapshotId, assetId),
+    [componentPlacementApi, harnessId, projectId],
+  );
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
@@ -338,9 +502,11 @@ export function HarnessDesignEditor({
     setSelectedObjectIds([]);
     setEditingObjectId(null);
     setMovePreview(null);
+    setComponentSnapshotsByPlacement(new Map());
+    setComponentGraphMessage("");
     setMessage("Загружаем документ жгута…");
     setSaveState("saved");
-    void api.get(projectId, harnessId).then((loaded) => {
+    const designRequest = api.get(projectId, harnessId).then((loaded) => {
       if (generation !== loadGeneration.current) return;
       const normalizedContent = normalizeE4RoutingDocument(loaded.content);
       setResource(loaded);
@@ -352,8 +518,14 @@ export function HarnessDesignEditor({
       setSaveState("error");
       setMessage(error instanceof Error ? error.message : "Не удалось загрузить документ жгута.");
     });
-    return () => { loadGeneration.current += 1; };
-  }, [api, harnessId, projectId]);
+
+    const componentGraphRequest = refreshComponentGraph(generation);
+    void Promise.allSettled([designRequest, componentGraphRequest]);
+    return () => {
+      loadGeneration.current += 1;
+      componentGraphRequestGeneration.current += 1;
+    };
+  }, [api, harnessId, projectId, refreshComponentGraph]);
 
   const saveOnce = useCallback(async (): Promise<boolean> => {
       savingRef.current = true;
@@ -537,7 +709,23 @@ export function HarnessDesignEditor({
 
   const diagnostics = view === "e4" ? collectE4Diagnostics(history.present) : [];
   const diagnosticObjectIds = new Set(diagnostics.map((diagnostic) => diagnostic.target.objectId));
-  const scene = designToScene(previewResult.document ?? history.present, view, diagnosticObjectIds);
+  const componentTemplateViewInstances = buildComponentTemplateViewInstances(
+    previewResult.document ?? history.present,
+    componentSnapshotsByPlacement,
+  );
+  const materializedConnectorIds = new Set(componentTemplateViewInstances.map((instance) => instance.objectId));
+  const hasComponentGraphIntegrityMismatch = history.present.connectors.some((connector) =>
+    connector.libraryBinding?.mode === "template" && componentSnapshotsByPlacement.has(connector.id) &&
+    !materializedConnectorIds.has(connector.id));
+  const componentGraphIntegrityMessage = componentGraphMessage || (hasComponentGraphIntegrityMismatch
+    ? "Закреплённые контактные данные компонента не совпадают со снимком проекта. Используется резервное отображение."
+    : "");
+  const scene = designToScene(
+    previewResult.document ?? history.present,
+    view,
+    diagnosticObjectIds,
+    materializedConnectorIds,
+  );
   const layers = toUiLayers(history.present, view);
   const selectedConnector = view === "e4" && selectedObjectId
     ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
@@ -677,6 +865,7 @@ export function HarnessDesignEditor({
         setSaveState("saved");
         pendingPlacementRef.current = null;
         setPlacementPending(false);
+        void refreshComponentGraph(pending.loadGeneration);
       } catch (error) {
         // The exact command is kept for the next activation. If the response was
         // lost after the server committed it, the idempotent command journal
@@ -717,6 +906,7 @@ export function HarnessDesignEditor({
       savedJsonRef.current = JSON.stringify(pending.nextHistory.present);
       pendingPlacementRef.current = null;
       setPlacementPending(false);
+      void refreshComponentGraph(pending.loadGeneration);
       setSaveState("saved");
       setMessage("");
       setSelectedObjectId(pending.connectorId);
@@ -841,6 +1031,10 @@ export function HarnessDesignEditor({
   return (
     <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
       {message && <div className="he-save-message" role="alert">{message}</div>}
+      {componentGraphIntegrityMessage && <ComponentGraphErrorAlert
+        message={componentGraphIntegrityMessage}
+        onRetry={() => void refreshComponentGraph(loadGeneration.current)}
+      />}
       <HarnessEditorErrorBoundary
         key={`${harnessId}:${uiFailureNonce}`}
         onError={(failure) => setMessage(`Ошибка отображения: ${failure}`)}
@@ -870,6 +1064,8 @@ export function HarnessDesignEditor({
           diffPairs: history.present.diffPairs,
           screens: history.present.screens,
         } : undefined}
+        componentTemplateViewInstances={componentTemplateViewInstances}
+        resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
         propertyInspector={selectedConnector ? (
