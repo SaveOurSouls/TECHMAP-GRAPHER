@@ -4,11 +4,13 @@ import {
   isTemplateContentV1,
   isTemplateContentV2,
   isTemplateContentV3,
+  isTemplateContentV4,
   parseComponentTemplateContent,
   reconcileTemplateEnvelopeAssets,
   upgradeComponentTemplateContentV1,
   upgradeComponentTemplateContentV1ToV3,
   upgradeComponentTemplateContentV2,
+  upgradeComponentTemplateContentV3,
 } from "./template-content";
 import { newTemplateContent, type TemplateContent } from "./template-model";
 
@@ -140,5 +142,31 @@ describe("component template content boundary", () => {
     expect(reconcileTemplateEnvelopeAssets(content, [asset]).diagnostics).toEqual([]);
     expect(reconcileTemplateEnvelopeAssets(content, [{ ...asset, sizeBytes: 257 }]).diagnostics)
       .toEqual([expect.objectContaining({ code: "asset_envelope_mismatch", message: expect.stringContaining("v3") })]);
+  });
+
+  it("parses v4 with its E4 table and upgrades v3 explicitly", () => {
+    const v3 = upgradeComponentTemplateContentV2(upgradeComponentTemplateContentV1(newTemplateContent()).content).content;
+    const upgraded = upgradeComponentTemplateContentV3(v3).content;
+    expect(upgraded.schemaVersion).toBe(4);
+    const parsed = parseComponentTemplateContent(upgraded);
+    expect(isTemplateContentV4(parsed)).toBe(true);
+    expect(parsed).toBe(upgraded);
+  });
+
+  it("rejects v4 when its table is not synchronized with the v3 article core", () => {
+    const v3 = upgradeComponentTemplateContentV2(upgradeComponentTemplateContentV1(newTemplateContent()).content).content;
+    const upgraded = upgradeComponentTemplateContentV3(v3).content;
+    const broken = {
+      ...structuredClone(upgraded),
+      e4ConnectorTable: {
+        ...structuredClone(upgraded.e4ConnectorTable),
+        contactTypeGroups: [...upgraded.e4ConnectorTable.contactTypeGroups, { id: crypto.randomUUID(), name: "Новый тип" }],
+      },
+    };
+    expect(() => parseComponentTemplateContent(broken)).toThrow(ComponentTemplateContentError);
+    try { parseComponentTemplateContent(broken); } catch (error) {
+      expect((error as ComponentTemplateContentError).diagnostics)
+        .toEqual(expect.arrayContaining([expect.objectContaining({ code: "e4_group_set_mismatch" })]));
+    }
   });
 });

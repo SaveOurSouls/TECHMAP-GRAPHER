@@ -6,11 +6,13 @@ import {
   fileSelectionLabel,
   googleSheetsProfilePreviewRequest,
   profileCountLabel,
+  ReferenceDiagnosticItem,
   ReferenceImportPanel,
+  referenceDiagnosticMessage,
   XlsxProfilePicker,
 } from "./ReferenceImportPanel";
 import { AppNavigation } from "./App";
-import type { XlsxReferencePreview } from "./reference-catalog-api";
+import type { ReferenceCatalogDiagnostic, XlsxReferencePreview } from "./reference-catalog-api";
 import { parseRuntimeConfig } from "./runtime-config";
 
 const config = parseRuntimeConfig({
@@ -161,5 +163,57 @@ describe("reference import panel", () => {
     const file = { name: "База данных.xlsx", size: 1536 } as File;
     expect(fileSelectionLabel(file)).toBe("База данных.xlsx · 2 КиБ");
     expect(fileSelectionLabel(null)).toBe("Файл не выбран");
+  });
+
+  it("leads with a short explanation for formula and incomplete-field warnings", () => {
+    const formulaWarning: ReferenceCatalogDiagnostic = {
+      diagnosticId: "a".repeat(64),
+      severity: "warning",
+      code: "xlsx_cached_formula_values_used",
+      message: "Для поля «legacyHumanUnitPriceMag» использованы сохранённые в XLSX результаты формул (128). Проверьте, что книга была пересчитана перед загрузкой.",
+      entityType: "operation",
+      sourceKey: null,
+      field: "legacyHumanUnitPriceMag",
+      sourceLocation: "'БД.ОП'!P3",
+    };
+    const incompleteWarning = {
+      ...formulaWarning,
+      code: "xlsx_profile_field_incomplete",
+      message: "Поле «manualTakeTimeSeconds» не заполнено в 2 строках профиля.",
+    };
+
+    expect(referenceDiagnosticMessage(formulaWarning)).toBe(
+      "В таблице использованы сохранённые результаты формул: 128 ячеек. Пересчитайте книгу перед загрузкой.",
+    );
+    expect(referenceDiagnosticMessage(incompleteWarning)).toBe(
+      "В профиле есть незаполненные строки: 2 строки. Проверьте таблицу.",
+    );
+  });
+
+  it("keeps source coordinates and internal keys inside collapsed diagnostic details", () => {
+    const diagnostic: ReferenceCatalogDiagnostic = {
+      diagnosticId: "c".repeat(64),
+      severity: "warning",
+      code: "xlsx_cached_formula_values_used",
+      message: "Для поля «legacyHumanUnitPriceMag» использованы сохранённые в XLSX результаты формул (128). Проверьте, что книга была пересчитана перед загрузкой.",
+      entityType: "operation",
+      sourceKey: "ОП-12",
+      field: "legacyHumanUnitPriceMag",
+      sourceLocation: "'БД.ОП'!P3",
+    };
+    const markup = renderToStaticMarkup(createElement(ReferenceDiagnosticItem, {
+      diagnostic,
+      acknowledged: false,
+      disabled: false,
+      onAcknowledge: () => undefined,
+    }));
+
+    expect(markup).toContain("Предупреждение: В таблице использованы сохранённые результаты формул: 128 ячеек");
+    expect(markup).toContain('<details class="diagnostic-details"><summary>Подробности проверки</summary>');
+    expect(markup).toContain("legacyHumanUnitPriceMag");
+    expect(markup).toContain("БД.ОП");
+    expect(markup).toContain("ОП-12");
+    expect(markup).not.toContain("<details class=\"diagnostic-details\" open=\"\"");
+    expect(markup.match(/<strong>(.*?)<\/strong>/)?.[1]).not.toContain("legacyHumanUnitPriceMag");
   });
 });

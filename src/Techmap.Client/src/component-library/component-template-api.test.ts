@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseRuntimeConfig } from "../runtime-config";
 import { createComponentTemplateApi } from "./component-template-api";
-import { upgradeComponentTemplateContentV1 } from "./template-content";
+import {
+  upgradeComponentTemplateContentV1,
+  upgradeComponentTemplateContentV2,
+  upgradeComponentTemplateContentV3,
+} from "./template-content";
 import { newTemplateContent } from "./template-model";
 
 const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "1", apiVersion: "1", schemaVersion: "7" });
@@ -75,6 +79,20 @@ describe("component template API", () => {
 
     await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 1 } });
     await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 2 } });
+  });
+
+  it("reads a persisted schema v4 response through the strict content boundary", async () => {
+    const v2 = upgradeComponentTemplateContentV1(newTemplateContent()).content;
+    const v3 = upgradeComponentTemplateContentV2(v2).content;
+    const v4 = upgradeComponentTemplateContentV3(v3).content;
+    const api = createComponentTemplateApi(config, session, async () => new Response(
+      JSON.stringify({ ...detail(4), content: v4 }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    await expect(api.get(templateId)).resolves.toMatchObject({
+      content: { schemaVersion: 4, e4ConnectorTable: { modelVersion: 1 } },
+    });
   });
 
   it("uploads, reads and removes immutable image assets", async () => {

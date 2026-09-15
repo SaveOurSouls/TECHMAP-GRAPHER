@@ -24,7 +24,7 @@ const renderSeriesPanel = (content: TemplateContentV3) => renderToStaticMarkup(c
   onAddContactTypeGroup: vi.fn(),
   onRenameContactTypeGroup: vi.fn(),
   onDeleteContactTypeGroup: vi.fn(),
-  onAddArticleVariant: vi.fn(),
+  onAddArticleVariants: vi.fn(),
   onDeleteArticleVariant: vi.fn(),
   onSetArticleContactGroup: vi.fn(),
   onRemoveArticleContactGroup: vi.fn(),

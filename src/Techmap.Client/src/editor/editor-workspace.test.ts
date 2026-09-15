@@ -568,7 +568,17 @@ describe("harness editor workspace", () => {
     expect(screenLayout.crossSize / screenLayout.alongSize).toBeGreaterThan(2);
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 50 }, 1)?.id).toBe("s1");
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 70 }, 1_000)).toBeNull();
-    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 15 }, 1)).toEqual({ screenId: "s1" });
+    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 15 }, 1)).toEqual({
+      screenId: "s1", screenTerminalSide: "above",
+    });
+    const bothSides = getE4ScreenLayout({ ...screen, terminalSide: "both" }, wires)!;
+    expect(bothSides.terminals).toEqual([
+      { side: "above", bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 15 } },
+      { side: "below", bodyConnectionPoint: { x: 40, y: 69 }, connectionPoint: { x: 40, y: 85 } },
+    ]);
+    expect(hitTestE4ScreenConnection([{ ...screen, terminalSide: "both" }], wires, { x: 40, y: 85 }, 1)).toEqual({
+      screenId: "s1", screenTerminalSide: "below",
+    });
     const pair = { id: "dp", wireIds: ["h1", "h2"] as const, step: 25, amplitude: 6, variant: 2 as const };
     const pairLayout = getE4DifferentialPairLayout(pair, wires)!;
     expect(pairLayout).toMatchObject({
@@ -588,6 +598,25 @@ describe("harness editor workspace", () => {
     expect(getE4DifferentialPairLayout({
       id: "dp-overlap", wireIds: ["h1", "h1"], step: 25, amplitude: 6, variant: 1,
     }, wires)).toMatchObject({ crossMinimum: 34, crossMaximum: 46 });
+  });
+
+  it("keeps screen placement continuous when selected routes have different bend counts", () => {
+    const wires: readonly EditorSceneObject[] = [
+      { id: "a", layerId: "bottom", kind: "wire", label: "A", x: 0, y: 0, width: 0, height: 0, color: "#c00", points: [
+        { x: 0, y: 20 }, { x: 80, y: 20 }, { x: 80, y: 80 }, { x: 140, y: 80 },
+      ], metadata: { view: "e4" } },
+      { id: "b", layerId: "bottom", kind: "wire", label: "B", x: 0, y: 0, width: 0, height: 0, color: "#00c", points: [
+        { x: 0, y: 40 }, { x: 50, y: 40 }, { x: 50, y: 60 }, { x: 100, y: 60 },
+        { x: 100, y: 100 }, { x: 140, y: 100 },
+      ], metadata: { view: "e4" } },
+    ];
+    const start = getE4ScreenLayout({ id: "s", wireIds: ["a", "b"], position: 0, label: "SH", width: 20 }, wires);
+    const end = getE4ScreenLayout({ id: "s", wireIds: ["a", "b"], position: 1, label: "SH", width: 20 }, wires);
+    expect(start).not.toBeNull();
+    expect(end).not.toBeNull();
+    expect(start!.pathLength).toBeGreaterThan(0);
+    expect(end!.pathLength).toBe(start!.pathLength);
+    expect(end!.center).not.toEqual(start!.center);
   });
 
   it("isolates both differential-pair traces from a wire between contacts 2 and 4", () => {

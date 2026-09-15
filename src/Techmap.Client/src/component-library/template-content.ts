@@ -13,8 +13,15 @@ import {
   type TemplateV3Upgrade,
 } from "./template-model-v3";
 import { upgradeTemplateContentV1ToV3, upgradeTemplateContentV2ToV3 } from "./template-upgrade-v3";
+import {
+  isTemplateContentV4 as isStrictTemplateContentV4,
+  upgradeTemplateContentV3ToV4,
+  validateTemplateContentV4,
+  type TemplateContentV4,
+  type TemplateV4Upgrade,
+} from "./template-model-v4";
 
-export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2 | TemplateContentV3;
+export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2 | TemplateContentV3 | TemplateContentV4;
 export type TemplateEnvelopeAsset = Readonly<TemplateAssetV2>;
 export interface TemplateAssetReconciliation {
   readonly assets: TemplateAssetV2[];
@@ -52,6 +59,12 @@ export function parseComponentTemplateContent(value: unknown): ComponentTemplate
       throw new ComponentTemplateContentError("Шаблон v3 не прошёл проверку содержимого.", validation.diagnostics);
     return value as TemplateContentV3;
   }
+  if (candidate.schemaVersion === 4) {
+    const validation = validateTemplateContentV4(value);
+    if (!validation.valid)
+      throw new ComponentTemplateContentError("Шаблон v4 не прошёл проверку содержимого.", validation.diagnostics);
+    return value as TemplateContentV4;
+  }
   throw new ComponentTemplateContentError("Шаблон имеет неподдерживаемую схему содержимого.");
 }
 
@@ -67,6 +80,10 @@ export function isTemplateContentV3(content: ComponentTemplateContent): content 
   return content.schemaVersion === 3;
 }
 
+export function isTemplateContentV4(content: ComponentTemplateContent): content is TemplateContentV4 {
+  return content.schemaVersion === 4 && isStrictTemplateContentV4(content);
+}
+
 export function upgradeComponentTemplateContentV1(
   content: TemplateContentV1,
   envelopeAssets: readonly TemplateEnvelopeAsset[] = [],
@@ -80,6 +97,10 @@ export function upgradeComponentTemplateContentV1(
 
 export function upgradeComponentTemplateContentV2(content: TemplateContentV2): TemplateV3Upgrade {
   return upgradeTemplateContentV2ToV3(content);
+}
+
+export function upgradeComponentTemplateContentV3(content: TemplateContentV3): TemplateV4Upgrade {
+  return upgradeTemplateContentV3ToV4(content);
 }
 
 export function upgradeComponentTemplateContentV1ToV3(

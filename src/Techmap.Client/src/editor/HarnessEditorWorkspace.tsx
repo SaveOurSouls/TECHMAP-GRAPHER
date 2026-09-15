@@ -299,7 +299,10 @@ export function HarnessEditorWorkspace({
         variant: selectedDiffPair.variant ?? 1,
         twistPitchMm: selectedDiffPair.step,
       } : null}
-      screen={selectedScreen ? { positionPercent: Math.round(selectedScreen.position * 100) } : null}
+      screen={selectedScreen ? {
+        positionPercent: Math.round(selectedScreen.position * 100),
+        terminalSide: selectedScreen.terminalSide ?? "above",
+      } : null}
       canClearGroup={canClearSelectedGroup}
       disabled={selectedWireIds.some((id) => layers.find((layer) =>
         layer.id === objects.find((object) => object.id === id)?.layerId)?.locked === true)}

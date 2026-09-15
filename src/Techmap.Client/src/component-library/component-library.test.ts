@@ -28,7 +28,7 @@ describe("component library UI", () => {
 
   it("renders view tabs, primitive tools and versioned save action", () => {
     const markup = renderToStaticMarkup(createElement(ComponentLibrary, { config, session }));
-    expect(markup).toContain("ГРАФИЧЕСКИЕ ШАБЛОНЫ");
+    expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Прямоугольник");
@@ -39,9 +39,9 @@ describe("component library UI", () => {
     expect(markup).toContain('role="tabpanel"');
     expect(markup).toContain("Отменить");
     expect(markup).toContain("Серия и артикулы");
-    expect(markup).toContain("Группы контактов");
+    expect(markup).toContain("Типы контактов");
     expect(markup).toContain("Артикул для предпросмотра");
-    expect(markup).toContain("ГРАФИЧЕСКИЕ ШАБЛОНЫ V3");
+    expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Добавить слой");

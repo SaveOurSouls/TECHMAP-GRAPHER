@@ -982,11 +982,11 @@ describe("shared harness editor model", () => {
       type: "create-screen", screen: { id: "s1", wireIds: ["w1", "w2"], position: 0.4, label: "SH1", width: 30 },
     });
     document = applyEditorCommand(document, {
-      type: "update-screen", screenId: "s1", position: 0.6, label: "SH-A",
+      type: "update-screen", screenId: "s1", position: 0.6, label: "SH-A", terminalSide: "both",
     });
     expect(document.views.e4.wireCrossingStyle).toBe("bridge");
     expect(document.diffPairs[0]).toMatchObject({ variant: 2, step: 16 });
-    expect(document.screens[0]).toMatchObject({ position: 0.6, label: "SH-A" });
+    expect(document.screens[0]).toMatchObject({ position: 0.6, label: "SH-A", terminalSide: "both" });
     document = applyEditorCommand(document, { type: "remove-wire", wireId: "w1" });
     expect(document.diffPairs).toHaveLength(0);
     expect(document.screens[0]?.wireIds).toEqual(["w2"]);
@@ -1082,7 +1082,10 @@ describe("shared harness editor model", () => {
     expect(movedRoute).not.toEqual(initialRoute);
 
     document = applyEditorCommand(document, {
-      type: "move-e4-wire-segment", wireId: "w1", segmentIndex: 2, position: { x: 0, y: 32 },
+      // At 70% the screen is on the long final horizontal span of w1/w2. Move
+      // the matching internal span of w2 so its bundle center, screen terminal
+      // and attached lead route must all follow.
+      type: "move-e4-wire-segment", wireId: "w1", segmentIndex: 3, position: { x: 840, y: 0 },
     });
     const finalPoint = wireScreenConnectionGeometry(document, "s1")!.connectionPoint;
     const lead = document.wires.find((wire) => wire.id === "shield-lead")!;
@@ -1109,6 +1112,35 @@ describe("shared harness editor model", () => {
     });
     const removed = applyEditorCommand(parsed, { type: "remove-screen", screenId: "s1" });
     expect(removed.wires.some((wire) => wire.id === "shield-lead")).toBe(false);
+  });
+
+  it("keeps legacy screen documents above and persists an explicitly selected side", () => {
+    const legacy = connectionDocument();
+    const legacyJson = JSON.parse(JSON.stringify({
+      ...legacy,
+      screens: [{ id: "s1", wireIds: ["w1", "w2"], position: 0.5, label: "SH1", width: 46 }],
+    })) as Record<string, unknown>;
+    const parsedLegacy = parseHarnessDesignDocument(legacyJson);
+    expect(parsedLegacy.screens[0]?.terminalSide).toBe("above");
+
+    let document = applyEditorCommand(connectionDocument(), {
+      type: "create-screen",
+      screen: { id: "s2", wireIds: ["w1", "w2"], position: 0.5, label: "SH2", width: 46, terminalSide: "both" },
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire(
+        "shield-lead-below",
+        { connectorId: "x1", contactId: "x1:contact:3" },
+        createScreenEndpoint("s2", "below"),
+      ),
+    });
+    const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+    expect(restored.screens[0]?.terminalSide).toBe("both");
+    expect(restored.wires.find((wire) => wire.id === "shield-lead-below")?.to).toMatchObject({
+      screenId: "s2", screenTerminalSide: "below",
+    });
+    expect(wireEndpointE4Anchor(restored, createScreenEndpoint("s2", "below"))?.leadDirection).toBe("down");
   });
 
   it("normalizes legacy routes whose old eight-unit clearance is no longer valid", () => {

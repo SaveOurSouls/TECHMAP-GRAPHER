@@ -68,7 +68,7 @@ export type EditorCommand =
   | { readonly type: "update-diff-pair"; readonly groupId: string; readonly variant?: 1 | 2; readonly step?: number; readonly amplitude?: number }
   | { readonly type: "remove-diff-pair"; readonly groupId: string }
   | { readonly type: "create-screen"; readonly screen: WireScreenGroup }
-  | { readonly type: "update-screen"; readonly screenId: string; readonly wireIds?: readonly string[]; readonly position?: number; readonly label?: string; readonly width?: number }
+  | { readonly type: "update-screen"; readonly screenId: string; readonly wireIds?: readonly string[]; readonly position?: number; readonly label?: string; readonly width?: number; readonly terminalSide?: WireScreenGroup["terminalSide"] }
   | { readonly type: "remove-screen"; readonly screenId: string }
   | { readonly type: "update-layer"; readonly view: EditorView; readonly layerId: string; readonly visible?: boolean; readonly locked?: boolean }
   | { readonly type: "replace-layers"; readonly view: EditorView; readonly layers: readonly EditorLayer[] }
@@ -662,6 +662,7 @@ export function applyEditorCommand(
           position: command.position ?? screen.position,
           label: command.label ?? screen.label,
           width: command.width ?? screen.width,
+          terminalSide: command.terminalSide ?? screen.terminalSide,
         }), "Экран не найден."),
       };
       const attachedWireIds = changed.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
@@ -1244,11 +1245,15 @@ function createE4RoutingRequest(
     }
   };
   const junctionLinkedWireIds = collectConductiveComponent([wireId], document);
-  const endpointScreenIds = new Set([wire.from, wire.to].flatMap((endpoint) =>
-    isScreenEndpoint(endpoint) ? [endpoint.screenId] : []));
-  const screenedWireIdsAtEndpoint = new Set(document.screens
-    .filter((screen) => endpointScreenIds.has(screen.id))
-    .flatMap((screen) => screen.wireIds));
+  const relatedScreenIds = new Set([
+    ...[wire.from, wire.to].flatMap((endpoint) => isScreenEndpoint(endpoint) ? [endpoint.screenId] : []),
+    ...document.screens.filter((screen) => screen.wireIds.includes(wireId)).map((screen) => screen.id),
+  ]);
+  const screenRelatedWireIds = new Set([
+    ...document.screens.filter((screen) => relatedScreenIds.has(screen.id)).flatMap((screen) => screen.wireIds),
+    ...document.wires.filter((candidate) => [candidate.from, candidate.to].some((endpoint) =>
+      isScreenEndpoint(endpoint) && relatedScreenIds.has(endpoint.screenId))).map((candidate) => candidate.id),
+  ]);
   return {
     start,
     end,
@@ -1264,8 +1269,9 @@ function createE4RoutingRequest(
         };
       }),
       ...document.wires.flatMap((candidate, index) => {
+        if (excludedWireIds.has(candidate.id)) return [];
         if (junctionLinkedWireIds.has(candidate.id)) return [];
-        if (screenedWireIdsAtEndpoint.has(candidate.id)) return [];
+        if (screenRelatedWireIds.has(candidate.id)) return [];
         const points = fullWirePoints(candidate);
         if (!points) return [];
         const label = candidate.circuit || `W${index + 1}`;
@@ -1285,8 +1291,12 @@ function createE4RoutingRequest(
     occupiedRoutes: [
       ...document.wires.flatMap((candidate) => {
       if (excludedWireIds.has(candidate.id)) return [];
+      if (screenRelatedWireIds.has(candidate.id)) return [];
       const points = fullWirePoints(candidate);
-      return points ? [{ id: candidate.id, points }] : [];
+      const allowedTouchPoints = document.junctions
+        .filter((junction) => junction.wireIds.includes(wireId) && junction.wireIds.includes(candidate.id))
+        .map((junction) => junction.position);
+      return points ? [{ id: candidate.id, points, allowedTouchPoints }] : [];
       }),
       ...(partialRoute && partialRoute.length >= 2
         ? [{
@@ -1536,10 +1546,14 @@ function normalizeScreen(document: HarnessDesignDocument, screen: WireScreenGrou
   })) throw new Error("Провод, подключённый к экрану, не может одновременно входить в его охват.");
   if (!Number.isFinite(screen.position) || screen.position < 0 || screen.position > 1) throw new Error("Положение экрана должно быть от 0 до 1.");
   requirePositiveParameter(screen.width, "Ширина экрана");
+  const terminalSide = screen.terminalSide ?? "above";
+  if (terminalSide !== "above" && terminalSide !== "below" && terminalSide !== "both") {
+    throw new Error("Сторона вывода экрана задана неверно.");
+  }
   if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
     throw new Error("Выбранные провода не имеют общего параллельного участка для экрана.");
   }
-  return { id, wireIds: [...screen.wireIds], position: screen.position, label, width: screen.width };
+  return { id, wireIds: [...screen.wireIds], position: screen.position, label, width: screen.width, terminalSide };
 }
 
 function requireWireIds(document: HarnessDesignDocument, wireIds: readonly string[]): void {

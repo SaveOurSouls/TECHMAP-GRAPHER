@@ -587,6 +587,46 @@ export function upsertArticleVariantV3(
   return [requireValidResult({ ...content, articleVariants: variants }, "invalid_article_variant"), id];
 }
 
+/**
+ * Adds a batch of new article variants as one immutable command.
+ *
+ * The whole input is normalized and checked before any variant is created, so
+ * a collision in the existing series or inside the batch leaves the source
+ * content untouched. This is used by the series pattern editor to avoid a
+ * partially-expanded list when one generated article is invalid.
+ */
+export function addArticleVariantsV3(
+  content: TemplateContentV3,
+  inputs: readonly UpsertArticleVariantV3Input[],
+): TemplateContentV3 {
+  requireValidInput(content);
+  if (inputs.length === 0)
+    throw new TemplateCommandV3Error("empty_article_batch", "Не задано ни одного артикула для добавления.");
+  if (inputs.length > TEMPLATE_V3_LIMITS.articleVariants || content.articleVariants.length + inputs.length > TEMPLATE_V3_LIMITS.articleVariants)
+    throw new TemplateCommandV3Error("article_variant_limit", "Превышен лимит артикулов серии.");
+
+  const existing = new Set(content.articleVariants.map(articleIdentity));
+  const batch = new Set<string>();
+  const normalized = inputs.map((input, index) => {
+    if (input.id !== undefined)
+      throw new TemplateCommandV3Error("article_batch_id_not_allowed", `В пакетном добавлении нельзя изменять существующий вариант (строка ${index + 1}).`);
+    const key = normalizedArticleKey(input);
+    const identity = articleIdentity(key);
+    if (existing.has(identity) || batch.has(identity))
+      throw new TemplateCommandV3Error("duplicate_article_variant", `Вариант с ключом «${key.articleKey}» уже есть в серии или повторяется в списке.`);
+    batch.add(identity);
+    return key;
+  });
+
+  const variants: ArticleVariantV3[] = normalized.map(key => ({
+    id: crypto.randomUUID(),
+    ...key,
+    parameterValues: [],
+    contactGroups: null,
+  }));
+  return requireValidResult({ ...content, articleVariants: [...content.articleVariants, ...variants] }, "invalid_article_variant_batch");
+}
+
 export function removeArticleVariantV3(content: TemplateContentV3, variantId: string): TemplateContentV3 {
   requireValidInput(content);
   if (!content.articleVariants.some(variant => variant.id === variantId))

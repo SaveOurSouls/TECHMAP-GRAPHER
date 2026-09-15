@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addBasicNodeV3,
+  addArticleVariantsV3,
   addBundlePortV3,
   addContactPointV3,
   addContactTypeGroupV3,
@@ -29,6 +30,29 @@ import { validateTemplateContentV3 } from "./template-model-v3";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 
 describe("template v3 immutable commands", () => {
+  it("adds an article batch atomically and rejects existing or intra-batch collisions", () => {
+    const initial = newTemplateContentV3();
+    const [withExisting] = upsertArticleVariantV3(initial, {
+      sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-02",
+    });
+    const before = structuredClone(withExisting);
+    const added = addArticleVariantsV3(withExisting, [
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-01" },
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-03" },
+    ]);
+    expect(added.articleVariants.map(item => item.articleKey)).toEqual(["PHR-02", "PHR-01", "PHR-03"]);
+    expect(withExisting).toEqual(before);
+
+    expect(() => addArticleVariantsV3(withExisting, [
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-04" },
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-04" },
+    ])).toThrowError(new TemplateCommandV3Error("duplicate_article_variant", "Вариант с ключом «PHR-04» уже есть в серии или повторяется в списке."));
+    expect(() => addArticleVariantsV3(withExisting, [
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-02" },
+      { sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-05" },
+    ])).toThrowError(new TemplateCommandV3Error("duplicate_article_variant", "Вариант с ключом «PHR-02» уже есть в серии или повторяется в списке."));
+    expect(withExisting).toEqual(before);
+  });
   it("creates mandatory views and a strictly valid v3 document", () => {
     const content = newTemplateContentV3();
 

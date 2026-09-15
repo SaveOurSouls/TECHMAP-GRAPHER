@@ -47,6 +47,10 @@
 .e4wm-number-field { grid-column: 1 / 3; display: grid; grid-template-columns: 1fr 80px; align-items: center; gap: 6px; color: #6f828c; font-size: 8px; }
 .e4wm-number-field input { width: 80px; height: 27px; padding: 4px 6px; border: 1px solid #cad8de; border-radius: 4px; color: #294f62; font-size: 9px; }
 .e4wm-screen-settings { margin-left: 35px; padding-top: 7px; display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; border-top: 1px solid #edf1f3; color: #71838c; font-size: 8px; }
+.e4wm-screen-side-label { grid-column: 1 / 3; font-weight: 750; }
+.e4wm-screen-side { grid-column: 1 / 3; margin-bottom: 5px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+.e4wm-screen-side button { min-height: 28px; padding: 3px; border: 1px solid #d5e0e4; border-radius: 4px; background: #fff; color: #607c89; font: inherit; cursor: pointer; }
+.e4wm-screen-side button.active { border-color: #7db1c5; background: #ebf6f9; color: #08749e; font-weight: 800; }
 .e4wm-screen-settings output { color: #27647e; font-weight: 800; }
 .e4wm-screen-settings input { grid-column: 1 / 3; width: 100%; accent-color: var(--e4wm-accent); }
 .e4wm-screen-settings .start, .e4wm-screen-settings .end { color: #98a5ab; font-size: 7px; }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import {
   panEditorCamera,
   screenToWorld,
@@ -245,11 +245,12 @@ export interface E4ScreenOverlay {
   readonly position: number;
   readonly label: string;
   readonly width: number;
+  readonly terminalSide?: "above" | "below" | "both";
 }
 
 export type E4ConnectableEndpoint =
   | { readonly connectorId: string; readonly contactIndex: number }
-  | { readonly screenId: string };
+  | { readonly screenId: string; readonly screenTerminalSide?: "above" | "below" };
 
 export interface E4SceneOverlays {
   readonly crossingStyle: "none" | "bridge";
@@ -518,7 +519,14 @@ export function parseE4SceneOverlays(objects: readonly EditorSceneObject[]): E4S
     const position = Number(item.position);
     const width = Number(item.width);
     return wireIds && wireIds.length > 0 && position >= 0 && position <= 1 && width > 0
-      ? [{ id: item.id, wireIds, position, width, label: typeof item.label === "string" ? item.label : "" }]
+      ? [{
+        id: item.id,
+        wireIds,
+        position,
+        width,
+        label: typeof item.label === "string" ? item.label : "",
+        terminalSide: item.terminalSide === "below" || item.terminalSide === "both" ? item.terminalSide : "above",
+      }]
       : [];
   }) : [];
   return {
@@ -688,6 +696,12 @@ export interface E4ScreenLayout {
   readonly pathLength: number;
   readonly bodyConnectionPoint: EditorPoint;
   readonly connectionPoint: EditorPoint;
+  readonly terminalSide: "above" | "below";
+  readonly terminals: readonly {
+    readonly side: "above" | "below";
+    readonly bodyConnectionPoint: EditorPoint;
+    readonly connectionPoint: EditorPoint;
+  }[];
 }
 
 export interface E4DifferentialPairMotif {
@@ -755,16 +769,28 @@ export function getE4ScreenLayout(
   objects: readonly EditorSceneObject[],
 ): E4ScreenLayout | null {
   const alignedSpans = findE4AlignedParallelSpans(objects, screen.wireIds);
+  const allCommonSpans = findE4AllCommonParallelSpans(objects, screen.wireIds);
   const fallbackSpan = findE4CommonParallelSpan(objects, screen.wireIds);
-  const spans = alignedSpans.length > 0 ? alignedSpans : fallbackSpan ? [fallbackSpan] : [];
+  const spans = alignedSpans.length > 0
+    ? alignedSpans
+    : allCommonSpans.length > 0
+      ? allCommonSpans
+      : fallbackSpan ? [fallbackSpan] : [];
   if (spans.length === 0) return null;
-  const pathLength = spans.reduce((sum, item) => sum + (item.end - item.start), 0);
+  const firstWire = objects.find((object) => object.id === screen.wireIds[0] && object.kind === "wire");
+  const firstRouteSegments = firstWire ? e4WireSegments(getE4WireRoute(firstWire)) : [];
+  const orderedSpans = [...spans].sort((left, right) => {
+    const leftIndex = firstWire ? firstRouteSegments.indexOf(left.segmentByWireId[firstWire.id]!) : 0;
+    const rightIndex = firstWire ? firstRouteSegments.indexOf(right.segmentByWireId[firstWire.id]!) : 0;
+    return leftIndex - rightIndex || left.start - right.start;
+  });
+  const pathLength = orderedSpans.reduce((sum, item) => sum + (item.end - item.start), 0);
   const requestedDistance = pathLength * Math.max(0, Math.min(1, screen.position));
   let distance = 0;
-  let span = spans[0]!;
-  for (const candidate of spans) {
+  let span = orderedSpans[0]!;
+  for (const candidate of orderedSpans) {
     const length = candidate.end - candidate.start;
-    if (requestedDistance <= distance + length || candidate === spans.at(-1)) {
+    if (requestedDistance <= distance + length || candidate === orderedSpans.at(-1)) {
       span = candidate;
       break;
     }
@@ -774,12 +800,21 @@ export function getE4ScreenLayout(
   const cross = (span.crossMinimum + span.crossMaximum) / 2;
   const crossSize = Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18);
   const center = span.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
-  const bodyConnectionPoint = span.orientation === "horizontal"
-    ? { x: center.x, y: center.y - crossSize / 2 }
-    : { x: center.x - crossSize / 2, y: center.y };
-  const connectionPoint = span.orientation === "horizontal"
-    ? { x: bodyConnectionPoint.x, y: bodyConnectionPoint.y - e4ScreenTerminalLength }
-    : { x: bodyConnectionPoint.x - e4ScreenTerminalLength, y: bodyConnectionPoint.y };
+  const configuredSide = screen.terminalSide ?? "above";
+  const sides: readonly ("above" | "below")[] = configuredSide === "both"
+    ? ["above", "below"]
+    : [configuredSide];
+  const terminals = sides.map((side) => {
+    const direction = side === "above" ? -1 : 1;
+    const bodyConnectionPoint = span.orientation === "horizontal"
+      ? { x: center.x, y: center.y + direction * crossSize / 2 }
+      : { x: center.x + direction * crossSize / 2, y: center.y };
+    const connectionPoint = span.orientation === "horizontal"
+      ? { x: bodyConnectionPoint.x, y: bodyConnectionPoint.y + direction * e4ScreenTerminalLength }
+      : { x: bodyConnectionPoint.x + direction * e4ScreenTerminalLength, y: bodyConnectionPoint.y };
+    return { side, bodyConnectionPoint, connectionPoint };
+  });
+  const terminal = terminals[0]!;
   return {
     id: screen.id,
     wireIds: screen.wireIds,
@@ -789,10 +824,12 @@ export function getE4ScreenLayout(
     alongSize: e4ScreenAlongSize,
     crossSize,
     span,
-    spans,
+    spans: orderedSpans,
     pathLength,
-    bodyConnectionPoint,
-    connectionPoint,
+    bodyConnectionPoint: terminal.bodyConnectionPoint,
+    connectionPoint: terminal.connectionPoint,
+    terminalSide: terminal.side,
+    terminals,
   };
 }
 
@@ -860,6 +897,59 @@ function findE4AlignedParallelSpans(
   return result;
 }
 
+/**
+ * Finds every usable common span when selected routes no longer have the same
+ * number of bends. This keeps the screen slider usable after automatic
+ * rerouting instead of locking it to the single longest segment.
+ */
+function findE4AllCommonParallelSpans(
+  objects: readonly EditorSceneObject[],
+  wireIds: readonly string[],
+): readonly E4ParallelSpan[] {
+  const wires = wireIds.map((wireId) => objects.find((object) => object.id === wireId && object.kind === "wire"));
+  if (wires.length === 0 || wires.some((wire) => wire === undefined)) return [];
+  const result: E4ParallelSpan[] = [];
+  const seen = new Set<string>();
+  for (const orientation of ["horizontal", "vertical"] as const) {
+    const segmentsByWire = wires.map((wire) => e4WireSegments(getE4WireRoute(wire!))
+      .flatMap((segment, routeIndex) => segment.orientation === orientation ? [{
+        segment,
+        routeIndex,
+        start: orientation === "horizontal"
+          ? Math.min(segment.start.x, segment.end.x)
+          : Math.min(segment.start.y, segment.end.y),
+        end: orientation === "horizontal"
+          ? Math.max(segment.start.x, segment.end.x)
+          : Math.max(segment.start.y, segment.end.y),
+      }] : []));
+    if (segmentsByWire.some((segments) => segments.length === 0)) continue;
+    const candidateStarts = [...new Set(segmentsByWire.flatMap((segments) => segments.map((item) => item.start)))]
+      .sort((left, right) => left - right);
+    for (const start of candidateStarts) {
+      const selected = segmentsByWire.map((segments) => segments
+        .filter((item) => item.start <= start && item.end > start)
+        .sort((left, right) => right.end - left.end || left.routeIndex - right.routeIndex)[0]);
+      if (selected.some((item) => item === undefined)) continue;
+      const end = Math.min(...selected.map((item) => item!.end));
+      if (end <= start) continue;
+      const signature = selected.map((item) => item!.routeIndex).join(":");
+      const key = `${orientation}:${signature}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const crosses = selected.map((item) => orientation === "horizontal" ? item!.segment.start.y : item!.segment.start.x);
+      result.push({
+        orientation,
+        start,
+        end,
+        crossMinimum: Math.min(...crosses),
+        crossMaximum: Math.max(...crosses),
+        segmentByWireId: Object.fromEntries(wireIds.map((wireId, index) => [wireId, selected[index]!.segment])),
+      });
+    }
+  }
+  return result;
+}
+
 function getE4ScreenPositionForPoint(layout: E4ScreenLayout, point: EditorPoint): number {
   let accumulated = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -907,14 +997,16 @@ export function hitTestE4ScreenConnection(
   point: EditorPoint,
   zoom: number,
   layers?: readonly EditorLayer[],
-): { readonly screenId: string } | null {
+): { readonly screenId: string; readonly screenTerminalSide: "above" | "below" } | null {
   const tolerance = 9 / Math.max(zoom, 0.01);
   const visibleObjects = layers ? objectsInPaintOrder(objects, layers) : objects;
   for (const screen of [...screens].reverse()) {
     if (layers && !isE4OverlayVisible(screen.wireIds, objects, layers)) continue;
     const layout = getE4ScreenLayout(screen, visibleObjects);
-    if (layout && Math.hypot(point.x - layout.connectionPoint.x, point.y - layout.connectionPoint.y) <= tolerance) {
-      return { screenId: screen.id };
+    const terminal = layout?.terminals.find((item) =>
+      Math.hypot(point.x - item.connectionPoint.x, point.y - item.connectionPoint.y) <= tolerance);
+    if (terminal) {
+      return { screenId: screen.id, screenTerminalSide: terminal.side };
     }
   }
   return null;
@@ -2035,16 +2127,18 @@ function drawE4Screens(
     context.strokeStyle = "#506d7c";
     context.lineWidth = 1.5;
     context.stroke();
-    context.beginPath();
-    context.moveTo(layout.bodyConnectionPoint.x, layout.bodyConnectionPoint.y);
-    context.lineTo(layout.connectionPoint.x, layout.connectionPoint.y);
-    context.strokeStyle = "#183b4d";
-    context.lineWidth = 2;
-    context.stroke();
-    context.beginPath();
-    context.arc(layout.connectionPoint.x, layout.connectionPoint.y, 3.5, 0, Math.PI * 2);
-    context.fillStyle = "#183b4d";
-    context.fill();
+    for (const terminal of layout.terminals) {
+      context.beginPath();
+      context.moveTo(terminal.bodyConnectionPoint.x, terminal.bodyConnectionPoint.y);
+      context.lineTo(terminal.connectionPoint.x, terminal.connectionPoint.y);
+      context.strokeStyle = "#183b4d";
+      context.lineWidth = 2;
+      context.stroke();
+      context.beginPath();
+      context.arc(terminal.connectionPoint.x, terminal.connectionPoint.y, 3.5, 0, Math.PI * 2);
+      context.fillStyle = "#183b4d";
+      context.fill();
+    }
   }
 }
 
@@ -2222,12 +2316,12 @@ export function getEditorSceneBounds(
       layout.center.x + width / 2,
       layout.center.y + height / 2,
     );
-    bounds = expandSceneBounds(
+    for (const terminal of layout.terminals) bounds = expandSceneBounds(
       bounds,
-      layout.connectionPoint.x - 4,
-      layout.connectionPoint.y - 4,
-      layout.connectionPoint.x + 4,
-      layout.connectionPoint.y + 4,
+      terminal.connectionPoint.x - 4,
+      terminal.connectionPoint.y - 4,
+      terminal.connectionPoint.x + 4,
+      terminal.connectionPoint.y + 4,
     );
   }
   return bounds;
@@ -2376,6 +2470,7 @@ export function CanvasViewport({
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
+  const [screenPositionPreview, setScreenPositionPreview] = useState<{ readonly screenId: string; readonly position: number } | null>(null);
   const [connectorAlignmentGuides, setConnectorAlignmentGuides] = useState<E4ConnectorSnapGuides>({});
   const displayObjects = wireLabelPreview
     ? objects.map((object) => object.id === wireLabelPreview.wireId ? {
@@ -2385,7 +2480,16 @@ export function CanvasViewport({
     : objects;
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
-  const overlays = e4Overlays ?? parseE4SceneOverlays(objects);
+  const sourceOverlays = useMemo(
+    () => e4Overlays ?? parseE4SceneOverlays(objects),
+    [e4Overlays, objects],
+  );
+  const overlays = useMemo(() => screenPositionPreview ? {
+    ...sourceOverlays,
+    screens: sourceOverlays.screens.map((screen) => screen.id === screenPositionPreview.screenId
+      ? { ...screen, position: screenPositionPreview.position }
+      : screen),
+  } : sourceOverlays, [screenPositionPreview, sourceOverlays]);
   const selectLinkedE4Group = (wireIds: readonly string[]) => {
     if (onObjectGroupSelect) onObjectGroupSelect(wireIds);
     else onObjectSelect(wireIds.at(-1) ?? null, false);
@@ -2433,7 +2537,7 @@ export function CanvasViewport({
         displayObjects,
         layers,
         selectedSet,
-        e4Overlays,
+        overlays,
         connectorAlignmentGuides,
         componentTemplateViewInstances,
         resolveComponentTemplateAssetUrl,
@@ -2452,7 +2556,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, e4Overlays, inlineObject?.id, layers, onViewportSizeChange, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
+  }, [camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -2727,6 +2831,16 @@ export function CanvasViewport({
         ? projectPointToE4WireLabelPosition(getE4WireRoute(wire), screenToWorld(camera, localPoint(event.clientX, event.clientY)))
         : null;
       if (position !== null) setWireLabelPreview({ wireId: drag.wireId, position });
+    } else if (drag.kind === "e4-screen") {
+      const screen = overlays.screens.find((item) => item.id === drag.screenId);
+      const layout = screen ? getE4ScreenLayout(screen, objects) : null;
+      const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      if (layout) {
+        setScreenPositionPreview({
+          screenId: drag.screenId,
+          position: getE4ScreenPositionForPoint(layout, worldPoint),
+        });
+      }
     }
   };
 
@@ -2768,21 +2882,25 @@ export function CanvasViewport({
       setWireLabelPreview(null);
     } else if (dragRef.current?.kind === "e4-screen") {
       const drag = dragRef.current;
-      const screen = overlays.screens.find((item) => item.id === drag.screenId);
-      const layout = screen ? getE4ScreenLayout(screen, objects) : null;
-      const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
-      if (layout) {
-        const position = getE4ScreenPositionForPoint(layout, worldPoint);
-        onE4ScreenPositionChange?.(drag.screenId, position);
+      if (screenPositionPreview?.screenId === drag.screenId) {
+        onE4ScreenPositionChange?.(drag.screenId, screenPositionPreview.position);
       } else {
-        const pixelDelta = drag.orientation === "horizontal"
-          ? event.clientX - drag.clientX
-          : event.clientY - drag.clientY;
-        if (Math.abs(pixelDelta) >= 1) {
-          const position = Math.max(0, Math.min(1, drag.position + pixelDelta / camera.zoom / drag.spanLength));
-          onE4ScreenPositionChange?.(drag.screenId, position);
+        const screen = overlays.screens.find((item) => item.id === drag.screenId);
+        const layout = screen ? getE4ScreenLayout(screen, objects) : null;
+        const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+        if (layout) {
+          onE4ScreenPositionChange?.(drag.screenId, getE4ScreenPositionForPoint(layout, worldPoint));
+        } else {
+          const pixelDelta = drag.orientation === "horizontal"
+            ? event.clientX - drag.clientX
+            : event.clientY - drag.clientY;
+          if (Math.abs(pixelDelta) >= 1) {
+            const position = Math.max(0, Math.min(1, drag.position + pixelDelta / camera.zoom / drag.spanLength));
+            onE4ScreenPositionChange?.(drag.screenId, position);
+          }
         }
       }
+      setScreenPositionPreview(null);
     }
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -2795,6 +2913,7 @@ export function CanvasViewport({
       setConnectorAlignmentGuides({});
     }
     if (dragRef.current.kind === "e4-wire-label") setWireLabelPreview(null);
+    if (dragRef.current.kind === "e4-screen") setScreenPositionPreview(null);
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };

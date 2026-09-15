@@ -213,4 +213,60 @@ describe("E4 obstacle router", () => {
   it("reports the Manhattan length of a route", () => {
     expect(polylineLength([{ x: 1, y: 2 }, { x: 5, y: 2 }, { x: 5, y: -3 }])).toBe(9);
   });
+
+  it("coalesces near-identical grid coordinates instead of creating zero-length edges", () => {
+    const result = routeE4WireThroughWaypoints({
+      start: { position: { x: 0, y: 0 }, leadDirection: null },
+      end: { position: { x: 100, y: 40 }, leadDirection: null },
+      options: { leadLength: 0 },
+    }, [{ x: 0.5e-9, y: 0 }]);
+
+    expect(result.points.every((point, index) => index === 0 ||
+      point.x !== result.points[index - 1]!.x || point.y !== result.points[index - 1]!.y)).toBe(true);
+    expect(() => validateE4Route(result.points, {
+      start: { position: { x: 0, y: 0 }, leadDirection: null },
+      end: { position: { x: 100, y: 40 }, leadDirection: null },
+      options: { leadLength: 0 },
+    })).not.toThrow();
+  });
+
+  it("keeps a crossing away from the corner of another route", () => {
+    const request: E4RoutingRequest = {
+      start: { position: { x: 0, y: 35 }, leadDirection: null },
+      end: { position: { x: 100, y: 35 }, leadDirection: null },
+      occupiedRoutes: [{ id: "L", points: [{ x: 40, y: 0 }, { x: 40, y: 40 }, { x: 80, y: 40 }] }],
+      options: { leadLength: 0, wireClearance: 8 },
+    };
+    expect(() => validateE4Route([
+      { x: 0, y: 35 }, { x: 100, y: 35 },
+    ], request)).toThrow(/зазор|углом/);
+  });
+
+  it("keeps a bend away from a foreign straight segment", () => {
+    const request: E4RoutingRequest = {
+      start: { position: { x: 0, y: 10 }, leadDirection: null },
+      end: { position: { x: 100, y: 50 }, leadDirection: null },
+      occupiedRoutes: [{ id: "W1", points: [{ x: 0, y: 0 }, { x: 100, y: 0 }] }],
+      options: { leadLength: 0, wireClearance: 8 },
+    };
+    expect(() => validateE4Route([
+      { x: 0, y: 10 }, { x: 20, y: 10 }, { x: 20, y: 50 }, { x: 100, y: 50 },
+    ], request)).toThrow(/зазор/);
+  });
+
+  it("routes a two-contact crossover through separated dogleg corridors", () => {
+    const first = [
+      { x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 24 }, { x: 120, y: 24 },
+    ];
+    const secondRequest: E4RoutingRequest = {
+      start: { position: { x: 0, y: 24 }, leadDirection: "right" },
+      end: { position: { x: 120, y: 0 }, leadDirection: "left" },
+      occupiedRoutes: [{ id: "W1", points: first }],
+      options: { leadLength: 24, wireClearance: 8 },
+    };
+    const second = routeE4Wire(secondRequest);
+
+    expect(() => validateE4Route(second.points, secondRequest)).not.toThrow();
+    expect(second.points.some((point) => point.y < 0 || point.y > 24)).toBe(true);
+  });
 });

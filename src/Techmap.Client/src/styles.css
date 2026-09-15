@@ -395,7 +395,13 @@ input::placeholder { color: #8795a3; }
 .diagnostic { padding: 10px 11px; display: flex; align-items: flex-start; gap: 9px; border-left: 3px solid #b43f3f; border-radius: 6px; background: #fff3f3; color: #7d3030; font-size: 11px; }
 .diagnostic.warning { border-left-color: #c88a2c; background: #fff8ea; color: #7d591f; }
 .diagnostic > div { display: grid; gap: 3px; }
-.diagnostic span { opacity: .82; }
+.diagnostic-content { min-width: 0; }
+.diagnostic-details { margin-top: 2px; color: currentColor; opacity: .82; }
+.diagnostic-details summary { width: max-content; cursor: pointer; font-size: 10px; }
+.diagnostic-details dl { margin: 7px 0 0; padding: 7px 9px; display: grid; gap: 5px; border-radius: 5px; background: rgb(255 255 255 / 55%); }
+.diagnostic-details dl > div { display: grid; grid-template-columns: minmax(90px, auto) minmax(0, 1fr); gap: 8px; }
+.diagnostic-details dt { font-weight: 700; }
+.diagnostic-details dd { margin: 0; overflow-wrap: anywhere; }
 .preview-table-scroll { max-height: 330px; margin-top: 15px; overflow: auto; border: 1px solid #dfe6eb; border-radius: 8px; }
 .preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .preview-table th { position: sticky; top: 0; padding: 8px 9px; background: #edf3f6; color: #456174; text-align: left; white-space: nowrap; }

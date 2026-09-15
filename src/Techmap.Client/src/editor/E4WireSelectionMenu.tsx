@@ -70,7 +70,7 @@ export function E4WireSelectionMenu({
       onScreenChange(null);
       return;
     }
-    if (capabilities.canCreateScreen) onScreenChange({ positionPercent: 50 });
+    if (capabilities.canCreateScreen) onScreenChange({ positionPercent: 50, terminalSide: "above" });
   };
 
   return (
@@ -192,6 +192,25 @@ export function E4WireSelectionMenu({
         </button>
         {screen && (
           <div className="e4wm-screen-settings">
+            <span className="e4wm-screen-side-label">Вывод экрана</span>
+            <div className="e4wm-screen-side" role="group" aria-label="Сторона вывода экрана">
+              {([
+                ["above", "Сверху"],
+                ["below", "Снизу"],
+                ["both", "С двух сторон"],
+              ] as const).map(([side, label]) => (
+                <button
+                  type="button"
+                  key={side}
+                  className={(screen.terminalSide ?? "above") === side ? "active" : ""}
+                  aria-pressed={(screen.terminalSide ?? "above") === side}
+                  disabled={disabled}
+                  onClick={() => onScreenChange({ ...screen, terminalSide: side })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <label htmlFor="e4-screen-position">Положение экрана</label>
             <output htmlFor="e4-screen-position">{clampScreenPosition(screen.positionPercent)}%</output>
             <input
@@ -203,7 +222,10 @@ export function E4WireSelectionMenu({
               value={clampScreenPosition(screen.positionPercent)}
               disabled={disabled}
               aria-label="Положение экрана вдоль выбранного участка"
-              onChange={(event) => onScreenChange({ positionPercent: clampScreenPosition(Number(event.target.value)) })}
+              onChange={(event) => onScreenChange({
+                ...screen,
+                positionPercent: clampScreenPosition(Number(event.target.value)),
+              })}
             />
             <span className="start">начало</span>
             <span className="end">конец</span>

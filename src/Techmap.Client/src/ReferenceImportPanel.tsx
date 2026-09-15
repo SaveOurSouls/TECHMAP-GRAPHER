@@ -5,6 +5,7 @@ import {
   isAbortError,
   ReferenceCatalogApiError,
   type GoogleSheetsProfilePreviewRequest,
+  type ReferenceCatalogDiagnostic,
   type ReferenceCatalogSnapshot,
   type XlsxFieldMapping,
   type XlsxFieldValueKind,
@@ -127,6 +128,67 @@ export function profileCountLabel(count: number): string {
     ? "профилей"
     : modulo10 === 1 ? "профиль" : modulo10 >= 2 && modulo10 <= 4 ? "профиля" : "профилей";
   return `${count} ${noun}`;
+}
+
+export function russianCountLabel(count: number, forms: readonly [string, string, string]): string {
+  const absolute = Math.abs(count);
+  const modulo100 = absolute % 100;
+  const modulo10 = absolute % 10;
+  const noun = modulo100 >= 11 && modulo100 <= 14
+    ? forms[2]
+    : modulo10 === 1 ? forms[0] : modulo10 >= 2 && modulo10 <= 4 ? forms[1] : forms[2];
+  return `${count} ${noun}`;
+}
+
+/** The catalog keeps stable machine-readable diagnostics; only the display text is simplified. */
+export function referenceDiagnosticMessage(diagnostic: ReferenceCatalogDiagnostic): string {
+  if (diagnostic.code === "xlsx_cached_formula_values_used") {
+    const count = diagnostic.message.match(/\((\d+)\)/)?.[1];
+    return `В таблице использованы сохранённые результаты формул${count ? `: ${russianCountLabel(Number(count), ["ячейка", "ячейки", "ячеек"])}` : ""}. Пересчитайте книгу перед загрузкой.`;
+  }
+  if (diagnostic.code === "xlsx_profile_field_incomplete") {
+    const count = diagnostic.message.match(/\b(\d+)\s+строк/iu)?.[1];
+    return `В профиле есть незаполненные строки${count ? `: ${russianCountLabel(Number(count), ["строка", "строки", "строк"])}` : ""}. Проверьте таблицу.`;
+  }
+  return diagnostic.message;
+}
+
+interface ReferenceDiagnosticItemProps {
+  readonly diagnostic: ReferenceCatalogDiagnostic;
+  readonly acknowledged: boolean;
+  readonly disabled: boolean;
+  readonly onAcknowledge: (checked: boolean) => void;
+}
+
+export function ReferenceDiagnosticItem({ diagnostic, acknowledged, disabled, onAcknowledge }: ReferenceDiagnosticItemProps) {
+  const message = referenceDiagnosticMessage(diagnostic);
+  const details = [
+    diagnostic.message !== message ? ["Исходное сообщение", diagnostic.message] : null,
+    diagnostic.sourceLocation ? ["Место", diagnostic.sourceLocation] : null,
+    diagnostic.field ? ["Поле данных", diagnostic.field] : null,
+    diagnostic.sourceKey ? ["Ключ записи", diagnostic.sourceKey] : null,
+    ["Код проверки", diagnostic.code],
+  ].filter((item): item is string[] => item !== null);
+  return (
+    <div className={`diagnostic ${diagnostic.severity}`}>
+      {diagnostic.severity === "warning" && (
+        <input
+          type="checkbox"
+          aria-label={`Подтвердить предупреждение: ${message}`}
+          checked={acknowledged}
+          onChange={(event) => onAcknowledge(event.target.checked)}
+          disabled={disabled}
+        />
+      )}
+      <div className="diagnostic-content">
+        <strong>{diagnostic.severity === "warning" ? "Предупреждение" : "Ошибка"}: {message}</strong>
+        <details className="diagnostic-details">
+          <summary>Подробности проверки</summary>
+          <dl>{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        </details>
+      </div>
+    </div>
+  );
 }
 
 export function googleSheetsProfilePreviewRequest(
@@ -759,21 +821,13 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
             <div className="diagnostics" aria-label="Результаты проверки">
               <h3>Диагностика · {preview.diagnostics.length}</h3>
               {preview.diagnostics.map((diagnostic) => (
-                <div className={`diagnostic ${diagnostic.severity}`} key={diagnostic.diagnosticId}>
-                  {diagnostic.severity === "warning" && (
-                    <input
-                      type="checkbox"
-                      aria-label={`Подтвердить предупреждение ${diagnostic.message}`}
-                      checked={acknowledgedWarnings.has(diagnostic.diagnosticId)}
-                      onChange={(event) => toggleWarning(diagnostic.diagnosticId, event.target.checked)}
-                      disabled={busy !== null || previewStale || previewExpired}
-                    />
-                  )}
-                  <div>
-                    <strong>{diagnostic.severity === "warning" ? "Предупреждение" : "Ошибка"}: {diagnostic.message}</strong>
-                    <span>{[diagnostic.sourceLocation, diagnostic.field, diagnostic.sourceKey].filter(Boolean).join(" · ") || diagnostic.code}</span>
-                  </div>
-                </div>
+                <ReferenceDiagnosticItem
+                  key={diagnostic.diagnosticId}
+                  diagnostic={diagnostic}
+                  acknowledged={acknowledgedWarnings.has(diagnostic.diagnosticId)}
+                  disabled={busy !== null || previewStale || previewExpired}
+                  onAcknowledge={(checked) => toggleWarning(diagnostic.diagnosticId, checked)}
+                />
               ))}
             </div>
           ) : (

@@ -1,5 +1,30 @@
 .he-host { position: relative; }
 .he-host.is-placement-busy .harness-editor { pointer-events: none; }
+.he-save-message,
+.he-recovery-draft {
+  position: absolute;
+  z-index: 31;
+  left: 50%;
+  top: 62px;
+  max-width: min(760px, calc(100% - 36px));
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d5a5a9;
+  border-radius: 7px;
+  background: rgb(255 247 247 / 98%);
+  color: #7b3038;
+  font-size: 11px;
+  font-weight: 650;
+  box-shadow: 0 7px 24px rgb(38 75 94 / 18%);
+  transform: translateX(-50%);
+}
+.he-recovery-draft { border-color: #d7b16d; background: rgb(255 250 239 / 98%); color: #6d5221; }
+.he-recovery-draft > span { min-width: 0; flex: 1 1 auto; }
+.he-recovery-draft button { flex: 0 0 auto; padding: 5px 9px; border: 1px solid #cda660; border-radius: 5px; background: #fff; color: inherit; font: inherit; cursor: pointer; }
+.he-recovery-draft button:hover { background: #fff5df; }
+.he-save-message + .he-recovery-draft { top: 108px; }
 .he-placement-busy,
 .he-placement-pending {
   position: absolute;

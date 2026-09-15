@@ -3,8 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   TemplateSeriesPanelV3,
+  articleAddPreviewV3,
   appendTerminalArticleKeyV3,
   articleContactGroupEditorValueV3,
+  contactTypeNameExistsV3,
   formatTerminalArticleKeysV3,
   parseTerminalArticleKeysV3,
   updateTerminalArticleKeyV3,
@@ -14,6 +16,25 @@ import { upgradeTemplateContentV2ToV3 } from "./template-upgrade-v3";
 import { newTemplateContentV2 } from "./template-commands-v2";
 
 describe("TemplateSeriesPanelV3", () => {
+  it("recognizes contact type duplicates ignoring case and surrounding spaces", () => {
+    const content = newTemplateContentV3();
+    content.contactTypeGroups.push({ id: crypto.randomUUID(), name: "Сигнальные" });
+    expect(contactTypeNameExistsV3(content, " сигнальные ")).toBe(true);
+    expect(contactTypeNameExistsV3(content, "Силовые")).toBe(false);
+    expect(contactTypeNameExistsV3(content, " ")).toBe(false);
+  });
+
+  it("previews a pattern using fixed connector catalog identity and reports collisions in Russian", () => {
+    const content = newTemplateContentV3();
+    content.articleVariants.push({ id: crypto.randomUUID(), sourceId: "БД.СОЕД", entityType: "connector", articleKey: "PHR-02", parameterValues: [], contactGroups: null });
+    expect(articleAddPreviewV3(content, "pattern", "", "PHR-XX", "01-03")).toEqual({
+      articles: [], error: "Артикул «PHR-02» уже есть в этой серии.",
+    });
+    expect(articleAddPreviewV3(content, "pattern", "", "PHR-XX", "01, 03")).toEqual({
+      articles: ["PHR-01", "PHR-03"], error: null,
+    });
+  });
+
   it("renders contact groups, article variants and editable terminal configuration", () => {
     const content = upgradeTemplateContentV2ToV3(newTemplateContentV2()).content;
     const groupId = crypto.randomUUID();
@@ -21,12 +42,18 @@ describe("TemplateSeriesPanelV3", () => {
     content.articleVariants.push({ id: crypto.randomUUID(), sourceId: "БД.СОЕД", entityType: "connector", articleKey: "B2B-XH-A", parameterValues: [], contactGroups: [{ contactTypeGroupId: groupId, contactCount: 2, allowedTerminalArticleKeys: [{ sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "SXH-001T-P0.6" }] }] });
     const markup = renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
       content, onAddContactTypeGroup: vi.fn(), onRenameContactTypeGroup: vi.fn(), onDeleteContactTypeGroup: vi.fn(),
-      onAddArticleVariant: vi.fn(), onDeleteArticleVariant: vi.fn(), onSetArticleContactGroup: vi.fn(), onRemoveArticleContactGroup: vi.fn(),
+      onAddArticleVariants: vi.fn(), onDeleteArticleVariant: vi.fn(), onSetArticleContactGroup: vi.fn(), onRemoveArticleContactGroup: vi.fn(),
       selectedArticleVariantId: content.articleVariants[0]!.id,
       articlePreviewMessage: "B2B-XH-A: 2 контакта",
       articlePreviewRows: [{ key: "row-1", number: "1", name: "DATA+", circuitText: "NET-DATA+", contactTypeGroupId: groupId }],
     }));
     expect(markup).toContain("Серия и артикулы");
+    expect(markup).toContain("Типы контактов");
+    expect(markup).toContain("Силовые");
+    expect(markup).toContain("Дополнительные");
+    expect(markup).toContain("Другой тип");
+    expect(markup).toContain("Тип «Сигнальные» уже добавлен.");
+    expect(markup).toContain('<button type="submit" disabled="">+ Тип</button>');
     expect(markup).toContain("Сигнальные");
     expect(markup).toContain("B2B-XH-A");
     expect(markup).toContain("SXH-001T-P0.6");
@@ -37,6 +64,9 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain('aria-invalid="true"');
     expect(markup).toContain("Допустимые терминалы");
     expect(markup).toContain("Артикул для предпросмотра");
+    expect(markup).toContain("Один артикул");
+    expect(markup).toContain("По шаблону");
+    expect(markup).toContain('name="article-add-mode"');
     expect(markup).toContain("B2B-XH-A: 2 контакта");
     expect(markup).toContain("Материализованные строки контактов");
     expect(markup).toContain("NET-DATA+");
@@ -52,13 +82,13 @@ describe("TemplateSeriesPanelV3", () => {
     expect(guideMarkup).toContain("<summary>Как заполнить шаблон</summary>");
     expect(guideMarkup).toContain('<ol aria-label="Порядок заполнения шаблона">');
     const guideSteps = [
-      "Создайте группы контактов.",
-      "В виде Э4 создайте логический контакт-прототип и назначьте ему группу. Нарисуйте один примитив строки, выделите его и сделайте повторяемым с параметром количества. В виде Чертеж разместите связанную точку, выделите один примитив-прототип и разместите существующий повтор в этом виде.",
-      "Добавьте артикулы и задайте количество контактов в каждой группе.",
-      "Укажите допустимые терминалы для групп артикула.",
-      "Выберите конкретный артикул для предпросмотра.",
-      "Проверьте виды Э4 и Чертеж для выбранного артикула.",
-      "Создайте новую версию.",
+      "Укажите серию соединителя и краткое описание.",
+      "Добавьте нужные типы контактов. В одной серии может быть несколько типов.",
+      "Добавьте артикулы по одному или массово по шаблону с <code>XX</code>. Ведущие нули сохраняются.",
+      "Для каждого артикула задайте количество контактов каждого типа.",
+      "Укажите допустимые терминалы из БД.ТЕР.",
+      "Выберите артикул и проверьте автоматически подготовленную таблицу Э4.",
+      "Сохраните новую версию серии.",
     ];
     expect(guideMarkup.match(/<li>/g)).toHaveLength(guideSteps.length);
     guideSteps.reduce((previousIndex, step) => {
@@ -66,7 +96,7 @@ describe("TemplateSeriesPanelV3", () => {
       expect(stepIndex).toBeGreaterThan(previousIndex);
       return stepIndex;
     }, -1);
-    expect(guideMarkup).toContain("Если повтор не задан, количество контактов артикула может быть только фактическим числом фиксированных контактов шаблона.");
+    expect(guideMarkup).toContain("Основной вид Э4 всегда формируется как таблица.");
     expect(guideMarkup).not.toContain("опубликуйте");
   });
 

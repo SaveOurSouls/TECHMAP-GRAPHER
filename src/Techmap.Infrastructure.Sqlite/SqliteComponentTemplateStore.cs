@@ -15,7 +15,7 @@ public sealed class SqliteComponentTemplateStore(
     TimeProvider timeProvider,
     IAttachmentContentStore? attachmentContentStore = null) : IComponentTemplateStore
 {
-    public const int CurrentContentSchemaVersion = 3;
+    public const int CurrentContentSchemaVersion = 4;
     public const int MinimumSupportedContentSchemaVersion = 1;
     public const int MaximumContentBytes = 1024 * 1024;
     public const int MaximumTemplates = 500;
@@ -437,7 +437,7 @@ public sealed class SqliteComponentTemplateStore(
             return entity != 0 ? entity : StringComparer.Ordinal.Compare(left.ArticleKey, right.ArticleKey);
         });
         var canonicalContent = ValidateAndCanonicalizeContent(contentJson, schemaVersion);
-        if (schemaVersion == CurrentContentSchemaVersion)
+        if (schemaVersion >= 3)
         {
             ValidateArticleBindingsAuthority(canonicalContent, normalizedBindings);
         }
@@ -470,7 +470,7 @@ public sealed class SqliteComponentTemplateStore(
         {
             throw Invalid(
                 "component_template_bindings_invalid",
-                "For schemaVersion 3 articleBindings must exactly match articleVariants.",
+                $"For schemaVersion {document.RootElement.GetProperty("schemaVersion").GetInt32()} articleBindings must exactly match articleVariants.",
                 "articleBindings");
         }
     }
@@ -514,7 +514,11 @@ public sealed class SqliteComponentTemplateStore(
                     "Content schemaVersion must match the request schemaVersion.",
                     "content.schemaVersion");
             }
-            if (schemaVersion == 3)
+            if (schemaVersion == 4)
+            {
+                ComponentTemplateContentV4Validator.Validate(root);
+            }
+            else if (schemaVersion == 3)
             {
                 ComponentTemplateContentV3Validator.Validate(root);
             }

@@ -9,6 +9,8 @@ export interface HarnessDesignResource {
   readonly revision: number;
   readonly content: HarnessDesignDocument;
   readonly updatedUtc: string;
+  /** Present when only derived E4 route geometry had to be rebuilt to open the document safely. */
+  readonly recoveryWarning?: string;
 }
 
 export interface HarnessDesignApi {
@@ -69,7 +71,7 @@ export function createHarnessDesignApi(
       headers: { Accept: "application/json" },
     }),
     save: async (projectId, harnessId, expectedRevision, content) => {
-      const validatedContent = normalizeE4RoutingDocument(parseHarnessDesignDocument(content));
+      const validatedContent = parseRecoverableHarnessDesignContent(content).content;
       return request(resource(projectId, harnessId), {
         method: "PUT",
         headers,
@@ -86,13 +88,91 @@ function parseResource(value: unknown): HarnessDesignResource {
       !Number.isSafeInteger(record.revision) || (record.revision as number) < 0) {
     throw new Error("Сервер вернул повреждённые метаданные документа жгута.");
   }
+  const parsedContent = parseRecoverableHarnessDesignContent(record.content);
   return {
     harnessId,
     schemaVersion: 1,
     revision: record.revision as number,
-    content: normalizeE4RoutingDocument(parseHarnessDesignDocument(record.content)),
+    content: parsedContent.content,
     updatedUtc: requireString(record.updatedUtc, "updatedUtc"),
+    ...(parsedContent.warning ? { recoveryWarning: parsedContent.warning } : {}),
   };
+}
+
+export interface RecoverableHarnessDesignContent {
+  readonly content: HarnessDesignDocument;
+  readonly warning: string | null;
+}
+
+/**
+ * Parses persisted domain data strictly, but treats an invalid E4 polyline as
+ * recoverable derived state. Connector/contact/wire data is never replaced by
+ * an empty document merely because an old route no longer satisfies current
+ * routing rules.
+ */
+export function parseRecoverableHarnessDesignContent(value: unknown): RecoverableHarnessDesignContent {
+  let parsed: HarnessDesignDocument;
+  try {
+    parsed = parseHarnessDesignDocument(value);
+  } catch (initialError) {
+    const source = requireRecord(value);
+    if (!Array.isArray(source.wires)) throw initialError;
+    let recoveredSource: Record<string, unknown> & { wires: Record<string, unknown>[] } = {
+      ...source,
+      wires: source.wires.map((candidate) => {
+        const wire = requireRecord(candidate);
+        const { e4Route: _invalidRoute, ...withoutRoute } = wire;
+        return { ...withoutRoute, e4RouteMode: "auto" };
+      }),
+    };
+    try {
+      parsed = parseHarnessDesignDocument(recoveredSource);
+    } catch {
+      // Removing E4 routes did not repair the document, so this is a domain or
+      // structural error and must remain visible instead of being concealed.
+      throw initialError;
+    }
+    // Put back each persisted route independently. One malformed polyline must
+    // not discard unrelated manual routing work from the same harness.
+    for (const [index, candidate] of source.wires.entries()) {
+      const originalWire = requireRecord(candidate);
+      if (originalWire.e4Route === undefined) continue;
+      const candidateWires = recoveredSource.wires.map((item, candidateIndex) => candidateIndex === index
+        ? {
+            ...item,
+            e4Route: originalWire.e4Route,
+            e4RouteMode: typeof originalWire.e4RouteMode === "string" ? originalWire.e4RouteMode : "auto",
+          }
+        : item);
+      const candidateSource = { ...recoveredSource, wires: candidateWires };
+      try {
+        parsed = parseHarnessDesignDocument(candidateSource);
+        recoveredSource = candidateSource;
+      } catch {
+        // This route alone violates the current route contract. Keep only this
+        // wire on the safe automatically reconstructed route.
+      }
+    }
+    const detail = initialError instanceof Error && initialError.message
+      ? ` Причина: ${initialError.message}`
+      : "";
+    // Do not run a global reroute here: it could rewrite valid manual routes
+    // while repairing an unrelated wire. The next explicit edit may reroute
+    // affected automatic routes under the current collision rules.
+    return {
+      content: parsed,
+      warning: `Схема открыта в безопасном режиме: некорректные маршруты Э4 восстановлены автоматически.${detail}`,
+    };
+  }
+  try {
+    return { content: normalizeE4RoutingDocument(parsed), warning: null };
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? ` Причина: ${error.message}` : "";
+    return {
+      content: parsed,
+      warning: `Схема открыта в безопасном режиме: исходная геометрия сохранена, автоматическая перетрассировка недоступна.${detail}`,
+    };
+  }
 }
 
 async function parseError(response: Response): Promise<HarnessDesignApiError> {

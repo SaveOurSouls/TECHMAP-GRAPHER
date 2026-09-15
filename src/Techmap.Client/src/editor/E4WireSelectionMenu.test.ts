@@ -64,7 +64,7 @@ describe("E4 wire selection menu handlers", () => {
 
     expect(onCrossingStyleChange).toHaveBeenCalledWith("bridge");
     expect(onDifferentialPairChange).toHaveBeenCalledWith({ variant: 1, twistPitchMm: 25 });
-    expect(onScreenChange).toHaveBeenCalledWith({ positionPercent: 50 });
+    expect(onScreenChange).toHaveBeenCalledWith({ positionPercent: 50, terminalSide: "above" });
   });
 
   it("emits edits and removals for existing differential-pair and screen groups", () => {
@@ -101,5 +101,20 @@ describe("E4 wire selection menu handlers", () => {
     expect(onScreenChange).toHaveBeenNthCalledWith(1, { positionPercent: 73 });
     expect(onScreenChange).toHaveBeenNthCalledWith(2, null);
     expect(onClearGroup).toHaveBeenCalledOnce();
+  });
+
+  it("switches the conducting terminal above, below and to both sides", () => {
+    const onScreenChange = vi.fn();
+    const { tree } = renderMenu({
+      screen: { positionPercent: 42, terminalSide: "above" },
+      onScreenChange,
+    });
+
+    (buttonWithText(tree, "Снизу").props.onClick as () => void)();
+    (buttonWithText(tree, "С двух сторон").props.onClick as () => void)();
+
+    expect(onScreenChange).toHaveBeenNthCalledWith(1, { positionPercent: 42, terminalSide: "below" });
+    expect(onScreenChange).toHaveBeenNthCalledWith(2, { positionPercent: 42, terminalSide: "both" });
+    expect(buttonWithText(tree, "Сверху").props["aria-pressed"]).toBe(true);
   });
 });

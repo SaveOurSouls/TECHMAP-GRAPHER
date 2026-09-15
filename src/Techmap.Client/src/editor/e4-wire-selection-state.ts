@@ -9,7 +9,11 @@ export interface E4DifferentialPairState {
 
 export interface E4ScreenState {
   readonly positionPercent: number;
+  /** Omitted in legacy callers and interpreted as `above`. */
+  readonly terminalSide?: E4ScreenTerminalSide;
 }
+
+export type E4ScreenTerminalSide = "above" | "below" | "both";
 
 export interface E4WireSelectionCapabilities {
   readonly selectedCount: number;

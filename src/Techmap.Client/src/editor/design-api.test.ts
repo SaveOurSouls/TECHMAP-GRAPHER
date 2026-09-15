@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseRuntimeConfig } from "../runtime-config";
-import { createHarnessDesignApi, HarnessDesignApiError } from "./design-api";
+import {
+  createHarnessDesignApi,
+  HarnessDesignApiError,
+  parseRecoverableHarnessDesignContent,
+} from "./design-api";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
-import { createEmptyHarnessDesign } from "./model";
+import { createEmptyHarnessDesign, parseHarnessDesignDocument } from "./model";
 
 const config = parseRuntimeConfig({
   configVersion: 1, basePath: "/techmap/", apiBasePath: "/techmap/api/v1/",
@@ -138,5 +142,86 @@ describe("harness design API", () => {
     const error = await api.save(projectId, harnessId, 2, content).catch((reason: unknown) => reason);
     expect(error).toBeInstanceOf(HarnessDesignApiError);
     expect(error).toMatchObject({ code: "design_revision_conflict", currentRevision: 7 });
+  });
+
+  it("opens a structurally valid document when only persisted E4 route geometry is invalid", async () => {
+    let routed = createEmptyHarnessDesign();
+    routed = applyEditorCommand(routed, {
+      type: "add-connector", connector: createConnector("x1", "X1", 1, { x: 0, y: 0 }),
+    });
+    routed = applyEditorCommand(routed, {
+      type: "add-connector", connector: createConnector("x2", "X2", 1, { x: 800, y: 0 }),
+    });
+    routed = applyEditorCommand(routed, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+    });
+    const invalid = {
+      ...routed,
+      wires: routed.wires.map((wire) => ({
+        ...wire,
+        e4RouteMode: "manual",
+        e4Route: [wire.e4Route[0]!, wire.e4Route[0]!],
+      })),
+    };
+
+    const fetcher = vi.fn(async () => response({
+      harnessId, schemaVersion: 1, revision: 9, content: invalid, updatedUtc: "2026-09-15T00:00:00Z",
+    }));
+    const loaded = await createHarnessDesignApi(config, session, fetcher).get(projectId, harnessId);
+
+    expect(loaded.content.connectors).toHaveLength(2);
+    expect(loaded.content.wires).toHaveLength(1);
+    expect(loaded.content.wires[0]?.e4RouteMode).toBe("auto");
+    expect(loaded.recoveryWarning).toMatch(/безопасном режиме/);
+  });
+
+  it("preserves valid manual routes while repairing only a malformed wire", () => {
+    const x1 = createConnector("x1", "X1", 2, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 2, { x: 800, y: 0 });
+    const routed = { ...createEmptyHarnessDesign(), connectors: [x1, x2], wires: [
+      createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+      createWire("w2", { connectorId: "x1", contactId: "x1:contact:2" }, { connectorId: "x2", contactId: "x2:contact:2" }),
+    ] };
+    const baselineSource = {
+      ...routed,
+      wires: routed.wires.map(({ e4Route: _route, e4RouteMode: _mode, ...wire }) => wire),
+    };
+    const baseline = parseHarnessDesignDocument(baselineSource);
+    const validManualRoute = baseline.wires[0]!.e4Route;
+    const duplicatedPoint = baseline.wires[1]!.e4Route[0]!;
+    const first = {
+      ...createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
+      e4RouteMode: "manual" as const,
+      e4Route: validManualRoute,
+    };
+    const second = createWire("w2", { connectorId: "x1", contactId: "x1:contact:2" }, { connectorId: "x2", contactId: "x2:contact:2" });
+    const invalid = {
+      ...routed,
+      wires: [
+        first,
+        {
+          ...second,
+          e4RouteMode: "manual",
+          e4Route: [duplicatedPoint, duplicatedPoint],
+        },
+      ],
+    };
+
+    const recovered = parseRecoverableHarnessDesignContent(invalid);
+
+    expect(recovered.content.wires[0]).toMatchObject({
+      id: "w1",
+      e4RouteMode: "manual",
+      e4Route: validManualRoute,
+    });
+    expect(recovered.content.wires[1]?.e4RouteMode).toBe("auto");
+    expect(recovered.content.wires[1]?.e4Route).not.toEqual(invalid.wires[1]?.e4Route);
+    expect(recovered.warning).toMatch(/восстановлены автоматически/);
+  });
+
+  it("does not disguise structural document corruption as a routing recovery", () => {
+    expect(() => parseRecoverableHarnessDesignContent({ ...content, connectors: "lost" }))
+      .toThrow();
   });
 });

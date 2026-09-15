@@ -160,8 +160,8 @@
       "techmap.application": {
         "type": "Project",
         "dependencies": {
-          "Techmap.Contracts": "[0.1.0, )",
-          "Techmap.Domain": "[0.1.0, )"
+          "Techmap.Contracts": "[0.7.0, )",
+          "Techmap.Domain": "[0.7.0, )"
         }
       },
       "techmap.contracts": {

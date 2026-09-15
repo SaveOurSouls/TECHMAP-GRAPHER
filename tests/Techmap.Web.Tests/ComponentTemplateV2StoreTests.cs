@@ -8,6 +8,33 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateV2StoreTests
 {
     [Fact]
+    public void Store_persists_v4_and_keeps_v3_history_readable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-v4", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var v3 = store.Create(
+                "SERIES-V4", "Series", ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 3,
+                ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+            var v4 = store.Update(
+                v3.TemplateId, v3.Version, "SERIES-V4", "Series v4",
+                ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 4,
+                ComponentTemplateContentV4ValidatorTests.ValidContentJson);
+
+            Assert.Equal(4, v4.SchemaVersion);
+            Assert.Equal(3, store.GetVersion(v3.TemplateId, 1).SchemaVersion);
+            Assert.Equal(4, store.Get(v3.TemplateId).SchemaVersion);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Store_accepts_v3_and_keeps_an_immutable_v2_version_readable()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-v3", Guid.NewGuid().ToString("N"));

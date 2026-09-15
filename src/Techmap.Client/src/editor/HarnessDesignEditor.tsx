@@ -1,9 +1,19 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { applyEditorCommand, createWire, normalizeE4RoutingDocument, type EditorCommand } from "./commands";
-import { createHarnessDesignApi, type HarnessDesignApi, type HarnessDesignResource } from "./design-api";
+import { applyEditorCommand, createWire, type EditorCommand } from "./commands";
+import {
+  createHarnessDesignApi,
+  parseRecoverableHarnessDesignContent,
+  type HarnessDesignApi,
+  type HarnessDesignResource,
+} from "./design-api";
 import { DesignSaveCoordinator } from "./design-save-coordinator";
+import {
+  readHarnessDesignRecoveryDraft,
+  removeHarnessDesignRecoveryDraft,
+  writeHarnessDesignRecoveryDraft,
+} from "./design-recovery-draft";
 import {
   createComponentPlacementApi,
   type PlaceComponentRequest,
@@ -490,6 +500,10 @@ export function HarnessDesignEditor({
     readonly point: { readonly x: number; readonly y: number };
   } | null>(null);
   const [message, setMessage] = useState("Загружаем документ жгута…");
+  const [recoveryDraft, setRecoveryDraft] = useState<{
+    readonly content: HarnessDesignDocument;
+    readonly baseRevision: number;
+  } | null>(null);
   const [componentSnapshotsByPlacement, setComponentSnapshotsByPlacement] =
     useState<ProjectComponentSnapshotLookup>(() => new Map());
   const [componentGraphMessage, setComponentGraphMessage] = useState("");
@@ -552,14 +566,33 @@ export function HarnessDesignEditor({
     setComponentSnapshotsByPlacement(new Map());
     setComponentGraphMessage("");
     setMessage("Загружаем документ жгута…");
+    setRecoveryDraft(null);
     setSaveState("saved");
     const designRequest = api.get(projectId, harnessId).then((loaded) => {
       if (generation !== loadGeneration.current) return;
-      const normalizedContent = normalizeE4RoutingDocument(loaded.content);
+      const savedJson = JSON.stringify(loaded.content);
+      let recoveryMessage = loaded.recoveryWarning ?? "";
+      const draft = readHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+      if (draft) {
+        try {
+          const recoveredDraft = parseRecoverableHarnessDesignContent(draft.content);
+          if (JSON.stringify(recoveredDraft.content) !== savedJson) {
+            setRecoveryDraft({ content: recoveredDraft.content, baseRevision: draft.baseRevision });
+            const revisionWarning = draft.baseRevision === loaded.revision
+              ? ""
+              : ` Черновик создан от ревизии ${draft.baseRevision}, на сервере уже ревизия ${loaded.revision}; после восстановления внимательно проверьте изменения.`;
+            recoveryMessage = `Найдены несохранённые изменения этого жгута. Серверный документ открыт без изменений; восстановите черновик кнопкой ниже.${revisionWarning}`;
+          } else {
+            removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+          }
+        } catch {
+          recoveryMessage = `${recoveryMessage ? `${recoveryMessage} ` : ""}Найден локальный черновик, но он повреждён и не применён.`;
+        }
+      }
       setResource(loaded);
-      setHistory(createEditorHistory(normalizedContent));
-      savedJsonRef.current = JSON.stringify(loaded.content);
-      setMessage("");
+      setHistory(createEditorHistory(loaded.content));
+      savedJsonRef.current = savedJson;
+      setMessage(recoveryMessage);
     }).catch((error: unknown) => {
       if (generation !== loadGeneration.current) return;
       setSaveState("error");
@@ -585,11 +618,20 @@ export function HarnessDesignEditor({
         if (serialized === savedJsonRef.current) return true;
         setSaveState("saving");
         const saved = await api.save(projectId, harnessId, currentResource.revision, content);
-        savedJsonRef.current = serialized;
+        const savedJson = JSON.stringify(saved.content);
+        savedJsonRef.current = savedJson;
         resourceRef.current = saved;
         setResource(saved);
-        setSaveState("saved");
-        setMessage("");
+        if (historyRef.current === currentHistory) {
+          const acknowledgedHistory = { ...currentHistory, present: saved.content };
+          historyRef.current = acknowledgedHistory;
+          setHistory(acknowledgedHistory);
+          setSaveState("saved");
+          if (!recoveryDraft) removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+        } else {
+          setSaveState("changed");
+        }
+        setMessage(saved.recoveryWarning ?? "");
         return true;
       } catch (error: unknown) {
         setSaveState("error");
@@ -598,7 +640,7 @@ export function HarnessDesignEditor({
       } finally {
         savingRef.current = false;
       }
-  }, [api, harnessId, projectId]);
+  }, [api, harnessId, projectId, recoveryDraft]);
 
   const flushSave = useCallback((): Promise<boolean> => {
     if (!saveCoordinatorRef.current) {
@@ -617,10 +659,20 @@ export function HarnessDesignEditor({
       if (!savingRef.current) setSaveState("saved");
       return;
     }
+    const baseRevision = resourceRef.current?.revision;
+    if (baseRevision !== undefined && !recoveryDraft) {
+      writeHarnessDesignRecoveryDraft(
+        window.localStorage,
+        projectId,
+        harnessId,
+        baseRevision,
+        history.present,
+      );
+    }
     setSaveState("changed");
     const timer = window.setTimeout(() => void flushSave(), 650);
     return () => window.clearTimeout(timer);
-  }, [flushSave, history]);
+  }, [flushSave, harnessId, history, projectId, recoveryDraft]);
 
   useEffect(() => {
     if (!history) return;
@@ -1066,11 +1118,11 @@ export function HarnessDesignEditor({
     }
     const position = state.positionPercent / 100;
     if (selectedScreen) {
-      run({ type: "update-screen", screenId: selectedScreen.id, position });
+      run({ type: "update-screen", screenId: selectedScreen.id, position, terminalSide: state.terminalSide });
     } else {
       run({
         type: "create-screen",
-        screen: { id: crypto.randomUUID(), wireIds: selectedWireIds, position, label: "Экран", width: 46 },
+        screen: { id: crypto.randomUUID(), wireIds: selectedWireIds, position, label: "Экран", width: 46, terminalSide: state.terminalSide },
       });
     }
   };
@@ -1078,6 +1130,21 @@ export function HarnessDesignEditor({
   return (
     <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
       {message && <div className="he-save-message" role="alert">{message}</div>}
+      {recoveryDraft && <div className="he-recovery-draft" role="alert">
+        <span>Есть несохранённый локальный черновик от ревизии {recoveryDraft.baseRevision}. Серверный документ не заменён.</span>
+        <button type="button" onClick={() => {
+          const next = createEditorHistory(recoveryDraft.content);
+          historyRef.current = next;
+          setHistory(next);
+          setRecoveryDraft(null);
+          setMessage("Локальный черновик восстановлен. Сохраняем его на сервере…");
+        }}>Восстановить</button>
+        <button type="button" onClick={() => {
+          removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+          setRecoveryDraft(null);
+          setMessage("");
+        }}>Оставить серверную версию</button>
+      </div>}
       {componentGraphIntegrityMessage && <ComponentGraphErrorAlert
         message={componentGraphIntegrityMessage}
         onRetry={() => void refreshComponentGraph(loadGeneration.current)}
@@ -1176,7 +1243,7 @@ export function HarnessDesignEditor({
         }}
         onWireConnect={(from, to) => {
           const resolveEndpoint = (endpoint: typeof from): WireEndpoint | null => {
-            if ("screenId" in endpoint) return createScreenEndpoint(endpoint.screenId);
+            if ("screenId" in endpoint) return createScreenEndpoint(endpoint.screenId, endpoint.screenTerminalSide);
             const connector = history.present.connectors.find((item) => item.id === endpoint.connectorId);
             const contact = connector?.contacts[endpoint.contactIndex];
             return contact ? { connectorId: endpoint.connectorId, contactId: contact.id } : null;
@@ -1194,7 +1261,7 @@ export function HarnessDesignEditor({
         }}
         onWireReconnect={(wireId, end, target) => {
           const endpoint: WireEndpoint | null = "screenId" in target
-            ? createScreenEndpoint(target.screenId)
+            ? createScreenEndpoint(target.screenId, target.screenTerminalSide)
             : (() => {
               const connector = history.present.connectors.find((item) => item.id === target.connectorId);
               const contact = connector?.contacts[target.contactIndex];
@@ -1212,7 +1279,7 @@ export function HarnessDesignEditor({
         }}
         onWireConnectToWire={(from, targetWireId, point) => {
           const fromEndpoint: WireEndpoint | null = "screenId" in from
-            ? createScreenEndpoint(from.screenId)
+            ? createScreenEndpoint(from.screenId, from.screenTerminalSide)
             : (() => {
               const connector = history.present.connectors.find((item) => item.id === from.connectorId);
               const contact = connector?.contacts[from.contactIndex];

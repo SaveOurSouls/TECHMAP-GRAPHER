@@ -25,6 +25,8 @@ export interface E4OccupiedRoute {
   readonly allowCrossings?: boolean;
   /** Only this endpoint may touch a non-crossable route. */
   readonly allowedTouchPoint?: Point;
+  /** Electrical junctions at which this route may intentionally touch the route being built. */
+  readonly allowedTouchPoints?: readonly Point[];
 }
 
 export interface E4RouterOptions {
@@ -82,7 +84,12 @@ interface Segment {
 
 interface OccupiedSegment extends Segment {
   readonly allowCrossings: boolean;
-  readonly allowedTouchPoint?: Point;
+  readonly allowedTouchPoints: readonly Point[];
+}
+
+interface OccupiedBend {
+  readonly point: Point;
+  readonly allowedTouchPoints: readonly Point[];
 }
 
 interface QueueItem {
@@ -146,11 +153,11 @@ export function routeE4WireThroughWaypoints(
   );
   if (graphPoints === null) throw new Error("Ортогональный маршрут с заданными зазорами не найден.");
 
-  const points = simplifyPolyline([
+  const points = canonicalizeRouteAxes(simplifyPolyline([
     input.start.position,
     ...graphPoints,
     input.end.position,
-  ]);
+  ]), input.start.position, input.end.position);
   validateE4Route(points, request);
   return {
     points,
@@ -177,6 +184,21 @@ export function validateE4Route(points: readonly Point[], request: E4RoutingRequ
     if (index === segments.length - 1 && input.end.obstacleId !== undefined) ignoredObstacleIds.add(input.end.obstacleId);
     validateSegmentAgainstObstacles(segments[index]!, input.obstacles, ignoredObstacleIds);
     validateSegmentAgainstOccupied(segments[index]!, input.occupiedSegments, input.options.wireClearance);
+    const compulsoryLead = index === 0 && input.start.leadDirection !== null ||
+      index === segments.length - 1 && input.end.leadDirection !== null;
+    if (!compulsoryLead) {
+      validateSegmentAgainstOccupiedBends(segments[index]!, input.occupiedBends, input.options.wireClearance);
+    }
+  }
+  // A crossing is allowed in the middle of two straight portions, but a bend
+  // cannot be placed inside another route's bridge footprint. Contact leads
+  // are deliberately exempt: the short straight lead is compulsory geometry.
+  for (let index = 1; index < points.length - 1; index += 1) {
+    if (index === 1 && input.start.leadDirection !== null) continue;
+    if (index === points.length - 2 && input.end.leadDirection !== null) continue;
+    if (!bendHasOccupiedClearance(points[index]!, input.occupiedSegments, input.options.wireClearance)) {
+      throw new Error("Между углом провода и другим проводом не выдержан зазор.");
+    }
   }
   validateNoSelfIntersections(segments);
 }
@@ -195,6 +217,7 @@ function normalizeRequest(request: E4RoutingRequest): {
   readonly end: E4RouterAnchor;
   readonly obstacles: readonly Rect[];
   readonly occupiedSegments: readonly OccupiedSegment[];
+  readonly occupiedBends: readonly OccupiedBend[];
   readonly occupiedPoints: readonly Point[];
   readonly options: NormalizedOptions;
 } {
@@ -223,17 +246,27 @@ function normalizeRequest(request: E4RoutingRequest): {
     };
   });
   const occupiedSegments: OccupiedSegment[] = [];
+  const occupiedBends: OccupiedBend[] = [];
   const occupiedPoints: Point[] = [];
   for (const route of request.occupiedRoutes ?? []) {
     const segments = toSegments(route.points, `Занятый маршрут${route.id ? ` ${route.id}` : ""}`);
+    const allowedTouchPoints = [
+      ...(route.allowedTouchPoint ? [route.allowedTouchPoint] : []),
+      ...(route.allowedTouchPoints ?? []),
+    ];
     occupiedSegments.push(...segments.map((segment) => ({
       ...segment,
       allowCrossings: route.allowCrossings !== false,
-      allowedTouchPoint: route.allowedTouchPoint,
+      allowedTouchPoints,
     })));
+    for (let index = 1; route.allowCrossings !== false && index < segments.length; index += 1) {
+      if (segments[index - 1]!.orientation !== segments[index]!.orientation) {
+        occupiedBends.push({ point: route.points[index]!, allowedTouchPoints });
+      }
+    }
     occupiedPoints.push(...route.points);
   }
-  return { start: request.start, end: request.end, obstacles, occupiedSegments, occupiedPoints, options };
+  return { start: request.start, end: request.end, obstacles, occupiedSegments, occupiedBends, occupiedPoints, options };
 }
 
 function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptions {
@@ -371,12 +404,17 @@ function buildGridCoordinates(
 }
 
 function uniqueSorted(values: readonly number[]): readonly number[] {
-  return [...new Set(values)].sort((left, right) => left - right);
+  const sorted = [...values].sort((left, right) => left - right);
+  const result: number[] = [];
+  for (const value of sorted) {
+    if (result.length === 0 || Math.abs(value - result.at(-1)!) > EPSILON) result.push(value);
+  }
+  return result;
 }
 
 function nodeIndex(xs: readonly number[], ys: readonly number[], point: Point): number {
-  const xIndex = xs.indexOf(point.x);
-  const yIndex = ys.indexOf(point.y);
+  const xIndex = xs.findIndex((value) => Math.abs(value - point.x) <= EPSILON);
+  const yIndex = ys.findIndex((value) => Math.abs(value - point.y) <= EPSILON);
   if (xIndex < 0 || yIndex < 0) throw new Error("Внутренняя ошибка сетки автотрассировки.");
   return yIndex * xs.length + xIndex;
 }
@@ -435,6 +473,10 @@ function findShortestGridPath(
       const segment = createSegment(from, to, "Ребро сетки");
       if (!gridSegmentIsAvailable(segment, input, fixedLeads)) continue;
       const nextDirection = neighbor.direction;
+      if (previousDirection !== NO_DIRECTION && previousDirection !== nextDirection &&
+          !samePoint(from, pointForNode(xs, ys, startNode)) &&
+          !samePoint(from, pointForNode(xs, ys, endNode)) &&
+          !bendHasOccupiedClearance(from, input.occupiedSegments, input.options.wireClearance)) continue;
       // A crossing remains legal for the explicit/manual editor, but the
       // automatic ECAD route should prefer a nearby parallel detour. Grid
       // edges often meet on the occupied route coordinate, so endpoint hits
@@ -526,6 +568,7 @@ function gridSegmentIsAvailable(
   try {
     validateSegmentAgainstObstacles(segment, input.obstacles, new Set());
     validateSegmentAgainstOccupied(segment, input.occupiedSegments, input.options.wireClearance);
+    validateSegmentAgainstOccupiedBends(segment, input.occupiedBends, input.options.wireClearance);
     for (const fixed of fixedLeads) {
       const intersection = segmentIntersection(segment, fixed.segment);
       if (intersection.kind === "none") continue;
@@ -568,14 +611,13 @@ function validateSegmentAgainstOccupied(
 ): void {
   for (const occupied of occupiedSegments) {
     if (segment.orientation !== occupied.orientation) {
-      if (!occupied.allowCrossings) {
-        const intersection = segmentIntersection(segment, occupied);
-        if (intersection.kind === "point") {
-          const allowedTouch = occupied.allowedTouchPoint !== undefined &&
-            samePoint(intersection.point, occupied.allowedTouchPoint) &&
-            (samePoint(intersection.point, segment.start) || samePoint(intersection.point, segment.end));
-          if (!allowedTouch) throw new Error("Маршрут пересекает уже построенную часть самого себя.");
+      const intersection = segmentIntersection(segment, occupied);
+      if (intersection.kind === "point") {
+        if (touchIsAllowed(intersection.point, segment, occupied)) continue;
+        if (!occupied.allowCrossings) {
+          throw new Error("Маршрут пересекает уже построенную часть самого себя.");
         }
+        continue;
       }
       continue;
     }
@@ -583,14 +625,10 @@ function validateSegmentAgainstOccupied(
       ? positiveOverlap(segment.start.x, segment.end.x, occupied.start.x, occupied.end.x)
       : positiveOverlap(segment.start.y, segment.end.y, occupied.start.y, occupied.end.y);
     if (!projectionsOverlap) {
-      if (!occupied.allowCrossings) {
-        const intersection = segmentIntersection(segment, occupied);
-        if (intersection.kind === "point") {
-          const allowedTouch = occupied.allowedTouchPoint !== undefined &&
-            samePoint(intersection.point, occupied.allowedTouchPoint) &&
-            (samePoint(intersection.point, segment.start) || samePoint(intersection.point, segment.end));
-          if (!allowedTouch) throw new Error("Маршрут касается уже построенной части самого себя.");
-        }
+      const intersection = segmentIntersection(segment, occupied);
+      if (intersection.kind === "point" && touchIsAllowed(intersection.point, segment, occupied)) continue;
+      if (intersection.kind === "point" && !occupied.allowCrossings) {
+        throw new Error("Маршрут касается уже построенной части самого себя.");
       }
       continue;
     }
@@ -600,6 +638,56 @@ function validateSegmentAgainstOccupied(
     if (distance <= EPSILON) throw new Error("Маршрут коллинеарно накладывается на другой провод.");
     if (distance + EPSILON < clearance) throw new Error("Между параллельными проводами не выдержан зазор.");
   }
+}
+
+function validateSegmentAgainstOccupiedBends(
+  segment: Segment,
+  occupiedBends: readonly OccupiedBend[],
+  clearance: number,
+): void {
+  for (const bend of occupiedBends) {
+    if (bend.allowedTouchPoints.some((allowed) => samePoint(bend.point, allowed)) &&
+        isSegmentEndpoint(bend.point, segment)) continue;
+    if (pointToSegmentDistance(bend.point, segment) + EPSILON < clearance) {
+      throw new Error("Между проводом и углом другого провода не выдержан зазор.");
+    }
+  }
+}
+
+function bendHasOccupiedClearance(
+  point: Point,
+  occupiedSegments: readonly OccupiedSegment[],
+  clearance: number,
+): boolean {
+  return occupiedSegments.every((occupied) =>
+    occupied.allowedTouchPoints.some((allowed) => samePoint(point, allowed)) ||
+    pointToSegmentDistance(point, occupied) + EPSILON >= clearance);
+}
+
+function touchIsAllowed(point: Point, segment: Segment, occupied: OccupiedSegment): boolean {
+  return isSegmentEndpoint(point, segment) &&
+    occupied.allowedTouchPoints.some((allowed) => samePoint(point, allowed));
+}
+
+function isSegmentEndpoint(point: Point, segment: Segment): boolean {
+  return samePoint(point, segment.start) || samePoint(point, segment.end);
+}
+
+function pointToSegmentDistance(point: Point, segment: Segment): number {
+  const closest = segment.orientation === "horizontal"
+    ? {
+      x: clamp(point.x, segment.start.x, segment.end.x),
+      y: segment.start.y,
+    }
+    : {
+      x: segment.start.x,
+      y: clamp(point.y, segment.start.y, segment.end.y),
+    };
+  return Math.hypot(point.x - closest.x, point.y - closest.y);
+}
+
+function clamp(value: number, first: number, second: number): number {
+  return Math.max(Math.min(first, second), Math.min(Math.max(first, second), value));
 }
 
 function validateRouteLead(anchor: E4RouterAnchor, segment: Segment, isStart: boolean, length: number): void {
@@ -663,6 +751,29 @@ function simplifyPolyline(points: readonly Point[]): readonly Point[] {
     result.push(point);
   }
   return result;
+}
+
+/** Keeps persisted coordinates exact when the grid merged values within ε. */
+function canonicalizeRouteAxes(
+  points: readonly Point[],
+  start: Point,
+  end: Point,
+): readonly Point[] {
+  const result = points.map((point) => ({ ...point }));
+  if (result.length < 2) return [{ ...start }, { ...end }];
+  result[0] = { ...start };
+  for (let index = 1; index < result.length; index += 1) {
+    const previous = result[index - 1]!;
+    const current = result[index]!;
+    if (Math.abs(current.x - previous.x) <= EPSILON) current.x = previous.x;
+    else if (Math.abs(current.y - previous.y) <= EPSILON) current.y = previous.y;
+  }
+  const last = result.length - 1;
+  result[last] = { ...end };
+  const previous = result[last - 1]!;
+  if (Math.abs(end.x - previous.x) <= EPSILON) previous.x = end.x;
+  else if (Math.abs(end.y - previous.y) <= EPSILON) previous.y = end.y;
+  return result.filter((point, index) => index === 0 || !samePoint(point, result[index - 1]!));
 }
 
 function pointsAreCollinear(first: Point, second: Point, third: Point): boolean {
