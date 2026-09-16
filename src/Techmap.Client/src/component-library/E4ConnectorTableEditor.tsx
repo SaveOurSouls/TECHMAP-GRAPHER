@@ -100,11 +100,15 @@ export function E4ConnectorTableEditor(props: E4ConnectorTableEditorProps) {
   }, [article, props.table]);
   const visibleColumns = props.table.columns.filter(column => column.visible);
 
-  const apply = (row: MaterializedE4ConnectorArticleRow, changes: E4ConnectorRowOverride) => {
+  const apply = (
+    row: MaterializedE4ConnectorArticleRow,
+    changes: E4ConnectorRowOverride,
+    editScope: E4ConnectorRowEditScope = scope,
+  ) => {
     if (!article || props.disabled) return;
     try {
       props.onChange(updateE4ConnectorTableCell(
-        props.table, article.articleVariantId, row.seriesRowId, scope, changes,
+        props.table, article.articleVariantId, row.seriesRowId, editScope, changes,
       ));
       setError(null);
     } catch (caught) { setError(simpleError(caught)); }
@@ -176,11 +180,12 @@ export function E4ConnectorTableEditor(props: E4ConnectorTableEditorProps) {
               </select>}
               {column.id === "standardTerminalArticleKey" && <select
                 aria-label={`Стандартный контакт, строка ${rowIndex + 1}`}
+                title="Стандартный терминал задаётся отдельно для выбранного артикула"
                 value={terminalValue}
                 disabled={props.disabled || row.contactTypeGroupId === null}
                 onChange={event => apply(row, {
                   standardTerminalArticleKey: terminals.find(item => articleIdentity(item) === event.currentTarget.value) ?? null,
-                })}
+                }, "article")}
               >
                 <option value="">Не выбран</option>
                 {terminals.map(terminal => <option key={articleIdentity(terminal)} value={articleIdentity(terminal)}>{terminal.articleKey}</option>)}

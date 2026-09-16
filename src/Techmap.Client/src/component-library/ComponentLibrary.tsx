@@ -10,7 +10,7 @@ import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate
 import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2, upgradeComponentTemplateContentV3 } from "./template-content";
 import { E4ConnectorTableEditor } from "./E4ConnectorTableEditor";
-import { createE4ConnectorSeriesTableFromV3, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
+import { createE4ConnectorSeriesTableFromV3, materializeE4ConnectorArticle, setArticleContactGroupStandardTerminal, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 import { TemplateCanvasV2 } from "./TemplateCanvasV2";
 import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
@@ -18,7 +18,10 @@ import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
 import {
   CONNECTOR_ARTICLE_ENTITY_V3,
   CONNECTOR_REFERENCE_SOURCE_V3,
+  TERMINAL_ARTICLE_ENTITY_V3,
+  TERMINAL_REFERENCE_SOURCE_V3,
   TemplateSeriesPanelV3,
+  standardTerminalKeyV3,
   type NewArticleVariantV3Input,
 } from "./TemplateSeriesPanelV3";
 import { materializeArticleVariantV3 } from "./template-article-materialization-v3";
@@ -128,6 +131,31 @@ export function connectorArticleInputs(
   });
 }
 
+export function terminalArticleSearchRequest(query: string): ReferenceCatalogSearchRequest {
+  return {
+    text: query.trim() || null,
+    exactSourceKey: null,
+    entityTypes: [TERMINAL_ARTICLE_ENTITY_V3],
+    filters: [],
+    filterLogic: "all",
+    sort: "relevance",
+    pageSize: 30,
+    cursor: null,
+  };
+}
+
+export function terminalArticleInputs(
+  records: readonly ReferenceCatalogSearchRecord[],
+): readonly ArticleBinding[] {
+  const seen = new Set<string>();
+  return records.flatMap(record => {
+    const articleKey = record.sourceKey.trim();
+    if (record.entityType !== TERMINAL_ARTICLE_ENTITY_V3 || !articleKey || seen.has(articleKey)) return [];
+    seen.add(articleKey);
+    return [{ sourceId: TERMINAL_REFERENCE_SOURCE_V3, entityType: TERMINAL_ARTICLE_ENTITY_V3, articleKey }];
+  });
+}
+
 /**
  * Old template envelopes used articleBindings as their lookup index. During the
  * explicit v1/v2 upgrade those identities become legacy v3 variants. From v3
@@ -193,6 +221,10 @@ export function ComponentLibrary({ config, session }: Props) {
   const [connectorArticleSuggestions, setConnectorArticleSuggestions] = useState<readonly NewArticleVariantV3Input[]>([]);
   const [connectorArticleSearchState, setConnectorArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [connectorArticleSearchMessage, setConnectorArticleSearchMessage] = useState<string | null>(null);
+  const [terminalArticleQuery, setTerminalArticleQuery] = useState("");
+  const [terminalArticleSuggestions, setTerminalArticleSuggestions] = useState<readonly ArticleBinding[]>([]);
+  const [terminalArticleSearchState, setTerminalArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [terminalArticleSearchMessage, setTerminalArticleSearchMessage] = useState<string | null>(null);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -222,6 +254,20 @@ export function ComponentLibrary({ config, session }: Props) {
     ...previewParameterValues,
     ...articlePreview.values,
   }), [articlePreview.values, previewParameterValues]);
+  const standardTerminalArticleKeys = useMemo(() => {
+    const result: Record<string, ArticleBinding | null> = {};
+    for (const article of draft.e4ConnectorTable.articles) {
+      const materialized = materializeE4ConnectorArticle(draft.e4ConnectorTable, article.articleVariantId);
+      for (const group of draft.e4ConnectorTable.contactTypeGroups) {
+        const rows = materialized.rows.filter(row => row.contactTypeGroupId === group.id);
+        const first = rows[0]?.standardTerminalArticleKey ?? null;
+        result[standardTerminalKeyV3(article.articleVariantId, group.id)] = rows.length > 0 && rows.every(row =>
+          articleIdentity(row.standardTerminalArticleKey ?? { sourceId: "", entityType: "", articleKey: "" }) ===
+          articleIdentity(first ?? { sourceId: "", entityType: "", articleKey: "" })) ? first : null;
+      }
+    }
+    return result;
+  }, [draft.e4ConnectorTable]);
 
   async function loadList() { try { setItems(await api.list()); setError(null); } catch (caught) { setError(errorText(caught)); } }
   useEffect(() => { void loadList(); }, [api]);
@@ -257,6 +303,31 @@ export function ComponentLibrary({ config, session }: Props) {
       controller.abort();
     };
   }, [connectorArticleQuery, referenceApi]);
+  useEffect(() => {
+    const query = terminalArticleQuery.trim();
+    if (!query) {
+      setTerminalArticleSuggestions([]);
+      setTerminalArticleSearchState("idle");
+      setTerminalArticleSearchMessage(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setTerminalArticleSearchState("loading");
+      setTerminalArticleSearchMessage(null);
+      void referenceApi.searchCatalog(TERMINAL_REFERENCE_SOURCE_V3, terminalArticleSearchRequest(query), controller.signal).then(page => {
+        if (controller.signal.aborted) return;
+        setTerminalArticleSuggestions(terminalArticleInputs(page.items));
+        setTerminalArticleSearchState("ready");
+      }).catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
+        setTerminalArticleSuggestions([]);
+        setTerminalArticleSearchState("error");
+        setTerminalArticleSearchMessage(errorText(caught));
+      });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [terminalArticleQuery, referenceApi]);
 
   function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable) {
     setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(content), e4ConnectorTable: structuredClone(table ?? createE4ConnectorSeriesTableFromV3(content)) });
@@ -266,6 +337,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
     setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
+    setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
 
   async function open(summary: ComponentTemplateSummary) {
@@ -300,6 +372,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setSelectedArticleVariantId(null);
     setPreviewParameterValues({});
     setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
+    setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
@@ -308,6 +381,43 @@ export function ComponentLibrary({ config, session }: Props) {
     if (selection !== undefined) setSelectedId(selection); markDirty(); setError(null);
   }
   function command(action: () => TemplateContentV2, selection?: string | null) { try { changeContent(action(), selection); } catch (caught) { setError(errorText(caught)); } }
+  function setArticleContactGroup(
+    variantId: string,
+    groupId: string,
+    count: number,
+    terminals: readonly ArticleBinding[],
+  ) {
+    try {
+      const content = setArticleVariantContactGroupV3(draft.content, variantId, groupId, count, terminals);
+      let table = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
+      const allowed = new Set(terminals.map(articleIdentity));
+      const materialized = materializeE4ConnectorArticle(table, variantId);
+      const containsInvalidStandard = materialized.rows.some(row => row.contactTypeGroupId === groupId &&
+        row.standardTerminalArticleKey !== null && !allowed.has(articleIdentity(row.standardTerminalArticleKey)));
+      if (containsInvalidStandard) table = setArticleContactGroupStandardTerminal(table, variantId, groupId, null);
+      setUndoStack(stack => [...stack.slice(-49), draft.content]);
+      setDraft(current => ({ ...current, content, e4ConnectorTable: table }));
+      markDirty(); setError(null);
+    } catch (caught) { setError(errorText(caught)); }
+  }
+  function setStandardTerminal(variantId: string, groupId: string, terminal: ArticleBinding | null) {
+    try {
+      const table = setArticleContactGroupStandardTerminal(draft.e4ConnectorTable, variantId, groupId, terminal);
+      setDraft(current => ({ ...current, e4ConnectorTable: table }));
+      markDirty(); setError(null);
+    } catch (caught) { setError(errorText(caught)); }
+  }
+  function removeArticleContactGroup(variantId: string, groupId: string) {
+    try {
+      const content = removeArticleVariantContactGroupV3(draft.content, variantId, groupId);
+      let table = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
+      if (materializeE4ConnectorArticle(table, variantId).rows.some(row => row.contactTypeGroupId === groupId))
+        table = setArticleContactGroupStandardTerminal(table, variantId, groupId, null);
+      setUndoStack(stack => [...stack.slice(-49), draft.content]);
+      setDraft(current => ({ ...current, content, e4ConnectorTable: table }));
+      markDirty(); setError(null);
+    } catch (caught) { setError(errorText(caught)); }
+  }
   const undo = useCallback(() => setUndoStack(stack => {
     const previous = stack.at(-1); if (!previous) return stack;
     setDraft(current => ({ ...current, content: previous, e4ConnectorTable: reconcileE4ConnectorTable(previous, current.e4ConnectorTable) })); setSelectedId(null); markDirty(); return stack.slice(0, -1);
@@ -428,6 +538,11 @@ export function ComponentLibrary({ config, session }: Props) {
           connectorArticleSearchState={connectorArticleSearchState}
           connectorArticleSearchMessage={connectorArticleSearchMessage}
           onConnectorArticleQueryChange={setConnectorArticleQuery}
+          terminalArticleQuery={terminalArticleQuery}
+          terminalArticleSuggestions={terminalArticleSuggestions}
+          terminalArticleSearchState={terminalArticleSearchState}
+          terminalArticleSearchMessage={terminalArticleSearchMessage}
+          onTerminalArticleQueryChange={setTerminalArticleQuery}
           selectedArticleVariantId={selectedArticleVariantId}
           articlePreviewMessage={articlePreview.message}
           articlePreviewError={articlePreview.error}
@@ -451,8 +566,10 @@ export function ComponentLibrary({ config, session }: Props) {
           }}
           onUpdateArticleVariant={(variantId, input) => command(() => upsertArticleVariantV3(draft.content, { id: variantId, ...input })[0])}
           onDeleteArticleVariant={variantId => { if (selectedArticleVariantId === variantId) setSelectedArticleVariantId(null); command(() => removeArticleVariantV3(draft.content, variantId)); }}
-          onSetArticleContactGroup={(variantId, groupId, count, terminals) => command(() => setArticleVariantContactGroupV3(draft.content, variantId, groupId, count, terminals))}
-          onRemoveArticleContactGroup={(variantId, groupId) => command(() => removeArticleVariantContactGroupV3(draft.content, variantId, groupId))}
+          onSetArticleContactGroup={setArticleContactGroup}
+          onRemoveArticleContactGroup={removeArticleContactGroup}
+          standardTerminalArticleKeys={standardTerminalArticleKeys}
+          onSetStandardTerminal={setStandardTerminal}
         />
         <E4ConnectorTableEditor table={draft.e4ConnectorTable} selectedArticleVariantId={selectedArticleVariantId} disabled={busy || assetMismatch} onChange={table => { setDraft(current => ({ ...current, e4ConnectorTable: table })); markDirty(); }} />
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>

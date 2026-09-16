@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { TemplateSeriesPanelV3, formatTerminalArticleKeysV3, parseTerminalArticleKeysV3 } from "./TemplateSeriesPanelV3";
+import { TemplateSeriesPanelV3, formatTerminalArticleKeysV3, parseTerminalArticleKeysV3, standardTerminalKeyV3, type TemplateSeriesPanelV3Props } from "./TemplateSeriesPanelV3";
 import {
   addBasicNodeV3,
   addContactPointV3,
@@ -19,7 +19,7 @@ import {
 } from "./template-commands-v3";
 import { validateTemplateContentV3, type ArticleKeyV3, type TemplateContentV3 } from "./template-model-v3";
 
-const renderSeriesPanel = (content: TemplateContentV3) => renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
+const renderSeriesPanel = (content: TemplateContentV3, overrides: Partial<TemplateSeriesPanelV3Props> = {}) => renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
   content,
   selectedArticleVariantId: content.articleVariants[0]?.id,
   onAddContactTypeGroup: vi.fn(),
@@ -29,6 +29,7 @@ const renderSeriesPanel = (content: TemplateContentV3) => renderToStaticMarkup(c
   onDeleteArticleVariant: vi.fn(),
   onSetArticleContactGroup: vi.fn(),
   onRemoveArticleContactGroup: vi.fn(),
+  ...overrides,
 }));
 
 describe("template series v3 end-to-end workflow", () => {
@@ -181,6 +182,28 @@ describe("template series v3 end-to-end workflow", () => {
     expect(parseTerminalArticleKeysV3("БД.ТЕР|terminal|T-1;БД.ТЕР|terminal|T-1")).toBeNull();
     expect(() => setArticleVariantContactGroupV3(withVariant, variantId, groupId, -1, []))
       .toThrowError(expect.objectContaining({ code: "invalid_contact_count" }));
+  });
+
+  it("shows terminal catalog results and an explicit standard terminal for a selected contact type", () => {
+    const [withGroup, groupId] = addContactTypeGroupV3(newTemplateContentV3(), "Сигнальные");
+    const [withContact] = addContactPointV3(withGroup, withGroup.views[0]!.id, { contactTypeGroupId: groupId });
+    const [withVariant, variantId] = upsertArticleVariantV3(withContact, {
+      sourceId: "technology-connectors", entityType: "connector", articleKey: "B2B-XH-A",
+    });
+    const standard = { sourceId: "technology-terminals", entityType: "terminal", articleKey: "SXH-001T-P0.6" };
+    const configured = setArticleVariantContactGroupV3(withVariant, variantId, groupId, 1, [standard]);
+    const markup = renderSeriesPanel(configured, {
+      terminalArticleQuery: "SXH",
+      terminalArticleSuggestions: [standard, { ...standard, articleKey: "SXH-002T-P0.6" }],
+      terminalArticleSearchState: "ready",
+      standardTerminalArticleKeys: { [standardTerminalKeyV3(variantId, groupId)]: standard },
+      onSetStandardTerminal: vi.fn(),
+    });
+
+    expect(markup).toContain("technology-terminals");
+    expect(markup).toContain("SXH-002T-P0.6");
+    expect(markup).toContain("Стандартный терминал для типа");
+    expect(markup).toContain('value="technology-terminals\u0000terminal\u0000SXH-001T-P0.6" selected=""');
   });
 
   it("keeps every controlled group edit in content when another group changes", () => {

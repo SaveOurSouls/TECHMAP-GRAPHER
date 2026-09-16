@@ -75,7 +75,7 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain('class="series-v3-terminal-heading"');
     expect(markup).toContain('class="series-v3-terminal-list"');
     expect(markup).toContain('class="series-v3-terminal-row"');
-    expect(markup).toContain("поиск по полному справочнику БД.ТЕР пока не подключён");
+    expect(markup).toContain("Их можно выбрать из справочника technology-terminals или добавить вручную.");
 
     const guideStart = markup.indexOf('<details class="series-v3-guide">');
     const guideEnd = markup.indexOf("</details>", guideStart);

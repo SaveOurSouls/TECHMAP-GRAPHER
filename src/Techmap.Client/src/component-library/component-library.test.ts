@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
-import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut } from "./ComponentLibrary";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, terminalArticleInputs, terminalArticleSearchRequest } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
 import { newTemplateContentV3, upsertArticleVariantV3 } from "./template-commands-v3";
@@ -27,6 +27,23 @@ describe("component library UI", () => {
     ])).toEqual([
       { sourceId: "technology-connectors", entityType: "connector", articleKey: "B2B-XH-A" },
       { sourceId: "technology-connectors", entityType: "connector", articleKey: "B10B-XH-A" },
+    ]);
+  });
+  it("builds terminal lookup requests and maps only unique terminal records", () => {
+    expect(terminalArticleSearchRequest("  SXH  ")).toMatchObject({
+      text: "SXH", entityTypes: ["terminal"], sort: "relevance", pageSize: 30, cursor: null,
+    });
+    const record = (entityType: string, sourceKey: string) => ({
+      recordId: crypto.randomUUID(), entityType, sourceKey, payload: {}, sourceLocation: null,
+    });
+    expect(terminalArticleInputs([
+      record("terminal", " SXH-001T-P0.6 "),
+      record("terminal", "SXH-001T-P0.6"),
+      record("connector", "B2B-XH-A"),
+      record("terminal", "SXH-002T-P0.6"),
+    ])).toEqual([
+      { sourceId: "technology-terminals", entityType: "terminal", articleKey: "SXH-001T-P0.6" },
+      { sourceId: "technology-terminals", entityType: "terminal", articleKey: "SXH-002T-P0.6" },
     ]);
   });
   it("connects Ctrl+Z and Cmd+Z to template undo", () => {

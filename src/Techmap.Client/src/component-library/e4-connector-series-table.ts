@@ -422,6 +422,52 @@ export function applyE4ConnectorRowEdit(
   return { ...table, articles };
 }
 
+/**
+ * Assigns one standard terminal to every row of a contact type in one article.
+ * The operation is intentionally article-scoped: different connector articles
+ * in a series may accept different terminals even when they share a row layout.
+ */
+export function setArticleContactGroupStandardTerminal(
+  table: E4ConnectorSeriesTable,
+  articleVariantId: string,
+  contactTypeGroupId: string,
+  terminal: ArticleKeyV3 | null,
+): E4ConnectorSeriesTable {
+  const article = requireArticle(table, articleVariantId);
+  const group = article.contactGroups.find(item => item.contactTypeGroupId === contactTypeGroupId);
+  if (!group)
+    throw new E4ConnectorSeriesTableError("article_contact_group_not_found", "Выбранный тип контакта не найден в артикуле.");
+  const normalizedTerminal = normalizedArticleKey(terminal);
+  if (normalizedTerminal !== null && !group.allowedTerminalArticleKeys.some(item => sameArticleKey(item, normalizedTerminal)))
+    throw new E4ConnectorSeriesTableError("incompatible_standard_terminal", "Стандартный терминал отсутствует в списке допустимых для этого типа.");
+
+  const defaultsById = new Map(table.seriesDefaults.map(row => [row.rowId, row.values]));
+  let affected = 0;
+  const rows = article.rows.map(row => {
+    const defaults = defaultsById.get(row.seriesRowId);
+    if (!defaults)
+      throw new E4ConnectorSeriesTableError("row_not_found", `Не найдены общие значения строки «${row.seriesRowId}».`);
+    if (materializedValues(defaults, row.overrides).contactTypeGroupId !== contactTypeGroupId)
+      return { ...row, overrides: cloneOverride(row.overrides) };
+    affected += 1;
+    return {
+      ...row,
+      overrides: compactOverride(defaults, {
+        ...row.overrides,
+        standardTerminalArticleKey: normalizedTerminal,
+      }),
+    };
+  });
+  if (affected === 0)
+    throw new E4ConnectorSeriesTableError("article_contact_group_empty", "В выбранном артикуле нет контактов этого типа.");
+  return {
+    ...table,
+    articles: table.articles.map(candidate => candidate.articleVariantId === articleVariantId
+      ? recountArticle(table.seriesDefaults, { ...candidate, rows }, table.contactTypeGroups)
+      : candidate),
+  };
+}
+
 function diagnostic(
   diagnostics: E4ConnectorSeriesTableDiagnostic[],
   code: string,

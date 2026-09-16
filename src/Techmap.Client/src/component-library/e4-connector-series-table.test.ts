@@ -3,6 +3,7 @@ import {
   applyE4ConnectorRowEdit,
   createE4ConnectorSeriesTableFromV3,
   materializeE4ConnectorArticle,
+  setArticleContactGroupStandardTerminal,
   validateE4ConnectorSeriesTable,
 } from "./e4-connector-series-table";
 import {
@@ -132,5 +133,36 @@ describe("E4 connector series table", () => {
       scope: "article",
       changes: { contactTypeGroupId: crypto.randomUUID() },
     })).toThrow("Выбранный тип контакта не найден в серии");
+  });
+
+  it("assigns a compatible standard terminal to every row of one article contact type", () => {
+    const fixture = series();
+    const table = createE4ConnectorSeriesTableFromV3(fixture.content);
+    const first = table.articles[0]!;
+    const second = table.articles[1]!;
+    const terminal = first.contactGroups.find(group => group.contactTypeGroupId === fixture.signalId)!
+      .allowedTerminalArticleKeys[0]!;
+
+    const edited = setArticleContactGroupStandardTerminal(
+      table, first.articleVariantId, fixture.signalId, terminal,
+    );
+
+    expect(materializeE4ConnectorArticle(edited, first.articleVariantId).rows[0]!.standardTerminalArticleKey)
+      .toEqual(terminal);
+    expect(materializeE4ConnectorArticle(edited, second.articleVariantId).rows[0]!.standardTerminalArticleKey)
+      .toBeNull();
+    expect(validateE4ConnectorSeriesTable(edited).valid).toBe(true);
+    expect(table.articles[0]!.rows[0]!.overrides).toEqual({});
+  });
+
+  it("rejects a group-wide terminal that is not compatible with the selected article", () => {
+    const fixture = series();
+    const table = createE4ConnectorSeriesTableFromV3(fixture.content);
+    expect(() => setArticleContactGroupStandardTerminal(
+      table,
+      table.articles[0]!.articleVariantId,
+      fixture.signalId,
+      { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "OTHER" },
+    )).toThrow("отсутствует в списке допустимых");
   });
 });

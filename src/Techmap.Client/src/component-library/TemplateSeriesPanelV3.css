@@ -77,6 +77,13 @@
 .series-v3-contact-group header span { min-width: 0; color: #71808d; font-size: 11px; text-align: right; overflow-wrap: anywhere; }
 .series-v3-contact-group > .series-v3-terminal-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .series-v3-contact-group > .series-v3-terminal-list { min-width: 0; display: grid; gap: 6px; }
+.series-v3-terminal-reference-search { min-width: 0; padding: 7px; display: grid; gap: 5px; border: 1px solid #d6e3e9; border-radius: 5px; background: #f8fbfc; }
+.series-v3-terminal-reference-search > label, .series-v3-standard-terminal { min-width: 0; display: grid; gap: 3px; color: #5b6b79; font-size: 11px; font-weight: 700; }
+.series-v3-terminal-reference-search > .series-v3-reference-error { color: #a33f3f; }
+.series-v3-terminal-reference-options { max-height: 145px; overflow: auto; display: grid; gap: 3px; }
+.series-v3-terminal-reference-options > button { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #fff; text-align: left; }
+.series-v3-terminal-reference-options > button span { color: #4f7b8e; font-size: 10px; }
+.series-v3-standard-terminal select { width: 100%; min-width: 0; height: 31px; padding: 5px 7px; border: 1px solid #cad8df; border-radius: 5px; background: #fff; color: #355365; font: inherit; }
 .series-v3-terminal-row { min-width: 0; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.4fr) 31px; gap: 6px; align-items: end; }
 .series-v3-terminal-row label { font-size: 11px; }
 .series-v3-remove-terminal { min-width: 31px; padding: 0 !important; border-color: #e1bcbc !important; background: #fdf2f2 !important; color: #9a3f3f !important; }
