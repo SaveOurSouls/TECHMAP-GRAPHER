@@ -6,7 +6,15 @@ import { parseRuntimeConfig } from "../runtime-config";
 import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, terminalArticleInputs, terminalArticleSearchRequest } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
-import { newTemplateContentV3, upsertArticleVariantV3 } from "./template-commands-v3";
+import {
+  addBasicNodeV3,
+  insertNodePointV3,
+  moveNodePointV3,
+  newTemplateContentV3,
+  upsertArticleVariantV3,
+} from "./template-commands-v3";
+import { createE4ConnectorSeriesTableFromV3 } from "./e4-connector-series-table";
+import { createTemplateContentV5FromEditor, projectTemplateContentV5ToV3 } from "./template-model-v5";
 
 const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "1", apiVersion: "1", schemaVersion: "7" });
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
@@ -67,6 +75,9 @@ describe("component library UI", () => {
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Прямоугольник");
     expect(markup).toContain("Эллипс");
+    expect(markup).toContain("Ломаная");
+    expect(markup).toContain("Безье");
+    expect(markup).toContain("Контур");
     expect(markup).toContain("Создать контакт");
     expect(markup).toContain("Разместить связанную точку");
     expect(markup).toContain("Выход пучка");
@@ -118,5 +129,35 @@ describe("component library UI", () => {
     expect(isTemplateAssetReferencedV2(withAsset, assetId)).toBe(false);
     expect(isTemplateAssetReferencedV2(placed, assetId)).toBe(true);
     expect(validateTemplateContentV2(placed)).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("creates advanced path primitives and preserves edited points through the saved v5 envelope", () => {
+    const initial = newTemplateContentV3();
+    const view = initial.views[1]!;
+    const layer = view.layers[0]!;
+    const [withPolyline, polylineId] = addBasicNodeV3(initial, view.id, layer.id, "polyline");
+    const [withBezier, bezierId] = addBasicNodeV3(withPolyline, view.id, layer.id, "bezier");
+    const [withContour, contourId] = addBasicNodeV3(withBezier, view.id, layer.id, "closedContour");
+    const moved = moveNodePointV3(withContour, view.id, layer.id, polylineId, 1, 15, -10);
+    const edited = insertNodePointV3(moved, view.id, layer.id, contourId, 3, 80, 140);
+
+    const nodes = edited.views[1]!.layers[0]!.nodes;
+    expect(nodes.map(node => node.kind)).toEqual(["polyline", "bezier", "closedContour"]);
+    const polyline = nodes.find(node => node.id === polylineId)!;
+    const bezier = nodes.find(node => node.id === bezierId)!;
+    const contour = nodes.find(node => node.id === contourId)!;
+    if (polyline.kind !== "polyline" || bezier.kind !== "bezier" || contour.kind !== "closedContour")
+      throw new Error("Expected advanced path primitives.");
+    expect(polyline.geometry.points[1]).toMatchObject({ x: { value: 175 }, y: { value: 90 } });
+    expect(bezier.geometry.points).toHaveLength(4);
+    expect(contour.geometry.points.at(-1)).toMatchObject({ x: { value: 80 }, y: { value: 140 } });
+
+    const envelope = createTemplateContentV5FromEditor(
+      edited,
+      createE4ConnectorSeriesTableFromV3(edited),
+      [],
+    ).content;
+    const restored = projectTemplateContentV5ToV3(JSON.parse(JSON.stringify(envelope)));
+    expect(restored.views[1]!.layers[0]!.nodes).toEqual(nodes);
   });
 });

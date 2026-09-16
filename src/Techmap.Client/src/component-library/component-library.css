@@ -63,6 +63,11 @@
 .template-selection [data-resize-handle="n"], .template-selection [data-resize-handle="s"] { cursor: ns-resize; }
 .template-selection [data-resize-handle="e"], .template-selection [data-resize-handle="w"] { cursor: ew-resize; }
 .template-selection [data-resize-handle="start"], .template-selection [data-resize-handle="end"] { cursor: crosshair; }
+.template-point-selection { pointer-events: none; }
+.template-point-selection [data-point-guide] { fill: none; stroke: #7ab8db; stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.template-point-selection [data-point-segment] { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: crosshair; }
+.template-point-selection [data-point-handle] { fill: #fff; stroke: #1685d1; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: all; cursor: move; }
+.template-point-selection [data-point-role="control"] { fill: #dff3ff; stroke: #408cb5; }
 .template-canvas line, .template-canvas rect, .template-canvas ellipse, .template-canvas text, .template-contact { cursor: move; }
 .template-contact circle { fill: #fff; stroke: #c54848; stroke-width: 2; }
 .template-contact path { fill: none; stroke: #c54848; stroke-width: 2; }

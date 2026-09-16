@@ -36,7 +36,8 @@ import {
   deleteRepeatPrototypeV3 as deleteRepeatPrototypeV2, editBundlePortV3 as editBundlePortV2,
   editContactPointV3 as editContactPointV2, editLogicalContactV3 as editLogicalContactV2,
   editNodeV3 as editNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2,
-  moveNodeV3 as moveNodeV2, resizeNodeV3 as resizeNodeV2, newTemplateContentV3 as newTemplateContentV2,
+  moveNodeV3 as moveNodeV2, moveNodePointV3, insertNodePointV3, deleteNodePointV3,
+  resizeNodeV3 as resizeNodeV2, newTemplateContentV3 as newTemplateContentV2,
   parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, projectTemplateContentV3CoreToV2,
   addArticleVariantsV3, removeArticleVariantContactGroupV3, removeArticleVariantV3, renameContactTypeGroupV3,
   renameLayerV3 as renameLayerV2, renameViewV3 as renameViewV2, reorderLayerV3 as reorderLayerV2,
@@ -58,7 +59,7 @@ import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
 interface Draft { templateId: string | null; version: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; e4ConnectorTable: E4ConnectorSeriesTable; }
-type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "rectangle" | "ellipse" | "text" | "image" }>;
+type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "rectangle" | "ellipse" | "bezier" | "closedContour" | "text" | "image" }>;
 
 const newDraft = (): Draft => {
   const content = newTemplateContentV2();
@@ -247,7 +248,7 @@ export function createTemplateImageNodeV2(assetId: string, layerId: string): Ima
 function isEditableConstantNode(node: TemplateNodeV2): node is EditableNode {
   const constant = (value: NumericExpressionV2) => value.kind === "constant";
   if (![node.transform.translateX, node.transform.translateY].every(constant)) return false;
-  if (node.kind === "line") return node.geometry.points.every(point => constant(point.x) && constant(point.y));
+  if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") return node.geometry.points.every(point => constant(point.x) && constant(point.y));
   if (node.kind === "rectangle") return [node.geometry.x, node.geometry.y, node.geometry.width, node.geometry.height].every(constant);
   if (node.kind === "ellipse") return [node.geometry.centerX, node.geometry.centerY, node.geometry.radiusX, node.geometry.radiusY].every(constant);
   if (node.kind === "text") return [node.geometry.x, node.geometry.y, node.geometry.fontSize].every(constant);
@@ -593,6 +594,21 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!layer) { setError("Изменяемый объект не найден в активном виде."); return; }
     command(() => resizeNodeV2(draft.content, activeView.id, layer.id, nodeId, handle, deltaX, deltaY), nodeId);
   }
+  function editCanvasPoint(nodeId: string, action: (layerId: string) => TemplateContentV2) {
+    if (!activeView) return;
+    const layer = activeView.layers.find(item => item.nodes.some(node => node.id === nodeId));
+    if (!layer) { setError("Изменяемый объект не найден в активном виде."); return; }
+    command(() => action(layer.id), nodeId);
+  }
+  function moveCanvasPoint(nodeId: string, pointIndex: number, deltaX: number, deltaY: number) {
+    editCanvasPoint(nodeId, layerId => moveNodePointV3(draft.content, activeView!.id, layerId, nodeId, pointIndex, deltaX, deltaY));
+  }
+  function insertCanvasPoint(nodeId: string, segmentIndex: number, x: number, y: number) {
+    editCanvasPoint(nodeId, layerId => insertNodePointV3(draft.content, activeView!.id, layerId, nodeId, segmentIndex, x, y));
+  }
+  function deleteCanvasPoint(nodeId: string, pointIndex: number) {
+    editCanvasPoint(nodeId, layerId => deleteNodePointV3(draft.content, activeView!.id, layerId, nodeId, pointIndex));
+  }
   function addView() {
     try { const [content, id] = addAdditionalViewV2(draft.content); const view = content.views.find(item => item.id === id)!; changeContent(content, null); setActiveLayerIds(current => ({ ...current, [id]: view.layers[0]!.id })); setViewId(id); } catch (caught) { setError(errorText(caught)); }
   }
@@ -721,8 +737,8 @@ export function ComponentLibrary({ config, session }: Props) {
           )[0])}
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
-        <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
@@ -785,7 +801,7 @@ function BundlePortProperties({ port, edit, remove }: { port: BundlePortV2; edit
 function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: EditableNode; disabled: boolean; edit: (changes: NodeEditV2) => void; move: (x: number, y: number) => void; toggleLock: () => void }) {
   const position = nodePosition(node), dimensions = nodeDimensions(node);
   const strokeWidth = constantValue(node.stroke.width) ?? 0;
-  const canFill = node.kind === "rectangle" || node.kind === "ellipse";
+  const canFill = node.kind === "rectangle" || node.kind === "ellipse" || node.kind === "closedContour" || node.kind === "bezier" && node.geometry.closed;
   const fillEnabled = canFill && node.fill.color !== null;
   const updateStroke = (changes: Partial<typeof node.stroke>) => edit({ stroke: { ...node.stroke, ...changes } });
   const colors = ["#111827", "#6b7280", "#ffffff", "#dc2626", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed"];
@@ -806,6 +822,7 @@ function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: Edit
     </section>
     <div className="coordinate-grid"><NumericField label="X" value={position.x} disabled={disabled} change={value => move(value, position.y)} /><NumericField label="Y" value={position.y} disabled={disabled} change={value => move(position.x, value)} />{dimensions && <><NumericField label="Ширина" value={dimensions.width} min={1} disabled={disabled} change={value => editDimension(node, "width", value, edit)} /><NumericField label="Высота" value={dimensions.height} min={1} disabled={disabled} change={value => editDimension(node, "height", value, edit)} /></>}</div>
     <NumericField label="Прозрачность 0…1" value={node.opacity} min={0} max={1} step={0.05} disabled={disabled} change={value => { if (value >= 0 && value <= 1) edit({ opacity: value }); }} />
+    {(node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") && <p className="readonly-note">Перетаскивайте маркеры точек. Двойной щелчок по сегменту добавляет вершину, по внутренней вершине — удаляет её.</p>}
     {node.kind === "text" && <label>Текст<input value={node.geometry.text} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, text: event.target.value } })} /></label>}
     {node.kind === "image" && <ImageProperties node={node} disabled={disabled} edit={edit} />}
   </>;
@@ -821,11 +838,11 @@ function NumericField({ label, value, disabled, min, max, step, change }: { labe
 }
 
 function nodeLabel(node: TemplateNodeV2) { return ({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Кривая Безье", closedContour: "Контур", text: "Текст", image: "Изображение", group: "Группа" })[node.kind]; }
-function nodePosition(node: EditableNode) { const tx = constantValue(node.transform.translateX)!, ty = constantValue(node.transform.translateY)!; if (node.kind === "line") return { x: constantValue(node.geometry.points[0]!.x)! + tx, y: constantValue(node.geometry.points[0]!.y)! + ty }; if (node.kind === "ellipse") return { x: constantValue(node.geometry.centerX)! - constantValue(node.geometry.radiusX)! + tx, y: constantValue(node.geometry.centerY)! - constantValue(node.geometry.radiusY)! + ty }; return { x: constantValue(node.geometry.x)! + tx, y: constantValue(node.geometry.y)! + ty }; }
-function nodeDimensions(node: EditableNode): { width: number; height: number } | null { if (node.kind === "line" || node.kind === "text") return null; if (node.kind === "ellipse") return { width: constantValue(node.geometry.radiusX)! * 2, height: constantValue(node.geometry.radiusY)! * 2 }; return { width: constantValue(node.geometry.width)!, height: constantValue(node.geometry.height)! }; }
+function nodePosition(node: EditableNode) { const tx = constantValue(node.transform.translateX)!, ty = constantValue(node.transform.translateY)!; if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") return { x: constantValue(node.geometry.points[0]!.x)! + tx, y: constantValue(node.geometry.points[0]!.y)! + ty }; if (node.kind === "ellipse") return { x: constantValue(node.geometry.centerX)! - constantValue(node.geometry.radiusX)! + tx, y: constantValue(node.geometry.centerY)! - constantValue(node.geometry.radiusY)! + ty }; return { x: constantValue(node.geometry.x)! + tx, y: constantValue(node.geometry.y)! + ty }; }
+function nodeDimensions(node: EditableNode): { width: number; height: number } | null { if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour" || node.kind === "text") return null; if (node.kind === "ellipse") return { width: constantValue(node.geometry.radiusX)! * 2, height: constantValue(node.geometry.radiusY)! * 2 }; return { width: constantValue(node.geometry.width)!, height: constantValue(node.geometry.height)! }; }
 
 function setNodePosition(content: TemplateContentV2, viewId: string, layerId: string, node: EditableNode, x: number, y: number): TemplateContentV2 {
   const current = nodePosition(node);
   return moveNodeV2(content, viewId, layerId, node.id, x - current.x, y - current.y);
 }
-function editDimension(node: EditableNode, key: "width" | "height", value: number, edit: (changes: NodeEditV2) => void) { if (value <= 0 || node.kind === "line" || node.kind === "text") return; const c = constantExpressionV2; if (node.kind === "ellipse") edit({ geometry: { ...node.geometry, [key === "width" ? "radiusX" : "radiusY"]: c(value / 2) } }); else edit({ geometry: { ...node.geometry, [key]: c(value) } }); }
+function editDimension(node: EditableNode, key: "width" | "height", value: number, edit: (changes: NodeEditV2) => void) { if (value <= 0 || node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour" || node.kind === "text") return; const c = constantExpressionV2; if (node.kind === "ellipse") edit({ geometry: { ...node.geometry, [key === "width" ? "radiusX" : "radiusY"]: c(value / 2) } }); else edit({ geometry: { ...node.geometry, [key]: c(value) } }); }

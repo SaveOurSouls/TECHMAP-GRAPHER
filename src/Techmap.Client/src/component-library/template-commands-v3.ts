@@ -42,6 +42,7 @@ import {
   type RepeatPrototypeIdsV2,
 } from "./template-commands-v2";
 import {
+  TEMPLATE_V2_LIMITS,
   type ContactDirectionV2,
   type PointExpressionV2,
   type TemplateContentV2,
@@ -828,6 +829,144 @@ export function setNodeLockedV3(
   locked: boolean,
 ): TemplateContentV3 {
   return runCore(content, "invalid_node", core => setNodeLockedV2(core, viewId, layerId, nodeId, locked));
+}
+
+type PointNodeV3 = Extract<TemplateNodeV3, { kind: "line" | "polyline" | "bezier" | "closedContour" }>;
+
+function requireEditablePointNode(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+): { view: TemplateViewV3; layer: TemplateViewV3["layers"][number]; node: PointNodeV3 } {
+  requireValidInput(content);
+  const view = requireView(content, viewId);
+  const layer = view.layers.find(candidate => candidate.id === layerId);
+  if (!layer) throw new TemplateCommandV3Error("layer_not_found", "Слой не найден.");
+  const node = layer.nodes.find(candidate => candidate.id === nodeId);
+  if (!node) throw new TemplateCommandV3Error("node_not_found", "Объект не найден.");
+  if (layer.locked) throw new TemplateCommandV3Error("layer_locked", "Слой заблокирован.");
+  if (node.locked) throw new TemplateCommandV3Error("node_locked", "Объект заблокирован.");
+  if (node.kind !== "line" && node.kind !== "polyline" && node.kind !== "bezier" && node.kind !== "closedContour")
+    throw new TemplateCommandV3Error("unsupported_point_geometry", "Точки этого объекта нельзя редактировать.");
+  return { view, layer, node };
+}
+
+function requirePointIndex(points: readonly PointExpressionV2[], pointIndex: number): void {
+  if (!Number.isSafeInteger(pointIndex) || pointIndex < 0 || pointIndex >= points.length)
+    throw new TemplateCommandV3Error("point_index", "Точка с таким индексом не найдена.");
+}
+
+function requireFiniteCoordinate(value: number, code: string): void {
+  if (!Number.isFinite(value) || value < -TEMPLATE_V2_LIMITS.coordinate || value > TEMPLATE_V2_LIMITS.coordinate)
+    throw new TemplateCommandV3Error(code, `Координата должна быть конечным числом от ${-TEMPLATE_V2_LIMITS.coordinate} до ${TEMPLATE_V2_LIMITS.coordinate}.`);
+}
+
+function requireConstantPoint(point: PointExpressionV2): { x: number; y: number } {
+  if (point.x.kind !== "constant" || point.y.kind !== "constant")
+    throw new TemplateCommandV3Error("non_constant_geometry", "Параметризованную точку нельзя редактировать как константу.");
+  return { x: point.x.value, y: point.y.value };
+}
+
+function replacePointNode(
+  content: TemplateContentV3,
+  view: TemplateViewV3,
+  layer: TemplateViewV3["layers"][number],
+  node: PointNodeV3,
+): TemplateContentV3 {
+  return requireValidResult(replaceView(content, {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? {
+      ...layer,
+      nodes: layer.nodes.map(candidate => candidate.id === node.id ? node : candidate),
+    } : candidate),
+  }), "invalid_node_points");
+}
+
+function withPointGeometry(node: PointNodeV3, points: PointExpressionV2[]): PointNodeV3 {
+  if (node.kind === "line") return { ...node, geometry: { ...node.geometry, points } };
+  if (node.kind === "polyline") return { ...node, geometry: { ...node.geometry, points } };
+  if (node.kind === "bezier") return { ...node, geometry: { ...node.geometry, points } };
+  return { ...node, geometry: { points } };
+}
+
+/** Moves one constant line/polyline endpoint, bend, or Bezier control/end point. */
+export function moveNodePointV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  pointIndex: number,
+  deltaX: number,
+  deltaY: number,
+): TemplateContentV3 {
+  if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY))
+    throw new TemplateCommandV3Error("invalid_point_move", "Смещение точки должно быть конечным числом.");
+  const { view, layer, node } = requireEditablePointNode(content, viewId, layerId, nodeId);
+  requirePointIndex(node.geometry.points, pointIndex);
+  const current = requireConstantPoint(node.geometry.points[pointIndex]!);
+  const x = current.x + deltaX, y = current.y + deltaY;
+  requireFiniteCoordinate(x, "invalid_point_move");
+  requireFiniteCoordinate(y, "invalid_point_move");
+  if (deltaX === 0 && deltaY === 0) return content;
+  const points = node.geometry.points.map((point, index) => index === pointIndex
+    ? { x: constantExpressionV3(x), y: constantExpressionV3(y) }
+    : point);
+  return replacePointNode(content, view, layer, withPointGeometry(node, points));
+}
+
+/** Inserts one constant bend after the selected line/polyline segment. */
+export function insertNodePointV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  segmentIndex: number,
+  x: number,
+  y: number,
+): TemplateContentV3 {
+  requireFiniteCoordinate(x, "invalid_point_insert");
+  requireFiniteCoordinate(y, "invalid_point_insert");
+  const { view, layer, node } = requireEditablePointNode(content, viewId, layerId, nodeId);
+  if (node.kind === "bezier")
+    throw new TemplateCommandV3Error("unsupported_point_insert", "Добавление отдельных точек кривой Безье не поддерживается.");
+  const segmentCount = node.kind === "closedContour" ? node.geometry.points.length : node.geometry.points.length - 1;
+  if (!Number.isSafeInteger(segmentIndex) || segmentIndex < 0 || segmentIndex >= segmentCount)
+    throw new TemplateCommandV3Error("segment_index", "Сегмент с таким индексом не найден.");
+  if (node.geometry.points.length >= 512)
+    throw new TemplateCommandV3Error("point_limit", "Линия не может содержать больше 512 точек.");
+  const points = [...node.geometry.points];
+  const insertionIndex = node.kind === "closedContour" && segmentIndex === node.geometry.points.length - 1
+    ? node.geometry.points.length
+    : segmentIndex + 1;
+  points.splice(insertionIndex, 0, { x: constantExpressionV3(x), y: constantExpressionV3(y) });
+  return replacePointNode(content, view, layer, withPointGeometry(node, points));
+}
+
+/** Removes one internal line/polyline bend while preserving both endpoints. */
+export function deleteNodePointV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  pointIndex: number,
+): TemplateContentV3 {
+  const { view, layer, node } = requireEditablePointNode(content, viewId, layerId, nodeId);
+  if (node.kind === "bezier")
+    throw new TemplateCommandV3Error("unsupported_point_delete", "Удаление отдельных точек кривой Безье не поддерживается.");
+  requirePointIndex(node.geometry.points, pointIndex);
+  if (node.kind === "closedContour") {
+    if (node.geometry.points.length <= 3)
+      throw new TemplateCommandV3Error("minimum_points", "В замкнутом контуре должно остаться не меньше трёх точек.");
+    const points = node.geometry.points.filter((_, index) => index !== pointIndex);
+    return replacePointNode(content, view, layer, withPointGeometry(node, points));
+  }
+  if (pointIndex === 0 || pointIndex === node.geometry.points.length - 1)
+    throw new TemplateCommandV3Error("endpoint_delete", "Конечные точки линии удалить нельзя.");
+  if (node.geometry.points.length <= 2)
+    throw new TemplateCommandV3Error("minimum_points", "В линии должно остаться не меньше двух точек.");
+  const points = node.geometry.points.filter((_, index) => index !== pointIndex);
+  return replacePointNode(content, view, layer, withPointGeometry(node, points));
 }
 
 export function moveNodeV3(

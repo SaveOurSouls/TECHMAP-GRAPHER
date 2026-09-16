@@ -8,6 +8,7 @@ import {
   attachRepeatDomainV3,
   constantExpressionV3,
   createRepeatPrototypeV3,
+  deleteNodePointV3,
   deleteBundlePortV3,
   deleteContactPointV3,
   deleteContactTypeGroupV3,
@@ -15,6 +16,8 @@ import {
   editContactPointV3,
   editLogicalContactV3,
   linkLogicalContactPointV3,
+  insertNodePointV3,
+  moveNodePointV3,
   newTemplateContentV3,
   projectTemplateContentV3CoreToV2,
   removeArticleVariantContactGroupV3,
@@ -228,5 +231,138 @@ describe("template v3 immutable commands", () => {
 
     expect(() => addBasicNodeV3(invalid, invalid.views[0]!.id, invalid.views[0]!.layers[0]!.id, "line"))
       .toThrowError(expect.objectContaining({ code: "invalid_input" } satisfies Partial<TemplateCommandV3Error>));
+  });
+
+  it("moves one constant line or Bezier point immutably", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withLine, lineId] = addBasicNodeV3(initial, view.id, layer.id, "line");
+    const before = structuredClone(withLine);
+    const moved = moveNodePointV3(withLine, view.id, layer.id, lineId, 1, 12, -8);
+    const movedLine = moved.views[1]!.layers[0]!.nodes[0]!;
+
+    expect(withLine).toEqual(before);
+    expect(movedLine.kind).toBe("line");
+    if (movedLine.kind === "line") expect(movedLine.geometry.points[1]).toEqual({
+      x: constantExpressionV3(222), y: constantExpressionV3(92),
+    });
+
+    const bezier = structuredClone(withLine);
+    const line = bezier.views[1]!.layers[0]!.nodes[0]!;
+    bezier.views[1]!.layers[0]!.nodes[0] = {
+      ...line,
+      kind: "bezier",
+      geometry: { points: [
+        { x: constantExpressionV3(0), y: constantExpressionV3(0) },
+        { x: constantExpressionV3(20), y: constantExpressionV3(0) },
+        { x: constantExpressionV3(40), y: constantExpressionV3(40) },
+        { x: constantExpressionV3(60), y: constantExpressionV3(40) },
+      ], closed: false },
+    };
+    const movedBezier = moveNodePointV3(bezier, view.id, layer.id, lineId, 2, -5, 7);
+    const result = movedBezier.views[1]!.layers[0]!.nodes[0]!;
+    if (result.kind === "bezier") expect(result.geometry.points[2]).toEqual({
+      x: constantExpressionV3(35), y: constantExpressionV3(47),
+    });
+    expect(() => insertNodePointV3(bezier, view.id, layer.id, lineId, 0, 10, 10))
+      .toThrowError(expect.objectContaining({ code: "unsupported_point_insert" }));
+    expect(() => deleteNodePointV3(bezier, view.id, layer.id, lineId, 1))
+      .toThrowError(expect.objectContaining({ code: "unsupported_point_delete" }));
+  });
+
+  it("inserts and removes an internal line point while preserving endpoints", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withLine, lineId] = addBasicNodeV3(initial, view.id, layer.id, "line");
+    const inserted = insertNodePointV3(withLine, view.id, layer.id, lineId, 0, 90, 45);
+    const insertedNode = inserted.views[1]!.layers[0]!.nodes[0]!;
+    expect(withLine.views[1]!.layers[0]!.nodes[0]).not.toBe(insertedNode);
+    if (insertedNode.kind === "line") {
+      expect(insertedNode.geometry.points).toHaveLength(3);
+      expect(insertedNode.geometry.points[1]).toEqual({ x: constantExpressionV3(90), y: constantExpressionV3(45) });
+    }
+
+    const removed = deleteNodePointV3(inserted, view.id, layer.id, lineId, 1);
+    expect(removed.views[1]!.layers[0]!.nodes[0]).toEqual(withLine.views[1]!.layers[0]!.nodes[0]);
+    expect(() => deleteNodePointV3(withLine, view.id, layer.id, lineId, 0))
+      .toThrowError(expect.objectContaining({ code: "endpoint_delete" }));
+    expect(() => deleteNodePointV3(withLine, view.id, layer.id, lineId, 1))
+      .toThrowError(expect.objectContaining({ code: "endpoint_delete" }));
+  });
+
+  it("edits a closed contour including its closing segment and keeps three vertices", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withLine, nodeId] = addBasicNodeV3(initial, view.id, layer.id, "line");
+    const contour = structuredClone(withLine);
+    const base = contour.views[1]!.layers[0]!.nodes[0]!;
+    contour.views[1]!.layers[0]!.nodes[0] = {
+      ...base,
+      kind: "closedContour",
+      geometry: { points: [
+        { x: constantExpressionV3(0), y: constantExpressionV3(0) },
+        { x: constantExpressionV3(100), y: constantExpressionV3(0) },
+        { x: constantExpressionV3(50), y: constantExpressionV3(80) },
+      ] },
+    };
+    const before = structuredClone(contour);
+    const inserted = insertNodePointV3(contour, view.id, layer.id, nodeId, 2, 10, 40);
+    const insertedNode = inserted.views[1]!.layers[0]!.nodes[0]!;
+    expect(contour).toEqual(before);
+    if (insertedNode.kind === "closedContour") {
+      expect(insertedNode.geometry.points).toHaveLength(4);
+      expect(insertedNode.geometry.points[3]).toEqual({ x: constantExpressionV3(10), y: constantExpressionV3(40) });
+    }
+
+    const moved = moveNodePointV3(inserted, view.id, layer.id, nodeId, 0, 5, 7);
+    const movedNode = moved.views[1]!.layers[0]!.nodes[0]!;
+    if (movedNode.kind === "closedContour") expect(movedNode.geometry.points[0]).toEqual({
+      x: constantExpressionV3(5), y: constantExpressionV3(7),
+    });
+    const removed = deleteNodePointV3(moved, view.id, layer.id, nodeId, 0);
+    const removedNode = removed.views[1]!.layers[0]!.nodes[0]!;
+    if (removedNode.kind === "closedContour") expect(removedNode.geometry.points).toHaveLength(3);
+    expect(() => deleteNodePointV3(removed, view.id, layer.id, nodeId, 0))
+      .toThrowError(expect.objectContaining({ code: "minimum_points" }));
+  });
+
+  it("rejects invalid, parameterized and locked point edits without mutation", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withLine, lineId] = addBasicNodeV3(initial, view.id, layer.id, "line");
+    const before = structuredClone(withLine);
+
+    expect(() => moveNodePointV3(withLine, view.id, layer.id, lineId, 9, 1, 1))
+      .toThrowError(expect.objectContaining({ code: "point_index" }));
+    expect(() => moveNodePointV3(withLine, view.id, layer.id, lineId, 0, Number.NaN, 1))
+      .toThrowError(expect.objectContaining({ code: "invalid_point_move" }));
+    expect(() => moveNodePointV3(withLine, view.id, layer.id, lineId, 0, 1_000_000, 0))
+      .toThrowError(expect.objectContaining({ code: "invalid_point_move" }));
+    expect(() => insertNodePointV3(withLine, view.id, layer.id, lineId, 0, 1_000_001, 0))
+      .toThrowError(expect.objectContaining({ code: "invalid_point_insert" }));
+    expect(() => insertNodePointV3(withLine, view.id, layer.id, lineId, 2, 0, 0))
+      .toThrowError(expect.objectContaining({ code: "segment_index" }));
+
+    const locked = structuredClone(withLine);
+    locked.views[1]!.layers[0]!.locked = true;
+    expect(() => moveNodePointV3(locked, view.id, layer.id, lineId, 0, 1, 1))
+      .toThrowError(expect.objectContaining({ code: "layer_locked" }));
+
+    const nodeLocked = structuredClone(withLine);
+    nodeLocked.views[1]!.layers[0]!.nodes[0]!.locked = true;
+    expect(() => moveNodePointV3(nodeLocked, view.id, layer.id, lineId, 0, 1, 1))
+      .toThrowError(expect.objectContaining({ code: "node_locked" }));
+    expect(() => moveNodePointV3(withLine, view.id, layer.id, crypto.randomUUID(), 0, 1, 1))
+      .toThrowError(expect.objectContaining({ code: "node_not_found" }));
+
+    const parameterized = structuredClone(withLine);
+    const parameterId = crypto.randomUUID();
+    parameterized.parameters.push({
+      id: parameterId, name: "X", type: "number", unit: null, defaultValue: 100,
+      minimum: null, maximum: null, formula: null,
+    });
+    const parameterizedNode = parameterized.views[1]!.layers[0]!.nodes[0]!;
+    if (parameterizedNode.kind === "line") parameterizedNode.geometry.points[0]!.x = {
+      kind: "parameter", parameterId,
+    };
+    expect(() => moveNodePointV3(parameterized, view.id, layer.id, lineId, 0, 1, 1))
+      .toThrowError(expect.objectContaining({ code: "non_constant_geometry" }));
+    expect(withLine).toEqual(before);
   });
 });

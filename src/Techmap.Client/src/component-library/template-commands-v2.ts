@@ -16,7 +16,7 @@ import {
 } from "./template-model-v2";
 import { expandTemplateRepeatsV2, TemplateRepeatV2Error } from "./template-repeat-v2";
 
-export type BasicNodeKindV2 = "line" | "rectangle" | "ellipse" | "text";
+export type BasicNodeKindV2 = "line" | "polyline" | "rectangle" | "ellipse" | "bezier" | "closedContour" | "text";
 export type NodeResizeHandleV2 = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "start" | "end";
 export type NodeEditV2 = Partial<Pick<TemplateNodeV2, "visible" | "locked" | "opacity" | "transform" | "stroke" | "fill">> & {
   geometry?: TemplateNodeV2["geometry"];
@@ -640,12 +640,26 @@ export function addBasicNodeV2(content: TemplateContentV2, viewId: string, layer
   const node: TemplateNodeV2 = kind === "line" ? { ...base, kind, geometry: { points: [
     { x: constantExpressionV2(100), y: constantExpressionV2(100) },
     { x: constantExpressionV2(210), y: constantExpressionV2(100) },
+  ], bendRadius: constantExpressionV2(0) } } : kind === "polyline" ? { ...base, kind, geometry: { points: [
+    { x: constantExpressionV2(100), y: constantExpressionV2(100) },
+    { x: constantExpressionV2(160), y: constantExpressionV2(100) },
+    { x: constantExpressionV2(160), y: constantExpressionV2(160) },
   ], bendRadius: constantExpressionV2(0) } } : kind === "rectangle" ? { ...base, kind, geometry: {
     x: constantExpressionV2(100), y: constantExpressionV2(100), width: constantExpressionV2(140), height: constantExpressionV2(70),
     cornerRadii: [constantExpressionV2(0), constantExpressionV2(0), constantExpressionV2(0), constantExpressionV2(0)],
   } } : kind === "ellipse" ? { ...base, kind, geometry: {
     centerX: constantExpressionV2(170), centerY: constantExpressionV2(135), radiusX: constantExpressionV2(70), radiusY: constantExpressionV2(35),
-  } } : { ...base, kind, geometry: {
+  } } : kind === "bezier" ? { ...base, kind, geometry: { points: [
+    { x: constantExpressionV2(100), y: constantExpressionV2(140) },
+    { x: constantExpressionV2(130), y: constantExpressionV2(80) },
+    { x: constantExpressionV2(190), y: constantExpressionV2(200) },
+    { x: constantExpressionV2(220), y: constantExpressionV2(140) },
+  ], closed: false } } : kind === "closedContour" ? { ...base, kind, geometry: { points: [
+    { x: constantExpressionV2(100), y: constantExpressionV2(100) },
+    { x: constantExpressionV2(220), y: constantExpressionV2(100) },
+    { x: constantExpressionV2(220), y: constantExpressionV2(180) },
+    { x: constantExpressionV2(100), y: constantExpressionV2(180) },
+  ] } } : { ...base, kind, geometry: {
     x: constantExpressionV2(100), y: constantExpressionV2(100), text: "Текст", fontSize: constantExpressionV2(18),
   } };
   return [addNodeV2(content, viewId, layerId, node), id];

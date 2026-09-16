@@ -5,7 +5,11 @@ import {
   TemplateCanvasV2,
   clientPointToTemplateCoordinatesV2,
   completedTemplateNodeDragV2,
+  completedTemplateNodePointDragV2,
   createTemplateNumericEvaluatorV2,
+  hitTestTemplateSegmentsV2,
+  projectPointToTemplateSegmentV2,
+  templatePointToNodePointV2,
   type TemplateCanvasV2Props,
 } from "./TemplateCanvasV2";
 import type {
@@ -181,6 +185,31 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain('opacity="0.4"');
   });
 
+  it("projects a click onto a segment and returns the nearest segment hit", () => {
+    expect(projectPointToTemplateSegmentV2(
+      { x: 7, y: 4 }, { x: 0, y: 0 }, { x: 10, y: 0 },
+    )).toEqual({ x: 7, y: 0, t: 0.7, distance: 4 });
+    expect(projectPointToTemplateSegmentV2(
+      { x: 20, y: 4 }, { x: 0, y: 0 }, { x: 10, y: 0 },
+    )).toEqual({ x: 10, y: 0, t: 1, distance: Math.hypot(10, 4) });
+    expect(hitTestTemplateSegmentsV2(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 20 }],
+      { x: 12, y: 8 },
+      3,
+    )).toEqual({ x: 10, y: 8, t: 0.4, distance: 2, segmentIndex: 1 });
+    expect(hitTestTemplateSegmentsV2(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }], { x: 5, y: 8 }, 4,
+    )).toBeNull();
+  });
+
+  it("converts a completed point gesture into local node coordinates", () => {
+    const start = { clientX: 0, clientY: 0, templateX: 100, templateY: 50 };
+    const end = { clientX: 0, clientY: 10, templateX: 100, templateY: 70 };
+    expect(completedTemplateNodePointDragV2(start, end, 90, 2, 4)).toEqual({ deltaX: 10, deltaY: 0 });
+    expect(completedTemplateNodePointDragV2(start, { ...end, clientY: 2 }, 90, 2, 4)).toBeNull();
+    expect(templatePointToNodePointV2(100, 80, 100, 40, 90, 2, 4)).toEqual({ x: 20, y: 0 });
+  });
+
   it("adds forgiving hit targets and Visio-style handles for selected simple figures", () => {
     const rectangle = node({
       id: ids.rectangle,
@@ -205,6 +234,82 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain('stroke-dasharray="12 6 2 6"');
     expect(markup).toContain('data-selection-kind="line"');
     expect(markup.match(/data-resize-handle=/g)).toHaveLength(2);
+  });
+
+  it("shows editable handles for every constant line point and segment insertion hit targets", () => {
+    const routed = node({
+      id: ids.line,
+      kind: "line",
+      geometry: {
+        points: [
+          { x: c(10), y: c(10) },
+          { x: c(40), y: c(10) },
+          { x: c(40), y: c(50) },
+        ],
+        bendRadius: c(0),
+      },
+    });
+    const markup = render(content([routed]), {
+      selectedId: ids.line,
+      onNodePointMove: () => undefined,
+      onNodePointDelete: () => undefined,
+      onNodePointInsert: () => undefined,
+    });
+
+    expect(markup).toContain('data-selection-kind="line"');
+    expect(markup.match(/data-point-handle=/g)).toHaveLength(3);
+    expect(markup.match(/data-point-segment=/g)).toHaveLength(2);
+    expect(markup).toContain('data-point-handle="1"');
+  });
+
+  it("shows bezier anchors and control handles but hides handles for locked or parameterized nodes", () => {
+    const bezier = node({
+      id: ids.line,
+      kind: "bezier",
+      geometry: {
+        points: [
+          { x: c(10), y: c(10) }, { x: c(20), y: c(0) },
+          { x: c(30), y: c(20) }, { x: c(40), y: c(10) },
+        ],
+        closed: false,
+      },
+    });
+    const callbacks = { selectedId: ids.line, onNodePointMove: () => undefined };
+    const editableMarkup = render(content([bezier]), callbacks);
+    expect(editableMarkup.match(/data-point-handle=/g)).toHaveLength(4);
+    expect(editableMarkup.match(/data-point-role="control"/g)).toHaveLength(2);
+    expect(editableMarkup.match(/data-point-guide=/g)).toHaveLength(2);
+
+    if (bezier.kind !== "bezier") throw new Error("Expected bezier node.");
+    bezier.locked = true;
+    expect(render(content([bezier]), callbacks)).not.toContain("data-point-handle");
+    bezier.locked = false;
+    bezier.geometry.points[1]!.x = p(ids.parameter);
+    expect(render(content([bezier]), callbacks)).not.toContain("data-point-handle");
+  });
+
+  it("exposes every closed-contour edge, including the closing edge, for point editing", () => {
+    const contour = node({
+      id: ids.line,
+      kind: "closedContour",
+      geometry: {
+        points: [
+          { x: c(10), y: c(10) }, { x: c(50), y: c(10) },
+          { x: c(50), y: c(40) }, { x: c(10), y: c(40) },
+        ],
+      },
+    });
+    const markup = render(content([contour]), {
+      selectedId: ids.line,
+      onNodePointMove: () => undefined,
+      onNodePointDelete: () => undefined,
+      onNodePointInsert: () => undefined,
+    });
+
+    expect(markup).toContain('data-selection-kind="closedContour"');
+    expect(markup.match(/data-point-handle=/g)).toHaveLength(4);
+    expect(markup.match(/data-point-segment=/g)).toHaveLength(4);
+    expect(markup).toContain('data-point-segment="3"');
   });
 
   it("does not expose resize handles for parameterized or rotated geometry", () => {
