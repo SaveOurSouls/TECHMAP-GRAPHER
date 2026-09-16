@@ -562,21 +562,22 @@ describe("harness editor workspace", () => {
     const screenLayout = getE4ScreenLayout(screen, wires)!;
     expect(screenLayout).toMatchObject({
       center: { x: 40, y: 50 }, orientation: "horizontal", crossSize: 38,
-      bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 15 },
+      bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 31 },
     });
     expect(screenLayout.alongSize).toBe(18);
     expect(screenLayout.crossSize / screenLayout.alongSize).toBeGreaterThan(2);
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 50 }, 1)?.id).toBe("s1");
     expect(hitTestE4Screen([screen], wires, { x: 40, y: 70 }, 1_000)).toBeNull();
-    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 15 }, 1)).toEqual({
+    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 31 }, 1)).toEqual({
       screenId: "s1", screenTerminalSide: "above",
     });
+    expect(hitTestE4ScreenConnection([screen], wires, { x: 40, y: 15 }, 1)).toBeNull();
     const bothSides = getE4ScreenLayout({ ...screen, terminalSide: "both" }, wires)!;
     expect(bothSides.terminals).toEqual([
-      { side: "above", bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 15 } },
-      { side: "below", bodyConnectionPoint: { x: 40, y: 69 }, connectionPoint: { x: 40, y: 85 } },
+      { side: "above", bodyConnectionPoint: { x: 40, y: 31 }, connectionPoint: { x: 40, y: 31 } },
+      { side: "below", bodyConnectionPoint: { x: 40, y: 69 }, connectionPoint: { x: 40, y: 69 } },
     ]);
-    expect(hitTestE4ScreenConnection([{ ...screen, terminalSide: "both" }], wires, { x: 40, y: 85 }, 1)).toEqual({
+    expect(hitTestE4ScreenConnection([{ ...screen, terminalSide: "both" }], wires, { x: 40, y: 69 }, 1)).toEqual({
       screenId: "s1", screenTerminalSide: "below",
     });
     const pair = { id: "dp", wireIds: ["h1", "h2"] as const, step: 25, amplitude: 6, variant: 2 as const };

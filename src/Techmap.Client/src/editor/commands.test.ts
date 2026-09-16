@@ -1023,10 +1023,7 @@ describe("shared harness editor model", () => {
     const geometry = wireScreenConnectionGeometry(document, "s1")!;
     expect(geometry.orientation).toBe("horizontal");
     expect(geometry.crossSize).toBeGreaterThan(geometry.alongSize);
-    expect(geometry.connectionPoint).toEqual({
-      x: geometry.bodyConnectionPoint.x,
-      y: geometry.bodyConnectionPoint.y - 16,
-    });
+    expect(geometry.connectionPoint).toEqual(geometry.bodyConnectionPoint);
     document = applyEditorCommand(document, {
       type: "add-wire",
       wire: createWire(
@@ -1141,6 +1138,32 @@ describe("shared harness editor model", () => {
       screenId: "s2", screenTerminalSide: "below",
     });
     expect(wireEndpointE4Anchor(restored, createScreenEndpoint("s2", "below"))?.leadDirection).toBe("down");
+  });
+
+  it("keeps the two explicit screen ports distinct and never substitutes the opposite side", () => {
+    let document = applyEditorCommand(connectionDocument(), {
+      type: "create-screen",
+      screen: { id: "s1", wireIds: ["w1", "w2"], position: 0.5, label: "SH1", width: 46, terminalSide: "both" },
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire(
+        "screen-through",
+        createScreenEndpoint("s1", "above"),
+        createScreenEndpoint("s1", "below"),
+      ),
+    });
+    expect(document.wires.find((wire) => wire.id === "screen-through")?.from).toMatchObject({
+      screenId: "s1", screenTerminalSide: "above",
+    });
+    expect(document.wires.find((wire) => wire.id === "screen-through")?.to).toMatchObject({
+      screenId: "s1", screenTerminalSide: "below",
+    });
+    expect(wireEndpointE4Anchor(document, createScreenEndpoint("s1", "above"))?.position)
+      .not.toEqual(wireEndpointE4Anchor(document, createScreenEndpoint("s1", "below"))?.position);
+    expect(() => applyEditorCommand(document, {
+      type: "update-screen", screenId: "s1", terminalSide: "above",
+    })).toThrow(/сторона экрана уже используется/i);
   });
 
   it("normalizes legacy routes whose old eight-unit clearance is no longer valid", () => {

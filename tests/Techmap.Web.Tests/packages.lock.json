@@ -590,8 +590,8 @@
       "techmap.application": {
         "type": "Project",
         "dependencies": {
-          "Techmap.Contracts": "[0.7.0, )",
-          "Techmap.Domain": "[0.7.0, )"
+          "Techmap.Contracts": "[0.7.1, )",
+          "Techmap.Domain": "[0.7.1, )"
         }
       },
       "techmap.contracts": {
@@ -603,7 +603,7 @@
       "techmap.infrastructure.googlesheets": {
         "type": "Project",
         "dependencies": {
-          "Techmap.Infrastructure.Xlsx": "[0.7.0, )"
+          "Techmap.Infrastructure.Xlsx": "[0.7.1, )"
         }
       },
       "techmap.infrastructure.sqlite": {
@@ -611,24 +611,24 @@
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
-          "Techmap.Application": "[0.7.0, )"
+          "Techmap.Application": "[0.7.1, )"
         }
       },
       "techmap.infrastructure.xlsx": {
         "type": "Project",
         "dependencies": {
           "DocumentFormat.OpenXml": "[3.3.0, )",
-          "Techmap.Application": "[0.7.0, )"
+          "Techmap.Application": "[0.7.1, )"
         }
       },
       "Techmap.Server": {
         "type": "Project",
         "dependencies": {
-          "Techmap.Application": "[0.7.0, )",
-          "Techmap.Contracts": "[0.7.0, )",
-          "Techmap.Infrastructure.GoogleSheets": "[0.7.0, )",
-          "Techmap.Infrastructure.Sqlite": "[0.7.0, )",
-          "Techmap.Infrastructure.Xlsx": "[0.7.0, )"
+          "Techmap.Application": "[0.7.1, )",
+          "Techmap.Contracts": "[0.7.1, )",
+          "Techmap.Infrastructure.GoogleSheets": "[0.7.1, )",
+          "Techmap.Infrastructure.Sqlite": "[0.7.1, )",
+          "Techmap.Infrastructure.Xlsx": "[0.7.1, )"
         }
       },
       "DocumentFormat.OpenXml": {

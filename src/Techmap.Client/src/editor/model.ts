@@ -271,6 +271,8 @@ export interface WireInstance {
   readonly to: WireEndpoint;
   readonly circuit: string;
   readonly color: string;
+  /** Contact whose table color drives a direct contact-to-contact wire. */
+  readonly colorSource?: WireColorSource | null;
   /** Physical source length. Null means that the wire is intentionally incomplete. */
   readonly lengthMm: number | null;
   /** Signed technological correction at the `from` end, in millimetres. */
@@ -286,6 +288,11 @@ export interface WireInstance {
   readonly e4LabelPosition?: number;
   readonly drawingRoute: readonly Point[];
   readonly layerIds: Readonly<Record<EditorView, string>>;
+}
+
+export interface WireColorSource {
+  readonly connectorId: string;
+  readonly contactId: string;
 }
 
 export interface WireCutLengthCalculation {
@@ -368,7 +375,6 @@ export interface HarnessDesignDocument {
 
 export const defaultE4WireLead = 24;
 export const e4ScreenAlongSize = 18;
-export const e4ScreenTerminalLength = 16;
 
 export const defaultLayerIds = {
   connectors: "connectors",
@@ -528,7 +534,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
         if (!junctionIds.has(endpoint.junctionId)) throw new Error("Провод ссылается на отсутствующий узел соединения.");
       } else if (isScreenEndpoint(endpoint)) {
         if (!document.screens.some((screen) => screen.id === endpoint.screenId) ||
-            !wireScreenConnectionPoint(document, endpoint.screenId)) {
+            !wireScreenConnectionPoint(document, endpoint.screenId, new Set(), endpoint.screenTerminalSide)) {
           throw new Error("Провод ссылается на отсутствующую точку подключения экрана.");
         }
       } else {
@@ -539,6 +545,13 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
       }
     }
   }
+  document = {
+    ...document,
+    wires: document.wires.map((wire) => ({
+      ...wire,
+      colorSource: normalizeWireColorSource(document, wire),
+    })),
+  };
   document = {
     ...document,
     wires: document.wires.map((wire, index) => {
@@ -669,7 +682,7 @@ export interface WireScreenConnectionGeometry {
   readonly crossSize: number;
 }
 
-/** Derives the screen body and its conducting terminal from the screened routes. */
+/** Derives the screen body and its explicit conducting ports from the screened routes. */
 export function wireScreenConnectionGeometry(
   document: HarnessDesignDocument,
   screenId: string,
@@ -779,12 +792,17 @@ export function wireScreenConnectionGeometry(
     const bodyConnectionPoint = selected.orientation === "horizontal"
       ? { x: center.x, y: center.y + direction * crossSize / 2 }
       : { x: center.x + direction * crossSize / 2, y: center.y };
-    const connectionPoint = selected.orientation === "horizontal"
-      ? { x: bodyConnectionPoint.x, y: bodyConnectionPoint.y + direction * e4ScreenTerminalLength }
-      : { x: bodyConnectionPoint.x + direction * e4ScreenTerminalLength, y: bodyConnectionPoint.y };
+    // The port belongs to the oval itself. A wire only becomes connected after
+    // the user explicitly starts or ends it on this perimeter point.
+    const connectionPoint = bodyConnectionPoint;
     return { side, bodyConnectionPoint, connectionPoint };
   });
-  const terminal = terminals.find((item) => item.side === preferredTerminalSide) ?? terminals[0]!;
+  const terminal = preferredTerminalSide === undefined
+    ? terminals[0]!
+    : terminals.find((item) => item.side === preferredTerminalSide);
+  // Never silently move a persisted endpoint to the opposite port when the
+  // screen mode changes. Such a document/command must be repaired explicitly.
+  if (!terminal) return null;
   return {
     center,
     bodyConnectionPoint: terminal.bodyConnectionPoint,
@@ -1385,6 +1403,8 @@ function parseWire(value: unknown): WireInstance {
     to: parseEndpoint(record.to),
     circuit: requireString(record.circuit, "Цепь провода"),
     color: requireText(record.color, "Цвет провода"),
+    colorSource: record.colorSource === undefined || record.colorSource === null
+      ? record.colorSource : parseWireColorSource(record.colorSource),
     lengthMm,
     endCorrectionFromMm,
     endCorrectionToMm,
@@ -1402,6 +1422,27 @@ function parseWire(value: unknown): WireInstance {
       drawing: requireText(layerIds.drawing, "Слой провода чертежа"),
     },
   };
+}
+
+function parseWireColorSource(value: unknown): WireColorSource {
+  const record = requireRecord(value, "Источник цвета провода задан неверно.");
+  return {
+    connectorId: requireText(record.connectorId, "Соединитель источника цвета"),
+    contactId: requireText(record.contactId, "Контакт источника цвета"),
+  };
+}
+
+function normalizeWireColorSource(document: HarnessDesignDocument, wire: WireInstance): WireColorSource | null | undefined {
+  if (isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ||
+      isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to)) return undefined;
+  if (wire.colorSource === null) return null;
+  const endpoints = [wire.from, wire.to] as const;
+  const source = wire.colorSource && endpoints.some((endpoint) =>
+    endpoint.connectorId === wire.colorSource!.connectorId && endpoint.contactId === wire.colorSource!.contactId)
+    ? wire.colorSource
+    : endpoints.find((endpoint) => document.connectors.find((connector) => connector.id === endpoint.connectorId)
+      ?.contacts.find((contact) => contact.id === endpoint.contactId)?.color.trim()) ?? endpoints[0];
+  return { connectorId: source.connectorId, contactId: source.contactId };
 }
 
 function validateWirePhysicalLength(value: number | null): number | null {

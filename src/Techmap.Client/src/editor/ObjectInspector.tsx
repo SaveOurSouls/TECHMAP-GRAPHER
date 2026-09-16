@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
+import { builtInWireColors } from "./wire-reference-catalog";
 
 export interface ObjectInspectorProps {
   readonly view: HarnessEditorView;
@@ -97,7 +98,7 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
           onChange={(event) => onChange(selectedObject.id, { label: event.target.value })}
         />
       </label>
-      {selectedObject.kind === "wire" && (
+      {selectedObject.kind === "wire" && view === "drawing" && (
         <>
           <label className="he-toggle-field">
             <input
@@ -205,6 +206,18 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
       )}
       <label>
         Цвет
+        {selectedObject.kind === "wire" && <span className="he-wire-standard-colors" aria-label="Стандартные цвета проводов">
+          {builtInWireColors.map((color) => <button
+            key={color.id}
+            type="button"
+            aria-label={color.name}
+            title={color.name}
+            disabled={disabled}
+            className={selectedObject.color.toUpperCase() === color.hex ? "active" : ""}
+            style={{ backgroundColor: color.hex }}
+            onClick={() => onChange(selectedObject.id, { color: color.hex })}
+          />)}
+        </span>}
         <span className="he-color-field">
           <input
             type="color"

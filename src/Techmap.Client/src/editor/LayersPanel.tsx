@@ -30,7 +30,7 @@ export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove }
       <ol className="he-layer-list" aria-label="Слои композиции">
         {layers.map((layer, index) => (
           <li
-            className={draggedLayerId === layer.id ? "he-layer-row dragging" : "he-layer-row"}
+            className={`${draggedLayerId === layer.id ? "he-layer-row dragging" : "he-layer-row"}${layer.visible ? "" : " is-hidden"}`}
             key={layer.id}
             draggable
             onDragStart={(event) => beginDrag(event, layer.id)}
@@ -42,13 +42,14 @@ export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove }
             <span className="he-layer-name">{layer.label}</span>
             <button
               type="button"
-              className={layer.visible ? "he-layer-control active" : "he-layer-control"}
+              className={layer.visible ? "he-layer-visibility active" : "he-layer-visibility"}
               aria-label={`${layer.visible ? "Скрыть" : "Показать"} слой ${layer.label}`}
               aria-pressed={layer.visible}
-              title={layer.visible ? "Скрыть" : "Показать"}
+              title={layer.visible ? `Скрыть слой «${layer.label}»` : `Показать слой «${layer.label}»`}
               onClick={() => onVisibilityToggle(layer.id)}
             >
-              {layer.visible ? "◉" : "○"}
+              <span aria-hidden="true">{layer.visible ? "◉" : "○"}</span>
+              <span>{layer.visible ? "Скрыть" : "Показать"}</span>
             </button>
             <button
               type="button"

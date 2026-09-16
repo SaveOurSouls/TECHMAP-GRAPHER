@@ -27,12 +27,14 @@ import {
   type Point,
   type WireEndpoint,
   type WireCrossingStyle,
+  type WireColorSource,
   type WireInstance,
   type WireScreenGroup,
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
 import { routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { getE4WireLabelLayout, normalizeE4WireLabelPosition } from "./e4-wire-label";
+import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
@@ -128,6 +130,7 @@ export function createWire(
   endCorrectionFromMm = 0,
   endCorrectionToMm = 0,
   cutRoundingStepMm = 1,
+  colorSource?: WireColorSource,
 ): WireInstance {
   const wire: WireInstance = {
     id,
@@ -135,6 +138,7 @@ export function createWire(
     to,
     circuit: circuit.trim(),
     color,
+    colorSource,
     lengthMm,
     endCorrectionFromMm,
     endCorrectionToMm,
@@ -292,7 +296,10 @@ export function applyEditorCommand(
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
-      return rememberCustomWireColors(updated, [command.color ?? "", command.secondaryColor ?? ""]);
+      const synchronized = command.color === undefined
+        ? updated
+        : syncDirectWireColors(updated, command.connectorId, command.contactId);
+      return rememberCustomWireColors(synchronized, [command.color ?? "", command.secondaryColor ?? ""]);
     }
     case "add-contact": {
       const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
@@ -419,6 +426,7 @@ export function applyEditorCommand(
             ...wire,
             circuit: command.circuit === undefined ? wire.circuit : command.circuit.trim(),
             color: command.color ?? wire.color,
+            colorSource: command.color === undefined ? wire.colorSource : null,
             lengthMm: command.lengthMm === undefined ? wire.lengthMm : command.lengthMm,
             endCorrectionFromMm: command.endCorrectionFromMm ?? wire.endCorrectionFromMm,
             endCorrectionToMm: command.endCorrectionToMm ?? wire.endCorrectionToMm,
@@ -665,8 +673,13 @@ export function applyEditorCommand(
           terminalSide: command.terminalSide ?? screen.terminalSide,
         }), "Экран не найден."),
       };
-      const attachedWireIds = changed.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
-        isScreenEndpoint(endpoint) && endpoint.screenId === command.screenId)).map((wire) => wire.id);
+      const attachedWires = changed.wires.filter((wire) => [wire.from, wire.to].some((endpoint) =>
+        isScreenEndpoint(endpoint) && endpoint.screenId === command.screenId));
+      if (attachedWires.some((wire) => [wire.from, wire.to].some((endpoint) =>
+        isScreenEndpoint(endpoint) && endpoint.screenId === command.screenId && !wireEndpointE4Anchor(changed, endpoint)))) {
+        throw new Error("Выбранная сторона экрана уже используется. Сначала переподключите или удалите провод.");
+      }
+      const attachedWireIds = attachedWires.map((wire) => wire.id);
       return rerouteE4WireBatch(changed, attachedWireIds);
     }
     case "remove-screen": {
@@ -692,6 +705,26 @@ export function applyEditorCommand(
     case "move-layer":
       return updateLayers(document, command.view, (layers) => moveLayer(layers, command.layerId, command.direction));
   }
+}
+
+function syncDirectWireColors(
+  document: HarnessDesignDocument,
+  connectorId: string,
+  contactId: string,
+): HarnessDesignDocument {
+  const contact = document.connectors.find((connector) => connector.id === connectorId)
+    ?.contacts.find((candidate) => candidate.id === contactId);
+  if (!contact) return document;
+  const color = resolveWireColorHex(contact.color);
+  let changed = false;
+  const wires = document.wires.map((wire) => {
+    if (wire.colorSource === null || isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ||
+        isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to) ||
+        ![wire.from, wire.to].some((endpoint) => isConnectorEndpoint(endpoint, connectorId, contactId))) return wire;
+    changed = true;
+    return { ...wire, color, colorSource: { connectorId, contactId } };
+  });
+  return changed ? { ...document, wires } : document;
 }
 
 function rememberCustomWireColors(
@@ -1630,7 +1663,8 @@ function isContactConnected(document: HarnessDesignDocument, connectorId: string
 
 function sameEndpoint(left: WireEndpoint, right: WireEndpoint): boolean {
   if (isJunctionEndpoint(left)) return isJunctionEndpoint(right) && left.junctionId === right.junctionId;
-  if (isScreenEndpoint(left)) return isScreenEndpoint(right) && left.screenId === right.screenId;
+  if (isScreenEndpoint(left)) return isScreenEndpoint(right) && left.screenId === right.screenId &&
+    (left.screenTerminalSide ?? "above") === (right.screenTerminalSide ?? "above");
   return !isJunctionEndpoint(right) && !isScreenEndpoint(right) &&
     left.connectorId === right.connectorId && left.contactId === right.contactId;
 }

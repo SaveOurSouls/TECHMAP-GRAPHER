@@ -18,7 +18,6 @@ import {
   connectorE4FooterWidth,
   connectorE4TableColumnWidth,
   e4ScreenAlongSize,
-  e4ScreenTerminalLength,
 } from "./model";
 import { getE4WireLabelLayout, projectPointToE4WireLabelPosition } from "./e4-wire-label";
 import { E4_BRIDGE_RADIUS } from "./e4-router";
@@ -809,9 +808,7 @@ export function getE4ScreenLayout(
     const bodyConnectionPoint = span.orientation === "horizontal"
       ? { x: center.x, y: center.y + direction * crossSize / 2 }
       : { x: center.x + direction * crossSize / 2, y: center.y };
-    const connectionPoint = span.orientation === "horizontal"
-      ? { x: bodyConnectionPoint.x, y: bodyConnectionPoint.y + direction * e4ScreenTerminalLength }
-      : { x: bodyConnectionPoint.x + direction * e4ScreenTerminalLength, y: bodyConnectionPoint.y };
+    const connectionPoint = bodyConnectionPoint;
     return { side, bodyConnectionPoint, connectionPoint };
   });
   const terminal = terminals[0]!;
@@ -2129,12 +2126,6 @@ function drawE4Screens(
     context.stroke();
     for (const terminal of layout.terminals) {
       context.beginPath();
-      context.moveTo(terminal.bodyConnectionPoint.x, terminal.bodyConnectionPoint.y);
-      context.lineTo(terminal.connectionPoint.x, terminal.connectionPoint.y);
-      context.strokeStyle = "#183b4d";
-      context.lineWidth = 2;
-      context.stroke();
-      context.beginPath();
       context.arc(terminal.connectionPoint.x, terminal.connectionPoint.y, 3.5, 0, Math.PI * 2);
       context.fillStyle = "#183b4d";
       context.fill();
@@ -2667,7 +2658,8 @@ export function CanvasViewport({
         }
       } else {
         const sameEndpoint = "screenId" in wireStart
-          ? "screenId" in endpoint && wireStart.screenId === endpoint.screenId
+          ? "screenId" in endpoint && wireStart.screenId === endpoint.screenId &&
+            (wireStart.screenTerminalSide ?? "above") === (endpoint.screenTerminalSide ?? "above")
           : "connectorId" in endpoint && wireStart.connectorId === endpoint.connectorId &&
             wireStart.contactIndex === endpoint.contactIndex;
         if (!sameEndpoint) {

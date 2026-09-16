@@ -1071,7 +1071,15 @@ export function HarnessDesignEditor({
     });
     const circuit = contactValues.find((contact) => contact.circuit.trim())?.circuit ?? "";
     const colorName = contactValues.find((contact) => contact.color.trim())?.color ?? "";
-    const wire = createWire(id, from, to, null, circuit, resolveWireColorHex(colorName));
+    const colorContact = contactValues.find((contact) => contact.color.trim());
+    const colorSource = colorContact
+      ? [from, to].find((endpoint) => !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) &&
+        endpoint.contactId === colorContact.id)
+      : !isJunctionEndpoint(from) && !isScreenEndpoint(from) ? from : undefined;
+    const wire = createWire(
+      id, from, to, null, circuit, resolveWireColorHex(colorName), 0, 0, 1,
+      colorSource ? { connectorId: colorSource.connectorId, contactId: colorSource.contactId } : undefined,
+    );
     const start = wireEndpointE4Anchor(history.present, from);
     const end = wireEndpointE4Anchor(history.present, to);
     return start && end ? { ...wire, e4Route: createOrthogonalE4Route(start, end) } : wire;

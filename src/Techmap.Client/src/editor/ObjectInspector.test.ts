@@ -61,7 +61,7 @@ describe("wire object inspector", () => {
     expect(markup).toContain("Длина готова для карты резки");
   });
 
-  it("warns for an unknown length and marks it as excluded from materials", () => {
+  it("does not expose drawing length controls on the E4 schematic", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "e4",
       selectedObject: wireObject({
@@ -77,10 +77,25 @@ describe("wire object inspector", () => {
       onChange: vi.fn(),
     }));
 
-    expect(inputTag(markup, "Длина задана")).not.toContain("checked");
-    expect(inputTag(markup, "Абсолютная длина, мм")).toContain("disabled");
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("Длина провода не задана");
-    expect(markup).toContain("Провод исключён из материалов до заполнения длины.");
+    expect(markup).not.toContain("Длина задана");
+    expect(markup).not.toContain("Абсолютная длина, мм");
+    expect(markup).not.toContain("Поправка начала, мм");
+    expect(markup).not.toContain("Поправка конца, мм");
+    expect(markup).not.toContain("Шаг округления длины резки, мм");
+    expect(markup).not.toContain("Расчётная длина резки");
+    expect(markup).toContain("Цепь / обозначение");
+    expect(markup).toContain("Цвет");
+  });
+
+  it("offers all standard wire colors and keeps the full custom palette", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "e4", selectedObject: wireObject({ lengthKnown: "false" }), disabled: false, onChange: vi.fn(),
+    }));
+    expect(markup).toContain('aria-label="Стандартные цвета проводов"');
+    for (const color of ["красный", "черный", "белый", "оранжевый", "зеленый", "фиолетовый", "желтый",
+      "голубой", "синий", "коричневый", "серый", "розовый", "бирюзовый"]) {
+      expect(markup).toContain(`aria-label="${color}"`);
+    }
+    expect(inputTag(markup, "Цвет объекта")).toContain('type="color"');
   });
 });
