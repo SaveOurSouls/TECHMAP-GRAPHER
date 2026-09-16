@@ -5,6 +5,7 @@ import type {
   TemplateContentV3,
   TemplateNodeV3,
 } from "../component-library/template-model-v3";
+import type { TemplateContentV4 } from "../component-library/template-model-v4";
 import {
   expandTemplateViewRepeatsV2,
   resolveTemplateParameterValuesV2,
@@ -17,7 +18,7 @@ export interface ComponentTemplateViewInstance {
   readonly objectId: string;
   readonly snapshotId: string;
   readonly articleVariantId: string;
-  readonly content: TemplateContentV3;
+  readonly content: TemplateContentV3 | TemplateContentV4;
 }
 
 export type ResolveComponentTemplateAssetUrl = (snapshotId: string, assetId: string) => string;
@@ -300,7 +301,13 @@ export function projectComponentTemplateView(
   const view = instance.content.views.find(candidate => candidate.kind === viewKind);
   if (!view) return null;
   try {
-    const materialized = materializeArticleVariantV3(instance.content, instance.articleVariantId);
+    const v3Content: TemplateContentV3 = instance.content.schemaVersion === 3
+      ? instance.content
+      : (() => {
+          const { e4ConnectorTable: _table, ...core } = instance.content;
+          return { ...core, schemaVersion: 3 };
+        })();
+    const materialized = materializeArticleVariantV3(v3Content, instance.articleVariantId);
     const values = resolveTemplateParameterValuesV2(materialized.repeatContent, materialized.repeatOptions);
     const evaluate = (expression: NumericExpressionV3) => evaluateNumericExpressionV3(expression, values);
     const expansions = expandTemplateViewRepeatsV2(materialized.repeatContent, view.id, materialized.repeatOptions);

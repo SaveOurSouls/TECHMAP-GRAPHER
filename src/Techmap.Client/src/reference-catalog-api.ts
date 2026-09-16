@@ -138,6 +138,19 @@ export interface ReferenceCatalogPublication {
   readonly snapshot: ReferenceCatalogSnapshot;
 }
 
+export interface EditableReferenceRecord {
+  readonly entityType: string;
+  readonly sourceKey: string;
+  readonly payload: Readonly<Record<string, string>>;
+  readonly sourceLocation?: string | null;
+}
+
+export interface PublishEditableReferenceTableRequest {
+  readonly expectedActiveSnapshotId: string | null;
+  readonly sourceUri: string | null;
+  readonly records: readonly EditableReferenceRecord[];
+}
+
 export interface ReferenceCatalogSearchRequest {
   readonly text: string | null;
   readonly exactSourceKey: string | null;
@@ -177,6 +190,7 @@ export interface ReferenceCatalogApi {
   previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   previewGoogleSheetsProfile(sourceId: string, request: GoogleSheetsProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   publishXlsx(sourceId: string, request: PublishXlsxPreviewRequest): Promise<ReferenceCatalogPublication>;
+  publishEditableTable(sourceId: string, request: PublishEditableReferenceTableRequest): Promise<ReferenceCatalogPublication>;
   searchCatalog(
     sourceId: string,
     request: ReferenceCatalogSearchRequest,
@@ -545,6 +559,44 @@ export function createReferenceCatalogApi(
   const resource = (sourceId: string, suffix: string): string =>
     `reference-sources/${encodeURIComponent(sourceId)}/${suffix}`;
 
+  async function publishEditableTable(
+    sourceId: string,
+    editable: PublishEditableReferenceTableRequest,
+  ): Promise<ReferenceCatalogPublication> {
+    const snapshotId = crypto.randomUUID();
+    const capturedUtc = new Date().toISOString();
+    const common = {
+      snapshotId,
+      contractVersion: 1,
+      capturedUtc,
+      sourceKind: "editable-table",
+      versionFingerprint: `editable:${capturedUtc}:${snapshotId}`,
+      sourceUri: editable.sourceUri,
+      records: editable.records.map((record) => ({
+        entityType: record.entityType,
+        sourceKey: record.sourceKey,
+        payload: record.payload,
+        sourceLocation: record.sourceLocation ?? null,
+      })),
+      diagnostics: [],
+    };
+    const validation = await request(resource(sourceId, "validations"), {
+      method: "POST", headers: mutationHeaders, body: JSON.stringify(common),
+    }, parseSnapshot);
+    return request(resource(sourceId, "publications"), {
+      method: "POST",
+      headers: mutationHeaders,
+      body: JSON.stringify({
+        ...common,
+        expectedActiveSnapshotId: editable.expectedActiveSnapshotId,
+        expectedValidationSha256: validation.sha256,
+        acknowledgedWarningIds: validation.diagnostics
+          .filter((item) => item.severity === "warning")
+          .map((item) => item.diagnosticId),
+      }),
+    }, parsePublication);
+  }
+
   async function request<T>(path: string, init: RequestInit, parse: (input: unknown) => T): Promise<T> {
     let response: Response;
     try {
@@ -608,6 +660,7 @@ export function createReferenceCatalogApi(
       { method: "POST", headers: mutationHeaders, body: JSON.stringify(body) },
       parsePublication,
     ),
+    publishEditableTable,
     searchCatalog: (
       sourceId: string,
       body: ReferenceCatalogSearchRequest,

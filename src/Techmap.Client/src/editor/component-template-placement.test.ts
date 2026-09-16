@@ -9,8 +9,10 @@ import {
 } from "../component-library/template-commands-v2";
 import { upgradeTemplateContentV2ToV3 } from "../component-library/template-upgrade-v3";
 import type { ArticleVariantV3, TemplateContentV3 } from "../component-library/template-model-v3";
+import { upgradeTemplateContentV3ToV4 } from "../component-library/template-model-v4";
 import {
   createConnectorInstanceFromComponentTemplateV3,
+  rematerializeComponentTemplateConnectorArticle,
   type ComponentTemplatePlacementEnvelopeV3,
 } from "./component-template-placement";
 import { parseHarnessDesignDocument } from "./model";
@@ -82,6 +84,58 @@ function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
 }
 
 describe("component template placement", () => {
+  it("materializes v4 E4 table values and remaps another article on stable series rows", () => {
+    const base = fixture(2);
+    const first = base.content.articleVariants.at(-1)!;
+    const second = { ...structuredClone(first), id: crypto.randomUUID(), articleKey: "XH-2-B" };
+    const v3: TemplateContentV3 = {
+      ...base.content,
+      schemaVersion: 3,
+      articleVariants: [...base.content.articleVariants, second],
+    };
+    const content = upgradeTemplateContentV3ToV4(v3).content;
+    const firstArticle = content.e4ConnectorTable.articles.find(article => article.articleVariantId === first.id)!;
+    const firstDefault = content.e4ConnectorTable.seriesDefaults.find(row => row.rowId === firstArticle.rows[0]!.seriesRowId)!;
+    firstDefault.values.name = "Э4 DATA";
+    firstDefault.values.circuitText = "Э4-CIRCUIT";
+    firstDefault.values.standardTerminalArticleKey =
+      { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-1" };
+    const template: ComponentTemplatePlacementEnvelopeV3 = {
+      ...base,
+      articleBindings: [first, second].map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })),
+      content,
+    };
+    const placed = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J-v4", designation: "X1", articleVariantId: first.id, e4Position: { x: 1, y: 2 },
+    });
+
+    expect(placed.contacts[0]).toMatchObject({
+      logicalContactId: firstArticle.rows[0]!.seriesRowId,
+      circuit: "Э4-CIRCUIT",
+      terminalArticle: "T-1",
+    });
+    expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts[0]).toMatchObject({
+      name: "Э4 DATA",
+      allowedTerminalArticleKeys: expect.arrayContaining([expect.objectContaining({ articleKey: "T-1" })]),
+    });
+
+    const edited = {
+      ...placed,
+      contacts: placed.contacts.map((contact, index) => index === 0
+        ? { ...contact, wire: "UL1007", color: "Красный" }
+        : contact),
+    };
+    const remapped = rematerializeComponentTemplateConnectorArticle(edited, template, second.id);
+    expect(remapped.partNumber).toBe("XH-2-B");
+    expect(remapped.contacts[0]).toMatchObject({
+      id: placed.contacts[0]!.id,
+      logicalContactId: placed.contacts[0]!.logicalContactId,
+      wire: "UL1007",
+      color: "Красный",
+      terminalArticle: "T-1",
+    });
+  });
+
   it.each([2, 10])("materializes a %i-contact article and preserves stable logical IDs", target => {
     const template = fixture(target);
     const connector = createConnectorInstanceFromComponentTemplateV3(template, {

@@ -124,11 +124,11 @@ public sealed class SqliteHarnessDesignDocumentStore(
             }
         }
 
-        var placements = new List<(Guid Id, string InstanceJson, Guid SourceTemplateId, int SourceVersion,
+        var placements = new List<(Guid Id, Guid SnapshotId, string InstanceJson, Guid SourceTemplateId, int SourceVersion,
             string VersionHash, ComponentTemplateArticleBinding Article)>();
         using (var select = unitOfWork.CreateCommand(
                    """
-                   SELECT p.placement_id, p.instance_json, s.source_template_id, s.source_version,
+                   SELECT p.placement_id, p.snapshot_id, p.instance_json, s.source_template_id, s.source_version,
                           s.source_version_sha256, p.source_id, p.entity_type, p.article_key
                    FROM harness_component_placements p
                    INNER JOIN project_component_snapshots s ON s.snapshot_id = p.snapshot_id
@@ -140,9 +140,9 @@ public sealed class SqliteHarnessDesignDocumentStore(
             while (reader.Read())
             {
                 if (Guid.TryParse(reader.GetString(0), out var placementId))
-                    placements.Add((placementId, reader.GetString(1), Guid.Parse(reader.GetString(2)), reader.GetInt32(3),
-                        reader.GetString(4), new ComponentTemplateArticleBinding(
-                            reader.GetString(5), reader.GetString(6), reader.GetString(7))));
+                    placements.Add((placementId, Guid.Parse(reader.GetString(1)), reader.GetString(2), Guid.Parse(reader.GetString(3)), reader.GetInt32(4),
+                        reader.GetString(5), new ComponentTemplateArticleBinding(
+                            reader.GetString(6), reader.GetString(7), reader.GetString(8))));
             }
         }
 
@@ -151,11 +151,12 @@ public sealed class SqliteHarnessDesignDocumentStore(
             var placementId = placement.Id;
             if (liveInstances.TryGetValue(placementId, out var instanceJson))
             {
+                var article = ResolveSnapshotArticle(unitOfWork, placement.SnapshotId, instanceJson);
                 try
                 {
                     SqliteProjectComponentSnapshotStore.ValidateInstanceBinding(
                         instanceJson, placementId, placement.SourceTemplateId, placement.SourceVersion,
-                        placement.VersionHash, placement.Article);
+                        placement.VersionHash, article);
                 }
                 catch (ProjectComponentSnapshotException error)
                 {
@@ -163,14 +164,19 @@ public sealed class SqliteHarnessDesignDocumentStore(
                         error.Code, error.Message, error.Field, innerException: error);
                 }
                 liveInstances.Remove(placementId);
-                if (string.Equals(placement.InstanceJson, instanceJson, StringComparison.Ordinal)) continue;
+                if (string.Equals(placement.InstanceJson, instanceJson, StringComparison.Ordinal) &&
+                    placement.Article == article) continue;
                 using var update = unitOfWork.CreateCommand(
                     """
                     UPDATE harness_component_placements
-                    SET instance_json = $instanceJson, updated_utc = $updatedUtc
+                    SET source_id = $sourceId, entity_type = $entityType, article_key = $articleKey,
+                        instance_json = $instanceJson, updated_utc = $updatedUtc
                     WHERE placement_id = $placementId AND harness_id = $harnessId;
                     """);
                 update.Parameters.AddWithValue("$instanceJson", instanceJson);
+                update.Parameters.AddWithValue("$sourceId", article.SourceId);
+                update.Parameters.AddWithValue("$entityType", article.EntityType);
+                update.Parameters.AddWithValue("$articleKey", article.ArticleKey);
                 update.Parameters.AddWithValue("$updatedUtc", updatedUtc);
                 update.Parameters.AddWithValue("$placementId", Format(placementId));
                 update.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
@@ -201,6 +207,51 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "A template-backed connector does not have a project component placement.",
                 "content.connectors");
         }
+    }
+
+    private static ComponentTemplateArticleBinding ResolveSnapshotArticle(
+        SqliteUnitOfWork unitOfWork,
+        Guid snapshotId,
+        string instanceJson)
+    {
+        string? sourceId = null;
+        string? entityType = null;
+        string? articleKey = null;
+        try
+        {
+            using var document = JsonDocument.Parse(instanceJson);
+            var binding = document.RootElement.GetProperty("libraryBinding");
+            var article = binding.GetProperty("article");
+            sourceId = article.GetProperty("sourceId").GetString();
+            entityType = article.GetProperty("entityType").GetString();
+            articleKey = article.GetProperty("articleKey").GetString();
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException)
+        {
+            throw new HarnessDesignDocumentException(
+                "component_placement_binding_mismatch",
+                "The component instance article binding is invalid.",
+                "instance.libraryBinding.article",
+                innerException: error);
+        }
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT source_id, entity_type, article_key
+            FROM project_component_snapshot_article_bindings
+            WHERE snapshot_id = $snapshotId AND source_id = $sourceId
+              AND entity_type = $entityType AND article_key = $articleKey;
+            """);
+        command.Parameters.AddWithValue("$snapshotId", Format(snapshotId));
+        command.Parameters.AddWithValue("$sourceId", sourceId ?? "");
+        command.Parameters.AddWithValue("$entityType", entityType ?? "");
+        command.Parameters.AddWithValue("$articleKey", articleKey ?? "");
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+            throw Invalid(
+                "component_template_article_not_found",
+                "The selected article is not present in the project component snapshot.",
+                "instance.libraryBinding.article.articleKey");
+        return new ComponentTemplateArticleBinding(reader.GetString(0), reader.GetString(1), reader.GetString(2));
     }
 
     private static string ValidateContent(string contentJson, int schemaVersion)

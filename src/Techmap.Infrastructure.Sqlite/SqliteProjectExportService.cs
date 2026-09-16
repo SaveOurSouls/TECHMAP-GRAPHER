@@ -951,7 +951,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
             ValidateSha256(component.SourceVersionSha256);
             if (ParseGuid(component.SnapshotId) != component.SnapshotId ||
                 ParseGuid(component.SourceTemplateId) != component.SourceTemplateId ||
-                component.SourceVersion <= 0 || component.SchemaVersion != 3 ||
+                component.SourceVersion <= 0 || component.SchemaVersion is not (3 or 4) ||
                 !componentSnapshotIds.Add(component.SnapshotId) ||
                 previousComponentSnapshotId is not null &&
                     string.CompareOrdinal(previousComponentSnapshotId, component.SnapshotId) >= 0 ||

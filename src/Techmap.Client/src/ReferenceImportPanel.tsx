@@ -14,6 +14,7 @@ import {
   xlsxFileToBase64,
 } from "./reference-catalog-api";
 import type { RuntimeConfig } from "./runtime-config";
+import { EditableReferenceTable } from "./EditableReferenceTable";
 
 interface ReferenceImportPanelProps {
   readonly config: RuntimeConfig;
@@ -40,6 +41,8 @@ const initialSettings: ImportSettings = {
   entityType: "generic-record",
   keyColumn: "RecordKey",
 };
+
+const connectorReferenceSourceId = "technology-connectors";
 
 const emptyFieldMapping: XlsxFieldMapping = {
   sourceColumn: "",
@@ -251,6 +254,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [profiles, setProfiles] = useState<readonly XlsxImportProfile[] | undefined>(undefined);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [editableSourceId, setEditableSourceId] = useState(connectorReferenceSourceId);
   const [inputMode, setInputMode] = useState<ReferenceInputMode>("xlsx");
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
   const [manualMode, setManualMode] = useState(false);
@@ -270,9 +274,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const activeRequestRef = useRef(0);
   const previewAbortRef = useRef<AbortController | null>(null);
   const selectedProfile = profiles?.find((profile) => profile.profileId === selectedProfileId) ?? null;
-  const activeSourceId = inputMode === "xlsx" && manualMode
-    ? settings.sourceId.trim()
-    : selectedProfile?.sourceId ?? "";
+  const activeSourceId = editableSourceId.trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -532,9 +534,11 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         expectedActiveSnapshotId: preview.activeSnapshotId,
         acknowledgedWarningIds: [...acknowledgedWarnings],
       });
-      activeRequestRef.current += 1;
-      setActive(publication.snapshot);
-      setActiveError(null);
+      if (publication.snapshot.sourceId === activeSourceId) {
+        activeRequestRef.current += 1;
+        setActive(publication.snapshot);
+        setActiveError(null);
+      }
       setPreviewPublished(true);
       setNotice({
         tone: "success",
@@ -587,7 +591,20 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div>
           <p className="eyebrow">ТЕКУЩЕЕ СОСТОЯНИЕ</p>
           <h2 id="active-reference-title">Активная версия</h2>
-          {(inputMode === "google-sheets" || !manualMode) && selectedProfile && <span className="active-reference-profile">{selectedProfile.displayName}</span>}
+          <label className="active-reference-source-picker">Справочник для редактирования
+            <input
+              list="editable-reference-sources"
+              value={editableSourceId}
+              placeholder={connectorReferenceSourceId}
+              disabled={busy !== null}
+              onChange={(event) => setEditableSourceId(event.currentTarget.value)}
+            />
+          </label>
+          <datalist id="editable-reference-sources">
+            <option value={connectorReferenceSourceId}>Соединители и их артикулы</option>
+            {profiles?.map((profile) => <option key={profile.sourceId} value={profile.sourceId}>{profile.displayName}</option>)}
+          </datalist>
+          <span className="active-reference-profile">Таблица не зависит от БД.ОП. Можно указать новый идентификатор и создать отдельный справочник.</span>
         </div>
         {activeError ? (
           <p className="reference-state error">{activeError}</p>
@@ -604,6 +621,35 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           </dl>
         )}
       </section>
+
+      {activeSourceId && active !== undefined && (
+        <EditableReferenceTable
+          sourceId={activeSourceId}
+          snapshot={active}
+          disabled={busy !== null}
+          onSave={async (request) => {
+            setBusy("publish");
+            try {
+              const publication = await api.publishEditableTable(activeSourceId, request);
+              setActive(publication.snapshot);
+              setNotice({
+                tone: "success",
+                text: publication.status === "unchanged"
+                  ? "Изменений в справочнике нет."
+                  : `Справочник сохранён: ${publication.snapshot.records.length} записей.`,
+              });
+            } catch (error) {
+              const message = errorText(error);
+              setNotice({ tone: "error", text: message });
+              throw new Error(message);
+            } finally {
+              setBusy(null);
+            }
+          }}
+        />
+      )}
+
+      {!activeSourceId && <p className="reference-state empty">Укажите идентификатор справочника, чтобы открыть или создать его таблицу.</p>}
 
       <form className="reference-import-card" onSubmit={submitPreview}>
         <div className="section-title-row reference-card-title">

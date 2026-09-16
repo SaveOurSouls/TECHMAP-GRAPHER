@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 16;
+    public const int CurrentSchemaVersion = 17;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1214,6 +1214,49 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 "binding_ordinal >= 0 AND binding_ordinal < 64",
                 "binding_ordinal >= 0 AND binding_ordinal < 500",
                 StringComparison.Ordinal);
+    private const string ProjectComponentSnapshotsV4MigrationId = "M3-04-project-component-snapshots-v4";
+    private static readonly string ProjectComponentSnapshotsV4SchemaSql =
+        """
+        DROP TRIGGER prevent_component_placement_command_update;
+        DROP TRIGGER prevent_component_placement_command_delete;
+        DROP TRIGGER enforce_component_snapshot_binding_insert;
+        DROP TRIGGER enforce_component_snapshot_asset_insert;
+        DROP TRIGGER prevent_component_snapshot_update;
+        DROP TRIGGER prevent_component_snapshot_delete;
+        DROP TRIGGER prevent_component_snapshot_binding_update;
+        DROP TRIGGER prevent_component_snapshot_binding_delete;
+        DROP TRIGGER prevent_component_snapshot_asset_update;
+        DROP TRIGGER prevent_component_snapshot_asset_delete;
+        DROP TRIGGER enforce_component_placement_project;
+
+        CREATE TEMP TABLE snapshots_v4_backup AS SELECT * FROM project_component_snapshots;
+        CREATE TEMP TABLE snapshot_bindings_v4_backup AS SELECT * FROM project_component_snapshot_article_bindings;
+        CREATE TEMP TABLE snapshot_assets_v4_backup AS SELECT * FROM project_component_snapshot_asset_refs;
+        CREATE TEMP TABLE placements_v4_backup AS SELECT * FROM harness_component_placements;
+        CREATE TEMP TABLE placement_commands_v4_backup AS SELECT * FROM component_placement_commands;
+
+        DROP TABLE component_placement_commands;
+        DROP TABLE harness_component_placements;
+        DROP TABLE project_component_snapshot_asset_refs;
+        DROP TABLE project_component_snapshot_article_bindings;
+        DROP TABLE project_component_snapshots;
+        """ + ProjectComponentSnapshotsSchemaSql.Replace(
+            "schema_version = 3",
+            "schema_version IN (3, 4)",
+            StringComparison.Ordinal) +
+        """
+        INSERT INTO project_component_snapshots SELECT * FROM snapshots_v4_backup;
+        INSERT INTO project_component_snapshot_article_bindings SELECT * FROM snapshot_bindings_v4_backup;
+        INSERT INTO project_component_snapshot_asset_refs SELECT * FROM snapshot_assets_v4_backup;
+        INSERT INTO harness_component_placements SELECT * FROM placements_v4_backup;
+        INSERT INTO component_placement_commands SELECT * FROM placement_commands_v4_backup;
+
+        DROP TABLE snapshots_v4_backup;
+        DROP TABLE snapshot_bindings_v4_backup;
+        DROP TABLE snapshot_assets_v4_backup;
+        DROP TABLE placements_v4_backup;
+        DROP TABLE placement_commands_v4_backup;
+        """;
 
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
@@ -1629,6 +1672,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 14, MigrationId: ComponentTemplateArticleIndexV2MigrationId, Sql: ComponentTemplateArticleIndexV2SchemaSql),
             (Version: 15, MigrationId: ProjectComponentSnapshotsMigrationId, Sql: ProjectComponentSnapshotsSchemaSql),
             (Version: 16, MigrationId: ComponentTemplateContentV4MigrationId, Sql: ComponentTemplateContentV4SchemaSql),
+            (Version: 17, MigrationId: ProjectComponentSnapshotsV4MigrationId, Sql: ProjectComponentSnapshotsV4SchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1756,6 +1800,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateContentV4SchemaSql);
         }
 
+        if (schemaVersion >= 17)
+        {
+            ExecuteSchemaSql(expected, ProjectComponentSnapshotsV4SchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1879,6 +1928,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateContentV4MigrationId,
                 Sql: ComponentTemplateContentV4SchemaSql,
                 Description: "E4 connector series table content schema version 4"),
+            16 => (
+                Version: 17,
+                MigrationId: ProjectComponentSnapshotsV4MigrationId,
+                Sql: ProjectComponentSnapshotsV4SchemaSql,
+                Description: "Project component snapshots support content schema version 4"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -1955,7 +2009,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16))
             {
                 return false;
             }

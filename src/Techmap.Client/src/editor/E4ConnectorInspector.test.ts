@@ -242,6 +242,26 @@ describe("E4 connector inline editing", () => {
     expect(markup).not.toContain('value="XH-2"');
   });
 
+  it("shows one family article selector when persistent variants are available", () => {
+    const connector = templateConnector();
+    if (connector.libraryBinding?.mode !== "template") throw new Error("template fixture expected");
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector,
+      disabled: false,
+      onCommand: vi.fn(),
+      templateArticleOptions: [
+        { articleVariantId: connector.libraryBinding.articleVariantId, articleKey: "XH-2" },
+        { articleVariantId: "variant-xh-10", articleKey: "XH-10" },
+      ],
+      onTemplateArticleSelect: vi.fn(),
+    }));
+
+    expect(selectMarkup(markup, "Артикул шаблона")).toContain("XH-2");
+    expect(selectMarkup(markup, "Артикул шаблона")).toContain("XH-10");
+    expect(markup).toContain("Артикул выбирается из семейства");
+    expect(markup).not.toContain("закреплены версией шаблона");
+  });
+
   it("renders actual controls only after the canvas enters editing mode", () => {
     const connector = createBuiltInConnectorInstance("catalog-connector-series:xs-demo-series", {
       id: "xs1", designation: "XS1", e4Position: { x: 20, y: 30 },

@@ -137,6 +137,41 @@ function snapshot() {
 }
 
 describe("reference catalog API", () => {
+  it("validates and publishes an independently editable table as a new immutable snapshot", async () => {
+    const calls: Array<{ readonly url: string; readonly body: Record<string, unknown> }> = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      calls.push({ url: String(input), body });
+      if (String(input).endsWith("/validations")) return jsonResponse({
+        ...snapshot(), snapshotId: body.snapshotId, sourceId: "custom-connectors",
+        sourceKind: "editable-table", versionFingerprint: body.versionFingerprint,
+        sourceUri: "https://example.test/table", diagnostics: [],
+      });
+      return jsonResponse({
+        status: "published", previousActiveSnapshotId: snapshotId,
+        snapshot: { ...snapshot(), snapshotId: body.snapshotId, sourceId: "custom-connectors",
+          sourceKind: "editable-table", versionFingerprint: body.versionFingerprint,
+          sourceUri: "https://example.test/table", diagnostics: [] },
+      });
+    });
+    const api = createReferenceCatalogApi(config, session, fetcher);
+    await expect(api.publishEditableTable("custom-connectors", {
+      expectedActiveSnapshotId: snapshotId,
+      sourceUri: "https://example.test/table",
+      records: [{ entityType: "connector", sourceKey: "PHR-02", payload: { description: "2 контакта" } }],
+    })).resolves.toMatchObject({ status: "published", snapshot: { sourceId: "custom-connectors" } });
+    expect(calls.map((call) => call.url)).toEqual([
+      "/techmap/api/v1/reference-sources/custom-connectors/validations",
+      "/techmap/api/v1/reference-sources/custom-connectors/publications",
+    ]);
+    expect(calls[0]?.body).toMatchObject({ sourceKind: "editable-table", records: [
+      { entityType: "connector", sourceKey: "PHR-02", payload: { description: "2 контакта" } },
+    ] });
+    expect(calls[1]?.body).toMatchObject({
+      expectedActiveSnapshotId: snapshotId, expectedValidationSha256: hash,
+    });
+  });
+
   it("discovers all named XLSX profiles without assuming a fixed count", async () => {
     const fetcher = vi.fn(async () => jsonResponse(profiles()));
     const api = createReferenceCatalogApi(config, session, fetcher);

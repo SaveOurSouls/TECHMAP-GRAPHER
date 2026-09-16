@@ -41,6 +41,7 @@ export type EditorCommand =
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
   | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string; readonly libraryCode?: string }
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
+  | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
   | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
@@ -250,6 +251,34 @@ export function applyEditorCommand(
         positions: item.positions,
       }));
       return rememberCustomWireColors(updated, contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
+    }
+    case "apply-template-article": {
+      const current = document.connectors.find((item) => item.id === command.connectorId);
+      if (!current) throw new Error("Соединитель не найден.");
+      const previousBinding = current.libraryBinding;
+      const nextBinding = command.connector.libraryBinding;
+      if (previousBinding?.mode !== "template" || nextBinding?.mode !== "template" ||
+          command.connector.id !== current.id ||
+          previousBinding.templateId !== nextBinding.templateId ||
+          previousBinding.templateVersion !== nextBinding.templateVersion ||
+          previousBinding.versionSha256 !== nextBinding.versionSha256) {
+        throw new Error("Артикул можно сменить только внутри закреплённой версии шаблона.");
+      }
+      validateConnectorLibraryMetadata(command.connector);
+      const retainedContactIds = new Set(command.connector.contacts.map((contact) => contact.id));
+      const connectedContactIds = new Set(document.wires.flatMap((wire) => [wire.from, wire.to]
+        .filter((endpoint) => !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) &&
+          endpoint.connectorId === command.connectorId)
+        .map((endpoint) => endpoint.contactId)));
+      if ([...connectedContactIds].some((contactId) => !retainedContactIds.has(contactId))) {
+        throw new Error("Выбранный артикул удалит подключённые контакты. Сначала переподключите или удалите их провода.");
+      }
+      const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
+        ...command.connector,
+        positions: item.positions,
+      }));
+      return rememberCustomWireColors(updated, command.connector.contacts
+        .flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
     }
     case "flip-connector-orientation":
       return updateConnectorE4Geometry(document, command.connectorId, (connector) => ({

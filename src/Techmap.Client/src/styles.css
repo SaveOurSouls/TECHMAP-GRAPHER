@@ -294,6 +294,20 @@ input::placeholder { color: #8795a3; }
   background: #fff;
   box-shadow: 0 8px 30px rgb(40 64 81 / 6%);
 }
+.editable-reference-card { margin-top: 18px; padding: 22px 24px; border: 1px solid #dce5ea; border-radius: 10px; background: #fff; box-shadow: 0 4px 16px rgb(34 61 77 / 6%); }
+.editable-reference-note { margin: 14px 0; color: #6d7f8a; font-size: 11px; line-height: 1.5; }
+.editable-reference-source { display: grid; gap: 6px; color: #59697a; font-size: 12px; font-weight: 700; }
+.editable-reference-source input, .editable-reference-actions input, .editable-reference-table input { min-width: 0; padding: 7px 8px; border: 1px solid #cbd8df; border-radius: 5px; background: #fff; color: #29445a; font: inherit; }
+.editable-reference-actions { margin: 14px 0; display: flex; gap: 8px; align-items: center; }
+.editable-reference-actions > input { min-width: 240px; flex: 1; }
+.editable-reference-scroll { max-height: 520px; overflow: auto; border: 1px solid #dce5ea; border-radius: 8px; }
+.editable-reference-table { min-width: 100%; border-collapse: collapse; font-size: 11px; }
+.editable-reference-table th { position: sticky; top: 0; z-index: 1; min-width: 145px; padding: 6px; background: #edf3f6; vertical-align: top; }
+.editable-reference-table th:first-child, .editable-reference-table th:nth-child(2) { min-width: 150px; }
+.editable-reference-table th > input { width: calc(100% - 28px); margin-bottom: 4px; display: block; }
+.editable-reference-table th > button, .editable-reference-table td:last-child button { width: 25px; height: 25px; border: 1px solid #e0c6c6; border-radius: 4px; background: #fff7f7; color: #9c4242; cursor: pointer; }
+.editable-reference-table td { padding: 5px 6px; border-top: 1px solid #e5ebef; vertical-align: top; }
+.editable-reference-table td input { width: 100%; min-width: 130px; }
 .reference-notice { margin-top: 18px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #c8dce7; border-left: 4px solid #2b7fa9; border-radius: 8px; background: #f1f8fb; color: #365d72; font-size: 13px; }
 .reference-notice.success { border-color: #b9dfcc; border-left-color: #2f8a63; background: #eff9f4; color: #276b50; }
 .reference-notice.error { border-color: #e6b9b9; border-left-color: #b53a3a; background: #fff6f6; color: #772c2c; }
@@ -328,6 +342,8 @@ input::placeholder { color: #8795a3; }
 .xlsx-format-guide p { margin: 4px 0 0; }
 .xlsx-format-guide code { padding: 1px 4px; border-radius: 4px; background: #e4eef3; color: #21465d; font: 600 11px Consolas, monospace; }
 .active-reference-profile { display: block; margin-top: 4px; color: #668091; font-size: 11px; font-weight: 650; }
+.active-reference-source-picker { min-width: min(420px, 70vw); margin-top: 10px; display: grid; gap: 5px; color: #526978; font-size: 11px; font-weight: 700; }
+.active-reference-source-picker input { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid #c6d6df; border-radius: 6px; background: #fff; color: #29475b; font: inherit; }
 .xlsx-profile-section { margin-top: 18px; padding: 15px; border: 1px solid #cbdde5; border-radius: 9px; background: #f8fbfc; }
 .xlsx-profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .xlsx-profile-heading > div { display: grid; gap: 3px; }

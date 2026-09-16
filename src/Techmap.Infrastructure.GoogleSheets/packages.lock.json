@@ -18,8 +18,8 @@
       "techmap.application": {
         "type": "Project",
         "dependencies": {
-          "Techmap.Contracts": "[0.7.1, )",
-          "Techmap.Domain": "[0.7.1, )"
+          "Techmap.Contracts": "[0.8.0, )",
+          "Techmap.Domain": "[0.8.0, )"
         }
       },
       "techmap.contracts": {
@@ -32,7 +32,7 @@
         "type": "Project",
         "dependencies": {
           "DocumentFormat.OpenXml": "[3.3.0, )",
-          "Techmap.Application": "[0.7.1, )"
+          "Techmap.Application": "[0.8.0, )"
         }
       },
       "DocumentFormat.OpenXml": {

@@ -15,6 +15,7 @@ import {
   materializeArticleContactRowsV3,
   type MaterializedArticleContactRowV3,
 } from "../component-library/template-article-contact-rows-v3";
+import { materializeE4ConnectorArticle } from "../component-library/e4-connector-series-table";
 import {
   reconcileTemplateEnvelopeAssets,
   type TemplateEnvelopeAsset,
@@ -25,6 +26,7 @@ import type {
   ArticleVariantV3,
   TemplateContentV3,
 } from "../component-library/template-model-v3";
+import { validateTemplateContentV4, type TemplateContentV4 } from "../component-library/template-model-v4";
 
 /** The immutable data needed from the component-library response at placement time. */
 export interface ComponentTemplatePlacementEnvelopeV3 {
@@ -35,8 +37,10 @@ export interface ComponentTemplatePlacementEnvelopeV3 {
   readonly name: string;
   readonly articleBindings: readonly ArticleKeyV3[];
   readonly assets: readonly TemplateEnvelopeAsset[];
-  readonly content: TemplateContentV3;
+  readonly content: TemplateContentV3 | TemplateContentV4;
 }
+
+export type ComponentTemplatePlacementEnvelope = ComponentTemplatePlacementEnvelopeV3;
 
 export interface CreateComponentTemplateConnectorOptions {
   readonly id: string;
@@ -65,9 +69,12 @@ export function createConnectorInstanceFromComponentTemplateV3(
   const code = requireBoundedText(template.code, "Код шаблона компонента", 120);
   const name = requireBoundedText(template.name, "Название шаблона компонента", 256);
   const content = template.content;
-  if (content.schemaVersion !== 3) throw new Error("Для размещения требуется содержимое шаблона v3.");
-  const validation = validateTemplateContentV3(content);
-  if (!validation.valid) throw new Error(`Шаблон v3 не прошёл проверку: ${validation.diagnostics[0]?.message ?? "повреждённое содержимое"}`);
+  if (content.schemaVersion !== 3 && content.schemaVersion !== 4)
+    throw new Error("Для размещения требуется содержимое шаблона v3 или v4.");
+  const validation = content.schemaVersion === 4
+    ? validateTemplateContentV4(content)
+    : validateTemplateContentV3(content);
+  if (!validation.valid) throw new Error(`Шаблон v${content.schemaVersion} не прошёл проверку: ${validation.diagnostics[0]?.message ?? "повреждённое содержимое"}`);
   if (reconcileTemplateEnvelopeAssets(content, template.assets).diagnostics.length > 0) {
     throw new Error("Ресурсы шаблона не совпадают с ресурсами его закрепляемой версии.");
   }
@@ -75,7 +82,7 @@ export function createConnectorInstanceFromComponentTemplateV3(
   const selectedVariant = options.articleVariant ?? options.articleVariantId;
   if (selectedVariant === undefined) throw new Error("Вариант артикула компонента не выбран.");
   const variant = selectedArticleVariant(content, selectedVariant);
-  const rows = materializeArticleContactRowsV3(content, variant.id);
+  const rows = materializePlacementRows(content, variant.id);
   if (rows.length < 1 || rows.length > 300) {
     throw new Error("В выбранном варианте должно быть от 1 до 300 контактов.");
   }
@@ -131,8 +138,98 @@ export function createConnectorInstanceFromComponentTemplateV3(
   return connector;
 }
 
+/** Schema-neutral placement entry point. The v3 name remains as a compatibility alias. */
+export const createConnectorInstanceFromComponentTemplate = createConnectorInstanceFromComponentTemplateV3;
+
+/**
+ * Re-materializes another article from the same immutable template version.
+ * Editable contact values survive when their stable logical row remains present;
+ * a v4 standard terminal initializes newly introduced rows.
+ */
+export function rematerializeComponentTemplateConnectorArticle(
+  connector: ConnectorInstance,
+  template: ComponentTemplatePlacementEnvelope,
+  articleVariantId: string,
+): ConnectorInstance {
+  const binding = connector.libraryBinding;
+  if (binding?.mode !== "template") throw new Error("Соединитель не привязан к шаблону компонента.");
+  if (binding.templateId !== template.templateId || binding.templateVersion !== template.version ||
+      binding.versionSha256 !== template.versionSha256) {
+    throw new Error("Смена артикула возможна только внутри закреплённой версии шаблона.");
+  }
+  const materialized = createConnectorInstanceFromComponentTemplateV3(template, {
+    id: connector.id,
+    designation: connector.designation,
+    articleVariantId,
+    e4Position: connector.positions.e4,
+    drawingPosition: connector.positions.drawing,
+    layerIds: connector.layerIds,
+  });
+  const previous = new Map(connector.contacts.map(contact => [contact.logicalContactId, contact]));
+  return {
+    ...materialized,
+    schematic: connector.schematic,
+    contacts: materialized.contacts.map(contact => {
+      const old = previous.get(contact.logicalContactId);
+      if (!old) return { ...contact, customValues: Object.fromEntries(connector.schematic.customFields.map(field => [field.id, ""])) };
+      const terminalAllowed = !old.terminalArticle || materialized.libraryBinding?.mode !== "template" ||
+        materialized.libraryBinding.snapshot.contacts.find(item => item.logicalContactId === contact.logicalContactId)
+          ?.allowedTerminalArticleKeys.some(item => item.articleKey === old.terminalArticle);
+      return {
+        ...contact,
+        circuit: old.circuit,
+        terminalArticle: terminalAllowed ? old.terminalArticle : contact.terminalArticle,
+        wire: old.wire,
+        color: old.color,
+        secondaryColor: old.secondaryColor,
+        connectionStatus: old.connectionStatus,
+        customValues: { ...old.customValues },
+      };
+    }),
+  };
+}
+
+interface PlacementContactRow extends MaterializedArticleContactRowV3 {
+  readonly standardTerminalArticleKey: ArticleKeyV3 | null;
+}
+
+function asV3Core(content: TemplateContentV3 | TemplateContentV4): TemplateContentV3 {
+  if (content.schemaVersion === 3) return content;
+  const { e4ConnectorTable: _table, ...core } = content;
+  return { ...core, schemaVersion: 3 };
+}
+
+function materializePlacementRows(
+  content: TemplateContentV3 | TemplateContentV4,
+  articleVariantId: string,
+): readonly PlacementContactRow[] {
+  const coreRows = materializeArticleContactRowsV3(asV3Core(content), articleVariantId);
+  if (content.schemaVersion === 3) return coreRows.map(row => ({ ...row, standardTerminalArticleKey: null }));
+  const tableArticle = materializeE4ConnectorArticle(content.e4ConnectorTable, articleVariantId);
+  if (tableArticle.rows.length !== coreRows.length)
+    throw new Error("Таблица Э4 не совпадает с материализованными контактами артикула.");
+  const allowedByGroup = new Map(tableArticle.contactGroups.map(group => [
+    group.contactTypeGroupId,
+    group.allowedTerminalArticleKeys,
+  ]));
+  return coreRows.map((core, index) => {
+    const table = tableArticle.rows[index]!;
+    const allowed = table.contactTypeGroupId === null ? [] : allowedByGroup.get(table.contactTypeGroupId) ?? [];
+    return {
+      ...core,
+      key: table.seriesRowId,
+      contactTypeGroupId: table.contactTypeGroupId,
+      number: table.number,
+      name: table.name,
+      circuitText: table.circuitText,
+      allowedTerminalArticleKeys: allowed,
+      standardTerminalArticleKey: table.standardTerminalArticleKey,
+    };
+  });
+}
+
 function selectedArticleVariant(
-  content: TemplateContentV3,
+  content: TemplateContentV3 | TemplateContentV4,
   selected: ArticleVariantV3 | string,
 ): ArticleVariantV3 {
   const id = typeof selected === "string" ? selected : selected.id;
@@ -178,9 +275,9 @@ function snapshotAsset(asset: TemplateEnvelopeAsset): ComponentTemplateAssetSnap
 }
 
 function createContact(
-  row: MaterializedArticleContactRowV3,
+  row: PlacementContactRow,
   number: number,
-  content: TemplateContentV3,
+  content: TemplateContentV3 | TemplateContentV4,
   connectorId: string,
 ): ConnectorContact {
   const group = row.contactTypeGroupId === null
@@ -192,7 +289,7 @@ function createContact(
     number,
     contactType: group?.name ?? "",
     circuit: row.circuitText ?? "",
-    terminalArticle: "",
+    terminalArticle: row.standardTerminalArticleKey?.articleKey ?? "",
     wire: "",
     color: "",
     secondaryColor: "",
@@ -203,8 +300,8 @@ function createContact(
 }
 
 function snapshotContact(
-  row: MaterializedArticleContactRowV3,
-  content: TemplateContentV3,
+  row: PlacementContactRow,
+  content: TemplateContentV3 | TemplateContentV4,
 ): ComponentTemplateContactSnapshot {
   const group = row.contactTypeGroupId === null
     ? null

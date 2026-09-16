@@ -53,6 +53,13 @@ export interface EditorCatalogItem {
   /** Exact immutable persistent template version used for a library placement. */
   readonly componentTemplateId?: string;
   readonly componentTemplateVersion?: number;
+  /** All articles exposed by this family card. The editor places the family
+   * with its first article and lets the selected instance switch the article. */
+  readonly componentArticles?: readonly {
+    readonly sourceId: string;
+    readonly entityType: string;
+    readonly articleKey: string;
+  }[];
   readonly componentArticle?: {
     readonly sourceId: string;
     readonly entityType: string;

@@ -21,6 +21,7 @@ import { validateTemplateContentV3, type ArticleKeyV3, type TemplateContentV3 } 
 
 const renderSeriesPanel = (content: TemplateContentV3) => renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
   content,
+  selectedArticleVariantId: content.articleVariants[0]?.id,
   onAddContactTypeGroup: vi.fn(),
   onRenameContactTypeGroup: vi.fn(),
   onDeleteContactTypeGroup: vi.fn(),

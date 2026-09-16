@@ -10,6 +10,31 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectComponentSnapshotStoreTests
 {
     [Fact]
+    public void Published_v4_template_is_placed_and_snapshotted_without_downgrade()
+    {
+        using var fixture = Fixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var catalog = new SqliteProjectCatalog(storage);
+        var project = catalog.CreateProject(new CreateProjectCommand("P", "Project", 1, ProjectStatus.Draft));
+        var harness = catalog.AddHarness(project.ProjectId, "W1").Harnesses.Single();
+        var article = ComponentTemplateContentV3ValidatorTests.ValidArticleBindings.Single();
+        var template = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
+            "XH", "XH series", [article], 4, ComponentTemplateContentV4ValidatorTests.ValidContentJson);
+        var placementId = Guid.NewGuid();
+        var store = new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System);
+
+        var result = store.Place(
+            project.ProjectId, harness.HarnessId, new ProjectCommandEnvelope(Guid.NewGuid(), 0),
+            placementId, template, article.SourceId, article.EntityType, article.ArticleKey,
+            BoundInstance(placementId, template, article, "X1"));
+
+        Assert.Equal(4, result.Snapshot.SchemaVersion);
+        using var content = JsonDocument.Parse(result.Snapshot.ContentJson);
+        Assert.Equal(4, content.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.True(content.RootElement.TryGetProperty("e4ConnectorTable", out _));
+    }
+
+    [Fact]
     public void Place_is_atomic_deduplicates_snapshot_and_replays_command()
     {
         using var fixture = Fixture.Create();
@@ -208,6 +233,48 @@ public sealed class ProjectComponentSnapshotStoreTests
 
         Assert.Empty(fixture.Store.ListPlacements(
             fixture.Project.ProjectId, fixture.Harness.HarnessId));
+    }
+
+    [Fact]
+    public void Ordinary_design_save_remaps_article_within_the_same_snapshot()
+    {
+        using var files = Fixture.Create();
+        using var storage = SqliteStorage.Open(files.DataRoot);
+        var catalog = new SqliteProjectCatalog(storage);
+        var project = catalog.CreateProject(new CreateProjectCommand("P", "Project", 1, ProjectStatus.Draft));
+        var harness = catalog.AddHarness(project.ProjectId, "W1").Harnesses.Single();
+        var content = JsonNode.Parse(ComponentTemplateContentV3ValidatorTests.ValidContentJson)!.AsObject();
+        var first = ComponentTemplateContentV3ValidatorTests.ValidArticleBindings.Single();
+        var second = new ComponentTemplateArticleBinding(first.SourceId, first.EntityType, "B3B-XH-A");
+        var secondVariant = content["articleVariants"]![0]!.DeepClone().AsObject();
+        secondVariant["id"] = "20000000-0000-4000-8000-000000000004";
+        secondVariant["articleKey"] = second.ArticleKey;
+        content["articleVariants"]!.AsArray().Add(secondVariant);
+        var template = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
+            "XH", "XH series", [first, second], 3, content.ToJsonString());
+        var snapshots = new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System);
+        var placementId = Guid.NewGuid();
+        _ = snapshots.Place(
+            project.ProjectId, harness.HarnessId, new ProjectCommandEnvelope(Guid.NewGuid(), 0),
+            placementId, template, first.SourceId, first.EntityType, first.ArticleKey,
+            BoundInstance(placementId, template, first, "X1"));
+        var designs = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System);
+        var before = designs.Get(project.ProjectId, harness.HarnessId);
+        var changed = JsonNode.Parse(before.ContentJson)!.AsObject();
+        changed["connectors"]![0]!["partNumber"] = second.ArticleKey;
+        changed["connectors"]![0]!["libraryBinding"]!["article"] = new JsonObject
+        {
+            ["sourceId"] = second.SourceId,
+            ["entityType"] = second.EntityType,
+            ["articleKey"] = second.ArticleKey,
+        };
+
+        _ = designs.Put(project.ProjectId, harness.HarnessId, before.Revision, before.SchemaVersion, changed.ToJsonString());
+
+        var remapped = Assert.Single(snapshots.ListPlacements(project.ProjectId, harness.HarnessId));
+        Assert.Equal(second.ArticleKey, remapped.ArticleKey);
+        using var stored = JsonDocument.Parse(remapped.InstanceJson);
+        Assert.Equal(second.ArticleKey, stored.RootElement.GetProperty("partNumber").GetString());
     }
 
     [Fact]

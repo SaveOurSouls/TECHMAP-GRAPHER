@@ -17,7 +17,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         await using (var sourceLease = DataRootLease.Acquire(fixture.SourceDataRoot))
         {
             using var sourceStorage = SqliteStorage.Open(sourceLease.CanonicalPath);
-            source = CreateSourceGraph(sourceStorage);
+            source = CreateSourceGraph(sourceStorage, schemaVersion: 4);
             await new SqliteProjectExportService(sourceLease, sourceStorage).ExportAsync(
                 new ProjectExportRequest(source.ProjectId, fixture.ArchivePath, "0.4.0-m3.01"),
                 TestContext.Current.CancellationToken);
@@ -92,7 +92,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Empty(copiedDesign.RootElement.GetProperty("wires").EnumerateArray());
     }
 
-    private static SourceGraph CreateSourceGraph(SqliteStorage storage)
+    private static SourceGraph CreateSourceGraph(SqliteStorage storage, int schemaVersion = 3)
     {
         var projects = new SqliteProjectCatalog(storage);
         var project = projects.CreateProject(new CreateProjectCommand(
@@ -100,7 +100,10 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var harness = projects.AddHarness(project.ProjectId, "W1").Harnesses.Single();
         var article = ComponentTemplateContentV3ValidatorTests.ValidArticleBindings.Single();
         var template = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
-            "XH", "XH series", [article], 3, ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+            "XH", "XH series", [article], schemaVersion,
+            schemaVersion == 4
+                ? ComponentTemplateContentV4ValidatorTests.ValidContentJson
+                : ComponentTemplateContentV3ValidatorTests.ValidContentJson);
         var store = new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System);
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
@@ -138,7 +141,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         return new SourceGraph(
             project.ProjectId, harness.HarnessId, [firstId, secondId],
             template.TemplateId, template.Version, template.VersionSha256,
-            articleVariantId, [firstLogicalId, secondLogicalId]);
+            template.SchemaVersion, articleVariantId, [firstLogicalId, secondLogicalId]);
     }
 
     private static string BoundInstance(
@@ -202,6 +205,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Equal(source.TemplateId, snapshot.SourceTemplateId);
         Assert.Equal(source.TemplateVersion, snapshot.SourceVersion);
         Assert.Equal(source.VersionSha256, snapshot.SourceVersionSha256);
+        Assert.Equal(source.SchemaVersion, snapshot.SchemaVersion);
 
         var design = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System)
             .Get(projectId, harnessId);
@@ -248,6 +252,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Guid TemplateId,
         int TemplateVersion,
         string VersionSha256,
+        int SchemaVersion,
         Guid ArticleVariantId,
         IReadOnlyList<Guid> LogicalContactIds);
 

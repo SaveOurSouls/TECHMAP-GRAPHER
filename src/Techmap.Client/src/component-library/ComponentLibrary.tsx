@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
+import {
+  createReferenceCatalogApi,
+  type ReferenceCatalogSearchRecord,
+  type ReferenceCatalogSearchRequest,
+} from "../reference-catalog-api";
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2, upgradeComponentTemplateContentV3 } from "./template-content";
@@ -10,7 +15,12 @@ import { TemplateCanvasV2 } from "./TemplateCanvasV2";
 import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
 import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
-import { TemplateSeriesPanelV3 } from "./TemplateSeriesPanelV3";
+import {
+  CONNECTOR_ARTICLE_ENTITY_V3,
+  CONNECTOR_REFERENCE_SOURCE_V3,
+  TemplateSeriesPanelV3,
+  type NewArticleVariantV3Input,
+} from "./TemplateSeriesPanelV3";
 import { materializeArticleVariantV3 } from "./template-article-materialization-v3";
 import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
 import {
@@ -93,6 +103,31 @@ export function isTemplateAssetReferencedV2(content: TemplateContentV2 | LegacyT
 const articleIdentity = (value: Pick<ArticleBinding, "sourceId" | "entityType" | "articleKey">) =>
   `${value.sourceId}\0${value.entityType}\0${value.articleKey}`;
 
+export function connectorArticleSearchRequest(query: string): ReferenceCatalogSearchRequest {
+  return {
+    text: query.trim() || null,
+    exactSourceKey: null,
+    entityTypes: [CONNECTOR_ARTICLE_ENTITY_V3],
+    filters: [],
+    filterLogic: "all",
+    sort: "relevance",
+    pageSize: 30,
+    cursor: null,
+  };
+}
+
+export function connectorArticleInputs(
+  records: readonly ReferenceCatalogSearchRecord[],
+): readonly NewArticleVariantV3Input[] {
+  const seen = new Set<string>();
+  return records.flatMap(record => {
+    const articleKey = record.sourceKey.trim();
+    if (record.entityType !== CONNECTOR_ARTICLE_ENTITY_V3 || !articleKey || seen.has(articleKey)) return [];
+    seen.add(articleKey);
+    return [{ sourceId: CONNECTOR_REFERENCE_SOURCE_V3, entityType: CONNECTOR_ARTICLE_ENTITY_V3, articleKey }];
+  });
+}
+
 /**
  * Old template envelopes used articleBindings as their lookup index. During the
  * explicit v1/v2 upgrade those identities become legacy v3 variants. From v3
@@ -137,6 +172,7 @@ function isEditableConstantNode(node: TemplateNodeV2): node is EditableNode {
 
 export function ComponentLibrary({ config, session }: Props) {
   const api = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
+  const referenceApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const [items, setItems] = useState<readonly ComponentTemplateSummary[]>([]);
   const [draft, setDraft] = useState<Draft>(() => newDraft());
   const [viewId, setViewId] = useState(() => draft.content.views[0]!.id);
@@ -153,6 +189,10 @@ export function ComponentLibrary({ config, session }: Props) {
   const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
   const [selectedArticleVariantId, setSelectedArticleVariantId] = useState<string | null>(null);
   const [pendingLogicalContactId, setPendingLogicalContactId] = useState<string | null>(null);
+  const [connectorArticleQuery, setConnectorArticleQuery] = useState("");
+  const [connectorArticleSuggestions, setConnectorArticleSuggestions] = useState<readonly NewArticleVariantV3Input[]>([]);
+  const [connectorArticleSearchState, setConnectorArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [connectorArticleSearchMessage, setConnectorArticleSearchMessage] = useState<string | null>(null);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -189,6 +229,34 @@ export function ComponentLibrary({ config, session }: Props) {
     if (selectedArticleVariantId && !draft.content.articleVariants.some(variant => variant.id === selectedArticleVariantId))
       setSelectedArticleVariantId(null);
   }, [draft.content.articleVariants, selectedArticleVariantId]);
+  useEffect(() => {
+    const query = connectorArticleQuery.trim();
+    if (!query) {
+      setConnectorArticleSuggestions([]);
+      setConnectorArticleSearchState("idle");
+      setConnectorArticleSearchMessage(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setConnectorArticleSearchState("loading");
+      setConnectorArticleSearchMessage(null);
+      void referenceApi.searchCatalog(CONNECTOR_REFERENCE_SOURCE_V3, connectorArticleSearchRequest(query), controller.signal).then(page => {
+        if (controller.signal.aborted) return;
+        setConnectorArticleSuggestions(connectorArticleInputs(page.items));
+        setConnectorArticleSearchState("ready");
+      }).catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
+        setConnectorArticleSuggestions([]);
+        setConnectorArticleSearchState("error");
+        setConnectorArticleSearchMessage(errorText(caught));
+      });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [connectorArticleQuery, referenceApi]);
 
   function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable) {
     setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(content), e4ConnectorTable: structuredClone(table ?? createE4ConnectorSeriesTableFromV3(content)) });
@@ -197,6 +265,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setSelectedArticleVariantId(null);
     setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
+    setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
   }
 
   async function open(summary: ComponentTemplateSummary) {
@@ -230,6 +299,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
     setPreviewParameterValues({});
+    setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
@@ -353,6 +423,11 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span>{draft.templateId ? `Версия ${draft.version}` : "Новая серия"}</span><button className="primary-action" onClick={() => void save()} disabled={busy || assetMismatch}>{busy ? "Сохраняем…" : draft.templateId ? "Создать версию" : "Сохранить серию"}</button></div></div>
         <TemplateSeriesPanelV3
           content={draft.content}
+          connectorArticleQuery={connectorArticleQuery}
+          connectorArticleSuggestions={connectorArticleSuggestions}
+          connectorArticleSearchState={connectorArticleSearchState}
+          connectorArticleSearchMessage={connectorArticleSearchMessage}
+          onConnectorArticleQueryChange={setConnectorArticleQuery}
           selectedArticleVariantId={selectedArticleVariantId}
           articlePreviewMessage={articlePreview.message}
           articlePreviewError={articlePreview.error}
@@ -364,6 +439,10 @@ export function ComponentLibrary({ config, session }: Props) {
           onAddArticleVariants={inputs => {
             try {
               changeContent(addArticleVariantsV3(draft.content, inputs));
+              if (inputs.some(input => input.sourceId === CONNECTOR_REFERENCE_SOURCE_V3)) {
+                setConnectorArticleQuery("");
+                setConnectorArticleSuggestions([]);
+              }
               return true;
             } catch (caught) {
               setError(errorText(caught));

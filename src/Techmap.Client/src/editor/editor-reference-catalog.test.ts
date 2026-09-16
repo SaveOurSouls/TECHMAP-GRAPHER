@@ -42,7 +42,7 @@ describe("editor reference catalog", () => {
     expect(filterComponentTemplates([template], "unknown")).toEqual([]);
   });
 
-  it("creates a separate catalog card for every article variant", () => {
+  it("creates one family card for all article variants and keeps article search", () => {
     const template = {
       templateId: "12345678-1234-4123-8123-123456789abc",
       version: 7,
@@ -56,15 +56,17 @@ describe("editor reference catalog", () => {
     };
 
     const items = componentTemplateSummaryToEditorCatalogItems(template);
-    expect(items).toHaveLength(2);
-    expect(items.map((item) => item.title)).toEqual(["B2B-XH-A", "B10B-XH-A"]);
-    expect(items[1]).toMatchObject({
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: `component-template:${template.templateId}:7`,
+      title: "JST XH",
+      subtitle: "JST-XH · 2 артикула · версия 7",
       componentTemplateId: template.templateId,
       componentTemplateVersion: 7,
-      componentArticle: template.articleBindings[1],
+      componentArticles: template.articleBindings,
     });
-    expect(filterComponentTemplates([template], "b10b").map((item) => item.title)).toEqual(["B10B-XH-A"]);
-    expect(filterComponentTemplates([template], "jst")).toHaveLength(2);
+    expect(filterComponentTemplates([template], "b10b").map((item) => item.title)).toEqual(["JST XH"]);
+    expect(filterComponentTemplates([template], "jst")).toHaveLength(1);
   });
 
   it("keeps built-in connector cards and searches them locally", () => {

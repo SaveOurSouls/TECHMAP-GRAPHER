@@ -26,6 +26,11 @@ export interface E4ConnectorInspectorProps {
   readonly onCommand: (command: EditorCommand) => void;
   readonly mode?: "panel" | "canvas";
   readonly series?: ConnectorSeries;
+  readonly templateArticleOptions?: readonly {
+    readonly articleVariantId: string;
+    readonly articleKey: string;
+  }[];
+  readonly onTemplateArticleSelect?: (articleVariantId: string) => void;
   readonly terminalArticles?: readonly string[];
   readonly onTerminalSearch?: (query: string) => void;
   readonly wireArticles?: readonly string[];
@@ -216,6 +221,8 @@ export function E4ConnectorInspector({
   onCommand,
   mode = "panel",
   series,
+  templateArticleOptions = [],
+  onTemplateArticleSelect,
   terminalArticles = [],
   onTerminalSearch,
   wireArticles = builtInWireReferences.map((wire) => wire.designation),
@@ -622,6 +629,17 @@ export function E4ConnectorInspector({
                 <option key={article.partNumber} value={article.partNumber}>{article.partNumber}</option>
               ))}
             </select>
+          ) : connector.libraryBinding?.mode === "template" && templateArticleOptions.length > 0 && onTemplateArticleSelect ? (
+            <select
+              aria-label="Артикул шаблона"
+              value={connector.libraryBinding.articleVariantId}
+              disabled={disabled}
+              onChange={(event) => onTemplateArticleSelect(event.currentTarget.value)}
+            >
+              {templateArticleOptions.map((article) => (
+                <option key={article.articleVariantId} value={article.articleVariantId}>{article.articleKey}</option>
+              ))}
+            </select>
           ) : connector.libraryBinding?.mode === "template" ? (
             <span className="e4ci-readonly-value" title="Артикул закреплён выбранным вариантом шаблона">
               {connector.partNumber}
@@ -647,7 +665,9 @@ export function E4ConnectorInspector({
         <span className="e4ci-readonly-note">{connector.libraryBinding?.mode === "series"
           ? "Артикул определяет число и типы контактов. Значения цепей сохраняются для совпавших строк."
           : connector.libraryBinding?.mode === "template"
-            ? "Артикул, код, число и типы контактов закреплены версией шаблона. Цепи, провода, цвета и совместимые терминалы можно редактировать."
+            ? templateArticleOptions.length > 0 && onTemplateArticleSelect
+              ? "Артикул выбирается из семейства. Код, число и типы контактов обновляются по выбранному варианту."
+              : "Артикул, код, число и типы контактов закреплены версией шаблона. Цепи, провода, цвета и совместимые терминалы можно редактировать."
             : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</span>
       </div>
 

@@ -180,22 +180,26 @@ export function componentTemplateSummaryToEditorCatalogItem(
 export function componentTemplateSummaryToEditorCatalogItems(
   template: ComponentTemplateSummary,
 ): readonly EditorCatalogItem[] {
-  const bindings = template.articleBindings.length > 0 ? template.articleBindings : [undefined];
-  return bindings.map((article) => ({
-    id: article
-      ? `component-template:${template.templateId}:${template.version}:${article.sourceId}:${article.entityType}:${article.articleKey}`
-      : `component-template:${template.templateId}:${template.version}`,
-    title: article?.articleKey ?? template.name,
-    subtitle: article
-      ? `${template.name} · ${template.code} · версия ${template.version}`
+  const articleCount = template.articleBindings.length;
+  const articleRemainder100 = articleCount % 100;
+  const articleRemainder10 = articleCount % 10;
+  const articleWord = articleRemainder100 >= 11 && articleRemainder100 <= 14
+    ? "артикулов"
+    : articleRemainder10 === 1 ? "артикул"
+      : articleRemainder10 >= 2 && articleRemainder10 <= 4 ? "артикула" : "артикулов";
+  return [{
+    id: `component-template:${template.templateId}:${template.version}`,
+    title: template.name,
+    subtitle: articleCount > 0
+      ? `${template.code} · ${articleCount} ${articleWord} · версия ${template.version}`
       : `${template.code} · версия ${template.version}`,
     category: componentLibrarySource.label,
     accent: "#496b88",
     placement: "connector",
     componentTemplateId: template.templateId,
     componentTemplateVersion: template.version,
-    componentArticle: article,
-  }));
+    componentArticles: template.articleBindings,
+  }];
 }
 
 export function filterComponentTemplates(
@@ -205,7 +209,11 @@ export function filterComponentTemplates(
   const normalized = query.trim().toLocaleLowerCase("ru");
   return templates
     .flatMap(componentTemplateSummaryToEditorCatalogItems)
-    .filter((item) => !normalized || `${item.title} ${item.subtitle}`.toLocaleLowerCase("ru").includes(normalized));
+    .filter((item) => !normalized || [
+      item.title,
+      item.subtitle,
+      ...(item.componentArticles ?? []).map((article) => article.articleKey),
+    ].join(" ").toLocaleLowerCase("ru").includes(normalized));
 }
 
 type CatalogLoadState = "idle" | "loading" | "loading-more" | "ready" | "unpublished" | "error";

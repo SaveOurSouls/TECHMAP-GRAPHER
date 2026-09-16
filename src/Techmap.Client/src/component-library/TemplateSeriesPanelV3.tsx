@@ -13,6 +13,7 @@ export interface NewArticleVariantV3Input {
 
 export const CONNECTOR_ARTICLE_SOURCE_V3 = "БД.СОЕД";
 export const CONNECTOR_ARTICLE_ENTITY_V3 = "connector";
+export const CONNECTOR_REFERENCE_SOURCE_V3 = "technology-connectors";
 export const CONTACT_TYPE_PRESETS_V3 = ["Сигнальные", "Силовые", "Дополнительные"] as const;
 export const CUSTOM_CONTACT_TYPE_V3 = "__custom__";
 export type ArticleAddModeV3 = "single" | "pattern";
@@ -64,7 +65,7 @@ export function articleAddPreviewV3(
   }
 
   const existing = new Set(content.articleVariants
-    .filter(variant => variant.sourceId === CONNECTOR_ARTICLE_SOURCE_V3 && variant.entityType === CONNECTOR_ARTICLE_ENTITY_V3)
+    .filter(variant => variant.entityType === CONNECTOR_ARTICLE_ENTITY_V3)
     .map(variant => variant.articleKey));
   const collision = articles.find(article => existing.has(article));
   return collision
@@ -85,6 +86,11 @@ export interface TemplateSeriesPanelV3Props {
     readonly contactTypeGroupId: string | null;
   }[];
   readonly onSelectArticleVariant?: (variantId: string | null) => void;
+  readonly connectorArticleQuery?: string;
+  readonly connectorArticleSuggestions?: readonly NewArticleVariantV3Input[];
+  readonly connectorArticleSearchState?: "idle" | "loading" | "ready" | "error";
+  readonly connectorArticleSearchMessage?: string | null;
+  readonly onConnectorArticleQueryChange?: (query: string) => void;
   readonly onAddContactTypeGroup: (name: string) => void;
   readonly onRenameContactTypeGroup: (groupId: string, name: string) => void;
   readonly onDeleteContactTypeGroup: (groupId: string) => void;
@@ -239,7 +245,7 @@ function GroupNameEditor({ id, name, onRename, onDelete }: {
   </li>;
 }
 
-function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
+function VariantTerminalEditor({ content, variantId, groupId, onSet, onRemove }: {
   readonly content: TemplateContentV3; readonly variantId: string; readonly groupId: string;
   readonly onSet: TemplateSeriesPanelV3Props["onSetArticleContactGroup"];
   readonly onRemove: TemplateSeriesPanelV3Props["onRemoveArticleContactGroup"];
@@ -247,7 +253,6 @@ function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
   const variant = content.articleVariants.find(item => item.id === variantId)!;
   const group = content.contactTypeGroups.find(item => item.id === groupId)!;
   const editor = articleContactGroupEditorValueV3(content, variantId, groupId);
-  const count = String(editor.contactCount);
   const configuredTerminals = editor.allowedTerminalArticleKeys;
   const parsedCount = editor.contactCount;
   const countHelp = articleContactGroupCountHelpV3(
@@ -256,11 +261,6 @@ function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
     editor.contactCount,
     editor.inherited,
   );
-  const setCountValue = (value: string) => {
-    const parsed = Number(value);
-    if (Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 2_000)
-      onSet(variant.id, group.id, parsed, configuredTerminals);
-  };
   const setTerminalField = (index: number, patch: TerminalArticleKeyPatchV3) => {
     const next = updateTerminalArticleKeyV3(configuredTerminals, index, patch);
     if (next) onSet(variant.id, group.id, parsedCount, next);
@@ -273,9 +273,8 @@ function VariantGroupEditor({ content, variantId, groupId, onSet, onRemove }: {
     const next = appendTerminalArticleKeyV3(configuredTerminals, { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: `Новый-${configuredTerminals.length + 1}` });
     if (next) onSet(variant.id, group.id, parsedCount, next);
   };
-  return <section className={editor.configured ? "series-v3-contact-group configured" : "series-v3-contact-group"} aria-label={`Группа ${group.name} артикула ${variant.articleKey}`}>
-    <header><strong>{group.name}</strong><span>{editor.inherited ? "наследуется из шаблона" : editor.configured ? "собственная настройка" : "не включена в артикул"}</span></header>
-    <label>Итоговое количество контактов {editor.inherited ? "(наследуемое)" : ""}<input type="number" min="0" max="2000" step="1" value={count} aria-invalid={countHelp.invalid || undefined} aria-describedby={`contact-count-help-${variant.id}-${group.id}`} onChange={event => setCountValue(event.target.value)} /></label>
+  return <section className={editor.configured ? "series-v3-contact-group configured" : "series-v3-contact-group"} aria-label={`Терминалы ${group.name} артикула ${variant.articleKey}`}>
+    <header><strong>{group.name}</strong><span>{parsedCount} конт.; {editor.inherited ? "наследуется из шаблона" : editor.configured ? "собственная настройка" : "не включена в артикул"}</span></header>
     <small id={`contact-count-help-${variant.id}-${group.id}`} role={countHelp.invalid ? "alert" : undefined}>{countHelp.text}</small>
     <div className="series-v3-terminal-heading"><strong>Допустимые терминалы</strong><button type="button" aria-label={`Добавить терминал для группы ${group.name} артикула ${variant.articleKey}`} onClick={addTerminal}>+ Терминал</button></div>
     {configuredTerminals.length === 0 && <small>Терминалы не заданы.</small>}
@@ -307,8 +306,52 @@ function VariantIdentityEditor({ variant, onUpdate }: {
     if (input.sourceId !== variant.sourceId || input.entityType !== variant.entityType || input.articleKey !== variant.articleKey)
       onUpdate(variant.id, input);
   };
-  return <div className="series-v3-variant-identity">
-    <label>Артикул<input value={articleKey} onChange={event => setArticleKey(event.target.value)} onBlur={save} /></label>
+  return <input className="series-v3-article-key" aria-label={`Артикул ${variant.articleKey}`} value={articleKey}
+    onChange={event => setArticleKey(event.target.value)} onBlur={save}
+    onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />;
+}
+
+function ArticleVariantsTable({ content, selectedArticleVariantId, onSelect, onUpdate, onDelete, onSet }: {
+  readonly content: TemplateContentV3;
+  readonly selectedArticleVariantId?: string | null;
+  readonly onSelect?: (variantId: string | null) => void;
+  readonly onUpdate?: TemplateSeriesPanelV3Props["onUpdateArticleVariant"];
+  readonly onDelete: TemplateSeriesPanelV3Props["onDeleteArticleVariant"];
+  readonly onSet: TemplateSeriesPanelV3Props["onSetArticleContactGroup"];
+}) {
+  return <div className="series-v3-article-table-wrap">
+    <table className="series-v3-article-table" aria-label="Таблица артикулов серии">
+      <thead><tr>
+        <th>Артикул</th>
+        {content.contactTypeGroups.map(group => <th key={group.id}>{group.name}, шт.</th>)}
+        <th aria-label="Действия" />
+      </tr></thead>
+      <tbody>{content.articleVariants.map(variant => <tr key={variant.id}
+        className={variant.id === selectedArticleVariantId ? "selected" : undefined}>
+        <td><VariantIdentityEditor variant={variant} onUpdate={onUpdate} /></td>
+        {content.contactTypeGroups.map(group => {
+          const editor = articleContactGroupEditorValueV3(content, variant.id, group.id);
+          const help = articleContactGroupCountHelpV3(content, group.id, editor.contactCount, editor.inherited);
+          return <td key={group.id} className="series-v3-count-cell">
+            <input type="number" min="0" max="2000" step="1" value={editor.contactCount}
+              aria-label={`Количество контактов ${group.name} артикула ${variant.articleKey}`}
+              aria-invalid={help.invalid || undefined} title={help.text}
+              onFocus={() => onSelect?.(variant.id)}
+              onChange={event => {
+                const count = Number(event.target.value);
+                if (Number.isSafeInteger(count) && count >= 0 && count <= 2_000)
+                  onSet(variant.id, group.id, count, editor.allowedTerminalArticleKeys);
+              }} />
+          </td>;
+        })}
+        <td className="series-v3-row-actions">
+          <button type="button" className="series-v3-select-article" aria-pressed={variant.id === selectedArticleVariantId}
+            onClick={() => onSelect?.(variant.id)}>Терминалы</button>
+          <button type="button" className="series-v3-delete-article" aria-label={`Удалить артикул ${variant.articleKey}`}
+            onClick={() => onDelete(variant.id)}>×</button>
+        </td>
+      </tr>)}</tbody>
+    </table>
   </div>;
 }
 
@@ -348,6 +391,10 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
     if (!accepted) return;
     if (articleAddMode === "single") setArticleKey("");
     else setArticleVariables("");
+  };
+  const addReferenceArticle = (input: NewArticleVariantV3Input) => {
+    if (props.content.articleVariants.some(variant => variant.articleKey === input.articleKey)) return;
+    props.onAddArticleVariants([input]);
   };
   return <details className="template-series-v3">
     <summary>Серия и артикулы <span>{props.content.articleVariants.length}</span></summary>
@@ -400,6 +447,36 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
       </section>
       <section className="series-v3-variants" aria-label="Артикулы серии">
         <header><strong>Артикулы серии</strong><small>Каждый артикул задаёт число контактов по группам</small></header>
+        {props.onConnectorArticleQueryChange && <div className="series-v3-reference-search">
+          <label>Добавить из справочника соединителей
+            <input
+              type="search"
+              aria-label="Поиск артикула в справочнике соединителей"
+              value={props.connectorArticleQuery ?? ""}
+              placeholder="Начните вводить артикул"
+              autoComplete="off"
+              onChange={event => props.onConnectorArticleQueryChange?.(event.currentTarget.value)}
+            />
+          </label>
+          {props.connectorArticleSearchState === "loading" && <p role="status">Ищем в активном справочнике…</p>}
+          {props.connectorArticleSearchMessage && <p className="series-v3-reference-error" role="alert">{props.connectorArticleSearchMessage}</p>}
+          {props.connectorArticleSearchState === "ready" && (props.connectorArticleQuery ?? "").trim() &&
+            (props.connectorArticleSuggestions?.length ?? 0) === 0 && <p>Подходящие артикулы не найдены.</p>}
+          {(props.connectorArticleSuggestions?.length ?? 0) > 0 && <div className="series-v3-reference-options" role="listbox" aria-label="Артикулы из справочника соединителей">
+            {props.connectorArticleSuggestions!.map(suggestion => {
+              const added = props.content.articleVariants.some(variant => variant.articleKey === suggestion.articleKey);
+              return <button
+                type="button"
+                role="option"
+                aria-selected={added}
+                key={`${suggestion.sourceId}:${suggestion.entityType}:${suggestion.articleKey}`}
+                disabled={added}
+                onClick={() => addReferenceArticle(suggestion)}
+              ><strong>{suggestion.articleKey}</strong><span>{added ? "Уже в серии" : "+ Добавить"}</span></button>;
+            })}
+          </div>}
+          <small>Поиск выполняется в опубликованном активном справочнике. Ручной ввод и массовый шаблон остаются доступны ниже.</small>
+        </div>}
         <form className="series-v3-add-variant" onSubmit={addVariants}>
           <fieldset className="series-v3-add-mode">
             <legend>Способ добавления</legend>
@@ -418,11 +495,20 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
             </div> : <p className="series-v3-add-hint">{articleAddMode === "single" ? "Введите артикул." : "Укажите шаблон с XX и значения переменной."}</p>}
           <button type="submit" disabled={Boolean(addPreview.error) || addPreview.articles.length === 0}>+ {addPreview.articles.length > 1 ? `${addPreview.articles.length} артикулов` : "Артикул"}</button>
         </form>
-        {props.content.articleVariants.length ? <div className="series-v3-variant-list">{props.content.articleVariants.map(variant => <article key={variant.id} className={variant.id === props.selectedArticleVariantId ? "series-v3-variant selected" : "series-v3-variant"}>
-          <header><VariantIdentityEditor variant={variant} onUpdate={props.onUpdateArticleVariant} /><button type="button" aria-label={`Удалить артикул ${variant.articleKey}`} onClick={() => props.onDeleteArticleVariant(variant.id)}>×</button></header>
-          {!props.content.contactTypeGroups.length && <p>Сначала создайте хотя бы одну группу контактов.</p>}
-          {props.content.contactTypeGroups.map(group => <VariantGroupEditor key={group.id} content={props.content} variantId={variant.id} groupId={group.id} onSet={props.onSetArticleContactGroup} onRemove={props.onRemoveArticleContactGroup} />)}
-        </article>)}</div> : <p>Артикулы серии ещё не добавлены.</p>}
+        {props.content.articleVariants.length ? <>
+          <ArticleVariantsTable content={props.content} selectedArticleVariantId={props.selectedArticleVariantId}
+            onSelect={props.onSelectArticleVariant} onUpdate={props.onUpdateArticleVariant}
+            onDelete={props.onDeleteArticleVariant} onSet={props.onSetArticleContactGroup} />
+          {!props.content.contactTypeGroups.length && <p>Создайте хотя бы один тип контакта, чтобы появилась колонка количества.</p>}
+          <p className="series-v3-reference-limit">Допустимые терминалы хранятся для каждого типа контактов. Сейчас их артикулы вводятся вручную; поиск по полному справочнику БД.ТЕР пока не подключён. Стандартный терминал конкретной строки выбирается ниже в таблице Э4.</p>
+          {props.selectedArticleVariantId && props.content.articleVariants.some(variant => variant.id === props.selectedArticleVariantId) &&
+            <div className="series-v3-selected-terminals" aria-label="Допустимые терминалы выбранного артикула">
+              <header><strong>Допустимые терминалы: {props.content.articleVariants.find(variant => variant.id === props.selectedArticleVariantId)!.articleKey}</strong></header>
+              {props.content.contactTypeGroups.map(group => <VariantTerminalEditor key={group.id} content={props.content}
+                variantId={props.selectedArticleVariantId!} groupId={group.id}
+                onSet={props.onSetArticleContactGroup} onRemove={props.onRemoveArticleContactGroup} />)}
+            </div>}
+        </> : <p>Артикулы серии ещё не добавлены.</p>}
       </section>
     </div>
   </details>;

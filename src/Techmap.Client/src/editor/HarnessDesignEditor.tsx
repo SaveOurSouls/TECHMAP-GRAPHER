@@ -21,8 +21,11 @@ import {
   type ProjectComponentSnapshotResource,
 } from "./component-placement-api";
 import { createComponentTemplateApi } from "../component-library/component-template-api";
-import { isTemplateContentV3 } from "../component-library/template-content";
-import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
+import { isTemplateContentV3, isTemplateContentV4 } from "../component-library/template-content";
+import {
+  createConnectorInstanceFromComponentTemplateV3,
+  rematerializeComponentTemplateConnectorArticle,
+} from "./component-template-placement";
 import {
   materializedContactWorldRepresentation,
   selectMaterializedContactRepresentation,
@@ -109,7 +112,8 @@ export function buildComponentTemplateViewInstances(
   return document.connectors.flatMap((connector): readonly ComponentTemplateViewInstance[] => {
     const binding = connector.libraryBinding;
     const snapshot = snapshotsByPlacement.get(connector.id);
-    if (binding?.mode !== "template" || !snapshot || !isTemplateContentV3(snapshot.content)) return [];
+    if (binding?.mode !== "template" || !snapshot ||
+        (!isTemplateContentV3(snapshot.content) && !isTemplateContentV4(snapshot.content))) return [];
     const articleVariant = snapshot.content.articleVariants.find((candidate) => candidate.id === binding.articleVariantId);
     const exactVersion = binding.templateId === snapshot.sourceTemplateId &&
       binding.templateVersion === snapshot.sourceVersion &&
@@ -838,6 +842,40 @@ export function HarnessDesignEditor({
   const selectedConnectorSeries = selectedSeriesId
     ? builtInConnectorSeries.find((series) => series.id === selectedSeriesId)
     : undefined;
+  const selectedTemplateSnapshot = selectedConnector?.libraryBinding?.mode === "template"
+    ? componentSnapshotsByPlacement.get(selectedConnector.id) ?? null
+    : null;
+  const selectedTemplateArticleOptions = selectedTemplateSnapshot &&
+      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content))
+    ? selectedTemplateSnapshot.content.articleVariants.map((article) => ({
+        articleVariantId: article.id,
+        articleKey: article.articleKey,
+      }))
+    : [];
+  const selectTemplateArticle = selectedConnector && selectedTemplateSnapshot &&
+      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content))
+    ? (articleVariantId: string) => {
+        try {
+          if (selectedConnector.libraryBinding?.mode === "template" &&
+              selectedConnector.libraryBinding.articleVariantId === articleVariantId) return;
+          const content = selectedTemplateSnapshot.content;
+          if (!isTemplateContentV3(content) && !isTemplateContentV4(content)) return;
+          const connector = rematerializeComponentTemplateConnectorArticle(selectedConnector, {
+            templateId: selectedTemplateSnapshot.sourceTemplateId,
+            version: selectedTemplateSnapshot.sourceVersion,
+            versionSha256: selectedTemplateSnapshot.sourceVersionSha256,
+            code: selectedTemplateSnapshot.code,
+            name: selectedTemplateSnapshot.name,
+            articleBindings: selectedTemplateSnapshot.articleBindings,
+            assets: selectedTemplateSnapshot.assets,
+            content,
+          }, articleVariantId);
+          run({ type: "apply-template-article", connectorId: selectedConnector.id, connector });
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Не удалось выбрать артикул семейства.");
+        }
+      }
+    : undefined;
   const customWireColorHexes = [...new Set([
     ...(history.present.customWireColors ?? []),
     ...history.present.connectors.flatMap((connector) => connector.contacts
@@ -862,7 +900,9 @@ export function HarnessDesignEditor({
       try {
         const template = await componentTemplateApi.getVersion(item.componentTemplateId, item.componentTemplateVersion);
         if (generation !== loadGeneration.current) return;
-        if (!isTemplateContentV3(template.content)) throw new Error("Для размещения в жгуте требуется шаблон v3.");
+        if (!isTemplateContentV3(template.content) && !isTemplateContentV4(template.content)) {
+          throw new Error("Для размещения в жгуте требуется шаблон v3 или v4.");
+        }
         const variant = item.componentArticle
           ? template.content.articleVariants.find((candidate) =>
               candidate.sourceId === item.componentArticle!.sourceId &&
@@ -1194,6 +1234,8 @@ export function HarnessDesignEditor({
           <E4ConnectorInspector
             connector={selectedConnector}
             series={selectedConnectorSeries}
+            templateArticleOptions={selectedTemplateArticleOptions}
+            onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
@@ -1205,6 +1247,8 @@ export function HarnessDesignEditor({
           <E4ConnectorInspector
             connector={selectedConnector}
             series={selectedConnectorSeries}
+            templateArticleOptions={selectedTemplateArticleOptions}
+            onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
