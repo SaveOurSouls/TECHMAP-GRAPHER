@@ -99,6 +99,66 @@ describe("project component template view", () => {
     )).toEqual(e4Projection.bounds);
   });
 
+  it("projects persisted stroke dash styles and keeps older strokes solid by default", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!;
+    const dashed = {
+      ...rectangle(e4.layers[0]!.id),
+      id: id(),
+      stroke: { color: "#111111", width: constant(2), dash: "dash-dot" as const },
+    };
+    const legacySolid = { ...rectangle(e4.layers[0]!.id), id: id() };
+    const custom = {
+      ...content,
+      views: [{ ...e4, layers: [{ ...e4.layers[0]!, nodes: [dashed, legacySolid] }] }, content.views[1]!],
+    };
+
+    const projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 })!;
+
+    expect(projection.commands.map(command => command.strokeDash)).toEqual(["dash-dot", "solid"]);
+  });
+
+  it("sets and resets Canvas2D dash patterns for every projected command", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!;
+    const dashed = {
+      ...rectangle(e4.layers[0]!.id),
+      id: id(),
+      stroke: { color: "#111111", width: constant(2), dash: "dash" as const },
+    };
+    const solid = {
+      ...rectangle(e4.layers[0]!.id),
+      id: id(),
+      stroke: { color: "#222222", width: constant(3), dash: "solid" as const },
+    };
+    const dotted = {
+      ...rectangle(e4.layers[0]!.id),
+      id: id(),
+      stroke: { color: "#333333", width: constant(0.5), dash: "dot" as const },
+    };
+    const custom = {
+      ...content,
+      views: [{ ...e4, layers: [{ ...e4.layers[0]!, nodes: [dashed, solid, dotted] }] }, content.views[1]!],
+    };
+    const projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 })!;
+    const setLineDash = vi.fn();
+    const context = {
+      save: () => undefined, restore: () => undefined, transform: () => undefined,
+      globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1,
+      setLineDash, beginPath: () => undefined, moveTo: () => undefined, lineTo: () => undefined,
+      quadraticCurveTo: () => undefined, closePath: () => undefined, fill: () => undefined,
+      stroke: () => undefined,
+    } as unknown as CanvasRenderingContext2D;
+
+    drawProjectedComponentTemplateView(context, projection, new ComponentTemplateImageCache(null));
+
+    expect(setLineDash.mock.calls).toEqual([
+      [[12, 8]],
+      [[]],
+      [[1, 3]],
+    ]);
+  });
+
   it("resolves article dimensions, nested group transform/opacity and repeat occurrence offsets", () => {
     const { content, instance } = fixture();
     const countId = id();
@@ -177,7 +237,7 @@ describe("project component template view", () => {
       globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textBaseline: "alphabetic",
       fillRect: () => events.push("fillRect"), strokeRect: () => events.push("strokeRect"),
       beginPath: () => undefined, moveTo: () => undefined, lineTo: () => undefined,
-      stroke: () => undefined, fillText: () => undefined,
+      setLineDash: () => undefined, stroke: () => undefined, fillText: () => undefined,
     } as unknown as CanvasRenderingContext2D;
     drawProjectedComponentTemplateView(context, missing, new ComponentTemplateImageCache(null));
     expect(events).toEqual(["fillRect", "strokeRect"]);
@@ -231,7 +291,7 @@ describe("project component template view", () => {
       fillRect: () => undefined, strokeRect: () => undefined, beginPath: () => undefined,
       moveTo: () => undefined, lineTo: () => undefined, quadraticCurveTo: () => undefined,
       closePath: () => undefined, fill: () => undefined, fillText: () => undefined,
-      stroke: () => events.push("rectangle"),
+      setLineDash: () => undefined, stroke: () => events.push("rectangle"),
       drawImage: (image: HTMLImageElement) => events.push(image.src),
     } as unknown as CanvasRenderingContext2D;
     drawProjectedComponentTemplateView(context, projection, cache);
@@ -269,7 +329,7 @@ describe("project component template view", () => {
       save: () => undefined, restore: () => undefined, transform: () => undefined,
       globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textBaseline: "alphabetic",
       fillRect: () => undefined, strokeRect: () => undefined, beginPath: () => undefined,
-      moveTo: () => undefined, lineTo: () => undefined, stroke: () => undefined,
+      moveTo: () => undefined, lineTo: () => undefined, setLineDash: () => undefined, stroke: () => undefined,
       fillText: () => undefined, drawImage,
     } as unknown as CanvasRenderingContext2D;
     drawProjectedComponentTemplateView(context, projection, cache);

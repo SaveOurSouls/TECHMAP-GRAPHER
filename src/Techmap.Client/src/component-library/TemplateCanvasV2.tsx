@@ -9,6 +9,7 @@ import type {
   TransformV2,
 } from "./template-model-v2";
 import { expandTemplateViewRepeatsV2, type RepeatOccurrenceDescriptorV2 } from "./template-repeat-v2";
+import type { NodeResizeHandleV2 } from "./template-commands-v2";
 
 export const TEMPLATE_CANVAS_V2_WIDTH = 720;
 export const TEMPLATE_CANVAS_V2_HEIGHT = 440;
@@ -23,6 +24,7 @@ export interface TemplateCanvasV2Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
+  onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
   resolveAssetUrl: (assetId: string) => string;
   parameterDefaults?: TemplateParameterDefaultsV2;
   width?: number;
@@ -192,6 +194,22 @@ function pointsAttribute(points: readonly SvgPoint[]): string {
   return points.map(([x, y]) => `${formatNumber(x)},${formatNumber(y)}`).join(" ");
 }
 
+interface ResizeStateV2 extends DragStateV2 {
+  readonly handle: NodeResizeHandleV2;
+}
+
+interface ResizePreviewV2 extends DragPreviewV2 {
+  readonly handle: NodeResizeHandleV2;
+}
+
+function strokeDasharray(dash: TemplateNodeV2["stroke"]["dash"], width: number): string | undefined {
+  const unit = Math.max(width, 1);
+  if (dash === "dash") return `${6 * unit} ${4 * unit}`;
+  if (dash === "dot") return `${unit} ${3 * unit}`;
+  if (dash === "dash-dot") return `${6 * unit} ${3 * unit} ${unit} ${3 * unit}`;
+  return undefined;
+}
+
 function bezierPath(points: readonly SvgPoint[], closed: boolean): string | null {
   if (points.length < 4 || (points.length - 1) % 3 !== 0) return null;
   let path = `M ${formatNumber(points[0]![0])} ${formatNumber(points[0]![1])}`;
@@ -267,13 +285,16 @@ export function TemplateCanvasV2({
   selectedId,
   onSelect,
   onNodeMove,
+  onNodeResize,
   resolveAssetUrl,
   parameterDefaults,
   width = TEMPLATE_CANVAS_V2_WIDTH,
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
   const dragRef = useRef<DragStateV2 | null>(null);
+  const resizeRef = useRef<ResizeStateV2 | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewV2 | null>(null);
+  const [resizePreview, setResizePreview] = useState<ResizePreviewV2 | null>(null);
   const view = content.views.find(candidate => candidate.id === viewId);
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
@@ -295,7 +316,9 @@ export function TemplateCanvasV2({
 
   useEffect(() => {
     dragRef.current = null;
+    resizeRef.current = null;
     setDragPreview(null);
+    setResizePreview(null);
   }, [viewId]);
 
   const select = (event: ReactPointerEvent<SVGElement>, id: string, interactive = true) => {
@@ -338,6 +361,14 @@ export function TemplateCanvasV2({
   };
 
   const moveNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const resize = resizeRef.current;
+    if (resize && resize.pointerId === event.pointerId) {
+      const point = pointFromEvent(event);
+      if (!point) return;
+      resizeRef.current = { ...resize, latest: point };
+      setResizePreview({ id: resize.id, handle: resize.handle, deltaX: point[0] - resize.start[0], deltaY: point[1] - resize.start[1] });
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const point = pointFromEvent(event);
@@ -353,10 +384,23 @@ export function TemplateCanvasV2({
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     } catch { /* The browser can release capture before React handles the terminal event. */ }
     dragRef.current = null;
+    resizeRef.current = null;
     setDragPreview(null);
+    setResizePreview(null);
   };
 
   const endNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const resize = resizeRef.current;
+    if (resize && resize.pointerId === event.pointerId) {
+      const finalPoint = pointFromEvent(event) ?? resize.latest;
+      const completed = completedTemplateNodeDragV2(
+        { clientX: resize.startClientX, clientY: resize.startClientY, templateX: resize.start[0], templateY: resize.start[1] },
+        { clientX: event.clientX, clientY: event.clientY, templateX: finalPoint[0], templateY: finalPoint[1] },
+      );
+      clearNodeGesture(event);
+      if (completed) onNodeResize?.(resize.id, resize.handle, completed.deltaX, completed.deltaY);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const finalPoint = pointFromEvent(event) ?? drag.latest;
@@ -366,6 +410,18 @@ export function TemplateCanvasV2({
     );
     clearNodeGesture(event);
     if (completed) onNodeMove?.(drag.id, completed.deltaX, completed.deltaY);
+  };
+
+  const beginResizeGesture = (event: ReactPointerEvent<SVGElement>, id: string, handle: NodeResizeHandleV2) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!onNodeResize) return;
+    const start = pointFromEvent(event);
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!start || !svg) return;
+    try { svg.setPointerCapture(event.pointerId); } catch { /* Pointer capture is best effort. */ }
+    resizeRef.current = { id, handle, pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY, start, latest: start };
+    setResizePreview({ id, handle, deltaX: 0, deltaY: 0 });
   };
 
   const previewTransform = (nodeId: string, transform: string, topLevel: boolean): string => {
@@ -415,6 +471,7 @@ export function TemplateCanvasV2({
         fill: node.fill.color ?? "none",
         stroke: node.stroke.color,
         strokeWidth,
+        strokeDasharray: strokeDasharray(node.stroke.dash, strokeWidth),
       };
 
       if (node.kind === "line" || node.kind === "polyline") {
@@ -424,7 +481,10 @@ export function TemplateCanvasV2({
         if (bendRadius === null || bendRadius < 0 || node.kind === "polyline" && bendRadius !== 0)
           return placeholder(node, width, height, "Радиус изгиба линии пока нельзя отобразить точно.");
         if (node.kind === "line" && points.length === 2) {
-          return <line {...common} {...shape} x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} />;
+          return <g {...common}>
+            <line x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} fill="none" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+            <line {...shape} pointerEvents="none" x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} />
+          </g>;
         }
         return <polyline {...common} {...shape} points={pointsAttribute(points)} />;
       }
@@ -438,7 +498,10 @@ export function TemplateCanvasV2({
           return placeholder(node, width, height, "Размер прямоугольника не вычисляется из параметров.");
         const path = rectanglePath(x, y, rectangleWidth, rectangleHeight, radii as number[]);
         return path
-          ? <path {...common} {...shape} d={path} />
+          ? <g {...common}>
+            <path d={path} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+            <path {...shape} pointerEvents="none" d={path} />
+          </g>
           : placeholder(node, width, height, "Размер прямоугольника должен быть положительным.");
       }
       if (node.kind === "ellipse") {
@@ -448,7 +511,10 @@ export function TemplateCanvasV2({
         const radiusY = evaluate(node.geometry.radiusY);
         if (centerX === null || centerY === null || radiusX === null || radiusY === null || radiusX <= 0 || radiusY <= 0)
           return placeholder(node, width, height, "Радиусы эллипса не вычисляются или не являются положительными.");
-        return <ellipse {...common} {...shape} cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} />;
+        return <g {...common}>
+          <ellipse cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+          <ellipse {...shape} pointerEvents="none" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} />
+        </g>;
       }
       if (node.kind === "bezier") {
         const points = evaluatePoints(node.geometry.points, evaluate);
@@ -633,6 +699,63 @@ export function TemplateCanvasV2({
     ))));
   }
 
+  function renderSelectionOverlay(): ReactNode {
+    if (!view || !selectedId || !onNodeResize) return null;
+    const located = view.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
+    if (!located || located.layer.locked || located.node.locked || !located.node.visible) return null;
+    const node = located.node;
+    const transformIsPlain = node.transform.rotationDegrees.kind === "constant" && node.transform.rotationDegrees.value === 0 &&
+      node.transform.scaleX.kind === "constant" && node.transform.scaleX.value === 1 &&
+      node.transform.scaleY.kind === "constant" && node.transform.scaleY.value === 1;
+    const expressionIsConstant = (expression: NumericExpressionV2) => expression.kind === "constant";
+    const geometryIsConstant = node.kind === "line"
+      ? node.geometry.points.length === 2 && node.geometry.points.every(point => expressionIsConstant(point.x) && expressionIsConstant(point.y))
+      : node.kind === "rectangle"
+        ? [node.geometry.x, node.geometry.y, node.geometry.width, node.geometry.height, ...node.geometry.cornerRadii].every(expressionIsConstant)
+        : node.kind === "ellipse"
+          ? [node.geometry.centerX, node.geometry.centerY, node.geometry.radiusX, node.geometry.radiusY].every(expressionIsConstant)
+          : node.kind === "image"
+            ? [node.geometry.x, node.geometry.y, node.geometry.width, node.geometry.height].every(expressionIsConstant)
+            : false;
+    if (!transformIsPlain || !geometryIsConstant) return null;
+    const transform = evaluateTransform(node.transform, evaluate);
+    if (transform === null) return null;
+    const preview = resizePreview?.id === node.id ? resizePreview : null;
+    const dx = preview?.deltaX ?? 0, dy = preview?.deltaY ?? 0;
+    const handle = preview?.handle;
+    const moveX = (value: number, side: "w" | "e") => value + (handle?.includes(side) ? dx : 0);
+    const moveY = (value: number, side: "n" | "s") => value + (handle?.includes(side) ? dy : 0);
+    if (node.kind === "line" && node.geometry.points.length === 2) {
+      const points = evaluatePoints(node.geometry.points, evaluate);
+      if (!points) return null;
+      const start = [points[0]![0] + (handle === "start" ? dx : 0), points[0]![1] + (handle === "start" ? dy : 0)] as const;
+      const end = [points[1]![0] + (handle === "end" ? dx : 0), points[1]![1] + (handle === "end" ? dy : 0)] as const;
+      return <g className="template-selection" transform={transform} data-selection-kind="line">
+        <line x1={start[0]} y1={start[1]} x2={end[0]} y2={end[1]} />
+        <circle cx={start[0]} cy={start[1]} r="6" data-resize-handle="start" onPointerDown={event => beginResizeGesture(event, node.id, "start")} />
+        <circle cx={end[0]} cy={end[1]} r="6" data-resize-handle="end" onPointerDown={event => beginResizeGesture(event, node.id, "end")} />
+      </g>;
+    }
+    let x: number | null = null, y: number | null = null, boxWidth: number | null = null, boxHeight: number | null = null;
+    if (node.kind === "rectangle" || node.kind === "image") {
+      x = evaluate(node.geometry.x); y = evaluate(node.geometry.y); boxWidth = evaluate(node.geometry.width); boxHeight = evaluate(node.geometry.height);
+    } else if (node.kind === "ellipse") {
+      const cx = evaluate(node.geometry.centerX), cy = evaluate(node.geometry.centerY), rx = evaluate(node.geometry.radiusX), ry = evaluate(node.geometry.radiusY);
+      if (cx !== null && cy !== null && rx !== null && ry !== null) { x = cx - rx; y = cy - ry; boxWidth = rx * 2; boxHeight = ry * 2; }
+    }
+    if (x === null || y === null || boxWidth === null || boxHeight === null) return null;
+    const left = moveX(x, "w"), top = moveY(y, "n"), right = moveX(x + boxWidth, "e"), bottom = moveY(y + boxHeight, "s");
+    const handles: readonly [NodeResizeHandleV2, number, number][] = [
+      ["nw", left, top], ["n", (left + right) / 2, top], ["ne", right, top], ["e", right, (top + bottom) / 2],
+      ["se", right, bottom], ["s", (left + right) / 2, bottom], ["sw", left, bottom], ["w", left, (top + bottom) / 2],
+    ];
+    return <g className="template-selection" transform={transform} data-selection-kind="box">
+      <rect x={Math.min(left, right)} y={Math.min(top, bottom)} width={Math.abs(right - left)} height={Math.abs(bottom - top)} />
+      {handles.map(([candidate, handleX, handleY]) => <circle key={candidate} cx={handleX} cy={handleY} r="5.5"
+        data-resize-handle={candidate} onPointerDown={event => beginResizeGesture(event, node.id, candidate)} />)}
+    </g>;
+  }
+
   return (
     <svg
       className="template-canvas-v2"
@@ -654,6 +777,7 @@ export function TemplateCanvasV2({
       {view?.contactPoints.map(point => repeatedPointIds.has(point.id) ? null : renderPoint(point, "contact"))}
       {view && renderRepeatedPoints()}
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
+      {renderSelectionOverlay()}
       {repeatPreviewError && <g data-template-repeat-error="true" pointerEvents="none">
         <rect x="16" y="16" width={Math.min(width - 32, 520)} height="42" rx="6" fill="#fff7e6" stroke="#a86519" />
         <text x="28" y="34" fill="#7b4c16" fontSize="11" fontWeight="700">Повторы показаны как прототипы</text>

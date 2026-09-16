@@ -18,7 +18,8 @@ export interface TransformV2 {
   translateX: NumericExpressionV2; translateY: NumericExpressionV2;
   rotationDegrees: NumericExpressionV2; scaleX: NumericExpressionV2; scaleY: NumericExpressionV2;
 }
-export interface StrokeV2 { color: string; width: NumericExpressionV2; }
+export type StrokeDashV2 = "solid" | "dash" | "dot" | "dash-dot";
+export interface StrokeV2 { color: string; width: NumericExpressionV2; dash?: StrokeDashV2; }
 export interface FillV2 { color: string | null; }
 
 interface NodeBaseV2 {
@@ -80,6 +81,7 @@ const nodeKinds = new Set(["line", "polyline", "rectangle", "ellipse", "bezier",
 const viewKinds = new Set(["e4", "drawing", "additional"]);
 const directions = new Set(["left", "right", "up", "down"]);
 const parameterTypes = new Set(["number", "integer", "boolean", "string"]);
+const strokeDashes = new Set(["solid", "dash", "dot", "dash-dot"]);
 const hasOwn = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -149,7 +151,15 @@ function validateNode(value: unknown, path: string, layerId: string, context: Ex
   if (typeof value.visible !== "boolean" || typeof value.locked !== "boolean") context.diagnostics.push({ code: "invalid_flags", path, message: "visible и locked должны быть логическими." });
   boundedNumber(value.opacity, `${path}.opacity`, context.diagnostics, 0, 1);
   transform(value.transform, `${path}.transform`, context);
-  if (exact(value.stroke, ["color", "width"], `${path}.stroke`, context.diagnostics)) { if (typeof value.stroke.color !== "string" || !COLOR.test(value.stroke.color)) context.diagnostics.push({ code: "invalid_color", path: `${path}.stroke.color`, message: "Нужен цвет #RRGGBB или #RRGGBBAA." }); expression(value.stroke.width, `${path}.stroke.width`, context); }
+  if (!isRecord(value.stroke)) context.diagnostics.push({ code: "object_required", path: `${path}.stroke`, message: "Ожидается объект." });
+  else {
+    const strokeKeys = Object.keys(value.stroke);
+    for (const key of strokeKeys) if (!["color", "width", "dash"].includes(key)) context.diagnostics.push({ code: "unexpected_key", path: `${path}.stroke.${key}`, message: "Неизвестное поле." });
+    for (const key of ["color", "width"]) if (!hasOwn(value.stroke, key)) context.diagnostics.push({ code: "missing_key", path: `${path}.stroke.${key}`, message: "Обязательное поле отсутствует." });
+    if (typeof value.stroke.color !== "string" || !COLOR.test(value.stroke.color)) context.diagnostics.push({ code: "invalid_color", path: `${path}.stroke.color`, message: "Нужен цвет #RRGGBB или #RRGGBBAA." });
+    expression(value.stroke.width, `${path}.stroke.width`, context);
+    if (hasOwn(value.stroke, "dash") && !strokeDashes.has(String(value.stroke.dash))) context.diagnostics.push({ code: "invalid_stroke_dash", path: `${path}.stroke.dash`, message: "Неизвестный тип штриха." });
+  }
   if (exact(value.fill, ["color"], `${path}.fill`, context.diagnostics) && value.fill.color !== null && (typeof value.fill.color !== "string" || !COLOR.test(value.fill.color))) context.diagnostics.push({ code: "invalid_color", path: `${path}.fill.color`, message: "Нужен цвет #RRGGBB, #RRGGBBAA или null." });
   validateGeometry(value.kind, value.geometry, `${path}.geometry`, context, assetIds);
 }

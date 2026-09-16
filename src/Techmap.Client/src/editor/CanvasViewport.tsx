@@ -1840,7 +1840,8 @@ export function drawEditorSceneObject(
       context.strokeStyle = selected ? "#1179ac" : object.color;
       context.lineWidth = selected ? 4 : object.kind === "wire" ? 3 : 1.5;
       if (object.kind === "dimension") context.setLineDash([7, 5]);
-      context.stroke();
+      if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
+      else context.stroke();
       context.setLineDash([]);
       if (selected) {
         context.fillStyle = "#ffffff";
@@ -1925,6 +1926,26 @@ export function drawEditorSceneObject(
   context.restore();
 }
 
+const E4_WHITE_WIRE_OUTLINE = "#53636c";
+
+function isWhiteWireColor(color: string): boolean {
+  const normalized = color.trim().toLowerCase().replace(/\s+/g, "");
+  return normalized === "white" || normalized === "#fff" || normalized === "#ffffff" ||
+    normalized === "#ffffffff" || normalized === "rgb(255,255,255)" || normalized === "rgba(255,255,255,1)";
+}
+
+/** Keeps a white E4 conductor visible on the pale canvas without changing its actual colour. */
+function strokeE4Wire(context: CanvasRenderingContext2D, color: string, width = 3): void {
+  if (isWhiteWireColor(color)) {
+    context.strokeStyle = E4_WHITE_WIRE_OUTLINE;
+    context.lineWidth = width + 2;
+    context.stroke();
+  }
+  context.strokeStyle = color;
+  context.lineWidth = width;
+  context.stroke();
+}
+
 function drawE4BridgeCrossings(
   context: CanvasRenderingContext2D,
   crossings: readonly E4WireCrossing[],
@@ -1949,8 +1970,6 @@ function drawE4BridgeCrossings(
     context.moveTo(geometry.clearStart.x, geometry.clearStart.y);
     context.lineTo(geometry.clearEnd.x, geometry.clearEnd.y);
     context.stroke();
-    context.strokeStyle = under.color;
-    context.lineWidth = 3;
     context.lineCap = "butt";
     context.beginPath();
     if (crossing.overOrientation === "horizontal") {
@@ -1960,7 +1979,7 @@ function drawE4BridgeCrossings(
       context.moveTo(crossing.point.x - 5, crossing.point.y);
       context.lineTo(crossing.point.x + 5, crossing.point.y);
     }
-    context.stroke();
+    strokeE4Wire(context, under.color);
     // A halo which follows the raised path establishes layer order. Drawing
     // the same path in colour afterwards keeps the bridge and both feet whole.
     context.strokeStyle = "#f8fafb";
@@ -1983,10 +2002,8 @@ function drawE4BridgeCrossings(
     }
     context.lineTo(geometry.coloredEnd.x, geometry.coloredEnd.y);
     context.stroke();
-    context.strokeStyle = over.color;
-    context.lineWidth = 3;
     context.lineCap = "round";
-    context.stroke();
+    strokeE4Wire(context, over.color);
     context.restore();
   }
 }
@@ -2057,19 +2074,15 @@ export function drawE4DifferentialPairs(
       context.lineCap = "butt";
       context.stroke();
       traceMotif(!firstStartsOnMinimum, true, true);
-      context.strokeStyle = first.color;
-      context.lineWidth = 3;
       context.lineCap = "round";
-      context.stroke();
+      strokeE4Wire(context, first.color);
       traceMotif(firstStartsOnMinimum, true, true);
       context.strokeStyle = "#f8fafb";
       context.lineWidth = 7;
       context.lineCap = "butt";
       context.stroke();
-      context.strokeStyle = second.color;
-      context.lineWidth = 3;
       context.lineCap = "round";
-      context.stroke();
+      strokeE4Wire(context, second.color);
       const nextMotif = layout.motifs[motifIndex + 1];
       const straightEnd = nextMotif?.from ?? span.end;
       if (straightEnd > to) {
@@ -2082,10 +2095,8 @@ export function drawE4DifferentialPairs(
             context.moveTo(cross, to);
             context.lineTo(cross, straightEnd);
           }
-          context.strokeStyle = color;
-          context.lineWidth = 3;
           context.lineCap = "butt";
-          context.stroke();
+          strokeE4Wire(context, color);
         };
         const afterSwap = motifIndex % 2 === 0;
         drawLane(layout.crossMinimum, afterSwap ? second.color : first.color);

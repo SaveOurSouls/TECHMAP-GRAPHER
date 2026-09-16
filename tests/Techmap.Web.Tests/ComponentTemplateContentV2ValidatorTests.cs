@@ -39,6 +39,22 @@ public sealed class ComponentTemplateContentV2ValidatorTests
     }
 
     [Fact]
+    public void Stroke_dash_is_optional_and_rejects_unknown_values()
+    {
+        var legacy = ValidContent();
+        ComponentTemplateContentV2Validator.Validate(Element(legacy));
+
+        var stroke = legacy["views"]![0]!["layers"]![0]!["nodes"]![0]!["stroke"]!.AsObject();
+        stroke["dash"] = "dash-dot";
+        ComponentTemplateContentV2Validator.Validate(Element(legacy));
+
+        stroke["dash"] = "zigzag";
+        var invalid = Assert.Throws<ComponentTemplateException>(() =>
+            ComponentTemplateContentV2Validator.Validate(Element(legacy)));
+        Assert.Equal("content.views[0].layers[0].nodes[0].stroke.dash", invalid.Field);
+    }
+
+    [Fact]
     public void Repeat_placement_must_use_a_group_and_points_from_its_own_view_and_domain()
     {
         var content = ValidContent();

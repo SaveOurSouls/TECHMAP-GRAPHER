@@ -3,7 +3,7 @@ import {
   addBasicNodeV2, addBundlePortV2, addContactPointV2, addLayerV2, addNodeV2, attachRepeatDomainV2, constantExpressionV2,
   createRepeatPrototypeV2, deleteContactPointV2, deleteLayerV2, deleteNodeV2,
   deleteBundlePortV2, deleteRepeatPrototypeV2, editBundlePortV2, editContactPointV2, editLogicalContactV2,
-  editNodeV2, evaluateNumericExpressionV2, moveNodeV2, newTemplateContentV2, renameLayerV2,
+  editNodeV2, evaluateNumericExpressionV2, moveNodeV2, resizeNodeV2, newTemplateContentV2, renameLayerV2,
   linkLogicalContactPointV2, parameterizeNodeDimensionV2,
   reorderLayerV2, reorderNodeV2, setLayerLockedV2, setLayerVisibleV2, setNodeLockedV2,
   setRepeatCountV2, setRepeatStepV2, setTemplateParameterDefaultV2,
@@ -63,6 +63,45 @@ describe("template v2 immutable commands", () => {
     expect(() => deleteNodeV2(layerLocked, view.id, layer.id, rectangleId)).toThrowError(expect.objectContaining({ code: "layer_locked" }));
     const final = deleteNodeV2(setLayerLockedV2(layerLocked, view.id, layer.id, false), view.id, layer.id, rectangleId);
     expect(final.views[0]!.layers[0]!.nodes.map(node => node.id)).toEqual([textId]);
+  });
+
+  it("resizes rectangles, ellipses and line endpoints from selection handles", () => {
+    const initial = newTemplateContentV2(), view = initial.views[0]!, layer = view.layers[0]!;
+    const [withRectangle, rectangleId] = addBasicNodeV2(initial, view.id, layer.id, "rectangle");
+    const [withEllipse, ellipseId] = addBasicNodeV2(withRectangle, view.id, layer.id, "ellipse");
+    const [withLine, lineId] = addBasicNodeV2(withEllipse, view.id, layer.id, "line");
+    const rectangle = resizeNodeV2(withLine, view.id, layer.id, rectangleId, "nw", 10, 5);
+    const ellipse = resizeNodeV2(rectangle, view.id, layer.id, ellipseId, "e", 20, 0);
+    const resized = resizeNodeV2(ellipse, view.id, layer.id, lineId, "end", 15, -4);
+    const nodes = resized.views[0]!.layers[0]!.nodes;
+    const rectangleNode = nodes.find(node => node.id === rectangleId)! as RectangleNodeV2;
+    const ellipseNode = nodes.find(node => node.id === ellipseId)!;
+    const lineNode = nodes.find(node => node.id === lineId)!;
+
+    expect(rectangleNode.geometry.x).toEqual(constantExpressionV2(110));
+    expect(rectangleNode.geometry.y).toEqual(constantExpressionV2(105));
+    expect(rectangleNode.geometry.width).toEqual(constantExpressionV2(130));
+    expect(rectangleNode.geometry.height).toEqual(constantExpressionV2(65));
+    expect(ellipseNode.kind === "ellipse" && ellipseNode.geometry.radiusX).toEqual(constantExpressionV2(80));
+    expect(lineNode.kind === "line" && lineNode.geometry.points[1]).toEqual({ x: constantExpressionV2(225), y: constantExpressionV2(96) });
+    expect(withLine.views[0]!.layers[0]!.nodes.find(node => node.id === rectangleId)).toEqual(withRectangle.views[0]!.layers[0]!.nodes[0]);
+  });
+
+  it("rejects invalid, locked and parameterized resize atomically", () => {
+    const initial = newTemplateContentV2(), view = initial.views[0]!, layer = view.layers[0]!;
+    const [withRectangle, rectangleId] = addBasicNodeV2(initial, view.id, layer.id, "rectangle");
+    const before = structuredClone(withRectangle);
+    expect(() => resizeNodeV2(withRectangle, view.id, layer.id, rectangleId, "w", 500, 0))
+      .toThrowError(expect.objectContaining({ code: "invalid_resize" }));
+    expect(withRectangle).toEqual(before);
+    const locked = setNodeLockedV2(withRectangle, view.id, layer.id, rectangleId, true);
+    expect(() => resizeNodeV2(locked, view.id, layer.id, rectangleId, "e", 10, 0))
+      .toThrowError(expect.objectContaining({ code: "node_locked" }));
+    const parameterized = parameterizeNodeDimensionV2(withRectangle, view.id, layer.id, rectangleId, "width", {
+      name: "Ширина", defaultValue: 140, minimum: 1, maximum: 500,
+    })[0];
+    expect(() => resizeNodeV2(parameterized, view.id, layer.id, rectangleId, "e", 10, 0))
+      .toThrowError(expect.objectContaining({ code: "non_constant_geometry" }));
   });
 
   it("preserves parameterized geometry and moves the node through its constant transform", () => {

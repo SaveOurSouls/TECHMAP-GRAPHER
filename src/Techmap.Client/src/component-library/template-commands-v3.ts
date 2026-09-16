@@ -14,6 +14,7 @@ import {
   editNodeV2,
   evaluateNumericExpressionV2,
   moveNodeV2,
+  resizeNodeV2,
   newTemplateContentV2,
   parameterizeNodeDimensionV2,
   renameLayerV2,
@@ -35,6 +36,7 @@ import {
   type ExpressionValuesV2,
   type NewBundlePortV2,
   type NodeEditV2,
+  type NodeResizeHandleV2,
   type ParameterizableNodeDimensionV2,
   type ParameterizeNodeDimensionV2Input,
   type RepeatPrototypeIdsV2,
@@ -65,6 +67,7 @@ import { expandTemplateRepeatsV2, TemplateRepeatV2Error } from "./template-repea
 
 export type BasicNodeKindV3 = BasicNodeKindV2;
 export type NodeEditV3 = NodeEditV2;
+export type NodeResizeHandleV3 = NodeResizeHandleV2;
 export type ExpressionValuesV3 = ExpressionValuesV2;
 export type ContactPointEditV3 = ContactPointEditV2;
 export type NewBundlePortV3 = NewBundlePortV2;
@@ -836,6 +839,18 @@ export function moveNodeV3(
   deltaY: number,
 ): TemplateContentV3 {
   return runCore(content, "invalid_node", core => moveNodeV2(core, viewId, layerId, nodeId, deltaX, deltaY));
+}
+
+export function resizeNodeV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  handle: NodeResizeHandleV3,
+  deltaX: number,
+  deltaY: number,
+): TemplateContentV3 {
+  return runCore(content, "invalid_node", core => resizeNodeV2(core, viewId, layerId, nodeId, handle, deltaX, deltaY));
 }
 
 export function deleteNodeV3(content: TemplateContentV3, viewId: string, layerId: string, nodeId: string): TemplateContentV3 {

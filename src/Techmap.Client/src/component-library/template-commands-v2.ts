@@ -17,6 +17,7 @@ import {
 import { expandTemplateRepeatsV2, TemplateRepeatV2Error } from "./template-repeat-v2";
 
 export type BasicNodeKindV2 = "line" | "rectangle" | "ellipse" | "text";
+export type NodeResizeHandleV2 = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "start" | "end";
 export type NodeEditV2 = Partial<Pick<TemplateNodeV2, "visible" | "locked" | "opacity" | "transform" | "stroke" | "fill">> & {
   geometry?: TemplateNodeV2["geometry"];
 };
@@ -634,7 +635,7 @@ export function addBasicNodeV2(content: TemplateContentV2, viewId: string, layer
   const id = crypto.randomUUID();
   const base = {
     id, kind, layerId, visible: true, locked: false, opacity: 1, transform: identityTransform(),
-    stroke: { color: "#27445a", width: constantExpressionV2(2) }, fill: { color: null },
+    stroke: { color: "#27445a", width: constantExpressionV2(2), dash: "solid" as const }, fill: { color: null },
   };
   const node: TemplateNodeV2 = kind === "line" ? { ...base, kind, geometry: { points: [
     { x: constantExpressionV2(100), y: constantExpressionV2(100) },
@@ -752,6 +753,56 @@ export function moveNodeV2(content: TemplateContentV2, viewId: string, layerId: 
   requireEditableNode(layer, node);
   const moved = moveNodeGeometry(node, deltaX, deltaY);
   return replaceLayer(content, view, layerId, { ...layer, nodes: layer.nodes.map(item => item.id === nodeId ? moved : item) });
+}
+
+/** Resizes simple constant geometry from one Visio-style selection handle. */
+export function resizeNodeV2(
+  content: TemplateContentV2,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  handle: NodeResizeHandleV2,
+  deltaX: number,
+  deltaY: number,
+): TemplateContentV2 {
+  if (![deltaX, deltaY].every(Number.isFinite))
+    throw new TemplateCommandV2Error("invalid_resize", "Изменение размера должно быть конечным числом.");
+  const { view, layer, node } = requireNode(content, viewId, layerId, nodeId);
+  requireEditableNode(layer, node);
+  const c = constantExpressionV2;
+  let resized: TemplateNodeV2;
+  if (node.kind === "line") {
+    if (handle !== "start" && handle !== "end")
+      throw new TemplateCommandV2Error("unsupported_resize_handle", "Для линии изменяются только конечные точки.");
+    if (node.geometry.points.length !== 2)
+      throw new TemplateCommandV2Error("unsupported_resize", "Изменение размера доступно для простой линии из двух точек.");
+    const index = handle === "start" ? 0 : 1;
+    const points = node.geometry.points.map((point, candidateIndex) => candidateIndex === index ? {
+      x: c(requireConstant(point.x) + deltaX),
+      y: c(requireConstant(point.y) + deltaY),
+    } : point);
+    resized = { ...node, geometry: { ...node.geometry, points } };
+  } else if (node.kind === "rectangle" || node.kind === "ellipse" || node.kind === "image") {
+    if (handle === "start" || handle === "end")
+      throw new TemplateCommandV2Error("unsupported_resize_handle", "Выбранная точка не относится к рамке фигуры.");
+    const isEllipse = node.kind === "ellipse";
+    let x = isEllipse ? requireConstant(node.geometry.centerX) - requireConstant(node.geometry.radiusX) : requireConstant(node.geometry.x);
+    let y = isEllipse ? requireConstant(node.geometry.centerY) - requireConstant(node.geometry.radiusY) : requireConstant(node.geometry.y);
+    let width = isEllipse ? requireConstant(node.geometry.radiusX) * 2 : requireConstant(node.geometry.width);
+    let height = isEllipse ? requireConstant(node.geometry.radiusY) * 2 : requireConstant(node.geometry.height);
+    if (handle.includes("w")) { x += deltaX; width -= deltaX; }
+    if (handle.includes("e")) width += deltaX;
+    if (handle.includes("n")) { y += deltaY; height -= deltaY; }
+    if (handle.includes("s")) height += deltaY;
+    if (width < 1 || height < 1)
+      throw new TemplateCommandV2Error("invalid_resize", "Ширина и высота фигуры должны быть не меньше 1.");
+    if (node.kind === "ellipse") resized = { ...node, geometry: {
+      ...node.geometry, centerX: c(x + width / 2), centerY: c(y + height / 2), radiusX: c(width / 2), radiusY: c(height / 2),
+    } };
+    else if (node.kind === "rectangle") resized = { ...node, geometry: { ...node.geometry, x: c(x), y: c(y), width: c(width), height: c(height) } };
+    else resized = { ...node, geometry: { ...node.geometry, x: c(x), y: c(y), width: c(width), height: c(height) } };
+  } else throw new TemplateCommandV2Error("unsupported_resize", "Размер этого объекта изменяется через панель параметров.");
+  return replaceLayer(content, view, layerId, { ...layer, nodes: layer.nodes.map(item => item.id === nodeId ? resized : item) });
 }
 
 export function deleteNodeV2(content: TemplateContentV2, viewId: string, layerId: string, nodeId: string): TemplateContentV2 {

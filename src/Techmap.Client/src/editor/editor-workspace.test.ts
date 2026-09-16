@@ -503,6 +503,42 @@ describe("harness editor workspace", () => {
     expect(hitTestWireEnd(routedWire, { x: 181, y: 21 }, 1)).toBe("to");
   });
 
+  it("outlines a white E4 wire while keeping its conductor white", () => {
+    const strokes: { readonly color: string; readonly width: number }[] = [];
+    const contextState = {
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 1,
+      font: "",
+      textAlign: "start",
+      textBaseline: "alphabetic",
+      save: () => undefined,
+      restore: () => undefined,
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      quadraticCurveTo: () => undefined,
+      closePath: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      fillText: () => undefined,
+      setLineDash: () => undefined,
+      stroke: () => strokes.push({ color: String(contextState.strokeStyle), width: contextState.lineWidth }),
+    };
+    const wire: EditorSceneObject = {
+      id: "white", layerId: "bottom", kind: "wire", label: "W1",
+      x: 0, y: 0, width: 0, height: 0, color: "#FFFFFF",
+      points: [{ x: 0, y: 20 }, { x: 120, y: 20 }], metadata: { view: "e4" },
+    };
+
+    drawEditorSceneObject(contextState as unknown as CanvasRenderingContext2D, wire, false, "e4");
+
+    expect(strokes.slice(0, 2)).toEqual([
+      { color: "#53636c", width: 5 },
+      { color: "#FFFFFF", width: 3 },
+    ]);
+  });
+
   it("creates straight E4 leads and orthogonal elbows while preserving a complete model route", () => {
     expect(buildE4OrthogonalRoute([{ x: 0, y: 10 }, { x: 100, y: 60 }])).toEqual([
       { x: 0, y: 10 },

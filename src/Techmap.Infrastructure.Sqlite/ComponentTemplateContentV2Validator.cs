@@ -918,9 +918,18 @@ internal static partial class ComponentTemplateContentV2Validator
 
     private static void ValidateStroke(JsonElement stroke, string path, ValidationState state)
     {
-        RequireExactProperties(stroke, path, "color", "width");
+        if (stroke.ValueKind != JsonValueKind.Object) Throw("An object is required.", path);
+        var actual = stroke.EnumerateObject().Select(property => property.Name).ToArray();
+        var allowed = new HashSet<string>(["color", "width", "dash"], StringComparer.Ordinal);
+        if (actual.Distinct(StringComparer.Ordinal).Count() != actual.Length ||
+            actual.Any(property => !allowed.Contains(property)) ||
+            !actual.Contains("color", StringComparer.Ordinal) || !actual.Contains("width", StringComparer.Ordinal))
+            Throw("Object has missing, extra, or duplicate properties.", path);
         ValidateColor(stroke.GetProperty("color"), path + ".color", allowNull: false);
         ValidateExpression(stroke.GetProperty("width"), path + ".width", state);
+        if (stroke.TryGetProperty("dash", out var dash) &&
+            (dash.ValueKind != JsonValueKind.String || dash.GetString() is not ("solid" or "dash" or "dot" or "dash-dot")))
+            Throw("Stroke dash must be solid, dash, dot, or dash-dot.", path + ".dash");
     }
 
     private static void ValidateFill(JsonElement fill, string path)

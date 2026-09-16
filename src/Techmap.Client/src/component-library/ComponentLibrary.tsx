@@ -36,7 +36,7 @@ import {
   deleteRepeatPrototypeV3 as deleteRepeatPrototypeV2, editBundlePortV3 as editBundlePortV2,
   editContactPointV3 as editContactPointV2, editLogicalContactV3 as editLogicalContactV2,
   editNodeV3 as editNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2,
-  moveNodeV3 as moveNodeV2, newTemplateContentV3 as newTemplateContentV2,
+  moveNodeV3 as moveNodeV2, resizeNodeV3 as resizeNodeV2, newTemplateContentV3 as newTemplateContentV2,
   parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, projectTemplateContentV3CoreToV2,
   addArticleVariantsV3, removeArticleVariantContactGroupV3, removeArticleVariantV3, renameContactTypeGroupV3,
   renameLayerV3 as renameLayerV2, renameViewV3 as renameViewV2, reorderLayerV3 as reorderLayerV2,
@@ -47,6 +47,7 @@ import {
   type BasicNodeKindV3 as BasicNodeKindV2, type BundlePortEditV3 as BundlePortEditV2,
   type ContactPointEditV3 as ContactPointEditV2, type LogicalContactEditV3 as LogicalContactEditV2,
   type NodeEditV3 as NodeEditV2,
+  type NodeResizeHandleV3 as NodeResizeHandleV2,
 } from "./template-commands-v3";
 import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
 import { validateTemplateContentV3 as validateTemplateContentV2, type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
@@ -513,6 +514,12 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!layer) { setError("Перемещаемый объект не найден в активном виде."); return; }
     command(() => moveNodeV2(draft.content, activeView.id, layer.id, nodeId, deltaX, deltaY), nodeId);
   }
+  function resizeCanvasNode(nodeId: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) {
+    if (!activeView) return;
+    const layer = activeView.layers.find(item => item.nodes.some(node => node.id === nodeId));
+    if (!layer) { setError("Изменяемый объект не найден в активном виде."); return; }
+    command(() => resizeNodeV2(draft.content, activeView.id, layer.id, nodeId, handle, deltaX, deltaY), nodeId);
+  }
   function addView() {
     try { const [content, id] = addAdditionalViewV2(draft.content); const view = content.views.find(item => item.id === id)!; changeContent(content, null); setActiveLayerIds(current => ({ ...current, [id]: view.layers[0]!.id })); setViewId(id); } catch (caught) { setError(errorText(caught)); }
   }
@@ -640,7 +647,7 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
         <div className="library-tools"><span>Примитивы</span>{(["line", "rectangle", "ellipse", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", rectangle: "Прямоугольник", ellipse: "Эллипс", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
@@ -702,7 +709,31 @@ function BundlePortProperties({ port, edit, remove }: { port: BundlePortV2; edit
 
 function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: EditableNode; disabled: boolean; edit: (changes: NodeEditV2) => void; move: (x: number, y: number) => void; toggleLock: () => void }) {
   const position = nodePosition(node), dimensions = nodeDimensions(node);
-  return <><button type="button" onClick={toggleLock}>{node.locked ? "Разблокировать объект" : "Заблокировать объект"}</button><div className="coordinate-grid"><NumericField label="X" value={position.x} disabled={disabled} change={value => move(value, position.y)} /><NumericField label="Y" value={position.y} disabled={disabled} change={value => move(position.x, value)} />{dimensions && <><NumericField label="Ширина" value={dimensions.width} disabled={disabled} change={value => editDimension(node, "width", value, edit)} /><NumericField label="Высота" value={dimensions.height} disabled={disabled} change={value => editDimension(node, "height", value, edit)} /></>}</div><NumericField label="Прозрачность 0…1" value={node.opacity} disabled={disabled} change={value => { if (value >= 0 && value <= 1) edit({ opacity: value }); }} />{node.kind === "text" && <label>Текст<input value={node.geometry.text} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, text: event.target.value } })} /></label>}{node.kind === "image" && <ImageProperties node={node} disabled={disabled} edit={edit} />}</>;
+  const strokeWidth = constantValue(node.stroke.width) ?? 0;
+  const canFill = node.kind === "rectangle" || node.kind === "ellipse";
+  const fillEnabled = canFill && node.fill.color !== null;
+  const updateStroke = (changes: Partial<typeof node.stroke>) => edit({ stroke: { ...node.stroke, ...changes } });
+  const colors = ["#111827", "#6b7280", "#ffffff", "#dc2626", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed"];
+  return <>
+    <button type="button" onClick={toggleLock}>{node.locked ? "Разблокировать объект" : "Заблокировать объект"}</button>
+    <section className="node-style-panel" aria-label="Стиль фигуры">
+      <strong>Стиль</strong>
+      {canFill && <div className="style-section">
+        <label className="check-field"><input type="checkbox" checked={fillEnabled} disabled={disabled} onChange={event => edit({ fill: { color: event.target.checked ? node.fill.color ?? "#ffffff" : null } })} />Заливка</label>
+        {fillEnabled && <label>Цвет заливки<input type="color" value={node.fill.color ?? "#ffffff"} disabled={disabled} onChange={event => edit({ fill: { color: event.target.value } })} /></label>}
+      </div>}
+      <div className="style-section">
+        <label>Цвет линии<input type="color" value={node.stroke.color} disabled={disabled} onChange={event => updateStroke({ color: event.target.value })} /></label>
+        <div className="style-swatches" aria-label="Быстрый выбор цвета линии">{colors.map(color => <button key={color} type="button" title={color} aria-label={`Цвет линии ${color}`} style={{ background: color }} className={node.stroke.color.toLowerCase() === color ? "active" : ""} disabled={disabled} onClick={() => updateStroke({ color })} />)}</div>
+        <div className="style-row"><NumericField label="Толщина" value={strokeWidth} min={0} max={24} step={0.5} disabled={disabled || node.stroke.width.kind !== "constant"} change={value => { if (value >= 0 && value <= 24) updateStroke({ width: constantExpressionV2(value) }); }} />
+          <label>Штрих<select value={node.stroke.dash ?? "solid"} disabled={disabled} onChange={event => updateStroke({ dash: event.target.value as NonNullable<typeof node.stroke.dash> })}><option value="solid">Сплошная</option><option value="dash">Штрих</option><option value="dot">Точки</option><option value="dash-dot">Штрих-точка</option></select></label></div>
+      </div>
+    </section>
+    <div className="coordinate-grid"><NumericField label="X" value={position.x} disabled={disabled} change={value => move(value, position.y)} /><NumericField label="Y" value={position.y} disabled={disabled} change={value => move(position.x, value)} />{dimensions && <><NumericField label="Ширина" value={dimensions.width} min={1} disabled={disabled} change={value => editDimension(node, "width", value, edit)} /><NumericField label="Высота" value={dimensions.height} min={1} disabled={disabled} change={value => editDimension(node, "height", value, edit)} /></>}</div>
+    <NumericField label="Прозрачность 0…1" value={node.opacity} min={0} max={1} step={0.05} disabled={disabled} change={value => { if (value >= 0 && value <= 1) edit({ opacity: value }); }} />
+    {node.kind === "text" && <label>Текст<input value={node.geometry.text} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, text: event.target.value } })} /></label>}
+    {node.kind === "image" && <ImageProperties node={node} disabled={disabled} edit={edit} />}
+  </>;
 }
 
 function ImageProperties({ node, disabled, edit }: { node: ImageNodeV2; disabled: boolean; edit: (changes: NodeEditV2) => void }) {
@@ -710,8 +741,8 @@ function ImageProperties({ node, disabled, edit }: { node: ImageNodeV2; disabled
   return <><label className="check-field"><input type="checkbox" checked={node.geometry.underlay} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, underlay: event.target.checked } })} />Подложка</label><div className="coordinate-grid"><NumericField label="Crop X" value={node.geometry.cropX} disabled={disabled} change={value => crop("cropX", value)} /><NumericField label="Crop Y" value={node.geometry.cropY} disabled={disabled} change={value => crop("cropY", value)} /><NumericField label="Crop ширина" value={node.geometry.cropWidth} disabled={disabled} change={value => crop("cropWidth", value)} /><NumericField label="Crop высота" value={node.geometry.cropHeight} disabled={disabled} change={value => crop("cropHeight", value)} /></div></>;
 }
 
-function NumericField({ label, value, disabled, change }: { label: string; value: number; disabled?: boolean; change: (value: number) => void }) {
-  return <label>{label}<input type="number" value={value} disabled={disabled} onChange={event => { const parsed = Number(event.target.value); if (Number.isFinite(parsed)) change(parsed); }} /></label>;
+function NumericField({ label, value, disabled, min, max, step, change }: { label: string; value: number; disabled?: boolean; min?: number; max?: number; step?: number; change: (value: number) => void }) {
+  return <label>{label}<input type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={event => { const parsed = Number(event.target.value); if (Number.isFinite(parsed)) change(parsed); }} /></label>;
 }
 
 function nodeLabel(node: TemplateNodeV2) { return ({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Кривая Безье", closedContour: "Контур", text: "Текст", image: "Изображение", group: "Группа" })[node.kind]; }

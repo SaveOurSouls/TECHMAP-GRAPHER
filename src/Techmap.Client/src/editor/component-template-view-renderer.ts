@@ -51,6 +51,7 @@ interface ProjectedCommandBase {
   readonly opacity: number;
   readonly stroke: string;
   readonly strokeWidth: number;
+  readonly strokeDash: "solid" | "dash" | "dot" | "dash-dot";
   readonly fill: string | null;
 }
 
@@ -139,6 +140,7 @@ function commonCommand(
     opacity,
     stroke: node.stroke.color,
     strokeWidth,
+    strokeDash: node.stroke.dash ?? "solid",
     fill: node.fill.color,
   };
 }
@@ -425,6 +427,11 @@ function applyCommandTransform(context: CanvasRenderingContext2D, command: Proje
   context.globalAlpha *= Math.min(1, Math.max(0, command.opacity));
   context.strokeStyle = command.stroke;
   context.lineWidth = command.strokeWidth;
+  const unit = Math.max(command.strokeWidth, 1);
+  context.setLineDash(command.strokeDash === "dash" ? [6 * unit, 4 * unit]
+    : command.strokeDash === "dot" ? [unit, 3 * unit]
+      : command.strokeDash === "dash-dot" ? [6 * unit, 3 * unit, unit, 3 * unit]
+        : []);
   context.fillStyle = command.fill ?? "rgba(0, 0, 0, 0)";
 }
 
@@ -457,6 +464,7 @@ function drawImagePlaceholder(
   context: CanvasRenderingContext2D,
   command: Extract<ProjectedComponentTemplateCommand, { readonly kind: "image" }>,
 ): void {
+  context.setLineDash([]);
   context.fillStyle = "#fff7e6";
   context.strokeStyle = "#a86519";
   context.lineWidth = Math.max(1, command.strokeWidth);

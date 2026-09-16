@@ -54,6 +54,15 @@ describe("template content v2 validation", () => {
     expect(validateTemplateContentV2(validDocument())).toEqual({ valid: true, diagnostics: [] });
   });
 
+  it("accepts optional persisted dash styles and rejects unknown ones", () => {
+    const legacy = validDocument();
+    expect(validateTemplateContentV2(legacy).valid).toBe(true);
+    legacy.views[0]!.layers[0]!.nodes[0]!.stroke.dash = "dash-dot";
+    expect(validateTemplateContentV2(legacy).valid).toBe(true);
+    (legacy.views[0]!.layers[0]!.nodes[0]!.stroke as { dash?: string }).dash = "zigzag";
+    expect(codes(legacy)).toContain("invalid_stroke_dash");
+  });
+
   it("enforces exact keys at every structural boundary", () => {
     const document = structuredClone(validDocument()) as TemplateContentV2 & { surprise?: boolean };
     document.surprise = true;

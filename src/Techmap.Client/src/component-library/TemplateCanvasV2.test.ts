@@ -181,6 +181,48 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain('opacity="0.4"');
   });
 
+  it("adds forgiving hit targets and Visio-style handles for selected simple figures", () => {
+    const rectangle = node({
+      id: ids.rectangle,
+      kind: "rectangle",
+      geometry: { x: c(10), y: c(20), width: c(80), height: c(40), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    const markup = render(content([rectangle]), { selectedId: ids.rectangle, onNodeResize: () => undefined });
+
+    expect(markup).toContain('fill="transparent" stroke="transparent" stroke-width="12"');
+    expect(markup).toContain('data-selection-kind="box"');
+    expect(markup.match(/data-resize-handle=/g)).toHaveLength(8);
+    expect(markup).toContain('data-resize-handle="nw"');
+    expect(markup).toContain('data-resize-handle="se"');
+  });
+
+  it("shows two endpoint handles and the selected dash style for a line", () => {
+    const dashed = line(ids.line);
+    dashed.stroke = { ...dashed.stroke, dash: "dash-dot" };
+    const markup = render(content([dashed]), { selectedId: ids.line, onNodeResize: () => undefined });
+
+    expect(markup).toContain('stroke-width="12"');
+    expect(markup).toContain('stroke-dasharray="12 6 2 6"');
+    expect(markup).toContain('data-selection-kind="line"');
+    expect(markup.match(/data-resize-handle=/g)).toHaveLength(2);
+  });
+
+  it("does not expose resize handles for parameterized or rotated geometry", () => {
+    const parameterized = node({
+      id: ids.rectangle,
+      kind: "rectangle",
+      geometry: { x: c(10), y: c(20), width: p(ids.parameter), height: c(40), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    expect(render(content([parameterized]), { selectedId: ids.rectangle, onNodeResize: () => undefined })).not.toContain("data-resize-handle");
+    const rotated = node({
+      id: ids.rectangle,
+      kind: "rectangle",
+      transform: { ...identity, rotationDegrees: c(15) },
+      geometry: { x: c(10), y: c(20), width: c(80), height: c(40), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    expect(render(content([rotated]), { selectedId: ids.rectangle, onNodeResize: () => undefined })).not.toContain("data-resize-handle");
+  });
+
   it("evaluates parameter defaults, formulas and explicit overrides without eval", () => {
     const document = content([]);
     const evaluateDefaults = createTemplateNumericEvaluatorV2(document);
