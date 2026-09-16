@@ -32,6 +32,24 @@ public sealed class ReferenceCatalogSnapshotStoreTests
     }
 
     [Fact]
+    public void Active_source_list_reports_only_the_current_snapshot_and_its_row_count()
+    {
+        using var fixture = Fixture.Create();
+        using var storage = SqliteStorage.Open(fixture.DataRoot);
+        var store = new SqliteReferenceCatalogSnapshotStore(storage);
+        var first = Publish(store, Draft("v1", "{\"value\":1}").Validate(), null).PublishedSnapshot!;
+        var second = Publish(store, Draft("v2", "{\"value\":2}").Validate(), first.SnapshotId).PublishedSnapshot!;
+
+        var source = Assert.Single(store.ListActiveSources());
+
+        Assert.Equal("technology-database", source.SourceId);
+        Assert.Equal("xlsx", source.SourceKind);
+        Assert.Equal(second.SnapshotId, source.ActiveSnapshotId);
+        Assert.Equal(1, source.RecordCount);
+        Assert.Equal(second.CapturedUtc, source.CapturedUtc);
+    }
+
+    [Fact]
     public void Failed_or_stale_publication_keeps_the_previous_active_snapshot()
     {
         using var fixture = Fixture.Create();

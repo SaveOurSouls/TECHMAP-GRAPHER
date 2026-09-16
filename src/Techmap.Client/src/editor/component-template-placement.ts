@@ -27,6 +27,14 @@ import type {
   TemplateContentV3,
 } from "../component-library/template-model-v3";
 import { validateTemplateContentV4, type TemplateContentV4 } from "../component-library/template-model-v4";
+import {
+  projectTemplateContentV5TableToV1,
+  projectTemplateContentV5ToV3,
+  validateTemplateContentV5,
+  type TemplateContentV5,
+} from "../component-library/template-model-v5";
+
+type SupportedTemplateContent = TemplateContentV3 | TemplateContentV4 | TemplateContentV5;
 
 /** The immutable data needed from the component-library response at placement time. */
 export interface ComponentTemplatePlacementEnvelopeV3 {
@@ -37,7 +45,7 @@ export interface ComponentTemplatePlacementEnvelopeV3 {
   readonly name: string;
   readonly articleBindings: readonly ArticleKeyV3[];
   readonly assets: readonly TemplateEnvelopeAsset[];
-  readonly content: TemplateContentV3 | TemplateContentV4;
+  readonly content: SupportedTemplateContent;
 }
 
 export type ComponentTemplatePlacementEnvelope = ComponentTemplatePlacementEnvelopeV3;
@@ -46,7 +54,7 @@ export interface CreateComponentTemplateConnectorOptions {
   readonly id: string;
   readonly designation: string;
   /** Either the full v3 variant or its stable variant ID. */
-  readonly articleVariant?: ArticleVariantV3 | string;
+  readonly articleVariant?: (ArticleKeyV3 & { readonly id: string }) | string;
   /** Alias useful to catalog UIs that carry only the selected variant ID. */
   readonly articleVariantId?: string;
   readonly e4Position: Point;
@@ -69,11 +77,10 @@ export function createConnectorInstanceFromComponentTemplateV3(
   const code = requireBoundedText(template.code, "Код шаблона компонента", 120);
   const name = requireBoundedText(template.name, "Название шаблона компонента", 256);
   const content = template.content;
-  if (content.schemaVersion !== 3 && content.schemaVersion !== 4)
-    throw new Error("Для размещения требуется содержимое шаблона v3 или v4.");
-  const validation = content.schemaVersion === 4
-    ? validateTemplateContentV4(content)
-    : validateTemplateContentV3(content);
+  if (content.schemaVersion !== 3 && content.schemaVersion !== 4 && content.schemaVersion !== 5)
+    throw new Error("Для размещения требуется содержимое шаблона v3, v4 или v5.");
+  const validation = content.schemaVersion === 5 ? validateTemplateContentV5(content)
+    : content.schemaVersion === 4 ? validateTemplateContentV4(content) : validateTemplateContentV3(content);
   if (!validation.valid) throw new Error(`Шаблон v${content.schemaVersion} не прошёл проверку: ${validation.diagnostics[0]?.message ?? "повреждённое содержимое"}`);
   if (reconcileTemplateEnvelopeAssets(content, template.assets).diagnostics.length > 0) {
     throw new Error("Ресурсы шаблона не совпадают с ресурсами его закрепляемой версии.");
@@ -193,19 +200,21 @@ interface PlacementContactRow extends MaterializedArticleContactRowV3 {
   readonly standardTerminalArticleKey: ArticleKeyV3 | null;
 }
 
-function asV3Core(content: TemplateContentV3 | TemplateContentV4): TemplateContentV3 {
+function asV3Core(content: SupportedTemplateContent): TemplateContentV3 {
   if (content.schemaVersion === 3) return content;
+  if (content.schemaVersion === 5) return projectTemplateContentV5ToV3(content);
   const { e4ConnectorTable: _table, ...core } = content;
   return { ...core, schemaVersion: 3 };
 }
 
 function materializePlacementRows(
-  content: TemplateContentV3 | TemplateContentV4,
+  content: SupportedTemplateContent,
   articleVariantId: string,
 ): readonly PlacementContactRow[] {
   const coreRows = materializeArticleContactRowsV3(asV3Core(content), articleVariantId);
   if (content.schemaVersion === 3) return coreRows.map(row => ({ ...row, standardTerminalArticleKey: null }));
-  const tableArticle = materializeE4ConnectorArticle(content.e4ConnectorTable, articleVariantId);
+  const table = content.schemaVersion === 5 ? projectTemplateContentV5TableToV1(content) : content.e4ConnectorTable;
+  const tableArticle = materializeE4ConnectorArticle(table, articleVariantId);
   if (tableArticle.rows.length !== coreRows.length)
     throw new Error("Таблица Э4 не совпадает с материализованными контактами артикула.");
   const allowedByGroup = new Map(tableArticle.contactGroups.map(group => [
@@ -214,7 +223,8 @@ function materializePlacementRows(
   ]));
   return coreRows.map((core, index) => {
     const table = tableArticle.rows[index]!;
-    const allowed = table.contactTypeGroupId === null ? [] : allowedByGroup.get(table.contactTypeGroupId) ?? [];
+    const allowed = content.schemaVersion === 5 ? content.compatibleTerminalArticleKeys
+      : table.contactTypeGroupId === null ? [] : allowedByGroup.get(table.contactTypeGroupId) ?? [];
     return {
       ...core,
       key: table.seriesRowId,
@@ -229,13 +239,13 @@ function materializePlacementRows(
 }
 
 function selectedArticleVariant(
-  content: TemplateContentV3 | TemplateContentV4,
-  selected: ArticleVariantV3 | string,
-): ArticleVariantV3 {
+  content: SupportedTemplateContent,
+  selected: (ArticleKeyV3 & { readonly id: string }) | string,
+): SupportedTemplateContent["articleVariants"][number] {
   const id = typeof selected === "string" ? selected : selected.id;
   const variant = content.articleVariants.find((candidate) => candidate.id === id);
   if (!variant) throw new Error(`Вариант артикула ${id} отсутствует в шаблоне.`);
-  return variant;
+  return variant as SupportedTemplateContent["articleVariants"][number];
 }
 
 function articleKey(variant: ArticleKeyV3): ComponentTemplateArticleKeySnapshot {
@@ -277,7 +287,7 @@ function snapshotAsset(asset: TemplateEnvelopeAsset): ComponentTemplateAssetSnap
 function createContact(
   row: PlacementContactRow,
   number: number,
-  content: TemplateContentV3 | TemplateContentV4,
+  content: SupportedTemplateContent,
   connectorId: string,
 ): ConnectorContact {
   const group = row.contactTypeGroupId === null
@@ -301,7 +311,7 @@ function createContact(
 
 function snapshotContact(
   row: PlacementContactRow,
-  content: TemplateContentV3 | TemplateContentV4,
+  content: SupportedTemplateContent,
 ): ComponentTemplateContactSnapshot {
   const group = row.contactTypeGroupId === null
     ? null

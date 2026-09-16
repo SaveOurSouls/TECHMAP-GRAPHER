@@ -12,4 +12,10 @@
     <ProjectReference Include="../Techmap.Infrastructure.Xlsx/Techmap.Infrastructure.Xlsx.csproj" />
     <ProjectReference Include="../Techmap.Infrastructure.GoogleSheets/Techmap.Infrastructure.GoogleSheets.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Test/build outputs can be created below a project by an overridden
+         BaseOutputPath. They are never application static content. -->
+    <Content Remove="artifacts/**" />
+    <None Remove="artifacts/**" />
+  </ItemGroup>
 </Project>

@@ -12,6 +12,19 @@ public static class ReferenceCatalogEndpoints
 
     public static void MapReferenceCatalogEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/v1/reference-sources", (
+            HttpContext context,
+            LocalHttpSession session,
+            IReferenceCatalogSnapshotStore store) =>
+            WithReadSession(context, session, () => Execute(() => Results.Ok(
+                store.ListActiveSources().Select(source => new ReferenceCatalogSourceSummaryResponse(
+                    source.SourceId,
+                    source.DisplayName,
+                    source.SourceKind,
+                    source.ActiveSnapshotId.Value,
+                    source.RecordCount,
+                    source.CapturedUtc)).ToArray()))));
+
         app.MapPost("/api/v1/reference-sources/{sourceId}/catalog-searches", async (
             HttpContext context,
             string sourceId,

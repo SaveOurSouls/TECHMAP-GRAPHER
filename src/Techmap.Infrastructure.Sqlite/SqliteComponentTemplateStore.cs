@@ -15,7 +15,7 @@ public sealed class SqliteComponentTemplateStore(
     TimeProvider timeProvider,
     IAttachmentContentStore? attachmentContentStore = null) : IComponentTemplateStore
 {
-    public const int CurrentContentSchemaVersion = 4;
+    public const int CurrentContentSchemaVersion = 5;
     public const int MinimumSupportedContentSchemaVersion = 1;
     public const int MaximumContentBytes = 1024 * 1024;
     public const int MaximumTemplates = 500;
@@ -514,7 +514,11 @@ public sealed class SqliteComponentTemplateStore(
                     "Content schemaVersion must match the request schemaVersion.",
                     "content.schemaVersion");
             }
-            if (schemaVersion == 4)
+            if (schemaVersion == 5)
+            {
+                ComponentTemplateContentV5Validator.Validate(root);
+            }
+            else if (schemaVersion == 4)
             {
                 ComponentTemplateContentV4Validator.Validate(root);
             }

@@ -43,6 +43,8 @@ describe("TemplateSeriesPanelV3", () => {
     const markup = renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
       content, onAddContactTypeGroup: vi.fn(), onRenameContactTypeGroup: vi.fn(), onDeleteContactTypeGroup: vi.fn(),
       onAddArticleVariants: vi.fn(), onDeleteArticleVariant: vi.fn(), onSetArticleContactGroup: vi.fn(), onRemoveArticleContactGroup: vi.fn(),
+      compatibleTerminalArticleKeys: [{ sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "SXH-001T-P0.6" }],
+      onChangeCompatibleTerminalArticleKeys: vi.fn(),
       selectedArticleVariantId: content.articleVariants[0]!.id,
       articlePreviewMessage: "B2B-XH-A: 2 контакта",
       articlePreviewRows: [{ key: "row-1", number: "1", name: "DATA+", circuitText: "NET-DATA+", contactTypeGroupId: groupId }],
@@ -64,7 +66,7 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("Создайте прототип контакта и один домен повтора");
     expect(markup).toContain("либо укажите 0");
     expect(markup).toContain('aria-invalid="true"');
-    expect(markup).toContain("Допустимые терминалы");
+    expect(markup).toContain("Совместимые терминалы серии");
     expect(markup).toContain("Артикул для предпросмотра");
     expect(markup).toContain("Один артикул");
     expect(markup).toContain("По шаблону");
@@ -72,10 +74,9 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("B2B-XH-A: 2 контакта");
     expect(markup).toContain("Материализованные строки контактов");
     expect(markup).toContain("NET-DATA+");
-    expect(markup).toContain('class="series-v3-terminal-heading"');
-    expect(markup).toContain('class="series-v3-terminal-list"');
-    expect(markup).toContain('class="series-v3-terminal-row"');
-    expect(markup).toContain("Их можно выбрать из справочника technology-terminals или добавить вручную.");
+    expect(markup).toContain('class="series-v3-terminal-table"');
+    expect(markup).toContain("<th>Источник</th><th>Тип</th><th>Артикул</th>");
+    expect(markup).not.toContain("Стандартный терминал для типа");
 
     const guideStart = markup.indexOf('<details class="series-v3-guide">');
     const guideEnd = markup.indexOf("</details>", guideStart);

@@ -89,6 +89,18 @@ public sealed class ReferenceCatalogApiTests
         Assert.Equal(validation.Sha256, active?.Sha256);
         Assert.Equal(snapshotId, records?.SnapshotId);
         Assert.Equal(17, Assert.Single(records!.Records).Payload.GetProperty("value").GetInt32());
+
+        using var sourcesResponse = await client.GetAsync(
+            "/api/v1/reference-sources",
+            TestContext.Current.CancellationToken);
+        var sources = await sourcesResponse.Content.ReadFromJsonAsync<ReferenceCatalogSourceSummaryResponse[]>(
+            TestContext.Current.CancellationToken);
+        var source = Assert.Single(sources!);
+        Assert.Equal(HttpStatusCode.OK, sourcesResponse.StatusCode);
+        Assert.Equal("technology-database", source.SourceId);
+        Assert.Equal("xlsx", source.SourceKind);
+        Assert.Equal(snapshotId, source.ActiveSnapshotId);
+        Assert.Equal(1, source.RecordCount);
     }
 
     [Fact]

@@ -20,8 +20,16 @@ import {
   type TemplateContentV4,
   type TemplateV4Upgrade,
 } from "./template-model-v4";
+import {
+  isTemplateContentV5 as isStrictTemplateContentV5,
+  upgradeTemplateContentV3ToV5,
+  upgradeTemplateContentV4ToV5,
+  validateTemplateContentV5,
+  type TemplateContentV5,
+  type TemplateV5Upgrade,
+} from "./template-model-v5";
 
-export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2 | TemplateContentV3 | TemplateContentV4;
+export type ComponentTemplateContent = TemplateContentV1 | TemplateContentV2 | TemplateContentV3 | TemplateContentV4 | TemplateContentV5;
 export type TemplateEnvelopeAsset = Readonly<TemplateAssetV2>;
 export interface TemplateAssetReconciliation {
   readonly assets: TemplateAssetV2[];
@@ -65,6 +73,12 @@ export function parseComponentTemplateContent(value: unknown): ComponentTemplate
       throw new ComponentTemplateContentError("Шаблон v4 не прошёл проверку содержимого.", validation.diagnostics);
     return value as TemplateContentV4;
   }
+  if (candidate.schemaVersion === 5) {
+    const validation = validateTemplateContentV5(value);
+    if (!validation.valid)
+      throw new ComponentTemplateContentError("Шаблон v5 не прошёл проверку содержимого.", validation.diagnostics);
+    return value as TemplateContentV5;
+  }
   throw new ComponentTemplateContentError("Шаблон имеет неподдерживаемую схему содержимого.");
 }
 
@@ -84,6 +98,10 @@ export function isTemplateContentV4(content: ComponentTemplateContent): content 
   return content.schemaVersion === 4 && isStrictTemplateContentV4(content);
 }
 
+export function isTemplateContentV5(content: ComponentTemplateContent): content is TemplateContentV5 {
+  return content.schemaVersion === 5 && isStrictTemplateContentV5(content);
+}
+
 export function upgradeComponentTemplateContentV1(
   content: TemplateContentV1,
   envelopeAssets: readonly TemplateEnvelopeAsset[] = [],
@@ -101,6 +119,14 @@ export function upgradeComponentTemplateContentV2(content: TemplateContentV2): T
 
 export function upgradeComponentTemplateContentV3(content: TemplateContentV3): TemplateV4Upgrade {
   return upgradeTemplateContentV3ToV4(content);
+}
+
+export function upgradeComponentTemplateContentV3ToV5(content: TemplateContentV3): TemplateV5Upgrade {
+  return upgradeTemplateContentV3ToV5(content);
+}
+
+export function upgradeComponentTemplateContentV4(content: TemplateContentV4): TemplateV5Upgrade {
+  return upgradeTemplateContentV4ToV5(content);
 }
 
 export function upgradeComponentTemplateContentV1ToV3(

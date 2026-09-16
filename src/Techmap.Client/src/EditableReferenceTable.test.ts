@@ -34,14 +34,27 @@ describe("editable reference table", () => {
 
     const request = editableReferenceRequest(draft, snapshot.snapshotId);
     expect(request.expectedActiveSnapshotId).toBe(snapshot.snapshotId);
+    expect(request.sourceKind).toBe("editable-table");
     expect(request.records[0]).toMatchObject({
       entityType: "connector", sourceKey: "PHR-02",
       payload: { article: "PHR-02", description: "2 контакта", _techmapFieldLinks: '{"article":"Артикул"}' },
     });
   });
 
+  it("keeps the source kind and untouched JSON value types", () => {
+    const imported = {
+      ...snapshot,
+      sourceKind: "xlsx",
+      records: [{ ...snapshot.records[0]!, payload: { count: 12, enabled: true, nested: { code: "A" } } }],
+    };
+    const request = editableReferenceRequest(editableReferenceDraft(imported), imported.snapshotId);
+
+    expect(request.sourceKind).toBe("xlsx");
+    expect(request.records[0]?.payload).toEqual({ count: 12, enabled: true, nested: { code: "A" } });
+  });
+
   it("rejects empty tables, duplicate fields and duplicate record keys", () => {
-    expect(() => editableReferenceRequest({ sourceUri: "", columns: [], rows: [] }, null)).toThrow(/хотя бы одну строку/i);
+    expect(() => editableReferenceRequest({ sourceKind: "editable-table", sourceUri: "", columns: [], rows: [] }, null)).toThrow(/хотя бы одну строку/i);
     const draft = editableReferenceDraft(snapshot);
     expect(() => editableReferenceRequest({
       ...draft,

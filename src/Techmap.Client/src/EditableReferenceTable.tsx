@@ -18,9 +18,11 @@ export interface EditableReferenceRow {
   readonly entityType: string;
   readonly sourceKey: string;
   readonly values: Readonly<Record<string, string>>;
+  readonly originalValues: Readonly<Record<string, unknown>>;
 }
 
 export interface EditableReferenceDraft {
+  readonly sourceKind: string;
   readonly sourceUri: string;
   readonly columns: readonly EditableReferenceColumn[];
   readonly rows: readonly EditableReferenceRow[];
@@ -62,8 +64,9 @@ export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null
     entityType: record.entityType,
     sourceKey: record.sourceKey,
     values: Object.fromEntries(columns.map((column) => [column.id, textValue(record.payload[column.name])])),
+    originalValues: Object.fromEntries(columns.map((column) => [column.id, record.payload[column.name]])),
   }));
-  return { sourceUri: snapshot?.sourceUri ?? "", columns, rows };
+  return { sourceKind: snapshot?.sourceKind ?? "editable-table", sourceUri: snapshot?.sourceUri ?? "", columns, rows };
 }
 
 export function editableReferenceRequest(
@@ -95,7 +98,11 @@ export function editableReferenceRequest(
       entityType,
       sourceKey,
       payload: {
-        ...Object.fromEntries(normalizedColumns.map((column) => [column.name, row.values[column.id] ?? ""])),
+        ...Object.fromEntries(normalizedColumns.map((column) => {
+          const value = row.values[column.id] ?? "";
+          const original = row.originalValues[column.id];
+          return [column.name, original !== undefined && value === textValue(original) ? original : value];
+        })),
         ...(Object.keys(links).length > 0 ? { [fieldLinksKey]: JSON.stringify(links) } : {}),
       },
       sourceLocation: null,
@@ -103,6 +110,7 @@ export function editableReferenceRequest(
   });
   return {
     expectedActiveSnapshotId,
+    sourceKind: draft.sourceKind,
     sourceUri: draft.sourceUri.trim() || null,
     records,
   };
@@ -169,7 +177,7 @@ export function EditableReferenceTable({ sourceId, snapshot, disabled, onSave }:
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setDraft({
         ...draft,
         rows: [...draft.rows, {
-          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? "generic-record", sourceKey: "", values: {},
+          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? "generic-record", sourceKey: "", values: {}, originalValues: {},
         }],
       })}>+ Строка</button>
     </div>

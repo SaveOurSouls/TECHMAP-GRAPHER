@@ -262,6 +262,17 @@ public sealed class ReferenceCatalogSnapshotTests
             .ThenBy(snapshot => snapshot.SnapshotId.Value)
             .ToArray();
 
+        public IReadOnlyList<ReferenceCatalogSourceSummary> ListActiveSources() => active
+            .Select(item => versions[item.Value])
+            .Select(snapshot => new ReferenceCatalogSourceSummary(
+                snapshot.SourceId,
+                snapshot.SourceId,
+                snapshot.Provenance.SourceKind,
+                snapshot.SnapshotId,
+                snapshot.Records.Count,
+                snapshot.CapturedUtc))
+            .ToArray();
+
         public ReferenceCatalogStorePublishResult TryPublish(
             ReferenceCatalogSnapshot candidate,
             ReferenceCatalogSnapshotIdentity? expectedActiveSnapshotId)

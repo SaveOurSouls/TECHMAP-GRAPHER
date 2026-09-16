@@ -8,6 +8,38 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateV2StoreTests
 {
     [Fact]
+    public void Store_persists_v5_and_keeps_v1_through_v4_readable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-v5", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var v1 = store.Create("SERIES-V5", "Series", [], 1, V1Content);
+            var v2 = store.Update(v1.TemplateId, v1.Version, "SERIES-V5", "Series v2", [], 2, V2Content);
+            var v3 = store.Update(v1.TemplateId, v2.Version, "SERIES-V5", "Series v3",
+                ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 3,
+                ComponentTemplateContentV3ValidatorTests.ValidContentJson);
+            var v4 = store.Update(v1.TemplateId, v3.Version, "SERIES-V5", "Series v4",
+                ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 4,
+                ComponentTemplateContentV4ValidatorTests.ValidContentJson);
+            var v5 = store.Update(v1.TemplateId, v4.Version, "SERIES-V5", "Series v5",
+                ComponentTemplateContentV3ValidatorTests.ValidArticleBindings, 5,
+                ComponentTemplateContentV5ValidatorTests.ValidContentJson);
+
+            Assert.Equal(5, v5.SchemaVersion);
+            Assert.Equal([1, 2, 3, 4, 5], Enumerable.Range(1, 5)
+                .Select(version => store.GetVersion(v1.TemplateId, version).SchemaVersion));
+            Assert.Equal(5, store.Get(v1.TemplateId).SchemaVersion);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Store_persists_v4_and_keeps_v3_history_readable()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-v4", Guid.NewGuid().ToString("N"));

@@ -46,6 +46,12 @@ export interface E4ConnectorArticleContactGroup {
   readonly allowedTerminalArticleKeys: readonly ArticleKeyV3[];
 }
 
+/** Schema-v5 article summary. Terminal compatibility belongs to the series. */
+export interface E4ConnectorArticleContactGroupV2 {
+  readonly contactTypeGroupId: string;
+  contactCount: number;
+}
+
 export interface E4ConnectorArticleTable {
   readonly articleVariantId: string;
   readonly sourceId: string;
@@ -68,6 +74,16 @@ export interface E4ConnectorSeriesTable {
   readonly contactTypeGroups: readonly ContactTypeGroupV3[];
   readonly seriesDefaults: readonly E4ConnectorSeriesRowDefault[];
   readonly articles: readonly E4ConnectorArticleTable[];
+}
+
+export interface E4ConnectorArticleTableV2 extends Omit<E4ConnectorArticleTable, "contactGroups"> {
+  readonly contactGroups: readonly E4ConnectorArticleContactGroupV2[];
+}
+
+/** E4 table persisted by component-template schema v5. */
+export interface E4ConnectorSeriesTableV2 extends Omit<E4ConnectorSeriesTable, "modelVersion" | "articles"> {
+  readonly modelVersion: 2;
+  readonly articles: readonly E4ConnectorArticleTableV2[];
 }
 
 export interface MaterializedE4ConnectorArticleRow extends E4ConnectorRowValues {
@@ -102,6 +118,54 @@ export interface E4ConnectorSeriesTableDiagnostic {
 export interface E4ConnectorSeriesTableValidation {
   readonly valid: boolean;
   readonly diagnostics: readonly E4ConnectorSeriesTableDiagnostic[];
+}
+
+/** Removes the terminal arrays duplicated by the v4 table without touching row edits. */
+export function upgradeE4ConnectorSeriesTableV1ToV2(
+  table: E4ConnectorSeriesTable,
+): E4ConnectorSeriesTableV2 {
+  return {
+    modelVersion: 2,
+    columns: table.columns.map(column => ({ ...column })),
+    contactTypeGroups: table.contactTypeGroups.map(group => ({ ...group })),
+    seriesDefaults: table.seriesDefaults.map(row => ({ rowId: row.rowId, values: cloneRowValues(row.values) })),
+    articles: table.articles.map(article => ({
+      articleVariantId: article.articleVariantId,
+      sourceId: article.sourceId,
+      entityType: article.entityType,
+      articleKey: article.articleKey,
+      contactGroups: article.contactGroups.map(group => ({
+        contactTypeGroupId: group.contactTypeGroupId,
+        contactCount: group.contactCount,
+      })),
+      rows: article.rows.map(row => ({ seriesRowId: row.seriesRowId, overrides: cloneOverride(row.overrides) })),
+    })),
+  };
+}
+
+/** Builds the legacy in-memory editor projection for a persisted v5 table. */
+export function projectE4ConnectorSeriesTableV2ToV1(
+  table: E4ConnectorSeriesTableV2,
+  compatibleTerminalArticleKeys: readonly ArticleKeyV3[],
+): E4ConnectorSeriesTable {
+  return {
+    modelVersion: 1,
+    columns: table.columns.map(column => ({ ...column })),
+    contactTypeGroups: table.contactTypeGroups.map(group => ({ ...group })),
+    seriesDefaults: table.seriesDefaults.map(row => ({ rowId: row.rowId, values: cloneRowValues(row.values) })),
+    articles: table.articles.map(article => ({
+      articleVariantId: article.articleVariantId,
+      sourceId: article.sourceId,
+      entityType: article.entityType,
+      articleKey: article.articleKey,
+      contactGroups: article.contactGroups.map(group => ({
+        contactTypeGroupId: group.contactTypeGroupId,
+        contactCount: group.contactCount,
+        allowedTerminalArticleKeys: compatibleTerminalArticleKeys.map(cloneArticleKey),
+      })),
+      rows: article.rows.map(row => ({ seriesRowId: row.seriesRowId, overrides: cloneOverride(row.overrides) })),
+    })),
+  };
 }
 
 export class E4ConnectorSeriesTableError extends Error {

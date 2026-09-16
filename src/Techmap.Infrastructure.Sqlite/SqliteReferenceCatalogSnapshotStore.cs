@@ -70,6 +70,40 @@ public sealed class SqliteReferenceCatalogSnapshotStore(SqliteStorage storage)
         });
     }
 
+    public IReadOnlyList<ReferenceCatalogSourceSummary> ListActiveSources()
+    {
+        return storage.ExecuteRead(unitOfWork =>
+        {
+            using var command = unitOfWork.CreateCommand(
+                """
+                SELECT s.source_key, s.display_name, s.source_kind, h.snapshot_id,
+                       COUNT(rr.source_record_key), r.captured_utc
+                FROM reference_sources s
+                JOIN reference_source_heads h ON h.source_id = s.source_id
+                JOIN reference_snapshots r ON r.snapshot_id = h.snapshot_id
+                LEFT JOIN reference_snapshot_records rr ON rr.snapshot_id = h.snapshot_id
+                WHERE r.lifecycle_status = 'published'
+                GROUP BY s.source_id, s.source_key, s.display_name, s.source_kind,
+                         h.snapshot_id, r.captured_utc
+                ORDER BY s.display_name, s.source_key;
+                """);
+            using var reader = command.ExecuteReader();
+            var result = new List<ReferenceCatalogSourceSummary>();
+            while (reader.Read())
+            {
+                result.Add(new ReferenceCatalogSourceSummary(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    new ReferenceCatalogSnapshotIdentity(ParseGuid(reader.GetString(3))),
+                    checked((int)reader.GetInt64(4)),
+                    ParseDate(reader.GetString(5))));
+            }
+
+            return result;
+        });
+    }
+
     public ReferenceCatalogStorePublishResult TryPublish(
         ReferenceCatalogSnapshot candidate,
         ReferenceCatalogSnapshotIdentity? expectedActiveSnapshotId)

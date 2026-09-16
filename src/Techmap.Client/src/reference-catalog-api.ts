@@ -80,6 +80,15 @@ export interface ReferenceCatalogSnapshot {
   readonly diagnostics: readonly ReferenceCatalogDiagnostic[];
 }
 
+export interface ReferenceCatalogSourceSummary {
+  readonly sourceId: string;
+  readonly displayName: string;
+  readonly sourceKind: string;
+  readonly activeSnapshotId: string;
+  readonly recordCount: number;
+  readonly capturedUtc: string;
+}
+
 export interface XlsxSheet {
   readonly name: string;
   readonly hidden: boolean;
@@ -141,12 +150,13 @@ export interface ReferenceCatalogPublication {
 export interface EditableReferenceRecord {
   readonly entityType: string;
   readonly sourceKey: string;
-  readonly payload: Readonly<Record<string, string>>;
+  readonly payload: Readonly<Record<string, unknown>>;
   readonly sourceLocation?: string | null;
 }
 
 export interface PublishEditableReferenceTableRequest {
   readonly expectedActiveSnapshotId: string | null;
+  readonly sourceKind: string;
   readonly sourceUri: string | null;
   readonly records: readonly EditableReferenceRecord[];
 }
@@ -185,6 +195,7 @@ export interface ReferenceCatalogSearchPage {
 
 export interface ReferenceCatalogApi {
   getXlsxProfiles(): Promise<readonly XlsxImportProfile[]>;
+  listSources(): Promise<readonly ReferenceCatalogSourceSummary[]>;
   getActive(sourceId: string): Promise<ReferenceCatalogSnapshot | null>;
   previewXlsx(sourceId: string, request: XlsxPreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
@@ -437,6 +448,27 @@ function parseSnapshot(value: unknown): ReferenceCatalogSnapshot {
   });
 }
 
+function parseSourceSummary(value: unknown): ReferenceCatalogSourceSummary {
+  const record = requireRecord(value, "Сервер вернул повреждённое описание справочника.");
+  return Object.freeze({
+    sourceId: requireString(record, "sourceId"),
+    displayName: requireString(record, "displayName"),
+    sourceKind: requireString(record, "sourceKind"),
+    activeSnapshotId: requireUuid(record, "activeSnapshotId"),
+    recordCount: requireInteger(record, "recordCount", 0),
+    capturedUtc: requireDateTime(record, "capturedUtc"),
+  });
+}
+
+function parseSourceSummaries(value: unknown): readonly ReferenceCatalogSourceSummary[] {
+  if (!Array.isArray(value)) throw new Error("Сервер вернул повреждённый список справочников.");
+  const sources = value.map(parseSourceSummary);
+  if (new Set(sources.map((source) => source.sourceId)).size !== sources.length) {
+    throw new Error("Сервер вернул повторяющиеся справочники.");
+  }
+  return Object.freeze(sources);
+}
+
 function parsePreviewRecord(value: unknown): XlsxPreviewRecord {
   const record = requireRecord(value, "Сервер вернул повреждённую строку просмотра XLSX.");
   return Object.freeze({
@@ -569,7 +601,7 @@ export function createReferenceCatalogApi(
       snapshotId,
       contractVersion: 1,
       capturedUtc,
-      sourceKind: "editable-table",
+      sourceKind: editable.sourceKind,
       versionFingerprint: `editable:${capturedUtc}:${snapshotId}`,
       sourceUri: editable.sourceUri,
       records: editable.records.map((record) => ({
@@ -628,6 +660,11 @@ export function createReferenceCatalogApi(
       "reference-import/xlsx-profiles",
       { method: "GET", headers: { Accept: "application/json" } },
       parseXlsxProfiles,
+    ),
+    listSources: () => request(
+      "reference-sources",
+      { method: "GET", headers: { Accept: "application/json" } },
+      parseSourceSummaries,
     ),
     getActive: async (sourceId: string) => {
       try {

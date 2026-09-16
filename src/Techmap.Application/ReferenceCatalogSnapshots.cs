@@ -20,11 +20,20 @@ public sealed record ReferenceCatalogStorePublishResult(
     ReferenceCatalogSnapshotIdentity? PreviousActiveSnapshotId,
     ReferenceCatalogSnapshot? EffectiveSnapshot = null);
 
+public sealed record ReferenceCatalogSourceSummary(
+    string SourceId,
+    string DisplayName,
+    string SourceKind,
+    ReferenceCatalogSnapshotIdentity ActiveSnapshotId,
+    int RecordCount,
+    DateTimeOffset CapturedUtc);
+
 public interface IReferenceCatalogSnapshotStore
 {
     ReferenceCatalogSnapshot? GetActive(string sourceId);
     ReferenceCatalogSnapshot? Get(ReferenceCatalogSnapshotIdentity snapshotId);
     IReadOnlyList<ReferenceCatalogSnapshot> List(string sourceId);
+    IReadOnlyList<ReferenceCatalogSourceSummary> ListActiveSources();
 
     // The candidate and active pointer must be committed atomically. A conflict or exception must
     // leave the prior active snapshot and all previously published versions unchanged.

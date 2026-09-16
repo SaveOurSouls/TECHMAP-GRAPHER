@@ -45,9 +45,11 @@ describe("reference import panel", () => {
     const markup = renderToStaticMarkup(createElement(ReferenceImportPanel, { config, session }));
 
     expect(markup).toContain("Справочники");
-    expect(markup).toContain("Справочник для редактирования");
+    expect(markup).toContain("ЗАГРУЖЕННЫЕ ТАБЛИЦЫ");
+    expect(markup).toContain("Загружаем список");
+    expect(markup).toContain("Новая таблица");
     expect(markup).toContain("technology-connectors");
-    expect(markup).toContain("Таблица не зависит от БД.ОП");
+    expect(markup).toContain("Выберите загруженный справочник слева");
     expect(markup).toContain("Выбрать рабочую книгу");
     expect(markup).toContain("Google Sheets");
     expect(markup).toContain("экспериментально");

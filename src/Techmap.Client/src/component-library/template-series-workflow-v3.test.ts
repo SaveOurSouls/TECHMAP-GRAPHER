@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { TemplateSeriesPanelV3, formatTerminalArticleKeysV3, parseTerminalArticleKeysV3, standardTerminalKeyV3, type TemplateSeriesPanelV3Props } from "./TemplateSeriesPanelV3";
+import { TemplateSeriesPanelV3, formatTerminalArticleKeysV3, parseTerminalArticleKeysV3, type TemplateSeriesPanelV3Props } from "./TemplateSeriesPanelV3";
 import {
   addBasicNodeV3,
   addContactPointV3,
@@ -19,8 +19,19 @@ import {
 } from "./template-commands-v3";
 import { validateTemplateContentV3, type ArticleKeyV3, type TemplateContentV3 } from "./template-model-v3";
 
+const seriesTerminals = (content: TemplateContentV3): ArticleKeyV3[] => {
+  const result: ArticleKeyV3[] = [], seen = new Set<string>();
+  for (const terminal of content.articleVariants.flatMap(variant =>
+    (variant.contactGroups ?? []).flatMap(group => group.allowedTerminalArticleKeys))) {
+    const identity = `${terminal.sourceId}\0${terminal.entityType}\0${terminal.articleKey}`;
+    if (!seen.has(identity)) { seen.add(identity); result.push(terminal); }
+  }
+  return result;
+};
+
 const renderSeriesPanel = (content: TemplateContentV3, overrides: Partial<TemplateSeriesPanelV3Props> = {}) => renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
   content,
+  compatibleTerminalArticleKeys: seriesTerminals(content),
   selectedArticleVariantId: content.articleVariants[0]?.id,
   onAddContactTypeGroup: vi.fn(),
   onRenameContactTypeGroup: vi.fn(),
@@ -184,7 +195,7 @@ describe("template series v3 end-to-end workflow", () => {
       .toThrowError(expect.objectContaining({ code: "invalid_contact_count" }));
   });
 
-  it("shows terminal catalog results and an explicit standard terminal for a selected contact type", () => {
+  it("shows terminal catalog results and one compatibility table for the series", () => {
     const [withGroup, groupId] = addContactTypeGroupV3(newTemplateContentV3(), "Сигнальные");
     const [withContact] = addContactPointV3(withGroup, withGroup.views[0]!.id, { contactTypeGroupId: groupId });
     const [withVariant, variantId] = upsertArticleVariantV3(withContact, {
@@ -196,14 +207,15 @@ describe("template series v3 end-to-end workflow", () => {
       terminalArticleQuery: "SXH",
       terminalArticleSuggestions: [standard, { ...standard, articleKey: "SXH-002T-P0.6" }],
       terminalArticleSearchState: "ready",
-      standardTerminalArticleKeys: { [standardTerminalKeyV3(variantId, groupId)]: standard },
-      onSetStandardTerminal: vi.fn(),
+      compatibleTerminalArticleKeys: [standard],
+      onChangeCompatibleTerminalArticleKeys: vi.fn(),
     });
 
     expect(markup).toContain("technology-terminals");
     expect(markup).toContain("SXH-002T-P0.6");
-    expect(markup).toContain("Стандартный терминал для типа");
-    expect(markup).toContain('value="technology-terminals\u0000terminal\u0000SXH-001T-P0.6" selected=""');
+    expect(markup).toContain("Совместимые терминалы серии");
+    expect(markup).toContain("<th>Источник</th><th>Тип</th><th>Артикул</th>");
+    expect(markup).not.toContain("Стандартный терминал для типа");
   });
 
   it("keeps every controlled group edit in content when another group changes", () => {

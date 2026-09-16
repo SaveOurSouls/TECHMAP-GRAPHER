@@ -98,6 +98,9 @@ export interface TemplateSeriesPanelV3Props {
   readonly terminalArticleSearchState?: "idle" | "loading" | "ready" | "error";
   readonly terminalArticleSearchMessage?: string | null;
   readonly onTerminalArticleQueryChange?: (query: string) => void;
+  /** One compatibility list for the whole connector series (schema v5). */
+  readonly compatibleTerminalArticleKeys?: readonly ArticleKeyV3[];
+  readonly onChangeCompatibleTerminalArticleKeys?: (keys: readonly ArticleKeyV3[]) => void;
   readonly onAddContactTypeGroup: (name: string) => void;
   readonly onRenameContactTypeGroup: (groupId: string, name: string) => void;
   readonly onDeleteContactTypeGroup: (groupId: string) => void;
@@ -256,53 +259,58 @@ function GroupNameEditor({ id, name, onRename, onDelete }: {
   </li>;
 }
 
-function VariantTerminalEditor({ content, variantId, groupId, onSet, onRemove, terminalQuery,
-  terminalSuggestions, terminalSearchState, terminalSearchMessage, onTerminalQueryChange,
-  standardTerminal, onSetStandardTerminal }: {
-  readonly content: TemplateContentV3; readonly variantId: string; readonly groupId: string;
-  readonly onSet: TemplateSeriesPanelV3Props["onSetArticleContactGroup"];
-  readonly onRemove: TemplateSeriesPanelV3Props["onRemoveArticleContactGroup"];
+function terminalIdentity(terminal: ArticleKeyV3): string {
+  return `${terminal.sourceId}\0${terminal.entityType}\0${terminal.articleKey}`;
+}
+
+function SeriesTerminalRow({ terminal, index, onChange, onRemove }: {
+  readonly terminal: ArticleKeyV3;
+  readonly index: number;
+  readonly onChange: (index: number, patch: TerminalArticleKeyPatchV3) => void;
+  readonly onRemove: (index: number) => void;
+}) {
+  const [draft, setDraft] = useState(terminal);
+  useEffect(() => setDraft(terminal), [terminal.sourceId, terminal.entityType, terminal.articleKey]);
+  const commit = () => onChange(index, draft);
+  return <tr>
+    <td><input aria-label={`Источник терминала ${index + 1}`} value={draft.sourceId}
+      onChange={event => setDraft(current => ({ ...current, sourceId: event.target.value }))} onBlur={commit} /></td>
+    <td><input aria-label={`Тип терминала ${index + 1}`} value={draft.entityType}
+      onChange={event => setDraft(current => ({ ...current, entityType: event.target.value }))} onBlur={commit} /></td>
+    <td><input aria-label={`Артикул терминала ${index + 1}`} value={draft.articleKey}
+      onChange={event => setDraft(current => ({ ...current, articleKey: event.target.value }))} onBlur={commit} /></td>
+    <td><button type="button" className="series-v3-remove-terminal" aria-label={`Удалить терминал ${index + 1}`} onClick={() => onRemove(index)}>×</button></td>
+  </tr>;
+}
+
+function SeriesTerminalEditor({ terminals, onChange, terminalQuery,
+  terminalSuggestions, terminalSearchState, terminalSearchMessage, onTerminalQueryChange }: {
+  readonly terminals: readonly ArticleKeyV3[];
+  readonly onChange?: (keys: readonly ArticleKeyV3[]) => void;
   readonly terminalQuery: string;
   readonly terminalSuggestions: readonly ArticleKeyV3[];
   readonly terminalSearchState: "idle" | "loading" | "ready" | "error";
   readonly terminalSearchMessage: string | null;
   readonly onTerminalQueryChange?: (query: string) => void;
-  readonly standardTerminal: ArticleKeyV3 | null;
-  readonly onSetStandardTerminal?: (variantId: string, groupId: string, terminal: ArticleKeyV3 | null) => void;
 }) {
-  const variant = content.articleVariants.find(item => item.id === variantId)!;
-  const group = content.contactTypeGroups.find(item => item.id === groupId)!;
-  const editor = articleContactGroupEditorValueV3(content, variantId, groupId);
-  const configuredTerminals = editor.allowedTerminalArticleKeys;
-  const parsedCount = editor.contactCount;
-  const countHelp = articleContactGroupCountHelpV3(
-    content,
-    groupId,
-    editor.contactCount,
-    editor.inherited,
-  );
   const setTerminalField = (index: number, patch: TerminalArticleKeyPatchV3) => {
-    const next = updateTerminalArticleKeyV3(configuredTerminals, index, patch);
-    if (next) onSet(variant.id, group.id, parsedCount, next);
+    const next = updateTerminalArticleKeyV3(terminals, index, patch);
+    if (next) onChange?.(next);
   };
   const removeTerminal = (index: number) => {
-    const next = configuredTerminals.filter((_, candidateIndex) => candidateIndex !== index);
-    onSet(variant.id, group.id, parsedCount, next);
+    onChange?.(terminals.filter((_, candidateIndex) => candidateIndex !== index));
   };
   const addTerminal = () => {
-    const next = appendTerminalArticleKeyV3(configuredTerminals, { sourceId: TERMINAL_REFERENCE_SOURCE_V3, entityType: TERMINAL_ARTICLE_ENTITY_V3, articleKey: `Новый-${configuredTerminals.length + 1}` });
-    if (next) onSet(variant.id, group.id, parsedCount, next);
+    const next = appendTerminalArticleKeyV3(terminals, { sourceId: TERMINAL_REFERENCE_SOURCE_V3, entityType: TERMINAL_ARTICLE_ENTITY_V3, articleKey: `Новый-${terminals.length + 1}` });
+    if (next) onChange?.(next);
   };
-  const terminalIdentity = (terminal: ArticleKeyV3) => `${terminal.sourceId}\0${terminal.entityType}\0${terminal.articleKey}`;
   const addTerminalFromReference = (terminal: ArticleKeyV3) => {
-    const next = appendTerminalArticleKeyV3(configuredTerminals, terminal);
-    if (next) onSet(variant.id, group.id, parsedCount, next);
+    const next = appendTerminalArticleKeyV3(terminals, terminal);
+    if (next) onChange?.(next);
   };
-  const standardValue = standardTerminal === null ? "" : terminalIdentity(standardTerminal);
-  return <section className={editor.configured ? "series-v3-contact-group configured" : "series-v3-contact-group"} aria-label={`Терминалы ${group.name} артикула ${variant.articleKey}`}>
-    <header><strong>{group.name}</strong><span>{parsedCount} конт.; {editor.inherited ? "наследуется из шаблона" : editor.configured ? "собственная настройка" : "не включена в артикул"}</span></header>
-    <small id={`contact-count-help-${variant.id}-${group.id}`} role={countHelp.invalid ? "alert" : undefined}>{countHelp.text}</small>
-    <div className="series-v3-terminal-heading"><strong>Допустимые терминалы</strong><button type="button" aria-label={`Добавить терминал для группы ${group.name} артикула ${variant.articleKey}`} onClick={addTerminal}>+ Вручную</button></div>
+  return <section className="series-v3-series-terminals" aria-label="Совместимые терминалы серии">
+    <header><div><strong>Совместимые терминалы серии</strong><small>Этот список доступен в поле «Терминал» для всех строк Э4 серии.</small></div>
+      <button type="button" disabled={!onChange} onClick={addTerminal}>+ Вручную</button></header>
     <div className="series-v3-terminal-reference-search">
       <label>Найти в справочнике technology-terminals
         <input type="search" value={terminalQuery} placeholder="Например, SXH-001T"
@@ -311,9 +319,9 @@ function VariantTerminalEditor({ content, variantId, groupId, onSet, onRemove, t
       {terminalSearchState === "loading" && <small role="status">Ищем терминалы…</small>}
       {terminalSearchMessage && <small className="series-v3-reference-error" role="alert">{terminalSearchMessage}</small>}
       {terminalSearchState === "ready" && terminalQuery.trim() && terminalSuggestions.length === 0 && <small>Подходящие терминалы не найдены.</small>}
-      {terminalSuggestions.length > 0 && <div className="series-v3-terminal-reference-options" role="listbox" aria-label={`Терминалы из справочника для группы ${group.name}`}>
+      {terminalSuggestions.length > 0 && <div className="series-v3-terminal-reference-options" role="listbox" aria-label="Терминалы из справочника для серии">
         {terminalSuggestions.map(terminal => {
-          const exists = configuredTerminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal));
+          const exists = terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal));
           return <button type="button" key={terminalIdentity(terminal)} disabled={exists}
             onClick={() => addTerminalFromReference(terminal)}>
             <strong>{terminal.articleKey}</strong><span>{exists ? "добавлен" : "+ допустимый"}</span>
@@ -321,30 +329,10 @@ function VariantTerminalEditor({ content, variantId, groupId, onSet, onRemove, t
         })}
       </div>}
     </div>
-    {configuredTerminals.length === 0 && <small>Терминалы не заданы.</small>}
-    <div className="series-v3-terminal-list">
-      {configuredTerminals.map((terminal, index) => {
-        return <div className="series-v3-terminal-row" key={`${variant.id}-${group.id}-${index}`}>
-          <label>Источник<input aria-label={`Источник терминала ${index + 1}`} value={terminal.sourceId} onChange={event => setTerminalField(index, { sourceId: event.target.value })} /></label>
-          <label>Тип<input aria-label={`Тип терминала ${index + 1}`} value={terminal.entityType} onChange={event => setTerminalField(index, { entityType: event.target.value })} /></label>
-          <label>Артикул<input aria-label={`Артикул терминала ${index + 1}`} value={terminal.articleKey} onChange={event => setTerminalField(index, { articleKey: event.target.value })} /></label>
-          <button type="button" className="series-v3-remove-terminal" aria-label={`Удалить терминал ${index + 1}`} onClick={() => removeTerminal(index)}>×</button>
-        </div>;
-      })}
-    </div>
-    <label className="series-v3-standard-terminal">Стандартный терминал для типа
-      <select value={standardValue} disabled={!onSetStandardTerminal || configuredTerminals.length === 0}
-        onChange={event => onSetStandardTerminal?.(
-          variant.id,
-          group.id,
-          configuredTerminals.find(terminal => terminalIdentity(terminal) === event.currentTarget.value) ?? null,
-        )}>
-        <option value="">Не выбран</option>
-        {configuredTerminals.map(terminal => <option key={terminalIdentity(terminal)} value={terminalIdentity(terminal)}>{terminal.articleKey}</option>)}
-      </select>
-    </label>
-    <small>Применяется ко всем контактам этого типа в выбранном артикуле.</small>
-    {editor.configured && <button type="button" aria-label={`Убрать собственную настройку группы ${group.name} артикула ${variant.articleKey}`} onClick={() => onRemove(variant.id, group.id)}>Убрать собственную настройку</button>}
+    {terminals.length === 0 ? <small>Совместимые терминалы пока не заданы.</small> : <div className="series-v3-terminal-table-wrap"><table className="series-v3-terminal-table">
+      <thead><tr><th>Источник</th><th>Тип</th><th>Артикул</th><th aria-label="Удалить" /></tr></thead>
+      <tbody>{terminals.map((terminal, index) => <SeriesTerminalRow key={terminalIdentity(terminal)} terminal={terminal} index={index} onChange={setTerminalField} onRemove={removeTerminal} />)}</tbody>
+    </table></div>}
   </section>;
 }
 
@@ -367,8 +355,9 @@ function VariantIdentityEditor({ variant, onUpdate }: {
     onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />;
 }
 
-function ArticleVariantsTable({ content, selectedArticleVariantId, onSelect, onUpdate, onDelete, onSet }: {
+function ArticleVariantsTable({ content, compatibleTerminals, selectedArticleVariantId, onSelect, onUpdate, onDelete, onSet }: {
   readonly content: TemplateContentV3;
+  readonly compatibleTerminals: readonly ArticleKeyV3[];
   readonly selectedArticleVariantId?: string | null;
   readonly onSelect?: (variantId: string | null) => void;
   readonly onUpdate?: TemplateSeriesPanelV3Props["onUpdateArticleVariant"];
@@ -396,13 +385,11 @@ function ArticleVariantsTable({ content, selectedArticleVariantId, onSelect, onU
               onChange={event => {
                 const count = Number(event.target.value);
                 if (Number.isSafeInteger(count) && count >= 0 && count <= 2_000)
-                  onSet(variant.id, group.id, count, editor.allowedTerminalArticleKeys);
+                  onSet(variant.id, group.id, count, compatibleTerminals);
               }} />
           </td>;
         })}
         <td className="series-v3-row-actions">
-          <button type="button" className="series-v3-select-article" aria-pressed={variant.id === selectedArticleVariantId}
-            onClick={() => onSelect?.(variant.id)}>Терминалы</button>
           <button type="button" className="series-v3-delete-article" aria-label={`Удалить артикул ${variant.articleKey}`}
             onClick={() => onDelete(variant.id)}>×</button>
         </td>
@@ -455,6 +442,15 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
   return <details className="template-series-v3">
     <summary>Серия и артикулы <span>{props.content.articleVariants.length}</span></summary>
     <div className="template-series-v3-body">
+      <SeriesTerminalEditor
+        terminals={props.compatibleTerminalArticleKeys ?? []}
+        onChange={props.onChangeCompatibleTerminalArticleKeys}
+        terminalQuery={props.terminalArticleQuery ?? ""}
+        terminalSuggestions={props.terminalArticleSuggestions ?? []}
+        terminalSearchState={props.terminalArticleSearchState ?? "idle"}
+        terminalSearchMessage={props.terminalArticleSearchMessage ?? null}
+        onTerminalQueryChange={props.onTerminalArticleQueryChange}
+      />
       <details className="series-v3-guide">
         <summary>Как заполнить шаблон</summary>
         <ol aria-label="Порядок заполнения шаблона">
@@ -552,25 +548,10 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
           <button type="submit" disabled={Boolean(addPreview.error) || addPreview.articles.length === 0}>+ {addPreview.articles.length > 1 ? `${addPreview.articles.length} артикулов` : "Артикул"}</button>
         </form>
         {props.content.articleVariants.length ? <>
-          <ArticleVariantsTable content={props.content} selectedArticleVariantId={props.selectedArticleVariantId}
+          <ArticleVariantsTable content={props.content} compatibleTerminals={props.compatibleTerminalArticleKeys ?? []} selectedArticleVariantId={props.selectedArticleVariantId}
             onSelect={props.onSelectArticleVariant} onUpdate={props.onUpdateArticleVariant}
             onDelete={props.onDeleteArticleVariant} onSet={props.onSetArticleContactGroup} />
           {!props.content.contactTypeGroups.length && <p>Создайте хотя бы один тип контакта, чтобы появилась колонка количества.</p>}
-          <p className="series-v3-reference-limit">Допустимые терминалы хранятся для каждого типа контактов. Их можно выбрать из справочника technology-terminals или добавить вручную.</p>
-          {props.selectedArticleVariantId && props.content.articleVariants.some(variant => variant.id === props.selectedArticleVariantId) &&
-            <div className="series-v3-selected-terminals" aria-label="Допустимые терминалы выбранного артикула">
-              <header><strong>Допустимые терминалы: {props.content.articleVariants.find(variant => variant.id === props.selectedArticleVariantId)!.articleKey}</strong></header>
-              {props.content.contactTypeGroups.map(group => <VariantTerminalEditor key={group.id} content={props.content}
-                variantId={props.selectedArticleVariantId!} groupId={group.id}
-                onSet={props.onSetArticleContactGroup} onRemove={props.onRemoveArticleContactGroup}
-                terminalQuery={props.terminalArticleQuery ?? ""}
-                terminalSuggestions={props.terminalArticleSuggestions ?? []}
-                terminalSearchState={props.terminalArticleSearchState ?? "idle"}
-                terminalSearchMessage={props.terminalArticleSearchMessage ?? null}
-                onTerminalQueryChange={props.onTerminalArticleQueryChange}
-                standardTerminal={props.standardTerminalArticleKeys?.[standardTerminalKeyV3(props.selectedArticleVariantId!, group.id)] ?? null}
-                onSetStandardTerminal={props.onSetStandardTerminal} />)}
-            </div>}
         </> : <p>Артикулы серии ещё не добавлены.</p>}
       </section>
     </div>

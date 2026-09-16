@@ -6,6 +6,7 @@ import type {
   TemplateNodeV3,
 } from "../component-library/template-model-v3";
 import type { TemplateContentV4 } from "../component-library/template-model-v4";
+import { projectTemplateContentV5ToV3, type TemplateContentV5 } from "../component-library/template-model-v5";
 import {
   expandTemplateViewRepeatsV2,
   resolveTemplateParameterValuesV2,
@@ -18,7 +19,7 @@ export interface ComponentTemplateViewInstance {
   readonly objectId: string;
   readonly snapshotId: string;
   readonly articleVariantId: string;
-  readonly content: TemplateContentV3 | TemplateContentV4;
+  readonly content: TemplateContentV3 | TemplateContentV4 | TemplateContentV5;
 }
 
 export type ResolveComponentTemplateAssetUrl = (snapshotId: string, assetId: string) => string;
@@ -305,6 +306,7 @@ export function projectComponentTemplateView(
   try {
     const v3Content: TemplateContentV3 = instance.content.schemaVersion === 3
       ? instance.content
+      : instance.content.schemaVersion === 5 ? projectTemplateContentV5ToV3(instance.content)
       : (() => {
           const { e4ConnectorTable: _table, ...core } = instance.content;
           return { ...core, schemaVersion: 3 };

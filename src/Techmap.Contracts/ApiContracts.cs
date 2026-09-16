@@ -374,6 +374,14 @@ public sealed record ReferenceCatalogRecordListResponse(
     string SnapshotSha256,
     IReadOnlyList<ReferenceCatalogRecordResponse> Records);
 
+public sealed record ReferenceCatalogSourceSummaryResponse(
+    string SourceId,
+    string DisplayName,
+    string SourceKind,
+    Guid ActiveSnapshotId,
+    int RecordCount,
+    DateTimeOffset CapturedUtc);
+
 public sealed record ReferenceCatalogSearchFilterRequest(
     string? Field,
     string? Operator,

@@ -8,7 +8,7 @@ import {
 } from "../reference-catalog-api";
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
-import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2, upgradeComponentTemplateContentV3 } from "./template-content";
+import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, isTemplateContentV5, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
 import { E4ConnectorTableEditor } from "./E4ConnectorTableEditor";
 import { createE4ConnectorSeriesTableFromV3, materializeE4ConnectorArticle, setArticleContactGroupStandardTerminal, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 import { TemplateCanvasV2 } from "./TemplateCanvasV2";
@@ -52,16 +52,17 @@ import {
 import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
 import { validateTemplateContentV3 as validateTemplateContentV2, type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
 import { validateTemplateContentV4, type TemplateContentV4 } from "./template-model-v4";
+import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3 } from "./template-model-v5";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { templateId: string | null; version: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Draft { templateId: string | null; version: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; e4ConnectorTable: E4ConnectorSeriesTable; }
 type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "rectangle" | "ellipse" | "text" | "image" }>;
 
 const newDraft = (): Draft => {
   const content = newTemplateContentV2();
-  return { templateId: null, version: 0, code: "", name: "Новый компонент", assets: [], content, e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
+  return { templateId: null, version: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
 };
 const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content.views.map(view => [view.id, view.layers[0]!.id]));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
@@ -88,6 +89,61 @@ function reconcileE4ConnectorTable(content: TemplateContentV2, previous?: E4Conn
 function v3CoreFromV4(content: TemplateContentV4): TemplateContentV2 {
   const { schemaVersion: _schemaVersion, e4ConnectorTable: _table, ...core } = content;
   return { schemaVersion: 3, ...structuredClone(core) };
+}
+
+function compatibleTerminalsFromV3(content: TemplateContentV2): ArticleBinding[] {
+  const result: ArticleBinding[] = [], seen = new Set<string>();
+  for (const terminal of content.articleVariants.flatMap(variant =>
+    (variant.contactGroups ?? []).flatMap(group => group.allowedTerminalArticleKeys))) {
+    const identity = articleIdentity(terminal);
+    if (!seen.has(identity)) { seen.add(identity); result.push({ ...terminal }); }
+  }
+  return result;
+}
+
+function applySeriesTerminalsToEditor(
+  content: TemplateContentV2,
+  table: E4ConnectorSeriesTable,
+  terminals: readonly ArticleBinding[],
+): { content: TemplateContentV2; table: E4ConnectorSeriesTable } {
+  const allowed = new Set(terminals.map(articleIdentity));
+  return {
+    content: {
+      ...content,
+      articleVariants: content.articleVariants.map(variant => ({
+        ...variant,
+        contactGroups: variant.contactGroups?.map(group => ({
+          ...group,
+          allowedTerminalArticleKeys: terminals.map(item => ({ ...item })),
+        })) ?? null,
+      })),
+    },
+    table: {
+      ...table,
+      seriesDefaults: table.seriesDefaults.map(row => ({
+        ...row,
+        values: {
+          ...row.values,
+          standardTerminalArticleKey: row.values.standardTerminalArticleKey !== null &&
+            allowed.has(articleIdentity(row.values.standardTerminalArticleKey)) ? row.values.standardTerminalArticleKey : null,
+        },
+      })),
+      articles: table.articles.map(article => ({
+        ...article,
+        contactGroups: article.contactGroups.map(group => ({
+          ...group,
+          allowedTerminalArticleKeys: terminals.map(item => ({ ...item })),
+        })),
+        rows: article.rows.map(row => ({
+          ...row,
+          overrides: row.overrides.standardTerminalArticleKey !== undefined && row.overrides.standardTerminalArticleKey !== null &&
+            !allowed.has(articleIdentity(row.overrides.standardTerminalArticleKey))
+            ? { ...row.overrides, standardTerminalArticleKey: null }
+            : row.overrides,
+        })),
+      })),
+    },
+  };
 }
 
 export const isTemplateUndoShortcut = (
@@ -330,8 +386,10 @@ export function ComponentLibrary({ config, session }: Props) {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [terminalArticleQuery, referenceApi]);
 
-  function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable) {
-    setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(content), e4ConnectorTable: structuredClone(table ?? createE4ConnectorSeriesTableFromV3(content)) });
+  function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[]) {
+    const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
+    const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys);
+    setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
@@ -362,6 +420,11 @@ export function ComponentLibrary({ config, session }: Props) {
         const reconciliation = reconcileTemplateEnvelopeAssets(item.content, item.assets), mismatch = reconciliation.diagnostics.length > 0;
         setLoadedDraft(item, v3CoreFromV4(item.content), reconciliation.diagnostics, false, mismatch, item.content.e4ConnectorTable);
         setError(mismatch ? "Метаданные изображений расходятся с версией шаблона. Сохранение заблокировано." : null);
+      } else if (isTemplateContentV5(item.content)) {
+        const reconciliation = reconcileTemplateEnvelopeAssets(item.content, item.assets), mismatch = reconciliation.diagnostics.length > 0;
+        setLoadedDraft(item, projectTemplateContentV5ToV3(item.content), reconciliation.diagnostics, false, mismatch,
+          projectTemplateContentV5TableToV1(item.content), item.content.compatibleTerminalArticleKeys);
+        setError(mismatch ? "Метаданные изображений расходятся с версией шаблона. Сохранение заблокировано." : null);
       }
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
@@ -376,6 +439,11 @@ export function ComponentLibrary({ config, session }: Props) {
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
   function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
+  function setCompatibleTerminals(terminals: readonly ArticleBinding[]) {
+    const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, terminals);
+    setDraft(current => ({ ...current, content: projected.content, compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), e4ConnectorTable: projected.table }));
+    markDirty(); setError(null);
+  }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
     if (content === draft.content) return;
     setUndoStack(stack => [...stack.slice(-49), draft.content]); setDraft(current => ({ ...current, content, e4ConnectorTable: reconcileE4ConnectorTable(content, current.e4ConnectorTable) }));
@@ -444,20 +512,25 @@ export function ComponentLibrary({ config, session }: Props) {
       }
     }
     catch (caught) { setError(errorText(caught)); return null; }
-    const v4Content: TemplateContentV4 = { ...structuredClone(draft.content), schemaVersion: 4, e4ConnectorTable: structuredClone(draft.e4ConnectorTable) };
-    const v4Validation = validateTemplateContentV4(v4Content);
-    if (!v4Validation.valid) { setError(v4Validation.diagnostics[0]?.message ?? "Таблица Э4 не прошла проверку."); return null; }
-    const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: v4Content };
+    let v5Content;
+    try {
+      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys).content;
+    } catch (caught) { setError(errorText(caught)); return null; }
+    const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: v5Content };
     return draft.templateId ? api.save(draft.templateId, { expectedVersion: draft.version, ...body }) : api.create(body);
   }
 
   function applyPersisted(result: ComponentTemplate, resetUndo = false) {
-    if (!isTemplateContentV3(result.content) && !isTemplateContentV4(result.content)) throw new Error("Сервер вернул неподдерживаемый формат после сохранения.");
-    const content = isTemplateContentV4(result.content) ? v3CoreFromV4(result.content) : result.content;
-    const table = isTemplateContentV4(result.content) ? result.content.e4ConnectorTable : createE4ConnectorSeriesTableFromV3(content);
+    if (!isTemplateContentV3(result.content) && !isTemplateContentV4(result.content) && !isTemplateContentV5(result.content)) throw new Error("Сервер вернул неподдерживаемый формат после сохранения.");
+    const content = isTemplateContentV5(result.content) ? projectTemplateContentV5ToV3(result.content)
+      : isTemplateContentV4(result.content) ? v3CoreFromV4(result.content) : result.content;
+    const terminals = isTemplateContentV5(result.content) ? result.content.compatibleTerminalArticleKeys : compatibleTerminalsFromV3(content);
+    const table = isTemplateContentV5(result.content) ? projectTemplateContentV5TableToV1(result.content)
+      : isTemplateContentV4(result.content) ? result.content.e4ConnectorTable : createE4ConnectorSeriesTableFromV3(content);
+    const projected = applySeriesTerminalsToEditor(content, table, terminals);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(content), e4ConnectorTable: structuredClone(table) });
+    setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
@@ -540,6 +613,8 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span>{draft.templateId ? `Версия ${draft.version}` : "Новая серия"}</span><button className="primary-action" onClick={() => void save()} disabled={busy || assetMismatch}>{busy ? "Сохраняем…" : draft.templateId ? "Создать версию" : "Сохранить серию"}</button></div></div>
         <TemplateSeriesPanelV3
           content={draft.content}
+          compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
+          onChangeCompatibleTerminalArticleKeys={setCompatibleTerminals}
           connectorArticleQuery={connectorArticleQuery}
           connectorArticleSuggestions={connectorArticleSuggestions}
           connectorArticleSearchState={connectorArticleSearchState}

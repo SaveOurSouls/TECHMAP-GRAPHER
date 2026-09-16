@@ -10,6 +10,7 @@ import {
 import { upgradeTemplateContentV2ToV3 } from "../component-library/template-upgrade-v3";
 import type { ArticleVariantV3, TemplateContentV3 } from "../component-library/template-model-v3";
 import { upgradeTemplateContentV3ToV4 } from "../component-library/template-model-v4";
+import { upgradeTemplateContentV4ToV5 } from "../component-library/template-model-v5";
 import {
   createConnectorInstanceFromComponentTemplateV3,
   rematerializeComponentTemplateConnectorArticle,
@@ -84,8 +85,25 @@ function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
 }
 
 describe("component template placement", () => {
+  it("offers the series terminal list on every v5 E4 contact", () => {
+    const base = fixture(2);
+    if (base.content.schemaVersion !== 3) throw new Error("test fixture must be v3");
+    const content = upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(base.content).content).content;
+    const template: ComponentTemplatePlacementEnvelopeV3 = { ...base, content };
+
+    const placed = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J-v5", designation: "X1", articleVariantId: content.articleVariants.at(-1)!.id,
+      e4Position: { x: 1, y: 2 },
+    });
+
+    expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts)
+      .toSatisfy((contacts: readonly { allowedTerminalArticleKeys: readonly { articleKey: string }[] }[]) =>
+        contacts.every(contact => contact.allowedTerminalArticleKeys.map(item => item.articleKey).join(",") === "T-1,T-2"));
+  });
+
   it("materializes v4 E4 table values and remaps another article on stable series rows", () => {
     const base = fixture(2);
+    if (base.content.schemaVersion !== 3) throw new Error("test fixture must be v3");
     const first = base.content.articleVariants.at(-1)!;
     const second = { ...structuredClone(first), id: crypto.randomUUID(), articleKey: "XH-2-B" };
     const v3: TemplateContentV3 = {

@@ -3,6 +3,17 @@
 .template-series-v3 > summary span { margin-left: 5px; padding: 2px 6px; border-radius: 9px; background: #e7f1f5; color: #36708e; font-size: 11px; }
 .template-series-v3-body { min-width: 0; padding: 2px 16px 14px; display: grid; grid-template-columns: minmax(190px, .55fr) minmax(0, 1.45fr); gap: 12px; }
 .series-v3-guide { grid-column: 1 / -1; min-width: 0; padding: 8px 10px; border: 1px solid #d8e5eb; border-radius: 7px; background: #f8fbfc; color: #567080; font-size: 11px; }
+.series-v3-series-terminals { grid-column: 1 / -1; min-width: 0; padding: 10px; display: grid; gap: 8px; border: 1px solid #cbdfe8; border-radius: 8px; background: #fff; }
+.series-v3-series-terminals > header { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.series-v3-series-terminals > header > div { display: grid; gap: 2px; }
+.series-v3-series-terminals > header small, .series-v3-series-terminals > small { color: #71808d; font-size: 11px; line-height: 1.4; }
+.series-v3-terminal-table-wrap { min-width: 0; overflow-x: auto; border: 1px solid #dbe5ea; border-radius: 6px; }
+.series-v3-terminal-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+.series-v3-terminal-table th { padding: 6px 7px; background: #eef5f8; color: #496274; text-align: left; }
+.series-v3-terminal-table th:first-child, .series-v3-terminal-table th:nth-child(2) { width: 24%; }
+.series-v3-terminal-table th:last-child { width: 39px; }
+.series-v3-terminal-table td { padding: 4px; border-top: 1px solid #e1e9ee; }
+.series-v3-terminal-table .series-v3-remove-terminal { width: 31px; }
 .series-v3-guide > summary { cursor: pointer; font-weight: 750; }
 .series-v3-guide ol { margin: 8px 0 1px; padding-left: 22px; display: grid; gap: 4px; line-height: 1.4; }
 .series-v3-preview { grid-column: 1 / -1; min-width: 0; padding: 9px 10px; display: grid; grid-template-columns: minmax(180px, .65fr) minmax(0, .45fr) minmax(260px, 1.4fr); align-items: end; gap: 12px; border: 1px solid #cbdfe8; border-radius: 8px; background: #f3f9fb; }

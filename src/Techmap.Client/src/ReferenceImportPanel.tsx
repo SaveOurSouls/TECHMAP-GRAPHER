@@ -6,6 +6,7 @@ import {
   ReferenceCatalogApiError,
   type GoogleSheetsProfilePreviewRequest,
   type ReferenceCatalogDiagnostic,
+  type ReferenceCatalogSourceSummary,
   type ReferenceCatalogSnapshot,
   type XlsxFieldMapping,
   type XlsxFieldValueKind,
@@ -254,7 +255,10 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [profiles, setProfiles] = useState<readonly XlsxImportProfile[] | undefined>(undefined);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState("");
-  const [editableSourceId, setEditableSourceId] = useState(connectorReferenceSourceId);
+  const [editableSourceId, setEditableSourceId] = useState("");
+  const [newSourceId, setNewSourceId] = useState(connectorReferenceSourceId);
+  const [sources, setSources] = useState<readonly ReferenceCatalogSourceSummary[] | undefined>(undefined);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<ReferenceInputMode>("xlsx");
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
   const [manualMode, setManualMode] = useState(false);
@@ -275,6 +279,22 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const previewAbortRef = useRef<AbortController | null>(null);
   const selectedProfile = profiles?.find((profile) => profile.profileId === selectedProfileId) ?? null;
   const activeSourceId = editableSourceId.trim();
+
+  const loadSources = useCallback(async (preferredSourceId?: string) => {
+    try {
+      const result = await api.listSources();
+      setSources(result);
+      setSourcesError(null);
+      setEditableSourceId((current) => preferredSourceId && result.some((source) => source.sourceId === preferredSourceId)
+        ? preferredSourceId
+        : result.some((source) => source.sourceId === current) ? current : result[0]?.sourceId ?? "");
+    } catch (error) {
+      setSources([]);
+      setSourcesError(errorText(error));
+    }
+  }, [api]);
+
+  useEffect(() => { void loadSources(); }, [loadSources]);
 
   useEffect(() => {
     let cancelled = false;
@@ -539,6 +559,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         setActive(publication.snapshot);
         setActiveError(null);
       }
+      void loadSources(publication.snapshot.sourceId);
       setPreviewPublished(true);
       setNotice({
         tone: "success",
@@ -587,69 +608,67 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         </div>
       )}
 
-      <section className="active-reference-card" aria-labelledby="active-reference-title">
-        <div>
-          <p className="eyebrow">ТЕКУЩЕЕ СОСТОЯНИЕ</p>
-          <h2 id="active-reference-title">Активная версия</h2>
-          <label className="active-reference-source-picker">Справочник для редактирования
-            <input
-              list="editable-reference-sources"
-              value={editableSourceId}
-              placeholder={connectorReferenceSourceId}
+      <section className="reference-tables-workspace" aria-labelledby="active-reference-title">
+        <aside className="reference-source-sidebar" aria-label="Загруженные справочники">
+          <div><p className="eyebrow">ЗАГРУЖЕННЫЕ ТАБЛИЦЫ</p><h2 id="active-reference-title">Справочники</h2></div>
+          {sources === undefined && <p className="reference-state" role="status">Загружаем список…</p>}
+          {sourcesError && <p className="reference-state error">{sourcesError}</p>}
+          {sources?.length === 0 && <p className="reference-state empty">Загруженных таблиц пока нет.</p>}
+          <div className="reference-source-list">
+            {sources?.map((source) => <button
+              type="button"
+              key={source.sourceId}
+              className={source.sourceId === activeSourceId ? "selected" : ""}
+              aria-pressed={source.sourceId === activeSourceId}
               disabled={busy !== null}
-              onChange={(event) => setEditableSourceId(event.currentTarget.value)}
+              onClick={() => setEditableSourceId(source.sourceId)}
+            ><strong>{profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
+              <span>{source.sourceId}</span><em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
+          </div>
+          <form className="reference-new-source" onSubmit={(event) => {
+            event.preventDefault();
+            const sourceId = newSourceId.trim();
+            if (sourceId) setEditableSourceId(sourceId);
+          }}>
+            <label>Новая таблица<input value={newSourceId} onChange={(event) => setNewSourceId(event.target.value)} disabled={busy !== null} /></label>
+            <button type="submit" className="secondary-action" disabled={busy !== null || !newSourceId.trim()}>Создать</button>
+          </form>
+        </aside>
+        <div className="reference-table-main">
+          {!activeSourceId && <p className="reference-state empty">Выберите загруженный справочник слева или создайте новую таблицу.</p>}
+          {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
+          {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
+          {activeSourceId && !activeError && active !== undefined && <>
+            {active && <dl className="active-reference-facts">
+              <div><dt>Записей</dt><dd>{active.records.length}</dd></div>
+              <div><dt>Источник</dt><dd>{active.sourceUri ?? active.sourceKind}</dd></div>
+              <div><dt>Снимок создан</dt><dd>{formatDateTime(active.capturedUtc)}</dd></div>
+            </dl>}
+            <EditableReferenceTable
+              sourceId={activeSourceId}
+              snapshot={active}
+              disabled={busy !== null}
+              onSave={async (request) => {
+                setBusy("publish");
+                try {
+                  const publication = await api.publishEditableTable(activeSourceId, request);
+                  setActive(publication.snapshot);
+                  await loadSources(publication.snapshot.sourceId);
+                  setNotice({ tone: "success", text: publication.status === "unchanged"
+                    ? "Изменений в справочнике нет."
+                    : `Справочник сохранён: ${publication.snapshot.records.length} записей.` });
+                } catch (error) {
+                  const message = errorText(error);
+                  setNotice({ tone: "error", text: message });
+                  throw new Error(message);
+                } finally {
+                  setBusy(null);
+                }
+              }}
             />
-          </label>
-          <datalist id="editable-reference-sources">
-            <option value={connectorReferenceSourceId}>Соединители и их артикулы</option>
-            {profiles?.map((profile) => <option key={profile.sourceId} value={profile.sourceId}>{profile.displayName}</option>)}
-          </datalist>
-          <span className="active-reference-profile">Таблица не зависит от БД.ОП. Можно указать новый идентификатор и создать отдельный справочник.</span>
+          </>}
         </div>
-        {activeError ? (
-          <p className="reference-state error">{activeError}</p>
-        ) : active === undefined ? (
-          <p className="reference-state" role="status">Загружаем…</p>
-        ) : active === null ? (
-          <p className="reference-state empty">Версия ещё не опубликована</p>
-        ) : (
-          <dl className="active-reference-facts">
-            <div><dt>Записей</dt><dd>{active.records.length}</dd></div>
-            <div><dt>Источник</dt><dd>{active.sourceUri ?? active.sourceKind}</dd></div>
-            <div><dt>Снимок создан</dt><dd>{formatDateTime(active.capturedUtc)}</dd></div>
-            <div><dt>Хеш</dt><dd title={active.sha256}>{active.sha256.slice(0, 12)}…</dd></div>
-          </dl>
-        )}
       </section>
-
-      {activeSourceId && active !== undefined && (
-        <EditableReferenceTable
-          sourceId={activeSourceId}
-          snapshot={active}
-          disabled={busy !== null}
-          onSave={async (request) => {
-            setBusy("publish");
-            try {
-              const publication = await api.publishEditableTable(activeSourceId, request);
-              setActive(publication.snapshot);
-              setNotice({
-                tone: "success",
-                text: publication.status === "unchanged"
-                  ? "Изменений в справочнике нет."
-                  : `Справочник сохранён: ${publication.snapshot.records.length} записей.`,
-              });
-            } catch (error) {
-              const message = errorText(error);
-              setNotice({ tone: "error", text: message });
-              throw new Error(message);
-            } finally {
-              setBusy(null);
-            }
-          }}
-        />
-      )}
-
-      {!activeSourceId && <p className="reference-state empty">Укажите идентификатор справочника, чтобы открыть или создать его таблицу.</p>}
 
       <form className="reference-import-card" onSubmit={submitPreview}>
         <div className="section-title-row reference-card-title">

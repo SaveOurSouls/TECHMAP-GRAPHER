@@ -137,6 +137,26 @@ function snapshot() {
 }
 
 describe("reference catalog API", () => {
+  it("lists every active reference source with its row count", async () => {
+    const fetcher = vi.fn(async () => jsonResponse([{
+      sourceId: "technology-terminals",
+      displayName: "technology-terminals",
+      sourceKind: "xlsx",
+      activeSnapshotId: snapshotId,
+      recordCount: 280,
+      capturedUtc: "2026-09-17T00:00:00Z",
+    }]));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+
+    await expect(api.listSources()).resolves.toEqual([
+      expect.objectContaining({ sourceId: "technology-terminals", recordCount: 280 }),
+    ]);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-sources",
+      expect.objectContaining({ method: "GET", headers: { Accept: "application/json" } }),
+    );
+  });
+
   it("validates and publishes an independently editable table as a new immutable snapshot", async () => {
     const calls: Array<{ readonly url: string; readonly body: Record<string, unknown> }> = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -157,6 +177,7 @@ describe("reference catalog API", () => {
     const api = createReferenceCatalogApi(config, session, fetcher);
     await expect(api.publishEditableTable("custom-connectors", {
       expectedActiveSnapshotId: snapshotId,
+      sourceKind: "editable-table",
       sourceUri: "https://example.test/table",
       records: [{ entityType: "connector", sourceKey: "PHR-02", payload: { description: "2 контакта" } }],
     })).resolves.toMatchObject({ status: "published", snapshot: { sourceId: "custom-connectors" } });

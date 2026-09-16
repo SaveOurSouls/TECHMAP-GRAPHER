@@ -21,7 +21,7 @@ import {
   type ProjectComponentSnapshotResource,
 } from "./component-placement-api";
 import { createComponentTemplateApi } from "../component-library/component-template-api";
-import { isTemplateContentV3, isTemplateContentV4 } from "../component-library/template-content";
+import { isTemplateContentV3, isTemplateContentV4, isTemplateContentV5 } from "../component-library/template-content";
 import {
   createConnectorInstanceFromComponentTemplateV3,
   rematerializeComponentTemplateConnectorArticle,
@@ -113,7 +113,7 @@ export function buildComponentTemplateViewInstances(
     const binding = connector.libraryBinding;
     const snapshot = snapshotsByPlacement.get(connector.id);
     if (binding?.mode !== "template" || !snapshot ||
-        (!isTemplateContentV3(snapshot.content) && !isTemplateContentV4(snapshot.content))) return [];
+        (!isTemplateContentV3(snapshot.content) && !isTemplateContentV4(snapshot.content) && !isTemplateContentV5(snapshot.content))) return [];
     const articleVariant = snapshot.content.articleVariants.find((candidate) => candidate.id === binding.articleVariantId);
     const exactVersion = binding.templateId === snapshot.sourceTemplateId &&
       binding.templateVersion === snapshot.sourceVersion &&
@@ -846,20 +846,20 @@ export function HarnessDesignEditor({
     ? componentSnapshotsByPlacement.get(selectedConnector.id) ?? null
     : null;
   const selectedTemplateArticleOptions = selectedTemplateSnapshot &&
-      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content))
+      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content) || isTemplateContentV5(selectedTemplateSnapshot.content))
     ? selectedTemplateSnapshot.content.articleVariants.map((article) => ({
         articleVariantId: article.id,
         articleKey: article.articleKey,
       }))
     : [];
   const selectTemplateArticle = selectedConnector && selectedTemplateSnapshot &&
-      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content))
+      (isTemplateContentV3(selectedTemplateSnapshot.content) || isTemplateContentV4(selectedTemplateSnapshot.content) || isTemplateContentV5(selectedTemplateSnapshot.content))
     ? (articleVariantId: string) => {
         try {
           if (selectedConnector.libraryBinding?.mode === "template" &&
               selectedConnector.libraryBinding.articleVariantId === articleVariantId) return;
           const content = selectedTemplateSnapshot.content;
-          if (!isTemplateContentV3(content) && !isTemplateContentV4(content)) return;
+          if (!isTemplateContentV3(content) && !isTemplateContentV4(content) && !isTemplateContentV5(content)) return;
           const connector = rematerializeComponentTemplateConnectorArticle(selectedConnector, {
             templateId: selectedTemplateSnapshot.sourceTemplateId,
             version: selectedTemplateSnapshot.sourceVersion,
@@ -900,7 +900,7 @@ export function HarnessDesignEditor({
       try {
         const template = await componentTemplateApi.getVersion(item.componentTemplateId, item.componentTemplateVersion);
         if (generation !== loadGeneration.current) return;
-        if (!isTemplateContentV3(template.content) && !isTemplateContentV4(template.content)) {
+        if (!isTemplateContentV3(template.content) && !isTemplateContentV4(template.content) && !isTemplateContentV5(template.content)) {
           throw new Error("Для размещения в жгуте требуется шаблон v3 или v4.");
         }
         const variant = item.componentArticle
