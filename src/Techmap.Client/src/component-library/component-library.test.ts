@@ -78,6 +78,8 @@ describe("component library UI", () => {
     expect(markup).toContain("Ломаная");
     expect(markup).toContain("Безье");
     expect(markup).toContain("Контур");
+    expect(markup).toContain("Привязка угла");
+    expect(markup).toContain("Свободно");
     expect(markup).toContain("Создать контакт");
     expect(markup).toContain("Разместить связанную точку");
     expect(markup).toContain("Выход пучка");

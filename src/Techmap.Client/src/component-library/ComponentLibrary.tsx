@@ -11,7 +11,7 @@ import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, isTemplateContentV5, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
 import { E4ConnectorTableEditor } from "./E4ConnectorTableEditor";
 import { createE4ConnectorSeriesTableFromV3, materializeE4ConnectorArticle, setArticleContactGroupStandardTerminal, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
-import { TemplateCanvasV2 } from "./TemplateCanvasV2";
+import { TemplateCanvasV2, type TemplatePointAngleModeV2 } from "./TemplateCanvasV2";
 import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
 import { TemplateLayersPanelV2 } from "./TemplateLayersPanelV2";
 import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
@@ -283,6 +283,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [terminalArticleSuggestions, setTerminalArticleSuggestions] = useState<readonly ArticleBinding[]>([]);
   const [terminalArticleSearchState, setTerminalArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [terminalArticleSearchMessage, setTerminalArticleSearchMessage] = useState<string | null>(null);
+  const [pointAngleMode, setPointAngleMode] = useState<TemplatePointAngleModeV2>("snap-15");
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -737,8 +738,8 @@ export function ComponentLibrary({ config, session }: Props) {
           )[0])}
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
-        <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
@@ -823,6 +824,7 @@ function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: Edit
     <div className="coordinate-grid"><NumericField label="X" value={position.x} disabled={disabled} change={value => move(value, position.y)} /><NumericField label="Y" value={position.y} disabled={disabled} change={value => move(position.x, value)} />{dimensions && <><NumericField label="Ширина" value={dimensions.width} min={1} disabled={disabled} change={value => editDimension(node, "width", value, edit)} /><NumericField label="Высота" value={dimensions.height} min={1} disabled={disabled} change={value => editDimension(node, "height", value, edit)} /></>}</div>
     <NumericField label="Прозрачность 0…1" value={node.opacity} min={0} max={1} step={0.05} disabled={disabled} change={value => { if (value >= 0 && value <= 1) edit({ opacity: value }); }} />
     {(node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") && <p className="readonly-note">Перетаскивайте маркеры точек. Двойной щелчок по сегменту добавляет вершину, по внутренней вершине — удаляет её.</p>}
+    {(node.kind === "line" || node.kind === "polyline") && <NumericField label="Радиус изгиба" value={constantValue(node.geometry.bendRadius) ?? 0} min={0} disabled={disabled || node.geometry.bendRadius.kind !== "constant"} change={value => { if (value >= 0) edit({ geometry: { ...node.geometry, bendRadius: constantExpressionV2(value) } }); }} />}
     {node.kind === "text" && <label>Текст<input value={node.geometry.text} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, text: event.target.value } })} /></label>}
     {node.kind === "image" && <ImageProperties node={node} disabled={disabled} edit={edit} />}
   </>;

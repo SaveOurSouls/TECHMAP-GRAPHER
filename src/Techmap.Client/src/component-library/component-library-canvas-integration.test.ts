@@ -65,6 +65,7 @@ describe("ComponentLibrary canvas integration", () => {
     expect(props.onNodePointMove).toEqual(expect.any(Function));
     expect(props.onNodePointInsert).toEqual(expect.any(Function));
     expect(props.onNodePointDelete).toEqual(expect.any(Function));
+    expect(props.pointAngleMode).toBe("snap-15");
 
     const view = props.content.views.find(candidate => candidate.id === props.viewId)!;
     const node = view.layers[0]!.nodes[0]!;

@@ -118,6 +118,41 @@ describe("project component template view", () => {
     expect(projection.commands.map(command => command.strokeDash)).toEqual(["dash-dot", "solid"]);
   });
 
+  it("keeps and paints the visual bend radius of a placed polyline", () => {
+    const { content, instance } = fixture();
+    const e4 = content.views[0]!, layer = e4.layers[0]!;
+    const rounded: TemplateNodeV3 = {
+      ...base("polyline", layer.id), kind: "polyline",
+      geometry: {
+        points: [
+          { x: constant(0), y: constant(0) },
+          { x: constant(20), y: constant(0) },
+          { x: constant(20), y: constant(20) },
+        ],
+        bendRadius: constant(5),
+      },
+    };
+    const custom = { ...content, views: [{ ...e4, layers: [{ ...layer, nodes: [rounded] }] }, content.views[1]!] };
+    const projection = projectComponentTemplateView({ ...instance, content: custom }, "e4", { x: 0, y: 0 })!;
+    expect(projection.commands[0]).toMatchObject({ kind: "polyline", bendRadius: 5 });
+
+    const arcTo = vi.fn();
+    const context = {
+      save: () => undefined, restore: () => undefined, transform: () => undefined,
+      globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1,
+      setLineDash: () => undefined, beginPath: () => undefined, moveTo: () => undefined,
+      lineTo: () => undefined, arcTo, closePath: () => undefined, fill: () => undefined,
+      stroke: () => undefined,
+    } as unknown as CanvasRenderingContext2D;
+    drawProjectedComponentTemplateView(context, projection, new ComponentTemplateImageCache(null));
+    expect(arcTo).toHaveBeenCalledOnce();
+    expect(arcTo.mock.calls[0]![0]).toBe(20);
+    expect(arcTo.mock.calls[0]![1]).toBe(0);
+    expect(arcTo.mock.calls[0]![2]).toBe(20);
+    expect(arcTo.mock.calls[0]![3]).toBeCloseTo(5);
+    expect(arcTo.mock.calls[0]![4]).toBeCloseTo(5);
+  });
+
   it("sets and resets Canvas2D dash patterns for every projected command", () => {
     const { content, instance } = fixture();
     const e4 = content.views[0]!;

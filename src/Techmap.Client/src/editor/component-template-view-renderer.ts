@@ -13,6 +13,7 @@ import {
   type RepeatOccurrenceDescriptorV2,
 } from "../component-library/template-repeat-v2";
 import type { HarnessEditorView } from "./editor-types";
+import { roundedPolylineCommandsV2 } from "../component-library/rounded-polyline-v2";
 
 export interface ComponentTemplateViewInstance {
   /** Placement id; for editor connectors this is the EditorSceneObject id. */
@@ -57,7 +58,7 @@ interface ProjectedCommandBase {
 }
 
 export type ProjectedComponentTemplateCommand =
-  | ProjectedCommandBase & { readonly kind: "polyline"; readonly points: readonly ComponentTemplateProjectionOrigin[]; readonly closed: boolean }
+  | ProjectedCommandBase & { readonly kind: "polyline"; readonly points: readonly ComponentTemplateProjectionOrigin[]; readonly closed: boolean; readonly bendRadius: number }
   | ProjectedCommandBase & { readonly kind: "rectangle"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly radii: readonly [number, number, number, number] }
   | ProjectedCommandBase & { readonly kind: "ellipse"; readonly centerX: number; readonly centerY: number; readonly radiusX: number; readonly radiusY: number }
   | ProjectedCommandBase & { readonly kind: "bezier"; readonly points: readonly ComponentTemplateProjectionOrigin[]; readonly closed: boolean }
@@ -161,8 +162,8 @@ function commandForNode(
   if (node.kind === "line" || node.kind === "polyline") {
     const points = evaluatedPoints(node.geometry.points, evaluate);
     const bendRadius = evaluate(node.geometry.bendRadius);
-    if (points.length < 2 || bendRadius < 0 || node.kind === "polyline" && bendRadius !== 0) return null;
-    return { ...common, kind: "polyline", points, closed: false };
+    if (points.length < 2 || !Number.isFinite(bendRadius) || bendRadius < 0) return null;
+    return { ...common, kind: "polyline", points, closed: false, bendRadius };
   }
   if (node.kind === "rectangle") {
     const x = evaluate(node.geometry.x);
@@ -189,7 +190,7 @@ function commandForNode(
   if (node.kind === "closedContour") {
     const points = evaluatedPoints(node.geometry.points, evaluate);
     if (points.length < 3) return null;
-    return { ...common, kind: "polyline", points, closed: true };
+    return { ...common, kind: "polyline", points, closed: true, bendRadius: 0 };
   }
   if (node.kind === "text") {
     const x = evaluate(node.geometry.x);
@@ -497,7 +498,15 @@ export function drawProjectedComponentTemplateView(
     applyCommandTransform(context, command);
     if (command.kind === "polyline") {
       context.beginPath();
-      command.points.forEach((point, index) => index === 0
+      const rounded = !command.closed && command.bendRadius > 0
+        ? roundedPolylineCommandsV2(command.points.map(point => [point.x, point.y] as const), command.bendRadius)
+        : null;
+      if (rounded) rounded.forEach(item => {
+        if (item.kind === "move") context.moveTo(item.x, item.y);
+        else if (item.kind === "line") context.lineTo(item.x, item.y);
+        else context.arcTo(item.cornerX, item.cornerY, item.x, item.y, item.radius);
+      });
+      else command.points.forEach((point, index) => index === 0
         ? context.moveTo(point.x, point.y)
         : context.lineTo(point.x, point.y));
       if (command.closed) context.closePath();

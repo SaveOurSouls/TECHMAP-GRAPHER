@@ -3,12 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   TemplateCanvasV2,
+  applyTemplatePointAngleModeV2,
   clientPointToTemplateCoordinatesV2,
   completedTemplateNodeDragV2,
   completedTemplateNodePointDragV2,
   createTemplateNumericEvaluatorV2,
   hitTestTemplateSegmentsV2,
+  nodePointToTemplatePointV2,
   projectPointToTemplateSegmentV2,
+  roundedPolylinePathV2,
+  snapTemplatePointAngleV2,
   templatePointToNodePointV2,
   type TemplateCanvasV2Props,
 } from "./TemplateCanvasV2";
@@ -210,6 +214,39 @@ describe("TemplateCanvasV2", () => {
     expect(templatePointToNodePointV2(100, 80, 100, 40, 90, 2, 4)).toEqual({ x: 20, y: 0 });
   });
 
+  it("switches point dragging between free movement and 15-degree angular snapping", () => {
+    const origin = { x: 10, y: 0 };
+    const delta = { deltaX: 0, deltaY: 2 };
+    const anchor = { x: 0, y: 0 };
+
+    expect(applyTemplatePointAngleModeV2(origin, delta, anchor, "free")).toEqual(delta);
+    const snapped = applyTemplatePointAngleModeV2(origin, delta, anchor, "snap-15");
+    const radius = Math.hypot(10, 2);
+    expect(snapped?.deltaX).toBeCloseTo(Math.cos(Math.PI / 12) * radius - 10);
+    expect(snapped?.deltaY).toBeCloseTo(Math.sin(Math.PI / 12) * radius);
+  });
+
+  it("keeps angular snapping stable for axis-aligned, zero-length, and invalid points", () => {
+    expect(snapTemplatePointAngleV2({ x: 4, y: 8 }, { x: 14, y: 8 }, "snap-15"))
+      .toEqual({ x: 14, y: 8 });
+    expect(snapTemplatePointAngleV2({ x: 4, y: 8 }, { x: 4, y: 8 }, "snap-15"))
+      .toEqual({ x: 4, y: 8 });
+    expect(snapTemplatePointAngleV2({ x: 0, y: 0 }, { x: Number.NaN, y: 1 }, "snap-15"))
+      .toBeNull();
+    expect(applyTemplatePointAngleModeV2(
+      { x: 1, y: 2 }, { deltaX: 3, deltaY: 4 }, null, "snap-15",
+    )).toEqual({ deltaX: 3, deltaY: 4 });
+  });
+
+  it("snaps in visible view coordinates after rotation and non-uniform scale", () => {
+    const transform = { translateX: 7, translateY: 9, rotationDegrees: 30, scaleX: 2, scaleY: 0.5 };
+    const origin = nodePointToTemplatePointV2([10, 0], transform);
+    const anchor = nodePointToTemplatePointV2([0, 0], transform);
+    const snapped = applyTemplatePointAngleModeV2(origin, { deltaX: 3, deltaY: 8 }, anchor, "snap-15")!;
+    const angle = Math.atan2(origin.y + snapped.deltaY - anchor.y, origin.x + snapped.deltaX - anchor.x) * 180 / Math.PI;
+    expect(angle / 15).toBeCloseTo(Math.round(angle / 15));
+  });
+
   it("adds forgiving hit targets and Visio-style handles for selected simple figures", () => {
     const rectangle = node({
       id: ids.rectangle,
@@ -360,7 +397,7 @@ describe("TemplateCanvasV2", () => {
     expect(first).toBe(second);
   });
 
-  it("uses a placeholder when an advanced rounded polyline cannot yet be drawn exactly", () => {
+  it("renders a rounded polyline as tangent circular arcs", () => {
     const rounded = node({
       id: ids.rectangle,
       kind: "polyline",
@@ -372,8 +409,28 @@ describe("TemplateCanvasV2", () => {
     const markup = render(content([rounded]));
 
     expect(markup).toContain(`data-template-node-id="${ids.rectangle}"`);
-    expect(markup).toContain('data-render="placeholder"');
+    expect(markup).not.toContain('data-render="placeholder"');
+    expect(markup).toContain('d="M 10 10 L 25 10 A 5 5 0 0 1 30 15 L 30 30"');
     expect(markup).not.toContain("<polyline");
+  });
+
+  it("caps a rounded corner by both adjacent segment lengths", () => {
+    expect(roundedPolylinePathV2([[0, 0], [20, 0], [20, 20]], 100)).toBe(
+      "M 0 0 L 10 0 A 10 10 0 0 1 20 10 L 20 20",
+    );
+  });
+
+  it("keeps radius-zero polylines sharp and does not alter collinear vertices", () => {
+    const sharp = node({
+      id: ids.rectangle,
+      kind: "polyline",
+      geometry: {
+        points: [{ x: c(0), y: c(0) }, { x: c(20), y: c(0) }, { x: c(20), y: c(20) }],
+        bendRadius: c(0),
+      },
+    });
+    expect(render(content([sharp]))).toContain('<polyline');
+    expect(roundedPolylinePathV2([[0, 0], [20, 0], [40, 0]], 5)).toBe("M 0 0 L 20 0 L 40 0");
   });
 
   it("renders an owned child exactly once inside its group at the group position", () => {

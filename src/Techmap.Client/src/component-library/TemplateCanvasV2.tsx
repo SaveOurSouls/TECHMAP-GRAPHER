@@ -10,6 +10,8 @@ import type {
 } from "./template-model-v2";
 import { expandTemplateViewRepeatsV2, type RepeatOccurrenceDescriptorV2 } from "./template-repeat-v2";
 import type { NodeResizeHandleV2 } from "./template-commands-v2";
+import { roundedPolylinePathV2 } from "./rounded-polyline-v2";
+export { roundedPolylinePathV2 } from "./rounded-polyline-v2";
 
 export const TEMPLATE_CANVAS_V2_WIDTH = 720;
 export const TEMPLATE_CANVAS_V2_HEIGHT = 440;
@@ -28,6 +30,7 @@ export interface TemplateCanvasV2Props {
   onNodePointMove?: (id: string, pointIndex: number, deltaX: number, deltaY: number) => void;
   onNodePointDelete?: (id: string, pointIndex: number) => void;
   onNodePointInsert?: (id: string, segmentIndex: number, x: number, y: number) => void;
+  pointAngleMode?: TemplatePointAngleModeV2;
   resolveAssetUrl: (assetId: string) => string;
   parameterDefaults?: TemplateParameterDefaultsV2;
   width?: number;
@@ -97,6 +100,8 @@ export function completedTemplateNodeDragV2(
   const deltaY = end.templateY - start.templateY;
   return deltaX === 0 && deltaY === 0 ? null : { deltaX, deltaY };
 }
+
+export type TemplatePointAngleModeV2 = "free" | "snap-15";
 
 export interface TemplateSegmentProjectionV2 {
   readonly x: number;
@@ -172,6 +177,21 @@ export function templatePointToNodePointV2(
   return delta ? { x: delta.deltaX, y: delta.deltaY } : null;
 }
 
+export function nodePointToTemplatePointV2(
+  point: readonly [number, number],
+  transform: {
+    readonly translateX: number; readonly translateY: number;
+    readonly rotationDegrees: number; readonly scaleX: number; readonly scaleY: number;
+  },
+): { x: number; y: number } {
+  const radians = transform.rotationDegrees * Math.PI / 180;
+  const scaledX = point[0] * transform.scaleX, scaledY = point[1] * transform.scaleY;
+  return {
+    x: transform.translateX + scaledX * Math.cos(radians) - scaledY * Math.sin(radians),
+    y: transform.translateY + scaledX * Math.sin(radians) + scaledY * Math.cos(radians),
+  };
+}
+
 export function completedTemplateNodePointDragV2(
   start: TemplateNodeDragSampleV2,
   end: TemplateNodeDragSampleV2,
@@ -184,6 +204,41 @@ export function completedTemplateNodePointDragV2(
   return completed
     ? templateDeltaToNodeDeltaV2(completed.deltaX, completed.deltaY, rotationDegrees, scaleX, scaleY)
     : null;
+}
+
+export function snapTemplatePointAngleV2(
+  anchor: { readonly x: number; readonly y: number },
+  point: { readonly x: number; readonly y: number },
+  mode: TemplatePointAngleModeV2,
+): { x: number; y: number } | null {
+  if (![anchor.x, anchor.y, point.x, point.y].every(Number.isFinite)) return null;
+  if (mode === "free") return { x: point.x, y: point.y };
+  const deltaX = point.x - anchor.x;
+  const deltaY = point.y - anchor.y;
+  const radius = Math.hypot(deltaX, deltaY);
+  if (radius === 0) return { x: anchor.x, y: anchor.y };
+  const step = Math.PI / 12;
+  const angle = Math.round(Math.atan2(deltaY, deltaX) / step) * step;
+  const normalize = (value: number) => Math.abs(value) < 1e-12 ? 0 : value;
+  return {
+    x: normalize(anchor.x + Math.cos(angle) * radius),
+    y: normalize(anchor.y + Math.sin(angle) * radius),
+  };
+}
+
+export function applyTemplatePointAngleModeV2(
+  origin: { readonly x: number; readonly y: number },
+  delta: { readonly deltaX: number; readonly deltaY: number },
+  anchor: { readonly x: number; readonly y: number } | null,
+  mode: TemplatePointAngleModeV2,
+): { deltaX: number; deltaY: number } | null {
+  if (![origin.x, origin.y, delta.deltaX, delta.deltaY].every(Number.isFinite)) return null;
+  if (mode === "free" || !anchor) return { deltaX: delta.deltaX, deltaY: delta.deltaY };
+  const snapped = snapTemplatePointAngleV2(anchor, {
+    x: origin.x + delta.deltaX,
+    y: origin.y + delta.deltaY,
+  }, mode);
+  return snapped ? { deltaX: snapped.x - origin.x, deltaY: snapped.y - origin.y } : null;
 }
 
 function suppliedDefault(
@@ -290,6 +345,11 @@ interface PointDragStateV2 extends DragStateV2 {
   readonly rotationDegrees: number;
   readonly scaleX: number;
   readonly scaleY: number;
+  readonly translateX: number;
+  readonly translateY: number;
+  readonly origin: SvgPoint;
+  readonly angleAnchor: SvgPoint | null;
+  readonly angleMode: TemplatePointAngleModeV2;
 }
 
 interface PointDragPreviewV2 extends DragPreviewV2 {
@@ -391,6 +451,7 @@ export function TemplateCanvasV2({
   onNodePointMove,
   onNodePointDelete,
   onNodePointInsert,
+  pointAngleMode = "free",
   resolveAssetUrl,
   parameterDefaults,
   width = TEMPLATE_CANVAS_V2_WIDTH,
@@ -474,13 +535,20 @@ export function TemplateCanvasV2({
     if (pointDrag && pointDrag.pointerId === event.pointerId) {
       const point = pointFromEvent(event);
       if (!point) return;
-      const delta = templateDeltaToNodeDeltaV2(
-        point[0] - pointDrag.start[0], point[1] - pointDrag.start[1],
+      const origin = nodePointToTemplatePointV2(pointDrag.origin, pointDrag);
+      const anchor = pointDrag.angleAnchor && nodePointToTemplatePointV2(pointDrag.angleAnchor, pointDrag);
+      const viewDelta = { deltaX: point[0] - pointDrag.start[0], deltaY: point[1] - pointDrag.start[1] };
+      const snappedViewDelta = applyTemplatePointAngleModeV2(
+        origin, viewDelta, anchor,
+        pointDrag.angleMode,
+      );
+      const adjusted = snappedViewDelta && templateDeltaToNodeDeltaV2(
+        snappedViewDelta.deltaX, snappedViewDelta.deltaY,
         pointDrag.rotationDegrees, pointDrag.scaleX, pointDrag.scaleY,
       );
-      if (!delta) return;
+      if (!adjusted) return;
       pointDragRef.current = { ...pointDrag, latest: point };
-      setPointDragPreview({ id: pointDrag.id, pointIndex: pointDrag.pointIndex, ...delta });
+      setPointDragPreview({ id: pointDrag.id, pointIndex: pointDrag.pointIndex, ...adjusted });
       return;
     }
     const resize = resizeRef.current;
@@ -519,13 +587,22 @@ export function TemplateCanvasV2({
     const pointDrag = pointDragRef.current;
     if (pointDrag && pointDrag.pointerId === event.pointerId) {
       const finalPoint = pointFromEvent(event) ?? pointDrag.latest;
-      const completed = completedTemplateNodePointDragV2(
+      const completed = completedTemplateNodeDragV2(
         { clientX: pointDrag.startClientX, clientY: pointDrag.startClientY, templateX: pointDrag.start[0], templateY: pointDrag.start[1] },
         { clientX: event.clientX, clientY: event.clientY, templateX: finalPoint[0], templateY: finalPoint[1] },
+      );
+      const origin = nodePointToTemplatePointV2(pointDrag.origin, pointDrag);
+      const anchor = pointDrag.angleAnchor && nodePointToTemplatePointV2(pointDrag.angleAnchor, pointDrag);
+      const snappedViewDelta = completed && applyTemplatePointAngleModeV2(
+        origin, completed, anchor,
+        pointDrag.angleMode,
+      );
+      const adjusted = snappedViewDelta && templateDeltaToNodeDeltaV2(
+        snappedViewDelta.deltaX, snappedViewDelta.deltaY,
         pointDrag.rotationDegrees, pointDrag.scaleX, pointDrag.scaleY,
       );
       clearNodeGesture(event);
-      if (completed) onNodePointMove?.(pointDrag.id, pointDrag.pointIndex, completed.deltaX, completed.deltaY);
+      if (adjusted) onNodePointMove?.(pointDrag.id, pointDrag.pointIndex, adjusted.deltaX, adjusted.deltaY);
       return;
     }
     const resize = resizeRef.current;
@@ -569,6 +646,10 @@ export function TemplateCanvasV2({
     rotationDegrees: number,
     scaleX: number,
     scaleY: number,
+    translateX: number,
+    translateY: number,
+    origin: SvgPoint,
+    angleAnchor: SvgPoint | null,
   ) => {
     event.preventDefault();
     event.stopPropagation();
@@ -580,7 +661,8 @@ export function TemplateCanvasV2({
     pointDragRef.current = {
       id, pointIndex, pointerId: event.pointerId,
       startClientX: event.clientX, startClientY: event.clientY,
-      start, latest: start, rotationDegrees, scaleX, scaleY,
+      start, latest: start, rotationDegrees, scaleX, scaleY, translateX, translateY,
+      origin, angleAnchor, angleMode: pointAngleMode,
     };
     setPointDragPreview({ id, pointIndex, deltaX: 0, deltaY: 0 });
   };
@@ -647,12 +729,20 @@ export function TemplateCanvasV2({
         if (!evaluatedPoints || evaluatedPoints.length < 2) return placeholder(node, width, height, "Координаты линии не вычисляются из параметров.");
         const points = previewPoints(node.id, evaluatedPoints);
         const bendRadius = evaluate(node.geometry.bendRadius);
-        if (bendRadius === null || bendRadius < 0 || node.kind === "polyline" && bendRadius !== 0)
-          return placeholder(node, width, height, "Радиус изгиба линии пока нельзя отобразить точно.");
+        if (bendRadius === null || bendRadius < 0)
+          return placeholder(node, width, height, "Радиус изгиба линии не вычисляется или является отрицательным.");
         if (node.kind === "line" && points.length === 2) {
           return <g {...common}>
             <line x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} fill="none" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
             <line {...shape} pointerEvents="none" x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} />
+          </g>;
+        }
+        if (bendRadius > 0) {
+          const path = roundedPolylinePathV2(points, bendRadius);
+          if (!path) return placeholder(node, width, height, "Скруглённую линию не удалось построить.");
+          return <g {...common}>
+            <path d={path} fill="none" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+            <path {...shape} fill="none" pointerEvents="none" d={path} />
           </g>;
         }
         return <polyline {...common} {...shape} points={pointsAttribute(points)} />;
@@ -940,7 +1030,12 @@ export function TemplateCanvasV2({
         {previewed.map((point, pointIndex) => <circle key={pointIndex} cx={point[0]} cy={point[1]} r={pointIndex === 0 || pointIndex === points.length - 1 ? 6 : 5}
           data-point-handle={pointIndex}
           data-point-role={node.kind === "bezier" && pointIndex % 3 !== 0 ? "control" : "anchor"}
-          onPointerDown={event => beginPointGesture(event, node.id, pointIndex, rotationDegrees, scaleX, scaleY)}
+          onPointerDown={event => beginPointGesture(
+            event, node.id, pointIndex, rotationDegrees, scaleX, scaleY, translateX, translateY, points[pointIndex]!,
+            node.kind === "line" || node.kind === "polyline"
+              ? points[pointIndex === 0 ? 1 : pointIndex - 1] ?? null
+              : null,
+          )}
           onDoubleClick={event => deletePoint(event, pointIndex)} />)}
       </g>;
     }
