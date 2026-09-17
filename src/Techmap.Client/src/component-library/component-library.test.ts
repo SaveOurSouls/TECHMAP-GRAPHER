@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
-import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, terminalArticleInputs, terminalArticleSearchRequest } from "./ComponentLibrary";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, shouldAutoSaveTemplate, terminalArticleInputs, terminalArticleSearchRequest, terminalCatalogLabel } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
 import {
@@ -68,6 +68,24 @@ describe("component library UI", () => {
     expect(isTemplateUndoShortcut({ ctrlKey: true, metaKey: false, key: "z", target: { tagName: "textarea" } as unknown as EventTarget })).toBe(false);
     expect(isTemplateUndoShortcut({ ctrlKey: true, metaKey: false, key: "z", target: { isContentEditable: true } as unknown as EventTarget })).toBe(false);
   });
+  it("shows technology terminal composite keys as manufacturer, article and series", () => {
+    const record = {
+      recordId: crypto.randomUUID(), entityType: "terminal",
+      sourceKey: "3:JST|14:SPH-002T-P0.5S|0:|3:PHR",
+      payload: { manufacturer: "JST", reelArticle: "SPH-002T-P0.5S", series: "PHR" },
+      sourceLocation: null,
+    };
+    expect(terminalCatalogLabel(record)).toBe("JST SPH-002T-P0.5S PHR");
+    expect(terminalCatalogLabel({ ...record, payload: {} })).toBe("JST SPH-002T-P0.5S PHR");
+  });
+
+  it("autosaves only complete changed drafts and pauses after a failed attempt", () => {
+    const ready = { dirty: true, failed: false, busy: false, assetMismatch: false, code: "JST PH", name: "Шаговый" };
+    expect(shouldAutoSaveTemplate(ready)).toBe(true);
+    expect(shouldAutoSaveTemplate({ ...ready, dirty: false })).toBe(false);
+    expect(shouldAutoSaveTemplate({ ...ready, failed: true })).toBe(false);
+    expect(shouldAutoSaveTemplate({ ...ready, code: " " })).toBe(false);
+  });
   it("exposes the library as a primary application section", () => {
     const markup = renderToStaticMarkup(createElement(AppNavigation, { activeSection: "library", onSectionChange: () => undefined }));
     expect(markup).toContain("Библиотека");
@@ -98,7 +116,8 @@ describe("component library UI", () => {
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Добавить слой");
-    expect(markup).toContain("Сохранить");
+    expect(markup).toContain("Сохранить сейчас");
+    expect(markup).toContain("Изменения сохранятся автоматически");
   });
 
   it("uses v3 article variants as the saved lookup index and imports legacy bindings once", () => {

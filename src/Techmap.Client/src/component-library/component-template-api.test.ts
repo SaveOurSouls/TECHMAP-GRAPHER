@@ -81,6 +81,19 @@ describe("component template API", () => {
     await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 2 } });
   });
 
+  it("deletes a template with optimistic version protection", async () => {
+    let requestedUrl: RequestInfo | URL | undefined;
+    let requestedInit: RequestInit | undefined;
+    const api = createComponentTemplateApi(config, session, async (url, init) => {
+      requestedUrl = url; requestedInit = init;
+      return new Response(null, { status: 204 });
+    });
+    await api.remove(templateId, 6);
+    expect(requestedUrl).toBe(`/api/v1/component-templates/${templateId}`);
+    expect(requestedInit?.method).toBe("DELETE");
+    expect(JSON.parse(String(requestedInit?.body))).toEqual({ expectedVersion: 6 });
+  });
+
   it("reads a persisted schema v4 response through the strict content boundary", async () => {
     const v2 = upgradeComponentTemplateContentV1(newTemplateContent()).content;
     const v3 = upgradeComponentTemplateContentV2(v2).content;

@@ -101,6 +101,8 @@ export interface TemplateSeriesPanelV3Props {
   /** One compatibility list for the whole connector series (schema v5). */
   readonly compatibleTerminalArticleKeys?: readonly ArticleKeyV3[];
   readonly onChangeCompatibleTerminalArticleKeys?: (keys: readonly ArticleKeyV3[]) => void;
+  readonly terminalContactTypeGroupIds?: Readonly<Record<string, string | null>>;
+  readonly onSetTerminalContactTypeGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
   readonly onAddContactTypeGroup: (name: string) => void;
   readonly onRenameContactTypeGroup: (groupId: string, name: string) => void;
   readonly onDeleteContactTypeGroup: (groupId: string) => void;
@@ -263,29 +265,60 @@ function terminalIdentity(terminal: ArticleKeyV3): string {
   return `${terminal.sourceId}\0${terminal.entityType}\0${terminal.articleKey}`;
 }
 
-function SeriesTerminalRow({ terminal, index, onChange, onRemove }: {
+export function readableTerminalArticleV3(articleKey: string): string {
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < articleKey.length) {
+    const separator = articleKey.indexOf(":", offset);
+    if (separator < 0 || !/^\d+$/.test(articleKey.slice(offset, separator))) return articleKey;
+    const length = Number(articleKey.slice(offset, separator));
+    const end = separator + 1 + length;
+    if (!Number.isSafeInteger(length) || end > articleKey.length) return articleKey;
+    parts.push(articleKey.slice(separator + 1, end));
+    if (end === articleKey.length) break;
+    if (articleKey[end] !== "|") return articleKey;
+    offset = end + 1;
+  }
+  const readable = [parts[0], parts[1], parts[3]].filter(Boolean).join(" ");
+  return readable || articleKey;
+}
+
+function SeriesTerminalRow({ terminal, index, groups, groupId, onSetGroup, onChange, onRemove }: {
   readonly terminal: ArticleKeyV3;
   readonly index: number;
+  readonly groups: TemplateContentV3["contactTypeGroups"];
+  readonly groupId: string | null;
+  readonly onSetGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
   readonly onChange: (index: number, patch: TerminalArticleKeyPatchV3) => void;
   readonly onRemove: (index: number) => void;
 }) {
   const [draft, setDraft] = useState(terminal);
   useEffect(() => setDraft(terminal), [terminal.sourceId, terminal.entityType, terminal.articleKey]);
   const commit = () => onChange(index, draft);
+  const readableArticle = readableTerminalArticleV3(draft.articleKey);
   return <tr>
-    <td><input aria-label={`Источник терминала ${index + 1}`} value={draft.sourceId}
-      onChange={event => setDraft(current => ({ ...current, sourceId: event.target.value }))} onBlur={commit} /></td>
-    <td><input aria-label={`Тип терминала ${index + 1}`} value={draft.entityType}
-      onChange={event => setDraft(current => ({ ...current, entityType: event.target.value }))} onBlur={commit} /></td>
-    <td><input aria-label={`Артикул терминала ${index + 1}`} value={draft.articleKey}
-      onChange={event => setDraft(current => ({ ...current, articleKey: event.target.value }))} onBlur={commit} /></td>
+    <td>{readableArticle !== draft.articleKey
+      ? <span className="series-v3-terminal-article" title={draft.articleKey}>{readableArticle}</span>
+      : <input aria-label={`Артикул терминала ${index + 1}`} value={draft.articleKey}
+        onChange={event => setDraft(current => ({ ...current, articleKey: event.target.value }))} onBlur={commit} />}</td>
+    <td><input type="checkbox" aria-label={`Стандартный терминал ${index + 1}`} checked={groupId !== null}
+      disabled={!onSetGroup || groups.length === 0}
+      onChange={event => onSetGroup?.(terminal, event.currentTarget.checked ? groups[0]?.id ?? null : null)} /></td>
+    <td><select aria-label={`Тип контакта терминала ${index + 1}`} value={groupId ?? ""} disabled={!onSetGroup}
+      onChange={event => onSetGroup?.(terminal, event.currentTarget.value || null)}>
+      <option value="">Не назначен</option>
+      {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+    </select></td>
     <td><button type="button" className="series-v3-remove-terminal" aria-label={`Удалить терминал ${index + 1}`} onClick={() => onRemove(index)}>×</button></td>
   </tr>;
 }
 
-function SeriesTerminalEditor({ terminals, onChange, terminalQuery,
+function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, onSetTerminalContactTypeGroup, onChange, terminalQuery,
   terminalSuggestions, terminalSearchState, terminalSearchMessage, onTerminalQueryChange }: {
   readonly terminals: readonly ArticleKeyV3[];
+  readonly groups: TemplateContentV3["contactTypeGroups"];
+  readonly terminalContactTypeGroupIds: Readonly<Record<string, string | null>>;
+  readonly onSetTerminalContactTypeGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
   readonly onChange?: (keys: readonly ArticleKeyV3[]) => void;
   readonly terminalQuery: string;
   readonly terminalSuggestions: readonly ArticleKeyV3[];
@@ -324,14 +357,16 @@ function SeriesTerminalEditor({ terminals, onChange, terminalQuery,
           const exists = terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal));
           return <button type="button" key={terminalIdentity(terminal)} disabled={exists}
             onClick={() => addTerminalFromReference(terminal)}>
-            <strong>{terminal.articleKey}</strong><span>{exists ? "добавлен" : "+ допустимый"}</span>
+            <strong>{readableTerminalArticleV3(terminal.articleKey)}</strong><span>{exists ? "добавлен" : "+ допустимый"}</span>
           </button>;
         })}
       </div>}
     </div>
     {terminals.length === 0 ? <small>Совместимые терминалы пока не заданы.</small> : <div className="series-v3-terminal-table-wrap"><table className="series-v3-terminal-table">
-      <thead><tr><th>Источник</th><th>Тип</th><th>Артикул</th><th aria-label="Удалить" /></tr></thead>
-      <tbody>{terminals.map((terminal, index) => <SeriesTerminalRow key={terminalIdentity(terminal)} terminal={terminal} index={index} onChange={setTerminalField} onRemove={removeTerminal} />)}</tbody>
+      <thead><tr><th>Артикул</th><th>Стандартный</th><th>Тип контакта</th><th aria-label="Удалить" /></tr></thead>
+      <tbody>{terminals.map((terminal, index) => <SeriesTerminalRow key={terminalIdentity(terminal)} terminal={terminal} index={index}
+        groups={groups} groupId={terminalContactTypeGroupIds[terminalIdentity(terminal)] ?? null}
+        onSetGroup={onSetTerminalContactTypeGroup} onChange={setTerminalField} onRemove={removeTerminal} />)}</tbody>
     </table></div>}
   </section>;
 }
@@ -444,6 +479,9 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
     <div className="template-series-v3-body">
       <SeriesTerminalEditor
         terminals={props.compatibleTerminalArticleKeys ?? []}
+        groups={props.content.contactTypeGroups}
+        terminalContactTypeGroupIds={props.terminalContactTypeGroupIds ?? {}}
+        onSetTerminalContactTypeGroup={props.onSetTerminalContactTypeGroup}
         onChange={props.onChangeCompatibleTerminalArticleKeys}
         terminalQuery={props.terminalArticleQuery ?? ""}
         terminalSuggestions={props.terminalArticleSuggestions ?? []}

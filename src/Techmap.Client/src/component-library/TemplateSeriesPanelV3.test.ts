@@ -9,6 +9,7 @@ import {
   contactTypeNameExistsV3,
   formatTerminalArticleKeysV3,
   parseTerminalArticleKeysV3,
+  readableTerminalArticleV3,
   updateTerminalArticleKeyV3,
 } from "./TemplateSeriesPanelV3";
 import { addContactPointV3, addContactTypeGroupV3, newTemplateContentV3, upsertArticleVariantV3 } from "./template-commands-v3";
@@ -75,7 +76,8 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("Материализованные строки контактов");
     expect(markup).toContain("NET-DATA+");
     expect(markup).toContain('class="series-v3-terminal-table"');
-    expect(markup).toContain("<th>Источник</th><th>Тип</th><th>Артикул</th>");
+    expect(markup).toContain("<th>Артикул</th><th>Стандартный</th><th>Тип контакта</th>");
+    expect(markup).not.toContain("<th>Источник</th>");
     expect(markup).not.toContain("Стандартный терминал для типа");
 
     const guideStart = markup.indexOf('<details class="series-v3-guide">');
@@ -181,6 +183,11 @@ describe("TemplateSeriesPanelV3", () => {
     const keys = [{ sourceId: "БД|ТЕР", entityType: "terminal", articleKey: "T;1\\A" }];
     const encoded = formatTerminalArticleKeysV3(keys);
     expect(parseTerminalArticleKeysV3(encoded)).toEqual(keys);
+  });
+
+  it("formats a composite terminal key as manufacturer, article and series", () => {
+    expect(readableTerminalArticleV3("3:JST|14:SPH-002T-P0.5S|0:|3:PHR")).toBe("JST SPH-002T-P0.5S PHR");
+    expect(readableTerminalArticleV3("SXH-001T-P0.6")).toBe("SXH-001T-P0.6");
   });
 
   it("updates one structured terminal row atomically and rejects incomplete duplicates", () => {

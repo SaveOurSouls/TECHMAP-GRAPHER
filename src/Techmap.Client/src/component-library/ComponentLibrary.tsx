@@ -215,6 +215,47 @@ export function terminalArticleInputs(
   });
 }
 
+function compositeSourceKeyParts(value: string): readonly string[] | null {
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < value.length) {
+    const separator = value.indexOf(":", offset);
+    if (separator < 0) return null;
+    const lengthText = value.slice(offset, separator);
+    if (!/^\d+$/.test(lengthText)) return null;
+    const length = Number(lengthText);
+    const start = separator + 1, end = start + length;
+    if (!Number.isSafeInteger(length) || end > value.length) return null;
+    parts.push(value.slice(start, end));
+    if (end === value.length) return parts;
+    if (value[end] !== "|") return null;
+    offset = end + 1;
+  }
+  return parts;
+}
+
+/** Human readable БД.ТЕР identity: manufacturer + reel article + series. */
+export function terminalCatalogLabel(record: ReferenceCatalogSearchRecord): string {
+  const text = (key: string) => typeof record.payload[key] === "string" ? record.payload[key].trim() : "";
+  const fromPayload = [text("manufacturer"), text("reelArticle"), text("series")].filter(Boolean);
+  if (fromPayload.length) return fromPayload.join(" ");
+  const composite = compositeSourceKeyParts(record.sourceKey);
+  const fromKey = composite ? [composite[0], composite[1], composite[3]].filter(Boolean) : [];
+  return fromKey.length ? fromKey.join(" ") : record.sourceKey;
+}
+
+export function shouldAutoSaveTemplate(input: {
+  readonly dirty: boolean;
+  readonly failed: boolean;
+  readonly busy: boolean;
+  readonly assetMismatch: boolean;
+  readonly code: string;
+  readonly name: string;
+}): boolean {
+  return input.dirty && !input.failed && !input.busy && !input.assetMismatch &&
+    Boolean(input.code.trim()) && Boolean(input.name.trim());
+}
+
 /**
  * Old template envelopes used articleBindings as their lookup index. During the
  * explicit v1/v2 upgrade those identities become legacy v3 variants. From v3
@@ -275,6 +316,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(true);
+  const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<readonly TemplateV2Diagnostic[]>([]);
@@ -339,6 +381,25 @@ export function ComponentLibrary({ config, session }: Props) {
     }
     return result;
   }, [draft.e4ConnectorTable]);
+  const terminalContactTypeGroupIds = useMemo(() => {
+    const result: Record<string, string | null> = {};
+    const assigned = new Set<string>();
+    for (const terminal of draft.compatibleTerminalArticleKeys) result[articleIdentity(terminal)] = null;
+    for (const article of draft.e4ConnectorTable.articles) {
+      const materialized = materializeE4ConnectorArticle(draft.e4ConnectorTable, article.articleVariantId);
+      for (const group of draft.e4ConnectorTable.contactTypeGroups) {
+        const selected = materialized.rows
+          .filter(row => row.contactTypeGroupId === group.id)
+          .map(row => row.standardTerminalArticleKey)
+          .filter((terminal): terminal is ArticleBinding => terminal !== null);
+        if (!selected.length || !selected.every(terminal => articleIdentity(terminal) === articleIdentity(selected[0]!))) continue;
+        const key = articleIdentity(selected[0]!);
+        result[key] = !assigned.has(key) || result[key] === group.id ? group.id : null;
+        assigned.add(key);
+      }
+    }
+    return result;
+  }, [draft.compatibleTerminalArticleKeys, draft.e4ConnectorTable]);
 
   async function loadList() { try { setItems(await api.list()); setError(null); } catch (caught) { setError(errorText(caught)); } }
   useEffect(() => { void loadList(); }, [api]);
@@ -407,7 +468,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
-    setDirty(migrated); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
+    setDirty(migrated); setAutoSaveFailed(false); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
     setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
@@ -416,6 +477,11 @@ export function ComponentLibrary({ config, session }: Props) {
   async function open(summary: ComponentTemplateSummary) {
     setBusy(true);
     try {
+      if (dirty && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
+        const persisted = await persistDraft();
+        if (!persisted) return;
+        applyPersisted(persisted);
+      }
       const item = await api.get(summary.templateId);
       if (isTemplateContentV1(item.content)) {
         const upgraded = upgradeComponentTemplateContentV1ToV3(item.content, item.assets);
@@ -443,16 +509,29 @@ export function ComponentLibrary({ config, session }: Props) {
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
 
-  function startNew() {
+  function resetNewDraft() {
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
-    setSelectedId(null); setUndoStack([]); setDirty(true); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
+    setSelectedId(null); setUndoStack([]); setDirty(true); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
     setPreviewParameterValues({});
     setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
-  function markDirty() { setDirty(true); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
+  async function startNew() {
+    if (dirty && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
+      setBusy(true);
+      try {
+        const persisted = await persistDraft();
+        if (!persisted) return;
+        applyPersisted(persisted);
+        await loadList();
+      } catch (caught) { setError(errorText(caught)); return; }
+      finally { setBusy(false); }
+    }
+    resetNewDraft();
+  }
+  function markDirty() { setDirty(true); setAutoSaveFailed(false); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
   function setCompatibleTerminals(terminals: readonly ArticleBinding[]) {
     const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, terminals);
     setDraft(current => ({ ...current, content: projected.content, compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), e4ConnectorTable: projected.table }));
@@ -486,6 +565,24 @@ export function ComponentLibrary({ config, session }: Props) {
   function setStandardTerminal(variantId: string, groupId: string, terminal: ArticleBinding | null) {
     try {
       const table = setArticleContactGroupStandardTerminal(draft.e4ConnectorTable, variantId, groupId, terminal);
+      setDraft(current => ({ ...current, e4ConnectorTable: table }));
+      markDirty(); setError(null);
+    } catch (caught) { setError(errorText(caught)); }
+  }
+  function setSeriesTerminalContactType(terminal: ArticleBinding, groupId: string | null) {
+    try {
+      let table = draft.e4ConnectorTable;
+      for (const article of table.articles) for (const group of article.contactGroups) {
+        if (group.contactCount < 1) continue;
+        const materialized = materializeE4ConnectorArticle(table, article.articleVariantId);
+        if (!materialized.rows.some(row => row.contactTypeGroupId === group.contactTypeGroupId)) continue;
+        const current = materialized.rows.filter(row => row.contactTypeGroupId === group.contactTypeGroupId)
+          .map(row => row.standardTerminalArticleKey);
+        const selectedHere = current.some(item => item !== null && articleIdentity(item) === articleIdentity(terminal));
+        if (selectedHere || group.contactTypeGroupId === groupId)
+          table = setArticleContactGroupStandardTerminal(table, article.articleVariantId, group.contactTypeGroupId,
+            group.contactTypeGroupId === groupId ? terminal : null);
+      }
       setDraft(current => ({ ...current, e4ConnectorTable: table }));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
@@ -548,9 +645,36 @@ export function ComponentLibrary({ config, session }: Props) {
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
-    setDirty(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved(`Сохранена версия ${result.version}`); setError(null);
+    setDirty(false); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved(`Сохранена версия ${result.version}`); setError(null);
   }
-  async function save() { setBusy(true); try { const result = await persistDraft(); if (result) { applyPersisted(result); await loadList(); } } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); } }
+  async function save() {
+    if (!dirty) return;
+    setBusy(true);
+    try {
+      const result = await persistDraft();
+      if (result) { applyPersisted(result); await loadList(); }
+      else setAutoSaveFailed(true);
+    } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!shouldAutoSaveTemplate({ dirty, failed: autoSaveFailed, busy, assetMismatch, code: draft.code, name: draft.name })) return;
+    const timer = window.setTimeout(() => { void save(); }, 900);
+    return () => window.clearTimeout(timer);
+  }, [assetMismatch, autoSaveFailed, busy, dirty, draft]);
+
+  async function removeTemplate() {
+    if (!draft.templateId) return;
+    if (!window.confirm(`Удалить серию «${draft.code}» и все версии шаблона? Это действие нельзя отменить.`)) return;
+    setBusy(true);
+    try {
+      await api.remove(draft.templateId, draft.version);
+      resetNewDraft();
+      await loadList();
+      setSaved("Серия удалена");
+    } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
+  }
 
   async function addAsset(file: File) {
     setBusy(true);
@@ -670,18 +794,20 @@ export function ComponentLibrary({ config, session }: Props) {
   const resolveAssetUrl = (assetId: string) => draft.templateId && draft.version > 0 ? api.assetContentUrl(draft.templateId, draft.version, assetId) : "";
 
   return <div className="component-library">
-    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ</p><h1>Серии и компоненты</h1><p>Здесь задаются серия, артикулы и таблица контактов Э4. Графика используется для вспомогательных видов.</p></div><button className="primary-action" type="button" onClick={startNew} disabled={busy}>+ Новая серия</button></header>
+    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ</p><h1>Серии и компоненты</h1><p>Здесь задаются серия, артикулы и таблица контактов Э4. Графика используется для вспомогательных видов.</p></div><button className="primary-action" type="button" onClick={() => void startNew()} disabled={busy}>+ Новая серия</button></header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="Закрыть">×</button></div>}
     {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыта прежняя версия шаблона.</strong><span>Она преобразована только в памяти и будет сохранена как новая версия v3.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
     {!upgradedFromV1 && diagnostics.length > 0 && <div className="library-diagnostics" role="alert">{diagnostics.map(item => <span key={`${item.code}/${item.path}`}>{item.path}: {item.message}</span>)}</div>}
     {saved && <div className="success-banner" role="status"><span>{saved}. Размещённые ранее экземпляры сохранят закреплённую версию.</span><button onClick={() => setSaved(null)} aria-label="Закрыть">×</button></div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
       <section className="library-editor" aria-busy={busy} inert={busy}>
-        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span>{draft.templateId ? `Версия ${draft.version}` : "Новая серия"}</span><button className="primary-action" onClick={() => void save()} disabled={busy || assetMismatch}>{busy ? "Сохраняем…" : draft.templateId ? "Создать версию" : "Сохранить серию"}</button></div></div>
+        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span role="status">{busy ? "Сохраняем…" : autoSaveFailed ? "Не сохранено — исправьте ошибку или повторите" : dirty ? "Изменения сохранятся автоматически" : `Версия ${draft.version} сохранена`}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || !dirty}>{busy ? "Сохраняем…" : "Сохранить сейчас"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
         <TemplateSeriesPanelV3
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
           onChangeCompatibleTerminalArticleKeys={setCompatibleTerminals}
+          terminalContactTypeGroupIds={terminalContactTypeGroupIds}
+          onSetTerminalContactTypeGroup={setSeriesTerminalContactType}
           connectorArticleQuery={connectorArticleQuery}
           connectorArticleSuggestions={connectorArticleSuggestions}
           connectorArticleSearchState={connectorArticleSearchState}
