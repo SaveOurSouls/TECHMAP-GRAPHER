@@ -8,6 +8,7 @@ import {
 } from "./template-commands-v3";
 import { upgradeTemplateContentV3ToV4 } from "./template-model-v4";
 import {
+  createTemplateContentV5FromEditor,
   isTemplateContentV5,
   upgradeTemplateContentV3ToV5,
   upgradeTemplateContentV4ToV5,
@@ -62,6 +63,43 @@ describe("template content v5 contract", () => {
 
     expect(result.e4ConnectorTable.articles[0]!.rows[0]!.overrides.standardTerminalArticleKey).toEqual(selected);
     expect(validateTemplateContentV5(result)).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("materializes missing v3 article configuration as a v5 contactGroups array", () => {
+    const source = v3Fixture().content;
+    source.articleVariants[0]!.contactGroups = null;
+
+    const result = upgradeTemplateContentV3ToV5(source).content;
+
+    expect(result.articleVariants[0]!.contactGroups).toEqual(
+      result.e4ConnectorTable.articles[0]!.contactGroups,
+    );
+    expect(Array.isArray(result.articleVariants[0]!.contactGroups)).toBe(true);
+    expect(validateTemplateContentV5(result)).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("serializes a newly added editor article with array contactGroups", () => {
+    const source = v3Fixture().content;
+    source.articleVariants[0]!.contactGroups = null;
+    const table = upgradeTemplateContentV3ToV4(source).content.e4ConnectorTable;
+
+    const result = createTemplateContentV5FromEditor(source, table, []).content;
+
+    expect(result.articleVariants[0]!.contactGroups).toEqual(
+      result.e4ConnectorTable.articles[0]!.contactGroups,
+    );
+    expect(validateTemplateContentV5(JSON.parse(JSON.stringify(result)))).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("rejects null article contactGroups at the client boundary", () => {
+    const content = upgradeTemplateContentV3ToV5(v3Fixture().content).content;
+    const broken = structuredClone(content) as unknown as Record<string, any>;
+    broken.articleVariants[0].contactGroups = null;
+
+    expect(validateTemplateContentV5(broken).diagnostics).toContainEqual(expect.objectContaining({
+      code: "array_required",
+      path: "$.articleVariants[0].contactGroups",
+    }));
   });
 
   it("rejects legacy per-article arrays, duplicates and a selected terminal outside the series list", () => {

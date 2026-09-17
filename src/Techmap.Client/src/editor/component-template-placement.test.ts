@@ -85,6 +85,27 @@ function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
 }
 
 describe("component template placement", () => {
+  it("places the first real article when the cached envelope index is stale", () => {
+    const template = fixture(2);
+    const selected = template.content.articleVariants[0]!;
+    const placed = createConnectorInstanceFromComponentTemplateV3({
+      ...template,
+      articleBindings: [{ sourceId: "obsolete", entityType: "connector", articleKey: "REMOVED" }],
+    }, {
+      id: "J-stale-index", designation: "X1", e4Position: { x: 1, y: 2 },
+    });
+
+    expect(placed.partNumber).toBe(selected.articleKey);
+    expect(placed.libraryBinding).toMatchObject({
+      mode: "template",
+      articleVariantId: selected.id,
+      snapshot: {
+        articleBindings: template.content.articleVariants.map(({ sourceId, entityType, articleKey }) =>
+          ({ sourceId, entityType, articleKey })),
+      },
+    });
+  });
+
   it("offers the series terminal list on every v5 E4 contact", () => {
     const base = fixture(2);
     if (base.content.schemaVersion !== 3) throw new Error("test fixture must be v3");

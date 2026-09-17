@@ -86,18 +86,20 @@ export function createConnectorInstanceFromComponentTemplateV3(
     throw new Error("Ресурсы шаблона не совпадают с ресурсами его закрепляемой версии.");
   }
   const id = requireText(options.id, "ID соединителя");
-  const selectedVariant = options.articleVariant ?? options.articleVariantId;
-  if (selectedVariant === undefined) throw new Error("Вариант артикула компонента не выбран.");
+  const selectedVariant = options.articleVariant ?? options.articleVariantId ?? content.articleVariants[0]?.id;
+  if (selectedVariant === undefined) throw new Error("В шаблоне нет варианта артикула для размещения.");
   const variant = selectedArticleVariant(content, selectedVariant);
   const rows = materializePlacementRows(content, variant.id);
   if (rows.length < 1 || rows.length > 300) {
     throw new Error("В выбранном варианте должно быть от 1 до 300 контактов.");
   }
   const article = articleKey(variant);
-  const articleBindings = uniqueArticleKeys(template.articleBindings);
-  if (!articleBindings.some((candidate) => sameArticleKey(candidate, article))) {
-    throw new Error("Выбранный артикул отсутствует в индексе закрепляемой версии шаблона.");
-  }
+  // articleVariants belongs to the immutable version content and is the
+  // placement authority. The summary/envelope index can lag behind that
+  // version after a series edit, so deriving the snapshot index from content
+  // keeps every inspector-selectable article available without trusting stale
+  // catalog metadata.
+  const articleBindings = uniqueArticleKeys(content.articleVariants);
   const assets = template.assets.map(snapshotAsset);
   const contacts = rows.map((row, index) => createContact(row, index + 1, content, id));
   const snapshot: ComponentTemplateMaterializedSnapshot = freezeSnapshot({
@@ -267,11 +269,6 @@ function uniqueArticleKeys(values: readonly ArticleKeyV3[]): readonly ComponentT
     result.push(normalized);
   }
   return Object.freeze(result);
-}
-
-function sameArticleKey(left: ArticleKeyV3, right: ArticleKeyV3): boolean {
-  return left.sourceId === right.sourceId && left.entityType === right.entityType &&
-    left.articleKey === right.articleKey;
 }
 
 function snapshotAsset(asset: TemplateEnvelopeAsset): ComponentTemplateAssetSnapshot {

@@ -24,7 +24,7 @@ export interface ArticleContactGroupV5 {
 export interface ArticleVariantV5 extends ArticleKeyV3 {
   readonly id: string;
   readonly parameterValues: ArticleParameterValueV3[];
-  readonly contactGroups: ArticleContactGroupV5[] | null;
+  readonly contactGroups: ArticleContactGroupV5[];
 }
 
 export interface TemplateContentV5 extends Omit<TemplateContentV3, "schemaVersion" | "articleVariants"> {
@@ -153,7 +153,12 @@ function validateV5Shapes(value: Record<string, unknown>, diagnostics: TemplateV
     diagnostics.push(error("array_required", "$.articleVariants", "Ожидается массив."));
     exactShapes = false;
   } else value.articleVariants.forEach((variant, articleIndex) => {
-    if (!isRecord(variant) || !Array.isArray(variant.contactGroups)) return;
+    if (!isRecord(variant)) return;
+    if (!Array.isArray(variant.contactGroups)) {
+      diagnostics.push(error("array_required", `$.articleVariants[${articleIndex}].contactGroups`, "Ожидается массив."));
+      exactShapes = false;
+      return;
+    }
     variant.contactGroups.forEach((group, groupIndex) => {
       if (!exact(group, ARTICLE_GROUP_KEYS, `$.articleVariants[${articleIndex}].contactGroups[${groupIndex}]`, diagnostics))
         exactShapes = false;
@@ -244,13 +249,14 @@ export function upgradeTemplateContentV4ToV5(content: TemplateContentV4): Templa
   const validation = validateTemplateContentV4(content);
   if (!validation.valid) throw new Error(validation.diagnostics[0]?.message ?? "Некорректный шаблон v4.");
   const compatibleTerminalArticleKeys = compatibleTerminalsFromV4(content);
+  const tableGroups = new Map(content.e4ConnectorTable.articles.map(article => [article.articleVariantId, article.contactGroups]));
   const articleVariants: ArticleVariantV5[] = content.articleVariants.map(variant => ({
     id: variant.id,
     sourceId: variant.sourceId,
     entityType: variant.entityType,
     articleKey: variant.articleKey,
     parameterValues: variant.parameterValues.map(value => ({ ...value })),
-    contactGroups: variant.contactGroups === null ? null : variant.contactGroups.map(group => ({
+    contactGroups: (tableGroups.get(variant.id) ?? []).map(group => ({
       contactTypeGroupId: group.contactTypeGroupId,
       contactCount: group.contactCount,
     })),
@@ -289,13 +295,14 @@ export function createTemplateContentV5FromEditor(
 ): TemplateV5Upgrade {
   const coreValidation = validateTemplateContentV3Structure(content);
   if (!coreValidation.valid) throw new Error(coreValidation.diagnostics[0]?.message ?? "Некорректный шаблон редактора.");
+  const tableGroups = new Map(table.articles.map(article => [article.articleVariantId, article.contactGroups]));
   const articleVariants: ArticleVariantV5[] = content.articleVariants.map(variant => ({
     id: variant.id,
     sourceId: variant.sourceId,
     entityType: variant.entityType,
     articleKey: variant.articleKey,
     parameterValues: variant.parameterValues.map(value => ({ ...value })),
-    contactGroups: variant.contactGroups === null ? null : variant.contactGroups.map(group => ({
+    contactGroups: (tableGroups.get(variant.id) ?? []).map(group => ({
       contactTypeGroupId: group.contactTypeGroupId,
       contactCount: group.contactCount,
     })),
@@ -321,7 +328,7 @@ export function projectTemplateContentV5ToV3(content: TemplateContentV5): Templa
     schemaVersion: 3,
     articleVariants: content.articleVariants.map(variant => ({
       ...structuredClone(variant),
-      contactGroups: variant.contactGroups === null ? null : variant.contactGroups.map(group => ({
+      contactGroups: variant.contactGroups.map(group => ({
         ...group,
         allowedTerminalArticleKeys: compatibleTerminalArticleKeys.map(terminal => ({ ...terminal })),
       })),

@@ -1055,12 +1055,10 @@ export function HarnessDesignEditor({
         if (!isTemplateContentV3(template.content) && !isTemplateContentV4(template.content) && !isTemplateContentV5(template.content)) {
           throw new Error("Для размещения в жгуте требуется шаблон v3 или v4.");
         }
-        const variant = item.componentArticle
-          ? template.content.articleVariants.find((candidate) =>
-              candidate.sourceId === item.componentArticle!.sourceId &&
-              candidate.entityType === item.componentArticle!.entityType &&
-              candidate.articleKey === item.componentArticle!.articleKey)
-          : template.content.articleVariants[0];
+        // A catalog card represents the whole series. Its cached article
+        // metadata may predate the loaded immutable version, whose first real
+        // variant is the deterministic initial selection.
+        const variant = template.content.articleVariants[0];
         if (!variant) throw new Error("В библиотечном шаблоне нет варианта артикула для размещения.");
         preview = createConnectorInstanceFromComponentTemplateV3({
           templateId: template.templateId,
