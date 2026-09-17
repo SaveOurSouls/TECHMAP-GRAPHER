@@ -10,7 +10,7 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectComponentPlacementPortabilityTests
 {
     [Fact]
-    public async Task Export_import_remaps_component_and_wire_ids_but_preserves_template_identity()
+    public async Task Export_import_remaps_component_ids_but_preserves_wire_cable_and_template_identity()
     {
         using var fixture = Fixture.Create();
         SourceGraph source;
@@ -35,7 +35,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
     }
 
     [Fact]
-    public void Copy_remaps_component_and_wire_ids_but_preserves_template_identity()
+    public void Copy_remaps_component_ids_but_preserves_wire_cable_and_template_identity()
     {
         using var fixture = Fixture.Create();
         using var storage = SqliteStorage.Open(fixture.SourceDataRoot);
@@ -61,6 +61,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var content = JsonNode.Parse(current.ContentJson)!.AsObject();
         content["connectors"] = new JsonArray();
         content["wires"] = new JsonArray();
+        content["cables"] = new JsonArray();
 
         _ = designStore.Put(
             source.ProjectId,
@@ -90,6 +91,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
             designStore.Get(copy.ProjectId, copiedHarness.HarnessId).ContentJson);
         Assert.Empty(copiedDesign.RootElement.GetProperty("connectors").EnumerateArray());
         Assert.Empty(copiedDesign.RootElement.GetProperty("wires").EnumerateArray());
+        Assert.Empty(copiedDesign.RootElement.GetProperty("cables").EnumerateArray());
     }
 
     private static SourceGraph CreateSourceGraph(SqliteStorage storage, int schemaVersion = 3)
@@ -111,6 +113,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var secondLogicalId = Guid.NewGuid();
         var articleVariantId = Guid.NewGuid();
         var materialSnapshotId = Guid.NewGuid();
+        var cableMaterialSnapshotId = Guid.NewGuid();
         var first = BoundInstance(firstId, firstLogicalId, articleVariantId, "X1", template, article);
         var second = BoundInstance(secondId, secondLogicalId, articleVariantId, "X2", template, article);
 
@@ -162,6 +165,30 @@ public sealed class ProjectComponentPlacementPortabilityTests
                 ["contactId"] = ContactId(secondId, secondLogicalId),
             },
         });
+        content["wires"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = "wire-2",
+            ["circuit"] = "DATA-",
+        });
+        content["cables"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "cable-1",
+            ["memberWireIds"] = new JsonArray("wire-1", "wire-2"),
+            ["materialBinding"] = new JsonObject
+            {
+                ["sourceId"] = "technology-cables",
+                ["snapshotId"] = cableMaterialSnapshotId.ToString("D"),
+                ["snapshotSha256"] = new string('1', 64),
+                ["recordId"] = new string('2', 64),
+                ["entityType"] = "cable",
+                ["sourceKey"] = "CABLE-2X0.20",
+                ["displayName"] = "Кабель 2x0,20",
+            },
+            ["lengthMm"] = 125.503m,
+            ["endCorrectionFromMm"] = -1.127m,
+            ["endCorrectionToMm"] = 2.009m,
+            ["cutRoundingStepMm"] = 0.005m,
+        });
         _ = designs.Put(project.ProjectId, harness.HarnessId, 2,
             SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString());
 
@@ -169,7 +196,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
             project.ProjectId, harness.HarnessId, [firstId, secondId],
             template.TemplateId, template.Version, template.VersionSha256,
             template.SchemaVersion, articleVariantId, [firstLogicalId, secondLogicalId],
-            materialSnapshotId);
+            materialSnapshotId, cableMaterialSnapshotId);
     }
 
     private static string BoundInstance(
@@ -240,9 +267,12 @@ public sealed class ProjectComponentPlacementPortabilityTests
         using var document = JsonDocument.Parse(design.ContentJson);
         var connectors = document.RootElement.GetProperty("connectors").EnumerateArray().ToArray();
         var wires = document.RootElement.GetProperty("wires").EnumerateArray().ToArray();
-        var wire = Assert.Single(wires);
+        Assert.Equal(2, wires.Length);
+        var wire = wires.Single(item => item.GetProperty("id").GetString() == "wire-1");
         Assert.Equal("wire-1", wire.GetProperty("id").GetString());
         Assert.Equal("DATA+", wire.GetProperty("circuit").GetString());
+        Assert.Equal("DATA-", wires.Single(item => item.GetProperty("id").GetString() == "wire-2")
+            .GetProperty("circuit").GetString());
         var material = wire.GetProperty("materialBinding");
         Assert.Equal("technology-wires", material.GetProperty("sourceId").GetString());
         Assert.Equal(source.MaterialSnapshotId.ToString("D"), material.GetProperty("snapshotId").GetString());
@@ -266,6 +296,22 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Equal(-0.001m, wire.GetProperty("endCorrectionFromMm").GetDecimal());
         Assert.Equal(0.002m, wire.GetProperty("endCorrectionToMm").GetDecimal());
         Assert.Equal(0.005m, wire.GetProperty("cutRoundingStepMm").GetDecimal());
+        var cable = Assert.Single(document.RootElement.GetProperty("cables").EnumerateArray());
+        Assert.Equal("cable-1", cable.GetProperty("id").GetString());
+        Assert.Equal(["wire-1", "wire-2"], cable.GetProperty("memberWireIds").EnumerateArray()
+            .Select(item => item.GetString()).ToArray());
+        var cableMaterial = cable.GetProperty("materialBinding");
+        Assert.Equal("technology-cables", cableMaterial.GetProperty("sourceId").GetString());
+        Assert.Equal(source.CableMaterialSnapshotId.ToString("D"), cableMaterial.GetProperty("snapshotId").GetString());
+        Assert.Equal(new string('1', 64), cableMaterial.GetProperty("snapshotSha256").GetString());
+        Assert.Equal(new string('2', 64), cableMaterial.GetProperty("recordId").GetString());
+        Assert.Equal("cable", cableMaterial.GetProperty("entityType").GetString());
+        Assert.Equal("CABLE-2X0.20", cableMaterial.GetProperty("sourceKey").GetString());
+        Assert.Equal("Кабель 2x0,20", cableMaterial.GetProperty("displayName").GetString());
+        Assert.Equal(125.503m, cable.GetProperty("lengthMm").GetDecimal());
+        Assert.Equal(-1.127m, cable.GetProperty("endCorrectionFromMm").GetDecimal());
+        Assert.Equal(2.009m, cable.GetProperty("endCorrectionToMm").GetDecimal());
+        Assert.Equal(0.005m, cable.GetProperty("cutRoundingStepMm").GetDecimal());
         var destinationIds = placements.Select(item => item.PlacementId.ToString("D")).ToHashSet(StringComparer.Ordinal);
         Assert.Equal(destinationIds, connectors.Select(item => item.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal));
 
@@ -357,7 +403,8 @@ public sealed class ProjectComponentPlacementPortabilityTests
         int SchemaVersion,
         Guid ArticleVariantId,
         IReadOnlyList<Guid> LogicalContactIds,
-        Guid MaterialSnapshotId);
+        Guid MaterialSnapshotId,
+        Guid CableMaterialSnapshotId);
 
     private sealed class Fixture : IDisposable
     {
