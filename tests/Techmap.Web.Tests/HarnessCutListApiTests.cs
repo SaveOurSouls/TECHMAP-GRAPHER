@@ -201,6 +201,124 @@ public sealed class HarnessCutListApiTests
     }
 
     [Fact]
+    public async Task Cut_list_counts_a_multicore_cable_once_and_omits_its_member_wires()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf, quantity: 2);
+        var snapshotId = Guid.NewGuid().ToString("D");
+        using var content = JsonDocument.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "connectors": [],
+              "wires": [
+                {"id":"W-C1","circuit":"DATA+","lengthMm":500},
+                {"id":"W-C2","circuit":"DATA-","lengthMm":500},
+                {
+                  "id":"W-FREE","circuit":"24V","lengthMm":25,
+                  "materialBinding":{
+                    "sourceId":"technology-wires","snapshotId":"SNAPSHOT_ID",
+                    "snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "entityType":"wire","sourceKey":"WIRE-FREE","displayName":"Отдельный провод"
+                  }
+                }
+              ],
+              "cables": [{
+                "id":"C-1","memberWireIds":["W-C1","W-C2"],
+                "materialBinding":{
+                  "sourceId":"technology-cables","snapshotId":"SNAPSHOT_ID",
+                  "snapshotSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "recordId":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "entityType":"cable","sourceKey":"CABLE-2X","displayName":"Кабель 2x0,2"
+                },
+                "lengthMm":99.1,"endCorrectionFromMm":1,"endCorrectionToMm":2,
+                "cutRoundingStepMm":1
+              }],
+              "views":{"e4":{"layers":[]},"drawing":{"layers":[]}}
+            }
+            """.Replace("SNAPSHOT_ID", snapshotId, StringComparison.Ordinal));
+        using (var save = await SendAsync(
+                   client, HttpMethod.Put, DesignRoute(ids.ProjectId, ids.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf))
+        {
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+
+        using var response = await client.GetAsync(
+            CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var cutList = Assert.IsType<HarnessCutListResponse>(result);
+        Assert.Equal("ready", cutList.Status);
+        Assert.Equal(2, cutList.Items.Count);
+        var cable = Assert.Single(cutList.Items, item => item.WireId == "C-1");
+        Assert.Equal("CABLE-2X", cable.MaterialSourceKey);
+        Assert.Equal(99.1m, cable.SourceLengthMm);
+        Assert.Equal(103m, cable.CutLengthMm);
+        Assert.Equal(2, cable.Pieces);
+        Assert.Equal(0.206m, cable.TotalMetres);
+        Assert.DoesNotContain(cutList.Items, item => item.WireId is "W-C1" or "W-C2");
+        var ordinaryWire = Assert.Single(cutList.Items, item => item.WireId == "W-FREE");
+        Assert.Equal("WIRE-FREE", ordinaryWire.MaterialSourceKey);
+        Assert.Equal(0.05m, ordinaryWire.TotalMetres);
+    }
+
+    [Fact]
+    public async Task Cut_list_marks_a_cable_with_unknown_length_incomplete_without_counting_its_members()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf, quantity: 3);
+        var snapshotId = Guid.NewGuid().ToString("D");
+        using var content = JsonDocument.Parse(
+            """
+            {
+              "schemaVersion":1,"connectors":[],
+              "wires":[
+                {"id":"W-1","circuit":"A","lengthMm":50},
+                {"id":"W-2","circuit":"B","lengthMm":50}
+              ],
+              "cables":[{
+                "id":"C-UNKNOWN","memberWireIds":["W-1","W-2"],"lengthMm":null,
+                "materialBinding":{
+                  "sourceId":"technology-cables","snapshotId":"SNAPSHOT_ID",
+                  "snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "entityType":"cable","sourceKey":"CABLE-X","displayName":"Кабель X"
+                }
+              }],
+              "views":{"e4":{"layers":[]},"drawing":{"layers":[]}}
+            }
+            """.Replace("SNAPSHOT_ID", snapshotId, StringComparison.Ordinal));
+        using (var save = await SendAsync(
+                   client, HttpMethod.Put, DesignRoute(ids.ProjectId, ids.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf))
+        {
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+
+        using var response = await client.GetAsync(
+            CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
+            TestContext.Current.CancellationToken);
+
+        var cutList = Assert.IsType<HarnessCutListResponse>(result);
+        Assert.Equal("incomplete", cutList.Status);
+        var cable = Assert.Single(cutList.Items);
+        Assert.Equal("C-UNKNOWN", cable.WireId);
+        Assert.Null(cable.CutLengthMm);
+        Assert.Null(cable.TotalMetres);
+        Assert.Equal(3, cable.Pieces);
+        Assert.Equal(["length-missing"], cable.Warnings);
+    }
+
+    [Fact]
     public async Task Cut_list_requires_session_and_rejects_a_harness_from_another_project()
     {
         await using var factory = new TechmapWebApplicationFactory();

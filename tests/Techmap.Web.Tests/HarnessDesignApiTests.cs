@@ -160,6 +160,127 @@ public sealed class HarnessDesignApiTests
         Assert.Equal("design_content_too_large", Assert.IsType<ApiErrorResponse>(error).Error);
     }
 
+    [Fact]
+    public async Task Cable_instances_round_trip_while_legacy_documents_remain_supported()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var snapshotId = Guid.NewGuid();
+        using var content = JsonDocument.Parse(
+            $$$$"""
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W-1"},{"id":"W-2"}],
+             "cables":[{"id":"C-1","memberWireIds":["W-1","W-2"],
+               "materialBinding":{"sourceId":"technology-cables","snapshotId":"{{{{snapshotId:D}}}}",
+                 "snapshotSha256":"{{{{new string('a', 64)}}}}","recordId":"{{{{new string('b', 64)}}}}",
+                 "entityType":"cable","sourceKey":"CABLE-2X","displayName":"Кабель 2x0,2"},
+               "lengthMm":125.5,"endCorrectionFromMm":-1.25,"endCorrectionToMm":2,
+               "cutRoundingStepMm":0.5}],
+             "views":{"e4":{"layers":[]},"drawing":{"layers":[]}}}
+            """);
+        using var savedResponse = await SendAsync(
+            client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf);
+        var saved = await savedResponse.Content.ReadFromJsonAsync<HarnessDesignResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, savedResponse.StatusCode);
+        var cable = Assert.IsType<HarnessDesignResponse>(saved).Content.GetProperty("cables")[0];
+        Assert.Equal("C-1", cable.GetProperty("id").GetString());
+        Assert.Equal(["W-1", "W-2"], cable.GetProperty("memberWireIds").EnumerateArray()
+            .Select(value => value.GetString()).ToArray());
+        Assert.Equal("cable", cable.GetProperty("materialBinding").GetProperty("entityType").GetString());
+        Assert.Equal(125.5m, cable.GetProperty("lengthMm").GetDecimal());
+
+        // Absence of the optional top-level collection is the legacy schema-1 representation.
+        using var legacy = JsonDocument.Parse(
+            "{\"schemaVersion\":1,\"connectors\":[],\"wires\":[],\"views\":{\"e4\":{\"layers\":[]},\"drawing\":{\"layers\":[]}}}");
+        using var legacyResponse = await SendAsync(
+            client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(1, 1, legacy.RootElement.Clone()), csrf);
+        Assert.Equal(HttpStatusCode.OK, legacyResponse.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("duplicate cable ID", "[{\"id\":\"C-1\",\"memberWireIds\":[\"W-1\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1},{\"id\":\"C-1\",\"memberWireIds\":[\"W-2\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1}]", "content.cables[1].id")]
+    [InlineData("unknown member", "[{\"id\":\"C-1\",\"memberWireIds\":[\"W-X\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1}]", "content.cables[0].memberWireIds[0]")]
+    [InlineData("member of two cables", "[{\"id\":\"C-1\",\"memberWireIds\":[\"W-1\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1},{\"id\":\"C-2\",\"memberWireIds\":[\"W-1\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1}]", "content.cables[1].memberWireIds[0]")]
+    [InlineData("invalid precision", "[{\"id\":\"C-1\",\"memberWireIds\":[\"W-1\"],\"lengthMm\":1.0001,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":1}]", "content.cables[0].lengthMm")]
+    [InlineData("zero rounding", "[{\"id\":\"C-1\",\"memberWireIds\":[\"W-1\"],\"lengthMm\":1,\"endCorrectionFromMm\":0,\"endCorrectionToMm\":0,\"cutRoundingStepMm\":0}]", "content.cables[0].cutRoundingStepMm")]
+    public async Task Cable_instances_reject_invalid_identity_membership_and_lengths(
+        string reason,
+        string cablesJson,
+        string expectedField)
+    {
+        _ = reason;
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        using var content = JsonDocument.Parse(
+            $"{{\"schemaVersion\":1,\"connectors\":[],\"wires\":[{{\"id\":\"W-1\"}},{{\"id\":\"W-2\"}}],\"cables\":{cablesJson},\"views\":{{\"e4\":{{\"layers\":[]}},\"drawing\":{{\"layers\":[]}}}}}}");
+
+        using var response = await SendAsync(
+            client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_design_content", Assert.IsType<ApiErrorResponse>(error).Error);
+        Assert.Equal(expectedField, error.Field);
+    }
+
+    [Fact]
+    public async Task Cable_instances_require_unique_member_wire_ids()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        using var content = JsonDocument.Parse(
+            """
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W-1"},{"id":"W-1"}],
+             "cables":[],"views":{"e4":{"layers":[]},"drawing":{"layers":[]}}}
+            """);
+
+        using var response = await SendAsync(
+            client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_design_content", Assert.IsType<ApiErrorResponse>(error).Error);
+        Assert.Equal("content.wires[1].id", error.Field);
+    }
+
+    [Fact]
+    public async Task Cable_material_binding_requires_the_cable_entity_type()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        using var content = JsonDocument.Parse(
+            $$$$"""
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W-1"}],
+             "cables":[{"id":"C-1","memberWireIds":["W-1"],
+               "materialBinding":{"sourceId":"technology-wires","snapshotId":"{{{{Guid.NewGuid():D}}}}",
+                 "snapshotSha256":"{{{{new string('a', 64)}}}}","recordId":"{{{{new string('b', 64)}}}}",
+                 "entityType":"wire","sourceKey":"WIRE-1","displayName":"Провод"},
+               "lengthMm":null,"endCorrectionFromMm":0,"endCorrectionToMm":0,"cutRoundingStepMm":1}],
+             "views":{"e4":{"layers":[]},"drawing":{"layers":[]}}}
+            """);
+        using var response = await SendAsync(
+            client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_design_content", Assert.IsType<ApiErrorResponse>(error).Error);
+        Assert.Equal("content.cables[0].materialBinding.entityType", error.Field);
+    }
+
     private static async Task<string> StartSessionAsync(HttpClient client)
     {
         using var page = await client.GetAsync("/", TestContext.Current.CancellationToken);

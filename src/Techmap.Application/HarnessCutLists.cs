@@ -138,72 +138,85 @@ public sealed class HarnessCutListService(
                 var wireId = RequiredString(wire, "id", $"{path}.id");
                 if (!wireIds.Add(wireId))
                     throw InvalidDesign("Harness design wire IDs must be unique.", $"{path}.id");
+                index++;
+            }
+
+            var cableMemberWireIds = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("cables", out var cables))
+            {
+                if (cables.ValueKind != JsonValueKind.Array)
+                    throw InvalidDesign("The harness design cables collection is invalid.", "content.cables");
+
+                var cableIds = new HashSet<string>(StringComparer.Ordinal);
+                index = 0;
+                foreach (var cable in cables.EnumerateArray())
+                {
+                    var path = $"content.cables[{index}]";
+                    if (cable.ValueKind != JsonValueKind.Object)
+                        throw InvalidDesign("A harness design cable must be an object.", path);
+
+                    var cableId = RequiredString(cable, "id", $"{path}.id");
+                    if (!cableIds.Add(cableId))
+                        throw InvalidDesign("Harness design cable IDs must be unique.", $"{path}.id");
+
+                    if (!cable.TryGetProperty("memberWireIds", out var memberWireIds) ||
+                        memberWireIds.ValueKind != JsonValueKind.Array)
+                    {
+                        throw InvalidDesign("A cable memberWireIds collection must be an array.", $"{path}.memberWireIds");
+                    }
+
+                    var localMemberWireIds = new HashSet<string>(StringComparer.Ordinal);
+                    var memberIndex = 0;
+                    foreach (var memberWireIdValue in memberWireIds.EnumerateArray())
+                    {
+                        var memberPath = $"{path}.memberWireIds[{memberIndex}]";
+                        if (memberWireIdValue.ValueKind != JsonValueKind.String ||
+                            string.IsNullOrWhiteSpace(memberWireIdValue.GetString()))
+                        {
+                            throw InvalidDesign("A cable member wire ID must be a non-empty string.", memberPath);
+                        }
+
+                        var memberWireId = memberWireIdValue.GetString()!;
+                        if (!localMemberWireIds.Add(memberWireId))
+                            throw InvalidDesign("A cable cannot contain the same member wire more than once.", memberPath);
+                        if (!wireIds.Contains(memberWireId))
+                            throw InvalidDesign("A cable member wire does not exist in the harness design.", memberPath);
+                        if (!cableMemberWireIds.Add(memberWireId))
+                            throw InvalidDesign("A wire cannot belong to more than one cable.", memberPath);
+                        memberIndex++;
+                    }
+
+                    var material = MaterialBindingOrMissing(cable, path);
+                    if (material is not null && material.EntityType != "cable")
+                    {
+                        throw InvalidDesign(
+                            "The cable material binding entityType must be cable.",
+                            $"{path}.materialBinding.entityType");
+                    }
+                    items.Add(BuildItem(
+                        cable,
+                        path,
+                        cableId,
+                        string.Empty,
+                        material,
+                        harness.Quantity));
+                    index++;
+                }
+            }
+
+            index = 0;
+            foreach (var wire in wires.EnumerateArray())
+            {
+                var path = $"content.wires[{index}]";
+                var wireId = RequiredString(wire, "id", $"{path}.id");
                 var circuit = RequiredString(wire, "circuit", $"{path}.circuit", allowEmpty: true);
+                if (cableMemberWireIds.Contains(wireId))
+                {
+                    index++;
+                    continue;
+                }
                 var material = MaterialBindingOrMissing(wire, path);
-                var sourceLength = NullableLength(wire, "lengthMm", $"{path}.lengthMm");
-                var fromCorrection = CorrectionOrDefault(
-                    wire, "endCorrectionFromMm", $"{path}.endCorrectionFromMm");
-                var toCorrection = CorrectionOrDefault(
-                    wire, "endCorrectionToMm", $"{path}.endCorrectionToMm");
-                var roundingStep = LengthOrDefault(
-                    wire, "cutRoundingStepMm", 1m, $"{path}.cutRoundingStepMm");
-                if (roundingStep.Micrometres == 0)
-                    throw InvalidDesign("The cut rounding step must be greater than zero.", $"{path}.cutRoundingStepMm");
-
-                CutLengthResult result;
-                try
-                {
-                    result = CutLengthCalculator.Calculate(new CutLengthInput(
-                        [sourceLength], fromCorrection, toCorrection, roundingStep));
-                }
-                catch (ArgumentException error)
-                {
-                    throw InvalidDesign("The wire cut-length inputs are invalid.", path, error);
-                }
-                catch (OverflowException error)
-                {
-                    throw InvalidDesign("The wire cut length exceeds the supported range.", path, error);
-                }
-
-                decimal? totalMetres = null;
-                if (result.CutLength is { } cutLength)
-                {
-                    try
-                    {
-                        totalMetres = checked((decimal)cutLength.Micrometres * harness.Quantity) /
-                            Length.MicrometresPerMetre;
-                    }
-                    catch (OverflowException error)
-                    {
-                        throw new HarnessCutListException(
-                            "cut_list_total_too_large",
-                            "The total wire consumption exceeds the supported decimal range.",
-                            path,
-                            error);
-                    }
-                }
-
-                var warnings = new List<string>(2);
-                if (material is null)
-                    warnings.Add(MissingMaterialWarningCode);
-                if (!result.IsComplete)
-                    warnings.Add(MissingLengthWarningCode);
-
-                items.Add(new HarnessCutListItem(
-                    wireId,
-                    circuit,
-                    material?.DisplayName ?? NotPinnedMaterial,
-                    material?.SourceKey,
-                    material?.DisplayName,
-                    sourceLength?.Millimetres,
-                    fromCorrection.Millimetres,
-                    toCorrection.Millimetres,
-                    roundingStep.Millimetres,
-                    result.CutLength?.Millimetres,
-                    harness.Quantity,
-                    totalMetres,
-                    result.IsComplete ? "ready" : "incomplete",
-                    warnings.AsReadOnly()));
+                items.Add(BuildItem(wire, path, wireId, circuit, material, harness.Quantity));
                 index++;
             }
 
@@ -233,6 +246,80 @@ public sealed class HarnessCutListService(
         {
             throw InvalidDesign("The harness design content is not valid JSON.", "content", error);
         }
+    }
+
+    private static HarnessCutListItem BuildItem(
+        JsonElement owner,
+        string path,
+        string itemId,
+        string circuit,
+        MaterialBinding? material,
+        long quantity)
+    {
+        var sourceLength = NullableLength(owner, "lengthMm", $"{path}.lengthMm");
+        var fromCorrection = CorrectionOrDefault(
+            owner, "endCorrectionFromMm", $"{path}.endCorrectionFromMm");
+        var toCorrection = CorrectionOrDefault(
+            owner, "endCorrectionToMm", $"{path}.endCorrectionToMm");
+        var roundingStep = LengthOrDefault(
+            owner, "cutRoundingStepMm", 1m, $"{path}.cutRoundingStepMm");
+        if (roundingStep.Micrometres == 0)
+            throw InvalidDesign("The cut rounding step must be greater than zero.", $"{path}.cutRoundingStepMm");
+
+        CutLengthResult result;
+        try
+        {
+            result = CutLengthCalculator.Calculate(new CutLengthInput(
+                [sourceLength], fromCorrection, toCorrection, roundingStep));
+        }
+        catch (ArgumentException error)
+        {
+            throw InvalidDesign("The cut-length inputs are invalid.", path, error);
+        }
+        catch (OverflowException error)
+        {
+            throw InvalidDesign("The cut length exceeds the supported range.", path, error);
+        }
+
+        decimal? totalMetres = null;
+        if (result.CutLength is { } cutLength)
+        {
+            try
+            {
+                totalMetres = checked((decimal)cutLength.Micrometres * quantity) /
+                    Length.MicrometresPerMetre;
+            }
+            catch (OverflowException error)
+            {
+                throw new HarnessCutListException(
+                    "cut_list_total_too_large",
+                    "The total material consumption exceeds the supported decimal range.",
+                    path,
+                    error);
+            }
+        }
+
+        var warnings = new List<string>(2);
+        if (material is null)
+            warnings.Add(MissingMaterialWarningCode);
+        if (!result.IsComplete)
+            warnings.Add(MissingLengthWarningCode);
+
+        return new HarnessCutListItem(
+            itemId,
+            circuit,
+            material?.DisplayName ?? NotPinnedMaterial,
+            material?.SourceKey,
+            material?.DisplayName,
+            sourceLength?.Millimetres,
+            fromCorrection.Millimetres,
+            toCorrection.Millimetres,
+            roundingStep.Millimetres,
+            result.CutLength?.Millimetres,
+            quantity,
+            totalMetres,
+            result.IsComplete ? ReadyStatus : IncompleteStatus,
+            warnings.AsReadOnly());
     }
 
     private static MaterialBinding? MaterialBindingOrMissing(JsonElement wire, string wirePath)

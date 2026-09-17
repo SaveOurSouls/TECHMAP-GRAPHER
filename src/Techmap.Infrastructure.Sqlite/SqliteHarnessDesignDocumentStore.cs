@@ -289,6 +289,8 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     "content");
             }
 
+            ValidateCableInstances(root);
+
             return root.GetRawText();
         }
         catch (JsonException error)
@@ -299,6 +301,176 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "content",
                 innerException: error);
         }
+    }
+
+    private static void ValidateCableInstances(JsonElement root)
+    {
+        // `cables` is optional so documents written before the cable model was
+        // introduced continue to round-trip unchanged.
+        if (!root.TryGetProperty("cables", out var cables)) return;
+        if (cables.ValueKind != JsonValueKind.Array)
+            throw Invalid("invalid_design_content", "The harness design cable collection must be an array.", "content.cables");
+        if (!root.TryGetProperty("wires", out var wires) || wires.ValueKind != JsonValueKind.Array)
+            throw Invalid("invalid_design_content", "The harness design wire collection must be an array.", "content.wires");
+
+        var wireIds = new HashSet<string>(StringComparer.Ordinal);
+        var wireIndex = 0;
+        foreach (var wire in wires.EnumerateArray())
+        {
+            var path = $"content.wires[{wireIndex}].id";
+            if (wire.ValueKind != JsonValueKind.Object)
+                throw Invalid("invalid_design_content", "A harness design wire must be an object.", $"content.wires[{wireIndex}]");
+            var wireId = RequiredCableString(wire, "id", path, 256);
+            if (!wireIds.Add(wireId))
+                throw Invalid("invalid_design_content", "Harness design wire IDs must be unique.", path);
+            wireIndex++;
+        }
+
+        var cableIds = new HashSet<string>(StringComparer.Ordinal);
+        var claimedWireIds = new HashSet<string>(StringComparer.Ordinal);
+        var cableIndex = 0;
+        foreach (var cable in cables.EnumerateArray())
+        {
+            var path = $"content.cables[{cableIndex}]";
+            if (cable.ValueKind != JsonValueKind.Object)
+                throw Invalid("invalid_design_content", "A harness design cable must be an object.", path);
+            var cableId = RequiredCableString(cable, "id", $"{path}.id", 256);
+            if (!cableIds.Add(cableId))
+                throw Invalid("invalid_design_content", "Harness design cable IDs must be unique.", $"{path}.id");
+
+            if (!cable.TryGetProperty("memberWireIds", out var members) || members.ValueKind != JsonValueKind.Array)
+                throw Invalid("invalid_design_content", "Cable memberWireIds must be an array.", $"{path}.memberWireIds");
+            var localMembers = new HashSet<string>(StringComparer.Ordinal);
+            var memberIndex = 0;
+            foreach (var member in members.EnumerateArray())
+            {
+                var memberPath = $"{path}.memberWireIds[{memberIndex}]";
+                if (member.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(member.GetString()))
+                    throw Invalid("invalid_design_content", "A cable member wire ID must be a non-empty string.", memberPath);
+                var memberId = member.GetString()!;
+                if (!wireIds.Contains(memberId))
+                    throw Invalid("invalid_design_content", "A cable references an unknown wire ID.", memberPath);
+                if (!localMembers.Add(memberId))
+                    throw Invalid("invalid_design_content", "A cable cannot contain the same wire more than once.", memberPath);
+                if (!claimedWireIds.Add(memberId))
+                    throw Invalid("invalid_design_content", "A wire cannot belong to more than one cable.", memberPath);
+                memberIndex++;
+            }
+
+            ValidateCableLength(cable, "lengthMm", $"{path}.lengthMm", allowNull: true, defaultValue: null);
+            ValidateCableCorrection(cable, "endCorrectionFromMm", $"{path}.endCorrectionFromMm", defaultValue: 0m);
+            ValidateCableCorrection(cable, "endCorrectionToMm", $"{path}.endCorrectionToMm", defaultValue: 0m);
+            var rounding = ValidateCableLength(cable, "cutRoundingStepMm", $"{path}.cutRoundingStepMm", allowNull: false, defaultValue: 1m);
+            if (rounding is not null && rounding.Value.Micrometres == 0)
+                throw Invalid("invalid_design_content", "The cable cut rounding step must be greater than zero.", $"{path}.cutRoundingStepMm");
+            ValidateCableMaterialBinding(cable, path);
+            cableIndex++;
+        }
+    }
+
+    private static Length? ValidateCableLength(
+        JsonElement owner,
+        string propertyName,
+        string path,
+        bool allowNull,
+        decimal? defaultValue)
+    {
+        if (!owner.TryGetProperty(propertyName, out var property))
+        {
+            if (defaultValue is null) return null;
+            property = JsonSerializer.SerializeToElement(defaultValue.Value);
+        }
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            if (allowNull) return null;
+            throw Invalid("invalid_design_content", $"Cable {propertyName} must be a number.", path);
+        }
+        if (property.ValueKind != JsonValueKind.Number || !property.TryGetDecimal(out var value))
+            throw Invalid("invalid_design_content", "A cable length must be an exact decimal JSON number.", path);
+        try
+        {
+            return Length.FromMillimetres(value);
+        }
+        catch (ArgumentException error)
+        {
+            throw new HarnessDesignDocumentException(
+                "invalid_design_content", "The cable length is invalid or more precise than 0.001 mm.", path,
+                innerException: error);
+        }
+        catch (OverflowException error)
+        {
+            throw new HarnessDesignDocumentException(
+                "invalid_design_content", "The cable length exceeds the supported range.", path,
+                innerException: error);
+        }
+    }
+
+    private static void ValidateCableCorrection(
+        JsonElement owner,
+        string propertyName,
+        string path,
+        decimal defaultValue)
+    {
+        var property = owner.TryGetProperty(propertyName, out var present)
+            ? present
+            : JsonSerializer.SerializeToElement(defaultValue);
+        if (property.ValueKind != JsonValueKind.Number ||
+            !property.TryGetDecimal(out var value))
+        {
+            throw Invalid("invalid_design_content", "A cable end correction must be an exact decimal JSON number.", path);
+        }
+        try
+        {
+            _ = LengthCorrection.FromMillimetres(value);
+        }
+        catch (ArgumentException error)
+        {
+            throw new HarnessDesignDocumentException(
+                "invalid_design_content", "The cable end correction is more precise than 0.001 mm.", path,
+                innerException: error);
+        }
+        catch (OverflowException error)
+        {
+            throw new HarnessDesignDocumentException(
+                "invalid_design_content", "The cable end correction exceeds the supported range.", path,
+                innerException: error);
+        }
+    }
+
+    private static void ValidateCableMaterialBinding(JsonElement cable, string cablePath)
+    {
+        if (!cable.TryGetProperty("materialBinding", out var binding)) return;
+        var path = $"{cablePath}.materialBinding";
+        if (binding.ValueKind != JsonValueKind.Object)
+            throw Invalid("invalid_design_content", "The cable material binding must be an object.", path);
+        _ = RequiredCableString(binding, "sourceId", $"{path}.sourceId", 128);
+        var snapshotId = RequiredCableString(binding, "snapshotId", $"{path}.snapshotId", 36);
+        if (!Guid.TryParseExact(snapshotId, "D", out var parsedSnapshotId) || parsedSnapshotId == Guid.Empty)
+            throw Invalid("invalid_design_content", "The cable material snapshotId must be a non-empty UUID.", $"{path}.snapshotId");
+        ValidateSha256(binding, "snapshotSha256", $"{path}.snapshotSha256");
+        ValidateSha256(binding, "recordId", $"{path}.recordId");
+        var entityType = RequiredCableString(binding, "entityType", $"{path}.entityType", 16);
+        if (!string.Equals(entityType, "cable", StringComparison.Ordinal))
+            throw Invalid("invalid_design_content", "The cable material entityType must be cable.", $"{path}.entityType");
+        _ = RequiredCableString(binding, "sourceKey", $"{path}.sourceKey", 512);
+        _ = RequiredCableString(binding, "displayName", $"{path}.displayName", 256);
+    }
+
+    private static void ValidateSha256(JsonElement owner, string propertyName, string path)
+    {
+        var value = RequiredCableString(owner, propertyName, path, 64);
+        if (value.Length != 64 || value.Any(character => !Uri.IsHexDigit(character)))
+            throw Invalid("invalid_design_content", $"Cable material {propertyName} must be a SHA-256 hexadecimal value.", path);
+    }
+
+    private static string RequiredCableString(JsonElement owner, string propertyName, string path, int maximumLength)
+    {
+        if (!owner.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+            throw Invalid("invalid_design_content", $"Cable {propertyName} must be a string.", path);
+        var result = value.GetString()!;
+        if (string.IsNullOrWhiteSpace(result) || result.Length > maximumLength)
+            throw Invalid("invalid_design_content", $"Cable {propertyName} is empty or too long.", path);
+        return result;
     }
 
     private static HarnessDesignDocument Read(
