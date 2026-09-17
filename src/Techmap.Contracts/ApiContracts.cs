@@ -251,6 +251,18 @@ public sealed record UpdateComponentTemplateRequest(
     IReadOnlyList<ComponentTemplateArticleBindingRequest>? ArticleBindings,
     JsonElement Content);
 
+public sealed record SaveComponentTemplateDraftRequest(
+    int? ExpectedVersion,
+    int? ExpectedDraftRevision,
+    string? Code,
+    string? Name,
+    IReadOnlyList<ComponentTemplateArticleBindingRequest>? ArticleBindings,
+    JsonElement Content);
+
+public sealed record PublishComponentTemplateDraftRequest(
+    int? ExpectedVersion,
+    int? ExpectedDraftRevision);
+
 public sealed record DeleteComponentTemplateRequest(int? ExpectedVersion);
 
 public sealed record AddComponentTemplateAssetRequest(
@@ -286,6 +298,18 @@ public sealed record ComponentTemplateResponse(
     Guid TemplateId,
     int Version,
     string VersionSha256,
+    string Code,
+    string Name,
+    IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,
+    IReadOnlyList<ComponentTemplateAssetResponse> Assets,
+    JsonElement Content,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
+public sealed record ComponentTemplateDraftResponse(
+    Guid TemplateId,
+    int BaseVersion,
+    int DraftRevision,
     string Code,
     string Name,
     IReadOnlyList<ComponentTemplateArticleBindingResponse> ArticleBindings,

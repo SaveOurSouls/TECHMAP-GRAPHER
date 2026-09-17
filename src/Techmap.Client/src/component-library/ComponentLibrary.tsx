@@ -6,7 +6,7 @@ import {
   type ReferenceCatalogSearchRecord,
   type ReferenceCatalogSearchRequest,
 } from "../reference-catalog-api";
-import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
+import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateDraft, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, isTemplateContentV5, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
 import { E4ConnectorTableEditor } from "./E4ConnectorTableEditor";
@@ -54,17 +54,18 @@ import {
 import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
 import { validateTemplateContentV3 as validateTemplateContentV2, type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
 import { validateTemplateContentV4, type TemplateContentV4 } from "./template-model-v4";
-import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3 } from "./template-model-v5";
+import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3, type TerminalContactTypeBindingV5 } from "./template-model-v5";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { templateId: string | null; version: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Draft { templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+type LoadedTemplate = Pick<ComponentTemplate, "templateId" | "code" | "name" | "articleBindings" | "assets" | "content"> & { readonly version: number; readonly draftRevision: number };
 type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "rectangle" | "ellipse" | "bezier" | "closedContour" | "text" | "image" }>;
 
 const newDraft = (): Draft => {
   const content = newTemplateContentV2();
-  return { templateId: null, version: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
+  return { templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
 };
 const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content.views.map(view => [view.id, view.layers[0]!.id]));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
@@ -107,8 +108,16 @@ function applySeriesTerminalsToEditor(
   content: TemplateContentV2,
   table: E4ConnectorSeriesTable,
   terminals: readonly ArticleBinding[],
+  bindings: readonly TerminalContactTypeBindingV5[] | null = null,
 ): { content: TemplateContentV2; table: E4ConnectorSeriesTable } {
   const allowed = new Set(terminals.map(articleIdentity));
+  const terminalsForGroup = (groupId: string) => terminals.filter(terminal =>
+    bindings === null || bindings.some(binding => binding.contactTypeGroupId === groupId &&
+      articleIdentity(binding.terminalArticleKey) === articleIdentity(terminal)));
+  const terminalAllowedForGroup = (terminal: ArticleBinding | null, groupId: string | null) => terminal === null ||
+    (allowed.has(articleIdentity(terminal)) && (bindings === null || (groupId !== null && bindings.some(binding =>
+      binding.contactTypeGroupId === groupId && articleIdentity(binding.terminalArticleKey) === articleIdentity(terminal)))));
+  const defaultsById = new Map(table.seriesDefaults.map(row => [row.rowId, row.values]));
   return {
     content: {
       ...content,
@@ -116,7 +125,7 @@ function applySeriesTerminalsToEditor(
         ...variant,
         contactGroups: variant.contactGroups?.map(group => ({
           ...group,
-          allowedTerminalArticleKeys: terminals.map(item => ({ ...item })),
+          allowedTerminalArticleKeys: terminalsForGroup(group.contactTypeGroupId).map(item => ({ ...item })),
         })) ?? null,
       })),
     },
@@ -126,20 +135,21 @@ function applySeriesTerminalsToEditor(
         ...row,
         values: {
           ...row.values,
-          standardTerminalArticleKey: row.values.standardTerminalArticleKey !== null &&
-            allowed.has(articleIdentity(row.values.standardTerminalArticleKey)) ? row.values.standardTerminalArticleKey : null,
+          standardTerminalArticleKey: terminalAllowedForGroup(row.values.standardTerminalArticleKey, row.values.contactTypeGroupId)
+            ? row.values.standardTerminalArticleKey : null,
         },
       })),
       articles: table.articles.map(article => ({
         ...article,
         contactGroups: article.contactGroups.map(group => ({
           ...group,
-          allowedTerminalArticleKeys: terminals.map(item => ({ ...item })),
+          allowedTerminalArticleKeys: terminalsForGroup(group.contactTypeGroupId).map(item => ({ ...item })),
         })),
         rows: article.rows.map(row => ({
           ...row,
-          overrides: row.overrides.standardTerminalArticleKey !== undefined && row.overrides.standardTerminalArticleKey !== null &&
-            !allowed.has(articleIdentity(row.overrides.standardTerminalArticleKey))
+          overrides: row.overrides.standardTerminalArticleKey !== undefined &&
+            !terminalAllowedForGroup(row.overrides.standardTerminalArticleKey ?? null,
+              row.overrides.contactTypeGroupId ?? defaultsById.get(row.seriesRowId)?.contactTypeGroupId ?? null)
             ? { ...row.overrides, standardTerminalArticleKey: null }
             : row.overrides,
         })),
@@ -383,23 +393,14 @@ export function ComponentLibrary({ config, session }: Props) {
   }, [draft.e4ConnectorTable]);
   const terminalContactTypeGroupIds = useMemo(() => {
     const result: Record<string, string | null> = {};
-    const assigned = new Set<string>();
     for (const terminal of draft.compatibleTerminalArticleKeys) result[articleIdentity(terminal)] = null;
-    for (const article of draft.e4ConnectorTable.articles) {
-      const materialized = materializeE4ConnectorArticle(draft.e4ConnectorTable, article.articleVariantId);
-      for (const group of draft.e4ConnectorTable.contactTypeGroups) {
-        const selected = materialized.rows
-          .filter(row => row.contactTypeGroupId === group.id)
-          .map(row => row.standardTerminalArticleKey)
-          .filter((terminal): terminal is ArticleBinding => terminal !== null);
-        if (!selected.length || !selected.every(terminal => articleIdentity(terminal) === articleIdentity(selected[0]!))) continue;
-        const key = articleIdentity(selected[0]!);
-        result[key] = !assigned.has(key) || result[key] === group.id ? group.id : null;
-        assigned.add(key);
-      }
-    }
+    for (const binding of draft.terminalContactTypeBindings ?? [])
+      result[articleIdentity(binding.terminalArticleKey)] = binding.contactTypeGroupId;
     return result;
-  }, [draft.compatibleTerminalArticleKeys, draft.e4ConnectorTable]);
+  }, [draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings]);
+  const standardTerminalIdentities = useMemo(() => new Set((draft.terminalContactTypeBindings ?? [])
+    .filter(binding => binding.standard).map(binding => articleIdentity(binding.terminalArticleKey))),
+  [draft.terminalContactTypeBindings]);
 
   async function loadList() { try { setItems(await api.list()); setError(null); } catch (caught) { setError(errorText(caught)); } }
   useEffect(() => { void loadList(); }, [api]);
@@ -461,10 +462,10 @@ export function ComponentLibrary({ config, session }: Props) {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [terminalArticleQuery, referenceApi]);
 
-  function setLoadedDraft(item: ComponentTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[]) {
+  function setLoadedDraft(item: LoadedTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[], bindings: readonly TerminalContactTypeBindingV5[] | null = null) {
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
-    const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys);
-    setDraft({ templateId: item.templateId, version: item.version, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, e4ConnectorTable: structuredClone(projected.table) });
+    const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
+    setDraft({ templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
@@ -477,12 +478,16 @@ export function ComponentLibrary({ config, session }: Props) {
   async function open(summary: ComponentTemplateSummary) {
     setBusy(true);
     try {
-      if (dirty && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
-        const persisted = await persistDraft();
+      if ((dirty || draft.draftRevision > 0) && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
+        const persisted = await publishWorkingDraft();
         if (!persisted) return;
         applyPersisted(persisted);
       }
-      const item = await api.get(summary.templateId);
+      const published = await api.get(summary.templateId);
+      const savedDraft = await api.getDraft(summary.templateId);
+      const item: LoadedTemplate = savedDraft
+        ? { ...savedDraft, version: savedDraft.baseVersion, draftRevision: savedDraft.draftRevision }
+        : { ...published, draftRevision: 0 };
       if (isTemplateContentV1(item.content)) {
         const upgraded = upgradeComponentTemplateContentV1ToV3(item.content, item.assets);
         setLoadedDraft(item, addLegacyArticleBindingsToV3(upgraded.content, item.articleBindings), upgraded.diagnostics, true, false); setError(null);
@@ -503,7 +508,7 @@ export function ComponentLibrary({ config, session }: Props) {
       } else if (isTemplateContentV5(item.content)) {
         const reconciliation = reconcileTemplateEnvelopeAssets(item.content, item.assets), mismatch = reconciliation.diagnostics.length > 0;
         setLoadedDraft(item, projectTemplateContentV5ToV3(item.content), reconciliation.diagnostics, false, mismatch,
-          projectTemplateContentV5TableToV1(item.content), item.content.compatibleTerminalArticleKeys);
+          projectTemplateContentV5TableToV1(item.content), item.content.compatibleTerminalArticleKeys, item.content.terminalContactTypeBindings ?? null);
         setError(mismatch ? "Метаданные изображений расходятся с версией шаблона. Сохранение заблокировано." : null);
       }
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
@@ -519,10 +524,10 @@ export function ComponentLibrary({ config, session }: Props) {
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
   async function startNew() {
-    if (dirty && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
+    if ((dirty || draft.draftRevision > 0) && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
       setBusy(true);
       try {
-        const persisted = await persistDraft();
+        const persisted = await publishWorkingDraft();
         if (!persisted) return;
         applyPersisted(persisted);
         await loadList();
@@ -533,8 +538,10 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function markDirty() { setDirty(true); setAutoSaveFailed(false); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
   function setCompatibleTerminals(terminals: readonly ArticleBinding[]) {
-    const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, terminals);
-    setDraft(current => ({ ...current, content: projected.content, compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), e4ConnectorTable: projected.table }));
+    const identities = new Set(terminals.map(articleIdentity));
+    const bindings = (draft.terminalContactTypeBindings ?? []).filter(binding => identities.has(articleIdentity(binding.terminalArticleKey)));
+    const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, terminals, bindings);
+    setDraft(current => ({ ...current, content: projected.content, compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings, e4ConnectorTable: projected.table }));
     markDirty(); setError(null);
   }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
@@ -571,19 +578,33 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function setSeriesTerminalContactType(terminal: ArticleBinding, groupId: string | null) {
     try {
+      const identity = articleIdentity(terminal);
+      const previous = draft.terminalContactTypeBindings?.find(binding => articleIdentity(binding.terminalArticleKey) === identity);
+      let bindings = (draft.terminalContactTypeBindings ?? []).filter(binding => articleIdentity(binding.terminalArticleKey) !== identity);
+      if (groupId !== null) bindings = [...bindings, { terminalArticleKey: { ...terminal }, contactTypeGroupId: groupId, standard: previous?.contactTypeGroupId === groupId && previous.standard }];
+      const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, bindings);
+      setDraft(current => ({ ...current, content: projected.content, terminalContactTypeBindings: bindings, e4ConnectorTable: projected.table }));
+      markDirty(); setError(null);
+    } catch (caught) { setError(errorText(caught)); }
+  }
+  function setSeriesStandardTerminal(terminal: ArticleBinding, standard: boolean) {
+    try {
+      const identity = articleIdentity(terminal);
+      const selected = draft.terminalContactTypeBindings?.find(binding => articleIdentity(binding.terminalArticleKey) === identity);
+      if (!selected) return;
+      const bindings = draft.terminalContactTypeBindings!.map(binding => ({
+        ...binding,
+        standard: binding.contactTypeGroupId === selected.contactTypeGroupId
+          ? articleIdentity(binding.terminalArticleKey) === identity && standard
+          : binding.standard,
+      }));
       let table = draft.e4ConnectorTable;
-      for (const article of table.articles) for (const group of article.contactGroups) {
-        if (group.contactCount < 1) continue;
-        const materialized = materializeE4ConnectorArticle(table, article.articleVariantId);
-        if (!materialized.rows.some(row => row.contactTypeGroupId === group.contactTypeGroupId)) continue;
-        const current = materialized.rows.filter(row => row.contactTypeGroupId === group.contactTypeGroupId)
-          .map(row => row.standardTerminalArticleKey);
-        const selectedHere = current.some(item => item !== null && articleIdentity(item) === articleIdentity(terminal));
-        if (selectedHere || group.contactTypeGroupId === groupId)
-          table = setArticleContactGroupStandardTerminal(table, article.articleVariantId, group.contactTypeGroupId,
-            group.contactTypeGroupId === groupId ? terminal : null);
+      for (const article of table.articles) {
+        const group = article.contactGroups.find(candidate => candidate.contactTypeGroupId === selected.contactTypeGroupId);
+        if (group?.contactCount) table = setArticleContactGroupStandardTerminal(table, article.articleVariantId,
+          selected.contactTypeGroupId, standard ? terminal : null);
       }
-      setDraft(current => ({ ...current, e4ConnectorTable: table }));
+      setDraft(current => ({ ...current, terminalContactTypeBindings: bindings, e4ConnectorTable: table }));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
   }
@@ -607,7 +628,7 @@ export function ComponentLibrary({ config, session }: Props) {
     window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener);
   }, [undo]);
 
-  async function persistDraft(): Promise<ComponentTemplate | null> {
+  function validatedBody() {
     if (!draft.code.trim() || !draft.name.trim()) { setError("Укажите серию соединителя и описание."); return null; }
     if (assetMismatch) { setError("Сохранение заблокировано: metadata assets не совпадают с версией шаблона."); return null; }
     const reconciliation = reconcileTemplateEnvelopeAssets(draft.content, draft.assets);
@@ -625,10 +646,37 @@ export function ComponentLibrary({ config, session }: Props) {
     catch (caught) { setError(errorText(caught)); return null; }
     let v5Content;
     try {
-      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys).content;
+      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings).content;
     } catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: v5Content };
-    return draft.templateId ? api.save(draft.templateId, { expectedVersion: draft.version, ...body }) : api.create(body);
+    return body;
+  }
+
+  async function persistWorkingDraft(): Promise<ComponentTemplate | ComponentTemplateDraft | null> {
+    const body = validatedBody();
+    if (!body) return null;
+    return draft.templateId
+      ? api.saveDraft(draft.templateId, { expectedVersion: draft.version, expectedDraftRevision: draft.draftRevision, ...body })
+      : api.create(body);
+  }
+
+  async function publishWorkingDraft(): Promise<ComponentTemplate | null> {
+    let templateId = draft.templateId, version = draft.version, revision = draft.draftRevision;
+    if (dirty || !templateId) {
+      const saved = await persistWorkingDraft();
+      if (!saved) return null;
+      if ("baseVersion" in saved) {
+        templateId = saved.templateId; version = saved.baseVersion; revision = saved.draftRevision;
+      } else {
+        return saved;
+      }
+    }
+    return revision > 0 ? api.publishDraft(templateId!, version, revision) : api.get(templateId!);
+  }
+
+  function applySavedDraft(result: ComponentTemplateDraft) {
+    setDraft(current => ({ ...current, templateId: result.templateId, version: result.baseVersion, draftRevision: result.draftRevision }));
+    setDirty(false); setAutoSaveFailed(false); setSaved(`Черновик сохранён · ревизия ${result.draftRevision}`); setError(null);
   }
 
   function applyPersisted(result: ComponentTemplate, resetUndo = false) {
@@ -636,22 +684,23 @@ export function ComponentLibrary({ config, session }: Props) {
     const content = isTemplateContentV5(result.content) ? projectTemplateContentV5ToV3(result.content)
       : isTemplateContentV4(result.content) ? v3CoreFromV4(result.content) : result.content;
     const terminals = isTemplateContentV5(result.content) ? result.content.compatibleTerminalArticleKeys : compatibleTerminalsFromV3(content);
+    const bindings = isTemplateContentV5(result.content) ? result.content.terminalContactTypeBindings ?? null : null;
     const table = isTemplateContentV5(result.content) ? projectTemplateContentV5TableToV1(result.content)
       : isTemplateContentV4(result.content) ? result.content.e4ConnectorTable : createE4ConnectorSeriesTableFromV3(content);
-    const projected = applySeriesTerminalsToEditor(content, table, terminals);
+    const projected = applySeriesTerminalsToEditor(content, table, terminals, bindings);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ templateId: result.templateId, version: result.version, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
     setDirty(false); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved(`Сохранена версия ${result.version}`); setError(null);
   }
   async function save() {
-    if (!dirty) return;
+    if (!dirty && draft.draftRevision === 0) return;
     setBusy(true);
     try {
-      const result = await persistDraft();
+      const result = await publishWorkingDraft();
       if (result) { applyPersisted(result); await loadList(); }
       else setAutoSaveFailed(true);
     } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); }
@@ -660,7 +709,14 @@ export function ComponentLibrary({ config, session }: Props) {
 
   useEffect(() => {
     if (!shouldAutoSaveTemplate({ dirty, failed: autoSaveFailed, busy, assetMismatch, code: draft.code, name: draft.name })) return;
-    const timer = window.setTimeout(() => { void save(); }, 900);
+    const timer = window.setTimeout(() => {
+      setBusy(true);
+      void persistWorkingDraft().then(result => {
+        if (!result) setAutoSaveFailed(true);
+        else if ("baseVersion" in result) applySavedDraft(result);
+        else applyPersisted(result);
+      }).catch(caught => { setAutoSaveFailed(true); setError(errorText(caught)); }).finally(() => setBusy(false));
+    }, 900);
     return () => window.clearTimeout(timer);
   }, [assetMismatch, autoSaveFailed, busy, dirty, draft]);
 
@@ -681,7 +737,7 @@ export function ComponentLibrary({ config, session }: Props) {
     try {
       const assetInput = await readTemplateAsset(file);
       let persisted: ComponentTemplate | null = null;
-      if (!draft.templateId || dirty) { persisted = await persistDraft(); if (!persisted) return; applyPersisted(persisted); }
+      if (!draft.templateId || dirty || draft.draftRevision > 0) { persisted = await publishWorkingDraft(); if (!persisted) return; applyPersisted(persisted); }
       const result = await api.addAsset(persisted?.templateId ?? draft.templateId!, { expectedVersion: persisted?.version ?? draft.version, ...assetInput });
       applyPersisted(result, true); await loadList();
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
@@ -692,7 +748,7 @@ export function ComponentLibrary({ config, session }: Props) {
     setBusy(true);
     try {
       let persisted: ComponentTemplate | null = null;
-      if (dirty) { persisted = await persistDraft(); if (!persisted) return; applyPersisted(persisted); }
+      if (dirty || draft.draftRevision > 0) { persisted = await publishWorkingDraft(); if (!persisted) return; applyPersisted(persisted); }
       const result = await api.removeAsset(persisted?.templateId ?? draft.templateId, assetId, persisted?.version ?? draft.version);
       applyPersisted(result, true); await loadList();
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
@@ -801,13 +857,15 @@ export function ComponentLibrary({ config, session }: Props) {
     {saved && <div className="success-banner" role="status"><span>{saved}. Размещённые ранее экземпляры сохранят закреплённую версию.</span><button onClick={() => setSaved(null)} aria-label="Закрыть">×</button></div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
       <section className="library-editor" aria-busy={busy} inert={busy}>
-        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span role="status">{busy ? "Сохраняем…" : autoSaveFailed ? "Не сохранено — исправьте ошибку или повторите" : dirty ? "Изменения сохранятся автоматически" : `Версия ${draft.version} сохранена`}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || !dirty}>{busy ? "Сохраняем…" : "Сохранить сейчас"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
+        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span role="status">{busy ? "Сохраняем…" : autoSaveFailed ? "Не сохранено — исправьте ошибку или повторите" : dirty ? "Изменения сохранятся автоматически" : draft.draftRevision > 0 ? `Черновик сохранён · ревизия ${draft.draftRevision}` : `Версия ${draft.version} сохранена`}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
         <TemplateSeriesPanelV3
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
           onChangeCompatibleTerminalArticleKeys={setCompatibleTerminals}
           terminalContactTypeGroupIds={terminalContactTypeGroupIds}
           onSetTerminalContactTypeGroup={setSeriesTerminalContactType}
+          standardTerminalIdentities={standardTerminalIdentities}
+          onSetSeriesStandardTerminal={setSeriesStandardTerminal}
           connectorArticleQuery={connectorArticleQuery}
           connectorArticleSuggestions={connectorArticleSuggestions}
           connectorArticleSearchState={connectorArticleSearchState}

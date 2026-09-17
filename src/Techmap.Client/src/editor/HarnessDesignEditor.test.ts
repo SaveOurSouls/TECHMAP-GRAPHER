@@ -13,6 +13,7 @@ import {
   designToScene,
   editorWireUpdateCommand,
   HarnessEditorErrorBoundary,
+  loadComponentTemplateForPlacement,
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
   snapRoutePoint,
@@ -26,6 +27,20 @@ import type {
 import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
 import type { EditorCatalogItem } from "./editor-types";
 import { connectorE4TableGeometry, createEmptyHarnessDesign } from "./model";
+
+it("publishes one autosaved draft checkpoint before template placement", async () => {
+  const published = { templateId: "template", version: 2 };
+  const api = {
+    getDraft: vi.fn().mockResolvedValue({ templateId: "template", baseVersion: 1, draftRevision: 7 }),
+    publishDraft: vi.fn().mockResolvedValue(published),
+    getVersion: vi.fn(),
+  };
+
+  await expect(loadComponentTemplateForPlacement(api as never, "template", 1)).resolves.toBe(published);
+  expect(api.publishDraft).toHaveBeenCalledOnce();
+  expect(api.publishDraft).toHaveBeenCalledWith("template", 1, 7);
+  expect(api.getVersion).not.toHaveBeenCalled();
+});
 
 function wireMaterialCatalogItem(): EditorCatalogItem {
   return {

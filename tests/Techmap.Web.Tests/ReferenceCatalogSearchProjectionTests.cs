@@ -160,6 +160,7 @@ public sealed class ReferenceCatalogSearchProjectionTests
             DROP TRIGGER prevent_component_template_version_update;
             DROP TABLE component_template_article_bindings;
             DROP TABLE component_template_versions;
+            DROP TABLE IF EXISTS component_template_drafts;
             DROP TABLE component_templates;
             DROP TRIGGER create_harness_design_document;
             DROP TABLE harness_design_documents;
@@ -171,7 +172,8 @@ public sealed class ReferenceCatalogSearchProjectionTests
             DROP TABLE reference_search_records;
             DROP TABLE reference_search_projections;
             DROP TABLE reference_catalog_saved_filters;
-            DELETE FROM schema_history WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18);
+                        DROP TABLE IF EXISTS component_template_drafts;
+                        DELETE FROM schema_history WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
             PRAGMA user_version = 7;
             """;
         command.ExecuteNonQuery();

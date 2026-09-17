@@ -76,7 +76,7 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("Материализованные строки контактов");
     expect(markup).toContain("NET-DATA+");
     expect(markup).toContain('class="series-v3-terminal-table"');
-    expect(markup).toContain("<th>Артикул</th><th>Стандартный</th><th>Тип контакта</th>");
+    expect(markup).toContain("<th>Артикул</th><th>Тип контакта</th><th>Стандартный</th>");
     expect(markup).not.toContain("<th>Источник</th>");
     expect(markup).not.toContain("Стандартный терминал для типа");
 

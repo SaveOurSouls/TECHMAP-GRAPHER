@@ -214,7 +214,7 @@ describe("template series v3 end-to-end workflow", () => {
     expect(markup).toContain("technology-terminals");
     expect(markup).toContain("SXH-002T-P0.6");
     expect(markup).toContain("Совместимые терминалы серии");
-    expect(markup).toContain("<th>Артикул</th><th>Стандартный</th><th>Тип контакта</th>");
+    expect(markup).toContain("<th>Артикул</th><th>Тип контакта</th><th>Стандартный</th>");
     expect(markup).not.toContain("Стандартный терминал для типа");
   });
 

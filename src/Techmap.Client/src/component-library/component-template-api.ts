@@ -19,10 +19,23 @@ export interface ComponentTemplate extends ComponentTemplateSummary {
   readonly assets: readonly TemplateAsset[];
   readonly content: ComponentTemplateContent;
 }
+export interface ComponentTemplateDraft {
+  readonly templateId: string; readonly baseVersion: number; readonly draftRevision: number;
+  readonly code: string; readonly name: string; readonly articleBindings: readonly ArticleBinding[];
+  readonly assets: readonly TemplateAsset[]; readonly content: ComponentTemplateContent;
+  readonly createdUtc: string; readonly updatedUtc: string;
+}
+export interface ComponentTemplateDraftBody {
+  expectedVersion: number; expectedDraftRevision: number; code: string; name: string;
+  articleBindings: ArticleBinding[]; content: ComponentTemplateContent;
+}
 export interface ComponentTemplateApi {
   list(): Promise<readonly ComponentTemplateSummary[]>;
   get(templateId: string): Promise<ComponentTemplate>;
   getVersion(templateId: string, version: number): Promise<ComponentTemplate>;
+  getDraft(templateId: string): Promise<ComponentTemplateDraft | null>;
+  saveDraft(templateId: string, body: ComponentTemplateDraftBody): Promise<ComponentTemplateDraft>;
+  publishDraft(templateId: string, expectedVersion: number, expectedDraftRevision: number): Promise<ComponentTemplate>;
   create(body: { code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
   save(templateId: string, body: { expectedVersion: number; code: string; name: string; articleBindings: ArticleBinding[]; content: ComponentTemplateContent }): Promise<ComponentTemplate>;
   addAsset(templateId: string, body: { expectedVersion: number; fileName: string; mediaType: TemplateAsset["mediaType"]; contentBase64: string }): Promise<ComponentTemplate>;
@@ -73,6 +86,18 @@ function parseTemplate(value: unknown): ComponentTemplate {
   const content = parseComponentTemplateContent(r.content);
   return Object.freeze({ templateId, version: integerField(r, "version"), versionSha256, code: stringField(r, "code"), name: stringField(r, "name"), articleBindings: bindings, assets, content, createdUtc: stringField(r, "createdUtc"), updatedUtc: typeof r.updatedUtc === "string" ? r.updatedUtc : undefined });
 }
+function parseDraft(value: unknown): ComponentTemplateDraft {
+  const r = record(value), templateId = stringField(r, "templateId");
+  if (!idPattern.test(templateId)) throw new Error("Поле ответа «templateId» задано неверно.");
+  return Object.freeze({
+    templateId, baseVersion: integerField(r, "baseVersion"), draftRevision: integerField(r, "draftRevision"),
+    code: stringField(r, "code"), name: stringField(r, "name"),
+    articleBindings: Array.isArray(r.articleBindings) ? r.articleBindings.map(parseBinding) : [],
+    assets: Array.isArray(r.assets) ? r.assets.map(parseAsset) : [],
+    content: parseComponentTemplateContent(r.content),
+    createdUtc: stringField(r, "createdUtc"), updatedUtc: stringField(r, "updatedUtc"),
+  });
+}
 function parseList(value: unknown): readonly ComponentTemplateSummary[] {
   const r = record(value);
   if (!Array.isArray(r.items)) throw new Error("Сервер вернул повреждённый список шаблонов.");
@@ -90,7 +115,7 @@ export function createComponentTemplateApi(config: RuntimeConfig, session: Local
     catch { throw new Error("Не удалось связаться с локальным сервером."); }
     if (!response.ok) {
       let detail = `Сервер не выполнил запрос (HTTP ${response.status}).`;
-      try { const body = record(await response.json()); if (body.error === "component_template_version_conflict") detail = `Шаблон уже изменён (актуальная версия ${String(body.currentVersion ?? "?")}). Обновите его перед сохранением.`; else if (typeof body.message === "string" && body.message.trim()) detail = body.message; } catch { /* status fallback */ }
+      try { const body = record(await response.json()); if (body.error === "component_template_version_conflict") detail = `Шаблон уже изменён (актуальная версия ${String(body.currentVersion ?? "?")}). Обновите его перед сохранением.`; else if (body.error === "component_template_draft_conflict") detail = `Черновик открыт в другой вкладке (актуальная ревизия ${String(body.currentVersion ?? "?")}). Обновите шаблон перед сохранением.`; else if (typeof body.message === "string" && body.message.trim()) detail = body.message; } catch { /* status fallback */ }
       throw new Error(detail);
     }
     if (response.status === 204) return undefined as T;
@@ -103,6 +128,9 @@ export function createComponentTemplateApi(config: RuntimeConfig, session: Local
       if (!Number.isSafeInteger(version) || version < 1) throw new Error("Версия шаблона задана неверно.");
       return request(`/${encodeURIComponent(id)}/versions/${version}`, { method: "GET", headers: { Accept: "application/json" } }, parseTemplate);
     },
+    getDraft: id => request(`/${encodeURIComponent(id)}/draft`, { method: "GET", headers: { Accept: "application/json" } }, parseDraft).then(value => value ?? null),
+    saveDraft: (id, body) => request(`/${encodeURIComponent(id)}/draft`, { method: "PUT", headers, body: JSON.stringify(body) }, parseDraft),
+    publishDraft: (id, expectedVersion, expectedDraftRevision) => request(`/${encodeURIComponent(id)}/draft/publish`, { method: "POST", headers, body: JSON.stringify({ expectedVersion, expectedDraftRevision }) }, parseTemplate),
     create: body => request("", { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),
     save: (id, body) => request(`/${encodeURIComponent(id)}`, { method: "PUT", headers, body: JSON.stringify(body) }, parseTemplate),
     addAsset: (id, body) => request(`/${encodeURIComponent(id)}/assets`, { method: "POST", headers, body: JSON.stringify(body) }, parseTemplate),

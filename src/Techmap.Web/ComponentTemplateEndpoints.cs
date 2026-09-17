@@ -44,6 +44,15 @@ public static class ComponentTemplateEndpoints
             IComponentTemplateStore store) =>
             HasSession(context, session, () => Results.Ok(ToResponse(store.GetVersion(templateId, version)))));
 
+        app.MapGet(route + "/{templateId:guid}/draft", (
+            HttpContext context,
+            Guid templateId,
+            LocalHttpSession session,
+            IComponentTemplateStore store) =>
+            HasSession(context, session, () => store.GetDraft(templateId) is { } draft
+                ? Results.Ok(ToResponse(draft))
+                : Results.NoContent()));
+
         app.MapPost(route, async (
             HttpContext context,
             IComponentTemplateStore store,
@@ -79,6 +88,43 @@ public static class ComponentTemplateEndpoints
                 ContentSchemaVersion(request.Content),
                 ContentJson(request.Content));
             return Results.Ok(ToResponse(result));
+        }));
+
+        app.MapPut(route + "/{templateId:guid}/draft", async (
+            HttpContext context,
+            Guid templateId,
+            IComponentTemplateStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            var request = await ReadRequestAsync<SaveComponentTemplateDraftRequest>(context.Request, cancellationToken);
+            if (request?.ExpectedVersion is null)
+                throw Invalid("component_template_expected_version_invalid", "Expected version is required.", "expectedVersion");
+            if (request.ExpectedDraftRevision is null)
+                throw Invalid("component_template_draft_revision_invalid", "Expected draft revision is required.", "expectedDraftRevision");
+            return Results.Ok(ToResponse(store.SaveDraft(
+                templateId,
+                request.ExpectedVersion.Value,
+                request.ExpectedDraftRevision.Value,
+                Required(request.Code, "code"),
+                Required(request.Name, "name"),
+                Bindings(request.ArticleBindings),
+                ContentSchemaVersion(request.Content),
+                ContentJson(request.Content))));
+        }));
+
+        app.MapPost(route + "/{templateId:guid}/draft/publish", async (
+            HttpContext context,
+            Guid templateId,
+            IComponentTemplateStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            var request = await ReadRequestAsync<PublishComponentTemplateDraftRequest>(context.Request, cancellationToken);
+            if (request?.ExpectedVersion is null)
+                throw Invalid("component_template_expected_version_invalid", "Expected version is required.", "expectedVersion");
+            if (request.ExpectedDraftRevision is null)
+                throw Invalid("component_template_draft_revision_invalid", "Expected draft revision is required.", "expectedDraftRevision");
+            return Results.Ok(ToResponse(store.PublishDraft(
+                templateId, request.ExpectedVersion.Value, request.ExpectedDraftRevision.Value)));
         }));
 
         app.MapDelete(route + "/{templateId:guid}", async (
@@ -284,6 +330,22 @@ public static class ComponentTemplateEndpoints
     private static ComponentTemplateAssetResponse ToResponse(ComponentTemplateAsset value) =>
         new(value.AssetId, value.Content.Sha256, value.Content.SizeBytes, value.FileName, value.MediaType);
 
+    private static ComponentTemplateDraftResponse ToResponse(ComponentTemplateDraft value)
+    {
+        using var content = JsonDocument.Parse(value.ContentJson);
+        return new ComponentTemplateDraftResponse(
+            value.TemplateId,
+            value.BaseVersion,
+            value.DraftRevision,
+            value.Code,
+            value.Name,
+            value.ArticleBindings.Select(ToResponse).ToArray(),
+            value.Assets.Select(ToResponse).ToArray(),
+            content.RootElement.Clone(),
+            value.CreatedUtc,
+            value.UpdatedUtc);
+    }
+
     private static IResult Execute(Func<IResult> operation)
     {
         try { return operation(); }
@@ -311,6 +373,7 @@ public static class ComponentTemplateEndpoints
             "component_template_not_found" or "component_template_version_not_found" or
                 "component_template_asset_not_found" => StatusCodes.Status404NotFound,
             "component_template_version_conflict" or "component_template_code_conflict" or
+                "component_template_draft_conflict" or
                 "component_template_asset_conflict" or "component_template_asset_in_use" =>
                 StatusCodes.Status409Conflict,
             "component_template_content_too_large" or "component_template_asset_too_large" => StatusCodes.Status413PayloadTooLarge,

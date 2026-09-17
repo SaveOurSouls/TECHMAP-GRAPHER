@@ -10,6 +10,7 @@ import { upgradeTemplateContentV3ToV4 } from "./template-model-v4";
 import {
   createTemplateContentV5FromEditor,
   isTemplateContentV5,
+  projectTemplateContentV5TableToV1,
   upgradeTemplateContentV3ToV5,
   upgradeTemplateContentV4ToV5,
   validateTemplateContentV5,
@@ -63,6 +64,34 @@ describe("template content v5 contract", () => {
 
     expect(result.e4ConnectorTable.articles[0]!.rows[0]!.overrides.standardTerminalArticleKey).toEqual(selected);
     expect(validateTemplateContentV5(result)).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("persists several compatible terminals for one type with only one standard", () => {
+    const { content, groupId } = v3Fixture();
+    const table = upgradeTemplateContentV3ToV4(content).content.e4ConnectorTable;
+    const terminals = content.articleVariants[1]!.contactGroups![0]!.allowedTerminalArticleKeys;
+    const result = createTemplateContentV5FromEditor(content, table, terminals, terminals.map((terminal, index) => ({
+      terminalArticleKey: terminal,
+      contactTypeGroupId: groupId,
+      standard: index === 1,
+    }))).content;
+
+    expect(result.terminalContactTypeBindings).toEqual([
+      expect.objectContaining({ contactTypeGroupId: groupId, standard: false }),
+      expect.objectContaining({ contactTypeGroupId: groupId, standard: true }),
+    ]);
+    expect(projectTemplateContentV5TableToV1(result).articles[0]!.contactGroups[0]!.allowedTerminalArticleKeys)
+      .toHaveLength(2);
+    expect(validateTemplateContentV5(result)).toEqual({ valid: true, diagnostics: [] });
+  });
+
+  it("keeps old v5 without terminal bindings readable", () => {
+    const result = upgradeTemplateContentV3ToV5(v3Fixture().content).content;
+    delete (result as unknown as { terminalContactTypeBindings?: unknown }).terminalContactTypeBindings;
+
+    expect(validateTemplateContentV5(result)).toEqual({ valid: true, diagnostics: [] });
+    expect(projectTemplateContentV5TableToV1(result).articles[0]!.contactGroups[0]!.allowedTerminalArticleKeys)
+      .toHaveLength(result.compatibleTerminalArticleKeys.length);
   });
 
   it("materializes missing v3 article configuration as a v5 contactGroups array", () => {

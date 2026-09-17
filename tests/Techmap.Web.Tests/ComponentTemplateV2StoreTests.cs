@@ -8,6 +8,77 @@ namespace Techmap.Web.Tests;
 public sealed class ComponentTemplateV2StoreTests
 {
     [Fact]
+    public void Autosave_draft_revisions_do_not_consume_immutable_version_limit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-drafts", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var published = store.Create("DRAFTS", "Initial", [], 1, V1Content);
+            var draftRevision = 0;
+            for (var index = 1; index <= 150; index++)
+            {
+                var draft = store.SaveDraft(
+                    published.TemplateId, published.Version, draftRevision,
+                    "DRAFTS", $"Autosave {index}", [], 1, V1Content);
+                draftRevision = draft.DraftRevision;
+                Assert.Equal(1, draft.BaseVersion);
+            }
+
+            Assert.Single(store.ListVersions(published.TemplateId));
+            Assert.Equal(150, store.GetDraft(published.TemplateId)?.DraftRevision);
+
+            var checkpoint = store.PublishDraft(published.TemplateId, 1, draftRevision);
+
+            Assert.Equal(2, checkpoint.Version);
+            Assert.Equal("Autosave 150", checkpoint.Name);
+            Assert.Null(store.GetDraft(published.TemplateId));
+            Assert.Equal([2, 1], store.ListVersions(published.TemplateId).Select(item => item.Version));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Draft_autosave_and_publish_enforce_both_optimistic_concurrency_tokens()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-template-draft-conflict", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var storage = SqliteStorage.Open(root);
+            var store = new SqliteComponentTemplateStore(storage, TimeProvider.System);
+            var published = store.Create("DRAFT-CONFLICT", "Initial", [], 1, V1Content);
+            var first = store.SaveDraft(published.TemplateId, 1, 0, "DRAFT-CONFLICT", "One", [], 1, V1Content);
+
+            var staleDraft = Assert.Throws<ComponentTemplateException>(() => store.SaveDraft(
+                published.TemplateId, 1, 0, "DRAFT-CONFLICT", "Stale", [], 1, V1Content));
+            Assert.Equal("component_template_draft_conflict", staleDraft.Code);
+            Assert.Equal(1, staleDraft.CurrentVersion);
+
+            var second = store.SaveDraft(published.TemplateId, 1, 1, "DRAFT-CONFLICT", "Two", [], 1, V1Content);
+            var stalePublish = Assert.Throws<ComponentTemplateException>(() =>
+                store.PublishDraft(published.TemplateId, 1, first.DraftRevision));
+            Assert.Equal("component_template_draft_conflict", stalePublish.Code);
+            Assert.Equal(2, stalePublish.CurrentVersion);
+
+            _ = store.Update(published.TemplateId, 1, "DRAFT-CONFLICT", "External", [], 1, V1Content);
+            var staleBase = Assert.Throws<ComponentTemplateException>(() =>
+                store.PublishDraft(published.TemplateId, 1, second.DraftRevision));
+            Assert.Equal("component_template_version_conflict", staleBase.Code);
+            Assert.Equal(2, staleBase.CurrentVersion);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Store_persists_v5_and_keeps_v1_through_v4_readable()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-template-v5", Guid.NewGuid().ToString("N"));

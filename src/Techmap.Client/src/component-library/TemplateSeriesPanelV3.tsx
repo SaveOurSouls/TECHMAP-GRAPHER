@@ -103,6 +103,8 @@ export interface TemplateSeriesPanelV3Props {
   readonly onChangeCompatibleTerminalArticleKeys?: (keys: readonly ArticleKeyV3[]) => void;
   readonly terminalContactTypeGroupIds?: Readonly<Record<string, string | null>>;
   readonly onSetTerminalContactTypeGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
+  readonly standardTerminalIdentities?: ReadonlySet<string>;
+  readonly onSetSeriesStandardTerminal?: (terminal: ArticleKeyV3, standard: boolean) => void;
   readonly onAddContactTypeGroup: (name: string) => void;
   readonly onRenameContactTypeGroup: (groupId: string, name: string) => void;
   readonly onDeleteContactTypeGroup: (groupId: string) => void;
@@ -283,12 +285,14 @@ export function readableTerminalArticleV3(articleKey: string): string {
   return readable || articleKey;
 }
 
-function SeriesTerminalRow({ terminal, index, groups, groupId, onSetGroup, onChange, onRemove }: {
+function SeriesTerminalRow({ terminal, index, groups, groupId, standard, onSetGroup, onSetStandard, onChange, onRemove }: {
   readonly terminal: ArticleKeyV3;
   readonly index: number;
   readonly groups: TemplateContentV3["contactTypeGroups"];
   readonly groupId: string | null;
+  readonly standard: boolean;
   readonly onSetGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
+  readonly onSetStandard?: (terminal: ArticleKeyV3, standard: boolean) => void;
   readonly onChange: (index: number, patch: TerminalArticleKeyPatchV3) => void;
   readonly onRemove: (index: number) => void;
 }) {
@@ -301,24 +305,26 @@ function SeriesTerminalRow({ terminal, index, groups, groupId, onSetGroup, onCha
       ? <span className="series-v3-terminal-article" title={draft.articleKey}>{readableArticle}</span>
       : <input aria-label={`Артикул терминала ${index + 1}`} value={draft.articleKey}
         onChange={event => setDraft(current => ({ ...current, articleKey: event.target.value }))} onBlur={commit} />}</td>
-    <td><input type="checkbox" aria-label={`Стандартный терминал ${index + 1}`} checked={groupId !== null}
-      disabled={!onSetGroup || groups.length === 0}
-      onChange={event => onSetGroup?.(terminal, event.currentTarget.checked ? groups[0]?.id ?? null : null)} /></td>
     <td><select aria-label={`Тип контакта терминала ${index + 1}`} value={groupId ?? ""} disabled={!onSetGroup}
       onChange={event => onSetGroup?.(terminal, event.currentTarget.value || null)}>
       <option value="">Не назначен</option>
       {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
     </select></td>
+    <td><input type="checkbox" aria-label={`Стандартный терминал ${index + 1}`} checked={standard}
+      disabled={!onSetStandard || groupId === null}
+      onChange={event => onSetStandard?.(terminal, event.currentTarget.checked)} /></td>
     <td><button type="button" className="series-v3-remove-terminal" aria-label={`Удалить терминал ${index + 1}`} onClick={() => onRemove(index)}>×</button></td>
   </tr>;
 }
 
-function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, onSetTerminalContactTypeGroup, onChange, terminalQuery,
+function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, standardTerminalIdentities, onSetTerminalContactTypeGroup, onSetSeriesStandardTerminal, onChange, terminalQuery,
   terminalSuggestions, terminalSearchState, terminalSearchMessage, onTerminalQueryChange }: {
   readonly terminals: readonly ArticleKeyV3[];
   readonly groups: TemplateContentV3["contactTypeGroups"];
   readonly terminalContactTypeGroupIds: Readonly<Record<string, string | null>>;
+  readonly standardTerminalIdentities: ReadonlySet<string>;
   readonly onSetTerminalContactTypeGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
+  readonly onSetSeriesStandardTerminal?: (terminal: ArticleKeyV3, standard: boolean) => void;
   readonly onChange?: (keys: readonly ArticleKeyV3[]) => void;
   readonly terminalQuery: string;
   readonly terminalSuggestions: readonly ArticleKeyV3[];
@@ -363,10 +369,11 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
       </div>}
     </div>
     {terminals.length === 0 ? <small>Совместимые терминалы пока не заданы.</small> : <div className="series-v3-terminal-table-wrap"><table className="series-v3-terminal-table">
-      <thead><tr><th>Артикул</th><th>Стандартный</th><th>Тип контакта</th><th aria-label="Удалить" /></tr></thead>
+      <thead><tr><th>Артикул</th><th>Тип контакта</th><th>Стандартный</th><th aria-label="Удалить" /></tr></thead>
       <tbody>{terminals.map((terminal, index) => <SeriesTerminalRow key={terminalIdentity(terminal)} terminal={terminal} index={index}
         groups={groups} groupId={terminalContactTypeGroupIds[terminalIdentity(terminal)] ?? null}
-        onSetGroup={onSetTerminalContactTypeGroup} onChange={setTerminalField} onRemove={removeTerminal} />)}</tbody>
+        standard={standardTerminalIdentities.has(terminalIdentity(terminal))}
+        onSetGroup={onSetTerminalContactTypeGroup} onSetStandard={onSetSeriesStandardTerminal} onChange={setTerminalField} onRemove={removeTerminal} />)}</tbody>
     </table></div>}
   </section>;
 }
@@ -481,7 +488,9 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
         terminals={props.compatibleTerminalArticleKeys ?? []}
         groups={props.content.contactTypeGroups}
         terminalContactTypeGroupIds={props.terminalContactTypeGroupIds ?? {}}
+        standardTerminalIdentities={props.standardTerminalIdentities ?? new Set<string>()}
         onSetTerminalContactTypeGroup={props.onSetTerminalContactTypeGroup}
+        onSetSeriesStandardTerminal={props.onSetSeriesStandardTerminal}
         onChange={props.onChangeCompatibleTerminalArticleKeys}
         terminalQuery={props.terminalArticleQuery ?? ""}
         terminalSuggestions={props.terminalArticleSuggestions ?? []}

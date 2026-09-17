@@ -271,8 +271,10 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TRIGGER prevent_component_template_version_update;
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
+                    DROP TABLE IF EXISTS component_template_drafts;
                     DROP TABLE component_templates;
-                    DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18);
+                        DROP TABLE IF EXISTS component_template_drafts;
+                        DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

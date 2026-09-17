@@ -33,6 +33,19 @@ public sealed record ComponentTemplateVersion(
     DateTimeOffset UpdatedUtc,
     string VersionSha256 = "");
 
+public sealed record ComponentTemplateDraft(
+    Guid TemplateId,
+    int BaseVersion,
+    int DraftRevision,
+    string Code,
+    string Name,
+    IReadOnlyList<ComponentTemplateArticleBinding> ArticleBindings,
+    IReadOnlyList<ComponentTemplateAsset> Assets,
+    int SchemaVersion,
+    string ContentJson,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset UpdatedUtc);
+
 public interface IComponentTemplateStore
 {
     IReadOnlyList<ComponentTemplateSummary> List();
@@ -42,6 +55,8 @@ public interface IComponentTemplateStore
     IReadOnlyList<ComponentTemplateVersion> ListVersions(Guid templateId);
 
     ComponentTemplateVersion GetVersion(Guid templateId, int version);
+
+    ComponentTemplateDraft? GetDraft(Guid templateId);
 
     ComponentTemplateVersion Create(
         string code,
@@ -58,6 +73,21 @@ public interface IComponentTemplateStore
         IReadOnlyCollection<ComponentTemplateArticleBinding> articleBindings,
         int schemaVersion,
         string contentJson);
+
+    ComponentTemplateDraft SaveDraft(
+        Guid templateId,
+        int expectedVersion,
+        int expectedDraftRevision,
+        string code,
+        string name,
+        IReadOnlyCollection<ComponentTemplateArticleBinding> articleBindings,
+        int schemaVersion,
+        string contentJson);
+
+    ComponentTemplateVersion PublishDraft(
+        Guid templateId,
+        int expectedVersion,
+        int expectedDraftRevision);
 
     Task<ComponentTemplateVersion> AddAssetAsync(
         Guid templateId,

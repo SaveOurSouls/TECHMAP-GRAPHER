@@ -57,6 +57,41 @@ public sealed class ComponentTemplateContentV5ValidatorTests
         Assert.Equal("content.compatibleTerminalArticleKeys[1]", error.Field);
     }
 
+    [Fact]
+    public void Multiple_terminals_can_bind_to_one_contact_type_but_only_one_is_standard()
+    {
+        var content = ValidContent();
+        var first = content["compatibleTerminalArticleKeys"]![0]!.DeepClone();
+        var second = first.DeepClone();
+        second!["articleKey"] = "SXH-002T-P0.6";
+        content["compatibleTerminalArticleKeys"]!.AsArray().Add(second.DeepClone());
+        var groupId = content["contactTypeGroups"]![0]!["id"]!.GetValue<string>();
+        content["terminalContactTypeBindings"] = new JsonArray(
+            new JsonObject { ["terminalArticleKey"] = first, ["contactTypeGroupId"] = groupId, ["standard"] = true },
+            new JsonObject { ["terminalArticleKey"] = second, ["contactTypeGroupId"] = groupId, ["standard"] = false });
+
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+
+        content["terminalContactTypeBindings"]![1]!["standard"] = true;
+        var error = Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        Assert.Equal("content.terminalContactTypeBindings[1]", error.Field);
+    }
+
+    [Fact]
+    public void Terminal_binding_must_reference_the_series_index_and_existing_contact_type()
+    {
+        var content = ValidContent();
+        content["terminalContactTypeBindings"] = new JsonArray(new JsonObject
+        {
+            ["terminalArticleKey"] = new JsonObject { ["sourceId"] = "technology-database", ["entityType"] = "terminal", ["articleKey"] = "OTHER" },
+            ["contactTypeGroupId"] = "missing",
+            ["standard"] = false,
+        });
+
+        var error = Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        Assert.Equal("content.terminalContactTypeBindings[0].terminalArticleKey", error.Field);
+    }
+
     internal static JsonObject ValidContent()
     {
         var content = ComponentTemplateContentV4ValidatorTests.ValidContent();

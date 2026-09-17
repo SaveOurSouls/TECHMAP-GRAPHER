@@ -124,6 +124,16 @@ public sealed class SqliteComponentTemplateStore(
         });
     }
 
+    public ComponentTemplateDraft? GetDraft(Guid templateId)
+    {
+        ValidateTemplateId(templateId);
+        return storage.ExecuteRead(unitOfWork =>
+        {
+            var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
+            return ReadDraft(unitOfWork, templateId, head);
+        });
+    }
+
     public ComponentTemplateVersion Create(
         string code,
         string name,
@@ -236,6 +246,116 @@ public sealed class SqliteComponentTemplateStore(
                 update.Parameters.AddWithValue("$templateId", Format(templateId));
                 update.Parameters.AddWithValue("$expectedVersion", expectedVersion);
                 if (update.ExecuteNonQuery() != 1) throw Conflict(ReadHead(unitOfWork, templateId, false).CurrentVersion);
+                DeleteDraft(unitOfWork, templateId);
+                return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
+            });
+        }
+        catch (SqliteException error) when (IsConstraint(error))
+        {
+            throw CodeConflict(error);
+        }
+    }
+
+    public ComponentTemplateDraft SaveDraft(
+        Guid templateId,
+        int expectedVersion,
+        int expectedDraftRevision,
+        string code,
+        string name,
+        IReadOnlyCollection<ComponentTemplateArticleBinding> articleBindings,
+        int schemaVersion,
+        string contentJson)
+    {
+        ValidateTemplateId(templateId);
+        ValidateExpectedVersion(expectedVersion);
+        if (expectedDraftRevision < 0)
+            throw Invalid("component_template_draft_revision_invalid", "Expected draft revision cannot be negative.", "expectedDraftRevision");
+        var input = ValidateInput(code, name, articleBindings, schemaVersion, contentJson);
+        var now = CanonicalUtc(timeProvider.GetUtcNow());
+        return storage.ExecuteInTransaction(unitOfWork =>
+        {
+            var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
+            EnsureExpectedVersion(head, expectedVersion);
+            EnsureDraftCodeAvailable(unitOfWork, templateId, input.NormalizedCode);
+            EnsureV2AssetMetadataMatches(
+                input.ContentJson, input.SchemaVersion, ReadAssets(unitOfWork, templateId, expectedVersion));
+            var currentDraft = ReadDraft(unitOfWork, templateId, head);
+            var currentRevision = currentDraft?.DraftRevision ?? 0;
+            if (currentRevision != expectedDraftRevision) throw DraftConflict(currentRevision);
+
+            var nextRevision = checked(currentRevision + 1);
+            var bindingsJson = SerializeBindings(input.Bindings);
+            using var command = unitOfWork.CreateCommand(expectedDraftRevision == 0
+                ? """
+                  INSERT INTO component_template_drafts
+                      (template_id, base_version, draft_revision, schema_version, code, name,
+                       bindings_json, content_json, content_sha256, created_utc, updated_utc)
+                  VALUES
+                      ($templateId, $baseVersion, $nextRevision, $schemaVersion, $code, $name,
+                       $bindings, $content, $contentSha256, $now, $now);
+                  """
+                : """
+                  UPDATE component_template_drafts
+                  SET draft_revision = $nextRevision,
+                      schema_version = $schemaVersion,
+                      code = $code,
+                      name = $name,
+                      bindings_json = $bindings,
+                      content_json = $content,
+                      content_sha256 = $contentSha256,
+                      updated_utc = $now
+                  WHERE template_id = $templateId
+                    AND base_version = $baseVersion
+                    AND draft_revision = $expectedDraftRevision;
+                  """);
+            command.Parameters.AddWithValue("$templateId", Format(templateId));
+            command.Parameters.AddWithValue("$baseVersion", expectedVersion);
+            command.Parameters.AddWithValue("$expectedDraftRevision", expectedDraftRevision);
+            command.Parameters.AddWithValue("$nextRevision", nextRevision);
+            command.Parameters.AddWithValue("$schemaVersion", input.SchemaVersion);
+            command.Parameters.AddWithValue("$code", input.Code);
+            command.Parameters.AddWithValue("$name", input.Name);
+            command.Parameters.AddWithValue("$bindings", bindingsJson);
+            command.Parameters.AddWithValue("$content", input.ContentJson);
+            command.Parameters.AddWithValue("$contentSha256", input.ContentSha256);
+            command.Parameters.AddWithValue("$now", now);
+            if (command.ExecuteNonQuery() != 1) throw DraftConflict(ReadDraftRevision(unitOfWork, templateId));
+            return ReadDraft(unitOfWork, templateId, head) ?? throw Corrupt();
+        });
+    }
+
+    public ComponentTemplateVersion PublishDraft(
+        Guid templateId,
+        int expectedVersion,
+        int expectedDraftRevision)
+    {
+        ValidateTemplateId(templateId);
+        ValidateExpectedVersion(expectedVersion);
+        if (expectedDraftRevision <= 0)
+            throw Invalid("component_template_draft_revision_invalid", "Expected draft revision must be positive.", "expectedDraftRevision");
+        var now = CanonicalUtc(timeProvider.GetUtcNow());
+        try
+        {
+            return storage.ExecuteInTransaction(unitOfWork =>
+            {
+                var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
+                EnsureExpectedVersion(head, expectedVersion);
+                var draft = ReadDraft(unitOfWork, templateId, head);
+                if (draft is null || draft.DraftRevision != expectedDraftRevision)
+                    throw DraftConflict(draft?.DraftRevision ?? 0);
+                if (expectedVersion >= MaximumVersionsPerTemplate)
+                    throw Invalid("component_template_version_limit_reached", $"A component template cannot exceed {MaximumVersionsPerTemplate} versions.");
+
+                var input = ValidateInput(
+                    draft.Code, draft.Name, draft.ArticleBindings, draft.SchemaVersion, draft.ContentJson);
+                var nextVersion = checked(expectedVersion + 1);
+                InsertVersion(unitOfWork, templateId, nextVersion, input, draft.Assets, now);
+                PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
+                using var delete = unitOfWork.CreateCommand(
+                    "DELETE FROM component_template_drafts WHERE template_id = $templateId AND draft_revision = $draftRevision;");
+                delete.Parameters.AddWithValue("$templateId", Format(templateId));
+                delete.Parameters.AddWithValue("$draftRevision", expectedDraftRevision);
+                if (delete.ExecuteNonQuery() != 1) throw DraftConflict(ReadDraftRevision(unitOfWork, templateId));
                 return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
             });
         }
@@ -255,6 +375,7 @@ public sealed class SqliteComponentTemplateStore(
         {
             var head = ReadHead(unitOfWork, templateId, includeDeleted: false);
             if (head.CurrentVersion != expectedVersion) throw Conflict(head.CurrentVersion);
+            DeleteDraft(unitOfWork, templateId);
             using var command = unitOfWork.CreateCommand(
                 """
                 UPDATE component_templates
@@ -320,6 +441,7 @@ public sealed class SqliteComponentTemplateStore(
                 InsertOrValidateBlob(unitOfWork, storedContent, now);
                 InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
                 PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
+                DeleteDraft(unitOfWork, templateId);
                 return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -364,6 +486,7 @@ public sealed class SqliteComponentTemplateStore(
             var nextVersion = checked(expectedVersion + 1);
             InsertVersion(unitOfWork, templateId, nextVersion, input, assets, now);
             PublishVersion(unitOfWork, templateId, expectedVersion, nextVersion, input, now);
+            DeleteDraft(unitOfWork, templateId);
             return ReadVersion(unitOfWork, templateId, nextVersion, head.CreatedUtc, ParseUtc(now));
         });
     }
@@ -1380,6 +1503,108 @@ public sealed class SqliteComponentTemplateStore(
         return result;
     }
 
+    private static ComponentTemplateDraft? ReadDraft(
+        SqliteUnitOfWork unitOfWork,
+        Guid templateId,
+        Head head)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT base_version, draft_revision, schema_version, code, name, bindings_json,
+                   content_json, content_sha256, created_utc, updated_utc
+            FROM component_template_drafts
+            WHERE template_id = $templateId;
+            """);
+        command.Parameters.AddWithValue("$templateId", Format(templateId));
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        var baseVersion = reader.GetInt32(0);
+        var draftRevision = reader.GetInt32(1);
+        var schemaVersion = reader.GetInt32(2);
+        var code = reader.GetString(3);
+        var name = reader.GetString(4);
+        var bindingsJson = reader.GetString(5);
+        var contentJson = reader.GetString(6);
+        var contentSha256 = reader.GetString(7);
+        var created = ParseUtc(reader.GetString(8));
+        var updated = ParseUtc(reader.GetString(9));
+        reader.Close();
+        if (baseVersion != head.CurrentVersion || draftRevision <= 0 ||
+            !string.Equals(Hash(contentJson), contentSha256, StringComparison.Ordinal))
+            throw Corrupt();
+        var bindings = ParseBindings(bindingsJson);
+        var input = ValidateInput(code, name, bindings, schemaVersion, contentJson);
+        var assets = ReadAssets(unitOfWork, templateId, baseVersion);
+        EnsureV2AssetMetadataMatches(input.ContentJson, input.SchemaVersion, assets);
+        return new ComponentTemplateDraft(
+            templateId, baseVersion, draftRevision, input.Code, input.Name, input.Bindings, assets,
+            input.SchemaVersion, input.ContentJson, created, updated);
+    }
+
+    private static int ReadDraftRevision(SqliteUnitOfWork unitOfWork, Guid templateId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            "SELECT draft_revision FROM component_template_drafts WHERE template_id = $templateId;");
+        command.Parameters.AddWithValue("$templateId", Format(templateId));
+        return command.ExecuteScalar() is long revision ? checked((int)revision) : 0;
+    }
+
+    private static void DeleteDraft(SqliteUnitOfWork unitOfWork, Guid templateId)
+    {
+        using var command = unitOfWork.CreateCommand(
+            "DELETE FROM component_template_drafts WHERE template_id = $templateId;");
+        command.Parameters.AddWithValue("$templateId", Format(templateId));
+        command.ExecuteNonQuery();
+    }
+
+    private static string SerializeBindings(IReadOnlyList<ComponentTemplateArticleBinding> bindings) =>
+        JsonSerializer.Serialize(bindings.Select(binding => new
+        {
+            sourceId = binding.SourceId,
+            entityType = binding.EntityType,
+            articleKey = binding.ArticleKey,
+        }));
+
+    private static IReadOnlyList<ComponentTemplateArticleBinding> ParseBindings(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) throw Corrupt();
+            var result = document.RootElement.EnumerateArray().Select(item =>
+                new ComponentTemplateArticleBinding(
+                    item.GetProperty("sourceId").GetString() ?? throw Corrupt(),
+                    item.GetProperty("entityType").GetString() ?? throw Corrupt(),
+                    item.GetProperty("articleKey").GetString() ?? throw Corrupt())).ToArray();
+            if (result.Length > MaximumArticleBindings) throw Corrupt();
+            return result;
+        }
+        catch (JsonException error)
+        {
+            throw Corrupt(error);
+        }
+    }
+
+    private static void EnsureDraftCodeAvailable(
+        SqliteUnitOfWork unitOfWork,
+        Guid templateId,
+        string normalizedCode)
+    {
+        using var command = unitOfWork.CreateCommand(
+            """
+            SELECT COUNT(*)
+            FROM component_templates t
+            LEFT JOIN component_template_drafts d ON d.template_id = t.template_id
+            WHERE t.deleted_utc IS NULL
+              AND t.template_id <> $templateId
+              AND (t.normalized_code = $normalizedCode OR upper(trim(d.code)) = $normalizedCode);
+            """);
+        command.Parameters.AddWithValue("$templateId", Format(templateId));
+        command.Parameters.AddWithValue("$normalizedCode", normalizedCode);
+        if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            throw CodeConflict(new InvalidOperationException("The component template code is already in use."));
+    }
+
     private static Head ReadHead(SqliteUnitOfWork unitOfWork, Guid templateId, bool includeDeleted)
     {
         using var command = unitOfWork.CreateCommand(
@@ -1497,6 +1722,12 @@ public sealed class SqliteComponentTemplateStore(
         "The component template changed after it was read.",
         "expectedVersion",
         currentVersion);
+
+    private static ComponentTemplateException DraftConflict(int currentRevision) => new(
+        "component_template_draft_conflict",
+        "The component template draft changed after it was read.",
+        "expectedDraftRevision",
+        currentRevision);
 
     private static ComponentTemplateException Corrupt(Exception? innerException = null) => new(
         "component_template_corrupt",

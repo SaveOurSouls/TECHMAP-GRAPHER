@@ -19,33 +19,82 @@ internal static class ComponentTemplateContentV5Validator
 
     internal static void Validate(JsonElement content)
     {
-        RequireExactProperties(content, "content", RootProperties);
+        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings");
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var version) || version != 5)
             Throw("Only component template schemaVersion 5 is supported.", "content.schemaVersion");
 
         var compatible = ValidateCompatibleTerminals(content.GetProperty("compatibleTerminalArticleKeys"));
+        var terminalBindings = ValidateTerminalBindings(content, compatible);
         ValidateArticleGroupShapes(content.GetProperty("articleVariants"));
         ValidateTableV2Shape(content.GetProperty("e4ConnectorTable"), compatible);
 
         var projected = JsonNode.Parse(content.GetRawText())!.AsObject();
         projected["schemaVersion"] = 4;
         projected.Remove("compatibleTerminalArticleKeys");
+        projected.Remove("terminalContactTypeBindings");
         var terminalNodes = CompatibleTerminalNodes(content.GetProperty("compatibleTerminalArticleKeys"));
         foreach (var variant in projected["articleVariants"]!.AsArray())
         {
             if (variant!["contactGroups"] is not JsonArray groups) continue;
             foreach (var group in groups)
-                group!["allowedTerminalArticleKeys"] = terminalNodes.DeepClone();
+                group!["allowedTerminalArticleKeys"] = TerminalNodesForGroup(terminalNodes, terminalBindings, group!["contactTypeGroupId"]!.GetValue<string>());
         }
         var table = projected["e4ConnectorTable"]!.AsObject();
         table["modelVersion"] = 1;
         foreach (var article in table["articles"]!.AsArray())
             foreach (var group in article!["contactGroups"]!.AsArray())
-                group!["allowedTerminalArticleKeys"] = terminalNodes.DeepClone();
+                group!["allowedTerminalArticleKeys"] = TerminalNodesForGroup(terminalNodes, terminalBindings, group!["contactTypeGroupId"]!.GetValue<string>());
 
         using var projectedDocument = JsonDocument.Parse(projected.ToJsonString());
         ComponentTemplateContentV4Validator.Validate(projectedDocument.RootElement);
+    }
+
+    private static Dictionary<string, (string ContactTypeGroupId, bool Standard)>? ValidateTerminalBindings(
+        JsonElement content,
+        IReadOnlySet<string> compatible)
+    {
+        if (!content.TryGetProperty("terminalContactTypeBindings", out var values)) return null;
+        const string path = "content.terminalContactTypeBindings";
+        if (values.ValueKind != JsonValueKind.Array) Throw("An array is required.", path);
+        var contactTypes = content.GetProperty("contactTypeGroups").EnumerateArray()
+            .Select(group => group.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+        var result = new Dictionary<string, (string, bool)>(StringComparer.Ordinal);
+        var standards = new HashSet<string>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var value in values.EnumerateArray())
+        {
+            var itemPath = $"{path}[{index++}]";
+            RequireExactProperties(value, itemPath, "terminalArticleKey", "contactTypeGroupId", "standard");
+            var terminalIdentity = ValidateArticleKey(value.GetProperty("terminalArticleKey"), itemPath + ".terminalArticleKey");
+            if (!compatible.Contains(terminalIdentity)) Throw("The bound terminal is absent from compatibleTerminalArticleKeys.", itemPath + ".terminalArticleKey");
+            var groupId = RequiredText(value.GetProperty("contactTypeGroupId"), 128, itemPath + ".contactTypeGroupId");
+            if (!contactTypes.Contains(groupId)) Throw("The bound contact type is absent from contactTypeGroups.", itemPath + ".contactTypeGroupId");
+            var standardValue = value.GetProperty("standard");
+            if (standardValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                Throw("A boolean is required.", itemPath + ".standard");
+            var standard = standardValue.GetBoolean();
+            if (!result.TryAdd(terminalIdentity, (groupId, standard))) Throw("A terminal can be bound only once.", itemPath);
+            if (standard && !standards.Add(groupId)) Throw("Only one standard terminal is allowed per contact type.", itemPath);
+        }
+        return result;
+    }
+
+    private static JsonArray TerminalNodesForGroup(
+        JsonArray terminals,
+        IReadOnlyDictionary<string, (string ContactTypeGroupId, bool Standard)>? bindings,
+        string groupId)
+    {
+        if (bindings is null) return (JsonArray)terminals.DeepClone();
+        var result = new JsonArray();
+        foreach (var terminal in terminals)
+        {
+            using var document = JsonDocument.Parse(terminal!.ToJsonString());
+            var identity = ValidateArticleKey(document.RootElement, "content.compatibleTerminalArticleKeys");
+            if (bindings.TryGetValue(identity, out var binding) && binding.ContactTypeGroupId == groupId)
+                result.Add(terminal.DeepClone());
+        }
+        return result;
     }
 
     private static HashSet<string> ValidateCompatibleTerminals(JsonElement values)
@@ -158,6 +207,16 @@ internal static class ComponentTemplateContentV5Validator
         var actual = value.EnumerateObject().Select(property => property.Name).ToArray();
         if (actual.Length != expected.Length || actual.Distinct(StringComparer.Ordinal).Count() != actual.Length ||
             !actual.Order(StringComparer.Ordinal).SequenceEqual(expected.Order(StringComparer.Ordinal)))
+            Throw("Object has missing, extra, or duplicate properties.", path);
+    }
+
+    private static void RequireExactPropertiesWithOptional(JsonElement value, string path, string[] required, params string[] optional)
+    {
+        if (value.ValueKind != JsonValueKind.Object) Throw("An object is required.", path);
+        var actual = value.EnumerateObject().Select(property => property.Name).ToArray();
+        var allowed = required.Concat(optional).ToHashSet(StringComparer.Ordinal);
+        if (actual.Distinct(StringComparer.Ordinal).Count() != actual.Length || actual.Any(property => !allowed.Contains(property)) ||
+            required.Any(property => !actual.Contains(property, StringComparer.Ordinal)))
             Throw("Object has missing, extra, or duplicate properties.", path);
     }
 

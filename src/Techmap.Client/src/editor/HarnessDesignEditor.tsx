@@ -20,7 +20,7 @@ import {
   type ProjectComponentPlacementGraph,
   type ProjectComponentSnapshotResource,
 } from "./component-placement-api";
-import { createComponentTemplateApi } from "../component-library/component-template-api";
+import { createComponentTemplateApi, type ComponentTemplateApi } from "../component-library/component-template-api";
 import { isTemplateContentV3, isTemplateContentV4, isTemplateContentV5 } from "../component-library/template-content";
 import {
   createConnectorInstanceFromComponentTemplateV3,
@@ -456,6 +456,17 @@ export function wireMaterialUpdateFromCatalogItem(
       },
     },
   };
+}
+
+export async function loadComponentTemplateForPlacement(
+  api: ComponentTemplateApi,
+  templateId: string,
+  catalogVersion: number,
+) {
+  const draft = await api.getDraft(templateId);
+  return draft
+    ? api.publishDraft(templateId, draft.baseVersion, draft.draftRevision)
+    : api.getVersion(templateId, catalogVersion);
 }
 
 type CableUpdateCommand = Extract<EditorCommand, { readonly type: "update-cable" }>;
@@ -1050,7 +1061,8 @@ export function HarnessDesignEditor({
     let templateArticle: { sourceId: string; entityType: string; articleKey: string } | null = null;
     if (item.componentTemplateId && item.componentTemplateVersion) {
       try {
-        const template = await componentTemplateApi.getVersion(item.componentTemplateId, item.componentTemplateVersion);
+        const template = await loadComponentTemplateForPlacement(
+          componentTemplateApi, item.componentTemplateId, item.componentTemplateVersion);
         if (generation !== loadGeneration.current) return;
         if (!isTemplateContentV3(template.content) && !isTemplateContentV4(template.content) && !isTemplateContentV5(template.content)) {
           throw new Error("Для размещения в жгуте требуется шаблон v3 или v4.");

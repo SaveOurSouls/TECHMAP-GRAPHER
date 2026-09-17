@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 18;
+    public const int CurrentSchemaVersion = 19;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1265,6 +1265,29 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             "schema_version IN (1, 2, 3, 4, 5)",
             StringComparison.Ordinal);
 
+    private const string ComponentTemplateDraftMigrationId = "M3-06-component-template-drafts";
+    private const string ComponentTemplateDraftSchemaSql =
+        """
+        CREATE TABLE component_template_drafts (
+            template_id TEXT NOT NULL PRIMARY KEY REFERENCES component_templates(template_id)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            base_version INTEGER NOT NULL CHECK (base_version > 0),
+            draft_revision INTEGER NOT NULL CHECK (draft_revision > 0),
+            schema_version INTEGER NOT NULL CHECK (schema_version IN (1, 2, 3, 4, 5)),
+            code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 128),
+            name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 256),
+            bindings_json TEXT NOT NULL CHECK (json_valid(bindings_json)),
+            content_json TEXT NOT NULL CHECK (length(content_json) BETWEEN 2 AND 1048576)
+                CHECK (json_valid(content_json)),
+            content_sha256 TEXT NOT NULL
+                CHECK (length(content_sha256) = 64)
+                CHECK (content_sha256 = lower(content_sha256))
+                CHECK (content_sha256 NOT GLOB '*[^0-9a-f]*'),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            updated_utc TEXT NOT NULL CHECK (length(updated_utc) BETWEEN 1 AND 64)
+        ) STRICT;
+        """;
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1681,6 +1704,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 16, MigrationId: ComponentTemplateContentV4MigrationId, Sql: ComponentTemplateContentV4SchemaSql),
             (Version: 17, MigrationId: ProjectComponentSnapshotsV4MigrationId, Sql: ProjectComponentSnapshotsV4SchemaSql),
             (Version: 18, MigrationId: ComponentTemplateContentV5MigrationId, Sql: ComponentTemplateContentV5SchemaSql),
+            (Version: 19, MigrationId: ComponentTemplateDraftMigrationId, Sql: ComponentTemplateDraftSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1818,6 +1842,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateContentV5SchemaSql);
         }
 
+        if (schemaVersion >= 19)
+        {
+            ExecuteSchemaSql(expected, ComponentTemplateDraftSchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1951,6 +1980,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateContentV5MigrationId,
                 Sql: ComponentTemplateContentV5SchemaSql,
                 Description: "Component template content schema version 5"),
+            18 => (
+                Version: 19,
+                MigrationId: ComponentTemplateDraftMigrationId,
+                Sql: ComponentTemplateDraftSchemaSql,
+                Description: "Mutable component template autosave drafts"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -2027,7 +2061,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18))
             {
                 return false;
             }

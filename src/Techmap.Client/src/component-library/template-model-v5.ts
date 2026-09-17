@@ -27,9 +27,17 @@ export interface ArticleVariantV5 extends ArticleKeyV3 {
   readonly contactGroups: ArticleContactGroupV5[];
 }
 
+/** Series-level terminal compatibility. One contact type may accept many terminals. */
+export interface TerminalContactTypeBindingV5 {
+  readonly terminalArticleKey: ArticleKeyV3;
+  readonly contactTypeGroupId: string;
+  readonly standard: boolean;
+}
+
 export interface TemplateContentV5 extends Omit<TemplateContentV3, "schemaVersion" | "articleVariants"> {
   readonly schemaVersion: 5;
   readonly compatibleTerminalArticleKeys: ArticleKeyV3[];
+  readonly terminalContactTypeBindings?: TerminalContactTypeBindingV5[];
   readonly articleVariants: ArticleVariantV5[];
   readonly e4ConnectorTable: E4ConnectorSeriesTableV2;
 }
@@ -48,6 +56,7 @@ const ROOT_KEYS = [
   "schemaVersion", "views", "logicalContacts", "parameters", "repeaters", "assets",
   "contactTypeGroups", "compatibleTerminalArticleKeys", "articleVariants", "e4ConnectorTable",
 ] as const;
+const OPTIONAL_ROOT_KEYS = ["terminalContactTypeBindings"] as const;
 const ARTICLE_GROUP_KEYS = ["contactTypeGroupId", "contactCount"] as const;
 const TABLE_KEYS = ["modelVersion", "columns", "contactTypeGroups", "seriesDefaults", "articles"] as const;
 const TABLE_ARTICLE_KEYS = ["articleVariantId", "sourceId", "entityType", "articleKey", "contactGroups", "rows"] as const;
@@ -79,6 +88,25 @@ function exact(
   for (const key of keys)
     if (!hasOwn(value, key)) diagnostics.push(error("missing_key", `${path}.${key}`, "Обязательное поле отсутствует."));
   return Object.keys(value).length === keys.length && keys.every(key => hasOwn(value, key));
+}
+
+function exactWithOptional(
+  value: unknown,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[],
+  path: string,
+  diagnostics: TemplateV3Diagnostic[],
+): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    diagnostics.push(error("object_required", path, "Ожидается объект."));
+    return false;
+  }
+  const allowed = new Set([...requiredKeys, ...optionalKeys]);
+  for (const key of Object.keys(value))
+    if (!allowed.has(key)) diagnostics.push(error("unexpected_key", `${path}.${key}`, "Неизвестное поле."));
+  for (const key of requiredKeys)
+    if (!hasOwn(value, key)) diagnostics.push(error("missing_key", `${path}.${key}`, "Обязательное поле отсутствует."));
+  return Object.keys(value).every(key => allowed.has(key)) && requiredKeys.every(key => hasOwn(value, key));
 }
 
 function validText(value: unknown, maximum: number): value is string {
@@ -147,8 +175,49 @@ function validateSelectedTerminals(
   });
 }
 
+function validateTerminalBindings(
+  value: unknown,
+  terminals: readonly ArticleKeyV3[],
+  contactTypeGroups: unknown,
+  diagnostics: TemplateV3Diagnostic[],
+): void {
+  if (value === undefined) return;
+  const path = "$.terminalContactTypeBindings";
+  if (!Array.isArray(value)) {
+    diagnostics.push(error("array_required", path, "Ожидается массив."));
+    return;
+  }
+  const compatible = new Set(terminals.map(identity));
+  const groups = new Set(Array.isArray(contactTypeGroups)
+    ? contactTypeGroups.filter(isRecord).map(group => group.id).filter((id): id is string => typeof id === "string")
+    : []);
+  const bound = new Set<string>();
+  const standards = new Set<string>();
+  value.forEach((candidate, index) => {
+    const itemPath = `${path}[${index}]`;
+    if (!exact(candidate, ["terminalArticleKey", "contactTypeGroupId", "standard"], itemPath, diagnostics)) return;
+    if (!exact(candidate.terminalArticleKey, ARTICLE_KEY_KEYS, `${itemPath}.terminalArticleKey`, diagnostics)) return;
+    const terminal = candidate.terminalArticleKey as unknown as ArticleKeyV3;
+    const terminalIdentity = identity(terminal);
+    if (!compatible.has(terminalIdentity))
+      diagnostics.push(error("incompatible_terminal_binding", `${itemPath}.terminalArticleKey`, "Терминал привязки отсутствует в списке совместимых терминалов серии."));
+    if (!validText(candidate.contactTypeGroupId, 128) || !groups.has(candidate.contactTypeGroupId as string))
+      diagnostics.push(error("contact_type_group_not_found", `${itemPath}.contactTypeGroupId`, "Тип контакта привязки отсутствует в серии."));
+    if (typeof candidate.standard !== "boolean")
+      diagnostics.push(error("boolean_required", `${itemPath}.standard`, "Ожидается логическое значение."));
+    if (bound.has(terminalIdentity))
+      diagnostics.push(error("duplicate_terminal_binding", itemPath, "Терминал уже привязан к типу контакта."));
+    else bound.add(terminalIdentity);
+    if (candidate.standard === true && typeof candidate.contactTypeGroupId === "string") {
+      if (standards.has(candidate.contactTypeGroupId))
+        diagnostics.push(error("duplicate_standard_terminal", itemPath, "Для типа контакта можно выбрать только один стандартный терминал."));
+      else standards.add(candidate.contactTypeGroupId);
+    }
+  });
+}
+
 function validateV5Shapes(value: Record<string, unknown>, diagnostics: TemplateV3Diagnostic[]): boolean {
-  let exactShapes = exact(value, ROOT_KEYS, "$", diagnostics);
+  let exactShapes = exactWithOptional(value, ROOT_KEYS, OPTIONAL_ROOT_KEYS, "$", diagnostics);
   if (!Array.isArray(value.articleVariants)) {
     diagnostics.push(error("array_required", "$.articleVariants", "Ожидается массив."));
     exactShapes = false;
@@ -184,23 +253,31 @@ function validateV5Shapes(value: Record<string, unknown>, diagnostics: TemplateV
 /** Builds a transient v4 document so the mature geometry/table checks stay shared. */
 function projectV5ToV4(value: Record<string, unknown>, terminals: readonly ArticleKeyV3[]): unknown {
   const projected = structuredClone(value);
+  const bindings = Array.isArray(projected.terminalContactTypeBindings)
+    ? new Map(projected.terminalContactTypeBindings.filter(isRecord).map(binding => {
+      const terminal = isRecord(binding.terminalArticleKey) ? binding.terminalArticleKey as unknown as ArticleKeyV3 : null;
+      return terminal && typeof binding.contactTypeGroupId === "string" ? [identity(terminal), binding.contactTypeGroupId] : ["", ""];
+    }))
+    : null;
+  const terminalsForGroup = (groupId: unknown) => terminals.filter(terminal =>
+    bindings === null || bindings.get(identity(terminal)) === groupId);
   projected.schemaVersion = 4;
   delete projected.compatibleTerminalArticleKeys;
+  delete projected.terminalContactTypeBindings;
   const configuredArticleIds = new Set<string>();
   if (Array.isArray(projected.articleVariants)) for (const variant of projected.articleVariants) {
     if (!isRecord(variant) || !Array.isArray(variant.contactGroups)) continue;
     if (typeof variant.id === "string") configuredArticleIds.add(variant.id);
     for (const group of variant.contactGroups)
-      if (isRecord(group)) group.allowedTerminalArticleKeys = structuredClone(terminals);
+      if (isRecord(group)) group.allowedTerminalArticleKeys = structuredClone(terminalsForGroup(group.contactTypeGroupId));
   }
   if (isRecord(projected.e4ConnectorTable)) {
     projected.e4ConnectorTable.modelVersion = 1;
     if (Array.isArray(projected.e4ConnectorTable.articles)) for (const article of projected.e4ConnectorTable.articles) {
       if (!isRecord(article) || !Array.isArray(article.contactGroups)) continue;
-      const projectedTerminals = typeof article.articleVariantId === "string" && configuredArticleIds.has(article.articleVariantId)
-        ? terminals : [];
       for (const group of article.contactGroups)
-        if (isRecord(group)) group.allowedTerminalArticleKeys = structuredClone(projectedTerminals);
+        if (isRecord(group)) group.allowedTerminalArticleKeys = typeof article.articleVariantId === "string" && configuredArticleIds.has(article.articleVariantId)
+          ? structuredClone(terminalsForGroup(group.contactTypeGroupId)) : [];
     }
   }
   return projected;
@@ -213,7 +290,10 @@ export function validateTemplateContentV5(value: unknown): TemplateV5Validation 
   if (value.schemaVersion !== 5)
     diagnostics.push(error("schema_version", "$.schemaVersion", "Поддерживается schemaVersion 5."));
   const terminals = validateTerminalKeys(value.compatibleTerminalArticleKeys, diagnostics);
-  if (terminals !== null) validateSelectedTerminals(value.e4ConnectorTable, terminals, diagnostics);
+  if (terminals !== null) {
+    validateSelectedTerminals(value.e4ConnectorTable, terminals, diagnostics);
+    validateTerminalBindings(value.terminalContactTypeBindings, terminals, value.contactTypeGroups, diagnostics);
+  }
   if (exactShapes && terminals !== null) {
     const projected = projectV5ToV4(value, terminals);
     const legacyValidation = validateTemplateContentV4(projected);
@@ -245,6 +325,30 @@ function compatibleTerminalsFromV4(content: TemplateContentV4): ArticleKeyV3[] {
   return result;
 }
 
+function terminalBindingsFromV4(content: TemplateContentV4): TerminalContactTypeBindingV5[] {
+  const groupByTerminal = new Map<string, string>();
+  for (const variant of content.articleVariants) for (const group of variant.contactGroups ?? [])
+    for (const terminal of group.allowedTerminalArticleKeys)
+      if (!groupByTerminal.has(identity(terminal))) groupByTerminal.set(identity(terminal), group.contactTypeGroupId);
+  const standardByGroup = new Map<string, ArticleKeyV3>();
+  const defaults = new Map(content.e4ConnectorTable.seriesDefaults.map(row => [row.rowId, row.values]));
+  for (const article of content.e4ConnectorTable.articles) for (const row of article.rows) {
+    const values = { ...defaults.get(row.seriesRowId), ...row.overrides };
+    if (values.contactTypeGroupId && values.standardTerminalArticleKey)
+      standardByGroup.set(values.contactTypeGroupId, values.standardTerminalArticleKey);
+  }
+  return compatibleTerminalsFromV4(content).flatMap(terminal => {
+    const terminalId = identity(terminal);
+    const contactTypeGroupId = [...standardByGroup].find(([, standard]) => identity(standard) === terminalId)?.[0]
+      ?? groupByTerminal.get(terminalId);
+    return contactTypeGroupId ? [{
+      terminalArticleKey: { ...terminal },
+      contactTypeGroupId,
+      standard: identity(standardByGroup.get(contactTypeGroupId) ?? { sourceId: "", entityType: "", articleKey: "" }) === terminalId,
+    }] : [];
+  });
+}
+
 export function upgradeTemplateContentV4ToV5(content: TemplateContentV4): TemplateV5Upgrade {
   const validation = validateTemplateContentV4(content);
   if (!validation.valid) throw new Error(validation.diagnostics[0]?.message ?? "Некорректный шаблон v4.");
@@ -266,6 +370,7 @@ export function upgradeTemplateContentV4ToV5(content: TemplateContentV4): Templa
     ...structuredClone(core),
     schemaVersion: 5,
     compatibleTerminalArticleKeys,
+    terminalContactTypeBindings: terminalBindingsFromV4(content),
     articleVariants,
     e4ConnectorTable: upgradeE4ConnectorSeriesTableV1ToV2(oldTable),
   };
@@ -292,6 +397,7 @@ export function createTemplateContentV5FromEditor(
   content: TemplateContentV3,
   table: TemplateContentV4["e4ConnectorTable"],
   compatibleTerminalArticleKeys: readonly ArticleKeyV3[],
+  terminalContactTypeBindings: readonly TerminalContactTypeBindingV5[] | null = [],
 ): TemplateV5Upgrade {
   const coreValidation = validateTemplateContentV3Structure(content);
   if (!coreValidation.valid) throw new Error(coreValidation.diagnostics[0]?.message ?? "Некорректный шаблон редактора.");
@@ -312,6 +418,11 @@ export function createTemplateContentV5FromEditor(
     ...structuredClone(core),
     schemaVersion: 5,
     compatibleTerminalArticleKeys: compatibleTerminalArticleKeys.map(item => ({ ...item })),
+    ...(terminalContactTypeBindings === null ? {} : { terminalContactTypeBindings: terminalContactTypeBindings.map(binding => ({
+      terminalArticleKey: { ...binding.terminalArticleKey },
+      contactTypeGroupId: binding.contactTypeGroupId,
+      standard: binding.standard,
+    })) }),
     articleVariants,
     e4ConnectorTable: upgradeE4ConnectorSeriesTableV1ToV2(table),
   };
@@ -322,7 +433,7 @@ export function createTemplateContentV5FromEditor(
 
 /** Projects v5 into the existing reusable v3 editor core. */
 export function projectTemplateContentV5ToV3(content: TemplateContentV5): TemplateContentV3 {
-  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, e4ConnectorTable: _table, ...core } = content;
+  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, terminalContactTypeBindings: _bindings, e4ConnectorTable: _table, ...core } = content;
   return {
     ...structuredClone(core),
     schemaVersion: 3,
@@ -330,12 +441,17 @@ export function projectTemplateContentV5ToV3(content: TemplateContentV5): Templa
       ...structuredClone(variant),
       contactGroups: variant.contactGroups.map(group => ({
         ...group,
-        allowedTerminalArticleKeys: compatibleTerminalArticleKeys.map(terminal => ({ ...terminal })),
+        allowedTerminalArticleKeys: compatibleTerminalArticleKeys.filter(terminal =>
+          content.terminalContactTypeBindings === undefined || content.terminalContactTypeBindings.some(binding =>
+            binding.contactTypeGroupId === group.contactTypeGroupId && identity(binding.terminalArticleKey) === identity(terminal)))
+          .map(terminal => ({ ...terminal })),
       })),
     })),
   };
 }
 
 export function projectTemplateContentV5TableToV1(content: TemplateContentV5) {
-  return projectE4ConnectorSeriesTableV2ToV1(content.e4ConnectorTable, content.compatibleTerminalArticleKeys);
+  const bindings = content.terminalContactTypeBindings;
+  const groupIds = bindings === undefined ? null : new Map(bindings.map(binding => [identity(binding.terminalArticleKey), binding.contactTypeGroupId]));
+  return projectE4ConnectorSeriesTableV2ToV1(content.e4ConnectorTable, content.compatibleTerminalArticleKeys, groupIds);
 }

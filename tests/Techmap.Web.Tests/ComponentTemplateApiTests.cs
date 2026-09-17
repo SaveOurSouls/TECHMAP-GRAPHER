@@ -13,6 +13,48 @@ public sealed class ComponentTemplateApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Fact]
+    public async Task Draft_endpoint_coalesces_autosaves_and_publishes_one_checkpoint()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        using var content = Content("draft");
+        using var create = await SendAsync(client, HttpMethod.Post, "/api/v1/component-templates",
+            new CreateComponentTemplateRequest("DRAFT-API", "Initial", [], content.RootElement.Clone()), csrf);
+        var template = Assert.IsType<ComponentTemplateResponse>(await create.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+
+        var revision = 0;
+        for (var index = 1; index <= 3; index++)
+        {
+            using var save = await SendAsync(client, HttpMethod.Put,
+                $"/api/v1/component-templates/{template.TemplateId:D}/draft",
+                new SaveComponentTemplateDraftRequest(1, revision, "DRAFT-API", $"Draft {index}", [], content.RootElement.Clone()), csrf);
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+            var draft = Assert.IsType<ComponentTemplateDraftResponse>(await save.Content
+                .ReadFromJsonAsync<ComponentTemplateDraftResponse>(TestContext.Current.CancellationToken));
+            revision = draft.DraftRevision;
+            Assert.Equal(1, draft.BaseVersion);
+        }
+
+        var versionsBefore = await client.GetFromJsonAsync<ComponentTemplateVersionListResponse>(
+            $"/api/v1/component-templates/{template.TemplateId:D}/versions", TestContext.Current.CancellationToken);
+        Assert.Single(Assert.IsType<ComponentTemplateVersionListResponse>(versionsBefore).Items);
+
+        using var publish = await SendAsync(client, HttpMethod.Post,
+            $"/api/v1/component-templates/{template.TemplateId:D}/draft/publish",
+            new PublishComponentTemplateDraftRequest(1, revision), csrf);
+        var checkpoint = Assert.IsType<ComponentTemplateResponse>(await publish.Content
+            .ReadFromJsonAsync<ComponentTemplateResponse>(TestContext.Current.CancellationToken));
+        Assert.Equal(2, checkpoint.Version);
+        Assert.Equal("Draft 3", checkpoint.Name);
+
+        using var noDraft = await client.GetAsync(
+            $"/api/v1/component-templates/{template.TemplateId:D}/draft", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, noDraft.StatusCode);
+    }
+
+    [Fact]
     public async Task Api_creates_and_reads_strict_v3_content()
     {
         await using var factory = new TechmapWebApplicationFactory();

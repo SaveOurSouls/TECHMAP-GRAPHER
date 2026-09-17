@@ -116,7 +116,7 @@ describe("component library UI", () => {
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Добавить слой");
-    expect(markup).toContain("Сохранить сейчас");
+    expect(markup).toContain("Записать версию");
     expect(markup).toContain("Изменения сохранятся автоматически");
   });
 

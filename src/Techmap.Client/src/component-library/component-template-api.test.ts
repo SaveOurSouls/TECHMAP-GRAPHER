@@ -14,6 +14,10 @@ const templateId = "12345678-1234-4123-8123-123456789abc";
 function detail(version = 1) {
   return { templateId, version, versionSha256: "a".repeat(64), code: "JST-XH", name: "JST XH", articleBindings: [], assets: [], content: newTemplateContent(), createdUtc: "2026-09-14T00:00:00Z", updatedUtc: "2026-09-14T00:00:00Z" };
 }
+function draft(revision = 1) {
+  const { version: _version, versionSha256: _hash, ...rest } = detail();
+  return { ...rest, baseVersion: 1, draftRevision: revision };
+}
 
 describe("component template API", () => {
   it("sends expectedVersion when saving an immutable version", async () => {
@@ -79,6 +83,25 @@ describe("component template API", () => {
 
     await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 1 } });
     await expect(api.get(templateId)).resolves.toMatchObject({ content: { schemaVersion: 2 } });
+  });
+
+  it("coalesces mutable drafts and publishes them with both concurrency tokens", async () => {
+    const responses = [draft(4), detail(2)];
+    const fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = vi.fn(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    const api = createComponentTemplateApi(config, session, fetcher);
+    await api.saveDraft(templateId, {
+      expectedVersion: 1, expectedDraftRevision: 3, code: "JST-XH", name: "Draft",
+      articleBindings: [], content: newTemplateContent(),
+    });
+    await api.publishDraft(templateId, 1, 4);
+
+    const calls = vi.mocked(fetcher).mock.calls;
+    expect(calls[0]?.[0]).toBe(`/api/v1/component-templates/${templateId}/draft`);
+    expect(JSON.parse(String(calls[0]?.[1]?.body))).toMatchObject({ expectedVersion: 1, expectedDraftRevision: 3 });
+    expect(calls[1]?.[0]).toBe(`/api/v1/component-templates/${templateId}/draft/publish`);
+    expect(JSON.parse(String(calls[1]?.[1]?.body))).toEqual({ expectedVersion: 1, expectedDraftRevision: 4 });
   });
 
   it("deletes a template with optimistic version protection", async () => {

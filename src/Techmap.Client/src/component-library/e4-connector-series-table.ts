@@ -147,6 +147,7 @@ export function upgradeE4ConnectorSeriesTableV1ToV2(
 export function projectE4ConnectorSeriesTableV2ToV1(
   table: E4ConnectorSeriesTableV2,
   compatibleTerminalArticleKeys: readonly ArticleKeyV3[],
+  terminalContactTypeGroupIds: ReadonlyMap<string, string> | null = null,
 ): E4ConnectorSeriesTable {
   return {
     modelVersion: 1,
@@ -161,7 +162,9 @@ export function projectE4ConnectorSeriesTableV2ToV1(
       contactGroups: article.contactGroups.map(group => ({
         contactTypeGroupId: group.contactTypeGroupId,
         contactCount: group.contactCount,
-        allowedTerminalArticleKeys: compatibleTerminalArticleKeys.map(cloneArticleKey),
+        allowedTerminalArticleKeys: compatibleTerminalArticleKeys
+          .filter(terminal => terminalContactTypeGroupIds === null || terminalContactTypeGroupIds.get(articleIdentity(terminal)) === group.contactTypeGroupId)
+          .map(cloneArticleKey),
       })),
       rows: article.rows.map(row => ({ seriesRowId: row.seriesRowId, overrides: cloneOverride(row.overrides) })),
     })),
