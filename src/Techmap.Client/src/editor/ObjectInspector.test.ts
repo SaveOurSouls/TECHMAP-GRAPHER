@@ -125,4 +125,55 @@ describe("wire object inspector", () => {
     expect(markup).toContain("Материал не выбран");
     expect(markup).toContain("нижнем справочнике");
   });
+
+  it("shows separate drawing strip profiles and calculated step lengths", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "drawing",
+      selectedObject: wireObject({ lengthKnown: "false" }),
+      disabled: false,
+      onChange: vi.fn(),
+      activeWireStripEnd: "from",
+      onActiveWireStripEndChange: vi.fn(),
+      onWireStripProfileClear: vi.fn(),
+      wireStripProfiles: {
+        from: {
+          sourceId: "technology-database",
+          snapshotId: "00000000-0000-4000-8000-000000000099",
+          snapshotSha256: "a".repeat(64),
+          recordId: "b".repeat(64),
+          entityType: "coax-termination",
+          sourceKey: "BNC|RG58|6|9",
+          displayName: "BNC / RG58",
+          layers: [
+            { index: 1, diameterMm: 0.9, stripLengthMm: 6 },
+            { index: 2, diameterMm: 3.1, stripLengthMm: 9 },
+          ],
+        },
+      },
+    }));
+
+    expect(markup).toContain('aria-label="Профиль разделки провода"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain("Начало");
+    expect(markup).toContain("Конец");
+    expect(markup).toContain("BNC / RG58");
+    expect(markup).toContain("Ступень, мм");
+    expect(markup).toContain(">3<");
+    expect(markup).toContain("Очистить начало");
+  });
+
+  it("keeps strip profiles out of E4 and explains an empty drawing end", () => {
+    const e4 = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "e4", selectedObject: wireObject({}), disabled: false, onChange: vi.fn(),
+    }));
+    expect(e4).not.toContain("Профиль разделки провода");
+
+    const drawing = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "drawing", selectedObject: wireObject({ lengthKnown: "false" }), disabled: true, onChange: vi.fn(),
+      activeWireStripEnd: "to", onActiveWireStripEndChange: vi.fn(),
+    }));
+    expect(drawing).toContain("Профиль не выбран");
+    expect(drawing).toContain("дважды щёлкните профиль разделки");
+    expect(drawing).toContain("disabled");
+  });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
+import { calculateWireStripSteps, type WireEndStripProfiles, type WireStripProfileBinding } from "./model";
 import { builtInWireColors } from "./wire-reference-catalog";
 
 export interface ObjectInspectorProps {
@@ -11,6 +12,10 @@ export interface ObjectInspectorProps {
     patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color" | "metadata">>,
   ) => void;
   readonly onWireMaterialClear?: (wireId: string) => void;
+  readonly wireStripProfiles?: WireEndStripProfiles;
+  readonly activeWireStripEnd?: "from" | "to";
+  readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
+  readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
 }
 
 const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
@@ -68,7 +73,72 @@ function WireCorrectionInput({
   </label>;
 }
 
-export function ObjectInspector({ view, selectedObject, disabled, onChange, onWireMaterialClear }: ObjectInspectorProps) {
+function WireStripProfilePanel({
+  wireId,
+  profiles,
+  activeEnd,
+  disabled,
+  onEndChange,
+  onClear,
+}: {
+  readonly wireId: string;
+  readonly profiles?: WireEndStripProfiles;
+  readonly activeEnd: "from" | "to";
+  readonly disabled: boolean;
+  readonly onEndChange?: (end: "from" | "to") => void;
+  readonly onClear?: (wireId: string, end: "from" | "to") => void;
+}) {
+  const profile: WireStripProfileBinding | undefined = profiles?.[activeEnd];
+  const steps = profile ? calculateWireStripSteps(profile.layers) : [];
+  return <section className="he-wire-strip-profile" aria-label="Профиль разделки провода">
+    <header>
+      <strong>Разделка конца</strong>
+      <div className="he-wire-end-tabs" role="tablist" aria-label="Конец провода">
+        {(["from", "to"] as const).map((end) => <button
+          key={end}
+          type="button"
+          role="tab"
+          aria-selected={activeEnd === end}
+          className={activeEnd === end ? "active" : ""}
+          disabled={disabled}
+          onClick={() => onEndChange?.(end)}
+        >{end === "from" ? "Начало" : "Конец"}</button>)}
+      </div>
+    </header>
+    {profile ? <>
+      <div className="he-wire-strip-identity">
+        <span>{profile.displayName}</span>
+        <small>{profile.sourceKey}</small>
+      </div>
+      <table className="he-wire-strip-table">
+        <thead><tr><th>Слой</th><th>D, мм</th><th>L, мм</th><th>Ступень, мм</th></tr></thead>
+        <tbody>{steps.map((step) => <tr key={step.index}>
+          <th>L{step.index}</th>
+          <td>{step.diameterMm}</td>
+          <td>{step.cumulativeLengthMm}</td>
+          <td>{step.stepLengthMm}</td>
+        </tr>)}</tbody>
+      </table>
+      {onClear && <button className="he-wire-strip-clear" type="button" disabled={disabled}
+        onClick={() => onClear(wireId, activeEnd)}>Очистить {activeEnd === "from" ? "начало" : "конец"}</button>}
+    </> : <div className="he-wire-strip-empty">
+      <span>Профиль не выбран</span>
+      <small>Выберите нужный конец и дважды щёлкните профиль разделки в нижнем справочнике.</small>
+    </div>}
+  </section>;
+}
+
+export function ObjectInspector({
+  view,
+  selectedObject,
+  disabled,
+  onChange,
+  onWireMaterialClear,
+  wireStripProfiles,
+  activeWireStripEnd = "from",
+  onActiveWireStripEndChange,
+  onWireStripProfileClear,
+}: ObjectInspectorProps) {
   if (!selectedObject) {
     return (
       <div className="he-inspector-empty">
@@ -112,6 +182,14 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange, onWi
       </section>}
       {selectedObject.kind === "wire" && view === "drawing" && (
         <>
+          <WireStripProfilePanel
+            wireId={selectedObject.id}
+            profiles={wireStripProfiles}
+            activeEnd={activeWireStripEnd}
+            disabled={disabled}
+            onEndChange={onActiveWireStripEndChange}
+            onClear={onWireStripProfileClear}
+          />
           <label className="he-toggle-field">
             <input
               type="checkbox"

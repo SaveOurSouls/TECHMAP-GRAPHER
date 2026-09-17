@@ -16,6 +16,7 @@ import {
   selectedEditorDeletionCommands,
   snapRoutePoint,
   wireMaterialUpdateFromCatalogItem,
+  wireStripProfileUpdateFromCatalogItem,
 } from "./HarnessDesignEditor";
 import type {
   ProjectComponentPlacementGraph,
@@ -40,6 +41,43 @@ function wireMaterialCatalogItem(): EditorCatalogItem {
     entityType: "wire",
     sourceKey: "UL1061-24AWG",
     referenceDisplayName: "UL1061 24AWG",
+  };
+}
+
+function wireStripCatalogItem(): EditorCatalogItem {
+  return {
+    id: "technology-database:coax-termination:BNC-RG58",
+    title: "BNC / RG58",
+    subtitle: "D1 0.9 / L1 6",
+    category: "Коаксиальная разделка",
+    accent: "#356c88",
+    placement: "reference-only",
+    sourceId: "technology-database",
+    snapshotId: "00000000-0000-4000-8000-000000000099",
+    snapshotSha256: "a".repeat(64),
+    recordId: "b".repeat(64),
+    entityType: "coax-termination",
+    sourceKey: "BNC|RG58|6|9|13",
+    coaxTerminationCandidate: {
+      state: "ready",
+      diagnostics: [],
+      layers: [
+        { index: 1, diameterMm: 0.9, stripLengthMm: 6 },
+        { index: 2, diameterMm: 3.1, stripLengthMm: 9 },
+      ],
+      binding: {
+        sourceId: "technology-database",
+        snapshotId: "00000000-0000-4000-8000-000000000099",
+        snapshotSha256: "a".repeat(64),
+        recordId: "b".repeat(64),
+        entityType: "coax-termination",
+        sourceKey: "BNC|RG58|6|9|13",
+        layers: [
+          { index: 1, diameterMm: 0.9, stripLengthMm: 6 },
+          { index: 2, diameterMm: 3.1, stripLengthMm: 9 },
+        ],
+      },
+    },
   };
 }
 
@@ -310,6 +348,45 @@ describe("harness design scene adapter", () => {
     }, "wire-1")).toEqual({
       ok: false,
       error: "Справочная позиция не содержит данных опубликованной версии.",
+    });
+  });
+
+  it("builds an exact strip profile command for the active wire end", () => {
+    expect(wireStripProfileUpdateFromCatalogItem(wireStripCatalogItem(), "wire-1", "to")).toEqual({
+      ok: true,
+      command: {
+        type: "set-wire-strip-profile",
+        wireId: "wire-1",
+        end: "to",
+        profile: {
+          ...wireStripCatalogItem().coaxTerminationCandidate!.binding,
+          displayName: "BNC / RG58",
+        },
+      },
+    });
+  });
+
+  it("rejects strip assignment without one editable drawing wire", () => {
+    expect(wireStripProfileUpdateFromCatalogItem(wireStripCatalogItem(), null, "from")).toMatchObject({
+      ok: false, error: expect.stringContaining("выберите один провод"),
+    });
+    expect(wireStripProfileUpdateFromCatalogItem(wireStripCatalogItem(), "wire-1", "from", true)).toEqual({
+      ok: false, error: "Слой выбранного провода заблокирован.",
+    });
+  });
+
+  it("reports the first catalog diagnostic for an incomplete strip profile", () => {
+    const item = wireStripCatalogItem();
+    expect(wireStripProfileUpdateFromCatalogItem({
+      ...item,
+      coaxTerminationCandidate: {
+        state: "incomplete",
+        layers: [{ index: 1, diameterMm: 0.9, stripLengthMm: null }],
+        diagnostics: [{ code: "layer-strip-length-missing", layerIndex: 1, message: "Для слоя L1 не указана длина разделки." }],
+        binding: null,
+      },
+    }, "wire-1", "from")).toEqual({
+      ok: false, error: "Для слоя L1 не указана длина разделки.",
     });
   });
 

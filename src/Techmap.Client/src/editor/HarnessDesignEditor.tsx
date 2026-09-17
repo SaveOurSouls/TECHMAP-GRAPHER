@@ -58,6 +58,7 @@ import {
   type EditorLayer,
   type HarnessDesignDocument,
   type WireEndpoint,
+  type WireStripProfileBinding,
 } from "./model";
 
 export interface HarnessDesignEditorProps {
@@ -449,6 +450,40 @@ export function wireMaterialUpdateFromCatalogItem(
   };
 }
 
+type WireStripProfileCommand = Extract<EditorCommand, { readonly type: "set-wire-strip-profile" }>;
+
+export type WireStripProfileCatalogUpdateResult =
+  | { readonly ok: true; readonly command: WireStripProfileCommand }
+  | { readonly ok: false; readonly error: string };
+
+/** Builds an exact end-treatment assignment from a published БД.КОАКС row. */
+export function wireStripProfileUpdateFromCatalogItem(
+  item: EditorCatalogItem,
+  selectedWireId: string | null,
+  end: "from" | "to",
+  disabled = false,
+): WireStripProfileCatalogUpdateResult {
+  if (!selectedWireId) {
+    return { ok: false, error: "Сначала выберите один провод на чертеже, затем профиль разделки." };
+  }
+  if (disabled) return { ok: false, error: "Слой выбранного провода заблокирован." };
+  if (item.entityType !== "coax-termination" || !item.coaxTerminationCandidate) {
+    return { ok: false, error: "Выбранная справочная позиция не является профилем разделки." };
+  }
+  const candidate = item.coaxTerminationCandidate;
+  if (candidate.state !== "ready" || !candidate.binding) {
+    return {
+      ok: false,
+      error: candidate.diagnostics[0]?.message || "Профиль разделки заполнен не полностью.",
+    };
+  }
+  const profile: WireStripProfileBinding = {
+    ...candidate.binding,
+    displayName: item.referenceDisplayName || item.title || candidate.binding.sourceKey,
+  };
+  return { ok: true, command: { type: "set-wire-strip-profile", wireId: selectedWireId, end, profile } };
+}
+
 /** Translates inspector metadata into a command while preserving omitted-versus-null length semantics. */
 export function editorWireUpdateCommand(
   selected: EditorSceneObject,
@@ -534,6 +569,7 @@ export function HarnessDesignEditor({
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
+  const [activeWireStripEnd, setActiveWireStripEnd] = useState<"from" | "to">("from");
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
@@ -928,6 +964,26 @@ export function HarnessDesignEditor({
     ...customWireColorHexes.map((hex) => createCustomWireColor(hex)),
   ];
   const placeCatalogItem = async (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
+    if (item.placement === "reference-only" && item.entityType === "coax-termination") {
+      if (view !== "drawing") {
+        setMessage("Профиль разделки назначается проводу только в режиме «Чертёж».");
+        return;
+      }
+      const selectedWireId = selectedObjectIds.length === 1 &&
+        history.present.wires.some((wire) => wire.id === selectedObjectIds[0])
+        ? selectedObjectIds[0]!
+        : null;
+      const selectedWire = selectedWireId
+        ? history.present.wires.find((wire) => wire.id === selectedWireId)
+        : undefined;
+      const locked = selectedWire
+        ? history.present.views.drawing.layers.some((layer) => layer.id === selectedWire.layerIds.drawing && layer.locked)
+        : false;
+      const result = wireStripProfileUpdateFromCatalogItem(item, selectedWireId, activeWireStripEnd, locked);
+      if (!result.ok) setMessage(result.error);
+      else run(result.command);
+      return;
+    }
     if (item.placement === "reference-only" && (item.entityType === "wire" || item.entityType === "cable")) {
       const selectedWireId = selectedObjectIds.length === 1 &&
         history.present.wires.some((wire) => wire.id === selectedObjectIds[0])
@@ -1331,6 +1387,12 @@ export function HarnessDesignEditor({
         onCatalogLoadMore={catalog.loadMore}
         onCatalogRetry={catalog.retry}
         onWireMaterialClear={(wireId) => run({ type: "update-wire", wireId, materialBinding: null })}
+        selectedWireStripProfiles={selectedObjectIds.length === 1
+          ? history.present.wires.find((wire) => wire.id === selectedObjectIds[0])?.stripProfiles
+          : undefined}
+        activeWireStripEnd={activeWireStripEnd}
+        onActiveWireStripEndChange={setActiveWireStripEnd}
+        onWireStripProfileClear={(wireId, end) => run({ type: "set-wire-strip-profile", wireId, end, profile: null })}
         onObjectMove={(objectId, point) => run({
           type: "move-connector",
           connectorId: objectId,

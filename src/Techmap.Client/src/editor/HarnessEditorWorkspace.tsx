@@ -27,6 +27,7 @@ import { E4WireSelectionMenu } from "./E4WireSelectionMenu";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
+import type { WireEndStripProfiles } from "./model";
 import "./harness-editor.css";
 
 const defaultLayers: readonly EditorLayer[] = [
@@ -105,6 +106,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCatalogLoadMore?: () => void;
   readonly onCatalogRetry?: () => void;
   readonly onWireMaterialClear?: (wireId: string) => void;
+  readonly selectedWireStripProfiles?: WireEndStripProfiles;
+  readonly activeWireStripEnd?: "from" | "to";
+  readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
+  readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
@@ -214,6 +219,10 @@ export function HarnessEditorWorkspace({
   onCatalogLoadMore,
   onCatalogRetry,
   onWireMaterialClear,
+  selectedWireStripProfiles,
+  activeWireStripEnd = "from",
+  onActiveWireStripEndChange,
+  onWireStripProfileClear,
   onObjectMove,
   onObjectMovePreview,
   onObjectEditRequest,
@@ -519,6 +528,10 @@ export function HarnessEditorWorkspace({
                   disabled={selectedLayer?.locked === true}
                   onChange={(objectId, patch) => changeObjects(updateEditorObject(objects, objectId, patch))}
                   onWireMaterialClear={onWireMaterialClear}
+                  wireStripProfiles={selectedWireStripProfiles}
+                  activeWireStripEnd={activeWireStripEnd}
+                  onActiveWireStripEndChange={onActiveWireStripEndChange}
+                  onWireStripProfileClear={onWireStripProfileClear}
                 />
               )
             ) : (

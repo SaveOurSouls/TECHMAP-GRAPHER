@@ -203,6 +203,27 @@
 .he-wire-material > span { color: #2f4c5e; font-size: 12px; font-weight: 700; }
 .he-wire-material > small { color: #71808d; font-size: 10px; }
 .he-wire-material > button { justify-self: start; }
+.he-wire-strip-profile { padding: 9px; display: grid; gap: 9px; border: 1px solid #cfdfe6; border-radius: 7px; background: #f8fbfc; }
+.he-wire-strip-profile > header { display: grid; gap: 7px; }
+.he-wire-strip-profile > header > strong { color: #35576b; font-size: 11px; }
+.he-wire-end-tabs { padding: 2px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border: 1px solid #d4e1e6; border-radius: 6px; background: #edf3f5; }
+.he-wire-end-tabs button { height: 27px; border: 0; border-radius: 4px; background: transparent; color: #647984; font-size: 9px; font-weight: 750; cursor: pointer; }
+.he-wire-end-tabs button.active { background: #fff; color: #0875a3; box-shadow: 0 1px 4px rgb(34 73 91 / 13%); }
+.he-wire-end-tabs button:disabled { cursor: default; opacity: .6; }
+.he-wire-strip-identity { min-width: 0; display: grid; gap: 2px; }
+.he-wire-strip-identity span { overflow: hidden; color: #294a5d; font-size: 11px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.he-wire-strip-identity small { overflow: hidden; color: #768791; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.he-wire-strip-table { width: 100%; border-collapse: collapse; color: #3b596a; font-size: 8px; font-variant-numeric: tabular-nums; }
+.he-wire-strip-table th, .he-wire-strip-table td { padding: 5px 3px; border-bottom: 1px solid #dce6ea; text-align: right; }
+.he-wire-strip-table thead th { color: #70818b; font-weight: 750; }
+.he-wire-strip-table th:first-child { text-align: left; }
+.he-wire-strip-table tbody tr:last-child th, .he-wire-strip-table tbody tr:last-child td { border-bottom: 0; }
+.he-wire-strip-clear { justify-self: start; min-height: 27px; padding: 0 8px; border: 1px solid #d1dfe5; border-radius: 5px; background: #fff; color: #496777; font-size: 9px; cursor: pointer; }
+.he-wire-strip-clear:hover:not(:disabled) { border-color: #9fbdca; background: #f1f7f9; }
+.he-wire-strip-clear:disabled { cursor: default; opacity: .55; }
+.he-wire-strip-empty { padding: 7px; display: grid; gap: 4px; border: 1px dashed #c7d7df; border-radius: 5px; color: #637984; }
+.he-wire-strip-empty span { font-size: 10px; font-weight: 750; }
+.he-wire-strip-empty small { font-size: 9px; line-height: 1.35; }
 .he-color-field { height: 35px; padding: 4px 8px 4px 4px; display: flex; align-items: center; gap: 9px; border: 1px solid #cad7de; border-radius: 6px; }
 .he-color-field input { width: 29px; height: 25px; padding: 0; border: 0; background: transparent; }
 .he-color-field code { color: #526b79; font: 600 10px Consolas, monospace; }
