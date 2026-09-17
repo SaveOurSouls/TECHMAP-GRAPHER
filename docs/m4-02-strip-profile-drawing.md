@@ -37,5 +37,6 @@
    инспектор объяснит, почему он временно не показан.
 
 Проверены 675/675 клиентских тестов, TypeScript, production build,
-640/640 .NET-тестов, `git diff --check` и семь portable-режимов. Данные архива
-зафиксированы в `docs/work-state.md` после упаковки.
+640/640 .NET-тестов, `git diff --check` и семь portable-режимов. Архив
+`artifacts/m4-02/TECHMAP-GRAPHER-win-x64.zip`: 48,20 МиБ (50 540 503 байта),
+SHA-256 `23191B8A2BCC006EB541A01DA0A01AFE219B7919E59C13376A45F41969E0575A`.
