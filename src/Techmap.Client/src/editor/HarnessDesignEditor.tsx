@@ -1377,6 +1377,7 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
+        cables={(previewResult.document ?? history.present).cables}
         e4Overlays={view === "e4" ? {
           crossingStyle: history.present.views.e4.wireCrossingStyle,
           junctions: history.present.junctions,

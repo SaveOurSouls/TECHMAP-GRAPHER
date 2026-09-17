@@ -38,6 +38,11 @@ import {
   type ComponentTemplateViewInstance,
   type ResolveComponentTemplateAssetUrl,
 } from "./component-template-view-renderer";
+import {
+  buildCableSheathGeometry,
+  type CableSheathGeometry,
+} from "./cable-sheath-geometry";
+import type { CableInstance } from "./model";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -47,6 +52,7 @@ export interface CanvasViewportProps {
   readonly layers: readonly EditorLayer[];
   readonly selectedObjectId: string | null;
   readonly selectedObjectIds?: readonly string[];
+  readonly cables?: readonly CableInstance[];
   readonly e4Overlays?: E4SceneOverlays;
   /** Exact project snapshots keyed to connector scene-object ids. */
   readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
@@ -1572,6 +1578,52 @@ export function objectsInPaintOrder(
   return result;
 }
 
+export interface VisibleCableSheathScene {
+  readonly geometries: readonly CableSheathGeometry[];
+  readonly incompatibleCableIds: readonly string[];
+}
+
+/** Resolves visible drawing sheaths without using hidden conductors as geometry. */
+export function getVisibleCableSheathScene(
+  cables: readonly CableInstance[],
+  objects: readonly EditorSceneObject[],
+  layers: readonly EditorLayer[],
+): VisibleCableSheathScene {
+  const layerMap = new Map(layers.map((layer) => [layer.id, layer]));
+  const geometries: CableSheathGeometry[] = [];
+  const incompatibleCableIds: string[] = [];
+  for (const cable of cables) {
+    const members = cable.memberWireIds.map((wireId) =>
+      objects.find((object) => object.id === wireId && object.kind === "wire"));
+    if (members.some((member) => member && layerMap.get(member.layerId)?.visible !== true)) continue;
+    const geometry = buildCableSheathGeometry(cable, objects);
+    if (geometry) geometries.push(geometry);
+    else incompatibleCableIds.push(cable.id);
+  }
+  return { geometries, incompatibleCableIds };
+}
+
+/** Selects the painted sheath contour while leaving its inner conductors easy to hit. */
+export function hitTestCableSheath(
+  geometries: readonly CableSheathGeometry[],
+  point: EditorPoint,
+  zoom: number,
+): CableSheathGeometry | null {
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const tolerance = 7 / safeZoom;
+  for (let index = geometries.length - 1; index >= 0; index -= 1) {
+    const geometry = geometries[index]!;
+    if (point.x < geometry.bounds.x - tolerance ||
+        point.x > geometry.bounds.x + geometry.bounds.width + tolerance ||
+        point.y < geometry.bounds.y - tolerance ||
+        point.y > geometry.bounds.y + geometry.bounds.height + tolerance) continue;
+    if (geometry.edges.some(([start, end]) => pointToSegmentDistance(point, start, end) <= tolerance)) {
+      return geometry;
+    }
+  }
+  return null;
+}
+
 export function hitTestEditorScene(
   objects: readonly EditorSceneObject[],
   layers: readonly EditorLayer[],
@@ -2276,6 +2328,7 @@ export function getEditorSceneBounds(
   e4Overlays?: E4SceneOverlays,
   componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
   resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
+  cables: readonly CableInstance[] = [],
 ): EditorSceneBounds | null {
   let bounds: EditorSceneBounds | null = null;
   const visibleObjects = objectsInPaintOrder(objects, layers);
@@ -2374,7 +2427,18 @@ export function getEditorSceneBounds(
     }
   }
 
-  if (view !== "e4") return bounds;
+  if (view !== "e4") {
+    for (const geometry of getVisibleCableSheathScene(cables, visibleObjects, layers).geometries) {
+      bounds = expandSceneBounds(
+        bounds,
+        geometry.bounds.x,
+        geometry.bounds.y,
+        geometry.bounds.x + geometry.bounds.width,
+        geometry.bounds.y + geometry.bounds.height,
+      );
+    }
+    return bounds;
+  }
   const visibleOverlays = getVisibleE4SceneOverlays(
     e4Overlays ?? parseE4SceneOverlays(objects),
     objects,
@@ -2428,6 +2492,7 @@ function redrawCanvas(
   objects: readonly EditorSceneObject[],
   layers: readonly EditorLayer[],
   selectedObjectIds: ReadonlySet<string>,
+  cables: readonly CableInstance[] = [],
   e4Overlays?: E4SceneOverlays,
   alignmentGuides?: E4ConnectorSnapGuides,
   componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
@@ -2450,6 +2515,14 @@ function redrawCanvas(
   context.save();
   context.translate(camera.offsetX, camera.offsetY);
   context.scale(camera.zoom, camera.zoom);
+  if (view === "drawing") {
+    drawCableSheaths(
+      context,
+      getVisibleCableSheathScene(cables, objects, layers).geometries,
+      selectedObjectIds,
+      camera.zoom,
+    );
+  }
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of objectsInPaintOrder(objects, layers)) {
     drawEditorSceneObject(
@@ -2474,6 +2547,32 @@ function redrawCanvas(
     drawE4ConnectorAlignmentGuides(context, alignmentGuides, camera.zoom);
   }
   context.restore();
+}
+
+export function drawCableSheaths(
+  context: CanvasRenderingContext2D,
+  geometries: readonly CableSheathGeometry[],
+  selectedObjectIds: ReadonlySet<string>,
+  zoom = 1,
+): void {
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  for (const geometry of geometries) {
+    const selected = geometry.memberWireIds.length > 0 &&
+      geometry.memberWireIds.every((wireId) => selectedObjectIds.has(wireId));
+    context.save();
+    context.beginPath();
+    geometry.polygon.forEach((point, index) => index === 0
+      ? context.moveTo(point.x, point.y)
+      : context.lineTo(point.x, point.y));
+    context.closePath();
+    context.fillStyle = selected ? "rgba(17, 121, 172, 0.13)" : "rgba(82, 105, 119, 0.08)";
+    context.fill();
+    context.strokeStyle = selected ? "#1179ac" : "#607d8b";
+    context.lineWidth = (selected ? 3 : 2) / safeZoom;
+    context.setLineDash(selected ? [] : [8 / safeZoom, 4 / safeZoom]);
+    context.stroke();
+    context.restore();
+  }
 }
 
 function drawE4ConnectorAlignmentGuides(
@@ -2522,6 +2621,7 @@ export function CanvasViewport({
   layers,
   selectedObjectId,
   selectedObjectIds,
+  cables = [],
   e4Overlays,
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
@@ -2584,6 +2684,12 @@ export function CanvasViewport({
       ? { ...screen, position: screenPositionPreview.position }
       : screen),
   } : sourceOverlays, [screenPositionPreview, sourceOverlays]);
+  const cableSheathScene = useMemo(
+    () => view === "drawing"
+      ? getVisibleCableSheathScene(cables, displayObjects, layers)
+      : { geometries: [], incompatibleCableIds: [] },
+    [cables, displayObjects, layers, view],
+  );
   const selectLinkedE4Group = (wireIds: readonly string[]) => {
     if (onObjectGroupSelect) onObjectGroupSelect(wireIds);
     else onObjectSelect(wireIds.at(-1) ?? null, false);
@@ -2631,6 +2737,7 @@ export function CanvasViewport({
         displayObjects,
         layers,
         selectedSet,
+        cables,
         overlays,
         connectorAlignmentGuides,
         componentTemplateViewInstances,
@@ -2650,7 +2757,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
+  }, [cables, camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -2853,6 +2960,11 @@ export function CanvasViewport({
         }
       }
       if (view === "drawing") {
+        const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
+        if (cableSheath) {
+          selectLinkedE4Group(cableSheath.memberWireIds);
+          return;
+        }
         const selectedWire = objects.find((item) => item.id === selectedObjectId);
         const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
         const routeIndex = selectedLayer?.locked === true

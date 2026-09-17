@@ -29,7 +29,10 @@ import {
   handleEditorViewportWheel,
   containInlineEditorPointerEvent,
   drawE4DifferentialPairs,
+  drawCableSheaths,
   drawEditorSceneObject,
+  getVisibleCableSheathScene,
+  hitTestCableSheath,
   inlineObjectDragDestination,
   inlineObjectDragMoved,
   isInlineEditorControlTarget,
@@ -52,6 +55,7 @@ import {
 } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorPoint, EditorSceneObject } from "./editor-types";
+import type { CableInstance } from "./model";
 import { HarnessEditorWorkspace, reconcileWorkspaceSelection } from "./HarnessEditorWorkspace";
 
 const layers: readonly EditorLayer[] = [
@@ -74,6 +78,59 @@ const stripProfile = {
 };
 
 describe("harness editor workspace", () => {
+  it("draws, selects and fits a multicore cable sheath in the drawing view", () => {
+    const cable: CableInstance = {
+      id: "CABLE-1", memberWireIds: ["core-a", "core-b"], lengthMm: 250,
+      endCorrectionFromMm: 0, endCorrectionToMm: 0, cutRoundingStepMm: 1,
+    };
+    const cableObjects: readonly EditorSceneObject[] = [
+      { id: "core-a", layerId: "bottom", kind: "wire", label: "1",
+        x: 0, y: 0, width: 0, height: 0, color: "#c00", points: [{ x: 20, y: 20 }, { x: 120, y: 20 }] },
+      { id: "core-b", layerId: "bottom", kind: "wire", label: "2",
+        x: 0, y: 0, width: 0, height: 0, color: "#00c", points: [{ x: 30, y: 30 }, { x: 110, y: 30 }] },
+    ];
+    const scene = getVisibleCableSheathScene([cable], cableObjects, layers);
+    expect(scene.incompatibleCableIds).toEqual([]);
+    expect(scene.geometries).toHaveLength(1);
+    expect(hitTestCableSheath(scene.geometries, { x: 60, y: 14 }, 1)?.cableId).toBe("CABLE-1");
+    expect(hitTestCableSheath(scene.geometries, { x: 60, y: 25 }, 1)).toBeNull();
+    expect(getEditorSceneBounds(cableObjects, layers, "drawing", undefined, [], undefined, [cable]))
+      .toEqual({ minX: 20, minY: 14, maxX: 120, maxY: 36 });
+
+    const strokes: string[] = [];
+    const contextState = {
+      strokeStyle: "", fillStyle: "", lineWidth: 1,
+      save: () => undefined, restore: () => undefined, beginPath: () => undefined,
+      moveTo: () => undefined, lineTo: () => undefined, closePath: () => undefined,
+      setLineDash: () => undefined, fill: () => undefined,
+      stroke: () => strokes.push(String(contextState.strokeStyle)),
+    };
+    drawCableSheaths(contextState as unknown as CanvasRenderingContext2D, scene.geometries, new Set(["core-a", "core-b"]));
+    expect(strokes).toEqual(["#1179ac"]);
+  });
+
+  it("does not guess incompatible cable routes and explains the omitted sheath", () => {
+    const cable: CableInstance = {
+      id: "CABLE-X", memberWireIds: ["core-a", "core-b"], lengthMm: null,
+      endCorrectionFromMm: 0, endCorrectionToMm: 0, cutRoundingStepMm: 1,
+    };
+    const cableObjects: readonly EditorSceneObject[] = [
+      { id: "core-a", layerId: "bottom", kind: "wire", label: "1",
+        x: 0, y: 0, width: 0, height: 0, color: "#c00", points: [{ x: 0, y: 0 }, { x: 50, y: 0 }] },
+      { id: "core-b", layerId: "bottom", kind: "wire", label: "2",
+        x: 0, y: 0, width: 0, height: 0, color: "#00c", points: [{ x: 60, y: 10 }, { x: 100, y: 10 }] },
+    ];
+    expect(getVisibleCableSheathScene([cable], cableObjects, layers)).toEqual({
+      geometries: [], incompatibleCableIds: ["CABLE-X"],
+    });
+    const markup = renderToStaticMarkup(createElement(HarnessEditorWorkspace, {
+      harnessId: "harness-cable", harnessDesignation: "ЖГ-К",
+      view: "drawing", objects: cableObjects, layers, cables: [cable],
+    }));
+    expect(markup).toContain("Общая оболочка не показана для кабеля CABLE-X");
+    expect(markup).toContain("нет однозначного общего участка");
+  });
+
   it("draws, hits and bounds end strip polygons only in the drawing view", () => {
     const wire: EditorSceneObject = {
       id: "stripped", layerId: "bottom", kind: "wire", label: "W1",

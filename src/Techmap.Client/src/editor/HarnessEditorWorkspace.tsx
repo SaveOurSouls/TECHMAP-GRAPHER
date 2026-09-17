@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   CanvasViewport,
   getEditorSceneBounds,
+  getVisibleCableSheathScene,
   type E4ConnectableEndpoint,
   type E4SceneOverlays,
 } from "./CanvasViewport";
@@ -27,7 +28,7 @@ import { E4WireSelectionMenu } from "./E4WireSelectionMenu";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
-import type { WireEndStripProfiles } from "./model";
+import type { CableInstance, WireEndStripProfiles } from "./model";
 import "./harness-editor.css";
 
 const defaultLayers: readonly EditorLayer[] = [
@@ -93,6 +94,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly catalogHasMore?: boolean;
   readonly selectedObjectId?: string | null;
   readonly selectedObjectIds?: readonly string[];
+  readonly cables?: readonly CableInstance[];
   readonly saveState?: EditorSaveState;
   readonly onSaveRequest?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
@@ -206,6 +208,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
+  cables = [],
   saveState = "saved",
   onSaveRequest,
   onViewChange,
@@ -401,7 +404,7 @@ export function HarnessEditorWorkspace({
   const fitView = () => setCamera((current) => fitEditorCameraToBounds(
     current,
     getEditorSceneBounds(viewportObjects, layers, view, e4Overlays,
-      componentTemplateViewInstances, resolveComponentTemplateAssetUrl),
+      componentTemplateViewInstances, resolveComponentTemplateAssetUrl, cables),
     viewportSize,
   ));
   const setZoom = (zoom: number) => setCamera((current) =>
@@ -429,6 +432,14 @@ export function HarnessEditorWorkspace({
       ))}
     </section>
   ) : undefined;
+  const incompatibleCableIds = view === "drawing"
+    ? getVisibleCableSheathScene(cables, viewportObjects, layers).incompatibleCableIds
+    : [];
+  const cableSheathWarning = incompatibleCableIds.length > 0
+    ? `Общая оболочка не показана для ${incompatibleCableIds.length === 1
+      ? `кабеля ${incompatibleCableIds[0]}`
+      : `кабелей ${incompatibleCableIds.join(", ")}`}: у жил нет однозначного общего участка.`
+    : null;
 
   return (
     <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`}>
@@ -485,6 +496,7 @@ export function HarnessEditorWorkspace({
           layers={layers}
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
+          cables={cables}
           e4Overlays={e4Overlays}
           componentTemplateViewInstances={componentTemplateViewInstances}
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
@@ -512,7 +524,9 @@ export function HarnessEditorWorkspace({
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />
-        {previewMessage && <div className="he-routing-preview-error" role="status">{previewMessage}</div>}
+        {(previewMessage || cableSheathWarning) && <div className="he-routing-preview-error" role="status">
+          {previewMessage || cableSheathWarning}
+        </div>}
 
         <aside className="he-right-panel" aria-label="Настройки редактора">
           <div className="he-inspector-tabs" role="tablist" aria-label="Панель объекта">
