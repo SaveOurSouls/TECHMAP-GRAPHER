@@ -48,6 +48,28 @@ export interface GoogleSheetsProfilePreviewRequest {
   readonly profileId: string;
 }
 
+export interface GoogleSheetsSyncRequest {
+  readonly url: string;
+}
+
+export type GoogleSheetsSyncStatus = "published" | "unchanged" | "failed";
+
+export interface GoogleSheetsSyncProfileResult {
+  readonly profileId: string;
+  readonly sourceId: string;
+  readonly status: GoogleSheetsSyncStatus;
+  readonly recordCount: number;
+  readonly snapshotId: string | null;
+  readonly diagnostics: readonly ReferenceCatalogDiagnostic[];
+  readonly error: { readonly error: string; readonly field: string | null; readonly message: string } | null;
+}
+
+export interface GoogleSheetsSyncResult {
+  readonly fileName: string;
+  readonly sourceSha256: string;
+  readonly profiles: readonly GoogleSheetsSyncProfileResult[];
+}
+
 export interface ReferenceCatalogDiagnostic {
   readonly diagnosticId: string;
   readonly severity: ReferenceDiagnosticSeverity;
@@ -200,6 +222,7 @@ export interface ReferenceCatalogApi {
   previewXlsx(sourceId: string, request: XlsxPreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   previewXlsxProfile(sourceId: string, request: XlsxProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
   previewGoogleSheetsProfile(sourceId: string, request: GoogleSheetsProfilePreviewRequest, signal?: AbortSignal): Promise<XlsxReferencePreview>;
+  syncGoogleSheets(request: GoogleSheetsSyncRequest, signal?: AbortSignal): Promise<GoogleSheetsSyncResult>;
   publishXlsx(sourceId: string, request: PublishXlsxPreviewRequest): Promise<ReferenceCatalogPublication>;
   publishEditableTable(sourceId: string, request: PublishEditableReferenceTableRequest): Promise<ReferenceCatalogPublication>;
   searchCatalog(
@@ -234,6 +257,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const sha256Pattern = /^[0-9a-f]{64}$/i;
 const severities = new Set<ReferenceDiagnosticSeverity>(["warning", "error"]);
 const publicationStatuses = new Set(["published", "unchanged"]);
+const googleSheetsSyncStatuses = new Set<GoogleSheetsSyncStatus>(["published", "unchanged", "failed"]);
 const resolvedValueKinds = new Set<XlsxResolvedValueKind>([
   "rawscalar", "text", "textscalar", "int64", "decimal", "boolean",
 ]);
@@ -540,6 +564,37 @@ function parsePublication(value: unknown): ReferenceCatalogPublication {
   });
 }
 
+function parseGoogleSheetsSync(value: unknown): GoogleSheetsSyncResult {
+  const record = requireRecord(value, "Сервер вернул повреждённый результат синхронизации Google Sheets.");
+  const profiles = requireArray(record, "profiles").map((item): GoogleSheetsSyncProfileResult => {
+    const profile = requireRecord(item, "Сервер вернул повреждённый результат профиля Google Sheets.");
+    const status = requireString(profile, "status") as GoogleSheetsSyncStatus;
+    if (!googleSheetsSyncStatuses.has(status)) throw new Error("Поле ответа «status» задано неверно.");
+    const error = profile.error === null || profile.error === undefined ? null : (() => {
+      const detail = requireRecord(profile.error, "Сервер вернул повреждённую ошибку профиля Google Sheets.");
+      return Object.freeze({
+        error: requireString(detail, "error"),
+        field: optionalString(detail, "field"),
+        message: requireString(detail, "message"),
+      });
+    })();
+    return Object.freeze({
+      profileId: requireString(profile, "profileId"),
+      sourceId: requireString(profile, "sourceId"),
+      status,
+      recordCount: requireInteger(profile, "recordCount", 0),
+      snapshotId: nullableUuid(profile, "snapshotId"),
+      diagnostics: Object.freeze(requireArray(profile, "diagnostics").map(parseDiagnostic)),
+      error,
+    });
+  });
+  return Object.freeze({
+    fileName: requireString(record, "fileName"),
+    sourceSha256: requireHash(record, "sourceSha256"),
+    profiles: Object.freeze(profiles),
+  });
+}
+
 async function responseError(response: Response): Promise<ReferenceCatalogApiError> {
   try {
     const body: unknown = await response.json();
@@ -691,6 +746,11 @@ export function createReferenceCatalogApi(
       resource(sourceId, "google-sheets-profile-previews"),
       { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
       parsePreview,
+    ),
+    syncGoogleSheets: (body: GoogleSheetsSyncRequest, signal?: AbortSignal) => request(
+      "reference-import/google-sheets-sync",
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify(body), signal },
+      parseGoogleSheetsSync,
     ),
     publishXlsx: (sourceId: string, body: PublishXlsxPreviewRequest) => request(
       resource(sourceId, "xlsx-publications"),

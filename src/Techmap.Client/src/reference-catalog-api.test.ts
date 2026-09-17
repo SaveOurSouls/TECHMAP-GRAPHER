@@ -250,6 +250,39 @@ describe("reference catalog API", () => {
     );
   });
 
+  it("synchronizes every Google Sheets profile in one request", async () => {
+    const response = {
+      fileName: "google-sheets.xlsx",
+      sourceSha256: hash,
+      profiles: [{
+        profileId: "technology.operations",
+        sourceId: "technology-operations",
+        status: "published",
+        recordCount: 129,
+        snapshotId,
+        diagnostics: [],
+        error: null,
+      }, {
+        profileId: "technology.terminals",
+        sourceId: "technology-terminals",
+        status: "failed",
+        recordCount: 0,
+        snapshotId: null,
+        diagnostics: [],
+        error: { error: "xlsx_sheet_not_found", field: null, message: "Лист не найден." },
+      }],
+    };
+    const fetcher = vi.fn(async () => jsonResponse(response));
+    const api = createReferenceCatalogApi(config, session, fetcher);
+    const body = { url: googleSheetsProfileRequest.url };
+
+    await expect(api.syncGoogleSheets(body)).resolves.toEqual(response);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/techmap/api/v1/reference-import/google-sheets-sync",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) }),
+    );
+  });
+
   it("forwards cancellation to XLSX and Google previews without masking AbortError", async () => {
     const xlsxController = new AbortController();
     const googleController = new AbortController();

@@ -5,6 +5,7 @@ import {
   isAbortError,
   ReferenceCatalogApiError,
   type GoogleSheetsProfilePreviewRequest,
+  type GoogleSheetsSyncResult,
   type ReferenceCatalogDiagnostic,
   type ReferenceCatalogSourceSummary,
   type ReferenceCatalogSnapshot,
@@ -283,9 +284,10 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [active, setActive] = useState<ReferenceCatalogSnapshot | null | undefined>(undefined);
   const [activeError, setActiveError] = useState<string | null>(null);
   const [preview, setPreview] = useState<XlsxReferencePreview | null>(null);
+  const [syncResult, setSyncResult] = useState<GoogleSheetsSyncResult | null>(null);
   const [previewStale, setPreviewStale] = useState(false);
   const [previewPublished, setPreviewPublished] = useState(false);
-  const [busy, setBusy] = useState<"preview" | "publish" | "active" | null>(null);
+  const [busy, setBusy] = useState<"preview" | "publish" | "active" | "sync" | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [now, setNow] = useState(Date.now());
   const activeRequestRef = useRef(0);
@@ -392,6 +394,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
   const invalidatePreview = () => {
     setPreview(null);
+    setSyncResult(null);
     setPreviewStale(false);
     setPreviewPublished(false);
     setNotice(null);
@@ -495,7 +498,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       setNotice({ tone: "error", text: "Выберите файл XLSX." });
       return;
     }
-    if ((inputMode === "google-sheets" || !manualMode) && !selectedProfile) {
+    if (inputMode === "xlsx" && !manualMode && !selectedProfile) {
       setNotice({ tone: "error", text: "Выберите профиль справочника." });
       return;
     }
@@ -508,15 +511,29 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     setPreviewStale(false);
     setPreviewPublished(false);
     try {
-      let result: XlsxReferencePreview;
       if (inputMode === "google-sheets") {
-        const profile = selectedProfile!;
-        result = await api.previewGoogleSheetsProfile(
-          profile.sourceId,
-          googleSheetsProfilePreviewRequest(googleSheetsUrl, profile.profileId),
-          previewController.signal,
-        );
-      } else if (manualMode) {
+        if (!googleSheetsUrl.trim()) throw new Error("Вставьте публичную ссылку Google Sheets.");
+        setBusy("sync");
+        const sync = await api.syncGoogleSheets({ url: googleSheetsUrl.trim() }, previewController.signal);
+        if (previewAbortRef.current !== previewController) return;
+        setSyncResult(sync);
+        const completed = sync.profiles.filter((profile) => profile.status !== "failed");
+        const failed = sync.profiles.filter((profile) => profile.status === "failed");
+        const terminal = completed.find((profile) => profile.profileId === "technology.terminals");
+        const selected = terminal ?? completed[0];
+        await loadSources(selected?.sourceId);
+        if (selected) {
+          setEditableSourceId(selected.sourceId);
+          if (selected.sourceId === activeSourceId) await loadActive(false);
+        }
+        setNotice({
+          tone: failed.length > 0 ? "error" : "success",
+          text: `Синхронизировано справочников: ${completed.length} из ${sync.profiles.length}.${failed.length > 0 ? ` Не удалось: ${failed.length}; подробности в журнале слева.` : ""}`,
+        });
+        return;
+      }
+      let result: XlsxReferencePreview;
+      if (manualMode) {
         const contentBase64 = await xlsxFileToBase64(file!);
         const sourceId = settings.sourceId.trim();
         const entityType = settings.entityType.trim();
@@ -602,7 +619,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div className="section-title-row reference-card-title">
           <div>
             <p className="eyebrow">ШАГ 1</p>
-            <h2>Выбор таблицы и источника</h2>
+            <h2>{inputMode === "google-sheets" ? "Загрузить все справочники" : "Выбор таблицы и источника"}</h2>
           </div>
           <span className="selected-file" title={inputMode === "xlsx" ? file?.name : googleSheetsUrl}>
             {inputMode === "xlsx" ? fileSelectionLabel(file) : "Публичная Google Sheets"}
@@ -655,13 +672,15 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           </div>
         )}
 
-        <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
+        {inputMode === "google-sheets" ? (
+          <p className="reference-state">Все {profiles?.length ?? 6} подготовленных таблиц будут проверены и сохранены за одно действие. Результат каждой таблицы появится в журнале слева.</p>
+        ) : <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
           <div className="xlsx-profile-heading">
             <div>
               <strong id="xlsx-profile-heading">Что загрузить</strong>
               <span>Одна публикация обновляет один справочник.</span>
             </div>
-            {(inputMode === "google-sheets" || !manualMode) && profiles && <span>{profileCountLabel(profiles.length)}</span>}
+            {!manualMode && profiles && <span>{profileCountLabel(profiles.length)}</span>}
           </div>
           <XlsxProfilePicker
             profiles={profiles}
@@ -670,7 +689,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
             disabled={busy !== null || (inputMode === "xlsx" && manualMode)}
             onSelect={selectProfile}
           />
-        </section>
+        </section>}
 
         {inputMode === "xlsx" && <div className="reference-form-grid profile-file-grid">
             <label className="file-picker wide-reference-field">
@@ -771,14 +790,14 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         </details>}
 
         <div className="reference-form-actions">
-          <button className="primary-action" type="submit" disabled={busy !== null && busy !== "preview"}>
-            {busy === "preview"
+          <button className="primary-action" type="submit" disabled={busy !== null && busy !== "preview" && busy !== "sync"}>
+            {busy === "sync" ? "Загружаем все справочники…" : busy === "preview"
               ? inputMode === "google-sheets" ? "Читаем Google Sheets…" : "Проверяем файл…"
-              : inputMode === "google-sheets" ? "Проверить Google Sheets"
+              : inputMode === "google-sheets" ? "Загрузить все справочники"
                 : manualMode ? "Проверить универсальный импорт"
                   : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
           </button>
-          <span>После успешной проверки таблица публикуется автоматически.</span>
+          <span>{inputMode === "google-sheets" ? "Каждая успешно проверенная таблица сохраняется автоматически." : "После успешной проверки таблица публикуется автоматически."}</span>
         </div>
       </form>
   );
@@ -831,7 +850,13 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           <div className="reference-sidebar-divider" />
           {importForm}
           <section className="reference-validation-log" aria-labelledby="reference-errors-title">
-            <ReferenceValidationDiagnostics diagnostics={preview?.diagnostics ?? null} />
+            {syncResult && <div className="reference-sync-results" aria-label="Результаты синхронизации">
+              {syncResult.profiles.map((profile) => <p key={profile.profileId}>
+                <strong>{profiles?.find((known) => known.profileId === profile.profileId)?.displayName ?? profile.profileId}</strong>
+                <span>{profile.status === "failed" ? `Ошибка: ${profile.error?.message ?? "Таблица не сохранена"}` : `${profile.status === "unchanged" ? "Без изменений" : "Сохранено"} · ${russianCountLabel(profile.recordCount, ["строка", "строки", "строк"])}`}</span>
+              </p>)}
+            </div>}
+            <ReferenceValidationDiagnostics diagnostics={syncResult?.profiles.flatMap((profile) => profile.diagnostics) ?? preview?.diagnostics ?? null} />
             {preview !== null && preview.canPublish && !previewPublished && <button className="secondary-action" type="button" onClick={() => void publishPreview()} disabled={!publishEnabled || busy !== null}>
               {busy === "publish" ? "Публикуем…" : "Повторить публикацию"}
             </button>}

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Techmap.Contracts;
 using Techmap.Infrastructure.GoogleSheets;
+using Techmap.Infrastructure.Xlsx;
 using Techmap.Web;
 using Xunit;
 
@@ -20,6 +21,69 @@ public sealed class GoogleSheetsReferenceApiTests
         "https://docs.google.com/spreadsheets/d/abcdefghijklmnop/edit?gid=0#gid=0";
     private const string SafeFileName =
         "google-sheet-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.xlsx";
+
+    [Fact]
+    public async Task Bulk_sync_downloads_once_publishes_valid_profiles_and_reports_failures_independently()
+    {
+        var bytes = CoaxWorkbook(withWarning: true);
+        var downloader = new QueueDownloader(new GoogleSheetsWorkbookDownload(bytes, SafeFileName));
+        await using var factory = CreateFactory(downloader);
+        using var client = CreateLocalClient(factory);
+        var csrf = await StartSessionAsync(client);
+
+        using var response = await SendAsync(
+            client,
+            "/api/v1/reference-import/google-sheets-sync",
+            new GoogleSheetsSyncRequest(PublicUrl),
+            csrf);
+
+        response.EnsureSuccessStatusCode();
+        var result = Assert.IsType<GoogleSheetsSyncResponse>(
+            await response.Content.ReadFromJsonAsync<GoogleSheetsSyncResponse>(
+                TestContext.Current.CancellationToken));
+        Assert.Equal(SafeFileName, result.FileName);
+        Assert.Equal(64, result.SourceSha256.Length);
+        Assert.Equal(XlsxKnownProfiles.All.Count, result.Profiles.Count);
+        Assert.Equal(PublicUrl, Assert.Single(downloader.RequestedUrls));
+
+        var published = Assert.Single(result.Profiles, item => item.ProfileId == "technology.coax-cables");
+        Assert.Equal("published", published.Status);
+        Assert.Equal(2, published.RecordCount);
+        Assert.NotNull(published.SnapshotId);
+        Assert.Null(published.Error);
+        Assert.Contains(published.Diagnostics, item => item.Severity == "warning");
+
+        var failed = Assert.Single(result.Profiles, item => item.ProfileId == "technology.terminals");
+        Assert.Equal("failed", failed.Status);
+        Assert.Equal("xlsx_sheet_not_found", failed.Error?.Error);
+
+        var active = await client.GetFromJsonAsync<ReferenceCatalogSnapshotResponse>(
+            SourcePath + "/active",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(published.SnapshotId, active?.SnapshotId);
+        Assert.Equal(2, active?.Records.Count);
+    }
+
+    [Fact]
+    public async Task Repeated_bulk_sync_reports_unchanged_and_keeps_effective_snapshot()
+    {
+        var bytes = CoaxWorkbook();
+        var download = new GoogleSheetsWorkbookDownload(bytes, SafeFileName);
+        var downloader = new QueueDownloader(download, download);
+        await using var factory = CreateFactory(downloader);
+        using var client = CreateLocalClient(factory);
+        var csrf = await StartSessionAsync(client);
+
+        var first = await SyncGoogleAsync(client, csrf);
+        var firstCoax = Assert.Single(first.Profiles, item => item.ProfileId == "technology.coax-cables");
+        Assert.Equal("published", firstCoax.Status);
+
+        var second = await SyncGoogleAsync(client, csrf);
+        var secondCoax = Assert.Single(second.Profiles, item => item.ProfileId == "technology.coax-cables");
+        Assert.Equal("unchanged", secondCoax.Status);
+        Assert.Equal(firstCoax.SnapshotId, secondCoax.SnapshotId);
+        Assert.Equal(2, downloader.RequestedUrls.Count);
+    }
 
     [Fact]
     public async Task Google_preview_uses_xlsx_pipeline_and_existing_publication_endpoint()
@@ -155,11 +219,16 @@ public sealed class GoogleSheetsReferenceApiTests
         Assert.DoesNotContain("abcdefghijklmnop", body, StringComparison.Ordinal);
     }
 
-    private static byte[] CoaxWorkbook() => new XlsxTestFixtureBuilder()
-        .WithWorksheetName("СПР.КАБ")
-        .WithHeaders("Кабель", "D1", "D2", "D3")
-        .AddRow("RG-58", "0.9", "3.0", "5.0")
-        .Build();
+    private static byte[] CoaxWorkbook(bool withWarning = false)
+    {
+        var builder = new XlsxTestFixtureBuilder()
+            .WithWorksheetName("СПР.КАБ")
+            .WithHeaders("Кабель", "D1", "D2", "D3")
+            .AddRow("RG-58", "0.9", "3.0", "5.0");
+        if (withWarning)
+            builder.AddRow("RG-58", "0.9", "3.0", "5.0");
+        return builder.Build();
+    }
 
     private static WebApplicationFactory<Program> CreateFactory(IGoogleSheetsWorkbookDownloader downloader)
     {
@@ -189,6 +258,21 @@ public sealed class GoogleSheetsReferenceApiTests
         response.EnsureSuccessStatusCode();
         return Assert.IsType<XlsxReferencePreviewResponse>(
             await response.Content.ReadFromJsonAsync<XlsxReferencePreviewResponse>(
+                TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<GoogleSheetsSyncResponse> SyncGoogleAsync(
+        HttpClient client,
+        string csrf)
+    {
+        using var response = await SendAsync(
+            client,
+            "/api/v1/reference-import/google-sheets-sync",
+            new GoogleSheetsSyncRequest(PublicUrl),
+            csrf);
+        response.EnsureSuccessStatusCode();
+        return Assert.IsType<GoogleSheetsSyncResponse>(
+            await response.Content.ReadFromJsonAsync<GoogleSheetsSyncResponse>(
                 TestContext.Current.CancellationToken));
     }
 

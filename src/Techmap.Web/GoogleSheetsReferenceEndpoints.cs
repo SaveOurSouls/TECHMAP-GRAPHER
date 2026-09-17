@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Techmap.Application;
 using Techmap.Contracts;
 using Techmap.Domain;
@@ -10,6 +11,41 @@ public static class GoogleSheetsReferenceEndpoints
 {
     public static void MapGoogleSheetsReferenceEndpoints(this WebApplication app)
     {
+        app.MapPost("/api/v1/reference-import/google-sheets-sync", async (
+            GoogleSheetsSyncRequest request,
+            IGoogleSheetsWorkbookDownloader downloader,
+            XlsxPreviewCatalog previews,
+            IReferenceCatalogSnapshotStore store,
+            CancellationToken cancellationToken) => await ExecuteAsync(async () =>
+        {
+            using var importLease = previews.TryBeginImport();
+            if (importLease is null)
+            {
+                throw new GoogleSheetsEndpointException(
+                    "google_sheets_import_busy",
+                    "Дождитесь завершения текущей синхронизации справочников.");
+            }
+
+            var download = await downloader.DownloadAsync(request.Url ?? "", cancellationToken)
+                .ConfigureAwait(false);
+            var sourceSha256 = Convert.ToHexStringLower(SHA256.HashData(download.Content));
+            var profiles = new List<GoogleSheetsSyncProfileResponse>(XlsxKnownProfiles.All.Count);
+            foreach (var profile in XlsxKnownProfiles.All)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                profiles.Add(await SyncProfileAsync(
+                    profile,
+                    download,
+                    store,
+                    cancellationToken).ConfigureAwait(false));
+            }
+
+            return Results.Ok(new GoogleSheetsSyncResponse(
+                download.SafeFileName,
+                sourceSha256,
+                profiles));
+        }));
+
         app.MapPost("/api/v1/reference-sources/{sourceId}/google-sheets-profile-previews", async (
             string sourceId,
             GoogleSheetsProfilePreviewRequest request,
@@ -49,6 +85,104 @@ public static class GoogleSheetsReferenceEndpoints
             return Results.Ok(ToResponse(stored.Id, stored.ExpiresUtc, active, sourceId, preview));
         }));
     }
+
+    private static async Task<GoogleSheetsSyncProfileResponse> SyncProfileAsync(
+        XlsxKnownProfile profile,
+        GoogleSheetsWorkbookDownload download,
+        IReferenceCatalogSnapshotStore store,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var preview = await new XlsxReferenceCatalogReader().PreviewAsync(
+                new MemoryStream(download.Content, writable: false),
+                download.SafeFileName,
+                profile.SourceId,
+                profile.Mapping,
+                ReferenceCatalogSnapshotIdentity.New(),
+                DateTimeOffset.UtcNow,
+                cancellationToken).ConfigureAwait(false);
+            var diagnostics = preview.Validation.Diagnostics.Select(ToResponse).ToArray();
+            if (!preview.Validation.IsValid || preview.Validation.Snapshot is null)
+            {
+                return FailedProfile(
+                    profile,
+                    preview.RecordCount,
+                    diagnostics,
+                    "catalog_validation_failed",
+                    "В таблице остались блокирующие ошибки.");
+            }
+
+            var active = store.GetActive(profile.SourceId)?.SnapshotId;
+            var publication = new ReferenceCatalogPublicationService(store).Publish(
+                new ReferenceCatalogPublicationRequest(
+                    preview.Validation,
+                    active,
+                    preview.Validation.Snapshot.Sha256,
+                    preview.Validation.RequiredWarningAcknowledgements));
+            return publication.Status switch
+            {
+                ReferenceCatalogPublicationStatus.Published => new GoogleSheetsSyncProfileResponse(
+                    profile.Id,
+                    profile.SourceId,
+                    "published",
+                    preview.RecordCount,
+                    publication.PublishedSnapshot?.SnapshotId.Value,
+                    diagnostics),
+                ReferenceCatalogPublicationStatus.Unchanged => new GoogleSheetsSyncProfileResponse(
+                    profile.Id,
+                    profile.SourceId,
+                    "unchanged",
+                    preview.RecordCount,
+                    publication.PublishedSnapshot?.SnapshotId.Value,
+                    diagnostics),
+                ReferenceCatalogPublicationStatus.ActiveSnapshotConflict => FailedProfile(
+                    profile,
+                    preview.RecordCount,
+                    diagnostics,
+                    "catalog_active_snapshot_changed",
+                    "Активная версия справочника изменилась во время синхронизации."),
+                _ => FailedProfile(
+                    profile,
+                    preview.RecordCount,
+                    diagnostics,
+                    "catalog_publication_failed",
+                    "Проверенный справочник не удалось опубликовать."),
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (XlsxImportException error)
+        {
+            return FailedProfile(profile, 0, [], error.Code, error.Message, error.SourceLocation);
+        }
+        catch (ArgumentException error)
+        {
+            return FailedProfile(
+                profile,
+                0,
+                [],
+                "google_sheets_mapping_invalid",
+                error.Message);
+        }
+    }
+
+    private static GoogleSheetsSyncProfileResponse FailedProfile(
+        XlsxKnownProfile profile,
+        int recordCount,
+        IReadOnlyList<ReferenceCatalogDiagnosticResponse> diagnostics,
+        string code,
+        string message,
+        string? field = null) => new(
+        profile.Id,
+        profile.SourceId,
+        "failed",
+        recordCount,
+        null,
+        diagnostics,
+        new ApiErrorResponse(code, field, message));
 
     private static XlsxReferencePreviewResponse ToResponse(
         Guid previewId,
