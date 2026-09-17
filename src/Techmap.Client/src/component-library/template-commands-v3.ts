@@ -1045,6 +1045,35 @@ function requireRootNode(
   return node;
 }
 
+function nodeSubtreeContainsAnyIdV3(
+  node: TemplateNodeV3,
+  nodesById: ReadonlyMap<string, TemplateNodeV3>,
+  targetIds: ReadonlySet<string>,
+  visiting = new Set<string>(),
+): boolean {
+  if (targetIds.has(node.id)) return true;
+  if (node.kind !== "group" || visiting.has(node.id)) return false;
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(node.id);
+  return node.geometry.childIds.some(childId => {
+    const child = nodesById.get(childId);
+    return child ? nodeSubtreeContainsAnyIdV3(child, nodesById, targetIds, nextVisiting) : false;
+  });
+}
+
+function requireNoRepeatPrototypeInSubtreeV3(
+  node: TemplateNodeV3,
+  layer: TemplateViewV3["layers"][number],
+  view: TemplateViewV3,
+): void {
+  const prototypeIds = new Set(view.repeatPlacements.map(placement => placement.prototypeGroupId));
+  if (nodeSubtreeContainsAnyIdV3(node, new Map(layer.nodes.map(candidate => [candidate.id, candidate])), prototypeIds))
+    throw new TemplateCommandV3Error(
+      "repeat_prototype_group",
+      "Объект с группой-прототипом повтора нельзя включать в структурную операцию.",
+    );
+}
+
 /** Wraps two or more adjacent root nodes in an identity group without changing their paint order. */
 export function groupRootNodesV3(
   content: TemplateContentV3,
@@ -1073,9 +1102,7 @@ export function groupRootNodesV3(
       "non_contiguous_group_selection",
       "Группировать можно только соседние объекты, чтобы не изменить порядок отрисовки.",
     );
-  const repeatedGroups = new Set(view.repeatPlacements.map(placement => placement.prototypeGroupId));
-  if (selected.some(node => repeatedGroups.has(node.id)))
-    throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя вложить в обычную группу.");
+  selected.forEach(node => requireNoRepeatPrototypeInSubtreeV3(node, layer, view));
 
   const childIds = layer.nodes.filter(node => selectedIds.has(node.id)).map(node => node.id);
   const insertionIndex = Math.max(...childIds.map(id => layer.nodes.findIndex(node => node.id === id))) + 1;
@@ -1166,7 +1193,12 @@ function localNodeBounds(
     constantGeometryValue(node.geometry.bendRadius);
     return boundsFromPoints(node.geometry.points);
   }
-  if (node.kind === "bezier" || node.kind === "closedContour")
+  if (node.kind === "bezier")
+    throw new TemplateCommandV3Error(
+      "unsupported_rotation_geometry",
+      "Поворот кривой Безье будет доступен после точного расчёта её визуальных границ.",
+    );
+  if (node.kind === "closedContour")
     return boundsFromPoints(node.geometry.points);
   if (node.kind === "rectangle") {
     const x = constantGeometryValue(node.geometry.x), y = constantGeometryValue(node.geometry.y);
@@ -1234,6 +1266,7 @@ export function setRootNodeRotationAroundCenterV3(
     throw new TemplateCommandV3Error("invalid_rotation", "Угол поворота должен быть конечным числом в допустимом диапазоне.");
   const { view, layer } = requireLayerForTreeCommand(content, viewId, layerId);
   const node = requireRootNode(layer, ownedNodeIds(layer.nodes), nodeId);
+  requireNoRepeatPrototypeInSubtreeV3(node, layer, view);
   const currentMatrix = constantTransformMatrix(node.transform);
   if (Math.abs(currentMatrix.a * currentMatrix.d - currentMatrix.b * currentMatrix.c) < 1e-12)
     throw new TemplateCommandV3Error("degenerate_transform", "Вырожденное преобразование нельзя безопасно повернуть.");
@@ -1303,8 +1336,7 @@ export function ungroupRootNodeV3(
   const ownedIds = ownedNodeIds(layer.nodes);
   const node = requireRootNode(layer, ownedIds, groupId);
   if (node.kind !== "group") throw new TemplateCommandV3Error("node_not_group", "Выбранный объект не является группой.");
-  if (view.repeatPlacements.some(placement => placement.prototypeGroupId === node.id))
-    throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя разгруппировать.");
+  requireNoRepeatPrototypeInSubtreeV3(node, layer, view);
   if (node.opacity !== 1)
     throw new TemplateCommandV3Error(
       "group_compositing",

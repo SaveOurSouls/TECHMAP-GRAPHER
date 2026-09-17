@@ -540,5 +540,40 @@ describe("template v3 immutable commands", () => {
       .toThrowError(expect.objectContaining({ code: "degenerate_transform" }));
     expect(() => setRootNodeRotationAroundCenterV3(one, view.id, layer.id, firstId, Number.NaN))
       .toThrowError(expect.objectContaining({ code: "invalid_rotation" }));
+
+    const [withBezier, bezierId] = addBasicNodeV3(initial, view.id, layer.id, "bezier");
+    expect(() => setRootNodeRotationAroundCenterV3(withBezier, view.id, layer.id, bezierId, 45))
+      .toThrowError(expect.objectContaining({ code: "unsupported_rotation_geometry" }));
+  });
+
+  it("rejects structural operations when an imported outer group contains a repeat prototype", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withType, typeId] = addContactTypeGroupV3(initial, "Сигнальные");
+    const [withNode, nodeId] = addBasicNodeV3(withType, view.id, layer.id, "rectangle");
+    const [withPoint, pointId] = addContactPointV3(withNode, view.id, { contactTypeGroupId: typeId });
+    const [repeated, repeatIds] = createRepeatPrototypeV3(withPoint, {
+      viewId: view.id, layerId: layer.id, prototypeNodeId: nodeId, prototypePointId: pointId,
+      count: 2, step: { x: constantExpressionV3(0), y: constantExpressionV3(20) },
+    });
+    const [withSibling, siblingId] = addBasicNodeV3(repeated, view.id, layer.id, "ellipse");
+    const imported = structuredClone(withSibling);
+    const importedLayer = imported.views[1]!.layers[0]!;
+    const prototype = importedLayer.nodes.find(node => node.id === repeatIds.groupId)!;
+    if (prototype.kind !== "group") throw new Error("Expected repeat group.");
+    const outerId = crypto.randomUUID();
+    importedLayer.nodes.push({
+      ...structuredClone(prototype), id: outerId,
+      geometry: { childIds: [repeatIds.groupId] },
+      transform: {
+        translateX: constantExpressionV3(0), translateY: constantExpressionV3(0),
+        rotationDegrees: constantExpressionV3(0), scaleX: constantExpressionV3(1), scaleY: constantExpressionV3(1),
+      },
+    });
+    expect(() => groupRootNodesV3(imported, view.id, layer.id, [outerId, siblingId]))
+      .toThrowError(expect.objectContaining({ code: "repeat_prototype_group" }));
+    expect(() => ungroupRootNodeV3(imported, view.id, layer.id, outerId))
+      .toThrowError(expect.objectContaining({ code: "repeat_prototype_group" }));
+    expect(() => setRootNodeRotationAroundCenterV3(imported, view.id, layer.id, outerId, 90))
+      .toThrowError(expect.objectContaining({ code: "repeat_prototype_group" }));
   });
 });
