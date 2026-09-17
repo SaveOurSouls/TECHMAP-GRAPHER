@@ -314,6 +314,20 @@ export interface WireMaterialBinding {
   readonly displayName: string;
 }
 
+/**
+ * One physical multicore cable. Its electrical conductors remain regular
+ * wires, while material consumption and cut length belong to this container.
+ */
+export interface CableInstance {
+  readonly id: string;
+  readonly memberWireIds: readonly string[];
+  readonly materialBinding?: WireMaterialBinding;
+  readonly lengthMm: number | null;
+  readonly endCorrectionFromMm: number;
+  readonly endCorrectionToMm: number;
+  readonly cutRoundingStepMm: number;
+}
+
 export interface WireEndStripProfiles {
   readonly from?: WireStripProfileBinding;
   readonly to?: WireStripProfileBinding;
@@ -441,6 +455,7 @@ export interface HarnessDesignDocument {
   readonly customWireColors?: readonly string[];
   readonly connectors: readonly ConnectorInstance[];
   readonly wires: readonly WireInstance[];
+  readonly cables: readonly CableInstance[];
   readonly junctions: readonly E4Junction[];
   readonly diffPairs: readonly DiffPairGroup[];
   readonly screens: readonly WireScreenGroup[];
@@ -561,6 +576,7 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
     customWireColors: [],
     connectors: [],
     wires: [],
+    cables: [],
     junctions: [],
     diffPairs: [],
     screens: [],
@@ -583,6 +599,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
     customWireColors: parseCustomWireColors(record.customWireColors),
     connectors: record.connectors.map(parseConnector),
     wires: wireValues.map(parseWire),
+    cables: record.cables === undefined ? [] : parseCables(record.cables),
     junctions: record.junctions === undefined ? [] : parseJunctions(record.junctions),
     diffPairs: record.diffPairs === undefined ? [] : parseDiffPairs(record.diffPairs),
     screens: record.screens === undefined ? [] : parseScreens(record.screens),
@@ -600,6 +617,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   if (connectorIds.size !== document.connectors.length) throw new Error("ID соединителей должны быть уникальны.");
   const wireIds = new Set(document.wires.map((wire) => wire.id));
   if (wireIds.size !== document.wires.length) throw new Error("ID проводов должны быть уникальны.");
+  validateCables(document.cables, wireIds);
   const junctionIds = new Set(document.junctions.map((junction) => junction.id));
   if (junctionIds.size !== document.junctions.length) throw new Error("ID узлов соединения должны быть уникальны.");
   for (const wire of document.wires) {
@@ -1502,6 +1520,63 @@ function parseWire(value: unknown): WireInstance {
   };
 }
 
+function parseCables(value: unknown): readonly CableInstance[] {
+  if (!Array.isArray(value)) throw new Error("Кабели заданы неверно.");
+  return value.map(normalizeCableInstance);
+}
+
+/** Validates and copies a physical multicore cable before it enters a document. */
+export function normalizeCableInstance(value: unknown): CableInstance {
+  const record = requireRecord(value, "Кабель задан неверно.");
+  if (!Array.isArray(record.memberWireIds)) throw new Error("Состав жил кабеля задан неверно.");
+  const memberWireIds = record.memberWireIds.map((item) => requireText(item, "ID жилы кабеля"));
+  if (new Set(memberWireIds).size !== memberWireIds.length) {
+    throw new Error("Состав жил кабеля не должен содержать повторяющиеся провода.");
+  }
+  const materialBinding = record.materialBinding === undefined
+    ? undefined
+    : parseWireMaterialBinding(record.materialBinding);
+  if (materialBinding !== undefined && materialBinding.entityType !== "cable") {
+    throw new Error("Материал многожильного кабеля должен иметь тип cable.");
+  }
+  const lengthMm = record.lengthMm === undefined || record.lengthMm === null
+    ? null
+    : validateWirePhysicalLength(requireNumber(record.lengthMm, "Длина кабеля"), "Длина кабеля");
+  const endCorrectionFromMm = record.endCorrectionFromMm === undefined
+    ? 0
+    : validateWireCorrection(requireNumber(record.endCorrectionFromMm, "Поправка начала кабеля"), "Поправка начала кабеля");
+  const endCorrectionToMm = record.endCorrectionToMm === undefined
+    ? 0
+    : validateWireCorrection(requireNumber(record.endCorrectionToMm, "Поправка конца кабеля"), "Поправка конца кабеля");
+  const cutRoundingStepMm = record.cutRoundingStepMm === undefined
+    ? defaultWireCutRoundingStepMm
+    : validateWireRoundingStep(requireNumber(record.cutRoundingStepMm, "Шаг округления длины резки кабеля"));
+  calculateWireCutLength({ lengthMm, endCorrectionFromMm, endCorrectionToMm, cutRoundingStepMm });
+  return Object.freeze({
+    id: requireText(record.id, "ID кабеля"),
+    memberWireIds: Object.freeze(memberWireIds),
+    materialBinding,
+    lengthMm,
+    endCorrectionFromMm,
+    endCorrectionToMm,
+    cutRoundingStepMm,
+  });
+}
+
+function validateCables(cables: readonly CableInstance[], wireIds: ReadonlySet<string>): void {
+  if (new Set(cables.map((cable) => cable.id)).size !== cables.length) {
+    throw new Error("ID кабелей должны быть уникальны.");
+  }
+  const assignedWireIds = new Set<string>();
+  for (const cable of cables) {
+    for (const wireId of cable.memberWireIds) {
+      if (!wireIds.has(wireId)) throw new Error("Кабель ссылается на отсутствующий провод.");
+      if (assignedWireIds.has(wireId)) throw new Error("Провод может входить только в один кабель.");
+      assignedWireIds.add(wireId);
+    }
+  }
+}
+
 function parseWireMaterialBinding(value: unknown): WireMaterialBinding {
   const record = requireRecord(value, "Привязка материала провода задана неверно.");
   if (record.entityType !== "wire" && record.entityType !== "cable") {
@@ -1610,12 +1685,12 @@ function normalizeWireColorSource(document: HarnessDesignDocument, wire: WireIns
   return { connectorId: source.connectorId, contactId: source.contactId };
 }
 
-function validateWirePhysicalLength(value: number | null): number | null {
+function validateWirePhysicalLength(value: number | null, name = "Длина провода"): number | null {
   if (value === null) return null;
   if (!Number.isFinite(value) || value < 0 || value > maximumWireLengthMm) {
-    throw new Error("Длина провода должна быть неотрицательным числом в миллиметрах или неизвестной.");
+    throw new Error(`${name} должна быть неотрицательным числом в миллиметрах или неизвестной.`);
   }
-  toExactMicrometres(value, "Длина провода");
+  toExactMicrometres(value, name);
   return value;
 }
 

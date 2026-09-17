@@ -9,6 +9,7 @@ import {
   defaultLayerIds,
   isJunctionEndpoint,
   isScreenEndpoint,
+  normalizeCableInstance,
   normalizeWireStripProfileBinding,
   validateConnectorLibraryMetadata,
   validateOrthogonalE4Route,
@@ -16,6 +17,7 @@ import {
   wireEndpointE4Anchor,
   wireGroupHasCommonE4ParallelSpan,
   type ConnectorBaseColumnKey,
+  type CableInstance,
   type ConnectorContact,
   type ConnectorContactStatus,
   type ConnectorCustomField,
@@ -56,6 +58,10 @@ export type EditorCommand =
   | { readonly type: "remove-connector"; readonly connectorId: string }
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
+  | { readonly type: "add-cable"; readonly cable: CableInstance }
+  | { readonly type: "update-cable"; readonly cableId: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
+  | { readonly type: "set-cable-members"; readonly cableId: string; readonly memberWireIds: readonly string[] }
+  | { readonly type: "remove-cable"; readonly cableId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-wire-strip-profile"; readonly wireId: string; readonly end: "from" | "to"; readonly profile: WireStripProfileBinding | null }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
@@ -424,6 +430,38 @@ export function applyEditorCommand(
       }, removedWireIds);
       return rebuildConnectorE4Wires(changed, command.connectorId, document.connectors.find((item) => item.id === command.connectorId));
     }
+    case "add-cable": {
+      const cable = normalizeCableInstance(command.cable);
+      if (document.cables.some((item) => item.id === cable.id)) {
+        throw new Error("Кабель с таким ID уже существует.");
+      }
+      validateCableMembership(document, cable);
+      return { ...document, cables: [...document.cables, cable] };
+    }
+    case "update-cable": {
+      const existing = document.cables.find((item) => item.id === command.cableId);
+      if (!existing) throw new Error("Кабель не найден.");
+      const cable = normalizeCableInstance({
+        ...existing,
+        materialBinding: command.materialBinding === undefined
+          ? existing.materialBinding : command.materialBinding ?? undefined,
+        lengthMm: command.lengthMm === undefined ? existing.lengthMm : command.lengthMm,
+        endCorrectionFromMm: command.endCorrectionFromMm ?? existing.endCorrectionFromMm,
+        endCorrectionToMm: command.endCorrectionToMm ?? existing.endCorrectionToMm,
+        cutRoundingStepMm: command.cutRoundingStepMm ?? existing.cutRoundingStepMm,
+      });
+      validateCableMembership(document, cable, cable.id);
+      return { ...document, cables: document.cables.map((item) => item.id === cable.id ? cable : item) };
+    }
+    case "set-cable-members": {
+      const existing = document.cables.find((item) => item.id === command.cableId);
+      if (!existing) throw new Error("Кабель не найден.");
+      const cable = normalizeCableInstance({ ...existing, memberWireIds: command.memberWireIds });
+      validateCableMembership(document, cable, cable.id);
+      return { ...document, cables: document.cables.map((item) => item.id === cable.id ? cable : item) };
+    }
+    case "remove-cable":
+      return { ...document, cables: removeRequired(document.cables, command.cableId, "Кабель не найден.") };
     case "add-wire":
       validateWire(document, command.wire);
       if (document.wires.some((item) => item.id === command.wire.id)) {
@@ -1562,10 +1600,31 @@ function cleanupWireReferences(document: HarnessDesignDocument, removedWireIds: 
   return {
     ...document,
     wires: document.wires.filter((wire) => !removed.has(wire.id)),
+    cables: document.cables.map((cable) => ({
+      ...cable,
+      memberWireIds: cable.memberWireIds.filter((wireId) => !removed.has(wireId)),
+    })),
     junctions,
     diffPairs: document.diffPairs.filter((group) => !group.wireIds.some((id) => removed.has(id))),
     screens,
   };
+}
+
+function validateCableMembership(
+  document: HarnessDesignDocument,
+  cable: CableInstance,
+  replacingCableId?: string,
+): void {
+  const wireIds = new Set(document.wires.map((wire) => wire.id));
+  if (cable.memberWireIds.some((wireId) => !wireIds.has(wireId))) {
+    throw new Error("Кабель ссылается на отсутствующий провод.");
+  }
+  const occupiedWireIds = new Set(document.cables
+    .filter((item) => item.id !== replacingCableId)
+    .flatMap((item) => item.memberWireIds));
+  if (cable.memberWireIds.some((wireId) => occupiedWireIds.has(wireId))) {
+    throw new Error("Провод может входить только в один кабель.");
+  }
 }
 
 function updateJunctionMembership(
