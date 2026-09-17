@@ -30,3 +30,6 @@ preview, одной командой и одной записью отмены. 
 Формат документа и SQLite schema 18 не менялись. Проверены 599/599 клиентских
 тестов, TypeScript, production build, 631/631 .NET-тест, `git diff --check` и семь
 режимов portable-пакета.
+
+Архив `artifacts/m3-10/TECHMAP-GRAPHER-win-x64.zip`: 50 523 394 байта,
+SHA-256 `A3CD4D2C5FE60733AC39FEF53C379CC46FA3776003F9D2BE1CC0835764075D35`.
