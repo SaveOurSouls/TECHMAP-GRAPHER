@@ -1,13 +1,15 @@
 import type { LocalSession } from "./local-session";
 import { buildApiUrl, type RuntimeConfig } from "./runtime-config";
 
-export type HarnessCutListStatus = "limited";
+export type HarnessCutListStatus = "limited" | "ready" | "incomplete";
 export type HarnessCutListItemStatus = "ready" | "incomplete";
 
 export interface HarnessCutListItem {
   readonly wireId: string;
   readonly circuit: string;
   readonly material: string;
+  readonly materialSourceKey: string | null;
+  readonly materialDisplayName: string | null;
   readonly sourceLengthMm: number | null;
   readonly endCorrectionFromMm: number;
   readonly endCorrectionToMm: number;
@@ -16,6 +18,7 @@ export interface HarnessCutListItem {
   readonly pieces: number;
   readonly totalMetres: number | null;
   readonly status: HarnessCutListItemStatus;
+  readonly warnings: readonly ("material-missing" | "length-missing")[];
 }
 
 export interface HarnessCutList {
@@ -45,6 +48,8 @@ type CutListFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const itemStatuses = new Set<HarnessCutListItemStatus>(["ready", "incomplete"]);
+const cutListStatuses = new Set<HarnessCutListStatus>(["limited", "ready", "incomplete"]);
+const warningCodes = new Set(["material-missing", "length-missing"] as const);
 
 export function createHarnessCutListApi(
   config: RuntimeConfig,
@@ -89,7 +94,7 @@ export function parseHarnessCutList(
       harnessId.toLocaleLowerCase() !== requestedHarnessId.toLocaleLowerCase()) {
     throw new Error("Карта резки относится к другому проекту или жгуту.");
   }
-  if (record.status !== "limited" || !Array.isArray(record.items)) {
+  if (!cutListStatuses.has(record.status as HarnessCutListStatus) || !Array.isArray(record.items)) {
     throw new Error("Сервер вернул неподдерживаемую карту резки.");
   }
   const items = record.items.map(parseItem);
@@ -100,7 +105,7 @@ export function parseHarnessCutList(
     projectId,
     harnessId,
     harnessQuantity: requireInteger(record, "harnessQuantity", 1),
-    status: "limited",
+    status: record.status as HarnessCutListStatus,
     warning: requireString(record, "warning"),
     items: Object.freeze(items),
   });
@@ -115,6 +120,9 @@ function parseItem(value: unknown): HarnessCutListItem {
   const sourceLengthMm = requireNullableNumber(record, "sourceLengthMm", 0);
   const cutLengthMm = requireNullableNumber(record, "cutLengthMm", 0);
   const totalMetres = requireNullableNumber(record, "totalMetres", 0);
+  const materialSourceKey = optionalNullableString(record, "materialSourceKey");
+  const materialDisplayName = optionalNullableString(record, "materialDisplayName");
+  const warnings = record.warnings === undefined ? [] : requireWarnings(record.warnings);
   if ((status === "ready" && (sourceLengthMm === null || cutLengthMm === null || totalMetres === null)) ||
       (status === "incomplete" && (sourceLengthMm !== null || cutLengthMm !== null || totalMetres !== null))) {
     throw new Error("Статус строки карты резки не согласован с её длинами.");
@@ -123,6 +131,8 @@ function parseItem(value: unknown): HarnessCutListItem {
     wireId: requireNonEmptyString(record, "wireId"),
     circuit: requireString(record, "circuit"),
     material: requireNonEmptyString(record, "material"),
+    materialSourceKey,
+    materialDisplayName,
     sourceLengthMm,
     endCorrectionFromMm: requireNumber(record, "endCorrectionFromMm"),
     endCorrectionToMm: requireNumber(record, "endCorrectionToMm"),
@@ -131,6 +141,7 @@ function parseItem(value: unknown): HarnessCutListItem {
     pieces: requireInteger(record, "pieces", 1),
     totalMetres,
     status: status as HarnessCutListItemStatus,
+    warnings: Object.freeze(warnings),
   });
 }
 
@@ -166,6 +177,19 @@ function requireNonEmptyString(record: Record<string, unknown>, key: string): st
   const value = requireString(record, key);
   if (!value.trim()) throw new Error(`Поле ответа «${key}» задано неверно.`);
   return value;
+}
+
+function optionalNullableString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Поле ответа «${key}» задано неверно.`);
+  return value;
+}
+
+function requireWarnings(value: unknown): ("material-missing" | "length-missing")[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !warningCodes.has(item as never)) ||
+      new Set(value).size !== value.length) throw new Error("Предупреждения строки карты резки заданы неверно.");
+  return value as ("material-missing" | "length-missing")[];
 }
 
 function requireUuid(record: Record<string, unknown>, key: string): string {

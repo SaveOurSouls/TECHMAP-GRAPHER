@@ -10,6 +10,7 @@ export interface ObjectInspectorProps {
     objectId: string,
     patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color" | "metadata">>,
   ) => void;
+  readonly onWireMaterialClear?: (wireId: string) => void;
 }
 
 const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
@@ -67,7 +68,7 @@ function WireCorrectionInput({
   </label>;
 }
 
-export function ObjectInspector({ view, selectedObject, disabled, onChange }: ObjectInspectorProps) {
+export function ObjectInspector({ view, selectedObject, disabled, onChange, onWireMaterialClear }: ObjectInspectorProps) {
   if (!selectedObject) {
     return (
       <div className="he-inspector-empty">
@@ -98,6 +99,17 @@ export function ObjectInspector({ view, selectedObject, disabled, onChange }: Ob
           onChange={(event) => onChange(selectedObject.id, { label: event.target.value })}
         />
       </label>
+      {selectedObject.kind === "wire" && <section className="he-wire-material" aria-label="Материал провода">
+        <strong>Материал</strong>
+        {selectedObject.metadata?.materialSourceKey ? <>
+          <span>{selectedObject.metadata.materialDisplayName || selectedObject.metadata.materialSourceKey}</span>
+          <small>{selectedObject.metadata.materialSourceKey} · {selectedObject.metadata.materialEntityType === "cable" ? "кабель" : "провод"}</small>
+          {onWireMaterialClear && <button type="button" disabled={disabled} onClick={() => onWireMaterialClear(selectedObject.id)}>Очистить материал</button>}
+        </> : <>
+          <span>Материал не выбран</span>
+          <small>Выберите провод или кабель в нижнем справочнике двойным щелчком.</small>
+        </>}
+      </section>}
       {selectedObject.kind === "wire" && view === "drawing" && (
         <>
           <label className="he-toggle-field">

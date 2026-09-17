@@ -380,6 +380,9 @@ export function designToScene(
         cutRoundingStepMm: String(cutLength.cutRoundingStepMm),
         cutLengthMm: cutLength.cutLengthMm === null ? "" : String(cutLength.cutLengthMm),
         materialStatus: cutLength.materialConsumptionMm === null ? "excluded" : "included",
+        materialSourceKey: wire.materialBinding?.sourceKey ?? "",
+        materialDisplayName: wire.materialBinding?.displayName ?? "",
+        materialEntityType: wire.materialBinding?.entityType ?? "",
         e4LabelPosition: String(wire.e4LabelPosition ?? 0.5),
         ...(view === "e4" ? {
           view: "e4",
@@ -409,6 +412,42 @@ export function designToScene(
 }
 
 type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
+
+export type WireMaterialCatalogUpdateResult =
+  | { readonly ok: true; readonly command: WireUpdateCommand }
+  | { readonly ok: false; readonly error: string };
+
+/** Builds an immutable material assignment without depending on editor or React state. */
+export function wireMaterialUpdateFromCatalogItem(
+  item: EditorCatalogItem,
+  selectedWireId: string | null,
+): WireMaterialCatalogUpdateResult {
+  if (!selectedWireId) {
+    return { ok: false, error: "Сначала выберите один провод, затем дважды щёлкните материал в справочнике." };
+  }
+  if (item.entityType !== "wire" && item.entityType !== "cable") {
+    return { ok: false, error: "Выбранная справочная позиция не является проводом или кабелем." };
+  }
+  if (!item.sourceId || !item.snapshotId || !item.snapshotSha256 || !item.recordId || !item.sourceKey) {
+    return { ok: false, error: "Справочная позиция не содержит данных опубликованной версии." };
+  }
+  return {
+    ok: true,
+    command: {
+      type: "update-wire",
+      wireId: selectedWireId,
+      materialBinding: {
+        sourceId: item.sourceId,
+        snapshotId: item.snapshotId,
+        snapshotSha256: item.snapshotSha256,
+        recordId: item.recordId,
+        entityType: item.entityType,
+        sourceKey: item.sourceKey,
+        displayName: item.referenceDisplayName || item.sourceKey,
+      },
+    },
+  };
+}
 
 /** Translates inspector metadata into a command while preserving omitted-versus-null length semantics. */
 export function editorWireUpdateCommand(
@@ -889,6 +928,16 @@ export function HarnessDesignEditor({
     ...customWireColorHexes.map((hex) => createCustomWireColor(hex)),
   ];
   const placeCatalogItem = async (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
+    if (item.placement === "reference-only" && (item.entityType === "wire" || item.entityType === "cable")) {
+      const selectedWireId = selectedObjectIds.length === 1 &&
+        history.present.wires.some((wire) => wire.id === selectedObjectIds[0])
+        ? selectedObjectIds[0]!
+        : null;
+      const result = wireMaterialUpdateFromCatalogItem(item, selectedWireId);
+      if (!result.ok) setMessage(result.error);
+      else run(result.command);
+      return;
+    }
     if (item.placement !== "connector") return;
     const generation = loadGeneration.current;
     const id = crypto.randomUUID();
@@ -1281,6 +1330,7 @@ export function HarnessDesignEditor({
         onCatalogQueryChange={catalog.changeQuery}
         onCatalogLoadMore={catalog.loadMore}
         onCatalogRetry={catalog.retry}
+        onWireMaterialClear={(wireId) => run({ type: "update-wire", wireId, materialBinding: null })}
         onObjectMove={(objectId, point) => run({
           type: "move-connector",
           connectorId: objectId,

@@ -308,6 +308,33 @@ describe("shared harness editor model", () => {
     expect(document.wires[0]?.lengthMm).toBeNull();
   });
 
+  it("assigns, replaces and clears one immutable material binding without changing wire geometry", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = createConnector("x2", "X2", 1, { x: 800, y: 0 });
+    let document = createEmptyHarnessDesign();
+    document = applyEditorCommand(document, { type: "add-connector", connector: x1 });
+    document = applyEditorCommand(document, { type: "add-connector", connector: x2 });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }, 350),
+    });
+    const route = document.wires[0]!.e4Route;
+    const material = {
+      sourceId: "technology-database",
+      snapshotId: "38d9aa91-b8d4-45d8-8e39-da14ee4effad",
+      snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), entityType: "wire" as const,
+      sourceKey: "UL1061-24AWG", displayName: "UL1061 24AWG",
+    };
+
+    document = applyEditorCommand(document, { type: "update-wire", wireId: "w1", materialBinding: material });
+    expect(document.wires[0]!.materialBinding).toEqual(material);
+    expect(document.wires[0]!.e4Route).toEqual(route);
+    document = applyEditorCommand(document, { type: "update-wire", wireId: "w1", materialBinding: { ...material, sourceKey: "НВ-4-0,2", displayName: "НВ-4 0,2 мм²" } });
+    expect(document.wires[0]!.materialBinding?.sourceKey).toBe("НВ-4-0,2");
+    document = applyEditorCommand(document, { type: "update-wire", wireId: "w1", materialBinding: null });
+    expect(document.wires[0]!.materialBinding).toBeUndefined();
+  });
+
   it("calculates cut length in exact millimetres and rounds only the final sum upwards", () => {
     const result = calculateWireCutLength({
       lengthMm: 1000.125,

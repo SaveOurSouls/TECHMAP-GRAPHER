@@ -44,8 +44,12 @@ export interface EditorCatalogItem {
   readonly accent: string;
   readonly placement?: "connector" | "reference-only";
   readonly sourceId?: string;
+  readonly snapshotId?: string;
+  readonly snapshotSha256?: string;
+  readonly recordId?: string;
   readonly sourceKey?: string;
   readonly entityType?: string;
+  readonly referenceDisplayName?: string;
   /** Library template metadata used when placing connector instances. */
   readonly templateKind?: "series" | "free";
   readonly seriesId?: string;

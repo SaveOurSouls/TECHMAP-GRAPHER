@@ -25,6 +25,8 @@ function responseBody() {
       wireId: "W-1",
       circuit: "DATA+",
       material: "not-pinned",
+      materialSourceKey: null,
+      materialDisplayName: null,
       sourceLengthMm: 20.001,
       endCorrectionFromMm: -0.001,
       endCorrectionToMm: 0.002,
@@ -33,10 +35,13 @@ function responseBody() {
       pieces: 3,
       totalMetres: 0.060015,
       status: "ready",
+      warnings: ["material-missing"],
     }, {
       wireId: "W-2",
       circuit: "",
       material: "not-pinned",
+      materialSourceKey: null,
+      materialDisplayName: null,
       sourceLengthMm: null,
       endCorrectionFromMm: 0,
       endCorrectionToMm: 0,
@@ -45,6 +50,7 @@ function responseBody() {
       pieces: 3,
       totalMetres: null,
       status: "incomplete",
+      warnings: ["material-missing", "length-missing"],
     }],
   };
 }
@@ -76,6 +82,19 @@ describe("harness cut-list API", () => {
         headers: { Accept: "application/json" },
       }),
     );
+  });
+
+  it("parses a complete pinned-material cut list", () => {
+    const parsed = parseHarnessCutList({
+      ...responseBody(), status: "ready", warning: "", items: [{
+        ...responseBody().items[0], material: "UL1061 24AWG",
+        materialSourceKey: "UL1061-24AWG", materialDisplayName: "UL1061 24AWG", warnings: [],
+      }],
+    }, projectId, harnessId);
+    expect(parsed.status).toBe("ready");
+    expect(parsed.items[0]).toMatchObject({
+      materialSourceKey: "UL1061-24AWG", materialDisplayName: "UL1061 24AWG", warnings: [],
+    });
   });
 
   it("rejects another harness, duplicate wires and inconsistent incomplete rows", () => {

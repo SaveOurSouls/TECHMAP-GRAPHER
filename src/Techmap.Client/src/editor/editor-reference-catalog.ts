@@ -112,6 +112,7 @@ function range(
 export function referenceRecordToEditorCatalogItem(
   source: RemoteCatalogSource,
   record: ReferenceCatalogSearchRecord,
+  snapshot?: { readonly snapshotId: string; readonly snapshotSha256: string },
 ): EditorCatalogItem {
   const payload = record.payload;
   const details: string[] = [];
@@ -159,8 +160,14 @@ export function referenceRecordToEditorCatalogItem(
     accent: source.accent,
     placement: "reference-only",
     sourceId: source.id,
+    snapshotId: snapshot?.snapshotId,
+    snapshotSha256: snapshot?.snapshotSha256,
+    recordId: record.recordId,
     sourceKey: record.sourceKey,
     entityType: record.entityType,
+    referenceDisplayName: record.entityType === "wire" || record.entityType === "cable"
+      ? firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
+      : undefined,
   };
 }
 
@@ -352,7 +359,7 @@ export function useEditorReferenceCatalog(
       cursor: null,
     }, controller.signal).then((page) => {
       if (requestGeneration.current !== generation) return;
-      setRemoteItems(page.items.map((record) => referenceRecordToEditorCatalogItem(source, record)));
+      setRemoteItems(page.items.map((record) => referenceRecordToEditorCatalogItem(source, record, page)));
       setNextCursor(page.nextCursor);
       setLoadState("ready");
     }).catch((error: unknown) => {
@@ -387,7 +394,7 @@ export function useEditorReferenceCatalog(
       setRemoteItems((current) => {
         const existing = new Set(current.map((item) => item.id));
         return [...current, ...page.items
-          .map((record) => referenceRecordToEditorCatalogItem(source, record))
+          .map((record) => referenceRecordToEditorCatalogItem(source, record, page))
           .filter((item) => !existing.has(item.id))];
       });
       setNextCursor(page.nextCursor);

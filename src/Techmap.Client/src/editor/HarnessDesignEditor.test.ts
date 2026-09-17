@@ -15,13 +15,33 @@ import {
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
   snapRoutePoint,
+  wireMaterialUpdateFromCatalogItem,
 } from "./HarnessDesignEditor";
 import type {
   ProjectComponentPlacementGraph,
   ProjectComponentSnapshotResource,
 } from "./component-placement-api";
 import { createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
+import type { EditorCatalogItem } from "./editor-types";
 import { connectorE4TableGeometry, createEmptyHarnessDesign } from "./model";
+
+function wireMaterialCatalogItem(): EditorCatalogItem {
+  return {
+    id: "technology-database:wire:UL1061-24AWG",
+    title: "UL1061-24AWG",
+    subtitle: "UL1061 24AWG",
+    category: "Провода",
+    accent: "#356c88",
+    placement: "reference-only",
+    sourceId: "technology-database",
+    snapshotId: "00000000-0000-4000-8000-000000000099",
+    snapshotSha256: "a".repeat(64),
+    recordId: "b".repeat(64),
+    entityType: "wire",
+    sourceKey: "UL1061-24AWG",
+    referenceDisplayName: "UL1061 24AWG",
+  };
+}
 
 describe("harness design scene adapter", () => {
   it("shows an explicit retry action when component graph loading fails", () => {
@@ -216,6 +236,80 @@ describe("harness design scene adapter", () => {
       cutRoundingStepMm: "1",
       cutLengthMm: "1031",
       materialStatus: "included",
+    });
+  });
+
+  it("projects the pinned wire material into the inspector scene", () => {
+    const x1 = createConnector("material-x1", "XS1", 1, { x: 10, y: 20 });
+    const x2 = createConnector("material-x2", "XS2", 1, { x: 500, y: 20 });
+    const wire = {
+      ...createWire(
+        "material-wire",
+        { connectorId: x1.id, contactId: x1.contacts[0]!.id },
+        { connectorId: x2.id, contactId: x2.contacts[0]!.id },
+      ),
+      materialBinding: {
+        sourceId: "technology-database",
+        snapshotId: "00000000-0000-4000-8000-000000000099",
+        snapshotSha256: "a".repeat(64),
+        recordId: "b".repeat(64),
+        entityType: "wire" as const,
+        sourceKey: "UL1061-24AWG",
+        displayName: "UL1061 24AWG",
+      },
+    };
+    const document = { ...createEmptyHarnessDesign(), connectors: [x1, x2], wires: [wire] };
+
+    expect(designToScene(document, "e4").find((item) => item.id === wire.id)?.metadata).toMatchObject({
+      materialSourceKey: "UL1061-24AWG",
+      materialDisplayName: "UL1061 24AWG",
+      materialEntityType: "wire",
+    });
+  });
+
+  it("builds a wire material update from an exact catalog snapshot", () => {
+    const item = wireMaterialCatalogItem();
+
+    expect(wireMaterialUpdateFromCatalogItem(item, "wire-1")).toEqual({
+      ok: true,
+      command: {
+        type: "update-wire",
+        wireId: "wire-1",
+        materialBinding: {
+          sourceId: "technology-database",
+          snapshotId: "00000000-0000-4000-8000-000000000099",
+          snapshotSha256: "a".repeat(64),
+          recordId: "b".repeat(64),
+          entityType: "wire",
+          sourceKey: "UL1061-24AWG",
+          displayName: "UL1061 24AWG",
+        },
+      },
+    });
+  });
+
+  it("rejects a material assignment without one selected wire", () => {
+    expect(wireMaterialUpdateFromCatalogItem(wireMaterialCatalogItem(), null)).toEqual({
+      ok: false,
+      error: "Сначала выберите один провод, затем дважды щёлкните материал в справочнике.",
+    });
+  });
+
+  it("rejects a catalog entity that is not wire material", () => {
+    expect(wireMaterialUpdateFromCatalogItem({
+      ...wireMaterialCatalogItem(), entityType: "terminal",
+    }, "wire-1")).toEqual({
+      ok: false,
+      error: "Выбранная справочная позиция не является проводом или кабелем.",
+    });
+  });
+
+  it("rejects an incomplete catalog snapshot identity", () => {
+    expect(wireMaterialUpdateFromCatalogItem({
+      ...wireMaterialCatalogItem(), snapshotSha256: undefined,
+    }, "wire-1")).toEqual({
+      ok: false,
+      error: "Справочная позиция не содержит данных опубликованной версии.",
     });
   });
 

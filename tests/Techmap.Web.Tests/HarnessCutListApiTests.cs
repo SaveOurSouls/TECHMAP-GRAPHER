@@ -61,13 +61,15 @@ public sealed class HarnessCutListApiTests
         Assert.Equal(ids.ProjectId, Assert.IsType<HarnessCutListResponse>(result).ProjectId);
         Assert.Equal(ids.HarnessId, result.HarnessId);
         Assert.Equal(3, result.HarnessQuantity);
-        Assert.Equal("limited", result.Status);
+        Assert.Equal("incomplete", result.Status);
         Assert.Contains("не закреплён", result.Warning, StringComparison.OrdinalIgnoreCase);
 
         var ready = result.Items[0];
         Assert.Equal("W-1", ready.WireId);
         Assert.Equal("DATA+", ready.Circuit);
         Assert.Equal("not-pinned", ready.Material);
+        Assert.Null(ready.MaterialSourceKey);
+        Assert.Null(ready.MaterialDisplayName);
         Assert.Equal(20.001m, ready.SourceLengthMm);
         Assert.Equal(-0.001m, ready.EndCorrectionFromMm);
         Assert.Equal(0.002m, ready.EndCorrectionToMm);
@@ -76,6 +78,7 @@ public sealed class HarnessCutListApiTests
         Assert.Equal(3, ready.Pieces);
         Assert.Equal(0.060015m, ready.TotalMetres);
         Assert.Equal("ready", ready.Status);
+        Assert.Equal(["material-missing"], ready.Warnings);
 
         var incomplete = result.Items[1];
         Assert.Equal("W-2", incomplete.WireId);
@@ -87,6 +90,114 @@ public sealed class HarnessCutListApiTests
         Assert.Equal(3, incomplete.Pieces);
         Assert.Null(incomplete.TotalMetres);
         Assert.Equal("incomplete", incomplete.Status);
+        Assert.Equal(
+            ["material-missing", "length-missing"],
+            incomplete.Warnings);
+    }
+
+    [Fact]
+    public async Task Cut_list_uses_pinned_material_identity_and_reports_no_warning_for_a_complete_wire()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf, quantity: 4);
+        var snapshotId = Guid.NewGuid();
+        using var content = JsonDocument.Parse(
+            """
+            {
+              "schemaVersion": 1,
+              "connectors": [],
+              "wires": [{
+                "id": "W-MATERIAL",
+                "circuit": "24V",
+                "materialBinding": {
+                  "sourceId": "technology-wires",
+                  "snapshotId": "SNAPSHOT_ID",
+                  "snapshotSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "recordId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "entityType": "wire",
+                  "sourceKey": "UL1061-24-BK",
+                  "displayName": "UL1061 24 AWG, чёрный"
+                },
+                "lengthMm": 125.2,
+                "endCorrectionFromMm": 1.1,
+                "endCorrectionToMm": 1.2,
+                "cutRoundingStepMm": 1
+              }],
+              "views": {"e4":{"layers":[]},"drawing":{"layers":[]}}
+            }
+            """.Replace("SNAPSHOT_ID", snapshotId.ToString("D"), StringComparison.Ordinal));
+        using (var save = await SendAsync(
+                   client, HttpMethod.Put, DesignRoute(ids.ProjectId, ids.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf))
+        {
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+
+        using var response = await client.GetAsync(
+            CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var cutList = Assert.IsType<HarnessCutListResponse>(result);
+        Assert.Equal("ready", cutList.Status);
+        Assert.Equal(string.Empty, cutList.Warning);
+        var item = Assert.Single(cutList.Items);
+        Assert.Equal("UL1061 24 AWG, чёрный", item.Material);
+        Assert.Equal("UL1061-24-BK", item.MaterialSourceKey);
+        Assert.Equal("UL1061 24 AWG, чёрный", item.MaterialDisplayName);
+        Assert.Equal(125.2m, item.SourceLengthMm);
+        Assert.Equal(128m, item.CutLengthMm);
+        Assert.Equal(4, item.Pieces);
+        Assert.Equal(0.512m, item.TotalMetres);
+        Assert.Equal("ready", item.Status);
+        Assert.Empty(item.Warnings);
+    }
+
+    [Fact]
+    public async Task Cut_list_keeps_a_missing_length_null_with_an_explicit_warning()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf, quantity: 2);
+        var snapshotId = Guid.NewGuid();
+        using var content = JsonDocument.Parse(
+            """
+            {"schemaVersion":1,"connectors":[],"wires":[{
+              "id":"W-NO-LENGTH","circuit":"",
+              "materialBinding":{
+                "sourceId":"technology-wires","snapshotId":"SNAPSHOT_ID",
+                "snapshotSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "entityType":"cable","sourceKey":"CABLE-2X","displayName":"Кабель 2x0,2"
+              },"lengthMm":null
+            }],"views":{"e4":{"layers":[]},"drawing":{"layers":[]}}}
+            """.Replace("SNAPSHOT_ID", snapshotId.ToString("D"), StringComparison.Ordinal));
+        using (var save = await SendAsync(
+                   client, HttpMethod.Put, DesignRoute(ids.ProjectId, ids.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, content.RootElement.Clone()), csrf))
+        {
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+
+        using var response = await client.GetAsync(
+            CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
+            TestContext.Current.CancellationToken);
+
+        var cutList = Assert.IsType<HarnessCutListResponse>(result);
+        Assert.Equal("incomplete", cutList.Status);
+        Assert.Equal("Не указана конечная длина провода.", cutList.Warning);
+        var item = Assert.Single(cutList.Items);
+        Assert.Equal("CABLE-2X", item.MaterialSourceKey);
+        Assert.Null(item.SourceLengthMm);
+        Assert.Null(item.CutLengthMm);
+        Assert.Null(item.TotalMetres);
+        Assert.Equal(2, item.Pieces);
+        Assert.Equal(["length-missing"], item.Warnings);
     }
 
     [Fact]
@@ -135,6 +246,52 @@ public sealed class HarnessCutListApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("invalid_cut_list_design", Assert.IsType<ApiErrorResponse>(error).Error);
         Assert.Equal("content.wires[0].lengthMm", error.Field);
+    }
+
+    [Theory]
+    [InlineData("snapshotId", "00000000-0000-0000-0000-000000000000")]
+    [InlineData("snapshotSha256", "not-a-hash")]
+    [InlineData("recordId", "not-a-hash")]
+    [InlineData("entityType", "terminal")]
+    [InlineData("sourceKey", "")]
+    [InlineData("displayName", "")]
+    public async Task Cut_list_rejects_an_invalid_material_binding(string field, string invalidValue)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var material = new Dictionary<string, object?>
+        {
+            ["sourceId"] = "technology-wires",
+            ["snapshotId"] = Guid.NewGuid().ToString("D"),
+            ["snapshotSha256"] = new string('a', 64),
+            ["recordId"] = new string('b', 64),
+            ["entityType"] = "wire",
+            ["sourceKey"] = "WIRE-1",
+            ["displayName"] = "Провод 1",
+        };
+        material[field] = invalidValue;
+        var content = JsonSerializer.SerializeToElement(new
+        {
+            schemaVersion = 1,
+            connectors = Array.Empty<object>(),
+            wires = new[] { new { id = "W-1", circuit = "", materialBinding = material, lengthMm = 10m } },
+            views = new { e4 = new { layers = Array.Empty<object>() }, drawing = new { layers = Array.Empty<object>() } },
+        });
+        using (var save = await SendAsync(
+                   client, HttpMethod.Put, DesignRoute(ids.ProjectId, ids.HarnessId),
+                   new PutHarnessDesignRequest(0, 1, content), csrf))
+        {
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+
+        using var response = await client.GetAsync(
+            CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_cut_list_design", Assert.IsType<ApiErrorResponse>(error).Error);
+        Assert.Equal($"content.wires[0].materialBinding.{field}", error.Field);
     }
 
     private static async Task<string> StartSessionAsync(HttpClient client)

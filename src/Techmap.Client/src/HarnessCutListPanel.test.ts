@@ -14,6 +14,8 @@ const cutList: HarnessCutList = {
     wireId: "W-1",
     circuit: "DATA+",
     material: "not-pinned",
+    materialSourceKey: null,
+    materialDisplayName: null,
     sourceLengthMm: 20.001,
     endCorrectionFromMm: -0.001,
     endCorrectionToMm: 0.002,
@@ -22,10 +24,13 @@ const cutList: HarnessCutList = {
     pieces: 3,
     totalMetres: 0.060015,
     status: "ready",
+    warnings: ["material-missing"],
   }, {
     wireId: "W-2",
     circuit: "",
     material: "not-pinned",
+    materialSourceKey: null,
+    materialDisplayName: null,
     sourceLengthMm: null,
     endCorrectionFromMm: 0,
     endCorrectionToMm: 0,
@@ -34,6 +39,7 @@ const cutList: HarnessCutList = {
     pieces: 3,
     totalMetres: null,
     status: "incomplete",
+    warnings: ["material-missing", "length-missing"],
   }],
 };
 
@@ -52,6 +58,38 @@ describe("HarnessCutListPanel", () => {
     expect(markup).toContain("не является спецификацией материалов");
     expect(markup).toContain("Не задана");
     expect(markup).toContain("Нет длины");
+  });
+
+  it("renders pinned material identity, ready status and each missing-data warning separately", () => {
+    const pinnedItem = {
+      ...cutList.items[0]!,
+      wireId: "W-PINNED",
+      material: "pinned",
+      materialSourceKey: "UL1061-24-BK",
+      materialDisplayName: "UL1061 24 AWG, чёрный",
+      warnings: [],
+    } as const;
+    const materialMissingItem = {
+      ...cutList.items[0]!,
+      wireId: "W-MATERIAL-MISSING",
+      warnings: ["material-missing"],
+    } as const;
+    const lengthMissingItem = {
+      ...cutList.items[1]!,
+      wireId: "W-LENGTH-MISSING",
+      material: "pinned",
+      materialSourceKey: "UL1061-24-RD",
+      materialDisplayName: "UL1061 24 AWG, красный",
+      warnings: ["length-missing"],
+    } as const;
+    const markup = renderToStaticMarkup(createElement(HarnessCutListTable, {
+      cutList: { ...cutList, warning: "", items: [pinnedItem, materialMissingItem, lengthMissingItem] },
+    }));
+
+    expect(markup).toContain("UL1061 24 AWG, чёрный · UL1061-24-BK");
+    expect(markup).toContain('<span class="cut-list-status ready">Готово</span>');
+    expect(markup).toContain('<span class="cut-list-status ready">Нет материала</span>');
+    expect(markup).toContain('<span class="cut-list-status incomplete">Нет длины</span>');
   });
 
   it("starts compact and offers an explicit refresh after editor save", () => {

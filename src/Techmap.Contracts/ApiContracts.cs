@@ -165,6 +165,8 @@ public sealed record HarnessCutListItemResponse(
     string WireId,
     string Circuit,
     string Material,
+    string? MaterialSourceKey,
+    string? MaterialDisplayName,
     decimal? SourceLengthMm,
     decimal EndCorrectionFromMm,
     decimal EndCorrectionToMm,
@@ -172,7 +174,8 @@ public sealed record HarnessCutListItemResponse(
     decimal? CutLengthMm,
     long Pieces,
     decimal? TotalMetres,
-    string Status);
+    string Status,
+    IReadOnlyList<string> Warnings);
 
 public sealed record HarnessCutListResponse(
     Guid ProjectId,

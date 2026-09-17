@@ -7,6 +7,8 @@ public sealed record HarnessCutListItem(
     string WireId,
     string Circuit,
     string Material,
+    string? MaterialSourceKey,
+    string? MaterialDisplayName,
     decimal? SourceLengthMm,
     decimal EndCorrectionFromMm,
     decimal EndCorrectionToMm,
@@ -14,7 +16,8 @@ public sealed record HarnessCutListItem(
     decimal? CutLengthMm,
     long Pieces,
     decimal? TotalMetres,
-    string Status);
+    string Status,
+    IReadOnlyList<string> Warnings);
 
 public sealed record HarnessCutList(
     ProjectIdentity ProjectId,
@@ -52,9 +55,15 @@ public sealed class HarnessCutListService(
     IHarnessDesignDocumentStore designStore) : IHarnessCutListService
 {
     public const string LimitedStatus = "limited";
+    public const string ReadyStatus = "ready";
+    public const string IncompleteStatus = "incomplete";
     public const string NotPinnedMaterial = "not-pinned";
     public const string MaterialWarning =
         "Материал провода не закреплён. Карта показывает длины заготовок, но пока не является спецификацией материалов.";
+    public const string MissingMaterialWarning = "Материал провода не закреплён.";
+    public const string MissingLengthWarning = "Не указана конечная длина провода.";
+    public const string MissingMaterialWarningCode = "material-missing";
+    public const string MissingLengthWarningCode = "length-missing";
 
     public HarnessCutList Get(ProjectIdentity projectId, HarnessIdentity harnessId)
     {
@@ -130,6 +139,7 @@ public sealed class HarnessCutListService(
                 if (!wireIds.Add(wireId))
                     throw InvalidDesign("Harness design wire IDs must be unique.", $"{path}.id");
                 var circuit = RequiredString(wire, "circuit", $"{path}.circuit", allowEmpty: true);
+                var material = MaterialBindingOrMissing(wire, path);
                 var sourceLength = NullableLength(wire, "lengthMm", $"{path}.lengthMm");
                 var fromCorrection = CorrectionOrDefault(
                     wire, "endCorrectionFromMm", $"{path}.endCorrectionFromMm");
@@ -173,10 +183,18 @@ public sealed class HarnessCutListService(
                     }
                 }
 
+                var warnings = new List<string>(2);
+                if (material is null)
+                    warnings.Add(MissingMaterialWarningCode);
+                if (!result.IsComplete)
+                    warnings.Add(MissingLengthWarningCode);
+
                 items.Add(new HarnessCutListItem(
                     wireId,
                     circuit,
-                    NotPinnedMaterial,
+                    material?.DisplayName ?? NotPinnedMaterial,
+                    material?.SourceKey,
+                    material?.DisplayName,
                     sourceLength?.Millimetres,
                     fromCorrection.Millimetres,
                     toCorrection.Millimetres,
@@ -184,16 +202,27 @@ public sealed class HarnessCutListService(
                     result.CutLength?.Millimetres,
                     harness.Quantity,
                     totalMetres,
-                    result.IsComplete ? "ready" : "incomplete"));
+                    result.IsComplete ? "ready" : "incomplete",
+                    warnings.AsReadOnly()));
                 index++;
             }
 
+            var hasMissingMaterials = items.Any(item => item.MaterialSourceKey is null);
+            var hasMissingLengths = items.Any(item => item.CutLengthMm is null);
+            var warning = hasMissingMaterials
+                ? MaterialWarning
+                : hasMissingLengths
+                    ? MissingLengthWarning
+                    : string.Empty;
+            var status = hasMissingMaterials || hasMissingLengths
+                ? IncompleteStatus
+                : ReadyStatus;
             return new HarnessCutList(
                 projectId,
                 harnessId,
                 harness.Quantity,
-                LimitedStatus,
-                MaterialWarning,
+                status,
+                warning,
                 items.AsReadOnly());
         }
         catch (HarnessCutListException)
@@ -204,6 +233,57 @@ public sealed class HarnessCutListService(
         {
             throw InvalidDesign("The harness design content is not valid JSON.", "content", error);
         }
+    }
+
+    private static MaterialBinding? MaterialBindingOrMissing(JsonElement wire, string wirePath)
+    {
+        if (!wire.TryGetProperty("materialBinding", out var value) || value.ValueKind == JsonValueKind.Null)
+            return null;
+        var path = $"{wirePath}.materialBinding";
+        if (value.ValueKind != JsonValueKind.Object)
+            throw InvalidDesign("The wire material binding must be an object.", path);
+
+        var sourceId = BoundedRequiredString(value, "sourceId", $"{path}.sourceId", 128);
+        var snapshotIdText = BoundedRequiredString(value, "snapshotId", $"{path}.snapshotId", 36);
+        if (!Guid.TryParseExact(snapshotIdText, "D", out var snapshotId) || snapshotId == Guid.Empty)
+            throw InvalidDesign("The wire material snapshotId must be a non-empty UUID.", $"{path}.snapshotId");
+        var snapshotSha256 = Sha256(value, "snapshotSha256", $"{path}.snapshotSha256");
+        var recordId = Sha256(value, "recordId", $"{path}.recordId");
+        var entityType = BoundedRequiredString(value, "entityType", $"{path}.entityType", 16);
+        if (entityType is not ("wire" or "cable"))
+            throw InvalidDesign("The wire material entityType must be wire or cable.", $"{path}.entityType");
+        var sourceKey = BoundedRequiredString(value, "sourceKey", $"{path}.sourceKey", 512);
+        var displayName = BoundedRequiredString(value, "displayName", $"{path}.displayName", 256);
+        return new MaterialBinding(
+            sourceId,
+            snapshotId,
+            snapshotSha256,
+            recordId,
+            entityType,
+            sourceKey,
+            displayName);
+    }
+
+    private static string BoundedRequiredString(
+        JsonElement owner,
+        string propertyName,
+        string path,
+        int maximumLength)
+    {
+        if (!owner.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+            throw InvalidDesign($"The wire material {propertyName} must be a string.", path);
+        var result = value.GetString()!;
+        if (string.IsNullOrWhiteSpace(result) || result.Length > maximumLength)
+            throw InvalidDesign($"The wire material {propertyName} is empty or too long.", path);
+        return result;
+    }
+
+    private static string Sha256(JsonElement owner, string propertyName, string path)
+    {
+        var value = BoundedRequiredString(owner, propertyName, path, 64);
+        if (value.Length != 64 || value.Any(character => !Uri.IsHexDigit(character)))
+            throw InvalidDesign($"The wire material {propertyName} must be a SHA-256 hexadecimal value.", path);
+        return value.ToLowerInvariant();
     }
 
     private static string RequiredString(
@@ -296,4 +376,13 @@ public sealed class HarnessCutListService(
         string field,
         Exception? innerException = null) =>
         new("invalid_cut_list_design", message, field, innerException);
+
+    private sealed record MaterialBinding(
+        string SourceId,
+        Guid SnapshotId,
+        string SnapshotSha256,
+        string RecordId,
+        string EntityType,
+        string SourceKey,
+        string DisplayName);
 }

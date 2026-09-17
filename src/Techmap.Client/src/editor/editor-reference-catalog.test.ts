@@ -112,4 +112,20 @@ describe("editor reference catalog", () => {
     expect(item.title).toBe("TER-INCOMPLETE");
     expect(item.subtitle).toContain("характеристики не заполнены");
   });
+
+  it("carries the exact immutable snapshot identity needed to pin a wire material", () => {
+    const snapshotId = "00000000-0000-4000-8000-000000000099";
+    const snapshotSha256 = "a".repeat(64);
+    const item = referenceRecordToEditorCatalogItem(
+      source("technology-database"),
+      record("wire", "UL1061-24AWG", { name: "UL1061 24AWG" }),
+      { snapshotId, snapshotSha256 },
+    );
+
+    expect(item).toMatchObject({
+      sourceId: "technology-database", snapshotId, snapshotSha256,
+      recordId: "a".repeat(64),
+      entityType: "wire", sourceKey: "UL1061-24AWG",
+    });
+  });
 });

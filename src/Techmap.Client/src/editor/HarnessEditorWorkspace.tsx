@@ -104,6 +104,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCatalogQueryChange?: (query: string) => void;
   readonly onCatalogLoadMore?: () => void;
   readonly onCatalogRetry?: () => void;
+  readonly onWireMaterialClear?: (wireId: string) => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
@@ -212,6 +213,7 @@ export function HarnessEditorWorkspace({
   onCatalogQueryChange,
   onCatalogLoadMore,
   onCatalogRetry,
+  onWireMaterialClear,
   onObjectMove,
   onObjectMovePreview,
   onObjectEditRequest,
@@ -516,6 +518,7 @@ export function HarnessEditorWorkspace({
                   selectedObject={selectedObject}
                   disabled={selectedLayer?.locked === true}
                   onChange={(objectId, patch) => changeObjects(updateEditorObject(objects, objectId, patch))}
+                  onWireMaterialClear={onWireMaterialClear}
                 />
               )
             ) : (

@@ -98,4 +98,31 @@ describe("wire object inspector", () => {
     }
     expect(inputTag(markup, "Цвет объекта")).toContain('type="color"');
   });
+
+  it("shows an assigned material and exposes explicit clearing", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "e4",
+      selectedObject: wireObject({
+        materialSourceKey: "UL1061-24AWG",
+        materialDisplayName: "UL1061 24AWG",
+        materialEntityType: "wire",
+      }),
+      disabled: false,
+      onChange: vi.fn(),
+      onWireMaterialClear: vi.fn(),
+    }));
+
+    expect(markup).toContain('aria-label="Материал провода"');
+    expect(markup).toContain("UL1061 24AWG");
+    expect(markup).toContain("UL1061-24AWG");
+    expect(markup).toContain("Очистить материал");
+  });
+
+  it("explains how to assign a missing material", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "e4", selectedObject: wireObject({}), disabled: false, onChange: vi.fn(),
+    }));
+    expect(markup).toContain("Материал не выбран");
+    expect(markup).toContain("нижнем справочнике");
+  });
 });

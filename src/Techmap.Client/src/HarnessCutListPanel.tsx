@@ -22,7 +22,7 @@ function formatCorrection(item: HarnessCutListItem): string {
 
 export function HarnessCutListTable({ cutList }: { readonly cutList: HarnessCutList }) {
   return <>
-    <p className="cut-list-warning" role="note">{cutList.warning}</p>
+    {cutList.warning && <p className="cut-list-warning" role="note">{cutList.warning}</p>}
     {cutList.items.length === 0 ? <p className="cut-list-empty">В жгуте пока нет проводов.</p> : (
       <div className="cut-list-scroll">
         <table className="cut-list-table">
@@ -36,13 +36,13 @@ export function HarnessCutListTable({ cutList }: { readonly cutList: HarnessCutL
             <th>Статус</th>
           </tr></thead>
           <tbody>{cutList.items.map(item => <tr key={item.wireId}>
-            <td><strong>{item.circuit || "Без цепи"}</strong><span>{item.wireId}</span><small>{item.material === "not-pinned" ? "Материал не закреплён" : item.material}</small></td>
+            <td><strong>{item.circuit || "Без цепи"}</strong><span>{item.wireId}</span><small>{item.materialDisplayName ?? (item.material === "not-pinned" ? "Материал не закреплён" : item.material)}{item.materialSourceKey && item.materialSourceKey !== item.materialDisplayName ? ` · ${item.materialSourceKey}` : ""}</small></td>
             <td>{formatMillimetres(item.sourceLengthMm)}</td>
             <td>{formatCorrection(item)}<small>шаг {formatMillimetres(item.roundingStepMm)}</small></td>
             <td>{formatMillimetres(item.cutLengthMm)}</td>
             <td>{item.pieces.toLocaleString("ru-RU")}</td>
             <td>{item.totalMetres === null ? "Не рассчитан" : `${item.totalMetres.toLocaleString("ru-RU", { maximumFractionDigits: 6 })} м`}</td>
-            <td><span className={`cut-list-status ${item.status}`}>{item.status === "ready" ? "Готово" : "Нет длины"}</span></td>
+            <td><span className={`cut-list-status ${item.status}`}>{item.warnings.includes("length-missing") ? "Нет длины" : item.warnings.includes("material-missing") ? "Нет материала" : "Готово"}</span></td>
           </tr>)}</tbody>
         </table>
       </div>

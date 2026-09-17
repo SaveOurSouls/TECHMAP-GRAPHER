@@ -34,6 +34,8 @@ public static class HarnessCutListEndpoints
             item.WireId,
             item.Circuit,
             item.Material,
+            item.MaterialSourceKey,
+            item.MaterialDisplayName,
             item.SourceLengthMm,
             item.EndCorrectionFromMm,
             item.EndCorrectionToMm,
@@ -41,7 +43,8 @@ public static class HarnessCutListEndpoints
             item.CutLengthMm,
             item.Pieces,
             item.TotalMetres,
-            item.Status)).ToArray());
+            item.Status,
+            item.Warnings)).ToArray());
 
     private static IResult Execute(Func<IResult> operation)
     {

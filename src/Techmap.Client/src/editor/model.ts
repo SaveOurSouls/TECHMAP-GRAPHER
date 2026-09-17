@@ -273,6 +273,8 @@ export interface WireInstance {
   readonly color: string;
   /** Contact whose table color drives a direct contact-to-contact wire. */
   readonly colorSource?: WireColorSource | null;
+  /** Exact immutable reference-catalog record selected for this wire. */
+  readonly materialBinding?: WireMaterialBinding;
   /** Physical source length. Null means that the wire is intentionally incomplete. */
   readonly lengthMm: number | null;
   /** Signed technological correction at the `from` end, in millimetres. */
@@ -293,6 +295,21 @@ export interface WireInstance {
 export interface WireColorSource {
   readonly connectorId: string;
   readonly contactId: string;
+}
+
+/**
+ * Stable catalog identity and compact display snapshot stored with a wire.
+ * The snapshot identity prevents a later catalog publication from silently
+ * changing the material selected for an existing harness.
+ */
+export interface WireMaterialBinding {
+  readonly sourceId: string;
+  readonly snapshotId: string;
+  readonly snapshotSha256: string;
+  readonly recordId: string;
+  readonly entityType: "wire" | "cable";
+  readonly sourceKey: string;
+  readonly displayName: string;
 }
 
 export interface WireCutLengthCalculation {
@@ -1405,6 +1422,8 @@ function parseWire(value: unknown): WireInstance {
     color: requireText(record.color, "Цвет провода"),
     colorSource: record.colorSource === undefined || record.colorSource === null
       ? record.colorSource : parseWireColorSource(record.colorSource),
+    materialBinding: record.materialBinding === undefined
+      ? undefined : parseWireMaterialBinding(record.materialBinding),
     lengthMm,
     endCorrectionFromMm,
     endCorrectionToMm,
@@ -1422,6 +1441,22 @@ function parseWire(value: unknown): WireInstance {
       drawing: requireText(layerIds.drawing, "Слой провода чертежа"),
     },
   };
+}
+
+function parseWireMaterialBinding(value: unknown): WireMaterialBinding {
+  const record = requireRecord(value, "Привязка материала провода задана неверно.");
+  if (record.entityType !== "wire" && record.entityType !== "cable") {
+    throw new Error("Тип материала провода задан неверно.");
+  }
+  return Object.freeze({
+    sourceId: requireBoundedText(record.sourceId, "Источник материала провода", 128),
+    snapshotId: parseNonEmptyGuid(record.snapshotId, "ID снимка материала провода"),
+    snapshotSha256: parseSha256(record.snapshotSha256, "Хэш снимка материала провода"),
+    recordId: parseSha256(record.recordId, "ID записи материала провода"),
+    entityType: record.entityType,
+    sourceKey: requireBoundedText(record.sourceKey, "Ключ материала провода", 512),
+    displayName: requireBoundedText(record.displayName, "Название материала провода", 256),
+  });
 }
 
 function parseWireColorSource(value: unknown): WireColorSource {
@@ -1701,4 +1736,13 @@ function requireInteger(value: unknown, name: string, minimum: number, maximum: 
     throw new Error(`${name} задано неверно.`);
   }
   return value as number;
+}
+
+function parseNonEmptyGuid(value: unknown, name: string): string {
+  const result = requireString(value, name);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result) ||
+      /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(result)) {
+    throw new Error(`${name} задан неверно.`);
+  }
+  return result.toLowerCase();
 }

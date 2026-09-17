@@ -29,6 +29,7 @@ import {
   type WireCrossingStyle,
   type WireColorSource,
   type WireInstance,
+  type WireMaterialBinding,
   type WireScreenGroup,
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
@@ -53,7 +54,7 @@ export type EditorCommand =
   | { readonly type: "remove-connector"; readonly connectorId: string }
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
-  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
+  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -456,6 +457,8 @@ export function applyEditorCommand(
             circuit: command.circuit === undefined ? wire.circuit : command.circuit.trim(),
             color: command.color ?? wire.color,
             colorSource: command.color === undefined ? wire.colorSource : null,
+            materialBinding: command.materialBinding === undefined
+              ? wire.materialBinding : command.materialBinding ?? undefined,
             lengthMm: command.lengthMm === undefined ? wire.lengthMm : command.lengthMm,
             endCorrectionFromMm: command.endCorrectionFromMm ?? wire.endCorrectionFromMm,
             endCorrectionToMm: command.endCorrectionToMm ?? wire.endCorrectionToMm,

@@ -198,6 +198,11 @@
 .he-wire-length-status small { font-size: 9px; font-weight: 700; }
 .he-wire-length-status.is-complete { border-color: #bcdac7; background: #f1faf4; color: #28613d; }
 .he-wire-length-status.is-incomplete { border-color: #eccb87; background: #fff9e9; color: #795712; }
+.he-wire-material { padding: 9px; display: grid; gap: 5px; border: 1px solid #d7e2e8; border-radius: 7px; background: #f8fbfc; }
+.he-wire-material > strong { color: #35576b; font-size: 11px; }
+.he-wire-material > span { color: #2f4c5e; font-size: 12px; font-weight: 700; }
+.he-wire-material > small { color: #71808d; font-size: 10px; }
+.he-wire-material > button { justify-self: start; }
 .he-color-field { height: 35px; padding: 4px 8px 4px 4px; display: flex; align-items: center; gap: 9px; border: 1px solid #cad7de; border-radius: 6px; }
 .he-color-field input { width: 29px; height: 25px; padding: 0; border: 0; background: transparent; }
 .he-color-field code { color: #526b79; font: 600 10px Consolas, monospace; }
