@@ -14,6 +14,7 @@ import {
   roundedPolylinePathV2,
   snapTemplatePointAngleV2,
   templatePointToNodePointV2,
+  templateRootDragPreviewV2,
   type TemplateCanvasV2Props,
 } from "./TemplateCanvasV2";
 import type {
@@ -288,6 +289,46 @@ describe("TemplateCanvasV2", () => {
 
     expect(markup).not.toContain("data-resize-handle");
     expect(markup.match(/data-selected="true"/g)).toHaveLength(2);
+    expect(markup).toContain('data-selection-kind="multi"');
+    expect(markup).toContain('data-multi-selection-bounds="true"');
+  });
+
+  it("bounds evaluated root geometry and recursively transformed group children in view coordinates", () => {
+    const child = node({
+      id: ids.child,
+      kind: "rectangle",
+      transform: { ...identity, translateX: c(5), translateY: c(6) },
+      geometry: { x: c(0), y: c(0), width: c(10), height: c(20), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    const group = node({
+      id: ids.group,
+      kind: "group",
+      transform: { translateX: c(100), translateY: c(50), rotationDegrees: c(90), scaleX: c(2), scaleY: c(1) },
+      geometry: { childIds: [ids.child] },
+    });
+    const evaluated = node({
+      id: ids.rectangle,
+      kind: "rectangle",
+      geometry: { x: c(130), y: c(10), width: p(ids.parameter), height: c(10), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    const markup = render(content([group, child, evaluated]), {
+      selectedId: ids.group,
+      selectedIds: [ids.group, ids.rectangle],
+    });
+
+    expect(markup).toContain('data-selection-kind="multi"');
+    expect(markup).toContain('data-multi-selection-bounds="true" x="74" y="10" width="81" height="70"');
+    expect(markup).not.toContain("data-resize-handle");
+  });
+
+  it("previews one drag delta on every selected root without moving nested children twice", () => {
+    const selected = new Set([ids.group, ids.rectangle]);
+    const drag = { id: ids.group, deltaX: 12, deltaY: -8 };
+
+    expect(templateRootDragPreviewV2(ids.group, true, drag, selected)).toEqual({ deltaX: 12, deltaY: -8 });
+    expect(templateRootDragPreviewV2(ids.rectangle, true, drag, selected)).toEqual({ deltaX: 12, deltaY: -8 });
+    expect(templateRootDragPreviewV2(ids.child, false, drag, selected)).toBeNull();
+    expect(templateRootDragPreviewV2(ids.line, true, drag, selected)).toBeNull();
   });
 
   it("shows editable handles for every constant line point and segment insertion hit targets", () => {

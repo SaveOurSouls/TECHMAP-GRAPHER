@@ -42,6 +42,24 @@ export interface TemplateCanvasV2Props {
 type NumericEvaluator = (expression: NumericExpressionV2) => number | null;
 type SvgPoint = readonly [number, number];
 
+interface TemplateMatrixV2 {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+  readonly e: number;
+  readonly f: number;
+}
+
+interface TemplateBoundsV2 {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+const IDENTITY_MATRIX_V2: TemplateMatrixV2 = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
 interface DragStateV2 {
   readonly id: string;
   readonly pointerId: number;
@@ -101,6 +119,19 @@ export function completedTemplateNodeDragV2(
   const deltaX = end.templateX - start.templateX;
   const deltaY = end.templateY - start.templateY;
   return deltaX === 0 && deltaY === 0 ? null : { deltaX, deltaY };
+}
+
+export function templateRootDragPreviewV2(
+  nodeId: string,
+  topLevel: boolean,
+  drag: { readonly id: string; readonly deltaX: number; readonly deltaY: number } | null,
+  selectedIds: ReadonlySet<string>,
+): { deltaX: number; deltaY: number } | null {
+  if (!topLevel || !drag) return null;
+  if (drag.id === nodeId) return { deltaX: drag.deltaX, deltaY: drag.deltaY };
+  return selectedIds.size > 1 && selectedIds.has(drag.id) && selectedIds.has(nodeId)
+    ? { deltaX: drag.deltaX, deltaY: drag.deltaY }
+    : null;
 }
 
 export type TemplatePointAngleModeV2 = "free" | "snap-15";
@@ -332,6 +363,62 @@ function evaluateTransform(transform: TransformV2, evaluate: NumericEvaluator): 
   if (translateX === null || translateY === null || rotation === null || scaleX === null || scaleY === null)
     return null;
   return `translate(${formatNumber(translateX)} ${formatNumber(translateY)}) rotate(${formatNumber(rotation)}) scale(${formatNumber(scaleX)} ${formatNumber(scaleY)})`;
+}
+
+function evaluateTransformMatrixV2(transform: TransformV2, evaluate: NumericEvaluator): TemplateMatrixV2 | null {
+  const translateX = evaluate(transform.translateX);
+  const translateY = evaluate(transform.translateY);
+  const rotation = evaluate(transform.rotationDegrees);
+  const scaleX = evaluate(transform.scaleX);
+  const scaleY = evaluate(transform.scaleY);
+  if (translateX === null || translateY === null || rotation === null || scaleX === null || scaleY === null) return null;
+  const radians = rotation * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  return {
+    a: cosine * scaleX,
+    b: sine * scaleX,
+    c: -sine * scaleY,
+    d: cosine * scaleY,
+    e: translateX,
+    f: translateY,
+  };
+}
+
+function multiplyTemplateMatricesV2(parent: TemplateMatrixV2, child: TemplateMatrixV2): TemplateMatrixV2 {
+  return {
+    a: parent.a * child.a + parent.c * child.b,
+    b: parent.b * child.a + parent.d * child.b,
+    c: parent.a * child.c + parent.c * child.d,
+    d: parent.b * child.c + parent.d * child.d,
+    e: parent.a * child.e + parent.c * child.f + parent.e,
+    f: parent.b * child.e + parent.d * child.f + parent.f,
+  };
+}
+
+function transformTemplatePointV2(matrix: TemplateMatrixV2, x: number, y: number): { x: number; y: number } {
+  return { x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f };
+}
+
+function boundsFromTemplatePointsV2(points: readonly { readonly x: number; readonly y: number }[]): TemplateBoundsV2 | null {
+  if (points.length === 0 || points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return null;
+  return {
+    left: Math.min(...points.map(point => point.x)),
+    top: Math.min(...points.map(point => point.y)),
+    right: Math.max(...points.map(point => point.x)),
+    bottom: Math.max(...points.map(point => point.y)),
+  };
+}
+
+function unionTemplateBoundsV2(bounds: readonly (TemplateBoundsV2 | null)[]): TemplateBoundsV2 | null {
+  const present = bounds.filter((item): item is TemplateBoundsV2 => item !== null);
+  if (present.length === 0) return null;
+  return {
+    left: Math.min(...present.map(item => item.left)),
+    top: Math.min(...present.map(item => item.top)),
+    right: Math.max(...present.map(item => item.right)),
+    bottom: Math.max(...present.map(item => item.bottom)),
+  };
 }
 
 function formatNumber(value: number): string {
@@ -678,8 +765,9 @@ export function TemplateCanvasV2({
   };
 
   const previewTransform = (nodeId: string, transform: string, topLevel: boolean): string => {
-    if (!topLevel || dragPreview?.id !== nodeId) return transform;
-    return `translate(${formatNumber(dragPreview.deltaX)} ${formatNumber(dragPreview.deltaY)}) ${transform}`;
+    const preview = templateRootDragPreviewV2(nodeId, topLevel, dragPreview, selectedIdSet);
+    if (!preview) return transform;
+    return `translate(${formatNumber(preview.deltaX)} ${formatNumber(preview.deltaY)}) ${transform}`;
   };
 
   const previewPoints = (nodeId: string, points: readonly SvgPoint[]): SvgPoint[] => {
@@ -970,6 +1058,82 @@ export function TemplateCanvasV2({
     ))));
   }
 
+  function renderMultiSelectionOverlay(): ReactNode {
+    if (!view || selectedIdSet.size < 2) return null;
+
+    const boundsForNode = (
+      node: TemplateNodeV2,
+      nodesById: ReadonlyMap<string, TemplateNodeV2>,
+      parentMatrix: TemplateMatrixV2,
+      ancestors: ReadonlySet<string>,
+    ): TemplateBoundsV2 | null => {
+      if (!node.visible || ancestors.has(node.id)) return null;
+      const localMatrix = evaluateTransformMatrixV2(node.transform, evaluate);
+      if (!localMatrix) return null;
+      const matrix = multiplyTemplateMatricesV2(parentMatrix, localMatrix);
+      const transformedPoints = (points: readonly SvgPoint[]) =>
+        boundsFromTemplatePointsV2(points.map(point => transformTemplatePointV2(matrix, point[0], point[1])));
+
+      if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") {
+        const points = evaluatePoints(node.geometry.points, evaluate);
+        return points ? transformedPoints(points) : null;
+      }
+      if (node.kind === "rectangle" || node.kind === "image") {
+        const x = evaluate(node.geometry.x), y = evaluate(node.geometry.y);
+        const nodeWidth = evaluate(node.geometry.width), nodeHeight = evaluate(node.geometry.height);
+        if (x === null || y === null || nodeWidth === null || nodeHeight === null) return null;
+        return transformedPoints([[x, y], [x + nodeWidth, y], [x + nodeWidth, y + nodeHeight], [x, y + nodeHeight]]);
+      }
+      if (node.kind === "ellipse") {
+        const centerX = evaluate(node.geometry.centerX), centerY = evaluate(node.geometry.centerY);
+        const radiusX = evaluate(node.geometry.radiusX), radiusY = evaluate(node.geometry.radiusY);
+        if (centerX === null || centerY === null || radiusX === null || radiusY === null) return null;
+        const center = transformTemplatePointV2(matrix, centerX, centerY);
+        const extentX = Math.hypot(matrix.a * radiusX, matrix.c * radiusY);
+        const extentY = Math.hypot(matrix.b * radiusX, matrix.d * radiusY);
+        return { left: center.x - extentX, top: center.y - extentY, right: center.x + extentX, bottom: center.y + extentY };
+      }
+      if (node.kind === "text") {
+        const x = evaluate(node.geometry.x), y = evaluate(node.geometry.y), fontSize = evaluate(node.geometry.fontSize);
+        if (x === null || y === null || fontSize === null) return null;
+        const textWidth = Math.max(fontSize * 0.6, node.geometry.text.length * fontSize * 0.6);
+        return transformedPoints([[x, y - fontSize], [x + textWidth, y - fontSize], [x + textWidth, y], [x, y]]);
+      }
+
+      const nextAncestors = new Set(ancestors);
+      nextAncestors.add(node.id);
+      return unionTemplateBoundsV2(node.geometry.childIds.map(childId => {
+        const child = nodesById.get(childId);
+        return child ? boundsForNode(child, nodesById, matrix, nextAncestors) : null;
+      }));
+    };
+
+    const selectedBounds: TemplateBoundsV2[] = [];
+    for (const layer of view.layers) {
+      if (!layer.visible) continue;
+      const nodesById = new Map(layer.nodes.map(node => [node.id, node]));
+      const ownedIds = new Set(layer.nodes.flatMap(node => node.kind === "group" ? node.geometry.childIds : []));
+      for (const node of layer.nodes) {
+        if (ownedIds.has(node.id) || !selectedIdSet.has(node.id)) continue;
+        const bounds = boundsForNode(node, nodesById, IDENTITY_MATRIX_V2, new Set());
+        if (bounds) selectedBounds.push(bounds);
+      }
+    }
+    const bounds = unionTemplateBoundsV2(selectedBounds);
+    if (!bounds) return null;
+    const preview = dragPreview && selectedIdSet.has(dragPreview.id) ? dragPreview : null;
+    const deltaX = preview?.deltaX ?? 0, deltaY = preview?.deltaY ?? 0;
+    return <g className="template-selection" data-selection-kind="multi" transform={`translate(${formatNumber(deltaX)} ${formatNumber(deltaY)})`}>
+      <rect
+        data-multi-selection-bounds="true"
+        x={bounds.left}
+        y={bounds.top}
+        width={bounds.right - bounds.left}
+        height={bounds.bottom - bounds.top}
+      />
+    </g>;
+  }
+
   function renderSelectionOverlay(): ReactNode {
     if (!view || !selectedId || selectedIdSet.size > 1) return null;
     const located = view.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
@@ -1122,6 +1286,7 @@ export function TemplateCanvasV2({
       {view?.contactPoints.map(point => repeatedPointIds.has(point.id) ? null : renderPoint(point, "contact"))}
       {view && renderRepeatedPoints()}
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
+      {renderMultiSelectionOverlay()}
       {renderSelectionOverlay()}
       {repeatPreviewError && <g data-template-repeat-error="true" pointerEvents="none">
         <rect x="16" y="16" width={Math.min(width - 32, 520)} height="42" rx="6" fill="#fff7e6" stroke="#a86519" />
