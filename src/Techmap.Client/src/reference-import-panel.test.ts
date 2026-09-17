@@ -65,7 +65,10 @@ describe("reference import panel", () => {
     expect(markup).toContain("Обычные ссылки на сайты разрешены");
     expect(markup).toContain("generic-record");
     expect(markup).toContain("Проверить таблицу");
-    expect(markup).toContain("Сначала проверьте файл или источник");
+    expect(markup).toContain("Ошибки");
+    expect(markup).toContain("Здесь появятся блокирующие ошибки проверки");
+    expect(markup).not.toContain("Публикация выполняется отдельным действием");
+    expect(markup.indexOf('class="reference-import-card"')).toBeLessThan(markup.indexOf("Выберите загруженный справочник слева"));
     expect(markup).toContain('accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"');
   });
 
@@ -123,7 +126,7 @@ describe("reference import panel", () => {
     expect(profileCountLabel(11)).toBe("11 профилей");
   });
 
-  it("requires current preview, warning acknowledgement and a live token", () => {
+  it("allows publication with warnings while rejecting stale or expired previews", () => {
     const warningId = "b".repeat(64);
     const preview: XlsxReferencePreview = {
       previewId: "12345678-1234-4123-8123-123456789abc",
@@ -158,10 +161,10 @@ describe("reference import panel", () => {
       }],
     };
 
-    expect(canPublishXlsxPreview(preview, new Set(), Date.parse("2026-09-12T18:00:00Z"))).toBe(false);
+    expect(canPublishXlsxPreview(preview, new Set(), Date.parse("2026-09-12T18:00:00Z"))).toBe(true);
     expect(canPublishXlsxPreview(preview, new Set([warningId]), Date.parse("2026-09-12T18:00:00Z"))).toBe(true);
-    expect(canPublishXlsxPreview(preview, new Set([warningId]), Date.parse(preview.expiresUtc))).toBe(false);
-    expect(canPublishXlsxPreview(preview, new Set([warningId]), Date.parse("2026-09-12T18:00:00Z"), true)).toBe(false);
+    expect(canPublishXlsxPreview(preview, new Set(), Date.parse(preview.expiresUtc))).toBe(false);
+    expect(canPublishXlsxPreview(preview, new Set(), Date.parse("2026-09-12T18:00:00Z"), true)).toBe(false);
   });
 
   it("shows file identity without exposing file content", () => {
@@ -206,12 +209,7 @@ describe("reference import panel", () => {
       field: "legacyHumanUnitPriceMag",
       sourceLocation: "'БД.ОП'!P3",
     };
-    const markup = renderToStaticMarkup(createElement(ReferenceDiagnosticItem, {
-      diagnostic,
-      acknowledged: false,
-      disabled: false,
-      onAcknowledge: () => undefined,
-    }));
+    const markup = renderToStaticMarkup(createElement(ReferenceDiagnosticItem, { diagnostic }));
 
     expect(markup).toContain("Предупреждение: В таблице использованы сохранённые результаты формул: 128 ячеек");
     expect(markup).toContain('<details class="diagnostic-details"><summary>Подробности проверки</summary>');

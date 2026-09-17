@@ -105,7 +105,7 @@ export function requiredWarningIds(preview: XlsxReferencePreview): readonly stri
 
 export function canPublishXlsxPreview(
   preview: XlsxReferencePreview | null,
-  acknowledgedWarningIds: ReadonlySet<string>,
+  _acknowledgedWarningIds: ReadonlySet<string>,
   now: number,
   stale = false,
 ): boolean {
@@ -116,9 +116,7 @@ export function canPublishXlsxPreview(
     stale ||
     Date.parse(preview.expiresUtc) <= now
   ) return false;
-  const required = requiredWarningIds(preview);
-  return acknowledgedWarningIds.size === required.length &&
-    required.every((diagnosticId) => acknowledgedWarningIds.has(diagnosticId));
+  return true;
 }
 
 export function fileSelectionLabel(file: Pick<File, "name" | "size"> | null): string {
@@ -159,12 +157,9 @@ export function referenceDiagnosticMessage(diagnostic: ReferenceCatalogDiagnosti
 
 interface ReferenceDiagnosticItemProps {
   readonly diagnostic: ReferenceCatalogDiagnostic;
-  readonly acknowledged: boolean;
-  readonly disabled: boolean;
-  readonly onAcknowledge: (checked: boolean) => void;
 }
 
-export function ReferenceDiagnosticItem({ diagnostic, acknowledged, disabled, onAcknowledge }: ReferenceDiagnosticItemProps) {
+export function ReferenceDiagnosticItem({ diagnostic }: ReferenceDiagnosticItemProps) {
   const message = referenceDiagnosticMessage(diagnostic);
   const details = [
     diagnostic.message !== message ? ["Исходное сообщение", diagnostic.message] : null,
@@ -175,15 +170,7 @@ export function ReferenceDiagnosticItem({ diagnostic, acknowledged, disabled, on
   ].filter((item): item is string[] => item !== null);
   return (
     <div className={`diagnostic ${diagnostic.severity}`}>
-      {diagnostic.severity === "warning" && (
-        <input
-          type="checkbox"
-          aria-label={`Подтвердить предупреждение: ${message}`}
-          checked={acknowledged}
-          onChange={(event) => onAcknowledge(event.target.checked)}
-          disabled={disabled}
-        />
-      )}
+      {diagnostic.severity === "warning" && <span className="diagnostic-mark" aria-hidden="true">!</span>}
       <div className="diagnostic-content">
         <strong>{diagnostic.severity === "warning" ? "Предупреждение" : "Ошибка"}: {message}</strong>
         <details className="diagnostic-details">
@@ -269,7 +256,6 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [active, setActive] = useState<ReferenceCatalogSnapshot | null | undefined>(undefined);
   const [activeError, setActiveError] = useState<string | null>(null);
   const [preview, setPreview] = useState<XlsxReferencePreview | null>(null);
-  const [acknowledgedWarnings, setAcknowledgedWarnings] = useState<ReadonlySet<string>>(new Set());
   const [previewStale, setPreviewStale] = useState(false);
   const [previewPublished, setPreviewPublished] = useState(false);
   const [busy, setBusy] = useState<"preview" | "publish" | "active" | null>(null);
@@ -379,7 +365,6 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
   const invalidatePreview = () => {
     setPreview(null);
-    setAcknowledgedWarnings(new Set());
     setPreviewStale(false);
     setPreviewPublished(false);
     setNotice(null);
@@ -441,6 +426,42 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     invalidatePreview();
   };
 
+  const publishValidatedPreview = async (candidate: XlsxReferencePreview) => {
+    if (!candidate.canPublish || !candidate.validationSha256) return false;
+    setBusy("publish");
+    try {
+      const publication = await api.publishXlsx(candidate.sourceId, {
+        previewId: candidate.previewId,
+        expectedValidationSha256: candidate.validationSha256,
+        expectedActiveSnapshotId: candidate.activeSnapshotId,
+        acknowledgedWarningIds: requiredWarningIds(candidate),
+      });
+      if (publication.snapshot.sourceId === activeSourceId) {
+        activeRequestRef.current += 1;
+        setActive(publication.snapshot);
+        setActiveError(null);
+      }
+      void loadSources(publication.snapshot.sourceId);
+      setPreviewPublished(true);
+      setNotice({
+        tone: "success",
+        text: publication.status === "unchanged"
+          ? "Данные совпадают с активной версией. Новая версия не создавалась."
+          : `Таблица опубликована: ${publication.snapshot.records.length} записей.`,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof ReferenceCatalogApiError && stalePreviewCodes.has(error.code ?? "")) {
+        setPreviewStale(true);
+        void loadActive(false);
+      }
+      setNotice({ tone: "error", text: errorText(error) });
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const submitPreview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (inputMode === "xlsx" && !file) {
@@ -457,7 +478,6 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     previewAbortRef.current = previewController;
     setBusy("preview");
     setNotice(null);
-    setAcknowledgedWarnings(new Set());
     setPreviewStale(false);
     setPreviewPublished(false);
     try {
@@ -513,9 +533,11 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       setPreview(result);
       setSheetOptions(result.sheets);
       setNow(Date.now());
-      setNotice(result.canPublish
-        ? { tone: "success", text: `Проверка завершена: подготовлено записей — ${result.recordCount}.` }
-        : { tone: "error", text: "Источник проверен, но содержит блокирующие ошибки. Активная версия не изменена." });
+      if (result.canPublish) {
+        await publishValidatedPreview(result);
+      } else {
+        setNotice({ tone: "error", text: "Источник проверен, но содержит блокирующие ошибки. Активная версия не изменена." });
+      }
     } catch (error) {
       if (isAbortError(error) || previewAbortRef.current !== previewController) return;
       setPreview(null);
@@ -534,142 +556,23 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     }
   };
 
-  const toggleWarning = (diagnosticId: string, checked: boolean) => {
-    setAcknowledgedWarnings((current) => {
-      const next = new Set(current);
-      if (checked) next.add(diagnosticId);
-      else next.delete(diagnosticId);
-      return next;
-    });
-  };
-
   const publishPreview = async () => {
-    if (!canPublishXlsxPreview(preview, acknowledgedWarnings, now, previewStale) || !preview?.validationSha256) return;
-    setBusy("publish");
-    setNotice(null);
-    try {
-      const publication = await api.publishXlsx(preview.sourceId, {
-        previewId: preview.previewId,
-        expectedValidationSha256: preview.validationSha256,
-        expectedActiveSnapshotId: preview.activeSnapshotId,
-        acknowledgedWarningIds: [...acknowledgedWarnings],
-      });
-      if (publication.snapshot.sourceId === activeSourceId) {
-        activeRequestRef.current += 1;
-        setActive(publication.snapshot);
-        setActiveError(null);
-      }
-      void loadSources(publication.snapshot.sourceId);
-      setPreviewPublished(true);
-      setNotice({
-        tone: "success",
-        text: publication.status === "unchanged"
-          ? "Данные совпадают с активной версией. Новая версия не создавалась."
-          : `Опубликована новая версия: ${publication.snapshot.records.length} записей.`,
-      });
-    } catch (error) {
-      if (error instanceof ReferenceCatalogApiError && stalePreviewCodes.has(error.code ?? "")) {
-        setPreviewStale(true);
-        void loadActive(false);
-      }
-      setNotice({ tone: "error", text: errorText(error) });
-    } finally {
-      setBusy(null);
-    }
+    if (!preview || !canPublishXlsxPreview(preview, new Set(), now, previewStale || previewPublished)) return;
+    await publishValidatedPreview(preview);
   };
 
   const warningIds = preview ? requiredWarningIds(preview) : [];
+  const blockingDiagnostics = preview?.diagnostics.filter((diagnostic) => diagnostic.severity === "error") ?? [];
   const expiresAt = preview ? Date.parse(preview.expiresUtc) : 0;
   const previewExpired = preview !== null && expiresAt <= now;
   const publishEnabled = canPublishXlsxPreview(
     preview,
-    acknowledgedWarnings,
+    new Set(),
     now,
     previewStale || previewPublished,
   );
 
-  return (
-    <div className="reference-workspace">
-      <div className="content-heading reference-heading">
-        <div>
-          <p className="eyebrow">ЛОКАЛЬНЫЕ ДАННЫЕ</p>
-          <h1>Справочники</h1>
-          <p>Загрузите нужную таблицу из рабочей книги. Настройки листа и столбцов применятся автоматически.</p>
-        </div>
-        <button className="secondary-action" type="button" onClick={() => void loadActive(true)} disabled={busy !== null}>
-          {busy === "active" ? "Обновление…" : "Обновить статус"}
-        </button>
-      </div>
-
-      {notice && (
-        <div className={`reference-notice ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
-          <span>{notice.text}</span>
-          <button type="button" aria-label="Закрыть сообщение" onClick={() => setNotice(null)}>×</button>
-        </div>
-      )}
-
-      <section className="reference-tables-workspace" aria-labelledby="active-reference-title">
-        <aside className="reference-source-sidebar" aria-label="Загруженные справочники">
-          <div><p className="eyebrow">ЗАГРУЖЕННЫЕ ТАБЛИЦЫ</p><h2 id="active-reference-title">Справочники</h2></div>
-          {sources === undefined && <p className="reference-state" role="status">Загружаем список…</p>}
-          {sourcesError && <p className="reference-state error">{sourcesError}</p>}
-          {sources?.length === 0 && <p className="reference-state empty">Загруженных таблиц пока нет.</p>}
-          <div className="reference-source-list">
-            {sources?.map((source) => <button
-              type="button"
-              key={source.sourceId}
-              className={source.sourceId === activeSourceId ? "selected" : ""}
-              aria-pressed={source.sourceId === activeSourceId}
-              disabled={busy !== null}
-              onClick={() => setEditableSourceId(source.sourceId)}
-            ><strong>{profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
-              <span>{source.sourceId}</span><em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
-          </div>
-          <form className="reference-new-source" onSubmit={(event) => {
-            event.preventDefault();
-            const sourceId = newSourceId.trim();
-            if (sourceId) setEditableSourceId(sourceId);
-          }}>
-            <label>Новая таблица<input value={newSourceId} onChange={(event) => setNewSourceId(event.target.value)} disabled={busy !== null} /></label>
-            <button type="submit" className="secondary-action" disabled={busy !== null || !newSourceId.trim()}>Создать</button>
-          </form>
-        </aside>
-        <div className="reference-table-main">
-          {!activeSourceId && <p className="reference-state empty">Выберите загруженный справочник слева или создайте новую таблицу.</p>}
-          {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
-          {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
-          {activeSourceId && !activeError && active !== undefined && <>
-            {active && <dl className="active-reference-facts">
-              <div><dt>Записей</dt><dd>{active.records.length}</dd></div>
-              <div><dt>Источник</dt><dd>{active.sourceUri ?? active.sourceKind}</dd></div>
-              <div><dt>Снимок создан</dt><dd>{formatDateTime(active.capturedUtc)}</dd></div>
-            </dl>}
-            <EditableReferenceTable
-              sourceId={activeSourceId}
-              snapshot={active}
-              disabled={busy !== null}
-              onSave={async (request) => {
-                setBusy("publish");
-                try {
-                  const publication = await api.publishEditableTable(activeSourceId, request);
-                  setActive(publication.snapshot);
-                  await loadSources(publication.snapshot.sourceId);
-                  setNotice({ tone: "success", text: publication.status === "unchanged"
-                    ? "Изменений в справочнике нет."
-                    : `Справочник сохранён: ${publication.snapshot.records.length} записей.` });
-                } catch (error) {
-                  const message = errorText(error);
-                  setNotice({ tone: "error", text: message });
-                  throw new Error(message);
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            />
-          </>}
-        </div>
-      </section>
-
+  const importForm = (
       <form className="reference-import-card" onSubmit={submitPreview}>
         <div className="section-title-row reference-card-title">
           <div>
@@ -850,85 +753,111 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
                 : manualMode ? "Проверить универсальный импорт"
                   : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
           </button>
-          <span>Публикация выполняется отдельным действием после проверки.</span>
+          <span>После успешной проверки таблица публикуется автоматически.</span>
         </div>
       </form>
+  );
 
-      {!preview && (
-        <section className="reference-preview-card preview-empty" aria-label="Предварительный просмотр">
-          <strong>Сначала проверьте файл или источник</strong>
-          <span>Здесь появятся строки, сопоставленные поля и адресные сообщения проверки.</span>
-        </section>
+  return (
+    <div className="reference-workspace">
+      <div className="content-heading reference-heading">
+        <div>
+          <p className="eyebrow">ЛОКАЛЬНЫЕ ДАННЫЕ</p>
+          <h1>Справочники</h1>
+          <p>Загрузите нужную таблицу из рабочей книги. Настройки листа и столбцов применятся автоматически.</p>
+        </div>
+        <button className="secondary-action" type="button" onClick={() => void loadActive(true)} disabled={busy !== null}>
+          {busy === "active" ? "Обновление…" : "Обновить статус"}
+        </button>
+      </div>
+
+      {notice && (
+        <div className={`reference-notice ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
+          <span>{notice.text}</span>
+          <button type="button" aria-label="Закрыть сообщение" onClick={() => setNotice(null)}>×</button>
+        </div>
       )}
 
-      {preview && (
-        <section className="reference-preview-card" aria-labelledby="reference-preview-title">
-          <div className="section-title-row reference-card-title">
-            <div>
-              <p className="eyebrow">ШАГ 2</p>
-              <h2 id="reference-preview-title">Предварительный просмотр</h2>
-            </div>
-            <span className={`preview-status ${preview.canPublish && !previewStale && !previewExpired ? "ready" : "blocked"}`}>
-              {previewPublished ? "Опубликовано" : previewStale ? "Нужна повторная проверка" : previewExpired ? "Просмотр истёк" : preview.canPublish ? "Готово к публикации" : "Есть ошибки"}
-            </span>
+      <section className="reference-tables-workspace" aria-labelledby="active-reference-title">
+        <aside className="reference-source-sidebar" aria-label="Загруженные справочники">
+          <div><p className="eyebrow">ЗАГРУЖЕННЫЕ ТАБЛИЦЫ</p><h2 id="active-reference-title">Справочники</h2></div>
+          {sources === undefined && <p className="reference-state" role="status">Загружаем список…</p>}
+          {sourcesError && <p className="reference-state error">{sourcesError}</p>}
+          {sources?.length === 0 && <p className="reference-state empty">Загруженных таблиц пока нет.</p>}
+          <div className="reference-source-list">
+            {sources?.map((source) => <button
+              type="button"
+              key={source.sourceId}
+              className={source.sourceId === activeSourceId ? "selected" : ""}
+              aria-pressed={source.sourceId === activeSourceId}
+              disabled={busy !== null}
+              onClick={() => setEditableSourceId(source.sourceId)}
+            ><strong>{profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
+              <span>{source.sourceId}</span><em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
           </div>
-
-          <dl className="preview-facts">
-            <div><dt>Лист</dt><dd>{preview.selectedSheet}</dd></div>
-            <div><dt>Строк в источнике</dt><dd>{preview.sourceRowCount}</dd></div>
-            <div><dt>Записей</dt><dd>{preview.recordCount}</dd></div>
-            <div><dt>Действует до</dt><dd>{formatDateTime(preview.expiresUtc)}</dd></div>
-          </dl>
-
-          {preview.isTruncated && <p className="preview-limit" role="note">Показаны первые 100 записей. При публикации будет сохранён весь проверенный набор.</p>}
-
-          {preview.diagnostics.length > 0 ? (
-            <div className="diagnostics" aria-label="Результаты проверки">
-              <h3>Диагностика · {preview.diagnostics.length}</h3>
-              {preview.diagnostics.map((diagnostic) => (
-                <ReferenceDiagnosticItem
-                  key={diagnostic.diagnosticId}
-                  diagnostic={diagnostic}
-                  acknowledged={acknowledgedWarnings.has(diagnostic.diagnosticId)}
-                  disabled={busy !== null || previewStale || previewExpired}
-                  onAcknowledge={(checked) => toggleWarning(diagnostic.diagnosticId, checked)}
-                />
-              ))}
+          <form className="reference-new-source" onSubmit={(event) => {
+            event.preventDefault();
+            const sourceId = newSourceId.trim();
+            if (sourceId) setEditableSourceId(sourceId);
+          }}>
+            <label>Новая таблица<input value={newSourceId} onChange={(event) => setNewSourceId(event.target.value)} disabled={busy !== null} /></label>
+            <button type="submit" className="secondary-action" disabled={busy !== null || !newSourceId.trim()}>Создать</button>
+          </form>
+          <div className="reference-sidebar-divider" />
+          {importForm}
+          <section className="reference-validation-log" aria-labelledby="reference-errors-title">
+            <div className="reference-validation-heading">
+              <strong id="reference-errors-title">Ошибки</strong>
+              <span>{blockingDiagnostics.length}</span>
             </div>
-          ) : (
-            <p className="validation-ok">Ошибок и предупреждений не найдено.</p>
-          )}
-
-          {preview.records.length > 0 && (
-            <div className="preview-table-scroll">
-              <table className="preview-table">
-                <thead><tr><th>Строка</th><th>Ключ</th>{preview.columns.map((column) => <th key={column.targetProperty}>{column.targetProperty}</th>)}</tr></thead>
-                <tbody>
-                  {preview.records.map((record) => (
-                    <tr key={`${record.rowNumber}-${record.sourceKey}`}>
-                      <td>{record.rowNumber}</td>
-                      <td><strong>{record.sourceKey}</strong></td>
-                      {preview.columns.map((column) => <td key={column.targetProperty}>{formatCell(record.payload[column.targetProperty])}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="publication-bar">
-            <div>
-              <strong>Опубликовать проверенную версию</strong>
-              <span>{warningIds.length > 0
-                ? `Подтверждено предупреждений: ${acknowledgedWarnings.size} из ${warningIds.length}`
-                : "Активная версия изменится только после нажатия кнопки."}</span>
-            </div>
-            <button className="primary-action" type="button" onClick={() => void publishPreview()} disabled={!publishEnabled || busy !== null}>
-              {busy === "publish" ? "Публикуем…" : "Опубликовать"}
-            </button>
-          </div>
-        </section>
-      )}
+            {preview === null
+              ? <p className="reference-state">Здесь появятся блокирующие ошибки проверки.</p>
+              : blockingDiagnostics.length > 0
+              ? <div className="diagnostics" aria-label="Блокирующие ошибки">
+                  {blockingDiagnostics.map((diagnostic) => <ReferenceDiagnosticItem key={diagnostic.diagnosticId} diagnostic={diagnostic} />)}
+                </div>
+              : <p className="validation-ok">Блокирующих ошибок нет.</p>}
+            {warningIds.length > 0 && <p className="reference-warning-summary">Предупреждений: {warningIds.length}. При успешной проверке они принимаются автоматически.</p>}
+            {preview !== null && preview.canPublish && !previewPublished && <button className="secondary-action" type="button" onClick={() => void publishPreview()} disabled={!publishEnabled || busy !== null}>
+              {busy === "publish" ? "Публикуем…" : "Повторить публикацию"}
+            </button>}
+          </section>
+        </aside>
+        <div className="reference-table-main">
+          {!activeSourceId && <p className="reference-state empty">Выберите загруженный справочник слева или создайте новую таблицу.</p>}
+          {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
+          {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
+          {activeSourceId && !activeError && active !== undefined && <>
+            {active && <dl className="active-reference-facts">
+              <div><dt>Записей</dt><dd>{active.records.length}</dd></div>
+              <div><dt>Источник</dt><dd>{active.sourceUri ?? active.sourceKind}</dd></div>
+              <div><dt>Снимок создан</dt><dd>{formatDateTime(active.capturedUtc)}</dd></div>
+            </dl>}
+            <EditableReferenceTable
+              sourceId={activeSourceId}
+              snapshot={active}
+              disabled={busy !== null}
+              onSave={async (request) => {
+                setBusy("publish");
+                try {
+                  const publication = await api.publishEditableTable(activeSourceId, request);
+                  setActive(publication.snapshot);
+                  await loadSources(publication.snapshot.sourceId);
+                  setNotice({ tone: "success", text: publication.status === "unchanged"
+                    ? "Изменений в справочнике нет."
+                    : `Справочник сохранён: ${publication.snapshot.records.length} записей.` });
+                } catch (error) {
+                  const message = errorText(error);
+                  setNotice({ tone: "error", text: message });
+                  throw new Error(message);
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            />
+          </>}
+        </div>
+      </section>
     </div>
   );
 }

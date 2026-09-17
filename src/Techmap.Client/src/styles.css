@@ -294,11 +294,11 @@ input::placeholder { color: #8795a3; }
   background: #fff;
   box-shadow: 0 8px 30px rgb(40 64 81 / 6%);
 }
-.editable-reference-card { margin-top: 18px; padding: 22px 24px; border: 1px solid #dce5ea; border-radius: 10px; background: #fff; box-shadow: 0 4px 16px rgb(34 61 77 / 6%); }
-.reference-tables-workspace { margin-top: 18px; display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }
-.reference-source-sidebar { position: sticky; top: 16px; padding: 18px; border: 1px solid #dce5ea; border-radius: 10px; background: #fff; box-shadow: 0 4px 16px rgb(34 61 77 / 6%); }
+.editable-reference-card { margin-top: 18px; padding: 14px 16px; border: 1px solid #dce5ea; border-radius: 10px; background: #fff; box-shadow: 0 4px 16px rgb(34 61 77 / 6%); }
+.reference-tables-workspace { margin-top: 18px; display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.reference-source-sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); padding: 16px; overflow: auto; border: 1px solid #dce5ea; border-radius: 10px; background: #fff; box-shadow: 0 4px 16px rgb(34 61 77 / 6%); }
 .reference-source-sidebar h2 { margin: 0; }
-.reference-source-list { margin-top: 14px; display: grid; gap: 7px; max-height: 520px; overflow: auto; }
+.reference-source-list { margin-top: 14px; display: grid; gap: 7px; max-height: 260px; overflow: auto; }
 .reference-source-list button { position: relative; display: grid; gap: 3px; padding: 10px 50px 10px 11px; border: 1px solid #d7e1e6; border-radius: 7px; background: #f9fbfc; color: #29445a; text-align: left; cursor: pointer; }
 .reference-source-list button:hover { border-color: #8cb8b1; background: #f2faf8; }
 .reference-source-list button.selected { border-color: #48aa99; background: #eaf8f5; box-shadow: inset 3px 0 #48aa99; }
@@ -316,14 +316,38 @@ input::placeholder { color: #8795a3; }
 .editable-reference-source input, .editable-reference-actions input, .editable-reference-table input { min-width: 0; padding: 7px 8px; border: 1px solid #cbd8df; border-radius: 5px; background: #fff; color: #29445a; font: inherit; }
 .editable-reference-actions { margin: 14px 0; display: flex; gap: 8px; align-items: center; }
 .editable-reference-actions > input { min-width: 240px; flex: 1; }
-.editable-reference-scroll { max-height: 520px; overflow: auto; border: 1px solid #dce5ea; border-radius: 8px; }
-.editable-reference-table { min-width: 100%; border-collapse: collapse; font-size: 11px; }
-.editable-reference-table th { position: sticky; top: 0; z-index: 1; min-width: 145px; padding: 6px; background: #edf3f6; vertical-align: top; }
-.editable-reference-table th:first-child, .editable-reference-table th:nth-child(2) { min-width: 150px; }
+.editable-reference-scroll { max-height: calc(100vh - 190px); overflow: auto; border: 1px solid #dce5ea; border-radius: 8px; }
+.editable-reference-table { min-width: 100%; border-collapse: collapse; font-size: 10px; }
+.editable-reference-table th { position: sticky; top: 0; z-index: 1; min-width: 110px; padding: 4px; background: #edf3f6; vertical-align: top; }
+.editable-reference-table th:first-child, .editable-reference-table th:nth-child(2) { min-width: 145px; }
 .editable-reference-table th > input { width: calc(100% - 28px); margin-bottom: 4px; display: block; }
 .editable-reference-table th > button, .editable-reference-table td:last-child button { width: 25px; height: 25px; border: 1px solid #e0c6c6; border-radius: 4px; background: #fff7f7; color: #9c4242; cursor: pointer; }
-.editable-reference-table td { padding: 5px 6px; border-top: 1px solid #e5ebef; vertical-align: top; }
-.editable-reference-table td input { width: 100%; min-width: 130px; }
+.editable-reference-table td { padding: 3px 4px; border-top: 1px solid #e5ebef; vertical-align: top; }
+.editable-reference-table td input { width: 100%; min-width: 105px; padding: 4px 6px; }
+.reference-sidebar-divider { margin: 16px 0; border-top: 1px solid #dce5ea; }
+.reference-source-sidebar .reference-import-card { margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+.reference-source-sidebar .reference-card-title { align-items: flex-start; padding-bottom: 10px; }
+.reference-source-sidebar .reference-card-title h2 { font-size: 15px; }
+.reference-source-sidebar .selected-file { max-width: 125px; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-source-sidebar .reference-source-switch { margin-top: 10px; padding: 9px; }
+.reference-source-sidebar .xlsx-format-guide, .reference-source-sidebar .google-sheets-guide { margin-top: 10px; padding: 9px 10px; font-size: 10px; }
+.reference-source-sidebar .xlsx-profile-section { margin-top: 10px; padding: 10px; }
+.reference-source-sidebar .xlsx-profile-picker { grid-template-columns: 1fr; gap: 8px; }
+.reference-source-sidebar .xlsx-profile-description { display: none; }
+.reference-source-sidebar .reference-form-grid { grid-template-columns: 1fr; gap: 8px; }
+.reference-source-sidebar .reference-form-actions { margin-top: 12px; align-items: stretch; flex-direction: column; }
+.reference-source-sidebar .reference-form-actions .primary-action { width: 100%; }
+.reference-source-sidebar .manual-import-details { margin-top: 10px; }
+.reference-source-sidebar .mapping-header { display: none; }
+.reference-source-sidebar .mapping-row, .reference-source-sidebar .mapping-policy { grid-template-columns: 1fr; }
+.reference-validation-log { margin-top: 14px; padding-top: 14px; border-top: 1px solid #dce5ea; }
+.reference-validation-heading { display: flex; align-items: center; justify-content: space-between; }
+.reference-validation-heading span { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: #f1e3e3; color: #8c3939; font-size: 10px; font-weight: 800; text-align: center; }
+.reference-validation-log .diagnostics { max-height: 190px; margin-top: 9px; }
+.reference-validation-log .diagnostic { padding: 8px; }
+.reference-validation-log .secondary-action { width: 100%; margin-top: 9px; }
+.reference-warning-summary { margin: 9px 0 0; color: #805f28; font-size: 10px; line-height: 1.4; }
+.diagnostic-mark { display: inline-grid; width: 16px; height: 16px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #efd49f; font-size: 10px; font-weight: 900; }
 .reference-notice { margin-top: 18px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #c8dce7; border-left: 4px solid #2b7fa9; border-radius: 8px; background: #f1f8fb; color: #365d72; font-size: 13px; }
 .reference-notice.success { border-color: #b9dfcc; border-left-color: #2f8a63; background: #eff9f4; color: #276b50; }
 .reference-notice.error { border-color: #e6b9b9; border-left-color: #b53a3a; background: #fff6f6; color: #772c2c; }
