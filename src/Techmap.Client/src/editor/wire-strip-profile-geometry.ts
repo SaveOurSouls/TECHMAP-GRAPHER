@@ -37,7 +37,8 @@ const geometryEpsilon = 1e-9;
 /** Below this length the stepped symbol cannot remain legible. */
 export const wireStripProfileMinimumSegmentLength = 8;
 export const wireStripProfileMaximumLength = 72;
-export const wireStripProfileSegmentFraction = 0.7;
+/** Keeps two end profiles on one straight segment from overlapping. */
+export const wireStripProfileSegmentFraction = 0.4;
 export const wireStripProfileMaximumDiameter = 14;
 
 export function buildWireStripProfileGeometry(

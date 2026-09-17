@@ -34,14 +34,14 @@ describe("wire strip profile geometry", () => {
       direction: { x: 1, y: 0 },
       normal: { x: -0, y: 1 },
     });
-    expect(geometry?.totalLength).toBeCloseTo(63);
+    expect(geometry?.totalLength).toBeCloseTo(36);
     expect(geometry?.primitives.map((primitive) => primitive.centerline)).toEqual([
-      [{ x: 10, y: 20 }, { x: 35.2, y: 20 }],
-      [{ x: 35.2, y: 20 }, { x: 47.8, y: 20 }],
-      [{ x: 47.8, y: 20 }, { x: 73, y: 20 }],
+      [{ x: 10, y: 20 }, { x: 24.4, y: 20 }],
+      [{ x: 24.4, y: 20 }, { x: 31.6, y: 20 }],
+      [{ x: 31.6, y: 20 }, { x: 46, y: 20 }],
     ]);
     expect(geometry?.primitives[1]?.polygon).toEqual([
-      { x: 35.2, y: 24.2 }, { x: 47.8, y: 24.2 }, { x: 47.8, y: 15.8 }, { x: 35.2, y: 15.8 },
+      { x: 24.4, y: 24.2 }, { x: 31.6, y: 24.2 }, { x: 31.6, y: 15.8 }, { x: 24.4, y: 15.8 },
     ]);
     expect(geometry?.primitives[2]?.polygon[0].y! - geometry?.primitives[2]?.polygon[3].y!).toBe(wireStripProfileMaximumDiameter);
     expect(points).toEqual([{ x: 10, y: 20 }, { x: 100, y: 20 }]);
@@ -56,7 +56,7 @@ describe("wire strip profile geometry", () => {
 
     expect(geometry).toMatchObject({ direction: { x: 0, y: -1 }, normal: { x: 1, y: 0 } });
     expect(geometry?.primitives[0]?.polygon).toEqual([
-      { x: 31.4, y: 90 }, { x: 31.4, y: 70.4 }, { x: 28.6, y: 70.4 }, { x: 28.6, y: 90 },
+      { x: 31.4, y: 90 }, { x: 31.4, y: 78.8 }, { x: 28.6, y: 78.8 }, { x: 28.6, y: 90 },
     ]);
   });
 
@@ -74,10 +74,22 @@ describe("wire strip profile geometry", () => {
       normal: { x: -0, y: -1 },
     });
     expect(geometry?.primitives.map((primitive) => primitive.centerline)).toEqual([
-      [{ x: 100, y: 10 }, { x: 72, y: 10 }],
-      [{ x: 72, y: 10 }, { x: 58, y: 10 }],
-      [{ x: 58, y: 10 }, { x: 30, y: 10 }],
+      [{ x: 100, y: 10 }, { x: 84, y: 10 }],
+      [{ x: 84, y: 10 }, { x: 76, y: 10 }],
+      [{ x: 76, y: 10 }, { x: 60, y: 10 }],
     ]);
+  });
+
+  it("keeps profiles at both ends of one segment from overlapping", () => {
+    const points = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
+    const from = buildWireStripProfileGeometry(points, "from", profile)!;
+    const to = buildWireStripProfileGeometry(points, "to", profile)!;
+    const fromInnerEdge = from.primitives.at(-1)!.centerline[1].x;
+    const toInnerEdge = to.primitives.at(-1)!.centerline[1].x;
+
+    expect(from.totalLength + to.totalLength).toBeLessThanOrEqual(100 * 0.8);
+    expect(fromInnerEdge).toBeLessThan(toInnerEdge);
+    expect([fromInnerEdge, toInnerEdge]).toEqual([40, 60]);
   });
 
   it("uses only the endpoint segment of a bent route", () => {
@@ -88,7 +100,7 @@ describe("wire strip profile geometry", () => {
     );
 
     expect(geometry?.direction).toEqual({ x: 1, y: 0 });
-    expect(geometry?.primitives.at(-1)?.centerline[1]).toEqual({ x: 56, y: 0 });
+    expect(geometry?.primitives.at(-1)?.centerline[1]).toEqual({ x: 32, y: 0 });
   });
 
   it("preserves gapped layer indices while deriving adjacent axial steps", () => {
@@ -108,9 +120,9 @@ describe("wire strip profile geometry", () => {
       step: primitive.stepLengthMm,
       line: primitive.centerline,
     }))).toEqual([
-      { index: 1, step: 2, line: [{ x: 0, y: 0 }, { x: 3.111111111, y: 0 }] },
-      { index: 3, step: 4, line: [{ x: 3.111111111, y: 0 }, { x: 9.333333333, y: 0 }] },
-      { index: 7, step: 3, line: [{ x: 9.333333333, y: 0 }, { x: 14, y: 0 }] },
+      { index: 1, step: 2, line: [{ x: 0, y: 0 }, { x: 1.777777778, y: 0 }] },
+      { index: 3, step: 4, line: [{ x: 1.777777778, y: 0 }, { x: 5.333333333, y: 0 }] },
+      { index: 7, step: 3, line: [{ x: 5.333333333, y: 0 }, { x: 8, y: 0 }] },
     ]);
   });
 
@@ -129,9 +141,9 @@ describe("wire strip profile geometry", () => {
     })) };
     const geometry = buildWireStripProfileGeometry([{ x: 0, y: 0 }, { x: 40, y: 0 }], "from", longProfile);
 
-    expect(geometry?.totalLength).toBe(28);
+    expect(geometry?.totalLength).toBe(16);
     expect(geometry?.primitives.at(-1)?.cumulativeLengthMm).toBe(5_000);
-    expect(geometry?.primitives.at(-1)?.centerline[1]).toEqual({ x: 28, y: 0 });
+    expect(geometry?.primitives.at(-1)?.centerline[1]).toEqual({ x: 16, y: 0 });
   });
 
   it("caps a long endpoint segment to a readable visual length", () => {
