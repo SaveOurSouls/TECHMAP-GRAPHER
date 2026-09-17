@@ -771,6 +771,8 @@ export function HarnessDesignEditor({
     if (editingObjectId && (view !== "e4" || editingObjectId !== selectedObjectId)) setEditingObjectId(null);
   }, [editingObjectId, selectedObjectId, view]);
 
+  useEffect(() => setActiveWireStripEnd("from"), [selectedObjectId]);
+
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
     if (!movePreview) return { document: history.present, error: null };

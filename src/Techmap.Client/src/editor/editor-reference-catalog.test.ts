@@ -202,4 +202,19 @@ describe("editor reference catalog", () => {
     expect(candidate.binding).toBeNull();
     expect(candidate.diagnostics).toEqual([expect.objectContaining({ code: "snapshot-identity-missing" })]);
   });
+
+  it.each([
+    [{ index: 1, diameterMm: 2, stripLengthMm: 2.5 }, { index: 2, diameterMm: 1, stripLengthMm: 7.5 }],
+    [{ index: 1, diameterMm: 1, stripLengthMm: 7.5 }, { index: 2, diameterMm: 2, stripLengthMm: 2.5 }],
+    [{ index: 1, diameterMm: 1, stripLengthMm: 2.5001 }],
+  ])("does not advertise a structurally invalid profile as ready", (...layers) => {
+    const candidate = normalizeCoaxTerminationCatalogCandidate(
+      "technology-coax-terminations",
+      record("coax-termination", "invalid-profile", { layers }),
+      { snapshotId: "00000000-0000-4000-8000-000000000099", snapshotSha256: "b".repeat(64) },
+    );
+    expect(candidate.state).toBe("incomplete");
+    expect(candidate.binding).toBeNull();
+    expect(candidate.diagnostics).toContainEqual(expect.objectContaining({ code: "layer-invalid" }));
+  });
 });

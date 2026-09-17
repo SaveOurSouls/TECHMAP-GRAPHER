@@ -11,6 +11,7 @@ import {
   type ComponentTemplateSummary,
 } from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
+import { normalizeWireStripProfileBinding } from "./model";
 import type {
   CoaxTerminationCatalogCandidate,
   CoaxTerminationCatalogDiagnostic,
@@ -202,7 +203,7 @@ export function normalizeCoaxTerminationCatalogCandidate(
     message: "Для привязки требуется точная версия опубликованного справочника.",
   });
 
-  const binding = diagnostics.length === 0 && snapshot ? {
+  let binding = diagnostics.length === 0 && snapshot ? {
     sourceId,
     snapshotId: snapshot.snapshotId,
     snapshotSha256: snapshot.snapshotSha256,
@@ -215,6 +216,17 @@ export function normalizeCoaxTerminationCatalogCandidate(
       stripLengthMm: layer.stripLengthMm!,
     })),
   } : null;
+  if (binding) {
+    try {
+      normalizeWireStripProfileBinding({ ...binding, displayName: record.sourceKey });
+    } catch (error) {
+      diagnostics.push({
+        code: "layer-invalid",
+        message: error instanceof Error ? error.message : "Профиль разделки имеет неверные значения.",
+      });
+      binding = null;
+    }
+  }
   return { state: binding ? "ready" : "incomplete", layers, diagnostics, binding };
 }
 
