@@ -48,6 +48,7 @@ import {
   type TemplateContentV2,
   type TemplateNodeV2,
   type TemplateViewV2,
+  type TransformV2,
 } from "./template-model-v2";
 import {
   TEMPLATE_V3_LIMITS,
@@ -1004,4 +1005,196 @@ export function reorderNodeV3(
   toIndex: number,
 ): TemplateContentV3 {
   return runCore(content, "invalid_node", core => reorderNodeV2(core, viewId, layerId, nodeId, toIndex));
+}
+
+type GroupNodeV3 = Extract<TemplateNodeV3, { kind: "group" }>;
+type RootOrderDirectionV3 = "forward" | "backward";
+
+const identityTransformV3 = (): TransformV2 => ({
+  translateX: constantExpressionV3(0), translateY: constantExpressionV3(0),
+  rotationDegrees: constantExpressionV3(0), scaleX: constantExpressionV3(1), scaleY: constantExpressionV3(1),
+});
+
+function requireLayerForTreeCommand(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+): { view: TemplateViewV3; layer: TemplateViewV3["layers"][number] } {
+  requireValidInput(content);
+  const view = requireView(content, viewId);
+  const layer = view.layers.find(candidate => candidate.id === layerId);
+  if (!layer) throw new TemplateCommandV3Error("layer_not_found", "Слой не найден.");
+  if (layer.locked) throw new TemplateCommandV3Error("layer_locked", "Слой заблокирован.");
+  return { view, layer };
+}
+
+function ownedNodeIds(nodes: readonly TemplateNodeV3[]): Set<string> {
+  return new Set(nodes.flatMap(node => node.kind === "group" ? node.geometry.childIds : []));
+}
+
+function requireRootNode(
+  layer: TemplateViewV3["layers"][number],
+  ownedIds: ReadonlySet<string>,
+  nodeId: string,
+): TemplateNodeV3 {
+  const node = layer.nodes.find(candidate => candidate.id === nodeId);
+  if (!node) throw new TemplateCommandV3Error("node_not_found", "Объект не найден.");
+  if (ownedIds.has(node.id))
+    throw new TemplateCommandV3Error("node_not_root", "Команда доступна только для объектов верхнего уровня.");
+  if (node.locked) throw new TemplateCommandV3Error("node_locked", "Объект заблокирован.");
+  return node;
+}
+
+/** Wraps two or more distinct root nodes in an identity group without changing their appearance. */
+export function groupRootNodesV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeIds: readonly string[],
+): [TemplateContentV3, string] {
+  const { view, layer } = requireLayerForTreeCommand(content, viewId, layerId);
+  if (nodeIds.length < 2)
+    throw new TemplateCommandV3Error("group_selection", "Для группировки выберите не меньше двух объектов.");
+  const selectedIds = new Set(nodeIds);
+  if (selectedIds.size !== nodeIds.length)
+    throw new TemplateCommandV3Error("duplicate_node", "Один объект выбран для группировки несколько раз.");
+  if (layer.nodes.length >= TEMPLATE_V3_LIMITS.nodes)
+    throw new TemplateCommandV3Error("node_limit", "Достигнут лимит объектов шаблона.");
+  const ownedIds = ownedNodeIds(layer.nodes);
+  const selected = nodeIds.map(id => requireRootNode(layer, ownedIds, id));
+  const repeatedGroups = new Set(view.repeatPlacements.map(placement => placement.prototypeGroupId));
+  if (selected.some(node => repeatedGroups.has(node.id)))
+    throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя вложить в обычную группу.");
+
+  const childIds = layer.nodes.filter(node => selectedIds.has(node.id)).map(node => node.id);
+  const insertionIndex = Math.max(...childIds.map(id => layer.nodes.findIndex(node => node.id === id))) + 1;
+  const groupId = crypto.randomUUID();
+  const group: GroupNodeV3 = {
+    id: groupId, kind: "group", layerId: layer.id, visible: true, locked: false, opacity: 1,
+    transform: identityTransformV3(),
+    stroke: { color: "#27445a", width: constantExpressionV3(2), dash: "solid" },
+    fill: { color: null }, geometry: { childIds },
+  };
+  const nodes = [...layer.nodes];
+  nodes.splice(insertionIndex, 0, group);
+  const result = replaceView(content, {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),
+  });
+  return [requireValidResult(result, "invalid_group"), groupId];
+}
+
+interface MatrixV3 { a: number; b: number; c: number; d: number; e: number; f: number }
+
+function constantTransformMatrix(transform: TransformV2): MatrixV3 {
+  const read = (value: TransformV2[keyof TransformV2]): number => {
+    if (value.kind !== "constant")
+      throw new TemplateCommandV3Error("non_constant_transform", "Параметризованное преобразование нельзя безопасно разгруппировать.");
+    return value.value;
+  };
+  const tx = read(transform.translateX), ty = read(transform.translateY);
+  const rotation = read(transform.rotationDegrees) * Math.PI / 180;
+  const sx = read(transform.scaleX), sy = read(transform.scaleY);
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  return { a: cos * sx, b: sin * sx, c: -sin * sy, d: cos * sy, e: tx, f: ty };
+}
+
+function multiplyMatrices(left: MatrixV3, right: MatrixV3): MatrixV3 {
+  return {
+    a: left.a * right.a + left.c * right.b,
+    b: left.b * right.a + left.d * right.b,
+    c: left.a * right.c + left.c * right.d,
+    d: left.b * right.c + left.d * right.d,
+    e: left.a * right.e + left.c * right.f + left.e,
+    f: left.b * right.e + left.d * right.f + left.f,
+  };
+}
+
+function matrixToTransform(matrix: MatrixV3): TransformV2 {
+  const scaleX = Math.hypot(matrix.a, matrix.b);
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  if (scaleX < 1e-12 || Math.abs(determinant) < 1e-12)
+    throw new TemplateCommandV3Error("non_decomposable_transform", "Вырожденное преобразование нельзя безопасно разгруппировать.");
+  const scaleY = determinant / scaleX;
+  const rotation = Math.atan2(matrix.b, matrix.a);
+  const expectedC = -Math.sin(rotation) * scaleY;
+  const expectedD = Math.cos(rotation) * scaleY;
+  const tolerance = 1e-8 * Math.max(1, Math.abs(matrix.c), Math.abs(matrix.d));
+  if (Math.abs(matrix.c - expectedC) > tolerance || Math.abs(matrix.d - expectedD) > tolerance)
+    throw new TemplateCommandV3Error("non_decomposable_transform", "Композиция преобразований создаёт сдвиг (skew) и не может быть сохранена текущим форматом TRS.");
+  const values = [matrix.e, matrix.f, rotation * 180 / Math.PI, scaleX, scaleY];
+  if (values.some(value => !Number.isFinite(value) || Math.abs(value) > TEMPLATE_V2_LIMITS.coordinate))
+    throw new TemplateCommandV3Error("invalid_transform", "Результирующее преобразование выходит за допустимый диапазон.");
+  return {
+    translateX: constantExpressionV3(matrix.e), translateY: constantExpressionV3(matrix.f),
+    rotationDegrees: constantExpressionV3(rotation * 180 / Math.PI),
+    scaleX: constantExpressionV3(scaleX), scaleY: constantExpressionV3(scaleY),
+  };
+}
+
+/** Removes one root group and bakes its constant TRS and opacity into its direct children. */
+export function ungroupRootNodeV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  groupId: string,
+): TemplateContentV3 {
+  const { view, layer } = requireLayerForTreeCommand(content, viewId, layerId);
+  const ownedIds = ownedNodeIds(layer.nodes);
+  const node = requireRootNode(layer, ownedIds, groupId);
+  if (node.kind !== "group") throw new TemplateCommandV3Error("node_not_group", "Выбранный объект не является группой.");
+  if (view.repeatPlacements.some(placement => placement.prototypeGroupId === node.id))
+    throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя разгруппировать.");
+  const children = new Map(node.geometry.childIds.map(id => [id, layer.nodes.find(candidate => candidate.id === id)]));
+  if ([...children.values()].some(child => !child))
+    throw new TemplateCommandV3Error("missing_group_child", "Группа ссылается на отсутствующий объект.");
+  if ([...children.values()].some(child => child!.locked))
+    throw new TemplateCommandV3Error("node_locked", "Один из дочерних объектов заблокирован.");
+  const parentMatrix = constantTransformMatrix(node.transform);
+  const replacements = new Map(node.geometry.childIds.map(id => {
+    const child = children.get(id)!;
+    return [id, {
+      ...child,
+      visible: node.visible && child.visible,
+      opacity: node.opacity * child.opacity,
+      transform: matrixToTransform(multiplyMatrices(parentMatrix, constantTransformMatrix(child.transform))),
+    } satisfies TemplateNodeV3] as const;
+  }));
+  const groupIndex = layer.nodes.findIndex(candidate => candidate.id === node.id);
+  const removedBeforeGroup = layer.nodes.slice(0, groupIndex).filter(candidate => replacements.has(candidate.id)).length;
+  const insertionIndex = groupIndex - removedBeforeGroup;
+  const nodes = layer.nodes.filter(candidate => candidate.id !== node.id && !replacements.has(candidate.id));
+  nodes.splice(insertionIndex, 0, ...node.geometry.childIds.map(id => replacements.get(id)!));
+  return requireValidResult(replaceView(content, {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),
+  }), "invalid_ungroup");
+}
+
+/** Moves one root node by one root-level paint-order step, ignoring owned child storage entries. */
+export function reorderRootNodeStepV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  direction: RootOrderDirectionV3,
+): TemplateContentV3 {
+  const { view, layer } = requireLayerForTreeCommand(content, viewId, layerId);
+  if (direction !== "forward" && direction !== "backward")
+    throw new TemplateCommandV3Error("root_order_direction", "Неизвестное направление изменения порядка.");
+  const ownedIds = ownedNodeIds(layer.nodes);
+  requireRootNode(layer, ownedIds, nodeId);
+  const roots = layer.nodes.filter(node => !ownedIds.has(node.id));
+  const rootIndex = roots.findIndex(node => node.id === nodeId);
+  const adjacentIndex = rootIndex + (direction === "forward" ? 1 : -1);
+  if (adjacentIndex < 0 || adjacentIndex >= roots.length) return content;
+  const adjacentId = roots[adjacentIndex]!.id;
+  const leftIndex = layer.nodes.findIndex(node => node.id === nodeId);
+  const rightIndex = layer.nodes.findIndex(node => node.id === adjacentId);
+  const nodes = [...layer.nodes];
+  [nodes[leftIndex], nodes[rightIndex]] = [nodes[rightIndex]!, nodes[leftIndex]!];
+  return requireValidResult(replaceView(content, {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),
+  }), "invalid_root_order");
 }

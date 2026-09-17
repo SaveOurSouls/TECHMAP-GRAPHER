@@ -17,15 +17,18 @@ import {
   editLogicalContactV3,
   linkLogicalContactPointV3,
   insertNodePointV3,
+  groupRootNodesV3,
   moveNodePointV3,
   newTemplateContentV3,
   projectTemplateContentV3CoreToV2,
   removeArticleVariantContactGroupV3,
   removeArticleVariantV3,
+  reorderRootNodeStepV3,
   renameContactTypeGroupV3,
   setArticleVariantContactGroupV3,
   setRepeatCountV3,
   TemplateCommandV3Error,
+  ungroupRootNodeV3,
   upsertArticleVariantV3,
 } from "./template-commands-v3";
 import { validateTemplateContentV2 } from "./template-model-v2";
@@ -364,5 +367,76 @@ describe("template v3 immutable commands", () => {
     expect(() => moveNodePointV3(parameterized, view.id, layer.id, lineId, 0, 1, 1))
       .toThrowError(expect.objectContaining({ code: "non_constant_geometry" }));
     expect(withLine).toEqual(before);
+  });
+
+  it("groups distinct root nodes immutably and ungroups an identity group at the same paint position", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, middleId] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
+    const [three, lastId] = addBasicNodeV3(two, view.id, layer.id, "text");
+    const before = structuredClone(three);
+    const [grouped, groupId] = groupRootNodesV3(three, view.id, layer.id, [firstId, lastId]);
+    const groupedNodes = grouped.views[1]!.layers[0]!.nodes;
+    const group = groupedNodes.find(node => node.id === groupId)!;
+
+    expect(three).toEqual(before);
+    expect(group).toMatchObject({ kind: "group", geometry: { childIds: [firstId, lastId] } });
+    expect(groupedNodes.filter(node => node.id === middleId || node.id === groupId).map(node => node.id))
+      .toEqual([middleId, groupId]);
+
+    const ungrouped = ungroupRootNodeV3(grouped, view.id, layer.id, groupId);
+    expect(ungrouped.views[1]!.layers[0]!.nodes.map(node => node.id)).toEqual([middleId, firstId, lastId]);
+    expect(validateTemplateContentV3(ungrouped).valid).toBe(true);
+  });
+
+  it("bakes composable group TRS into children and rejects a composition that creates skew", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, secondId] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
+    const [grouped, groupId] = groupRootNodesV3(two, view.id, layer.id, [firstId, secondId]);
+    const transformed = structuredClone(grouped);
+    const nodes = transformed.views[1]!.layers[0]!.nodes;
+    const group = nodes.find(node => node.id === groupId)!;
+    group.transform = {
+      translateX: constantExpressionV3(20), translateY: constantExpressionV3(30),
+      rotationDegrees: constantExpressionV3(90), scaleX: constantExpressionV3(2), scaleY: constantExpressionV3(2),
+    };
+    const first = nodes.find(node => node.id === firstId)!;
+    first.transform = {
+      ...first.transform,
+      translateX: constantExpressionV3(5), translateY: constantExpressionV3(7),
+    };
+    const ungrouped = ungroupRootNodeV3(transformed, view.id, layer.id, groupId);
+    const result = ungrouped.views[1]!.layers[0]!.nodes.find(node => node.id === firstId)!;
+    expect(result.transform.translateX).toEqual(constantExpressionV3(6));
+    expect(result.transform.translateY).toEqual(constantExpressionV3(40));
+    expect(result.transform.rotationDegrees).toMatchObject({ kind: "constant", value: 90 });
+    expect(result.transform.scaleX).toEqual(constantExpressionV3(2));
+    expect(result.transform.scaleY).toEqual(constantExpressionV3(2));
+
+    const skewed = structuredClone(grouped);
+    const skewNodes = skewed.views[1]!.layers[0]!.nodes;
+    skewNodes.find(node => node.id === groupId)!.transform.scaleX = constantExpressionV3(2);
+    skewNodes.find(node => node.id === firstId)!.transform.rotationDegrees = constantExpressionV3(45);
+    expect(() => ungroupRootNodeV3(skewed, view.id, layer.id, groupId))
+      .toThrowError(expect.objectContaining({ code: "non_decomposable_transform" }));
+  });
+
+  it("moves a root by one paint-order step without treating group children as roots", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, secondId] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
+    const [three, thirdId] = addBasicNodeV3(two, view.id, layer.id, "text");
+    const [grouped, groupId] = groupRootNodesV3(three, view.id, layer.id, [firstId, secondId]);
+    const moved = reorderRootNodeStepV3(grouped, view.id, layer.id, groupId, "forward");
+    const nodes = moved.views[1]!.layers[0]!.nodes;
+    const owned = new Set([firstId, secondId]);
+
+    expect(nodes.filter(node => !owned.has(node.id)).map(node => node.id)).toEqual([thirdId, groupId]);
+    expect((nodes.find(node => node.id === groupId)! as { geometry: { childIds: string[] } }).geometry.childIds)
+      .toEqual([firstId, secondId]);
+    expect(reorderRootNodeStepV3(moved, view.id, layer.id, groupId, "forward")).toBe(moved);
+    expect(() => reorderRootNodeStepV3(grouped, view.id, layer.id, firstId, "forward"))
+      .toThrowError(expect.objectContaining({ code: "node_not_root" }));
   });
 });
