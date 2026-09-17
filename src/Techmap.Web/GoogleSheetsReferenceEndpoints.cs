@@ -167,6 +167,15 @@ public static class GoogleSheetsReferenceEndpoints
                 "google_sheets_mapping_invalid",
                 error.Message);
         }
+        catch (Exception)
+        {
+            return FailedProfile(
+                profile,
+                0,
+                [],
+                "google_sheets_profile_sync_failed",
+                "Не удалось синхронизировать этот профиль справочника.");
+        }
     }
 
     private static GoogleSheetsSyncProfileResponse FailedProfile(
