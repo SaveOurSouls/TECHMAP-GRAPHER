@@ -1045,7 +1045,7 @@ function requireRootNode(
   return node;
 }
 
-/** Wraps two or more distinct root nodes in an identity group without changing their appearance. */
+/** Wraps two or more adjacent root nodes in an identity group without changing their paint order. */
 export function groupRootNodesV3(
   content: TemplateContentV3,
   viewId: string,
@@ -1062,6 +1062,17 @@ export function groupRootNodesV3(
     throw new TemplateCommandV3Error("node_limit", "Достигнут лимит объектов шаблона.");
   const ownedIds = ownedNodeIds(layer.nodes);
   const selected = nodeIds.map(id => requireRootNode(layer, ownedIds, id));
+  const roots = layer.nodes.filter(node => !ownedIds.has(node.id));
+  const selectedRootIndexes = roots
+    .map((node, index) => selectedIds.has(node.id) ? index : -1)
+    .filter(index => index >= 0);
+  const firstSelectedRoot = Math.min(...selectedRootIndexes);
+  const lastSelectedRoot = Math.max(...selectedRootIndexes);
+  if (lastSelectedRoot - firstSelectedRoot + 1 !== selectedRootIndexes.length)
+    throw new TemplateCommandV3Error(
+      "non_contiguous_group_selection",
+      "Группировать можно только соседние объекты, чтобы не изменить порядок отрисовки.",
+    );
   const repeatedGroups = new Set(view.repeatPlacements.map(placement => placement.prototypeGroupId));
   if (selected.some(node => repeatedGroups.has(node.id)))
     throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя вложить в обычную группу.");
@@ -1086,6 +1097,107 @@ export function groupRootNodesV3(
 
 interface MatrixV3 { a: number; b: number; c: number; d: number; e: number; f: number }
 
+interface BoundsV3 { minX: number; minY: number; maxX: number; maxY: number }
+
+function constantGeometryValue(expression: PointExpressionV2["x"]): number {
+  if (expression.kind !== "constant")
+    throw new TemplateCommandV3Error("non_constant_geometry", "Параметризованную геометрию нельзя безопасно повернуть.");
+  return expression.value;
+}
+
+function boundsFromPoints(points: readonly PointExpressionV2[]): BoundsV3 {
+  const evaluated = points.map(point => ({
+    x: constantGeometryValue(point.x),
+    y: constantGeometryValue(point.y),
+  }));
+  const xs = evaluated.map(point => point.x), ys = evaluated.map(point => point.y);
+  return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+}
+
+function unionBounds(bounds: readonly BoundsV3[]): BoundsV3 {
+  return {
+    minX: Math.min(...bounds.map(value => value.minX)),
+    minY: Math.min(...bounds.map(value => value.minY)),
+    maxX: Math.max(...bounds.map(value => value.maxX)),
+    maxY: Math.max(...bounds.map(value => value.maxY)),
+  };
+}
+
+function transformPoint(matrix: MatrixV3, x: number, y: number): { x: number; y: number } {
+  return { x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f };
+}
+
+function transformBounds(bounds: BoundsV3, matrix: MatrixV3): BoundsV3 {
+  const points = [
+    transformPoint(matrix, bounds.minX, bounds.minY),
+    transformPoint(matrix, bounds.maxX, bounds.minY),
+    transformPoint(matrix, bounds.maxX, bounds.maxY),
+    transformPoint(matrix, bounds.minX, bounds.maxY),
+  ];
+  return {
+    minX: Math.min(...points.map(point => point.x)), minY: Math.min(...points.map(point => point.y)),
+    maxX: Math.max(...points.map(point => point.x)), maxY: Math.max(...points.map(point => point.y)),
+  };
+}
+
+function localNodeBounds(
+  node: TemplateNodeV3,
+  nodesById: ReadonlyMap<string, TemplateNodeV3>,
+  visiting: Set<string>,
+): BoundsV3 {
+  if (node.kind === "group") {
+    if (visiting.has(node.id))
+      throw new TemplateCommandV3Error("group_cycle", "Циклическую группу нельзя повернуть.");
+    visiting.add(node.id);
+    const childBounds = node.geometry.childIds.map(id => {
+      const child = nodesById.get(id);
+      if (!child) throw new TemplateCommandV3Error("missing_group_child", "Группа ссылается на отсутствующий объект.");
+      const matrix = constantTransformMatrix(child.transform);
+      if (Math.abs(matrix.a * matrix.d - matrix.b * matrix.c) < 1e-12)
+        throw new TemplateCommandV3Error("degenerate_transform", "Вырожденное преобразование нельзя безопасно повернуть.");
+      return transformBounds(localNodeBounds(child, nodesById, visiting), matrix);
+    });
+    visiting.delete(node.id);
+    if (childBounds.length === 0)
+      throw new TemplateCommandV3Error("degenerate_geometry", "Пустую группу нельзя повернуть.");
+    return unionBounds(childBounds);
+  }
+  if (node.kind === "line" || node.kind === "polyline") {
+    constantGeometryValue(node.geometry.bendRadius);
+    return boundsFromPoints(node.geometry.points);
+  }
+  if (node.kind === "bezier" || node.kind === "closedContour")
+    return boundsFromPoints(node.geometry.points);
+  if (node.kind === "rectangle") {
+    const x = constantGeometryValue(node.geometry.x), y = constantGeometryValue(node.geometry.y);
+    const width = constantGeometryValue(node.geometry.width), height = constantGeometryValue(node.geometry.height);
+    node.geometry.cornerRadii.forEach(constantGeometryValue);
+    if (width <= 0 || height <= 0)
+      throw new TemplateCommandV3Error("degenerate_geometry", "Прямоугольник должен иметь положительные размеры.");
+    return { minX: x, minY: y, maxX: x + width, maxY: y + height };
+  }
+  if (node.kind === "ellipse") {
+    const centerX = constantGeometryValue(node.geometry.centerX), centerY = constantGeometryValue(node.geometry.centerY);
+    const radiusX = constantGeometryValue(node.geometry.radiusX), radiusY = constantGeometryValue(node.geometry.radiusY);
+    if (radiusX <= 0 || radiusY <= 0)
+      throw new TemplateCommandV3Error("degenerate_geometry", "Эллипс должен иметь положительные радиусы.");
+    return { minX: centerX - radiusX, minY: centerY - radiusY, maxX: centerX + radiusX, maxY: centerY + radiusY };
+  }
+  if (node.kind === "text") {
+    const x = constantGeometryValue(node.geometry.x), y = constantGeometryValue(node.geometry.y);
+    const fontSize = constantGeometryValue(node.geometry.fontSize);
+    if (fontSize <= 0)
+      throw new TemplateCommandV3Error("degenerate_geometry", "Текст должен иметь положительный размер шрифта.");
+    const width = node.geometry.text.length * fontSize * 0.6;
+    return { minX: x, minY: y - fontSize, maxX: x + width, maxY: y };
+  }
+  const x = constantGeometryValue(node.geometry.x), y = constantGeometryValue(node.geometry.y);
+  const width = constantGeometryValue(node.geometry.width), height = constantGeometryValue(node.geometry.height);
+  if (width <= 0 || height <= 0)
+    throw new TemplateCommandV3Error("degenerate_geometry", "Изображение должно иметь положительные размеры.");
+  return { minX: x, minY: y, maxX: x + width, maxY: y + height };
+}
+
 function constantTransformMatrix(transform: TransformV2): MatrixV3 {
   const read = (value: TransformV2[keyof TransformV2]): number => {
     if (value.kind !== "constant")
@@ -1108,6 +1220,54 @@ function multiplyMatrices(left: MatrixV3, right: MatrixV3): MatrixV3 {
     e: left.a * right.e + left.c * right.f + left.e,
     f: left.b * right.e + left.d * right.f + left.f,
   };
+}
+
+/** Sets an absolute rotation for one root node while preserving its world-space geometric center. */
+export function setRootNodeRotationAroundCenterV3(
+  content: TemplateContentV3,
+  viewId: string,
+  layerId: string,
+  nodeId: string,
+  rotationDegrees: number,
+): TemplateContentV3 {
+  if (!Number.isFinite(rotationDegrees) || Math.abs(rotationDegrees) > TEMPLATE_V2_LIMITS.coordinate)
+    throw new TemplateCommandV3Error("invalid_rotation", "Угол поворота должен быть конечным числом в допустимом диапазоне.");
+  const { view, layer } = requireLayerForTreeCommand(content, viewId, layerId);
+  const node = requireRootNode(layer, ownedNodeIds(layer.nodes), nodeId);
+  const currentMatrix = constantTransformMatrix(node.transform);
+  if (Math.abs(currentMatrix.a * currentMatrix.d - currentMatrix.b * currentMatrix.c) < 1e-12)
+    throw new TemplateCommandV3Error("degenerate_transform", "Вырожденное преобразование нельзя безопасно повернуть.");
+  const bounds = localNodeBounds(node, new Map(layer.nodes.map(candidate => [candidate.id, candidate])), new Set());
+  if (![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(Number.isFinite) ||
+      (Math.abs(bounds.maxX - bounds.minX) < 1e-12 && Math.abs(bounds.maxY - bounds.minY) < 1e-12))
+    throw new TemplateCommandV3Error("degenerate_geometry", "Вырожденную геометрию нельзя безопасно повернуть.");
+  if (node.transform.rotationDegrees.kind !== "constant" || node.transform.scaleX.kind !== "constant" ||
+      node.transform.scaleY.kind !== "constant" || node.transform.translateX.kind !== "constant" ||
+      node.transform.translateY.kind !== "constant")
+    throw new TemplateCommandV3Error("non_constant_transform", "Параметризованное преобразование нельзя безопасно повернуть.");
+  if (node.transform.rotationDegrees.value === rotationDegrees) return content;
+
+  const centerX = (bounds.minX + bounds.maxX) / 2, centerY = (bounds.minY + bounds.maxY) / 2;
+  const worldCenter = transformPoint(currentMatrix, centerX, centerY);
+  const radians = rotationDegrees * Math.PI / 180;
+  const scaledX = centerX * node.transform.scaleX.value, scaledY = centerY * node.transform.scaleY.value;
+  const translateX = worldCenter.x - (Math.cos(radians) * scaledX - Math.sin(radians) * scaledY);
+  const translateY = worldCenter.y - (Math.sin(radians) * scaledX + Math.cos(radians) * scaledY);
+  if (![translateX, translateY].every(value => Number.isFinite(value) && Math.abs(value) <= TEMPLATE_V2_LIMITS.coordinate))
+    throw new TemplateCommandV3Error("invalid_transform", "Поворот выводит объект за допустимый диапазон координат.");
+  const replacement: TemplateNodeV3 = { ...node, transform: {
+    ...node.transform,
+    translateX: constantExpressionV3(translateX),
+    translateY: constantExpressionV3(translateY),
+    rotationDegrees: constantExpressionV3(rotationDegrees),
+  } };
+  return requireValidResult(replaceView(content, {
+    ...view,
+    layers: view.layers.map(candidate => candidate.id === layer.id ? {
+      ...layer,
+      nodes: layer.nodes.map(candidate => candidate.id === node.id ? replacement : candidate),
+    } : candidate),
+  }), "invalid_rotation");
 }
 
 function matrixToTransform(matrix: MatrixV3): TransformV2 {
@@ -1145,14 +1305,21 @@ export function ungroupRootNodeV3(
   if (node.kind !== "group") throw new TemplateCommandV3Error("node_not_group", "Выбранный объект не является группой.");
   if (view.repeatPlacements.some(placement => placement.prototypeGroupId === node.id))
     throw new TemplateCommandV3Error("repeat_prototype_group", "Группу-прототип повтора нельзя разгруппировать.");
+  if (node.opacity !== 1)
+    throw new TemplateCommandV3Error(
+      "group_compositing",
+      "Группу с общей прозрачностью нельзя безопасно разгруппировать без изменения наложения фигур.",
+    );
+  const childIds = new Set(node.geometry.childIds);
+  const childrenInPaintOrder = layer.nodes.filter(candidate => childIds.has(candidate.id));
   const children = new Map(node.geometry.childIds.map(id => [id, layer.nodes.find(candidate => candidate.id === id)]));
   if ([...children.values()].some(child => !child))
     throw new TemplateCommandV3Error("missing_group_child", "Группа ссылается на отсутствующий объект.");
   if ([...children.values()].some(child => child!.locked))
     throw new TemplateCommandV3Error("node_locked", "Один из дочерних объектов заблокирован.");
   const parentMatrix = constantTransformMatrix(node.transform);
-  const replacements = new Map(node.geometry.childIds.map(id => {
-    const child = children.get(id)!;
+  const replacements = new Map(childrenInPaintOrder.map(child => {
+    const id = child.id;
     return [id, {
       ...child,
       visible: node.visible && child.visible,
@@ -1164,7 +1331,7 @@ export function ungroupRootNodeV3(
   const removedBeforeGroup = layer.nodes.slice(0, groupIndex).filter(candidate => replacements.has(candidate.id)).length;
   const insertionIndex = groupIndex - removedBeforeGroup;
   const nodes = layer.nodes.filter(candidate => candidate.id !== node.id && !replacements.has(candidate.id));
-  nodes.splice(insertionIndex, 0, ...node.geometry.childIds.map(id => replacements.get(id)!));
+  nodes.splice(insertionIndex, 0, ...childrenInPaintOrder.map(child => replacements.get(child.id)!));
   return requireValidResult(replaceView(content, {
     ...view,
     layers: view.layers.map(candidate => candidate.id === layer.id ? { ...layer, nodes } : candidate),

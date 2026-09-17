@@ -37,7 +37,7 @@ import {
   editContactPointV3 as editContactPointV2, editLogicalContactV3 as editLogicalContactV2,
   editNodeV3 as editNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2,
   moveNodeV3 as moveNodeV2, moveNodePointV3, insertNodePointV3, deleteNodePointV3,
-  groupRootNodesV3, ungroupRootNodeV3, reorderRootNodeStepV3,
+  groupRootNodesV3, ungroupRootNodeV3, reorderRootNodeStepV3, setRootNodeRotationAroundCenterV3,
   resizeNodeV3 as resizeNodeV2, newTemplateContentV3 as newTemplateContentV2,
   parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, projectTemplateContentV3CoreToV2,
   addArticleVariantsV3, removeArticleVariantContactGroupV3, removeArticleVariantV3, renameContactTypeGroupV3,
@@ -609,8 +609,8 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!id) { setSelectedIds([]); return; }
     const nodeLayer = activeView?.layers.find(layer => layer.nodes.some(node => node.id === id));
     const isNode = Boolean(nodeLayer);
-    if (!extend || !isNode) { setSelectedIds([id]); return; }
     if (activeView && nodeLayer) setActiveLayerIds(current => ({ ...current, [activeView.id]: nodeLayer.id }));
+    if (!extend || !isNode) { setSelectedIds([id]); return; }
     setSelectedIds(current => nextTemplateSelectionV2(
       current.every(candidate => nodeLayer!.nodes.some(node => node.id === candidate)) ? current : [], id, true,
     ));
@@ -629,6 +629,15 @@ export function ComponentLibrary({ config, session }: Props) {
   function reorderSelection(direction: "forward" | "backward") {
     if (!activeView || !activeLayer || selectedNodeIds.length !== 1) return;
     command(() => reorderRootNodeStepV3(draft.content, activeView.id, activeLayer.id, selectedNodeIds[0]!, direction));
+  }
+  function rotateSelection(rotationDegrees: number) {
+    if (!activeView || !activeLayer || selectedNodeIds.length !== 1) return;
+    command(
+      () => setRootNodeRotationAroundCenterV3(
+        draft.content, activeView.id, activeLayer.id, selectedNodeIds[0]!, rotationDegrees,
+      ),
+      selectedNodeIds[0]!,
+    );
   }
   function resizeCanvasNode(nodeId: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) {
     if (!activeView) return;
@@ -797,7 +806,8 @@ export function ComponentLibrary({ config, session }: Props) {
              {selectedBundlePort && activeView && <BundlePortProperties port={selectedBundlePort} edit={changes => command(() => editBundlePortV2(draft.content, activeView.id, selectedBundlePort.id, changes))} remove={() => command(() => deleteBundlePortV2(draft.content, activeView.id, selectedBundlePort.id), null)} />}
             {selectedIds.length === 1 && selected?.node && !editableNode && <><p className="readonly-note">Сложный или параметризованный объект доступен только для чтения. Его данные сохраняются без потерь.</p><label>Тип<input value={selected.node.kind} readOnly /></label></>}
             {editableNode && selected && <NodeProperties node={editableNode} disabled={selected.layer.locked || editableNode.locked} edit={changes => command(() => editNodeV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, changes))} move={(x, y) => command(() => setNodePosition(draft.content, activeView!.id, selected.layer.id, editableNode, x, y))} toggleLock={() => command(() => setNodeLockedV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, !editableNode.locked))} />}
-            {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked}>Удалить объект</button></>}
+            {selected && selectedNodeIds.length === 1 && selected.node.transform.rotationDegrees.kind === "constant" && <div className="rotation-control"><NumericField label="Поворот, °" value={selected.node.transform.rotationDegrees.value} step={15} disabled={selected.layer.locked || selected.node.locked} change={rotateSelection} /><div className="property-order"><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value - 90 : 0)}>−90°</button><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value + 90 : 0)}>+90°</button></div></div>}
+            {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" title={selected.node.kind === "group" ? "Сначала разгруппируйте объект" : undefined} onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked || selected.node.kind === "group"}>Удалить объект</button></>}
           </aside>
         </div>
       </section>

@@ -7,6 +7,7 @@ import {
   addContactTypeGroupV3,
   attachRepeatDomainV3,
   constantExpressionV3,
+  constantExpressionValueV3,
   createRepeatPrototypeV3,
   deleteNodePointV3,
   deleteBundlePortV3,
@@ -25,6 +26,7 @@ import {
   removeArticleVariantV3,
   reorderRootNodeStepV3,
   renameContactTypeGroupV3,
+  setRootNodeRotationAroundCenterV3,
   setArticleVariantContactGroupV3,
   setRepeatCountV3,
   TemplateCommandV3Error,
@@ -375,18 +377,28 @@ describe("template v3 immutable commands", () => {
     const [two, middleId] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
     const [three, lastId] = addBasicNodeV3(two, view.id, layer.id, "text");
     const before = structuredClone(three);
-    const [grouped, groupId] = groupRootNodesV3(three, view.id, layer.id, [firstId, lastId]);
+    const [grouped, groupId] = groupRootNodesV3(three, view.id, layer.id, [middleId, lastId]);
     const groupedNodes = grouped.views[1]!.layers[0]!.nodes;
     const group = groupedNodes.find(node => node.id === groupId)!;
 
     expect(three).toEqual(before);
-    expect(group).toMatchObject({ kind: "group", geometry: { childIds: [firstId, lastId] } });
-    expect(groupedNodes.filter(node => node.id === middleId || node.id === groupId).map(node => node.id))
-      .toEqual([middleId, groupId]);
+    expect(group).toMatchObject({ kind: "group", geometry: { childIds: [middleId, lastId] } });
+    expect(groupedNodes.filter(node => node.id === firstId || node.id === groupId).map(node => node.id))
+      .toEqual([firstId, groupId]);
 
     const ungrouped = ungroupRootNodeV3(grouped, view.id, layer.id, groupId);
-    expect(ungrouped.views[1]!.layers[0]!.nodes.map(node => node.id)).toEqual([middleId, firstId, lastId]);
+    expect(ungrouped.views[1]!.layers[0]!.nodes.map(node => node.id)).toEqual([firstId, middleId, lastId]);
     expect(validateTemplateContentV3(ungrouped).valid).toBe(true);
+  });
+
+  it("rejects a non-contiguous group selection to preserve paint order", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
+    const [three, lastId] = addBasicNodeV3(two, view.id, layer.id, "text");
+
+    expect(() => groupRootNodesV3(three, view.id, layer.id, [firstId, lastId]))
+      .toThrowError(expect.objectContaining({ code: "non_contiguous_group_selection" }));
   });
 
   it("bakes composable group TRS into children and rejects a composition that creates skew", () => {
@@ -420,6 +432,25 @@ describe("template v3 immutable commands", () => {
     skewNodes.find(node => node.id === firstId)!.transform.rotationDegrees = constantExpressionV3(45);
     expect(() => ungroupRootNodeV3(skewed, view.id, layer.id, groupId))
       .toThrowError(expect.objectContaining({ code: "non_decomposable_transform" }));
+
+    const translucent = structuredClone(grouped);
+    translucent.views[1]!.layers[0]!.nodes.find(node => node.id === groupId)!.opacity = 0.5;
+    expect(() => ungroupRootNodeV3(translucent, view.id, layer.id, groupId))
+      .toThrowError(expect.objectContaining({ code: "group_compositing" }));
+  });
+
+  it("uses stored paint order when imported group child ids have another order", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, secondId] = addBasicNodeV3(one, view.id, layer.id, "ellipse");
+    const [grouped, groupId] = groupRootNodesV3(two, view.id, layer.id, [firstId, secondId]);
+    const imported = structuredClone(grouped);
+    const group = imported.views[1]!.layers[0]!.nodes.find(node => node.id === groupId)!;
+    if (group.kind !== "group") throw new Error("Expected group.");
+    group.geometry.childIds = [secondId, firstId];
+
+    const ungrouped = ungroupRootNodeV3(imported, view.id, layer.id, groupId);
+    expect(ungrouped.views[1]!.layers[0]!.nodes.map(node => node.id)).toEqual([firstId, secondId]);
   });
 
   it("moves a root by one paint-order step without treating group children as roots", () => {
@@ -438,5 +469,76 @@ describe("template v3 immutable commands", () => {
     expect(reorderRootNodeStepV3(moved, view.id, layer.id, groupId, "forward")).toBe(moved);
     expect(() => reorderRootNodeStepV3(grouped, view.id, layer.id, firstId, "forward"))
       .toThrowError(expect.objectContaining({ code: "node_not_root" }));
+  });
+
+  it("rotates a root rectangle around its world-space geometric center", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [withRectangle, nodeId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const source = structuredClone(withRectangle);
+    const node = source.views[1]!.layers[0]!.nodes[0]!;
+    node.transform = {
+      translateX: constantExpressionV3(17), translateY: constantExpressionV3(-9),
+      rotationDegrees: constantExpressionV3(30), scaleX: constantExpressionV3(2), scaleY: constantExpressionV3(0.5),
+    };
+    const before = structuredClone(source);
+    const rotated = setRootNodeRotationAroundCenterV3(source, view.id, layer.id, nodeId, 90);
+    const result = rotated.views[1]!.layers[0]!.nodes[0]!;
+
+    expect(source).toEqual(before);
+    expect(result.transform.rotationDegrees).toEqual(constantExpressionV3(90));
+    expect(constantExpressionValueV3(result.transform.translateX)).toBeCloseTo(345.1986372867092, 10);
+    expect(constantExpressionValueV3(result.transform.translateY)).toBeCloseTo(-120.54328524455039, 10);
+    expect(setRootNodeRotationAroundCenterV3(rotated, view.id, layer.id, nodeId, 90)).toBe(rotated);
+  });
+
+  it("rotates a root group around bounds that include child transforms", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, secondId] = addBasicNodeV3(one, view.id, layer.id, "rectangle");
+    const positioned = structuredClone(two);
+    positioned.views[1]!.layers[0]!.nodes.find(node => node.id === secondId)!.transform.translateX = constantExpressionV3(200);
+    const [grouped, groupId] = groupRootNodesV3(positioned, view.id, layer.id, [firstId, secondId]);
+    const rotated = setRootNodeRotationAroundCenterV3(grouped, view.id, layer.id, groupId, 180);
+    const group = rotated.views[1]!.layers[0]!.nodes.find(node => node.id === groupId)!;
+
+    expect(group.transform.rotationDegrees).toEqual(constantExpressionV3(180));
+    expect(constantExpressionValueV3(group.transform.translateX)).toBeCloseTo(540, 10);
+    expect(constantExpressionValueV3(group.transform.translateY)).toBeCloseTo(270, 10);
+    expect(rotated.views[1]!.layers[0]!.nodes.find(node => node.id === firstId)!.transform)
+      .toEqual(grouped.views[1]!.layers[0]!.nodes.find(node => node.id === firstId)!.transform);
+  });
+
+  it("rejects non-root, locked, parameterized and degenerate rotation inputs", () => {
+    const initial = newTemplateContentV3(), view = initial.views[1]!, layer = view.layers[0]!;
+    const [one, firstId] = addBasicNodeV3(initial, view.id, layer.id, "rectangle");
+    const [two, secondId] = addBasicNodeV3(one, view.id, layer.id, "rectangle");
+    const [grouped] = groupRootNodesV3(two, view.id, layer.id, [firstId, secondId]);
+    expect(() => setRootNodeRotationAroundCenterV3(grouped, view.id, layer.id, firstId, 45))
+      .toThrowError(expect.objectContaining({ code: "node_not_root" }));
+
+    const locked = structuredClone(one);
+    locked.views[1]!.layers[0]!.nodes[0]!.locked = true;
+    expect(() => setRootNodeRotationAroundCenterV3(locked, view.id, layer.id, firstId, 45))
+      .toThrowError(expect.objectContaining({ code: "node_locked" }));
+
+    const parameterized = structuredClone(one);
+    const parameterId = crypto.randomUUID();
+    parameterized.parameters.push({ id: parameterId, name: "Угол", type: "number", unit: null,
+      defaultValue: 0, minimum: null, maximum: null, formula: null });
+    parameterized.views[1]!.layers[0]!.nodes[0]!.transform.rotationDegrees = { kind: "parameter", parameterId };
+    expect(() => setRootNodeRotationAroundCenterV3(parameterized, view.id, layer.id, firstId, 45))
+      .toThrowError(expect.objectContaining({ code: "non_constant_transform" }));
+
+    const degenerate = structuredClone(one);
+    degenerate.views[1]!.layers[0]!.nodes[0]!.transform.scaleX = constantExpressionV3(0);
+    expect(() => setRootNodeRotationAroundCenterV3(degenerate, view.id, layer.id, firstId, 45))
+      .toThrowError(expect.objectContaining({ code: "degenerate_transform" }));
+    const degenerateChild = structuredClone(grouped);
+    degenerateChild.views[1]!.layers[0]!.nodes.find(node => node.id === firstId)!.transform.scaleY = constantExpressionV3(0);
+    const groupId = degenerateChild.views[1]!.layers[0]!.nodes.find(node => node.kind === "group")!.id;
+    expect(() => setRootNodeRotationAroundCenterV3(degenerateChild, view.id, layer.id, groupId, 45))
+      .toThrowError(expect.objectContaining({ code: "degenerate_transform" }));
+    expect(() => setRootNodeRotationAroundCenterV3(one, view.id, layer.id, firstId, Number.NaN))
+      .toThrowError(expect.objectContaining({ code: "invalid_rotation" }));
   });
 });

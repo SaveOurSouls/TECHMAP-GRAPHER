@@ -273,6 +273,23 @@ describe("TemplateCanvasV2", () => {
     expect(markup.match(/data-resize-handle=/g)).toHaveLength(2);
   });
 
+  it("hides single-object editing handles while several roots are selected", () => {
+    const rectangle = node({
+      id: ids.rectangle,
+      kind: "rectangle",
+      geometry: { x: c(10), y: c(20), width: c(80), height: c(40), cornerRadii: [c(0), c(0), c(0), c(0)] },
+    });
+    const sibling = line(ids.line);
+    const markup = render(content([rectangle, sibling]), {
+      selectedId: ids.rectangle,
+      selectedIds: [ids.rectangle, ids.line],
+      onNodeResize: () => undefined,
+    });
+
+    expect(markup).not.toContain("data-resize-handle");
+    expect(markup.match(/data-selected="true"/g)).toHaveLength(2);
+  });
+
   it("shows editable handles for every constant line point and segment insertion hit targets", () => {
     const routed = node({
       id: ids.line,

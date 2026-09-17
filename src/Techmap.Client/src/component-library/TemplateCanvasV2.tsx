@@ -499,8 +499,10 @@ export function TemplateCanvasV2({
   const select = (event: ReactPointerEvent<SVGElement>, id: string, interactive = true) => {
     if (!interactive) return;
     event.stopPropagation();
-    if (onSelectionChange) onSelectionChange(id, event.ctrlKey || event.metaKey || event.shiftKey);
-    else onSelect(id);
+    const extend = event.ctrlKey || event.metaKey || event.shiftKey;
+    if (onSelectionChange) {
+      if (!(selectedIdSet.has(id) && !extend)) onSelectionChange(id, extend);
+    } else onSelect(id);
   };
 
   const selectFromKeyboard = (event: ReactKeyboardEvent<SVGElement>, id: string) => {
@@ -521,6 +523,7 @@ export function TemplateCanvasV2({
 
   const beginNodeGesture = (event: ReactPointerEvent<SVGElement>, id: string, selectable: boolean, movable: boolean) => {
     select(event, id, selectable);
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!movable || !onNodeMove) return;
     const start = pointFromEvent(event);
     const svg = event.currentTarget.ownerSVGElement;
@@ -968,7 +971,7 @@ export function TemplateCanvasV2({
   }
 
   function renderSelectionOverlay(): ReactNode {
-    if (!view || !selectedId) return null;
+    if (!view || !selectedId || selectedIdSet.size > 1) return null;
     const located = view.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
     if (!located || located.layer.locked || located.node.locked || !located.node.visible) return null;
     const node = located.node;
