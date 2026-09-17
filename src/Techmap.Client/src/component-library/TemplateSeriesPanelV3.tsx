@@ -351,7 +351,7 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
     <header><div><strong>Совместимые терминалы серии</strong><small>Этот список доступен в поле «Терминал» для всех строк Э4 серии.</small></div>
       <button type="button" disabled={!onChange} onClick={addTerminal}>+ Вручную</button></header>
     <div className="series-v3-terminal-reference-search">
-      <label>Найти в справочнике technology-terminals
+      <label>Найти терминал в активной базе <small>(technology-terminals)</small>
         <input type="search" value={terminalQuery} placeholder="Например, SXH-001T"
           onChange={event => onTerminalQueryChange?.(event.target.value)} />
       </label>

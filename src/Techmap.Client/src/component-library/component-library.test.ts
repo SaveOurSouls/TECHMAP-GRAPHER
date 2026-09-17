@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
-import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, shouldAutoSaveTemplate, terminalArticleInputs, terminalArticleSearchRequest, terminalCatalogLabel } from "./ComponentLibrary";
+import { ReferenceCatalogApiError, type ReferenceCatalogSearchPage } from "../reference-catalog-api";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, searchTerminalArticles, shouldAutoSaveTemplate, terminalArticleInputs, terminalArticleSearchRequest, terminalCatalogLabel } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
 import {
@@ -59,6 +60,40 @@ describe("component library UI", () => {
       { sourceId: "technology-terminals", entityType: "terminal", articleKey: "SXH-001T-P0.6" },
       { sourceId: "technology-terminals", entityType: "terminal", articleKey: "SXH-002T-P0.6" },
     ]);
+  });
+  it("falls back to the active combined database when the dedicated terminal snapshot is absent", async () => {
+    const record = {
+      recordId: crypto.randomUUID(), entityType: "terminal", sourceKey: "3:JST|18:SPH-002T-P0.5S|0:|3:PHR",
+      payload: { reelArticle: "SPH-002T-P0.5S" }, sourceLocation: null,
+    };
+    const page: ReferenceCatalogSearchPage = {
+      snapshotId: crypto.randomUUID(), snapshotSha256: "a".repeat(64), items: [record], nextCursor: null,
+    };
+    const sources: string[] = [];
+    const api = { searchCatalog: async (sourceId: string) => {
+      sources.push(sourceId);
+      if (sourceId === "technology-terminals")
+        throw new ReferenceCatalogApiError("missing", "catalog_active_snapshot_not_found");
+      return page;
+    } };
+
+    await expect(searchTerminalArticles(api, "SPH")).resolves.toEqual([{
+      sourceId: "technology-database", entityType: "terminal", articleKey: record.sourceKey,
+    }]);
+    expect(sources).toEqual(["technology-terminals", "technology-database"]);
+  });
+  it("shows a Russian empty-base message only when both terminal sources are absent", async () => {
+    const api = { searchCatalog: async () => {
+      throw new ReferenceCatalogApiError("missing", "catalog_active_snapshot_not_found");
+    } };
+    await expect(searchTerminalArticles(api, "SPH")).rejects.toThrow(
+      "Справочник терминалов не загружен. Загрузите и опубликуйте БД.ТЕР в разделе «Справочники».",
+    );
+
+    const unavailable = { searchCatalog: async () => {
+      throw new ReferenceCatalogApiError("offline", "server_unavailable");
+    } };
+    await expect(searchTerminalArticles(unavailable, "SPH")).rejects.toThrow("offline");
   });
   it("connects Ctrl+Z and Cmd+Z to template undo", () => {
     expect(isTemplateUndoShortcut({ ctrlKey: true, metaKey: false, key: "z" })).toBe(true);
@@ -117,7 +152,7 @@ describe("component library UI", () => {
     expect(markup).toContain("Загрузить PNG");
     expect(markup).toContain("Добавить слой");
     expect(markup).toContain("Записать версию");
-    expect(markup).toContain("Изменения сохранятся автоматически");
+    expect(markup).toContain("Изменено");
   });
 
   it("uses v3 article variants as the saved lookup index and imports legacy bindings once", () => {

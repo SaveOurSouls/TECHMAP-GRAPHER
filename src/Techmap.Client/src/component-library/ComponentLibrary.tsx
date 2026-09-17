@@ -3,6 +3,8 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import {
   createReferenceCatalogApi,
+  ReferenceCatalogApiError,
+  type ReferenceCatalogApi,
   type ReferenceCatalogSearchRecord,
   type ReferenceCatalogSearchRequest,
 } from "../reference-catalog-api";
@@ -215,14 +217,44 @@ export function terminalArticleSearchRequest(query: string): ReferenceCatalogSea
 
 export function terminalArticleInputs(
   records: readonly ReferenceCatalogSearchRecord[],
+  sourceId = TERMINAL_REFERENCE_SOURCE_V3,
 ): readonly ArticleBinding[] {
   const seen = new Set<string>();
   return records.flatMap(record => {
     const articleKey = record.sourceKey.trim();
     if (record.entityType !== TERMINAL_ARTICLE_ENTITY_V3 || !articleKey || seen.has(articleKey)) return [];
     seen.add(articleKey);
-    return [{ sourceId: TERMINAL_REFERENCE_SOURCE_V3, entityType: TERMINAL_ARTICLE_ENTITY_V3, articleKey }];
+    return [{ sourceId, entityType: TERMINAL_ARTICLE_ENTITY_V3, articleKey }];
   });
+}
+
+export const LEGACY_TERMINAL_REFERENCE_SOURCE = "technology-database";
+
+function missingSearchableSnapshot(error: unknown): boolean {
+  return error instanceof ReferenceCatalogApiError && error.code === "catalog_active_snapshot_not_found";
+}
+
+/** Searches the dedicated БД.ТЕР source and falls back to the legacy combined database. */
+export async function searchTerminalArticles(
+  api: Pick<ReferenceCatalogApi, "searchCatalog">,
+  query: string,
+  signal?: AbortSignal,
+): Promise<readonly ArticleBinding[]> {
+  const request = terminalArticleSearchRequest(query);
+  try {
+    const page = await api.searchCatalog(TERMINAL_REFERENCE_SOURCE_V3, request, signal);
+    return terminalArticleInputs(page.items, TERMINAL_REFERENCE_SOURCE_V3);
+  } catch (error) {
+    if (!missingSearchableSnapshot(error)) throw error;
+  }
+  try {
+    const page = await api.searchCatalog(LEGACY_TERMINAL_REFERENCE_SOURCE, request, signal);
+    return terminalArticleInputs(page.items, LEGACY_TERMINAL_REFERENCE_SOURCE);
+  } catch (error) {
+    if (missingSearchableSnapshot(error))
+      throw new Error("Справочник терминалов не загружен. Загрузите и опубликуйте БД.ТЕР в разделе «Справочники».");
+    throw error;
+  }
 }
 
 function compositeSourceKeyParts(value: string): readonly string[] | null {
@@ -448,9 +480,9 @@ export function ComponentLibrary({ config, session }: Props) {
     const timer = window.setTimeout(() => {
       setTerminalArticleSearchState("loading");
       setTerminalArticleSearchMessage(null);
-      void referenceApi.searchCatalog(TERMINAL_REFERENCE_SOURCE_V3, terminalArticleSearchRequest(query), controller.signal).then(page => {
+      void searchTerminalArticles(referenceApi, query, controller.signal).then(items => {
         if (controller.signal.aborted) return;
-        setTerminalArticleSuggestions(terminalArticleInputs(page.items));
+        setTerminalArticleSuggestions(items);
         setTerminalArticleSearchState("ready");
       }).catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -676,7 +708,7 @@ export function ComponentLibrary({ config, session }: Props) {
 
   function applySavedDraft(result: ComponentTemplateDraft) {
     setDraft(current => ({ ...current, templateId: result.templateId, version: result.baseVersion, draftRevision: result.draftRevision }));
-    setDirty(false); setAutoSaveFailed(false); setSaved(`Черновик сохранён · ревизия ${result.draftRevision}`); setError(null);
+    setDirty(false); setAutoSaveFailed(false); setSaved("Сохранено"); setError(null);
   }
 
   function applyPersisted(result: ComponentTemplate, resetUndo = false) {
@@ -694,7 +726,7 @@ export function ComponentLibrary({ config, session }: Props) {
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
-    setDirty(false); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved(`Сохранена версия ${result.version}`); setError(null);
+    setDirty(false); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved("Сохранено"); setError(null);
   }
   async function save() {
     if (!dirty && draft.draftRevision === 0) return;
@@ -854,10 +886,9 @@ export function ComponentLibrary({ config, session }: Props) {
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="Закрыть">×</button></div>}
     {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыта прежняя версия шаблона.</strong><span>Она преобразована только в памяти и будет сохранена как новая версия v3.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
     {!upgradedFromV1 && diagnostics.length > 0 && <div className="library-diagnostics" role="alert">{diagnostics.map(item => <span key={`${item.code}/${item.path}`}>{item.path}: {item.message}</span>)}</div>}
-    {saved && <div className="success-banner" role="status"><span>{saved}. Размещённые ранее экземпляры сохранят закреплённую версию.</span><button onClick={() => setSaved(null)} aria-label="Закрыть">×</button></div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
-      <section className="library-editor" aria-busy={busy} inert={busy}>
-        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span role="status">{busy ? "Сохраняем…" : autoSaveFailed ? "Не сохранено — исправьте ошибку или повторите" : dirty ? "Изменения сохранятся автоматически" : draft.draftRevision > 0 ? `Черновик сохранён · ревизия ${draft.draftRevision}` : `Версия ${draft.version} сохранена`}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
+      <section className="library-editor" aria-busy={busy}>
+        <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span className={autoSaveFailed ? "library-save-state error" : "library-save-state"} role="status">{busy ? "Сохранение…" : autoSaveFailed ? "Не сохранено" : dirty ? "Изменено" : saved ?? "Сохранено"}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
         <TemplateSeriesPanelV3
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}

@@ -12,6 +12,8 @@
 .library-metadata { padding: 15px 17px; display: grid; grid-template-columns: minmax(150px, .6fr) minmax(220px, 1fr) auto; gap: 12px; align-items: end; border-bottom: 1px solid #dfe6eb; }
 .library-metadata label, .library-properties label, .coordinate-grid label { display: grid; gap: 5px; color: #5b6b79; font-size: 11px; font-weight: 700; }
 .library-metadata > div { display: flex; align-items: center; gap: 12px; color: #647787; font-size: 11px; }
+.library-save-state { min-width: 70px; color: #28775d; font-weight: 750; white-space: nowrap; }
+.library-save-state.error { color: #a13d3d; }
 .library-metadata .danger-action { min-height: 34px; padding: 7px 10px; border: 1px solid #d5a9a9; border-radius: 5px; background: #fff4f4; color: #963c3c; font-weight: 750; cursor: pointer; }
 .library-metadata .danger-action:disabled { opacity: .55; cursor: default; }
 .library-bindings { border-bottom: 1px solid #dfe6eb; background: #fff; }
