@@ -347,6 +347,8 @@ input::placeholder { color: #8795a3; }
 .reference-validation-log .diagnostic { padding: 8px; }
 .reference-validation-log .secondary-action { width: 100%; margin-top: 9px; }
 .reference-warning-summary { margin: 9px 0 0; color: #805f28; font-size: 10px; line-height: 1.4; }
+.reference-warning-log { margin-top: 9px; color: #805f28; font-size: 11px; }
+.reference-warning-log > summary { cursor: pointer; }
 .diagnostic-mark { display: inline-grid; width: 16px; height: 16px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #efd49f; font-size: 10px; font-weight: 900; }
 .reference-notice { margin-top: 18px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #c8dce7; border-left: 4px solid #2b7fa9; border-radius: 8px; background: #f1f8fb; color: #365d72; font-size: 13px; }
 .reference-notice.success { border-color: #b9dfcc; border-left-color: #2f8a63; background: #eff9f4; color: #276b50; }

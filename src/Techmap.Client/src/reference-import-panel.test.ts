@@ -8,6 +8,7 @@ import {
   profileCountLabel,
   ReferenceDiagnosticItem,
   ReferenceImportPanel,
+  ReferenceValidationDiagnostics,
   referenceDiagnosticMessage,
   XlsxProfilePicker,
 } from "./ReferenceImportPanel";
@@ -191,7 +192,7 @@ describe("reference import panel", () => {
     };
 
     expect(referenceDiagnosticMessage(formulaWarning)).toBe(
-      "В таблице использованы сохранённые результаты формул: 128 ячеек. Пересчитайте книгу перед загрузкой.",
+      "Взяты сохранённые конечные значения формул: 128 ячеек.",
     );
     expect(referenceDiagnosticMessage(incompleteWarning)).toBe(
       "В профиле есть незаполненные строки: 2 строки. Проверьте таблицу.",
@@ -211,12 +212,45 @@ describe("reference import panel", () => {
     };
     const markup = renderToStaticMarkup(createElement(ReferenceDiagnosticItem, { diagnostic }));
 
-    expect(markup).toContain("Предупреждение: В таблице использованы сохранённые результаты формул: 128 ячеек");
+    expect(markup).toContain("Предупреждение: Взяты сохранённые конечные значения формул: 128 ячеек");
     expect(markup).toContain('<details class="diagnostic-details"><summary>Подробности проверки</summary>');
     expect(markup).toContain("legacyHumanUnitPriceMag");
     expect(markup).toContain("БД.ОП");
     expect(markup).toContain("ОП-12");
     expect(markup).not.toContain("<details class=\"diagnostic-details\" open=\"\"");
     expect(markup.match(/<strong>(.*?)<\/strong>/)?.[1]).not.toContain("legacyHumanUnitPriceMag");
+    expect(markup).not.toContain("<input");
+  });
+
+  it("shows errors and collapsed warning details without confirmation controls", () => {
+    const diagnostic: ReferenceCatalogDiagnostic = {
+      diagnosticId: "d".repeat(64),
+      severity: "warning",
+      code: "xlsx_cached_formula_values_used",
+      message: "Использованы сохранённые результаты формул (129).",
+      entityType: "operation",
+      sourceKey: "ОП-12",
+      field: "legacyOperationTime",
+      sourceLocation: "'БД.ОП'!P3",
+    };
+    const markup = renderToStaticMarkup(createElement(ReferenceValidationDiagnostics, {
+      diagnostics: [diagnostic, {
+        ...diagnostic,
+        diagnosticId: "e".repeat(64),
+        severity: "error",
+        code: "xlsx_required_value_missing",
+        message: "Не заполнено обязательное поле.",
+      }],
+    }));
+
+    expect(markup).toContain('aria-label="Блокирующие ошибки"');
+    expect(markup).toContain("Ошибка: Не заполнено обязательное поле.");
+    expect(markup).toContain('<details class="reference-warning-log"><summary>Предупреждений: 1</summary>');
+    expect(markup).toContain("предупреждения принимаются автоматически");
+    expect(markup).toContain("Предупреждение: Взяты сохранённые конечные значения формул: 129 ячеек");
+    expect(markup).toContain("legacyOperationTime");
+    expect(markup).not.toContain("<input");
+    expect(markup).not.toContain("checkbox");
+    expect(markup).not.toContain('class="reference-warning-log" open');
   });
 });

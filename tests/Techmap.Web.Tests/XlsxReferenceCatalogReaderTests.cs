@@ -32,13 +32,41 @@ public sealed class XlsxReferenceCatalogReaderTests
     }
 
     [Fact]
-    public async Task Formula_cached_value_is_never_imported()
+    public async Task Mapped_formula_uses_cached_value_and_warns_without_blocking()
     {
-        var preview = await PreviewAsync(XlsxTestFixtureBuilder.FormulaWorkbook());
+        var mapping = DefaultMapping() with
+        {
+            Fields = [new XlsxFieldMapping("Computed", "computed", XlsxFieldValueKind.Decimal, Required: true)],
+        };
+        var preview = await PreviewAsync(XlsxTestFixtureBuilder.FormulaWorkbook(), mapping);
+
+        Assert.True(preview.Validation.IsValid);
+        Assert.Equal(2m, Assert.Single(preview.Records).Payload.GetProperty("computed").GetDecimal());
+        Assert.Contains(preview.Validation.Diagnostics, item =>
+            item.Code == "xlsx_cached_formula_values_used" &&
+            item.Field == "computed" &&
+            item.Severity == ReferenceCatalogDiagnosticSeverity.Warning &&
+            item.SourceLocation == "'Catalog'!E2");
+    }
+
+    [Fact]
+    public async Task Required_formula_without_cached_value_blocks_import()
+    {
+        var bytes = new XlsxTestFixtureBuilder()
+            .WithHeaders("RecordKey", "Computed")
+            .AddRow("TER-001", null)
+            .WithFormula("B2", "1+1", "")
+            .Build();
+        var mapping = DefaultMapping() with
+        {
+            Fields = [new XlsxFieldMapping("Computed", "computed", XlsxFieldValueKind.Decimal, Required: true)],
+        };
+
+        var preview = await PreviewAsync(bytes, mapping);
 
         Assert.False(preview.Validation.IsValid);
         Assert.Contains(preview.Validation.Diagnostics, item =>
-            item.Code == "xlsx_formula_not_allowed" && item.SourceLocation == "'Catalog'!E2");
+            item.Code == "xlsx_formula_cached_value_missing" && item.SourceLocation == "'Catalog'!B2");
     }
 
     [Fact]

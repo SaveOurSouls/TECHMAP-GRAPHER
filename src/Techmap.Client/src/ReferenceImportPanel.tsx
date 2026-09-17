@@ -146,7 +146,7 @@ export function russianCountLabel(count: number, forms: readonly [string, string
 export function referenceDiagnosticMessage(diagnostic: ReferenceCatalogDiagnostic): string {
   if (diagnostic.code === "xlsx_cached_formula_values_used") {
     const count = diagnostic.message.match(/\((\d+)\)/)?.[1];
-    return `В таблице использованы сохранённые результаты формул${count ? `: ${russianCountLabel(Number(count), ["ячейка", "ячейки", "ячеек"])}` : ""}. Пересчитайте книгу перед загрузкой.`;
+    return `Взяты сохранённые конечные значения формул${count ? `: ${russianCountLabel(Number(count), ["ячейка", "ячейки", "ячеек"])}` : ""}.`;
   }
   if (diagnostic.code === "xlsx_profile_field_incomplete") {
     const count = diagnostic.message.match(/\b(\d+)\s+строк/iu)?.[1];
@@ -180,6 +180,33 @@ export function ReferenceDiagnosticItem({ diagnostic }: ReferenceDiagnosticItemP
       </div>
     </div>
   );
+}
+
+export function ReferenceValidationDiagnostics({ diagnostics }: {
+  readonly diagnostics: readonly ReferenceCatalogDiagnostic[] | null;
+}) {
+  const errors = diagnostics?.filter((diagnostic) => diagnostic.severity === "error") ?? [];
+  const warnings = diagnostics?.filter((diagnostic) => diagnostic.severity === "warning") ?? [];
+  return <>
+    <div className="reference-validation-heading">
+      <strong id="reference-errors-title">Ошибки</strong>
+      <span>{errors.length}</span>
+    </div>
+    {diagnostics === null
+      ? <p className="reference-state">Здесь появятся блокирующие ошибки проверки.</p>
+      : errors.length > 0
+      ? <div className="diagnostics" aria-label="Блокирующие ошибки">
+          {errors.map((diagnostic) => <ReferenceDiagnosticItem key={diagnostic.diagnosticId} diagnostic={diagnostic} />)}
+        </div>
+      : <p className="validation-ok">Блокирующих ошибок нет.</p>}
+    {warnings.length > 0 && <details className="reference-warning-log">
+      <summary>Предупреждений: {warnings.length}</summary>
+      <p className="reference-warning-summary">При успешной проверке предупреждения принимаются автоматически.</p>
+      <div className="diagnostics" aria-label="Предупреждения проверки">
+        {warnings.map((diagnostic) => <ReferenceDiagnosticItem key={diagnostic.diagnosticId} diagnostic={diagnostic} />)}
+      </div>
+    </details>}
+  </>;
 }
 
 export function googleSheetsProfilePreviewRequest(
@@ -561,8 +588,6 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
     await publishValidatedPreview(preview);
   };
 
-  const warningIds = preview ? requiredWarningIds(preview) : [];
-  const blockingDiagnostics = preview?.diagnostics.filter((diagnostic) => diagnostic.severity === "error") ?? [];
   const expiresAt = preview ? Date.parse(preview.expiresUtc) : 0;
   const previewExpired = preview !== null && expiresAt <= now;
   const publishEnabled = canPublishXlsxPreview(
@@ -806,18 +831,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           <div className="reference-sidebar-divider" />
           {importForm}
           <section className="reference-validation-log" aria-labelledby="reference-errors-title">
-            <div className="reference-validation-heading">
-              <strong id="reference-errors-title">Ошибки</strong>
-              <span>{blockingDiagnostics.length}</span>
-            </div>
-            {preview === null
-              ? <p className="reference-state">Здесь появятся блокирующие ошибки проверки.</p>
-              : blockingDiagnostics.length > 0
-              ? <div className="diagnostics" aria-label="Блокирующие ошибки">
-                  {blockingDiagnostics.map((diagnostic) => <ReferenceDiagnosticItem key={diagnostic.diagnosticId} diagnostic={diagnostic} />)}
-                </div>
-              : <p className="validation-ok">Блокирующих ошибок нет.</p>}
-            {warningIds.length > 0 && <p className="reference-warning-summary">Предупреждений: {warningIds.length}. При успешной проверке они принимаются автоматически.</p>}
+            <ReferenceValidationDiagnostics diagnostics={preview?.diagnostics ?? null} />
             {preview !== null && preview.canPublish && !previewPublished && <button className="secondary-action" type="button" onClick={() => void publishPreview()} disabled={!publishEnabled || busy !== null}>
               {busy === "publish" ? "Публикуем…" : "Повторить публикацию"}
             </button>}

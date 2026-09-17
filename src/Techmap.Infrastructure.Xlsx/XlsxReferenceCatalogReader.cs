@@ -526,11 +526,6 @@ public sealed class XlsxReferenceCatalogReader
                 }
                 if (cell.State == ParsedCellState.Formula)
                 {
-                    if (!field.Mapping.AllowFormulaCachedValue)
-                    {
-                        AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Формулы нельзя использовать в импортируемых полях.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
-                        continue;
-                    }
                     if (cell.Text.Length == 0)
                     {
                         if (field.Mapping.Required)
@@ -606,7 +601,7 @@ public sealed class XlsxReferenceCatalogReader
         {
             AddDiagnostic(diagnostics, Warning(
                 "xlsx_cached_formula_values_used",
-                $"Для поля «{field}» использованы сохранённые в XLSX результаты формул ({usage.Count}). Проверьте, что книга была пересчитана перед загрузкой.",
+                $"Для поля «{field}» взяты сохранённые в XLSX конечные значения формул ({usage.Count}).",
                 mapping.EntityType,
                 field: field,
                 location: usage.FirstLocation));

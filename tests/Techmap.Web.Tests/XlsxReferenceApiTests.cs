@@ -49,7 +49,7 @@ public sealed class XlsxReferenceApiTests
     }
 
     [Fact]
-    public async Task Blocking_formula_preview_cannot_replace_previous_active_snapshot()
+    public async Task Blocking_key_formula_preview_cannot_replace_previous_active_snapshot()
     {
         await using var factory = new TechmapWebApplicationFactory();
         using var client = factory.CreateLocalClient();
@@ -65,7 +65,11 @@ public sealed class XlsxReferenceApiTests
             response.EnsureSuccessStatusCode();
         }
 
-        var invalid = await PreviewAsync(client, csrf, XlsxTestFixtureBuilder.FormulaWorkbook());
+        var invalidBytes = new XlsxTestFixtureBuilder()
+            .AddRow("TER-002", "Terminal 2", "0", "mm")
+            .WithFormula("A2", "\"TER-002\"", "TER-002", cachedValueIsText: true)
+            .Build();
+        var invalid = await PreviewAsync(client, csrf, invalidBytes);
         Assert.False(invalid.CanPublish);
         Assert.Contains(invalid.Diagnostics, item => item.Code == "xlsx_formula_not_allowed");
         using var rejected = await SendAsync(
@@ -79,6 +83,32 @@ public sealed class XlsxReferenceApiTests
             SourcePath + "/active",
             TestContext.Current.CancellationToken);
         Assert.Equal(valid.SnapshotId, active?.SnapshotId);
+    }
+
+    [Fact]
+    public async Task Cached_formula_value_can_be_published_and_exposes_final_value()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var preview = await PreviewAsync(client, csrf, XlsxTestFixtureBuilder.FormulaWorkbook());
+
+        Assert.True(preview.CanPublish);
+        Assert.Contains(preview.Diagnostics, item => item.Code == "xlsx_cached_formula_values_used");
+        Assert.Equal(2, Assert.Single(preview.Records).Payload.GetProperty("Computed").GetInt64());
+        using var response = await SendAsync(
+            client,
+            SourcePath + "/xlsx-publications",
+            new PublishXlsxReferencePreviewRequest(
+                preview.PreviewId, preview.ValidationSha256, null,
+                preview.Diagnostics.Where(item => item.Severity == "warning")
+                    .Select(item => item.DiagnosticId).ToArray()),
+            csrf);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var active = await client.GetFromJsonAsync<ReferenceCatalogRecordListResponse>(
+            SourcePath + "/active/records", TestContext.Current.CancellationToken);
+        Assert.Equal(2, Assert.Single(active!.Records).Payload.GetProperty("Computed").GetInt64());
     }
 
     [Fact]
