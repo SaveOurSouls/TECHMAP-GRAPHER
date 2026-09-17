@@ -373,6 +373,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
+      ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
         lengthKnown: String(cutLength.isComplete),
         lengthMm: cutLength.sourceLengthMm === null ? "" : String(cutLength.sourceLengthMm),

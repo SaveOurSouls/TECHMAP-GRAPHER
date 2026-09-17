@@ -1,3 +1,5 @@
+import type { WireEndStripProfiles } from "./model";
+
 export type HarnessEditorView = "e4" | "drawing";
 
 export type EditorTool =
@@ -26,6 +28,8 @@ export interface EditorSceneObject {
   readonly height: number;
   readonly color: string;
   readonly points?: readonly EditorPoint[];
+  /** End-treatment presentation shares the wire identity and drawing layer. */
+  readonly stripProfiles?: WireEndStripProfiles;
   readonly metadata?: Readonly<Record<string, string>>;
 }
 

@@ -7,6 +7,7 @@ import {
   e4WireSegments,
   findE4CommonParallelSpan,
   getEditorSceneBounds,
+  getDrawingWireStripProfileGeometries,
   getE4BridgeGeometry,
   getE4DifferentialPairLayout,
   getE4ScreenLayout,
@@ -64,7 +65,64 @@ const objects: readonly EditorSceneObject[] = [
   { id: "wire", layerId: "bottom", kind: "wire", label: "W1", x: 0, y: 0, width: 0, height: 0, color: "#cc0000", points: [{ x: 100, y: 100 }, { x: 180, y: 100 }] },
 ];
 
+const stripProfile = {
+  sourceId: "technology-coax-terminations",
+  snapshotId: "38d9aa91-b8d4-45d8-8e39-da14ee4effad",
+  snapshotSha256: "a".repeat(64), recordId: "b".repeat(64),
+  entityType: "coax-termination" as const, sourceKey: "BNC|RG58", displayName: "BNC / RG58",
+  layers: [{ index: 1, diameterMm: 1, stripLengthMm: 4 }, { index: 2, diameterMm: 4, stripLengthMm: 8 }],
+};
+
 describe("harness editor workspace", () => {
+  it("draws, hits and bounds end strip polygons only in the drawing view", () => {
+    const wire: EditorSceneObject = {
+      id: "stripped", layerId: "bottom", kind: "wire", label: "W1",
+      x: 0, y: 0, width: 0, height: 0, color: "#c00",
+      points: [{ x: 0, y: 20 }, { x: 100, y: 20 }], stripProfiles: { from: stripProfile },
+    };
+
+    const geometry = getDrawingWireStripProfileGeometries(wire, "drawing");
+    expect(geometry).toHaveLength(1);
+    expect(geometry[0]?.primitives).toHaveLength(2);
+    expect(getDrawingWireStripProfileGeometries(wire, "e4")).toEqual([]);
+    const stripOnlyPoint = geometry[0]!.primitives[1]!.polygon[0];
+    expect(hitTestEditorScene([wire], layers, stripOnlyPoint, 2, "drawing")).toBe("stripped");
+    expect(hitTestEditorScene([wire], layers, stripOnlyPoint, 2, "e4")).toBeNull();
+    expect(getEditorSceneBounds([wire], layers, "drawing")).toMatchObject({
+      minX: -0.75, minY: 12.25, maxX: 100, maxY: 27.75,
+    });
+    expect(getEditorSceneBounds([wire], layers, "e4"))
+      .toEqual(getEditorSceneBounds([{ ...wire, stripProfiles: undefined }], layers, "e4"));
+    expect(getEditorSceneBounds([wire], [{ ...layers[1]!, visible: false }, layers[0]!], "drawing")).toBeNull();
+  });
+
+  it("uses the wire colour for the outer strip layer and highlights selected outlines", () => {
+    const fills: string[] = [];
+    const strokes: string[] = [];
+    const contextState = {
+      strokeStyle: "", fillStyle: "", lineWidth: 1, lineJoin: "miter", font: "",
+      textAlign: "start", textBaseline: "alphabetic",
+      save: () => undefined, restore: () => undefined, beginPath: () => undefined,
+      moveTo: () => undefined, lineTo: () => undefined, closePath: () => undefined,
+      arc: () => undefined, fillText: () => undefined, setLineDash: () => undefined,
+      fill: () => fills.push(String(contextState.fillStyle)),
+      stroke: () => strokes.push(String(contextState.strokeStyle)),
+    };
+    const wire: EditorSceneObject = {
+      id: "stripped", layerId: "bottom", kind: "wire", label: "W1",
+      x: 0, y: 0, width: 0, height: 0, color: "#c00",
+      points: [{ x: 0, y: 20 }, { x: 100, y: 20 }], stripProfiles: { from: stripProfile },
+    };
+
+    drawEditorSceneObject(contextState as unknown as CanvasRenderingContext2D, wire, false, "drawing");
+    expect(fills.slice(0, 2)).toEqual(["#d6ad65", "#c00"]);
+    expect(strokes.slice(1, 3)).toEqual(["#344b59", "#344b59"]);
+
+    strokes.length = 0;
+    drawEditorSceneObject(contextState as unknown as CanvasRenderingContext2D, wire, true, "drawing");
+    expect(strokes.slice(0, 3)).toEqual(["#1179ac", "#1179ac", "#1179ac"]);
+  });
+
   it("reconciles controlled and local multi-selection after scene objects disappear", () => {
     expect(reconcileWorkspaceSelection(
       ["wire", "removed", "wire"],

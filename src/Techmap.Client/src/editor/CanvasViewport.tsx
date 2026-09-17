@@ -28,6 +28,10 @@ import {
 } from "./e4-connector-snap";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import {
+  buildWireStripProfileGeometry,
+  type WireStripProfileGeometry,
+} from "./wire-strip-profile-geometry";
+import {
   ComponentTemplateImageCache,
   drawProjectedComponentTemplateView,
   projectComponentTemplateView,
@@ -1037,6 +1041,37 @@ function pointToSegmentDistance(point: EditorPoint, start: EditorPoint, end: Edi
   return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
 }
 
+/** Decoration geometry never substitutes the physical wire route. */
+export function getDrawingWireStripProfileGeometries(
+  object: EditorSceneObject,
+  view?: HarnessEditorView,
+): readonly WireStripProfileGeometry[] {
+  if (view !== "drawing" || object.kind !== "wire" || !object.stripProfiles) return [];
+  return (["from", "to"] as const).flatMap((end) => {
+    const profile = object.stripProfiles?.[end];
+    const geometry = profile && buildWireStripProfileGeometry(object.points ?? [], end, profile);
+    return geometry ? [geometry] : [];
+  });
+}
+
+function polygonContainsPoint(
+  polygon: readonly EditorPoint[],
+  point: EditorPoint,
+  tolerance: number,
+): boolean {
+  let positive = false;
+  let negative = false;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index]!;
+    const end = polygon[(index + 1) % polygon.length]!;
+    if (pointToSegmentDistance(point, start, end) <= tolerance) return true;
+    const cross = (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x);
+    positive ||= cross > 0;
+    negative ||= cross < 0;
+  }
+  return !(positive && negative);
+}
+
 function containsPoint(
   object: EditorSceneObject,
   point: EditorPoint,
@@ -1044,6 +1079,8 @@ function containsPoint(
   view?: HarnessEditorView,
 ): boolean {
   if (object.kind === "wire" || object.kind === "dimension") {
+    if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
+      geometry.primitives.some((primitive) => polygonContainsPoint(primitive.polygon, point, tolerance)))) return true;
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
@@ -1811,6 +1848,37 @@ function drawE4Connector(
   });
 }
 
+const stripProfilePalette = ["#d6ad65", "#e4ebef", "#a9b7c0", "#7a929e", "#b8c9c2"] as const;
+const stripProfileOutline = "#344b59";
+const stripProfileStrokeWidth = 1.5;
+
+function drawWireStripProfiles(
+  context: CanvasRenderingContext2D,
+  object: EditorSceneObject,
+  selected: boolean,
+): void {
+  context.save();
+  context.setLineDash([]);
+  context.lineWidth = stripProfileStrokeWidth;
+  context.lineJoin = "miter";
+  context.strokeStyle = selected ? "#1179ac" : stripProfileOutline;
+  for (const geometry of getDrawingWireStripProfileGeometries(object, "drawing")) {
+    geometry.primitives.forEach((primitive, index) => {
+      context.beginPath();
+      primitive.polygon.forEach((point, index) => index === 0
+        ? context.moveTo(point.x, point.y)
+        : context.lineTo(point.x, point.y));
+      context.closePath();
+      context.fillStyle = index === geometry.primitives.length - 1
+        ? object.color
+        : stripProfilePalette[(primitive.layerIndex - 1) % stripProfilePalette.length]!;
+      context.fill();
+      context.stroke();
+    });
+  }
+  context.restore();
+}
+
 export function drawEditorSceneObject(
   context: CanvasRenderingContext2D,
   object: EditorSceneObject,
@@ -1843,6 +1911,7 @@ export function drawEditorSceneObject(
       if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
       else context.stroke();
       context.setLineDash([]);
+      if (view === "drawing" && object.kind === "wire") drawWireStripProfiles(context, object, selected);
       if (selected) {
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#1179ac";
@@ -2206,6 +2275,19 @@ export function getEditorSceneBounds(
       const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
       for (const point of points) {
         bounds = expandSceneBounds(bounds, point.x, point.y, point.x, point.y);
+      }
+      for (const geometry of getDrawingWireStripProfileGeometries(object, view)) {
+        for (const primitive of geometry.primitives) {
+          for (const point of primitive.polygon) {
+            bounds = expandSceneBounds(
+              bounds,
+              point.x - stripProfileStrokeWidth / 2,
+              point.y - stripProfileStrokeWidth / 2,
+              point.x + stripProfileStrokeWidth / 2,
+              point.y + stripProfileStrokeWidth / 2,
+            );
+          }
+        }
       }
       if (view === "e4" && object.kind === "wire" && object.label) {
         const rawPosition = Number(object.metadata?.e4LabelPosition ?? "0.5");
