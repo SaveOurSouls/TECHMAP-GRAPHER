@@ -120,6 +120,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M3-03-component-template-content-v4",
                 "M3-04-project-component-snapshots-v4",
                 "M3-05-component-template-content-v5",
+                "M3-06-component-template-drafts",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
