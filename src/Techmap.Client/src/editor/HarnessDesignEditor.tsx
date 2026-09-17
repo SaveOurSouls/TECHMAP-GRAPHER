@@ -42,6 +42,7 @@ import {
 } from "./connector-series-demo";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { builtInWireColors, createCustomWireColor, resolveWireColorHex } from "./wire-reference-catalog";
+import { buildWireStripProfileGeometry } from "./wire-strip-profile-geometry";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand, type EditorHistory } from "./history";
 import {
   connectorContactPosition,
@@ -58,6 +59,7 @@ import {
   type EditorLayer,
   type HarnessDesignDocument,
   type WireEndpoint,
+  type WireEndStripProfiles,
   type WireStripProfileBinding,
 } from "./model";
 
@@ -362,6 +364,9 @@ export function designToScene(
     const fromAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.from) : null;
     const toAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.to) : null;
     const cutLength = calculateWireCutLength(wire);
+    const stripProfileDisplayWarning = view === "drawing"
+      ? wireStripProfileDisplayWarning(points, wire.stripProfiles)
+      : null;
     return [{
       id: wire.id,
       layerId: wire.layerIds[view],
@@ -386,6 +391,7 @@ export function designToScene(
         materialDisplayName: wire.materialBinding?.displayName ?? "",
         materialEntityType: wire.materialBinding?.entityType ?? "",
         e4LabelPosition: String(wire.e4LabelPosition ?? 0.5),
+        ...(stripProfileDisplayWarning ? { stripProfileDisplayWarning } : {}),
         ...(view === "e4" ? {
           view: "e4",
           fromSide: fromAnchor?.leadDirection ?? "",
@@ -449,6 +455,19 @@ export function wireMaterialUpdateFromCatalogItem(
       },
     },
   };
+}
+
+/** Reports saved end treatments that cannot be projected on the current route. */
+export function wireStripProfileDisplayWarning(
+  points: readonly { readonly x: number; readonly y: number }[],
+  profiles: WireEndStripProfiles | undefined,
+): string | null {
+  if (!profiles) return null;
+  const hiddenEnds = (["from", "to"] as const).filter((end) => {
+    const profile = profiles[end];
+    return profile !== undefined && buildWireStripProfileGeometry(points, end, profile) === null;
+  });
+  return hiddenEnds.length > 0 ? hiddenEnds.join(",") : null;
 }
 
 type WireStripProfileCommand = Extract<EditorCommand, { readonly type: "set-wire-strip-profile" }>;

@@ -176,4 +176,16 @@ describe("wire object inspector", () => {
     expect(drawing).toContain("дважды щёлкните профиль разделки");
     expect(drawing).toContain("disabled");
   });
+
+  it("explains why a saved drawing strip profile is not visible", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "drawing",
+      selectedObject: wireObject({ lengthKnown: "false", stripProfileDisplayWarning: "from" }),
+      disabled: false,
+      onChange: vi.fn(),
+    }));
+
+    expect(markup).toContain("Разделку невозможно показать");
+    expect(markup).toContain("нет достаточно длинного направленного участка");
+  });
 });

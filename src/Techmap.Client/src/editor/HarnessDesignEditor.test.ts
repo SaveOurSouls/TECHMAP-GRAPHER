@@ -299,6 +299,29 @@ describe("harness design scene adapter", () => {
     expect(designToScene(document, "e4").find(item => item.id === wire.id)?.stripProfiles).toBeUndefined();
   });
 
+  it("explains when a saved strip profile cannot fit its drawing endpoint", () => {
+    const x1 = createConnector("short-strip-x1", "X1", 1, { x: 10, y: 20 }, { x: 100, y: 120 });
+    const x2 = createConnector("short-strip-x2", "X2", 1, { x: 500, y: 20 }, { x: 222, y: 120 });
+    const profile = {
+      sourceId: "technology-coax-terminations", snapshotId: "38d9aa91-b8d4-45d8-8e39-da14ee4effad",
+      snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), entityType: "coax-termination" as const,
+      sourceKey: "BNC|RG58", displayName: "BNC / RG58",
+      layers: [{ index: 1, diameterMm: 1, stripLengthMm: 4 }],
+    };
+    const wire = {
+      ...createWire("short-strip-wire", { connectorId: x1.id, contactId: x1.contacts[0]!.id },
+        { connectorId: x2.id, contactId: x2.contacts[0]!.id }),
+      stripProfiles: { from: profile, to: profile },
+    };
+    const document = { ...createEmptyHarnessDesign(), connectors: [x1, x2], wires: [wire] };
+
+    const drawingWire = designToScene(document, "drawing").find(item => item.id === wire.id);
+    expect(drawingWire?.stripProfiles).toEqual({ from: profile, to: profile });
+    expect(drawingWire?.metadata?.stripProfileDisplayWarning).toBe("from,to");
+    expect(designToScene(document, "e4").find(item => item.id === wire.id)?.metadata?.stripProfileDisplayWarning)
+      .toBeUndefined();
+  });
+
   it("projects the pinned wire material into the inspector scene", () => {
     const x1 = createConnector("material-x1", "XS1", 1, { x: 10, y: 20 });
     const x2 = createConnector("material-x2", "XS2", 1, { x: 500, y: 20 });

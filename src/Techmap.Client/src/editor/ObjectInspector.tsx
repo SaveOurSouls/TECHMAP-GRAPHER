@@ -190,6 +190,12 @@ export function ObjectInspector({
             onEndChange={onActiveWireStripEndChange}
             onClear={onWireStripProfileClear}
           />
+          {selectedObject.metadata?.stripProfileDisplayWarning && (
+            <div className="he-wire-length-status is-incomplete" role="alert">
+              <strong>Разделку невозможно показать</strong>
+              <span>У выбранного конца провода нет достаточно длинного направленного участка.</span>
+            </div>
+          )}
           <label className="he-toggle-field">
             <input
               type="checkbox"
