@@ -24,7 +24,9 @@ export interface TemplateCanvasV2Props {
   content: TemplateContentV2;
   viewId: string;
   selectedId: string | null;
+  selectedIds?: readonly string[];
   onSelect: (id: string | null) => void;
+  onSelectionChange?: (id: string | null, extend: boolean) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
   onNodePointMove?: (id: string, pointIndex: number, deltaX: number, deltaY: number) => void;
@@ -445,7 +447,9 @@ export function TemplateCanvasV2({
   content,
   viewId,
   selectedId,
+  selectedIds,
   onSelect,
+  onSelectionChange,
   onNodeMove,
   onNodeResize,
   onNodePointMove,
@@ -464,6 +468,7 @@ export function TemplateCanvasV2({
   const [resizePreview, setResizePreview] = useState<ResizePreviewV2 | null>(null);
   const [pointDragPreview, setPointDragPreview] = useState<PointDragPreviewV2 | null>(null);
   const view = content.views.find(candidate => candidate.id === viewId);
+  const selectedIdSet = new Set(selectedIds ?? (selectedId ? [selectedId] : []));
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
   const logicalContacts = new Map(content.logicalContacts.map(contact => [contact.id, contact]));
@@ -494,14 +499,16 @@ export function TemplateCanvasV2({
   const select = (event: ReactPointerEvent<SVGElement>, id: string, interactive = true) => {
     if (!interactive) return;
     event.stopPropagation();
-    onSelect(id);
+    if (onSelectionChange) onSelectionChange(id, event.ctrlKey || event.metaKey || event.shiftKey);
+    else onSelect(id);
   };
 
   const selectFromKeyboard = (event: ReactKeyboardEvent<SVGElement>, id: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    onSelect(id);
+    if (onSelectionChange) onSelectionChange(id, event.ctrlKey || event.metaKey || event.shiftKey);
+    else onSelect(id);
   };
 
   const pointFromEvent = (event: ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>): SvgPoint | null => {
@@ -709,7 +716,7 @@ export function TemplateCanvasV2({
         key: node.id,
         "data-template-node-id": node.id,
         "data-template-node-kind": node.kind,
-        "data-selected": selectedId === node.id ? "true" : undefined,
+        "data-selected": selectedIdSet.has(rootNodeId) ? "true" : undefined,
         "data-locked": locked ? "true" : undefined,
         opacity: node.opacity,
         transform: previewTransform(node.id, transform, topLevel),
@@ -1102,7 +1109,7 @@ export function TemplateCanvasV2({
       width="100%"
       height="100%"
       style={{ display: "block", touchAction: "none" }}
-      onPointerDown={() => onSelect(null)}
+      onPointerDown={() => onSelectionChange ? onSelectionChange(null, false) : onSelect(null)}
       onPointerMove={moveNodeGesture}
       onPointerUp={endNodeGesture}
       onPointerCancel={clearNodeGesture}

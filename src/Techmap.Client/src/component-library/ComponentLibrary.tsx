@@ -37,11 +37,12 @@ import {
   editContactPointV3 as editContactPointV2, editLogicalContactV3 as editLogicalContactV2,
   editNodeV3 as editNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2,
   moveNodeV3 as moveNodeV2, moveNodePointV3, insertNodePointV3, deleteNodePointV3,
+  groupRootNodesV3, ungroupRootNodeV3, reorderRootNodeStepV3,
   resizeNodeV3 as resizeNodeV2, newTemplateContentV3 as newTemplateContentV2,
   parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, projectTemplateContentV3CoreToV2,
   addArticleVariantsV3, removeArticleVariantContactGroupV3, removeArticleVariantV3, renameContactTypeGroupV3,
   renameLayerV3 as renameLayerV2, renameViewV3 as renameViewV2, reorderLayerV3 as reorderLayerV2,
-  reorderNodeV3 as reorderNodeV2, setArticleVariantContactGroupV3, setLayerLockedV3 as setLayerLockedV2,
+  setArticleVariantContactGroupV3, setLayerLockedV3 as setLayerLockedV2,
   setLayerVisibleV3 as setLayerVisibleV2, setNodeLockedV3 as setNodeLockedV2,
   setRepeatCountV3 as setRepeatCountV2, setRepeatStepV3 as setRepeatStepV2,
   setTemplateParameterDefaultV3 as setTemplateParameterDefaultV2, upsertArticleVariantV3,
@@ -256,6 +257,12 @@ function isEditableConstantNode(node: TemplateNodeV2): node is EditableNode {
   return false;
 }
 
+export function nextTemplateSelectionV2(current: readonly string[], id: string | null, extend: boolean): readonly string[] {
+  if (!id) return [];
+  if (!extend) return [id];
+  return current.includes(id) ? current.filter(candidate => candidate !== id) : [...current, id];
+}
+
 export function ComponentLibrary({ config, session }: Props) {
   const api = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const referenceApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
@@ -263,7 +270,9 @@ export function ComponentLibrary({ config, session }: Props) {
   const [draft, setDraft] = useState<Draft>(() => newDraft());
   const [viewId, setViewId] = useState(() => draft.content.views[0]!.id);
   const [activeLayerIds, setActiveLayerIds] = useState<Record<string, string>>(() => firstLayerIds(draft.content));
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const selectedId = selectedIds.at(-1) ?? null;
+  const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -289,11 +298,14 @@ export function ComponentLibrary({ config, session }: Props) {
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
   const activeLayer = activeView?.layers.find(layer => layer.id === activeLayerId) ?? activeView?.layers[0];
   const selected = activeView?.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
+  const selectedNodeIds = activeView && activeLayer
+    ? selectedIds.filter(id => activeLayer.nodes.some(node => node.id === id))
+    : [];
   const selectedContactPoint = activeView?.contactPoints.find(point => point.id === selectedId);
   const selectedBundlePort = activeView?.bundlePorts.find(point => point.id === selectedId);
   const selectedPoint = selectedContactPoint ?? selectedBundlePort;
   const selectedLogicalContact = selectedContactPoint ? draft.content.logicalContacts.find(contact => contact.id === selectedContactPoint.logicalContactId) : undefined;
-  const editableNode = selected?.node && isEditableConstantNode(selected.node) ? selected.node : null;
+  const editableNode = selectedIds.length === 1 && selected?.node && isEditableConstantNode(selected.node) ? selected.node : null;
   const compatibilityContent = useMemo(() => projectTemplateContentV3CoreToV2(draft.content), [draft.content]);
   const articlePreview = useMemo(() => {
     if (!selectedArticleVariantId) return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: null };
@@ -587,7 +599,36 @@ export function ComponentLibrary({ config, session }: Props) {
     if (!activeView) return;
     const layer = activeView.layers.find(item => item.nodes.some(node => node.id === nodeId));
     if (!layer) { setError("Перемещаемый объект не найден в активном виде."); return; }
-    command(() => moveNodeV2(draft.content, activeView.id, layer.id, nodeId, deltaX, deltaY), nodeId);
+    const movingIds = selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1 ? selectedNodeIds : [nodeId];
+    command(() => movingIds.reduce(
+      (content, id) => moveNodeV2(content, activeView.id, layer.id, id, deltaX, deltaY),
+      draft.content,
+    ));
+  }
+  function selectCanvasObject(id: string | null, extend: boolean) {
+    if (!id) { setSelectedIds([]); return; }
+    const nodeLayer = activeView?.layers.find(layer => layer.nodes.some(node => node.id === id));
+    const isNode = Boolean(nodeLayer);
+    if (!extend || !isNode) { setSelectedIds([id]); return; }
+    if (activeView && nodeLayer) setActiveLayerIds(current => ({ ...current, [activeView.id]: nodeLayer.id }));
+    setSelectedIds(current => nextTemplateSelectionV2(
+      current.every(candidate => nodeLayer!.nodes.some(node => node.id === candidate)) ? current : [], id, true,
+    ));
+  }
+  function groupSelection() {
+    if (!activeView || !activeLayer || selectedNodeIds.length < 2) return;
+    try {
+      const [content, groupId] = groupRootNodesV3(draft.content, activeView.id, activeLayer.id, selectedNodeIds);
+      changeContent(content, groupId);
+    } catch (caught) { setError(errorText(caught)); }
+  }
+  function ungroupSelection() {
+    if (!activeView || !activeLayer || selectedNodeIds.length !== 1) return;
+    command(() => ungroupRootNodeV3(draft.content, activeView.id, activeLayer.id, selectedNodeIds[0]!), null);
+  }
+  function reorderSelection(direction: "forward" | "backward") {
+    if (!activeView || !activeLayer || selectedNodeIds.length !== 1) return;
+    command(() => reorderRootNodeStepV3(draft.content, activeView.id, activeLayer.id, selectedNodeIds[0]!, direction));
   }
   function resizeCanvasNode(nodeId: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) {
     if (!activeView) return;
@@ -739,8 +780,10 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
         <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} onSelect={setSelectedId} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
+            {selectedNodeIds.length > 1 && <><p className="readonly-note">Выбрано объектов: {selectedNodeIds.length}. Перетаскивание перемещает их одной операцией.</p><button type="button" onClick={groupSelection}>Сгруппировать</button></>}
+            {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <button type="button" onClick={ungroupSelection}>Разгруппировать</button>}
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
                point={selectedContactPoint}
@@ -752,9 +795,9 @@ export function ComponentLibrary({ config, session }: Props) {
              />}
              {selectedContactPoint && !selectedLogicalContact && <p className="readonly-note">Логический контакт точки не найден. Проверьте диагностику шаблона.</p>}
              {selectedBundlePort && activeView && <BundlePortProperties port={selectedBundlePort} edit={changes => command(() => editBundlePortV2(draft.content, activeView.id, selectedBundlePort.id, changes))} remove={() => command(() => deleteBundlePortV2(draft.content, activeView.id, selectedBundlePort.id), null)} />}
-            {selected?.node && !editableNode && <><p className="readonly-note">Сложный или параметризованный объект доступен только для чтения. Его данные сохраняются без потерь.</p><label>Тип<input value={selected.node.kind} readOnly /></label></>}
+            {selectedIds.length === 1 && selected?.node && !editableNode && <><p className="readonly-note">Сложный или параметризованный объект доступен только для чтения. Его данные сохраняются без потерь.</p><label>Тип<input value={selected.node.kind} readOnly /></label></>}
             {editableNode && selected && <NodeProperties node={editableNode} disabled={selected.layer.locked || editableNode.locked} edit={changes => command(() => editNodeV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, changes))} move={(x, y) => command(() => setNodePosition(draft.content, activeView!.id, selected.layer.id, editableNode, x, y))} toggleLock={() => command(() => setNodeLockedV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, !editableNode.locked))} />}
-            {selected && <><div className="property-order"><button onClick={() => command(() => reorderNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id, 0))} disabled={selected.layer.locked || selected.node.locked}>На задний план</button><button onClick={() => command(() => reorderNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id, selected.layer.nodes.length - 1))} disabled={selected.layer.locked || selected.node.locked}>На передний план</button></div><button className="danger-action" onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked}>Удалить объект</button></>}
+            {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked}>Удалить объект</button></>}
           </aside>
         </div>
       </section>

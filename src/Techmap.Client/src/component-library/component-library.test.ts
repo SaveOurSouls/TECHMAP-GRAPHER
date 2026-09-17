@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
-import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, terminalArticleInputs, terminalArticleSearchRequest } from "./ComponentLibrary";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, terminalArticleInputs, terminalArticleSearchRequest } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
 import {
@@ -20,6 +20,12 @@ const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 
 describe("component library UI", () => {
+  it("supports replacement, additive toggle, and blank selection semantics", () => {
+    expect(nextTemplateSelectionV2(["a"], "b", false)).toEqual(["b"]);
+    expect(nextTemplateSelectionV2(["a"], "b", true)).toEqual(["a", "b"]);
+    expect(nextTemplateSelectionV2(["a", "b"], "a", true)).toEqual(["b"]);
+    expect(nextTemplateSelectionV2(["a"], null, false)).toEqual([]);
+  });
   it("builds active connector lookup requests and maps unique connector records", () => {
     expect(connectorArticleSearchRequest("  XH  ")).toMatchObject({
       text: "XH", entityTypes: ["connector"], sort: "relevance", pageSize: 30, cursor: null,
