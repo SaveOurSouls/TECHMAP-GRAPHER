@@ -8,6 +8,7 @@ import {
   acceptProjectComponentSnapshotLookup,
   buildComponentTemplateViewInstances,
   buildProjectComponentSnapshotLookup,
+  cableMaterialUpdateFromCatalogItem,
   ComponentGraphErrorAlert,
   designToScene,
   editorWireUpdateCommand,
@@ -369,6 +370,25 @@ describe("harness design scene adapter", () => {
         },
       },
     });
+  });
+
+  it("assigns only a published cable material to a cable container", () => {
+    const item: EditorCatalogItem = {
+      ...wireMaterialCatalogItem(),
+      id: "technology-database:cable:CABLE-2X",
+      entityType: "cable",
+      sourceKey: "CABLE-2X",
+      referenceDisplayName: "Кабель 2×0,35",
+    };
+    const result = cableMaterialUpdateFromCatalogItem(item, "CABLE-1");
+    expect(result).toMatchObject({ ok: true, command: {
+      type: "update-cable", cableId: "CABLE-1",
+      materialBinding: { entityType: "cable", sourceKey: "CABLE-2X", displayName: "Кабель 2×0,35" },
+    } });
+    expect(cableMaterialUpdateFromCatalogItem({ ...item, entityType: "wire" }, "CABLE-1"))
+      .toEqual({ ok: false, error: "Для общего материала выберите кабель." });
+    expect(cableMaterialUpdateFromCatalogItem(item, null))
+      .toEqual({ ok: false, error: "Сначала создайте кабель из выбранных проводов." });
   });
 
   it("rejects a material assignment without one selected wire", () => {

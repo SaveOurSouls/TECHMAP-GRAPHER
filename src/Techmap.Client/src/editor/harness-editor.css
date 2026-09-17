@@ -203,6 +203,15 @@
 .he-wire-material > span { color: #2f4c5e; font-size: 12px; font-weight: 700; }
 .he-wire-material > small { color: #71808d; font-size: 10px; }
 .he-wire-material > button { justify-self: start; }
+.he-cable-panel { padding: 10px; display: grid; gap: 9px; border: 1px solid #b9d2dd; border-radius: 8px; background: #f5fafc; color: #35576b; }
+.he-cable-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.he-cable-panel > header strong { font-size: 12px; }
+.he-cable-panel > header span, .he-cable-panel > small { color: #71838d; font-size: 9px; }
+.he-cable-panel > p { margin: 0; font-size: 10px; line-height: 1.4; }
+.he-cable-panel > button { justify-self: start; }
+.he-cable-members { display: flex; flex-wrap: wrap; gap: 4px; }
+.he-cable-members span { padding: 3px 6px; border-radius: 999px; background: #dfeef3; color: #35576b; font-size: 9px; font-weight: 700; }
+.he-cable-remove { color: #9a3f3f; }
 .he-wire-strip-profile { padding: 9px; display: grid; gap: 9px; border: 1px solid #cfdfe6; border-radius: 7px; background: #f8fbfc; }
 .he-wire-strip-profile > header { display: grid; gap: 7px; }
 .he-wire-strip-profile > header > strong { color: #35576b; font-size: 11px; }

@@ -34,6 +34,7 @@ import type { ComponentTemplateViewInstance } from "./component-template-view-re
 import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
+import { CableSelectionPanel } from "./CableSelectionPanel";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
 import { collectE4Diagnostics } from "./e4-diagnostics";
 import {
@@ -455,6 +456,24 @@ export function wireMaterialUpdateFromCatalogItem(
       },
     },
   };
+}
+
+type CableUpdateCommand = Extract<EditorCommand, { readonly type: "update-cable" }>;
+
+export function cableMaterialUpdateFromCatalogItem(
+  item: EditorCatalogItem,
+  cableId: string | null,
+): { readonly ok: true; readonly command: CableUpdateCommand } | { readonly ok: false; readonly error: string } {
+  if (!cableId) return { ok: false, error: "Сначала создайте кабель из выбранных проводов." };
+  if (item.entityType !== "cable") return { ok: false, error: "Для общего материала выберите кабель." };
+  if (!item.sourceId || !item.snapshotId || !item.snapshotSha256 || !item.recordId || !item.sourceKey) {
+    return { ok: false, error: "Справочная позиция не содержит данных опубликованной версии." };
+  }
+  return { ok: true, command: { type: "update-cable", cableId, materialBinding: {
+    sourceId: item.sourceId, snapshotId: item.snapshotId, snapshotSha256: item.snapshotSha256,
+    recordId: item.recordId, entityType: "cable", sourceKey: item.sourceKey,
+    displayName: item.referenceDisplayName || item.sourceKey,
+  } } };
 }
 
 /** Reports saved end treatments that cannot be projected on the current route. */
@@ -1007,6 +1026,12 @@ export function HarnessDesignEditor({
       return;
     }
     if (item.placement === "reference-only" && (item.entityType === "wire" || item.entityType === "cable")) {
+      if (item.entityType === "cable" && selectedCable) {
+        const result = cableMaterialUpdateFromCatalogItem(item, selectedCable.id);
+        if (!result.ok) setMessage(result.error);
+        else run(result.command);
+        return;
+      }
       const selectedWireId = selectedObjectIds.length === 1 &&
         history.present.wires.some((wire) => wire.id === selectedObjectIds[0])
         ? selectedObjectIds[0]!
@@ -1253,6 +1278,13 @@ export function HarnessDesignEditor({
   };
 
   const selectedWireIds = selectedObjectIds.filter((id) => history.present.wires.some((wire) => wire.id === id));
+  const selectedCable = history.present.cables.find((cable) =>
+    cable.memberWireIds.length === selectedWireIds.length &&
+    cable.memberWireIds.every((wireId) => selectedWireIds.includes(wireId))) ?? null;
+  const selectedWiresLocked = selectedWireIds.some((wireId) => {
+    const wire = history.present.wires.find((item) => item.id === wireId);
+    return wire ? history.present.views.drawing.layers.some((layer) => layer.id === wire.layerIds.drawing && layer.locked) : false;
+  });
   const selectedDiffPair = history.present.diffPairs.find((group) =>
     group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
   const selectedScreen = history.present.screens.find((group) =>
@@ -1368,6 +1400,19 @@ export function HarnessDesignEditor({
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
+          />
+        ) : view === "drawing" && selectedWireIds.length >= 2 ? (
+          <CableSelectionPanel
+            selectedWireIds={selectedWireIds}
+            cable={selectedCable}
+            disabled={selectedWiresLocked}
+            onCreate={() => run({ type: "add-cable", cable: {
+              id: crypto.randomUUID(), memberWireIds: selectedWireIds, lengthMm: null,
+              endCorrectionFromMm: 0, endCorrectionToMm: 0, cutRoundingStepMm: 1,
+            } })}
+            onUpdate={(patch) => selectedCable && run({ type: "update-cable", cableId: selectedCable.id, ...patch })}
+            onMaterialClear={() => selectedCable && run({ type: "update-cable", cableId: selectedCable.id, materialBinding: null })}
+            onRemove={() => selectedCable && run({ type: "remove-cable", cableId: selectedCable.id })}
           />
         ) : undefined}
         canvasEditor={selectedConnector ? (
