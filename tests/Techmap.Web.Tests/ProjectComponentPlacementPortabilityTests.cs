@@ -136,6 +136,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
                 ["sourceKey"] = "UL1061-24-BK",
                 ["displayName"] = "UL1061 24 AWG, чёрный",
             },
+            ["stripProfiles"] = new JsonObject
+            {
+                ["from"] = StripProfile(
+                    "4a98501d-b827-43d0-a324-629e02613d0b", 'c', 'd', "BNC|RG58|from",
+                    "BNC / RG58, сторона X1",
+                    (1, 0.901m, 2.501m), (3, 2.953m, 3.507m), (7, 4.957m, 7.509m)),
+                ["to"] = StripProfile(
+                    "c8584ef6-a77d-4f26-9e24-9e082dd3fbcc", 'e', 'f', "BNC|RG58|to",
+                    "BNC / RG58, сторона X2",
+                    (2, 1.103m, 1.207m), (5, 3.311m, 5.419m)),
+            },
             ["lengthMm"] = 20.001m,
             ["endCorrectionFromMm"] = -0.001m,
             ["endCorrectionToMm"] = 0.002m,
@@ -240,6 +251,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Equal("wire", material.GetProperty("entityType").GetString());
         Assert.Equal("UL1061-24-BK", material.GetProperty("sourceKey").GetString());
         Assert.Equal("UL1061 24 AWG, чёрный", material.GetProperty("displayName").GetString());
+        var stripProfiles = wire.GetProperty("stripProfiles");
+        AssertStripProfile(
+            stripProfiles.GetProperty("from"),
+            "4a98501d-b827-43d0-a324-629e02613d0b", 'c', 'd', "BNC|RG58|from",
+            "BNC / RG58, сторона X1",
+            (1, 0.901m, 2.501m), (3, 2.953m, 3.507m), (7, 4.957m, 7.509m));
+        AssertStripProfile(
+            stripProfiles.GetProperty("to"),
+            "c8584ef6-a77d-4f26-9e24-9e082dd3fbcc", 'e', 'f', "BNC|RG58|to",
+            "BNC / RG58, сторона X2",
+            (2, 1.103m, 1.207m), (5, 3.311m, 5.419m));
         Assert.Equal(20.001m, wire.GetProperty("lengthMm").GetDecimal());
         Assert.Equal(-0.001m, wire.GetProperty("endCorrectionFromMm").GetDecimal());
         Assert.Equal(0.002m, wire.GetProperty("endCorrectionToMm").GetDecimal());
@@ -275,6 +297,55 @@ public sealed class ProjectComponentPlacementPortabilityTests
 
     private static string ContactId(Guid placementId, Guid logicalContactId) =>
         $"{placementId:D}:contact:{logicalContactId:D}";
+
+    private static JsonObject StripProfile(
+        string snapshotId,
+        char snapshotHashCharacter,
+        char recordHashCharacter,
+        string sourceKey,
+        string displayName,
+        params (int Index, decimal DiameterMm, decimal StripLengthMm)[] layers) => new()
+    {
+        ["sourceId"] = "technology-coax-terminations",
+        ["snapshotId"] = snapshotId,
+        ["snapshotSha256"] = new string(snapshotHashCharacter, 64),
+        ["recordId"] = new string(recordHashCharacter, 64),
+        ["entityType"] = "coax-termination",
+        ["sourceKey"] = sourceKey,
+        ["displayName"] = displayName,
+        ["layers"] = new JsonArray(layers.Select(layer => new JsonObject
+        {
+            ["index"] = layer.Index,
+            ["diameterMm"] = layer.DiameterMm,
+            ["stripLengthMm"] = layer.StripLengthMm,
+        }).ToArray()),
+    };
+
+    private static void AssertStripProfile(
+        JsonElement actual,
+        string snapshotId,
+        char snapshotHashCharacter,
+        char recordHashCharacter,
+        string sourceKey,
+        string displayName,
+        params (int Index, decimal DiameterMm, decimal StripLengthMm)[] layers)
+    {
+        Assert.Equal("technology-coax-terminations", actual.GetProperty("sourceId").GetString());
+        Assert.Equal(snapshotId, actual.GetProperty("snapshotId").GetString());
+        Assert.Equal(new string(snapshotHashCharacter, 64), actual.GetProperty("snapshotSha256").GetString());
+        Assert.Equal(new string(recordHashCharacter, 64), actual.GetProperty("recordId").GetString());
+        Assert.Equal("coax-termination", actual.GetProperty("entityType").GetString());
+        Assert.Equal(sourceKey, actual.GetProperty("sourceKey").GetString());
+        Assert.Equal(displayName, actual.GetProperty("displayName").GetString());
+        var actualLayers = actual.GetProperty("layers").EnumerateArray().ToArray();
+        Assert.Equal(layers.Length, actualLayers.Length);
+        for (var index = 0; index < layers.Length; index++)
+        {
+            Assert.Equal(layers[index].Index, actualLayers[index].GetProperty("index").GetInt32());
+            Assert.Equal(layers[index].DiameterMm, actualLayers[index].GetProperty("diameterMm").GetDecimal());
+            Assert.Equal(layers[index].StripLengthMm, actualLayers[index].GetProperty("stripLengthMm").GetDecimal());
+        }
+    }
 
     private sealed record SourceGraph(
         ProjectIdentity ProjectId,
