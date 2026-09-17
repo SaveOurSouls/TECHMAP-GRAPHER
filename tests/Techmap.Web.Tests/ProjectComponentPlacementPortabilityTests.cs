@@ -110,6 +110,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var firstLogicalId = Guid.NewGuid();
         var secondLogicalId = Guid.NewGuid();
         var articleVariantId = Guid.NewGuid();
+        var materialSnapshotId = Guid.NewGuid();
         var first = BoundInstance(firstId, firstLogicalId, articleVariantId, "X1", template, article);
         var second = BoundInstance(secondId, secondLogicalId, articleVariantId, "X2", template, article);
 
@@ -124,6 +125,21 @@ public sealed class ProjectComponentPlacementPortabilityTests
         content["wires"]!.AsArray().Add(new JsonObject
         {
             ["id"] = "wire-1",
+            ["circuit"] = "DATA+",
+            ["materialBinding"] = new JsonObject
+            {
+                ["sourceId"] = "technology-wires",
+                ["snapshotId"] = materialSnapshotId.ToString("D"),
+                ["snapshotSha256"] = new string('a', 64),
+                ["recordId"] = new string('b', 64),
+                ["entityType"] = "wire",
+                ["sourceKey"] = "UL1061-24-BK",
+                ["displayName"] = "UL1061 24 AWG, чёрный",
+            },
+            ["lengthMm"] = 20.001m,
+            ["endCorrectionFromMm"] = -0.001m,
+            ["endCorrectionToMm"] = 0.002m,
+            ["cutRoundingStepMm"] = 0.005m,
             ["from"] = new JsonObject
             {
                 ["connectorId"] = firstId.ToString("D"),
@@ -141,7 +157,8 @@ public sealed class ProjectComponentPlacementPortabilityTests
         return new SourceGraph(
             project.ProjectId, harness.HarnessId, [firstId, secondId],
             template.TemplateId, template.Version, template.VersionSha256,
-            template.SchemaVersion, articleVariantId, [firstLogicalId, secondLogicalId]);
+            template.SchemaVersion, articleVariantId, [firstLogicalId, secondLogicalId],
+            materialSnapshotId);
     }
 
     private static string BoundInstance(
@@ -213,6 +230,20 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var connectors = document.RootElement.GetProperty("connectors").EnumerateArray().ToArray();
         var wires = document.RootElement.GetProperty("wires").EnumerateArray().ToArray();
         var wire = Assert.Single(wires);
+        Assert.Equal("wire-1", wire.GetProperty("id").GetString());
+        Assert.Equal("DATA+", wire.GetProperty("circuit").GetString());
+        var material = wire.GetProperty("materialBinding");
+        Assert.Equal("technology-wires", material.GetProperty("sourceId").GetString());
+        Assert.Equal(source.MaterialSnapshotId.ToString("D"), material.GetProperty("snapshotId").GetString());
+        Assert.Equal(new string('a', 64), material.GetProperty("snapshotSha256").GetString());
+        Assert.Equal(new string('b', 64), material.GetProperty("recordId").GetString());
+        Assert.Equal("wire", material.GetProperty("entityType").GetString());
+        Assert.Equal("UL1061-24-BK", material.GetProperty("sourceKey").GetString());
+        Assert.Equal("UL1061 24 AWG, чёрный", material.GetProperty("displayName").GetString());
+        Assert.Equal(20.001m, wire.GetProperty("lengthMm").GetDecimal());
+        Assert.Equal(-0.001m, wire.GetProperty("endCorrectionFromMm").GetDecimal());
+        Assert.Equal(0.002m, wire.GetProperty("endCorrectionToMm").GetDecimal());
+        Assert.Equal(0.005m, wire.GetProperty("cutRoundingStepMm").GetDecimal());
         var destinationIds = placements.Select(item => item.PlacementId.ToString("D")).ToHashSet(StringComparer.Ordinal);
         Assert.Equal(destinationIds, connectors.Select(item => item.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal));
 
@@ -254,7 +285,8 @@ public sealed class ProjectComponentPlacementPortabilityTests
         string VersionSha256,
         int SchemaVersion,
         Guid ArticleVariantId,
-        IReadOnlyList<Guid> LogicalContactIds);
+        IReadOnlyList<Guid> LogicalContactIds,
+        Guid MaterialSnapshotId);
 
     private sealed class Fixture : IDisposable
     {
