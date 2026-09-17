@@ -991,4 +991,6 @@ M4-03 `0.17.0-m4-03` вводит многожильный кабель как �
 
 Проверены 684/684 клиентских теста, TypeScript, production build, 650/650
 .NET-тестов, copy/export/import acceptance, `git diff --check` и семь
-portable-режимов. Данные ZIP добавлены после сборки.
+portable-режимов. `artifacts/m4-03/TECHMAP-GRAPHER-win-x64.zip`: 48,21 МиБ
+(50 547 076 байт), SHA-256
+`414DD9CF8257B6AE65997520237A43B2840BD1D61C97F15EE920F7C5EAEE1B9B`.
