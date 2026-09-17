@@ -9,6 +9,7 @@ import {
   defaultLayerIds,
   isJunctionEndpoint,
   isScreenEndpoint,
+  normalizeWireStripProfileBinding,
   validateConnectorLibraryMetadata,
   validateOrthogonalE4Route,
   wireE4PathContainsPoint,
@@ -30,6 +31,7 @@ import {
   type WireColorSource,
   type WireInstance,
   type WireMaterialBinding,
+  type WireStripProfileBinding,
   type WireScreenGroup,
 } from "./model";
 import type { ConnectorLibraryBinding } from "./model";
@@ -55,6 +57,7 @@ export type EditorCommand =
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
+  | { readonly type: "set-wire-strip-profile"; readonly wireId: string; readonly end: "from" | "to"; readonly profile: WireStripProfileBinding | null }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -470,6 +473,19 @@ export function applyEditorCommand(
       };
       return normalizeJunctionCircuits(changed);
     }
+    case "set-wire-strip-profile":
+      return {
+        ...document,
+        wires: replaceRequired(document.wires, command.wireId, (wire) => {
+          const profile = command.profile === null ? undefined : normalizeWireStripProfileBinding(command.profile);
+          const stripProfiles = { ...wire.stripProfiles, [command.end]: profile };
+          if (stripProfiles.from === undefined && stripProfiles.to === undefined) {
+            const { stripProfiles: _removed, ...withoutProfiles } = wire;
+            return withoutProfiles;
+          }
+          return { ...wire, stripProfiles: Object.freeze(stripProfiles) };
+        }, "Провод не найден."),
+      };
     case "set-e4-wire-label-position": {
       const changed = {
         ...document,

@@ -6,6 +6,7 @@ import {
   componentTemplateSummaryToEditorCatalogItems,
   filterComponentTemplates,
   filterBuiltInConnectors,
+  normalizeCoaxTerminationCatalogCandidate,
   referenceRecordToEditorCatalogItem,
   remoteEditorCatalogSources,
 } from "./editor-reference-catalog";
@@ -127,5 +128,78 @@ describe("editor reference catalog", () => {
       recordId: "a".repeat(64),
       entityType: "wire", sourceKey: "UL1061-24AWG",
     });
+  });
+
+  it("normalizes complete coax termination layers without compacting index gaps", () => {
+    const snapshot = {
+      snapshotId: "00000000-0000-4000-8000-000000000099",
+      snapshotSha256: "b".repeat(64),
+    };
+    const sourceRecord = record("coax-termination", "BNC · RG58 #1", {
+      layers: [
+        { index: 1, diameterMm: "1,2", stripLengthMm: "2,5" },
+        { index: 3, diameterMm: 3.5, stripLengthMm: 7.5 },
+      ],
+    });
+
+    const candidate = normalizeCoaxTerminationCatalogCandidate(
+      "technology-coax-terminations", sourceRecord, snapshot,
+    );
+
+    expect(candidate).toEqual({
+      state: "ready",
+      diagnostics: [],
+      layers: [
+        { index: 1, diameterMm: 1.2, stripLengthMm: 2.5 },
+        { index: 3, diameterMm: 3.5, stripLengthMm: 7.5 },
+      ],
+      binding: {
+        sourceId: "technology-coax-terminations",
+        ...snapshot,
+        recordId: "a".repeat(64),
+        entityType: "coax-termination",
+        sourceKey: "BNC · RG58 #1",
+        layers: [
+          { index: 1, diameterMm: 1.2, stripLengthMm: 2.5 },
+          { index: 3, diameterMm: 3.5, stripLengthMm: 7.5 },
+        ],
+      },
+    });
+  });
+
+  it("keeps a partial coax termination visible with diagnostics and no binding", () => {
+    const item = referenceRecordToEditorCatalogItem(
+      source("technology-coax-terminations"),
+      record("coax-termination", "BNC · RG58 incomplete", {
+        layers: [
+          { index: 1, diameterMm: 1.2, stripLengthMm: 2.5 },
+          { index: 3, stripLengthMm: 7.5 },
+        ],
+      }),
+      { snapshotId: "00000000-0000-4000-8000-000000000099", snapshotSha256: "b".repeat(64) },
+    );
+
+    expect(item.title).toBe("BNC · RG58 incomplete");
+    expect(item.subtitle).toContain("D3 — / L3 7,5 мм");
+    expect(item.subtitle).toContain("данные неполные");
+    expect(item.coaxTerminationCandidate).toMatchObject({
+      state: "incomplete",
+      binding: null,
+      layers: [{ index: 1 }, { index: 3 }],
+      diagnostics: [{ code: "layer-diameter-missing", layerIndex: 3 }],
+    });
+  });
+
+  it("requires exact snapshot identity before a complete termination can bind", () => {
+    const candidate = normalizeCoaxTerminationCatalogCandidate(
+      "technology-coax-terminations",
+      record("coax-termination", "BNC · RG58", {
+        layers: [{ index: 1, diameterMm: 1.2, stripLengthMm: 2.5 }],
+      }),
+    );
+
+    expect(candidate.state).toBe("incomplete");
+    expect(candidate.binding).toBeNull();
+    expect(candidate.diagnostics).toEqual([expect.objectContaining({ code: "snapshot-identity-missing" })]);
   });
 });

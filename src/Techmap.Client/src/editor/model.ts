@@ -275,6 +275,8 @@ export interface WireInstance {
   readonly colorSource?: WireColorSource | null;
   /** Exact immutable reference-catalog record selected for this wire. */
   readonly materialBinding?: WireMaterialBinding;
+  /** Exact immutable stripping profiles selected independently for both wire ends. */
+  readonly stripProfiles?: WireEndStripProfiles;
   /** Physical source length. Null means that the wire is intentionally incomplete. */
   readonly lengthMm: number | null;
   /** Signed technological correction at the `from` end, in millimetres. */
@@ -310,6 +312,61 @@ export interface WireMaterialBinding {
   readonly entityType: "wire" | "cable";
   readonly sourceKey: string;
   readonly displayName: string;
+}
+
+export interface WireEndStripProfiles {
+  readonly from?: WireStripProfileBinding;
+  readonly to?: WireStripProfileBinding;
+}
+
+/**
+ * Exact catalog snapshot and normalized layer geometry for one end treatment.
+ * Layer indices run from the central conductor outwards. Both diameter and
+ * cumulative strip length therefore grow with the index.
+ */
+export interface WireStripProfileBinding {
+  readonly sourceId: string;
+  readonly snapshotId: string;
+  readonly snapshotSha256: string;
+  readonly recordId: string;
+  readonly entityType: "coax-termination";
+  readonly sourceKey: string;
+  readonly displayName: string;
+  readonly layers: readonly WireStripProfileLayer[];
+}
+
+export interface WireStripProfileLayer {
+  readonly index: number;
+  readonly diameterMm: number;
+  /** Cumulative length from the common cut end, in millimetres. */
+  readonly stripLengthMm: number;
+}
+
+export interface WireStripStep {
+  readonly index: number;
+  readonly diameterMm: number;
+  readonly cumulativeLengthMm: number;
+  /** Length added outside the previous, more internal layer. */
+  readonly stepLengthMm: number;
+}
+
+const maximumWireStripLayers = 64;
+
+/** Converts cumulative L values into independently executable strip steps. */
+export function calculateWireStripSteps(layers: readonly WireStripProfileLayer[]): readonly WireStripStep[] {
+  const normalized = normalizeWireStripProfileLayers(layers);
+  let previousMicrometres = 0n;
+  return Object.freeze(normalized.map((layer) => {
+    const cumulativeMicrometres = toExactMicrometres(layer.stripLengthMm, `L${layer.index}`);
+    const step = Object.freeze({
+      index: layer.index,
+      diameterMm: layer.diameterMm,
+      cumulativeLengthMm: layer.stripLengthMm,
+      stepLengthMm: Number(cumulativeMicrometres - previousMicrometres) / micrometresPerMillimetre,
+    });
+    previousMicrometres = cumulativeMicrometres;
+    return step;
+  }));
 }
 
 export interface WireCutLengthCalculation {
@@ -1424,6 +1481,8 @@ function parseWire(value: unknown): WireInstance {
       ? record.colorSource : parseWireColorSource(record.colorSource),
     materialBinding: record.materialBinding === undefined
       ? undefined : parseWireMaterialBinding(record.materialBinding),
+    stripProfiles: record.stripProfiles === undefined
+      ? undefined : parseWireEndStripProfiles(record.stripProfiles),
     lengthMm,
     endCorrectionFromMm,
     endCorrectionToMm,
@@ -1457,6 +1516,77 @@ function parseWireMaterialBinding(value: unknown): WireMaterialBinding {
     sourceKey: requireBoundedText(record.sourceKey, "Ключ материала провода", 512),
     displayName: requireBoundedText(record.displayName, "Название материала провода", 256),
   });
+}
+
+function parseWireEndStripProfiles(value: unknown): WireEndStripProfiles | undefined {
+  const record = requireRecord(value, "Профили разделки концов провода заданы неверно.");
+  const from = record.from === undefined ? undefined : normalizeWireStripProfileBinding(record.from);
+  const to = record.to === undefined ? undefined : normalizeWireStripProfileBinding(record.to);
+  return from === undefined && to === undefined ? undefined : Object.freeze({ from, to });
+}
+
+/** Validates and snapshots a catalog profile before it is stored in a command result. */
+export function normalizeWireStripProfileBinding(value: unknown): WireStripProfileBinding {
+  const record = requireRecord(value, "Привязка профиля разделки задана неверно.");
+  if (record.entityType !== "coax-termination") {
+    throw new Error("Тип профиля разделки задан неверно.");
+  }
+  if (!Array.isArray(record.layers)) throw new Error("Слои профиля разделки заданы неверно.");
+  const layers = normalizeWireStripProfileLayers(record.layers.map((item) => {
+    const layer = requireRecord(item, "Слой профиля разделки задан неверно.");
+    return {
+      index: requireInteger(layer.index, "Номер слоя профиля разделки", 1, Number.MAX_SAFE_INTEGER),
+      diameterMm: requireNumber(layer.diameterMm, "Диаметр слоя профиля разделки"),
+      stripLengthMm: requireNumber(layer.stripLengthMm, "Длина слоя профиля разделки"),
+    };
+  }));
+  return Object.freeze({
+    sourceId: requireBoundedText(record.sourceId, "Источник профиля разделки", 128),
+    snapshotId: parseNonEmptyGuid(record.snapshotId, "ID снимка профиля разделки"),
+    snapshotSha256: parseSha256(record.snapshotSha256, "Хэш снимка профиля разделки"),
+    recordId: parseSha256(record.recordId, "ID записи профиля разделки"),
+    entityType: record.entityType,
+    sourceKey: requireBoundedText(record.sourceKey, "Ключ профиля разделки", 512),
+    displayName: requireBoundedText(record.displayName, "Название профиля разделки", 256),
+    layers,
+  });
+}
+
+function normalizeWireStripProfileLayers(layers: readonly WireStripProfileLayer[]): readonly WireStripProfileLayer[] {
+  if (layers.length < 1 || layers.length > maximumWireStripLayers) {
+    throw new Error(`Профиль разделки должен содержать от 1 до ${maximumWireStripLayers} слоёв.`);
+  }
+  let previousIndex = 0;
+  let previousDiameterMicrometres = 0n;
+  let previousLengthMicrometres = 0n;
+  const normalized = layers.map((layer) => {
+    if (!Number.isSafeInteger(layer.index) || layer.index < 1) {
+      throw new Error("Номер слоя профиля разделки должен быть положительным целым числом.");
+    }
+    if (layer.index <= previousIndex) {
+      throw new Error("Номера слоёв профиля разделки должны быть уникальны и расположены по возрастанию.");
+    }
+    const diameterMicrometres = validateWireStripMeasurement(layer.diameterMm, `D${layer.index}`);
+    const lengthMicrometres = validateWireStripMeasurement(layer.stripLengthMm, `L${layer.index}`);
+    if (diameterMicrometres <= previousDiameterMicrometres) {
+      throw new Error("Диаметры слоёв профиля разделки должны строго возрастать.");
+    }
+    if (lengthMicrometres <= previousLengthMicrometres) {
+      throw new Error("Длины слоёв профиля разделки должны строго возрастать.");
+    }
+    previousIndex = layer.index;
+    previousDiameterMicrometres = diameterMicrometres;
+    previousLengthMicrometres = lengthMicrometres;
+    return Object.freeze({ index: layer.index, diameterMm: layer.diameterMm, stripLengthMm: layer.stripLengthMm });
+  });
+  return Object.freeze(normalized);
+}
+
+function validateWireStripMeasurement(value: number, name: string): bigint {
+  if (!Number.isFinite(value) || value <= 0 || value > maximumWireLengthMm) {
+    throw new Error(`${name} должна быть положительным числом в миллиметрах.`);
+  }
+  return toExactMicrometres(value, name);
 }
 
 function parseWireColorSource(value: unknown): WireColorSource {

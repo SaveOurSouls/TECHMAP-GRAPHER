@@ -11,7 +11,13 @@ import {
   type ComponentTemplateSummary,
 } from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
-import type { EditorCatalogItem, EditorCatalogSource } from "./editor-types";
+import type {
+  CoaxTerminationCatalogCandidate,
+  CoaxTerminationCatalogDiagnostic,
+  CoaxTerminationCatalogLayer,
+  EditorCatalogItem,
+  EditorCatalogSource,
+} from "./editor-types";
 
 interface RemoteCatalogSource extends EditorCatalogSource {
   readonly entityTypes: readonly string[];
@@ -51,6 +57,13 @@ export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
     description: "Диаметры коаксиальных кабелей из СПР.КАБ",
     entityTypes: ["coax-cable"],
     accent: "#596d78",
+  },
+  {
+    id: "technology-coax-terminations",
+    label: "Разделка коаксиала",
+    description: "Послойные диаметры и длины разделки из БД.КОАКС",
+    entityTypes: ["coax-termination"],
+    accent: "#6d5b78",
   },
   {
     id: "technology-awg-reference",
@@ -109,6 +122,102 @@ function range(
   return null;
 }
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sha256Pattern = /^[0-9a-f]{64}$/i;
+
+function positiveDecimal(value: unknown): number | null {
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    if (!normalized || normalized === "-" || normalized === "—") return null;
+    value = normalized;
+  }
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function positiveIndex(value: unknown): number | null {
+  const number = typeof value === "number" ? value :
+    typeof value === "string" && value.trim() ? Number(value.trim()) : Number.NaN;
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+/** Converts one published БД.КОАКС row into a future bindable value without
+ * hiding partial source data. Indexes are never compacted: [1, 3] stays [1, 3]. */
+export function normalizeCoaxTerminationCatalogCandidate(
+  sourceId: string,
+  record: ReferenceCatalogSearchRecord,
+  snapshot?: { readonly snapshotId: string; readonly snapshotSha256: string },
+): CoaxTerminationCatalogCandidate {
+  const diagnostics: CoaxTerminationCatalogDiagnostic[] = [];
+  const layers: CoaxTerminationCatalogLayer[] = [];
+  const rawLayers = Array.isArray(record.payload.layers) ? record.payload.layers : [];
+
+  for (const rawLayer of rawLayers) {
+    if (typeof rawLayer !== "object" || rawLayer === null || Array.isArray(rawLayer)) {
+      diagnostics.push({ code: "layer-invalid", message: "Слой разделки имеет неверный формат." });
+      continue;
+    }
+    const layer = rawLayer as Readonly<Record<string, unknown>>;
+    const index = positiveIndex(layer.index);
+    if (index === null) {
+      diagnostics.push({ code: "layer-invalid", message: "У слоя разделки не указан корректный индекс." });
+      continue;
+    }
+    const diameterMm = positiveDecimal(layer.diameterMm);
+    const stripLengthMm = positiveDecimal(layer.stripLengthMm);
+    layers.push({ index, diameterMm, stripLengthMm });
+    if (diameterMm === null) diagnostics.push({
+      code: "layer-diameter-missing", layerIndex: index,
+      message: `Для слоя D${index} не указан диаметр.`,
+    });
+    if (stripLengthMm === null) diagnostics.push({
+      code: "layer-strip-length-missing", layerIndex: index,
+      message: `Для слоя L${index} не указана длина разделки.`,
+    });
+  }
+
+  if (layers.length === 0) diagnostics.push({
+    code: "layers-missing", message: "В записи нет активных слоёв разделки.",
+  });
+  const indexes = new Set<number>();
+  for (const layer of layers) {
+    if (indexes.has(layer.index)) diagnostics.push({
+      code: "layer-index-duplicate", layerIndex: layer.index,
+      message: `Индекс слоя ${layer.index} повторяется.`,
+    });
+    indexes.add(layer.index);
+  }
+
+  const hasRecordIdentity = sourceId.trim() !== "" && record.entityType === "coax-termination" &&
+    record.sourceKey.trim() !== "" && sha256Pattern.test(record.recordId);
+  if (!hasRecordIdentity) diagnostics.push({
+    code: "record-identity-invalid",
+    message: "Запись разделки не содержит точную идентификацию источника.",
+  });
+  const hasSnapshotIdentity = snapshot !== undefined &&
+    uuidPattern.test(snapshot.snapshotId) && sha256Pattern.test(snapshot.snapshotSha256);
+  if (!hasSnapshotIdentity) diagnostics.push({
+    code: "snapshot-identity-missing",
+    message: "Для привязки требуется точная версия опубликованного справочника.",
+  });
+
+  const binding = diagnostics.length === 0 && snapshot ? {
+    sourceId,
+    snapshotId: snapshot.snapshotId,
+    snapshotSha256: snapshot.snapshotSha256,
+    recordId: record.recordId,
+    entityType: "coax-termination" as const,
+    sourceKey: record.sourceKey,
+    layers: layers.map((layer) => ({
+      index: layer.index,
+      diameterMm: layer.diameterMm!,
+      stripLengthMm: layer.stripLengthMm!,
+    })),
+  } : null;
+  return { state: binding ? "ready" : "incomplete", layers, diagnostics, binding };
+}
+
 export function referenceRecordToEditorCatalogItem(
   source: RemoteCatalogSource,
   record: ReferenceCatalogSearchRecord,
@@ -116,6 +225,9 @@ export function referenceRecordToEditorCatalogItem(
 ): EditorCatalogItem {
   const payload = record.payload;
   const details: string[] = [];
+  const coaxTerminationCandidate = record.entityType === "coax-termination"
+    ? normalizeCoaxTerminationCatalogCandidate(source.id, record, snapshot)
+    : undefined;
   if (record.entityType === "terminal") {
     const family = firstValue(payload, "productName", "series", "connectorType", "manufacturer");
     const section = range(payload, "sectionFromMm2", "sectionToMm2", "мм²") ??
@@ -136,6 +248,13 @@ export function referenceRecordToEditorCatalogItem(
       return index && diameter ? [`D${index} ${diameter} мм`] : [];
     });
     details.push(...diameters.slice(0, 3));
+  } else if (record.entityType === "coax-termination") {
+    for (const layer of coaxTerminationCandidate?.layers ?? []) {
+      const diameter = layer.diameterMm === null ? `D${layer.index} —` : `D${layer.index} ${displayValue(layer.diameterMm)} мм`;
+      const length = layer.stripLengthMm === null ? `L${layer.index} —` : `L${layer.index} ${displayValue(layer.stripLengthMm)} мм`;
+      details.push(`${diameter} / ${length}`);
+    }
+    if (coaxTerminationCandidate?.state === "incomplete") details.push("данные неполные");
   } else if (record.entityType === "awg-reference") {
     const section = firstValue(payload, "sectionMm2");
     const conductor = firstValue(payload, "conductorDiameterMm");
@@ -168,6 +287,7 @@ export function referenceRecordToEditorCatalogItem(
     referenceDisplayName: record.entityType === "wire" || record.entityType === "cable"
       ? firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
       : undefined,
+    coaxTerminationCandidate,
   };
 }
 

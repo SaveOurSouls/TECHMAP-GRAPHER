@@ -36,6 +36,51 @@ export interface EditorLayer {
   readonly locked: boolean;
 }
 
+export type CoaxTerminationCatalogDiagnosticCode =
+  | "snapshot-identity-missing"
+  | "record-identity-invalid"
+  | "layers-missing"
+  | "layer-invalid"
+  | "layer-index-duplicate"
+  | "layer-diameter-missing"
+  | "layer-strip-length-missing";
+
+export interface CoaxTerminationCatalogDiagnostic {
+  readonly code: CoaxTerminationCatalogDiagnosticCode;
+  readonly message: string;
+  readonly layerIndex?: number;
+}
+
+/** A normalized active layer. Missing D or L is retained so an incomplete
+ * published catalog row remains visible and can explain why it cannot bind. */
+export interface CoaxTerminationCatalogLayer {
+  readonly index: number;
+  readonly diameterMm: number | null;
+  readonly stripLengthMm: number | null;
+}
+
+export interface CoaxTerminationCatalogBinding {
+  readonly sourceId: string;
+  readonly snapshotId: string;
+  readonly snapshotSha256: string;
+  readonly recordId: string;
+  readonly entityType: "coax-termination";
+  readonly sourceKey: string;
+  readonly layers: readonly {
+    readonly index: number;
+    readonly diameterMm: number;
+    readonly stripLengthMm: number;
+  }[];
+}
+
+export interface CoaxTerminationCatalogCandidate {
+  readonly state: "ready" | "incomplete";
+  readonly layers: readonly CoaxTerminationCatalogLayer[];
+  readonly diagnostics: readonly CoaxTerminationCatalogDiagnostic[];
+  /** Present only for an exact immutable snapshot and complete D+L layers. */
+  readonly binding: CoaxTerminationCatalogBinding | null;
+}
+
 export interface EditorCatalogItem {
   readonly id: string;
   readonly title: string;
@@ -50,6 +95,7 @@ export interface EditorCatalogItem {
   readonly sourceKey?: string;
   readonly entityType?: string;
   readonly referenceDisplayName?: string;
+  readonly coaxTerminationCandidate?: CoaxTerminationCatalogCandidate;
   /** Library template metadata used when placing connector instances. */
   readonly templateKind?: "series" | "free";
   readonly seriesId?: string;
