@@ -104,6 +104,7 @@ function ColorCellEditor({
   open,
   onOpenChange,
   onChange,
+  onResetAuto,
 }: {
   readonly contact: ConnectorContact;
   readonly choices: readonly WireColorReference[];
@@ -112,6 +113,7 @@ function ColorCellEditor({
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onChange: (patch: Pick<ConnectorContact, "color" | "secondaryColor">) => void;
+  readonly onResetAuto: () => void;
 }) {
   const primary = contact.color;
   const secondary = contact.secondaryColor ?? "";
@@ -179,6 +181,16 @@ function ColorCellEditor({
             />
           </span>
         </label>
+        <button
+          type="button"
+          className="e4cce-color-auto"
+          disabled={disabled || contact.colorMode === "auto" ||
+            contact.colorMode === undefined && !primary.trim() && !secondary.trim()}
+          onClick={() => {
+            onResetAuto();
+            onOpenChange(false);
+          }}
+        >Автоматический цвет</button>
       </div>
     </div>
   );
@@ -451,6 +463,11 @@ export function E4ConnectorInspector({
                       open={openColorContactId === contact.id}
                       onOpenChange={(open) => setOpenColorContactId(open ? contact.id : null)}
                       onChange={(patch) => updateContact(contact, patch)}
+                      onResetAuto={() => onCommand({
+                        type: "reset-contact-color-auto",
+                        connectorId: connector.id,
+                        contactId: contact.id,
+                      })}
                     />
                   ) : column.id === "terminal" && isLibrary ? (
                     <select

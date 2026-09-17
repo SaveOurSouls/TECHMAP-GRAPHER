@@ -206,6 +206,8 @@ export interface ConnectorContact {
   readonly color: string;
   /** Empty or missing means that the wire has one insulation color. */
   readonly secondaryColor?: string;
+  /** Automatic values follow a directly connected contact; manual values are preserved. */
+  readonly colorMode?: "auto" | "manual";
   readonly connectionStatus: ConnectorContactStatus;
   readonly customValues: Readonly<Record<string, string>>;
   readonly libraryContact?: ConnectorLibraryContact | null;
@@ -749,6 +751,8 @@ interface ScreenRouteSpan {
   readonly crossMinimum: number;
   readonly crossMaximum: number;
   readonly routeIndex: number;
+  readonly routeSignature: string;
+  readonly firstWireDirection: 1 | -1;
 }
 
 interface ScreenRouteSegment {
@@ -757,6 +761,7 @@ interface ScreenRouteSegment {
   readonly end: number;
   readonly cross: number;
   readonly routeIndex: number;
+  readonly direction: 1 | -1;
 }
 
 export interface WireScreenConnectionGeometry {
@@ -801,6 +806,7 @@ export function wireScreenConnectionGeometry(
         end: Math.max(previous.x, current.x),
         cross: previous.y,
         routeIndex: index,
+        direction: current.x >= previous.x ? 1 : -1,
       });
       else if (previous.x === current.x && previous.y !== current.y) segments.push({
         orientation: "vertical",
@@ -808,6 +814,7 @@ export function wireScreenConnectionGeometry(
         end: Math.max(previous.y, current.y),
         cross: previous.x,
         routeIndex: index,
+        direction: current.y >= previous.y ? 1 : -1,
       });
     });
     return segments;
@@ -828,10 +835,12 @@ export function wireScreenConnectionGeometry(
       crossMinimum: Math.min(...selected.map((segment) => segment.cross)),
       crossMaximum: Math.max(...selected.map((segment) => segment.cross)),
       routeIndex: selected[0]!.routeIndex,
+      routeSignature: selected.map((segment) => segment.routeIndex).join(":"),
+      firstWireDirection: selected[0]!.direction,
     });
   }
   if (spans.length === 0) {
-    const seen = new Set<string>();
+    const seen = new Set(spans.map((span) => `${span.orientation}:${span.routeSignature}`));
     for (const orientation of ["horizontal", "vertical"] as const) {
       const candidates = [...new Set(segmentLists.flatMap((segments) => segments
         .filter((segment) => segment.orientation === orientation)
@@ -853,6 +862,8 @@ export function wireScreenConnectionGeometry(
           crossMinimum: Math.min(...selected.map((segment) => segment!.cross)),
           crossMaximum: Math.max(...selected.map((segment) => segment!.cross)),
           routeIndex: selected[0]!.routeIndex,
+          routeSignature: selected.map((segment) => segment!.routeIndex).join(":"),
+          firstWireDirection: selected[0]!.direction,
         });
       }
     }
@@ -870,7 +881,8 @@ export function wireScreenConnectionGeometry(
     }
     accumulated += span.end - span.start;
   }
-  const along = selected.start + Math.max(0, Math.min(selected.end - selected.start, requestedDistance - accumulated));
+  const spanOffset = Math.max(0, Math.min(selected.end - selected.start, requestedDistance - accumulated));
+  const along = selected.firstWireDirection === 1 ? selected.start + spanOffset : selected.end - spanOffset;
   const cross = (selected.crossMinimum + selected.crossMaximum) / 2;
   const alongSize = e4ScreenAlongSize;
   const crossSize = Math.max(32, screen.width, selected.crossMaximum - selected.crossMinimum + 18);
@@ -1096,6 +1108,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       wire: optionalString(contact.wire, "Провод контакта"),
       color: optionalString(contact.color, "Цвет провода контакта"),
       secondaryColor: optionalString(contact.secondaryColor, "Второй цвет провода контакта"),
+      ...(contact.colorMode === undefined ? {} : { colorMode: parseContactColorMode(contact.colorMode) }),
       connectionStatus: parseContactStatus(contact.connectionStatus),
       customValues: parseCustomValues(contact.customValues),
       libraryContact: parseConnectorLibraryContact(contact.libraryContact),
@@ -1670,6 +1683,11 @@ function parseWireColorSource(value: unknown): WireColorSource {
     connectorId: requireText(record.connectorId, "Соединитель источника цвета"),
     contactId: requireText(record.contactId, "Контакт источника цвета"),
   };
+}
+
+function parseContactColorMode(value: unknown): "auto" | "manual" {
+  if (value === "auto" || value === "manual") return value;
+  throw new Error("Режим цвета контакта задан неверно.");
 }
 
 function normalizeWireColorSource(document: HarnessDesignDocument, wire: WireInstance): WireColorSource | null | undefined {

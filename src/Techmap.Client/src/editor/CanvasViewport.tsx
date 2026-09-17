@@ -626,6 +626,8 @@ export interface E4ParallelSpan {
   readonly end: number;
   readonly crossMinimum: number;
   readonly crossMaximum: number;
+  /** Direction in which the first selected wire traverses this span. */
+  readonly firstWireDirection: 1 | -1;
   readonly segmentByWireId: Readonly<Record<string, E4WireSegment>>;
 }
 
@@ -680,6 +682,7 @@ export function findE4CommonParallelSpan(
         end,
         crossMinimum: Math.min(...crosses),
         crossMaximum: Math.max(...crosses),
+        firstWireDirection: segmentAxisDirection(chosen[0]!, orientation),
         segmentByWireId: Object.fromEntries(wireIds.map((wireId, index) => [wireId, chosen[index]!])),
       };
     }
@@ -781,10 +784,9 @@ export function getE4ScreenLayout(
       : fallbackSpan ? [fallbackSpan] : [];
   if (spans.length === 0) return null;
   const firstWire = objects.find((object) => object.id === screen.wireIds[0] && object.kind === "wire");
-  const firstRouteSegments = firstWire ? e4WireSegments(getE4WireRoute(firstWire)) : [];
   const orderedSpans = [...spans].sort((left, right) => {
-    const leftIndex = firstWire ? firstRouteSegments.indexOf(left.segmentByWireId[firstWire.id]!) : 0;
-    const rightIndex = firstWire ? firstRouteSegments.indexOf(right.segmentByWireId[firstWire.id]!) : 0;
+    const leftIndex = firstWire ? left.segmentByWireId[firstWire.id]?.index ?? Number.MAX_SAFE_INTEGER : 0;
+    const rightIndex = firstWire ? right.segmentByWireId[firstWire.id]?.index ?? Number.MAX_SAFE_INTEGER : 0;
     return leftIndex - rightIndex || left.start - right.start;
   });
   const pathLength = orderedSpans.reduce((sum, item) => sum + (item.end - item.start), 0);
@@ -799,7 +801,8 @@ export function getE4ScreenLayout(
     }
     distance += length;
   }
-  const along = span.start + Math.max(0, Math.min(span.end - span.start, requestedDistance - distance));
+  const spanOffset = Math.max(0, Math.min(span.end - span.start, requestedDistance - distance));
+  const along = span.firstWireDirection === 1 ? span.start + spanOffset : span.end - spanOffset;
   const cross = (span.crossMinimum + span.crossMaximum) / 2;
   const crossSize = Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18);
   const center = span.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
@@ -892,6 +895,7 @@ function findE4AlignedParallelSpans(
       end,
       crossMinimum: Math.min(...crosses),
       crossMaximum: Math.max(...crosses),
+      firstWireDirection: segmentAxisDirection(selected[0]!, orientation),
       segmentByWireId: Object.fromEntries(wireIds.map((wireId, wireIndex) => [wireId, selected[wireIndex]!])),
     });
   }
@@ -944,6 +948,7 @@ function findE4AllCommonParallelSpans(
         end,
         crossMinimum: Math.min(...crosses),
         crossMaximum: Math.max(...crosses),
+        firstWireDirection: segmentAxisDirection(selected[0]!.segment, orientation),
         segmentByWireId: Object.fromEntries(wireIds.map((wireId, index) => [wireId, selected[index]!.segment])),
       });
     }
@@ -964,11 +969,16 @@ function getE4ScreenPositionForPoint(layout: E4ScreenLayout, point: EditorPoint)
     const distance = Math.hypot(axis - along, cross - (span.crossMinimum + span.crossMaximum) / 2);
     if (distance < bestDistance) {
       bestDistance = distance;
-      bestAlong = accumulated + along - minimum;
+      bestAlong = accumulated + (span.firstWireDirection === 1 ? along - minimum : maximum - along);
     }
     accumulated += maximum - minimum;
   }
   return layout.pathLength <= 0 ? 0 : Math.max(0, Math.min(1, bestAlong / layout.pathLength));
+}
+
+function segmentAxisDirection(segment: E4WireSegment, orientation: E4SegmentOrientation): 1 | -1 {
+  const delta = orientation === "horizontal" ? segment.end.x - segment.start.x : segment.end.y - segment.start.y;
+  return delta >= 0 ? 1 : -1;
 }
 
 export function hitTestE4Screen(

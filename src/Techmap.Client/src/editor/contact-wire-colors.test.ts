@@ -75,12 +75,68 @@ describe("connector contact wire colors", () => {
     expect(document.wires[0]).toMatchObject({
       color: "#D32F2F", colorSource: { connectorId: "x1", contactId: x1.contacts[0]!.id },
     });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({ color: "красный", colorMode: "auto" });
     document = applyEditorCommand(document, {
       type: "update-contact", connectorId: "x2", contactId: x2.contacts[0]!.id, color: "синий",
     });
     expect(document.wires[0]).toMatchObject({
       color: "#1976D2", colorSource: { connectorId: "x2", contactId: x2.contacts[0]!.id },
     });
+    expect(document.connectors[0]?.contacts[0]).toMatchObject({ color: "красный", colorMode: "manual" });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({ color: "синий", colorMode: "manual" });
+  });
+
+  it("preserves a manual opposite color and can reset that cell to the direct-wire automatic value", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = contactsLeft(createConnector("x2", "X2", 1, { x: 600, y: 0 }));
+    let document: HarnessDesignDocument = {
+      ...createEmptyHarnessDesign(), connectors: [x1, x2],
+      wires: [createWire("w1", { connectorId: "x1", contactId: x1.contacts[0]!.id },
+        { connectorId: "x2", contactId: x2.contacts[0]!.id })],
+    };
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: "x2", contactId: x2.contacts[0]!.id, color: "синий",
+    });
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: "x1", contactId: x1.contacts[0]!.id,
+      color: "красный", secondaryColor: "белый",
+    });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({ color: "синий", colorMode: "manual" });
+    expect(document.wires[0]).toMatchObject({ color: "#D32F2F" });
+
+    document = applyEditorCommand(document, {
+      type: "reset-contact-color-auto", connectorId: "x2", contactId: x2.contacts[0]!.id,
+    });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({
+      color: "красный", secondaryColor: "белый", colorMode: "auto",
+    });
+    expect(document.wires[0]).toMatchObject({
+      color: "#D32F2F", colorSource: { connectorId: "x1", contactId: x1.contacts[0]!.id },
+    });
+
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: "x1", contactId: x1.contacts[0]!.id, color: "оранжевый",
+    });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({
+      color: "оранжевый", secondaryColor: "белый", colorMode: "auto",
+    });
+  });
+
+  it("starts a new direct wire from the chosen contact color and fills only an automatic opposite cell", () => {
+    const x1 = createConnector("x1", "X1", 1, { x: 0, y: 0 });
+    const x2 = contactsLeft(createConnector("x2", "X2", 1, { x: 600, y: 0 }));
+    let document: HarnessDesignDocument = { ...createEmptyHarnessDesign(), connectors: [x1, x2] };
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: "x1", contactId: x1.contacts[0]!.id, color: "фиолетовый",
+    });
+    document = applyEditorCommand(document, {
+      type: "add-wire",
+      wire: createWire("w1", { connectorId: "x1", contactId: x1.contacts[0]!.id },
+        { connectorId: "x2", contactId: x2.contacts[0]!.id }, 100, "", "#7B1FA2", 0, 0, 1,
+        { connectorId: "x1", contactId: x1.contacts[0]!.id }),
+    });
+    expect(document.connectors[1]?.contacts[0]).toMatchObject({ color: "фиолетовый", colorMode: "auto" });
+    expect(document.wires[0]?.color).toBe("#7B1FA2");
   });
 
   it("keeps branch and manually recolored direct wire colors independent", () => {
@@ -108,6 +164,7 @@ describe("connector contact wire colors", () => {
     });
     expect(document.wires.find((wire) => wire.id === "direct")).toMatchObject({ color: "#ABCDEF", colorSource: null });
     expect(document.wires.find((wire) => wire.id === "branch")?.color).toBe("#00FF00");
+    expect(document.connectors.find((connector) => connector.id === "x2")?.contacts[0]?.color).toBe("");
   });
 
   it("persists the direct wire color source and repairs a stale legacy source", () => {

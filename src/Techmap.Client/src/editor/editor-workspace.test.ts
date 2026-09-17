@@ -924,6 +924,31 @@ describe("harness editor workspace", () => {
     });
   });
 
+  it("follows the first wire traversal direction across a reversed multi-bend screen path", () => {
+    const routed: readonly EditorSceneObject[] = [
+      {
+        id: "route-a", layerId: "top", kind: "wire", label: "A",
+        x: 0, y: 0, width: 0, height: 0, color: "#c00", metadata: { view: "e4" },
+        points: [{ x: 200, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }, { x: 0, y: 0 }],
+      },
+      {
+        id: "route-b", layerId: "top", kind: "wire", label: "B",
+        x: 0, y: 0, width: 0, height: 0, color: "#00c", metadata: { view: "e4" },
+        points: [{ x: 200, y: 120 }, { x: 80, y: 120 }, { x: 80, y: 20 }, { x: 0, y: 20 }],
+      },
+    ];
+    const base = { id: "screen", wireIds: ["route-a", "route-b"], label: "SH", width: 18 };
+    expect(getE4ScreenLayout({ ...base, position: 0.1 }, routed)).toMatchObject({
+      center: { x: 174, y: 110 }, orientation: "horizontal", pathLength: 260,
+    });
+    expect(getE4ScreenLayout({ ...base, position: 0.5 }, routed)).toMatchObject({
+      center: { x: 90, y: 70 }, orientation: "vertical", pathLength: 260,
+    });
+    expect(getE4ScreenLayout({ ...base, position: 0.9 }, routed)).toMatchObject({
+      center: { x: 26, y: 10 }, orientation: "horizontal", pathLength: 260,
+    });
+  });
+
   it("accepts model overlay metadata and drops malformed groups", () => {
     const carrier: EditorSceneObject = {
       id: "W1", layerId: "top", kind: "wire", label: "W1", x: 0, y: 0, width: 0, height: 0,

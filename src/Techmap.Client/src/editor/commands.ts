@@ -49,6 +49,7 @@ export type EditorCommand =
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
   | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "toggle-base-column-visibility"; readonly connectorId: string; readonly key: ConnectorBaseColumnKey }
@@ -329,17 +330,20 @@ export function applyEditorCommand(
           secondaryColor: command.secondaryColor === undefined
             ? contact.secondaryColor ?? ""
             : normalizeValue(command.secondaryColor, "Второй цвет провода контакта"),
+          colorMode: command.color === undefined && command.secondaryColor === undefined ? contact.colorMode : "manual",
           connectionStatus: command.connectionStatus ?? contact.connectionStatus,
           customValues: customValues ?? contact.customValues,
         }), "Контакт не найден.");
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
-      const synchronized = command.color === undefined
+      const synchronized = command.color === undefined && command.secondaryColor === undefined
         ? updated
         : syncDirectWireColors(updated, command.connectorId, command.contactId);
       return rememberCustomWireColors(synchronized, [command.color ?? "", command.secondaryColor ?? ""]);
     }
+    case "reset-contact-color-auto":
+      return resetContactColorToAutomatic(document, command.connectorId, command.contactId);
     case "add-contact": {
       const updated = updateConnectorE4Geometry(document, command.connectorId, (connector) => {
         if (connector.libraryBinding?.mode === "series" || connector.libraryBinding?.mode === "template") {
@@ -476,7 +480,10 @@ export function applyEditorCommand(
       }
       const addedAndRouted = rerouteWireE4(added, command.wire.id);
       validateWireGroups(addedAndRouted);
-      return normalizeJunctionCircuits(addedAndRouted);
+      const normalized = normalizeJunctionCircuits(addedAndRouted);
+      return command.wire.colorSource
+        ? syncDirectWireColors(normalized, command.wire.colorSource.connectorId, command.wire.colorSource.contactId)
+        : normalized;
     case "remove-wire": {
       const attachedWireIds = screenAttachmentWireIds(document, [command.wireId]);
       const changed = {
@@ -803,14 +810,82 @@ function syncDirectWireColors(
   if (!contact) return document;
   const color = resolveWireColorHex(contact.color);
   let changed = false;
+  let connectors = document.connectors;
   const wires = document.wires.map((wire) => {
     if (wire.colorSource === null || isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ||
         isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to) ||
         ![wire.from, wire.to].some((endpoint) => isConnectorEndpoint(endpoint, connectorId, contactId))) return wire;
+    const opposite = sameConnectorEndpoint(wire.from, connectorId, contactId) ? wire.to : wire.from;
+    const oppositeContact = contactAtEndpoint({ ...document, connectors }, opposite);
+    if (oppositeContact && contactColorIsAutomatic(oppositeContact)) {
+      connectors = updateContactColor(connectors, opposite, contact.color, contact.secondaryColor ?? "", "auto");
+    }
     changed = true;
     return { ...wire, color, colorSource: { connectorId, contactId } };
   });
-  return changed ? { ...document, wires } : document;
+  return changed ? { ...document, connectors, wires } : document;
+}
+
+function resetContactColorToAutomatic(
+  document: HarnessDesignDocument,
+  connectorId: string,
+  contactId: string,
+): HarnessDesignDocument {
+  const endpoint = { connectorId, contactId } as const;
+  if (!contactAtEndpoint(document, endpoint)) throw new Error("Контакт не найден.");
+  const directWire = document.wires.find((wire) =>
+    !isJunctionEndpoint(wire.from) && !isScreenEndpoint(wire.from) &&
+    !isJunctionEndpoint(wire.to) && !isScreenEndpoint(wire.to) &&
+    (sameConnectorEndpoint(wire.from, connectorId, contactId) || sameConnectorEndpoint(wire.to, connectorId, contactId)));
+  if (!directWire) {
+    return { ...document, connectors: updateContactColor(document.connectors, endpoint, "", "", "auto") };
+  }
+  const opposite = sameConnectorEndpoint(directWire.from, connectorId, contactId) ? directWire.to : directWire.from;
+  const source = contactAtEndpoint(document, opposite);
+  if (!source || isJunctionEndpoint(opposite) || isScreenEndpoint(opposite)) {
+    return { ...document, connectors: updateContactColor(document.connectors, endpoint, "", "", "auto") };
+  }
+  return {
+    ...document,
+    connectors: updateContactColor(document.connectors, endpoint, source.color, source.secondaryColor ?? "", "auto"),
+    wires: directWire.colorSource === null ? document.wires : document.wires.map((wire) => wire.id === directWire.id ? {
+      ...wire,
+      color: resolveWireColorHex(source.color),
+      colorSource: { connectorId: opposite.connectorId, contactId: opposite.contactId },
+    } : wire),
+  };
+}
+
+function contactColorIsAutomatic(contact: ConnectorContact): boolean {
+  return contact.colorMode === "auto" ||
+    contact.colorMode === undefined && !contact.color.trim() && !(contact.secondaryColor ?? "").trim();
+}
+
+function contactAtEndpoint(document: HarnessDesignDocument, endpoint: WireEndpoint): ConnectorContact | null {
+  if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return null;
+  return document.connectors.find((connector) => connector.id === endpoint.connectorId)
+    ?.contacts.find((contact) => contact.id === endpoint.contactId) ?? null;
+}
+
+function sameConnectorEndpoint(endpoint: WireEndpoint, connectorId: string, contactId: string): boolean {
+  return !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) &&
+    endpoint.connectorId === connectorId && endpoint.contactId === contactId;
+}
+
+function updateContactColor(
+  connectors: readonly ConnectorInstance[],
+  endpoint: WireEndpoint,
+  color: string,
+  secondaryColor: string,
+  colorMode: "auto" | "manual",
+): readonly ConnectorInstance[] {
+  if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return connectors;
+  return connectors.map((connector) => connector.id !== endpoint.connectorId ? connector : {
+    ...connector,
+    contacts: connector.contacts.map((contact) => contact.id !== endpoint.contactId ? contact : {
+      ...contact, color, secondaryColor, colorMode,
+    }),
+  });
 }
 
 function rememberCustomWireColors(
@@ -979,6 +1054,9 @@ function normalizeContact(
     wire: normalizeValue(contact.wire, "Провод контакта"),
     color: normalizeValue(contact.color, "Цвет провода контакта"),
     secondaryColor: normalizeValue(contact.secondaryColor ?? "", "Второй цвет провода контакта"),
+    colorMode: contact.colorMode === "auto" || contact.colorMode === "manual"
+      ? contact.colorMode
+      : contact.color.trim() || (contact.secondaryColor ?? "").trim() ? "manual" : "auto",
     customValues: normalizeCustomValues(contact.customValues, customFields),
   };
 }

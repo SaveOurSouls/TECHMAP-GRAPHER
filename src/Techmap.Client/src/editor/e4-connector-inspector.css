@@ -127,6 +127,8 @@
 .e4cce-palette-control { position: relative; width: 62px; height: 26px; display: grid; grid-template-columns: 24px 30px; align-items: center; justify-content: space-between; gap: 5px; }
 .e4cce-palette-control .e4cce-color-swatch { pointer-events: none; }
 .e4cce-color-popover input[type="color"] { width: 30px; height: 26px; padding: 1px; border: 1px solid #c7d6dc; border-radius: 4px; background: #fff; cursor: pointer; }
+.e4cce-color-auto { min-height: 26px; border: 1px solid #b9ccd5; border-radius: 4px; background: #eef6f9; color: #27657e; font: 700 9px Inter, Arial, sans-serif; cursor: pointer; }
+.e4cce-color-auto:disabled { cursor: default; opacity: .5; }
 .e4-connector-canvas-editor.contacts-left td.e4cce-number > input { padding-right: 5px; padding-left: 35px; }
 .e4cce-row-actions { position: absolute; z-index: 2; right: 1px; top: 2px; display: flex; gap: 1px; opacity: 0; }
 .e4-connector-canvas-editor.contacts-left .e4cce-row-actions { right: auto; left: 1px; }

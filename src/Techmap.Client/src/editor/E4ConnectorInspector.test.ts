@@ -283,6 +283,7 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("Основной цвет");
     expect(markup).toContain("Второй цвет");
     expect(markup).toContain("Пусто · одноцветный");
+    expect(markup).toContain("Автоматический цвет");
     expect(markup).toContain("Новый цвет");
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('class="e4cce-color-popover" hidden=""');
