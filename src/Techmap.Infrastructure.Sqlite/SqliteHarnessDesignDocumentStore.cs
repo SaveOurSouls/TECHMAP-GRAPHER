@@ -304,7 +304,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
         }
     }
 
-    private static void ValidateCableInstances(JsonElement root)
+    internal static void ValidateCableInstances(JsonElement root)
     {
         // `cables` is optional so documents written before the cable model was
         // introduced continue to round-trip unchanged.
@@ -358,13 +358,14 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 memberIndex++;
             }
 
-            ValidateCableLength(cable, "lengthMm", $"{path}.lengthMm", allowNull: true, defaultValue: null);
-            ValidateCableCorrection(cable, "endCorrectionFromMm", $"{path}.endCorrectionFromMm", defaultValue: 0m);
-            ValidateCableCorrection(cable, "endCorrectionToMm", $"{path}.endCorrectionToMm", defaultValue: 0m);
+            var length = ValidateCableLength(cable, "lengthMm", $"{path}.lengthMm", allowNull: true, defaultValue: null);
+            var fromCorrection = ValidateCableCorrection(cable, "endCorrectionFromMm", $"{path}.endCorrectionFromMm", defaultValue: 0m);
+            var toCorrection = ValidateCableCorrection(cable, "endCorrectionToMm", $"{path}.endCorrectionToMm", defaultValue: 0m);
             var rounding = ValidateCableLength(cable, "cutRoundingStepMm", $"{path}.cutRoundingStepMm", allowNull: false, defaultValue: 1m);
             if (rounding is not null && rounding.Value.Micrometres == 0)
                 throw Invalid("invalid_design_content", "The cable cut rounding step must be greater than zero.", $"{path}.cutRoundingStepMm");
             ValidateCableMaterialBinding(cable, path);
+            ValidateCableSheathStrip(cable, path, length, fromCorrection, toCorrection);
             cableIndex++;
         }
     }
@@ -406,7 +407,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
         }
     }
 
-    private static void ValidateCableCorrection(
+    private static decimal ValidateCableCorrection(
         JsonElement owner,
         string propertyName,
         string path,
@@ -423,6 +424,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
         try
         {
             _ = LengthCorrection.FromMillimetres(value);
+            return value;
         }
         catch (ArgumentException error)
         {
@@ -436,6 +438,36 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "invalid_design_content", "The cable end correction exceeds the supported range.", path,
                 innerException: error);
         }
+    }
+
+    private static void ValidateCableSheathStrip(JsonElement cable, string cablePath, Length? length,
+        decimal fromCorrection, decimal toCorrection)
+    {
+        if (!cable.TryGetProperty("sheathStrip", out var strip)) return;
+        var path = $"{cablePath}.sheathStrip";
+        if (strip.ValueKind != JsonValueKind.Object)
+            throw Invalid("invalid_design_content", "Cable sheath stripping must be an object.", path);
+        foreach (var key in new[] { "fromMm", "toMm" })
+            if (!strip.TryGetProperty(key, out _))
+                throw Invalid("invalid_design_content", "A stripping end must be a length or null.", $"{path}.{key}");
+        var from = ValidateCableLength(strip, "fromMm", $"{path}.fromMm", true, null);
+        var to = ValidateCableLength(strip, "toMm", $"{path}.toMm", true, null);
+        if (from?.Millimetres > 1_000_000_000m || to?.Millimetres > 1_000_000_000m)
+            throw Invalid("invalid_design_content", "Sheath stripping exceeds the editor length range.", path);
+        decimal? End(Length? source, decimal correction, string key)
+        {
+            if (source is null) return null;
+            var result = source.Value.Micrometres == 0 ? 0m : source.Value.Micrometres / 1000m + correction;
+            if (result < 0)
+                throw Invalid("invalid_design_content", "Corrected sheath stripping cannot be negative.", $"{path}.{key}");
+            return result;
+        }
+        var correctedFrom = End(from, fromCorrection, "fromMm");
+        var correctedTo = End(to, toCorrection, "toMm");
+        if (length is not null &&
+            ((decimal)(from?.Micrometres ?? 0) + (to?.Micrometres ?? 0) > length.Value.Micrometres ||
+             (correctedFrom ?? 0m) + (correctedTo ?? 0m) > length.Value.Micrometres / 1000m + fromCorrection + toCorrection))
+            throw Invalid("invalid_design_content", "Sheath stripping exceeds cable length.", path);
     }
 
     private static void ValidateCableMaterialBinding(JsonElement cable, string cablePath)

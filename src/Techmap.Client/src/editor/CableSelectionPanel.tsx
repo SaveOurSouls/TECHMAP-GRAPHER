@@ -1,4 +1,5 @@
-import type { CableInstance } from "./model";
+import { calculateCableSheathStrip, type CableInstance } from "./model";
+import { InfoHint } from "../InfoHint";
 
 export interface CableSelectionPanelProps {
   readonly selectedWireIds: readonly string[];
@@ -6,7 +7,7 @@ export interface CableSelectionPanelProps {
   readonly disabled: boolean;
   readonly onCreate: () => void;
   readonly onUpdate: (patch: Partial<Pick<CableInstance,
-    "lengthMm" | "endCorrectionFromMm" | "endCorrectionToMm" | "cutRoundingStepMm">>) => void;
+    "lengthMm" | "endCorrectionFromMm" | "endCorrectionToMm" | "cutRoundingStepMm" | "sheathStrip">>) => void;
   readonly onMaterialClear: () => void;
   readonly onRemove: () => void;
 }
@@ -20,10 +21,11 @@ function finiteNumber(value: string, fallback: number): number {
 export function CableSelectionPanel({ selectedWireIds, cable, disabled, onCreate, onUpdate, onMaterialClear, onRemove }: CableSelectionPanelProps) {
   if (!cable) return <section className="he-cable-panel" aria-label="Многожильный кабель">
     <header><strong>Многожильный кабель</strong><span>{selectedWireIds.length} жилы</span></header>
-    <p>Провода останутся отдельными электрическими цепями, а материал и длина будут учтены один раз.</p>
+    <InfoHint>Провода останутся отдельными электрическими цепями, а материал и длина будут учтены один раз.</InfoHint>
     <button type="button" disabled={disabled || selectedWireIds.length < 2} onClick={onCreate}>Создать кабель</button>
   </section>;
 
+  const stripping = calculateCableSheathStrip(cable);
   return <section className="he-cable-panel" aria-label="Многожильный кабель">
     <header><strong>Многожильный кабель</strong><span>{cable.memberWireIds.length} жилы</span></header>
     <small>{cable.id}</small>
@@ -35,12 +37,33 @@ export function CableSelectionPanel({ selectedWireIds, cable, disabled, onCreate
       {cable.materialBinding ? <>
         <span>{cable.materialBinding.displayName}</span><small>{cable.materialBinding.sourceKey}</small>
         <button type="button" disabled={disabled} onClick={onMaterialClear}>Очистить материал</button>
-      </> : <><span>Материал не выбран</span><small>Дважды щёлкните кабель в нижнем справочнике.</small></>}
+      </> : <><span>Материал не выбран</span><InfoHint>Дважды щёлкните кабель в нижнем справочнике.</InfoHint></>}
     </div>
     <label>Конечная длина, мм
       <input type="number" aria-label="Конечная длина кабеля, мм" min="0" step="0.001" value={cable.lengthMm ?? ""} disabled={disabled}
         onChange={(event) => onUpdate({ lengthMm: event.target.value.trim() === "" ? null : finiteNumber(event.target.value, cable.lengthMm ?? 0) })} />
     </label>
+    <header><strong>Снятие оболочки</strong><InfoHint>
+      Размеры от концов кабеля, мм. Начало совпадает с началом первой жилы ({cable.memberWireIds[0]}).
+      Пусто — размер не задан; 0 — оболочка не снимается. Положительный размер снятия
+      учитывает поправку соответствующего конца. Округление резки отдельно.
+      На чертеже показаны конечные размеры без технологических поправок, пропорционально
+      длине кабеля. Сырьё учитывается один раз; разделка не увеличивает расход.
+    </InfoHint></header>
+    <div className="he-field-pair">
+      {(["fromMm", "toMm"] as const).map((end, index) => <label key={end}>{index === 0 ? "Начало, мм" : "Конец, мм"}
+        <input type="number" aria-label={`Снятие оболочки ${index === 0 ? "начала" : "конца"}, мм`} min="0" step="0.001"
+          value={cable.sheathStrip?.[end] ?? ""} disabled={disabled}
+          onChange={(event) => onUpdate({ sheathStrip: {
+            fromMm: cable.sheathStrip?.fromMm ?? null, toMm: cable.sheathStrip?.toMm ?? null,
+            [end]: event.target.value.trim() === "" ? null : finiteNumber(event.target.value, cable.sheathStrip?.[end] ?? 0),
+          } })} />
+      </label>)}
+    </div>
+    {stripping && <output aria-label="Снятие оболочки с поправками">
+      С поправками: {stripping.fromMm ?? "—"} / {stripping.toMm ?? "—"} мм
+      {!stripping.isComplete && <InfoHint>Укажите длину кабеля и размеры обоих концов для отображения оболочки.</InfoHint>}
+    </output>}
     <div className="he-field-pair">
       <label>Поправка начала, мм<input type="number" aria-label="Поправка начала кабеля, мм" step="0.001" value={cable.endCorrectionFromMm} disabled={disabled}
         onChange={(event) => onUpdate({ endCorrectionFromMm: finiteNumber(event.target.value, cable.endCorrectionFromMm) })} /></label>

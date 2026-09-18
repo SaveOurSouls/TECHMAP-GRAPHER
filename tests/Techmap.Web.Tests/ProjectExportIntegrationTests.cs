@@ -13,8 +13,10 @@ namespace Techmap.Web.Tests;
 
 public sealed class ProjectExportIntegrationTests
 {
-    [Fact]
-    public async Task Invalid_strip_profile_in_storage_cannot_be_exported()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Invalid_strip_profile_in_storage_cannot_be_exported(bool cableStrip)
     {
         using var fixture = ExportFixture.Create();
         await using var lease = DataRootLease.Acquire(fixture.DataRoot);
@@ -25,7 +27,10 @@ public sealed class ProjectExportIntegrationTests
         // Simulate an invalid document accepted by a previous server version.
         storage.ExecuteInTransaction(unit => {
             using var command = unit.CreateCommand("UPDATE harness_design_documents SET content_json = $content;");
-            command.Parameters.AddWithValue("$content", """
+            command.Parameters.AddWithValue("$content", cableStrip ? """
+                {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1"}],
+                 "cables":[{"id":"C1","memberWireIds":["W1"],"lengthMm":100,"sheathStrip":{"fromMm":90,"toMm":20}}]}
+                """ : """
                 {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1","stripProfiles":{"to":null}}]}
                 """);
             command.ExecuteNonQuery();

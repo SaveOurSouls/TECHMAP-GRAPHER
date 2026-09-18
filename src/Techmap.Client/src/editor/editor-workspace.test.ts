@@ -92,6 +92,10 @@ describe("harness editor workspace", () => {
     const scene = getVisibleCableSheathScene([cable], cableObjects, layers);
     expect(scene.incompatibleCableIds).toEqual([]);
     expect(scene.geometries).toHaveLength(1);
+    expect(getVisibleCableSheathScene([{ ...cable, sheathStrip: { fromMm: 100, toMm: 150 } }], cableObjects, layers))
+      .toEqual({ geometries: [], incompatibleCableIds: [] });
+    expect(getVisibleCableSheathScene([{ ...cable, sheathStrip: { fromMm: null, toMm: 20 } }], cableObjects, layers))
+      .toEqual({ geometries: [], incompatibleCableIds: [] });
     expect(hitTestCableSheath(scene.geometries, { x: 60, y: 14 }, 1)?.cableId).toBe("CABLE-1");
     expect(hitTestCableSheath(scene.geometries, { x: 60, y: 25 }, 1)).toBeNull();
     expect(getEditorSceneBounds(cableObjects, layers, "drawing", undefined, [], undefined, [cable]))

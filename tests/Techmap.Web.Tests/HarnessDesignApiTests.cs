@@ -16,6 +16,69 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("null", 0, 0)]
+    [InlineData("{}", 0, 0)]
+    [InlineData("{\"fromMm\":-1,\"toMm\":0}", 0, 0)]
+    [InlineData("{\"fromMm\":1.0001,\"toMm\":0}", 0, 0)]
+    [InlineData("{\"fromMm\":1000000001,\"toMm\":null}", 0, 0)]
+    [InlineData("{\"fromMm\":\"1\",\"toMm\":0}", 0, 0)]
+    [InlineData("{\"fromMm\":60,\"toMm\":41}", 0, 0)]
+    [InlineData("{\"fromMm\":10,\"toMm\":0}", -11, 0)]
+    [InlineData("{\"fromMm\":30,\"toMm\":0}", 0, -80)]
+    public async Task Invalid_cable_stripping_preserves_saved_document(string stripJson, int fromCorrection, int toCorrection)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1"}],
+             "cables":[{"id":"C1","memberWireIds":["W1"],"lengthMm":100,
+               "sheathStrip":{"fromMm":10,"toMm":20}}]}
+            """)!;
+        var initial = JsonSerializer.SerializeToElement(content);
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, initial), csrf);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var cable = content["cables"]![0]!;
+        cable["sheathStrip"] = JsonNode.Parse(stripJson);
+        cable["endCorrectionFromMm"] = fromCorrection;
+        cable["endCorrectionToMm"] = toCorrection;
+        using var rejected = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(1, 1, JsonSerializer.SerializeToElement(content)), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var error = await rejected.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.StartsWith("content.cables[0].sheathStrip", error!.Field);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(initial, saved.Content));
+    }
+
+    [Theory]
+    [InlineData(null, null, 0, -2)]
+    [InlineData(100, 10, 20, -1)]
+    [InlineData(100, 50, 50, 2)]
+    public async Task Cable_stripping_round_trips_unknown_zero_and_full_removal(int? length, int? from, int to, int correction)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonSerializer.SerializeToElement(new {
+            schemaVersion = 1, connectors = Array.Empty<object>(), wires = new[] { new { id = "W1" } },
+            cables = new[] { new { id = "C1", memberWireIds = new[] { "W1" }, lengthMm = length,
+                endCorrectionFromMm = correction, sheathStrip = new { fromMm = from, toMm = to } } }
+        });
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, content), csrf);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId),
+            TestContext.Current.CancellationToken);
+        Assert.True(JsonElement.DeepEquals(content, saved!.Content));
+    }
+
+    [Theory]
     [InlineData("layers", "[]")]
     [InlineData("layers", "null")]
     [InlineData("layers", "[{\"index\":1,\"diameterMm\":1,\"stripLengthMm\":0}]")]

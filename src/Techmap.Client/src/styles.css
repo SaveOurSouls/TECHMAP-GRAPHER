@@ -270,6 +270,9 @@ input::placeholder { color: #8795a3; }
 .cut-list-table td small { margin-top: 3px; color: #8a672c; font-size: 9px; }
 .cut-list-status { padding: 3px 6px; border-radius: 8px; background: #e3f4ed; color: #1d7657; font-weight: 800; }
 .cut-list-status.incomplete { background: #fff0da; color: #945f16; }
+.he-cable-panel output { display: block; margin-top: 7px; color: #5d7280; font-size: 10px; line-height: 1.35; }
+.he-cable-panel output .info-hint { margin-left: 4px; }
+.he-cable-panel > header .info-hint { margin-left: 4px; }
 .document-icon { position: relative; width: 40px; height: 48px; border: 2px solid #80aac0; border-radius: 4px; background: #fff; }
 .document-icon::before, .document-icon::after { content: ""; position: absolute; background: #bad1dd; }
 .document-icon::before { left: 7px; right: 7px; top: 13px; height: 2px; box-shadow: 0 8px #bad1dd, 0 16px #bad1dd; }

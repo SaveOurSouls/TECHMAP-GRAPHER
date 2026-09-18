@@ -63,7 +63,7 @@ export type EditorCommand =
   | { readonly type: "add-wire"; readonly wire: WireInstance; readonly targetWireId?: string }
   | { readonly type: "remove-wire"; readonly wireId: string }
   | { readonly type: "add-cable"; readonly cable: CableInstance }
-  | { readonly type: "update-cable"; readonly cableId: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
+  | { readonly type: "update-cable"; readonly cableId: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number; readonly sheathStrip?: CableInstance["sheathStrip"] | null }
   | { readonly type: "set-cable-members"; readonly cableId: string; readonly memberWireIds: readonly string[] }
   | { readonly type: "remove-cable"; readonly cableId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
@@ -484,6 +484,7 @@ export function applyEditorCommand(
         endCorrectionFromMm: command.endCorrectionFromMm ?? existing.endCorrectionFromMm,
         endCorrectionToMm: command.endCorrectionToMm ?? existing.endCorrectionToMm,
         cutRoundingStepMm: command.cutRoundingStepMm ?? existing.cutRoundingStepMm,
+        sheathStrip: command.sheathStrip === undefined ? existing.sheathStrip : command.sheathStrip ?? undefined,
       });
       validateCableMembership(document, cable, cable.id);
       return { ...document, cables: document.cables.map((item) => item.id === cable.id ? cable : item) };

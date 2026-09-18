@@ -23,6 +23,9 @@ describe("multicore cable selection panel", () => {
     }));
     expect(markup).toContain("W1"); expect(markup).toContain("W2"); expect(markup).toContain("Кабель 2×0,35");
     expect(markup).toContain('aria-label="Конечная длина кабеля, мм"');
+    expect(markup).toContain('aria-label="Снятие оболочки начала, мм"');
+    expect(markup).toContain('aria-label="Снятие оболочки конца, мм"');
+    expect(markup).toContain('role="tooltip"');
     expect(markup).toContain("Длина кабеля не задана"); expect(markup).toContain("Расформировать кабель");
   });
 });

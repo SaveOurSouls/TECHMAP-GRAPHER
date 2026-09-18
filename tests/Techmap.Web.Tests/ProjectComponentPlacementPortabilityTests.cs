@@ -203,6 +203,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
                 ["displayName"] = "Кабель 2x0,20",
             },
             ["lengthMm"] = 125.503m,
+            ["sheathStrip"] = new JsonObject { ["fromMm"] = 10.125m, ["toMm"] = 20.5m },
             ["endCorrectionFromMm"] = -1.127m,
             ["endCorrectionToMm"] = 2.009m,
             ["cutRoundingStepMm"] = 0.005m,
@@ -327,6 +328,8 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Equal("CABLE-2X0.20", cableMaterial.GetProperty("sourceKey").GetString());
         Assert.Equal("Кабель 2x0,20", cableMaterial.GetProperty("displayName").GetString());
         Assert.Equal(125.503m, cable.GetProperty("lengthMm").GetDecimal());
+        Assert.Equal(10.125m, cable.GetProperty("sheathStrip").GetProperty("fromMm").GetDecimal());
+        Assert.Equal(20.5m, cable.GetProperty("sheathStrip").GetProperty("toMm").GetDecimal());
         Assert.Equal(-1.127m, cable.GetProperty("endCorrectionFromMm").GetDecimal());
         Assert.Equal(2.009m, cable.GetProperty("endCorrectionToMm").GetDecimal());
         Assert.Equal(0.005m, cable.GetProperty("cutRoundingStepMm").GetDecimal());

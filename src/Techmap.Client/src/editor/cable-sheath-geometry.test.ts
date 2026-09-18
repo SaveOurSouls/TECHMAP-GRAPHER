@@ -20,6 +20,23 @@ function wire(id: string, points: readonly EditorPoint[]): EditorSceneObject {
 }
 
 describe("cable sheath geometry", () => {
+  it("clips installed end stripping proportionally without using cut allowances as geometry", () => {
+    const stripped = { ...cable, sheathStrip: { fromMm: 100, toMm: 200 }, endCorrectionFromMm: 50 };
+    const objects = [wire("W1", [{ x: 0, y: 0 }, { x: 200, y: 0 }]), wire("W2", [{ x: 0, y: 10 }, { x: 200, y: 10 }])];
+    expect(buildCableSheathGeometry(stripped, objects)?.centerline).toEqual([{ x: 20, y: 5 }, { x: 160, y: 5 }]);
+    const reverse = objects.map(object => ({ ...object, points: [...object.points!].reverse() }));
+    expect(buildCableSheathGeometry(stripped, reverse)?.centerline).toEqual([{ x: 40, y: 5 }, { x: 180, y: 5 }]);
+    expect(buildCableSheathGeometry({ ...stripped, sheathStrip: { fromMm: 500, toMm: 500 } }, objects)).toBeNull();
+    expect(buildCableSheathGeometry({ ...stripped, sheathStrip: { fromMm: null, toMm: 200 } }, objects)).toBeNull();
+    expect(buildCableSheathGeometry({ ...stripped, lengthMm: null }, objects)).toBeNull();
+  });
+
+  it("measures stripping along bends before selecting the remaining common trunk", () => {
+    const objects = [wire("W1", [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]),
+      wire("W2", [{ x: 0, y: 10 }, { x: 110, y: 10 }, { x: 110, y: 100 }])];
+    expect(buildCableSheathGeometry({ ...cable, sheathStrip: { fromMm: 600, toMm: 100 } }, objects)?.centerline)
+      .toEqual([{ x: 105, y: 20 }, { x: 105, y: 80 }]);
+  });
   it("builds a horizontal envelope around the common member span", () => {
     const geometry = buildCableSheathGeometry(cable, [
       wire("W1", [{ x: 0, y: 10 }, { x: 100, y: 10 }]),

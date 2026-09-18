@@ -14,8 +14,10 @@ namespace Techmap.Web.Tests;
 
 public sealed class ProjectImportIntegrationTests
 {
-    [Fact]
-    public async Task Invalid_strip_profile_with_valid_archive_hashes_is_rejected_before_publication()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Invalid_strip_profile_with_valid_archive_hashes_is_rejected_before_publication(bool cableStrip)
     {
         using var fixture = ImportFixture.Create();
         var archive = await fixture.CreateMinimalArchiveAsync();
@@ -23,6 +25,13 @@ public sealed class ProjectImportIntegrationTests
         var snapshot = JsonNode.Parse(entries[SqliteProjectExportService.SnapshotPath])!;
         snapshot["harnesses"]![0]!["design"]!["content"]!["wires"] = new JsonArray(
             new JsonObject { ["id"] = "W1", ["stripProfiles"] = new JsonObject { ["to"] = null } });
+        if (cableStrip) {
+            var content = snapshot["harnesses"]![0]!["design"]!["content"]!;
+            content["wires"] = new JsonArray(new JsonObject { ["id"] = "W1" });
+            content["cables"] = JsonNode.Parse("""
+                [{"id":"C1","memberWireIds":["W1"],"lengthMm":100,"sheathStrip":{"fromMm":90,"toMm":20}}]
+                """);
+        }
         var snapshotBytes = Encoding.UTF8.GetBytes(snapshot.ToJsonString());
         entries[SqliteProjectExportService.SnapshotPath] = snapshotBytes;
         var manifest = JsonNode.Parse(entries[SqliteProjectExportService.ManifestPath])!;

@@ -1605,6 +1605,9 @@ export function getVisibleCableSheathScene(
   const geometries: CableSheathGeometry[] = [];
   const incompatibleCableIds: string[] = [];
   for (const cable of cables) {
+    const strip = cable.sheathStrip;
+    if (strip && (strip.fromMm === null || strip.toMm === null || cable.lengthMm === null ||
+        Math.round((strip.fromMm + strip.toMm) * 1000) === Math.round(cable.lengthMm * 1000))) continue;
     const members = cable.memberWireIds.map((wireId) =>
       objects.find((object) => object.id === wireId && object.kind === "wire"));
     if (members.some((member) => member && layerMap.get(member.layerId)?.visible !== true)) continue;

@@ -235,6 +235,7 @@ public sealed class HarnessCutListApiTests
                   "entityType":"cable","sourceKey":"CABLE-2X","displayName":"Кабель 2x0,2"
                 },
                 "lengthMm":99.1,"endCorrectionFromMm":1,"endCorrectionToMm":2,
+                "sheathStrip":{"fromMm":10,"toMm":20},
                 "cutRoundingStepMm":1
               }],
               "views":{"e4":{"layers":[]},"drawing":{"layers":[]}}

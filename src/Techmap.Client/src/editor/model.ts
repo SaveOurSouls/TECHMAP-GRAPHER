@@ -353,6 +353,32 @@ export interface CableInstance {
   readonly endCorrectionFromMm: number;
   readonly endCorrectionToMm: number;
   readonly cutRoundingStepMm: number;
+  readonly sheathStrip?: { readonly fromMm: number | null; readonly toMm: number | null };
+}
+
+/** End corrections belong to the blank; stripping never adds a second material. */
+export function calculateCableSheathStrip(cable: CableInstance) {
+  const source = cable.sheathStrip;
+  if (!source) return null;
+  const end = (value: number | null, correction: number) => {
+    if (value === null) return null;
+    validateWirePhysicalLength(value, "Снятие оболочки");
+    const result = value === 0 ? 0n : toExactMicrometres(value, "Снятие оболочки") + toExactMicrometres(correction, "Поправка");
+    if (result < 0n) throw new Error("Снятие оболочки с поправкой не должно быть отрицательным.");
+    return Number(result) / micrometresPerMillimetre;
+  };
+  const fromMm = end(source.fromMm, cable.endCorrectionFromMm);
+  const toMm = end(source.toMm, cable.endCorrectionToMm);
+  const totalMm = calculateWireCutLength(cable).unroundedTotalMm;
+  if (cable.lengthMm !== null && toExactMicrometres(source.fromMm ?? 0, "Снятие оболочки") +
+      toExactMicrometres(source.toMm ?? 0, "Снятие оболочки") > toExactMicrometres(cable.lengthMm, "Длина кабеля")) {
+    throw new Error("Сумма снятия оболочки превышает длину кабеля.");
+  }
+  if (totalMm !== null && toExactMicrometres(fromMm ?? 0, "Снятие оболочки") +
+      toExactMicrometres(toMm ?? 0, "Снятие оболочки") > toExactMicrometres(totalMm, "Длина кабеля")) {
+    throw new Error("Снятие оболочки с поправками превышает длину заготовки.");
+  }
+  return { fromMm, toMm, totalMm, isComplete: fromMm !== null && toMm !== null && totalMm !== null };
 }
 
 export interface WireEndStripProfiles {
@@ -1624,7 +1650,12 @@ export function normalizeCableInstance(value: unknown): CableInstance {
     ? defaultWireCutRoundingStepMm
     : validateWireRoundingStep(requireNumber(record.cutRoundingStepMm, "Шаг округления длины резки кабеля"));
   calculateWireCutLength({ lengthMm, endCorrectionFromMm, endCorrectionToMm, cutRoundingStepMm });
-  return Object.freeze({
+  const sheathRecord = record.sheathStrip === undefined ? undefined : requireRecord(record.sheathStrip, "Снятие оболочки задано неверно.");
+  const sheathStrip = sheathRecord === undefined ? undefined : Object.freeze({
+    fromMm: sheathRecord.fromMm === null ? null : validateWirePhysicalLength(requireNumber(sheathRecord.fromMm, "Снятие оболочки начала")),
+    toMm: sheathRecord.toMm === null ? null : validateWirePhysicalLength(requireNumber(sheathRecord.toMm, "Снятие оболочки конца")),
+  });
+  const cable = Object.freeze({
     id: requireText(record.id, "ID кабеля"),
     memberWireIds: Object.freeze(memberWireIds),
     materialBinding,
@@ -1632,7 +1663,10 @@ export function normalizeCableInstance(value: unknown): CableInstance {
     endCorrectionFromMm,
     endCorrectionToMm,
     cutRoundingStepMm,
+    ...(sheathStrip === undefined ? {} : { sheathStrip }),
   });
+  calculateCableSheathStrip(cable);
+  return cable;
 }
 
 function validateCables(cables: readonly CableInstance[], wireIds: ReadonlySet<string>): void {

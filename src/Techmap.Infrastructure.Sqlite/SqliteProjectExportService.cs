@@ -1104,7 +1104,10 @@ public sealed class SqliteProjectExportService : IProjectExportService
         }
 
         if (parsedSchemaVersion != design.SchemaVersion) return false;
-        try { HarnessStripProfileValidator.Validate(design.Content); }
+        try {
+            HarnessStripProfileValidator.Validate(design.Content);
+            SqliteHarnessDesignDocumentStore.ValidateCableInstances(design.Content);
+        }
         catch (HarnessDesignDocumentException) { return false; }
         return true;
     }

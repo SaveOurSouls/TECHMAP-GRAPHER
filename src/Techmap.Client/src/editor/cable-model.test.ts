@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
 import {
+  calculateCableSheathStrip,
+  calculateWireCutLength,
+  normalizeCableInstance,
   createEmptyHarnessDesign,
   parseHarnessDesignDocument,
   type HarnessDesignDocument,
   type WireMaterialBinding,
 } from "./model";
+import { createEditorHistory, executeEditorCommand, undoEditorCommand, redoEditorCommand } from "./history";
 
 const cableMaterial: WireMaterialBinding = {
   sourceId: "БД.ПРОВ",
@@ -41,6 +45,42 @@ function documentWithWires(): HarnessDesignDocument {
 }
 
 describe("multicore cable model", () => {
+  it("keeps installed stripping separate from allowances, consumption and undo history", () => {
+    const cable = normalizeCableInstance({ id: "C", memberWireIds: ["w1", "w2"], lengthMm: 100,
+      endCorrectionFromMm: -1.25, endCorrectionToMm: 2 });
+    let history = executeEditorCommand(createEditorHistory(documentWithWires()), { type: "add-cable", cable });
+    history = executeEditorCommand(history, { type: "update-cable", cableId: "C", sheathStrip: { fromMm: 10, toMm: 20 } });
+    const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(history.present)));
+    expect(restored.cables[0]?.sheathStrip).toEqual({ fromMm: 10, toMm: 20 });
+    expect(calculateCableSheathStrip(restored.cables[0]!)).toEqual({ fromMm: 8.75, toMm: 22, totalMm: 100.75, isComplete: true });
+    expect(calculateWireCutLength(restored.cables[0]!)).toEqual(calculateWireCutLength(cable));
+    expect(restored.wires).toEqual(history.present.wires);
+    expect(undoEditorCommand(history).present.cables[0]?.sheathStrip).toBeUndefined();
+    expect(redoEditorCommand(undoEditorCommand(history)).present).toEqual(history.present);
+    expect(applyEditorCommand(restored, { type: "update-cable", cableId: "C", sheathStrip: null }).cables[0]?.sheathStrip).toBeUndefined();
+  });
+
+  it("supports unknown lengths and zero as no stripping, including exact full removal", () => {
+    const cable = normalizeCableInstance({ id: "C", memberWireIds: [], lengthMm: null,
+      endCorrectionFromMm: -2, sheathStrip: { fromMm: 0, toMm: null } });
+    expect(calculateCableSheathStrip(cable)).toEqual({ fromMm: 0, toMm: null, totalMm: null, isComplete: false });
+    expect(calculateCableSheathStrip(normalizeCableInstance({ ...cable, lengthMm: 0.3, endCorrectionFromMm: 0,
+      sheathStrip: { fromMm: 0.1, toMm: 0.2 } }))?.isComplete).toBe(true);
+  });
+
+  it.each([
+    { sheathStrip: null }, { sheathStrip: {} }, { sheathStrip: { fromMm: -1, toMm: 0 } },
+    { sheathStrip: { fromMm: 1.0001, toMm: 0 } }, { sheathStrip: { fromMm: "1", toMm: 0 } },
+    { sheathStrip: { fromMm: 1_000_000_001, toMm: null } },
+    { sheathStrip: { fromMm: 60, toMm: 41 } },
+    { endCorrectionFromMm: -11, sheathStrip: { fromMm: 10, toMm: 0 } },
+    { endCorrectionToMm: -80, sheathStrip: { fromMm: 30, toMm: 0 } },
+  ])("rejects invalid stripping atomically: %j", patch => {
+    const cable = normalizeCableInstance({ id: "C", memberWireIds: ["w1", "w2"], lengthMm: 100 });
+    const document = applyEditorCommand(documentWithWires(), { type: "add-cable", cable });
+    expect(() => parseHarnessDesignDocument({ ...document, cables: [{ ...cable, ...patch }] })).toThrow();
+    expect(document.cables[0]).toEqual(cable);
+  });
   it("normalizes legacy documents without a cables collection", () => {
     const legacy = { ...createEmptyHarnessDesign() } as Record<string, unknown>;
     delete legacy.cables;

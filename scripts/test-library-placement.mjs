@@ -233,6 +233,61 @@ try {
     routingExpected = { connectors: reread.content.connectors, junctions: reread.content.junctions, screens: reread.content.screens };
     routingChecked = true;
   }
+  let cableStripChecked = false;
+  let cableHarnessId;
+  let expectedCable;
+  if (process.argv.includes('--check-cable-strip')) {
+    const { applyEditorCommand, createConnector, createWire } = await module('editor/commands.ts');
+    const { createEmptyHarnessDesign, calculateCableSheathStrip } = await module('editor/model.ts');
+    const { buildCableSheathGeometry } = await module('editor/cable-sheath-geometry.ts');
+    const { designToScene } = await module('editor/HarnessDesignEditor.tsx');
+    const { createMutationHeaders } = await module('local-session.ts');
+    project = (await projects.addHarness(project.projectId, { commandId: crypto.randomUUID(), expectedRevision: project.revision }, {
+      designation: 'CABLE-STRIP', quantity: 2,
+    })).project;
+    cableHarnessId = project.harnesses.find(harness => harness.designation === 'CABLE-STRIP').harnessId;
+    let document = createEmptyHarnessDesign();
+    for (const [id, x] of [['a', 0], ['b', 600]]) document = applyEditorCommand(document, {
+      type: 'add-connector', connector: createConnector(id, id, 2, { x, y: 0 }),
+    });
+    document = applyEditorCommand(document, { type: 'flip-connector-orientation', connectorId: 'b' });
+    for (let i = 1; i <= 2; i++) document = applyEditorCommand(document, { type: 'add-wire', wire: createWire(`cw${i}`,
+      { connectorId: 'a', contactId: `a:contact:${i}` }, { connectorId: 'b', contactId: `b:contact:${i}` }) });
+    document = applyEditorCommand(document, { type: 'add-cable', cable: {
+      id: 'CABLE', memberWireIds: ['cw1', 'cw2'], lengthMm: 100,
+      endCorrectionFromMm: -1.25, endCorrectionToMm: 2, cutRoundingStepMm: 1,
+      sheathStrip: { fromMm: 10, toMm: 20 },
+    } });
+    const stored = await designs.save(project.projectId, cableHarnessId, 0, document);
+    const reread = await designs.get(project.projectId, cableHarnessId);
+    expectedCable = reread.content.cables[0];
+    assert.deepEqual(expectedCable.sheathStrip, { fromMm: 10, toMm: 20 });
+    assert.deepEqual(calculateCableSheathStrip(expectedCable), { fromMm: 8.75, toMm: 22, totalMm: 100.75, isComplete: true });
+    const objects = designToScene(reread.content, 'drawing');
+    const full = buildCableSheathGeometry({ ...expectedCable, sheathStrip: undefined }, objects);
+    const stripped = buildCableSheathGeometry(expectedCable, objects);
+    assert.ok(stripped && full && stripped.length < full.length);
+    const cutResponse = await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${cableHarnessId}/cut-list`);
+    assert.equal(cutResponse.status, 200);
+    const cut = await cutResponse.json();
+    assert.equal(cut.items.length, 1);
+    assert.equal(cut.items[0].cutLengthMm, 101);
+    assert.equal(cut.items[0].totalMetres, 0.202);
+    const invalid = JSON.parse(JSON.stringify(reread.content));
+    invalid.cables[0].sheathStrip.toMm = 100;
+    const rejected = await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${cableHarnessId}/design`, {
+      method: 'PUT', headers: createMutationHeaders(session),
+      body: JSON.stringify({ expectedRevision: stored.revision, schemaVersion: 1, content: invalid }),
+    });
+    assert.equal(rejected.status, 400);
+    const unchanged = await designs.get(project.projectId, cableHarnessId);
+    assert.equal(unchanged.revision, stored.revision);
+    assert.deepEqual(unchanged.content.cables[0], expectedCable);
+    const copy = await projects.copyProject(project.projectId);
+    const copiedHarness = copy.harnesses.find(harness => harness.designation === 'CABLE-STRIP');
+    assert.deepEqual((await designs.get(copy.projectId, copiedHarness.harnessId)).content.cables[0], expectedCable);
+    cableStripChecked = true;
+  }
   let deleted = false;
   if (checkDeletion) {
     const kept = await projects.copyProject(project.projectId);
@@ -281,13 +336,20 @@ try {
       for (const key of Object.keys(routingExpected)) assert.deepEqual(content[key], JSON.parse(JSON.stringify(routingExpected[key])));
       assert.deepEqual(content.wires.find(wire => wire.id === 'branch').e4Route, []);
     }
+    if (cableStripChecked && !deleted) {
+      const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${cableHarnessId}/design`, restartedUrl), {
+        headers: { Cookie: restartedCookie },
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json()).content.cables[0], JSON.parse(JSON.stringify(expectedCable)));
+    }
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, stripProfilesChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

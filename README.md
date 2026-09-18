@@ -4,6 +4,9 @@
 
 ## Текущее состояние
 
+19.09.2026: M4-12 сохранена в GitHub (`129cc35`, M4-13). Продолжение M4:
+[снятие общей оболочки кабеля, M4-14](docs/m4-14-cable-sheath-strip.md).
+
 На 18.09.2026 работа продолжена от коммита `b05c112` (02:35 МСК).
 Проверены M3-12, M4-01–04 и исправления M4-03-r6. M4-05:
 [импорт, пины, предпросмотр и размещение Э4](docs/m4-05-library-import-e4.md).
@@ -103,11 +106,11 @@ M3-03: [длина провода и первая карта резки](docs/m3
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-package.ps1 -ArtifactSlice m4-05-verified
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-package.ps1 -ArtifactSlice m4-14
 ```
 
 Готовый локальный артефакт создаётся в
-`artifacts/m4-05-verified/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
+`artifacts/m4-14/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
 Внутри ZIP находится `Examples/reference-catalog.xlsx` с инструкцией для проверки
 универсального импорта.
 

@@ -85,6 +85,17 @@ export function buildCableSheathGeometry(
   const segmentCount = segmentGroups[0]!.length;
   if (segmentCount === 0 || segmentGroups.some((segments) => segments.length !== segmentCount)) return null;
 
+  // Physical lengths are independent of canvas scale. The first member defines
+  // the cable's from/to direction; technological allowances do not move its installed ends.
+  const strip = cable.sheathStrip;
+  if (strip && (strip.fromMm === null || strip.toMm === null || cable.lengthMm === null || cable.lengthMm <= 0)) return null;
+  const reference = segmentGroups[0]!;
+  const referenceLengths = reference.map(segment => Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y));
+  const totalVisualLength = referenceLengths.reduce((sum, value) => sum + value, 0);
+  const fromDistance = strip ? totalVisualLength * strip.fromMm! / cable.lengthMm! : 0;
+  const toDistance = strip ? totalVisualLength * (1 - strip.toMm! / cable.lengthMm!) : totalVisualLength;
+  let distanceBefore = 0;
+
   const candidates: Candidate[] = [];
   for (let routeIndex = 0; routeIndex < segmentCount; routeIndex += 1) {
     const segments = segmentGroups.map((items) => items[routeIndex]!);
@@ -94,8 +105,17 @@ export function buildCableSheathGeometry(
     const normal = freezePoint(-direction.y, direction.x);
     const starts = segments.map((segment) => Math.min(dot(segment.start, direction), dot(segment.end, direction)));
     const ends = segments.map((segment) => Math.max(dot(segment.start, direction), dot(segment.end, direction)));
-    const alongStart = Math.max(...starts);
-    const alongEnd = Math.min(...ends);
+    const referenceSegment = reference[routeIndex]!;
+    const referenceLength = referenceLengths[routeIndex]!;
+    const clipStart = Math.max(0, fromDistance - distanceBefore);
+    const clipEnd = Math.min(referenceLength, toDistance - distanceBefore);
+    distanceBefore += referenceLength;
+    if (strip && clipEnd <= clipStart) continue;
+    const sign = dot(referenceSegment.direction, direction) >= 0 ? 1 : -1;
+    const origin = dot(referenceSegment.start, direction);
+    const clipCoordinates = [origin + sign * clipStart, origin + sign * clipEnd];
+    const alongStart = Math.max(...starts, ...(strip ? [Math.min(...clipCoordinates)] : []));
+    const alongEnd = Math.min(...ends, ...(strip ? [Math.max(...clipCoordinates)] : []));
     if (alongEnd - alongStart + geometryEpsilon < cableSheathMinimumSpanLength) continue;
 
     candidates.push(Object.freeze({
