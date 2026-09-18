@@ -127,9 +127,7 @@ describe("template v3 immutable commands", () => {
     expect(() => addContactTypeGroupV3(renamed, " питание ")).toThrowError(expect.objectContaining({
       code: "duplicate_contact_type_group_name",
     }));
-    expect(() => deleteContactTypeGroupV3(referenced, signalId)).toThrowError(expect.objectContaining({
-      code: "contact_type_group_referenced",
-    }));
+    expect(deleteContactTypeGroupV3(referenced, signalId).contactTypeGroups.map(group => group.id)).toEqual([powerId]);
     expect(deleteContactTypeGroupV3(renamed, signalId).contactTypeGroups.map(group => group.id)).toEqual([powerId]);
   });
 

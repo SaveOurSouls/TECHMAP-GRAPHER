@@ -4,6 +4,13 @@
 
 ## Текущее состояние
 
+На 18.09.2026 работа продолжена от коммита `b05c112` (02:35 МСК).
+Проверены M3-12, M4-01–04 и исправления M4-03-r6. M4-05:
+[импорт, пины, предпросмотр и размещение Э4](docs/m4-05-library-import-e4.md).
+M4-06: [редактор серии](docs/m4-06-series-editor.md). M4-07:
+[цвет, перестроение трасс и прямой отвод экрана](docs/m4-07-routing-audit.md).
+Ниже сохранена история основных решений; это ещё не полная приёмка V1.
+
 Основной опрос завершён; план M0–M9 и решения A01–A03 приняты владельцем.
 Завершены M0-01 (обследование справочников), M0-02 (интерактивный эксперимент
 текстуры вдоль направляющей), M0-03 (поиск большого каталога и нагрузка Canvas),
@@ -96,11 +103,11 @@ M3-03: [длина провода и первая карта резки](docs/m3
 Product-каркас собирается и проверяется одной командой Windows PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-m1-15.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-package.ps1 -ArtifactSlice m4-05-verified
 ```
 
 Готовый локальный артефакт создаётся в
-`artifacts/m3-03/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
+`artifacts/m4-05-verified/TECHMAP-GRAPHER-win-x64.zip`; `artifacts/` не входит в Git.
 Внутри ZIP находится `Examples/reference-catalog.xlsx` с инструкцией для проверки
 универсального импорта.
 

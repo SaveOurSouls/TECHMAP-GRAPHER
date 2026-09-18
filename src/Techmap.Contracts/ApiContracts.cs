@@ -62,6 +62,8 @@ public sealed record UpdateHarnessQuantityRequest(
 
 public sealed record DeleteHarnessRequest(Guid CommandId, long? ExpectedRevision);
 
+public sealed record DeleteProjectRequest(long? ExpectedRevision);
+
 public sealed record ProjectListResponse(IReadOnlyList<ProjectSummaryResponse> Projects);
 
 public sealed record ProjectSummaryResponse(

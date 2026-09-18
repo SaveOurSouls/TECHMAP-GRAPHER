@@ -42,7 +42,7 @@ public static partial class GoogleSheetsWorkbookAddressParser
             throw Invalid("Разрешена только HTTPS-ссылка на публичную таблицу docs.google.com.");
         }
 
-        var gid = ValidateQuery(uri.Query);
+        _ = ValidateQuery(uri.Query);
         ValidateFragment(uri.Fragment);
 
         var published = PublishedPath().Match(uri.AbsolutePath);
@@ -57,11 +57,11 @@ public static partial class GoogleSheetsWorkbookAddressParser
         var exportPath = published.Success
             ? $"https://docs.google.com/spreadsheets/d/e/{identifier}/pub?output=xlsx"
             : $"https://docs.google.com/spreadsheets/d/{identifier}/export?format=xlsx";
-        if (gid is not null)
-            exportPath += $"&gid={gid}";
+        // The importer resolves named profiles across the whole workbook.
+        // A copied browser URL's gid selects a tab, not a separate source.
         var exportUri = new Uri(exportPath);
         var identityHash = Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes($"{(published.Success ? "published" : "workbook")}\n{identifier}\n{gid ?? ""}")));
+            Encoding.UTF8.GetBytes($"{(published.Success ? "published" : "workbook")}\n{identifier}\n")));
         var sourceLabel = $"google-sheet:{identityHash}";
         return new GoogleSheetsWorkbookAddress(
             exportUri,

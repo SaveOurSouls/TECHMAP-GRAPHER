@@ -11,12 +11,24 @@ import {
   parseTerminalArticleKeysV3,
   readableTerminalArticleV3,
   updateTerminalArticleKeyV3,
+  patternContactCount,
 } from "./TemplateSeriesPanelV3";
 import { addContactPointV3, addContactTypeGroupV3, newTemplateContentV3, upsertArticleVariantV3 } from "./template-commands-v3";
 import { upgradeTemplateContentV2ToV3 } from "./template-upgrade-v3";
 import { newTemplateContentV2 } from "./template-commands-v2";
+import { addSeriesArticles } from "./ComponentLibrary";
 
 describe("TemplateSeriesPanelV3", () => {
+  it("derives independent pin count from each XX article value", () => {
+    expect(patternContactCount("JST-XX", "JST-12")).toBe(12);
+    expect(patternContactCount("JST-XX-A", "JST-07-A")).toBe(7);
+  });
+
+  it("stores XX count in the first article contact group", () => {
+    const content = upgradeTemplateContentV2ToV3(newTemplateContentV2()).content;
+    const next = addSeriesArticles(content, [{ sourceId: "БД.СОЕД", entityType: "connector", articleKey: "JST-12", contactCount: 12 }]);
+    expect(next.articleVariants[0]?.contactGroups?.[0]?.contactCount).toBe(12);
+  });
   it("recognizes contact type duplicates ignoring case and surrounding spaces", () => {
     const content = newTemplateContentV3();
     content.contactTypeGroups.push({ id: crypto.randomUUID(), name: "Сигнальные" });
@@ -47,10 +59,8 @@ describe("TemplateSeriesPanelV3", () => {
       compatibleTerminalArticleKeys: [{ sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "SXH-001T-P0.6" }],
       onChangeCompatibleTerminalArticleKeys: vi.fn(),
       selectedArticleVariantId: content.articleVariants[0]!.id,
-      articlePreviewMessage: "B2B-XH-A: 2 контакта",
-      articlePreviewRows: [{ key: "row-1", number: "1", name: "DATA+", circuitText: "NET-DATA+", contactTypeGroupId: groupId }],
     }));
-    expect(markup).toContain("Серия и артикулы");
+    expect(markup).toContain("Настройка серии");
     expect(markup).toContain("Типы контактов");
     expect(markup).toContain("Силовые");
     expect(markup).toContain("Дополнительные");
@@ -68,42 +78,22 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("либо укажите 0");
     expect(markup).toContain('aria-invalid="true"');
     expect(markup).toContain("Совместимые терминалы серии");
-    expect(markup).toContain("Артикул для предпросмотра");
+    expect(markup).not.toContain("Артикул для предпросмотра");
     expect(markup).toContain("Один артикул");
     expect(markup).toContain("По шаблону");
     expect(markup).toContain('name="article-add-mode"');
-    expect(markup).toContain("B2B-XH-A: 2 контакта");
-    expect(markup).toContain("Материализованные строки контактов");
-    expect(markup).toContain("NET-DATA+");
+    expect(markup).not.toContain("B2B-XH-A: 2 контакта");
+    expect(markup).not.toContain("Материализованные строки контактов");
+    expect(markup).not.toContain("NET-DATA+");
     expect(markup).toContain('class="series-v3-terminal-table"');
     expect(markup).toContain("<th>Артикул</th><th>Тип контакта</th><th>Стандартный</th>");
     expect(markup).not.toContain("<th>Источник</th>");
     expect(markup).not.toContain("Стандартный терминал для типа");
 
-    const guideStart = markup.indexOf('<details class="series-v3-guide">');
-    const guideEnd = markup.indexOf("</details>", guideStart);
-    const guideMarkup = markup.slice(guideStart, guideEnd);
-    expect(guideStart).toBeGreaterThan(-1);
-    expect(guideMarkup).not.toContain(" open=");
-    expect(guideMarkup).toContain("<summary>Как заполнить шаблон</summary>");
-    expect(guideMarkup).toContain('<ol aria-label="Порядок заполнения шаблона">');
-    const guideSteps = [
-      "Укажите серию соединителя и краткое описание.",
-      "Добавьте нужные типы контактов. В одной серии может быть несколько типов.",
-      "Добавьте артикулы по одному или массово по шаблону с <code>XX</code>. Ведущие нули сохраняются.",
-      "Для каждого артикула задайте количество контактов каждого типа.",
-      "Укажите допустимые терминалы из БД.ТЕР.",
-      "Выберите артикул и проверьте автоматически подготовленную таблицу Э4.",
-      "Сохраните новую версию серии.",
-    ];
-    expect(guideMarkup.match(/<li>/g)).toHaveLength(guideSteps.length);
-    guideSteps.reduce((previousIndex, step) => {
-      const stepIndex = guideMarkup.indexOf(step);
-      expect(stepIndex).toBeGreaterThan(previousIndex);
-      return stepIndex;
-    }, -1);
-    expect(guideMarkup).toContain("Основной вид Э4 всегда формируется как таблица.");
-    expect(guideMarkup).not.toContain("опубликуйте");
+    expect(markup.indexOf('series-v3-groups')).toBeLessThan(markup.indexOf('series-v3-series-terminals'));
+    expect(markup.indexOf('series-v3-series-terminals')).toBeLessThan(markup.indexOf('series-v3-variants'));
+    expect(markup).toContain('role="tooltip"');
+
   });
 
   it("does not duplicate a reference connector through the manual fallback", () => {
@@ -140,7 +130,7 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).not.toContain('class="series-v3-variant"');
   });
 
-  it("renders active connector reference suggestions while keeping manual fallback", () => {
+  it("renders manual articles without the removed connector search", () => {
     const content = newTemplateContentV3();
     content.articleVariants.push({
       id: "existing", sourceId: "technology-connectors", entityType: "connector", articleKey: "B2B-XH-A",
@@ -148,23 +138,16 @@ describe("TemplateSeriesPanelV3", () => {
     });
     const markup = renderToStaticMarkup(createElement(TemplateSeriesPanelV3, {
       content,
-      connectorArticleQuery: "XH",
-      connectorArticleSearchState: "ready",
-      connectorArticleSuggestions: [
-        { sourceId: "technology-connectors", entityType: "connector", articleKey: "B2B-XH-A" },
-        { sourceId: "technology-connectors", entityType: "connector", articleKey: "B10B-XH-A" },
-      ],
-      onConnectorArticleQueryChange: vi.fn(),
       onAddContactTypeGroup: vi.fn(), onRenameContactTypeGroup: vi.fn(), onDeleteContactTypeGroup: vi.fn(),
       onAddArticleVariants: vi.fn(), onDeleteArticleVariant: vi.fn(), onSetArticleContactGroup: vi.fn(), onRemoveArticleContactGroup: vi.fn(),
     }));
 
-    expect(markup).toContain('aria-label="Поиск артикула в справочнике соединителей"');
-    expect(markup).toContain('aria-label="Артикулы из справочника соединителей"');
+    expect(markup).not.toContain('aria-label="Поиск артикула в справочнике соединителей"');
+    expect(markup).not.toContain('aria-label="Артикулы из справочника соединителей"');
     expect(markup).toContain("B2B-XH-A");
-    expect(markup).toContain("B10B-XH-A");
-    expect(markup).toContain("Уже в серии");
-    expect(markup).toContain("+ Добавить");
+    expect(markup).not.toContain("B10B-XH-A");
+    expect(markup).not.toContain("Уже в серии");
+    expect(markup).not.toContain("+ Добавить");
     expect(markup).toContain("Один артикул");
     expect(markup).toContain("По шаблону");
   });

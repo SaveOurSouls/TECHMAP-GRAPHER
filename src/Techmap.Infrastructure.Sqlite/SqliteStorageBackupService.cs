@@ -464,7 +464,7 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
         sequences.CommandText =
             """
             SELECT COUNT(*) FROM project_component_snapshots s
-            WHERE s.schema_version NOT IN (3, 4)
+            WHERE s.schema_version NOT IN (3, 4, 5)
                OR (SELECT COUNT(*) FROM project_component_snapshot_article_bindings b
                    WHERE b.snapshot_id = s.snapshot_id) > 500
                OR (SELECT COUNT(*) FROM project_component_snapshot_asset_refs a

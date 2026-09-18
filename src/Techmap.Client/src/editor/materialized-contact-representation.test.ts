@@ -6,6 +6,7 @@ import type {
 } from "./model";
 import {
   connectorContactPosition,
+  connectorE4TableGeometry,
   createEmptyHarnessDesign,
   wireEndpointE4Anchor,
 } from "./model";
@@ -13,6 +14,25 @@ import {
   materializedContactWorldRepresentation,
   selectMaterializedContactRepresentation,
 } from "./materialized-contact-representation";
+import { designToScene } from "./HarnessDesignEditor";
+import { createWire } from "./commands";
+
+it("uses current v5 table edges for E4 rendering and routing while retaining drawing points", () => {
+  const original = connector();
+  const table = { ...original, e4TableMode: true };
+  const id = table.contacts[0]!.id;
+  const point = connectorE4TableGeometry(table).contactPoints[id]!;
+  const expected = { x: table.positions.e4.x + point.x, y: table.positions.e4.y + point.y };
+  expect(connectorContactPosition(table, id, "e4")).toEqual(expected);
+  expect(materializedContactWorldRepresentation(table, id, "e4")).toBeNull();
+  expect(materializedContactWorldRepresentation(table, id, "drawing"))
+    .toEqual(materializedContactWorldRepresentation(original, id, "drawing"));
+  const wire = createWire("wire", { connectorId: table.id, contactId: id },
+    { connectorId: table.id, contactId: table.contacts[1]!.id }, null);
+  const document = { ...createEmptyHarnessDesign(), connectors: [table], wires: [wire] };
+  expect(wireEndpointE4Anchor(document, wire.from)?.position).toEqual(expected);
+  expect(designToScene(document, "e4", new Set(), new Set()).find(item => item.kind === "wire")?.points?.[0]).toEqual(expected);
+});
 
 const fixedLogicalId = "fixed-contact";
 const repeatedPrototypeId = "repeat-contact";

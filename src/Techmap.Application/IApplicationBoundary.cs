@@ -65,6 +65,8 @@ public interface IProjectCatalog
 
     ProjectDetails GetProject(ProjectIdentity projectId);
 
+    void DeleteProject(ProjectIdentity projectId, long expectedRevision);
+
     ProjectDetails CreateProject(CreateProjectCommand command);
 
     ProjectDetails UpdateProject(ProjectIdentity projectId, UpdateProjectCommand command);

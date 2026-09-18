@@ -1,3 +1,4 @@
+import type { DrawingArrayLayout } from "./array-layout";
 export const TEMPLATE_V2_LIMITS = Object.freeze({
   views: 34, layers: 128, nodes: 5_000, contacts: 2_000, parameters: 128,
   repeaters: 64, assets: 64, presets: 500, expressionDepth: 8, expressionNodes: 64,
@@ -43,6 +44,7 @@ export interface BundlePortV2 { id: string; name: string; x: NumericExpressionV2
 export interface ViewRepeatPlacementV2 {
   repeatDomainId: string; prototypeGroupId: string;
   step: PointExpressionV2; contactPointIds: string[];
+  arrayLayout?: DrawingArrayLayout;
 }
 export interface TemplateViewV2 {
   id: string; name: string; kind: ViewKindV2; layers: LayerV2[];
@@ -268,7 +270,17 @@ function validateRepeatDomains(repeaters: unknown[], parameterIds: Set<string>, 
 function validateRepeatPlacements(value: unknown, path: string, domains: Map<string, Set<string>>, groups: Map<string, string[]>, viewNodeIds: Set<string>, pointIds: Set<string>, pointLogicalIds: Map<string, string>, context: ExpressionContext, repeatedGroups: Map<string, string>, diagnostics: TemplateV2Diagnostic[]): void {
   if (!Array.isArray(value)) { diagnostics.push({ code: "array_required", path, message: "Ожидается массив." }); return; }
   const domainsInView = new Set<string>();
-  value.forEach((raw, index) => { const itemPath = `${path}[${index}]`; if (!exact(raw, ["repeatDomainId", "prototypeGroupId", "step", "contactPointIds"], itemPath, diagnostics)) return; let domainContacts: Set<string> | undefined; if (uuid(raw.repeatDomainId, `${itemPath}.repeatDomainId`, diagnostics)) { domainContacts = domains.get(raw.repeatDomainId); if (!domainContacts) diagnostics.push({ code: "missing_repeat_domain", path: `${itemPath}.repeatDomainId`, message: "Домен повтора не найден." }); if (domainsInView.has(raw.repeatDomainId)) diagnostics.push({ code: "duplicate_repeat_placement", path: `${itemPath}.repeatDomainId`, message: "В одном виде допустимо одно размещение домена повтора." }); domainsInView.add(raw.repeatDomainId); } if (uuid(raw.prototypeGroupId, `${itemPath}.prototypeGroupId`, diagnostics)) { if (!viewNodeIds.has(raw.prototypeGroupId) || !groups.has(raw.prototypeGroupId)) diagnostics.push({ code: "missing_prototype", path: `${itemPath}.prototypeGroupId`, message: "Группа-прототип не найдена в этом виде." }); const previous = repeatedGroups.get(raw.prototypeGroupId); if (previous) diagnostics.push({ code: "nested_repeater", path: `${itemPath}.prototypeGroupId`, message: "Одну группу нельзя повторять повторно или вкладывать в другой повтор." }); else if (typeof raw.repeatDomainId === "string") repeatedGroups.set(raw.prototypeGroupId, raw.repeatDomainId); } point(raw.step, `${itemPath}.step`, context); validateIdRefs(raw.contactPointIds, `${itemPath}.contactPointIds`, pointIds, diagnostics); if (domainContacts && Array.isArray(raw.contactPointIds)) raw.contactPointIds.forEach((pointId, pointIndex) => { const logicalId = typeof pointId === "string" ? pointLogicalIds.get(pointId) : undefined; if (logicalId && !domainContacts.has(logicalId)) diagnostics.push({ code: "repeat_contact_mismatch", path: `${itemPath}.contactPointIds[${pointIndex}]`, message: "Точка не принадлежит логическим контактам домена повтора." }); }); });
+  value.forEach((raw, index) => { const itemPath = `${path}[${index}]`; if (!exact(raw, ["repeatDomainId", "prototypeGroupId", "step", "contactPointIds", ...(isRecord(raw) && hasOwn(raw, "arrayLayout") ? ["arrayLayout"] : [])], itemPath, diagnostics)) return;
+    if (hasOwn(raw, "arrayLayout")) {
+      const grid = raw.arrayLayout;
+      if (exact(grid, ["rows", "direction", "numbering", "countSource"], `${itemPath}.arrayLayout`, diagnostics)) {
+        if (!Number.isInteger(grid.rows) || Number(grid.rows) < 1 || Number(grid.rows) > 4 ||
+            !["long-side", "short-side"].includes(String(grid.direction)) ||
+            !["new-row", "snake"].includes(String(grid.numbering)) ||
+            !["article", "parameter"].includes(String(grid.countSource)))
+          diagnostics.push({ code: "array_layout", path: `${itemPath}.arrayLayout`, message: "Некорректная настройка массива." });
+      }
+    } let domainContacts: Set<string> | undefined; if (uuid(raw.repeatDomainId, `${itemPath}.repeatDomainId`, diagnostics)) { domainContacts = domains.get(raw.repeatDomainId); if (!domainContacts) diagnostics.push({ code: "missing_repeat_domain", path: `${itemPath}.repeatDomainId`, message: "Домен повтора не найден." }); if (domainsInView.has(raw.repeatDomainId)) diagnostics.push({ code: "duplicate_repeat_placement", path: `${itemPath}.repeatDomainId`, message: "В одном виде допустимо одно размещение домена повтора." }); domainsInView.add(raw.repeatDomainId); } if (uuid(raw.prototypeGroupId, `${itemPath}.prototypeGroupId`, diagnostics)) { if (!viewNodeIds.has(raw.prototypeGroupId) || !groups.has(raw.prototypeGroupId)) diagnostics.push({ code: "missing_prototype", path: `${itemPath}.prototypeGroupId`, message: "Группа-прототип не найдена в этом виде." }); const previous = repeatedGroups.get(raw.prototypeGroupId); if (previous) diagnostics.push({ code: "nested_repeater", path: `${itemPath}.prototypeGroupId`, message: "Одну группу нельзя повторять повторно или вкладывать в другой повтор." }); else if (typeof raw.repeatDomainId === "string") repeatedGroups.set(raw.prototypeGroupId, raw.repeatDomainId); } point(raw.step, `${itemPath}.step`, context); validateIdRefs(raw.contactPointIds, `${itemPath}.contactPointIds`, pointIds, diagnostics); if (domainContacts && Array.isArray(raw.contactPointIds)) raw.contactPointIds.forEach((pointId, pointIndex) => { const logicalId = typeof pointId === "string" ? pointLogicalIds.get(pointId) : undefined; if (logicalId && !domainContacts.has(logicalId)) diagnostics.push({ code: "repeat_contact_mismatch", path: `${itemPath}.contactPointIds[${pointIndex}]`, message: "Точка не принадлежит логическим контактам домена повтора." }); }); });
 }
 function validateNestedRepeaters(repeatedGroups: Map<string, string>, groups: Map<string, string[]>, diagnostics: TemplateV2Diagnostic[]): void {
   for (const prototype of repeatedGroups.keys()) if ([...descendants(prototype, groups)].some(child => repeatedGroups.has(child))) diagnostics.push({ code: "nested_repeater", path: `group:${prototype}`, message: "Вложенные repeaters запрещены." });

@@ -67,6 +67,7 @@ function sameArticleKeys(left: readonly ArticleKeyV3[], right: readonly ArticleK
 function crossValidateV3AndTable(
   core: TemplateContentV3,
   table: E4ConnectorSeriesTable,
+  independentE4: boolean,
 ): E4ConnectorSeriesTableDiagnostic[] {
   const diagnostics: E4ConnectorSeriesTableDiagnostic[] = [];
   const coreGroups = new Map(core.contactTypeGroups.map(group => [group.id, group]));
@@ -81,7 +82,15 @@ function crossValidateV3AndTable(
 
   let expected: E4ConnectorSeriesTable;
   try {
-    expected = createE4ConnectorSeriesTableFromV3(core);
+    expected = independentE4 ? {
+      ...table,
+      articles: core.articleVariants.map(variant => ({
+        articleVariantId: variant.id, sourceId: variant.sourceId, entityType: variant.entityType,
+        articleKey: variant.articleKey, rows: [],
+        contactGroups: core.contactTypeGroups.map(group => variant.contactGroups?.find(config => config.contactTypeGroupId === group.id)
+          ?? { contactTypeGroupId: group.id, contactCount: 0, allowedTerminalArticleKeys: [] }),
+      })),
+    } : createE4ConnectorSeriesTableFromV3(core);
   } catch (caught) {
     diagnostics.push(error(
       "e4_core_materialization_failed",
@@ -123,7 +132,7 @@ function crossValidateV3AndTable(
   return diagnostics;
 }
 
-export function validateTemplateContentV4(value: unknown): TemplateV4Validation {
+export function validateTemplateContentV4(value: unknown, independentE4 = false): TemplateV4Validation {
   if (!isRecord(value)) return {
     valid: false,
     diagnostics: [error("object_required", "$", "Содержимое шаблона v4 должно быть объектом.")],
@@ -145,7 +154,7 @@ export function validateTemplateContentV4(value: unknown): TemplateV4Validation 
     path: item.path.replace(/^\$/, "$.e4ConnectorTable"),
   })));
   if (coreValidation.valid && tableValidation.valid)
-    diagnostics.push(...crossValidateV3AndTable(projectV3Core(value) as TemplateContentV3, value.e4ConnectorTable as E4ConnectorSeriesTable));
+    diagnostics.push(...crossValidateV3AndTable(projectV3Core(value) as TemplateContentV3, value.e4ConnectorTable as E4ConnectorSeriesTable, independentE4));
   return {
     valid: diagnostics.every(item => "severity" in item ? item.severity !== "error" : false),
     diagnostics,

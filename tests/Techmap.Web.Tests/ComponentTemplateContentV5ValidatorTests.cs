@@ -11,9 +11,38 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
     [Fact]
+    public void E4_presentation_is_optional_and_validated_before_projection()
+    {
+        var content = ValidContent();
+        content["e4Presentation"] = JsonNode.Parse("""
+            {"orientation":"contacts-left","baseColumns":[{"key":"wire","visible":false}],
+             "customFields":[{"id":"note","label":"Примечание","visible":true}]}
+            """);
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        content["e4Presentation"]!["orientation"] = "wrong";
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        content["e4Presentation"]!["orientation"] = "contacts-left";
+        content["e4Presentation"]!["baseColumns"]!.AsArray().Add(content["e4Presentation"]!["baseColumns"]![0]!.DeepClone());
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
+    [Fact]
     public void Valid_v5_uses_one_root_terminal_index_and_table_model_2()
     {
         ComponentTemplateContentV5Validator.Validate(Element(ValidContent()));
+    }
+
+    [Fact]
+    public void E4_rows_do_not_require_graphical_contact_prototypes_but_counts_must_match()
+    {
+        var content = ValidContent();
+        content["logicalContacts"] = new JsonArray();
+        content["repeaters"] = new JsonArray();
+        foreach (var view in content["views"]!.AsArray()) view!["contactPoints"] = new JsonArray();
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+
+        content["articleVariants"]![0]!["contactGroups"]![0]!["contactCount"] = 2;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
     }
 
     [Fact]

@@ -8,6 +8,39 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectCatalogIntegrationTests
 {
     [Fact]
+    public void Project_deletion_is_atomic_and_preserves_other_projects_and_increments()
+    {
+        using var fixture = ProjectCatalogFixture.Create();
+        ProjectIdentity deletedId;
+        ProjectIdentity keptId;
+        using (var storage = SqliteStorage.Open(fixture.DataRoot))
+        {
+            var catalog = new SqliteProjectCatalog(storage);
+            var first = catalog.CreateProject(CreateCommand("DELETE-TEST"));
+            first = catalog.AddHarness(first.ProjectId, "Жгут", 2);
+            var kept = catalog.CopyProject(first.ProjectId);
+            deletedId = first.ProjectId;
+            keptId = kept.ProjectId;
+            var failing = new SqliteProjectCatalog(storage, stage =>
+            {
+                if (stage == "after_delete_project") throw new InvalidOperationException("rollback test");
+            });
+            Assert.Throws<InvalidOperationException>(() => failing.DeleteProject(first.ProjectId, first.Revision));
+            Assert.Single(catalog.GetProject(first.ProjectId).Harnesses);
+            Assert.Single(catalog.ListVersions(first.ProjectId));
+            Assert.Throws<ProjectCommandException>(() => catalog.DeleteProject(first.ProjectId, 0));
+            catalog.DeleteProject(first.ProjectId, first.Revision);
+            Assert.Equal(kept.ProjectId, Assert.Single(catalog.ListProjects()).ProjectId);
+            Assert.Single(catalog.GetProject(kept.ProjectId).Harnesses);
+            Assert.True(catalog.CreateProject(CreateCommand("AFTER-DELETE")).Increment > kept.Increment);
+        }
+        using var reopened = SqliteStorage.Open(fixture.DataRoot);
+        var afterRestart = new SqliteProjectCatalog(reopened);
+        Assert.Throws<ProjectCatalogException>(() => afterRestart.GetProject(deletedId));
+        Assert.Single(afterRestart.GetProject(keptId).Harnesses);
+    }
+
+    [Fact]
     public void Two_harnesses_keep_their_ids_and_order_after_restart()
     {
         using var fixture = ProjectCatalogFixture.Create();

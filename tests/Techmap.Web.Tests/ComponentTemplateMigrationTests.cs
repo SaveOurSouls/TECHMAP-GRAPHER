@@ -274,7 +274,7 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE IF EXISTS component_template_drafts;
                     DROP TABLE component_templates;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

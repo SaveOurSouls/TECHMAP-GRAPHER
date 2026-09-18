@@ -951,7 +951,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
             ValidateSha256(component.SourceVersionSha256);
             if (ParseGuid(component.SnapshotId) != component.SnapshotId ||
                 ParseGuid(component.SourceTemplateId) != component.SourceTemplateId ||
-                component.SourceVersion <= 0 || component.SchemaVersion is not (3 or 4) ||
+                component.SourceVersion <= 0 || component.SchemaVersion is not (3 or 4 or 5) ||
                 !componentSnapshotIds.Add(component.SnapshotId) ||
                 previousComponentSnapshotId is not null &&
                     string.CompareOrdinal(previousComponentSnapshotId, component.SnapshotId) >= 0 ||
@@ -1103,7 +1103,10 @@ public sealed class SqliteProjectExportService : IProjectExportService
             return false;
         }
 
-        return parsedSchemaVersion == design.SchemaVersion;
+        if (parsedSchemaVersion != design.SchemaVersion) return false;
+        try { HarnessStripProfileValidator.Validate(design.Content); }
+        catch (HarnessDesignDocumentException) { return false; }
+        return true;
     }
 
     private static async Task<byte[]> ReadBoundedAsync(

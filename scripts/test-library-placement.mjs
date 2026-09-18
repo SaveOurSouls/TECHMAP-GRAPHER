@@ -1,0 +1,297 @@
+// Run against the packaged server in a newly created, isolated test data root.
+// Uses the production client materializer/request builder and real HTTP APIs.
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { resolve, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const clientRoot = join(root, 'src/Techmap.Client');
+const require = createRequire(join(clientRoot, 'package.json'));
+const { createServer } = await import(pathToFileURL(require.resolve('vite')).href);
+const packageRoot = resolve(process.argv[2] ?? join(root, 'artifacts/m4-03-r6-final/TECHMAP-GRAPHER'));
+const checkDeletion = process.argv.includes('--check-deletion');
+const checkTerminalLabels = process.argv.includes('--check-terminal-labels');
+const terminalKey = '3:JST|14:SPH-002T-P0.5S|0:|3:PHR';
+const testsRoot = join(root, 'artifacts/library-placement-smoke');
+await mkdir(testsRoot, { recursive: true });
+const dataRoot = await mkdtemp(join(testsRoot, 'test-'));
+let server = spawn(join(packageRoot, 'Techmap.Server.exe'), ['--no-browser', `--data-root=${dataRoot}`], {
+  cwd: packageRoot, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+});
+let log = '';
+server.stdout.on('data', chunk => { log += chunk; });
+server.stderr.on('data', chunk => { log += chunk; });
+const vite = await createServer({ root: clientRoot, configFile: false, server: { middlewareMode: true }, appType: 'custom' });
+try {
+  const url = await new Promise((res, rej) => {
+    const timeout = setTimeout(() => { clearInterval(timer); rej(new Error(`Server timeout: ${log}`)); }, 30000);
+    const timer = setInterval(() => {
+      const match = /TECHMAP_HOST_URL=(https?:\/\/[^\s]+)/.exec(log);
+      if (match) { clearInterval(timer); clearTimeout(timeout); res(match[1]); }
+      else if (server.exitCode !== null) { clearInterval(timer); clearTimeout(timeout); rej(new Error(log)); }
+    }, 100);
+  });
+  const origin = new URL(url).origin;
+  const page = await fetch(url);
+  assert.equal(page.status, 200);
+  const cookie = page.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  const fetcher = (path, init = {}) => fetch(new URL(String(path), origin), {
+    ...init, headers: { ...init.headers, Cookie: cookie, Origin: origin },
+  });
+  const html = await page.text();
+  for (const [, asset] of html.matchAll(/(?:src|href)="(\.\/assets\/[^\"]+)"/g)) {
+    const response = await fetcher(new URL(asset, url));
+    assert.equal(response.status, 200, `Missing packaged client asset: ${asset}`);
+    assert.ok(!response.headers.get('content-type')?.includes('text/html'));
+  }
+  const session = await (await fetcher('/api/v1/session')).json();
+  const config = await (await fetcher('/runtime-config.json')).json();
+  const module = path => vite.ssrLoadModule(`/src/${path}`);
+  const { createProjectApi } = await module('project-api.ts');
+  const { createComponentTemplateApi } = await module('component-library/component-template-api.ts');
+  const { newTemplateContentV3, addContactPointV3, addContactTypeGroupV3, addArticleVariantsV3, setArticleVariantContactGroupV3 } = await module('component-library/template-commands-v3.ts');
+  const { upgradeTemplateContentV3ToV4 } = await module('component-library/template-model-v4.ts');
+  const { upgradeTemplateContentV4ToV5 } = await module('component-library/template-model-v5.ts');
+  const { createConnectorInstanceFromComponentTemplateV3 } = await module('editor/component-template-placement.ts');
+  const { componentPlacementRequest, createComponentPlacementApi } = await module('editor/component-placement-api.ts');
+  const { createHarnessDesignApi } = await module('editor/design-api.ts');
+  const projects = createProjectApi(config, session, fetcher);
+  const templates = createComponentTemplateApi(config, session, fetcher);
+  const placements = createComponentPlacementApi(config, session, fetcher);
+  const designs = createHarnessDesignApi(config, session, fetcher);
+  assert.equal((await projects.listProjects()).length, 0);
+  let project = await projects.createProject({ designation: 'API-SMOKE', name: 'Isolated placement test', status: 'draft' });
+  project = (await projects.addHarness(project.projectId, { commandId: crypto.randomUUID(), expectedRevision: 0 }, {
+    designation: 'TEST-HARNESS', quantity: 1,
+  })).project;
+  const harnessId = project.harnesses[0].harnessId;
+  let content = newTemplateContentV3();
+  [content] = addContactPointV3(content, content.views[0].id, { number: '1', name: 'Test contact' });
+  const article = { sourceId: process.argv.includes('--independent-e4') ? 'БД.СОЕД' : 'smoke-library', entityType: 'connector', articleKey: 'TEST-ARTICLE' };
+  content.articleVariants = [{ ...article, id: crypto.randomUUID(), parameterValues: [], contactGroups: null }];
+  content = upgradeTemplateContentV3ToV4(content).content;
+  if (!process.argv.includes('--v4')) {
+    content = upgradeTemplateContentV4ToV5(content).content;
+    content.logicalContacts = [];
+    content.repeaters = [];
+    content.views = content.views.map(view => ({ ...view, contactPoints: [] }));
+  }
+  if (process.argv.includes('--independent-e4')) {
+    const { createE4ConnectorSeriesTableFromV3 } = await module('component-library/e4-connector-series-table.ts');
+    const { createTemplateContentV5FromEditor } = await module('component-library/template-model-v5.ts');
+    const { parseConnectorSchematic } = await module('editor/model.ts');
+    let core = newTemplateContentV3();
+    let group;
+    [core, group] = addContactTypeGroupV3(core, 'Signal');
+    core = addArticleVariantsV3(core, [article]);
+    core = setArticleVariantContactGroupV3(core, core.articleVariants[0].id, group, 12, []);
+    const defaults = parseConnectorSchematic(undefined);
+    const preset = { ...defaults, orientation: 'contacts-left',
+      baseColumns: defaults.baseColumns.map(column => ({ ...column, visible: column.key !== 'wire' })),
+      customFields: [{ id: 'note', label: 'Note', visible: true }] };
+    content = createTemplateContentV5FromEditor(core, createE4ConnectorSeriesTableFromV3(core, true), [], [], preset).content;
+    if (checkTerminalLabels) {
+      const terminal = { sourceId: 'technology-terminals', entityType: 'terminal', articleKey: terminalKey };
+      content.compatibleTerminalArticleKeys = [terminal];
+      content.terminalContactTypeBindings = [{ terminalArticleKey: terminal, contactTypeGroupId: group, standard: true }];
+      content.e4ConnectorTable.seriesDefaults = content.e4ConnectorTable.seriesDefaults.map(row => ({
+        ...row, values: { ...row.values, standardTerminalArticleKey: terminal },
+      }));
+    }
+  }
+  const initial = await templates.create({ code: 'API-SMOKE', name: 'Test series', articleBindings: [article], content });
+  const draft = await templates.saveDraft(initial.templateId, { expectedVersion: initial.version, expectedDraftRevision: 0,
+    code: initial.code, name: 'Published newer draft', articleBindings: [article], content });
+  const published = await templates.publishDraft(initial.templateId, initial.version, draft.draftRevision);
+  assert.ok(published.version > initial.version);
+  const preview = createConnectorInstanceFromComponentTemplateV3(published, {
+    id: crypto.randomUUID(), designation: 'XS1', e4Position: { x: 120, y: 100 },
+  });
+  const body = componentPlacementRequest(preview, 0, crypto.randomUUID());
+  const result = await placements.place(project.projectId, harnessId, body);
+  const graph = await placements.list(project.projectId, harnessId);
+  const saved = await designs.get(project.projectId, harnessId);
+  let latestTemplateVersion = published.version;
+  const snapshot = graph.snapshots[0];
+  assert.equal(snapshot.sourceTemplateId, preview.libraryBinding.templateId);
+  assert.equal(snapshot.sourceVersion, preview.libraryBinding.templateVersion);
+  assert.equal(snapshot.sourceVersionSha256, preview.libraryBinding.versionSha256);
+  for (const key of ['sourceId', 'entityType', 'articleKey']) assert.equal(graph.placements[0][key], preview.libraryBinding.article[key]);
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.content.connectors[0].libraryBinding)),
+    JSON.parse(JSON.stringify(preview.libraryBinding)));
+  assert.deepEqual(await placements.place(project.projectId, harnessId, body), result);
+  if (checkTerminalLabels) {
+    const { terminalArticleLabel } = await module('editor/terminal-article-label.ts');
+    assert.equal(saved.content.connectors[0].contacts[0].terminalArticle, terminalKey);
+    assert.equal(terminalArticleLabel(saved.content.connectors[0].contacts[0].terminalArticle), 'SPH-002T-P0.5S');
+  }
+  if (process.argv.includes('--independent-e4')) {
+    assert.equal(saved.content.connectors[0].contacts.length, 12);
+    assert.deepEqual(saved.content.connectors[0].schematic, content.e4Presentation);
+    assert.deepEqual((await templates.get(initial.templateId)).content.e4Presentation, content.e4Presentation);
+  }
+  let terminalRefreshChecked = false;
+  if (process.argv.includes('--check-terminal-refresh')) {
+    const { refreshedTemplateTerminalCatalog } = await module('editor/template-terminal-catalog.ts');
+    const { applyEditorCommand } = await module('editor/commands.ts');
+    const terminal = { sourceId: 'technology-terminals', entityType: 'terminal', articleKey: 'TEST-NEW-TERMINAL' };
+    const latest = await templates.save(published.templateId, {
+      expectedVersion: published.version, code: published.code, name: published.name,
+      articleBindings: [article], content: { ...content,
+        compatibleTerminalArticleKeys: [...content.compatibleTerminalArticleKeys, terminal] },
+    });
+    latestTemplateVersion = latest.version;
+    const before = saved.content.connectors[0];
+    const catalog = refreshedTemplateTerminalCatalog(before, latest);
+    let updated = applyEditorCommand(saved.content, { type: 'refresh-template-terminals', connectorId: before.id, catalog });
+    updated = applyEditorCommand(updated, { type: 'update-contact', connectorId: before.id,
+      contactId: before.contacts[0].id, terminalArticle: terminal.articleKey });
+    const written = await designs.save(project.projectId, harnessId, saved.revision, updated);
+    const reread = await designs.get(project.projectId, harnessId);
+    assert.equal(reread.revision, written.revision);
+    assert.equal(reread.content.connectors[0].contacts[0].terminalArticle, terminal.articleKey);
+    assert.deepEqual(reread.content.connectors[0].libraryBinding, before.libraryBinding);
+    assert.equal(reread.content.connectors[0].e4TableMode, true);
+    const unchangedGraph = await placements.list(project.projectId, harnessId);
+    assert.equal(unchangedGraph.snapshots[0].sourceVersion, published.version);
+    assert.equal(unchangedGraph.snapshots[0].sourceVersionSha256, published.versionSha256);
+    terminalRefreshChecked = true;
+  }
+  let stripProfilesChecked = false;
+  if (process.argv.includes('--check-strip-profiles')) {
+    const { createConnector, createWire } = await module('editor/commands.ts');
+    const { createMutationHeaders } = await module('local-session.ts');
+    const left = createConnector(crypto.randomUUID(), 'STRIP-X1', 1, { x: 500, y: 100 });
+    const right = createConnector(crypto.randomUUID(), 'STRIP-X2', 1, { x: 800, y: 100 });
+    const wire = createWire(crypto.randomUUID(),
+      { connectorId: left.id, contactId: left.contacts[0].id },
+      { connectorId: right.id, contactId: right.contacts[0].id });
+    const profile = { sourceId: 'test-coax', snapshotId: crypto.randomUUID(),
+      snapshotSha256: 'a'.repeat(64), recordId: 'b'.repeat(64), entityType: 'coax-termination',
+      sourceKey: 'TEST-STRIP', displayName: 'Test strip', layers: [
+        { index: 1, diameterMm: 1, stripLengthMm: 2.5 },
+        { index: 3, diameterMm: 3, stripLengthMm: 7.5 },
+      ] };
+    wire.stripProfiles = { from: profile, to: { ...profile, sourceKey: 'TEST-STRIP-TO' } };
+    const valid = await designs.save(project.projectId, harnessId, saved.revision, {
+      ...saved.content, connectors: [...saved.content.connectors, left, right], wires: [wire],
+    });
+    const invalid = JSON.parse(JSON.stringify(valid.content));
+    invalid.wires[0].stripProfiles.to.layers[1].stripLengthMm = 1;
+    const rejected = await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`, {
+      method: 'PUT', headers: createMutationHeaders(session),
+      body: JSON.stringify({ expectedRevision: valid.revision, schemaVersion: 1, content: invalid }),
+    });
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).field, 'content.wires[0].stripProfiles.to.layers[1].stripLengthMm');
+    const unchanged = await designs.get(project.projectId, harnessId);
+    assert.equal(unchanged.revision, valid.revision);
+    assert.deepEqual(unchanged.content.wires[0].stripProfiles, valid.content.wires[0].stripProfiles);
+    stripProfilesChecked = true;
+  }
+  let routingChecked = false;
+  let routingHarnessId;
+  let routingExpected;
+  if (process.argv.includes('--check-routing')) {
+    const { applyEditorCommand, createConnector, createWire, e4RoutingIssues } = await module('editor/commands.ts');
+    const { createEmptyHarnessDesign, createScreenEndpoint, createJunctionEndpoint, wireEndpointE4Anchor } = await module('editor/model.ts');
+    project = (await projects.addHarness(project.projectId, { commandId: crypto.randomUUID(), expectedRevision: project.revision }, {
+      designation: 'ROUTING', quantity: 1,
+    })).project;
+    routingHarnessId = project.harnesses.find(harness => harness.designation === 'ROUTING').harnessId;
+    const empty = await designs.get(project.projectId, routingHarnessId);
+    let scene = createEmptyHarnessDesign();
+    scene = applyEditorCommand(scene, { type: 'add-connector', connector: createConnector('x1', 'X1', 2, { x: 0, y: 0 }) });
+    scene = applyEditorCommand(scene, { type: 'add-connector', connector: createConnector('x2', 'X2', 2, { x: 1000, y: 0 }) });
+    scene = applyEditorCommand(scene, { type: 'flip-connector-orientation', connectorId: 'x2' });
+    for (let i = 1; i <= 2; i++) scene = applyEditorCommand(scene, { type: 'add-wire', wire: createWire(`w${i}`,
+      { connectorId: 'x1', contactId: `x1:contact:${i}` }, { connectorId: 'x2', contactId: `x2:contact:${i}` }) });
+    scene = applyEditorCommand(scene, { type: 'move-connector', connectorId: 'x2', view: 'e4', position: { x: 200, y: 30 } });
+    assert.ok(e4RoutingIssues(scene).length > 0);
+    scene = applyEditorCommand(scene, { type: 'update-contact', connectorId: 'x1', contactId: 'x1:contact:1', color: 'Красный' });
+    const blocked = await designs.save(project.projectId, routingHarnessId, empty.revision, scene);
+    assert.deepEqual(blocked.content.connectors[1].positions.e4, { x: 200, y: 30 });
+    assert.equal(blocked.content.connectors[0].contacts[0].color, 'Красный');
+    scene = applyEditorCommand(blocked.content, { type: 'move-connector', connectorId: 'x2', view: 'e4', position: { x: 1000, y: 0 } });
+    assert.equal(e4RoutingIssues(scene).length, 0);
+    scene = applyEditorCommand(scene, { type: 'create-screen', screen: { id: 'screen', wireIds: ['w2'], position: 0.5, width: 16, label: 'SH' } });
+    const targetY = wireEndpointE4Anchor(scene, scene.wires[0].from).position.y;
+    scene = applyEditorCommand(scene, { type: 'create-junction', junction: {
+      id: 'j', position: { x: 850, y: targetY }, wireIds: ['w1', 'branch'],
+    }, branchWire: createWire('branch', createScreenEndpoint('screen'), createJunctionEndpoint('j')) });
+    scene = applyEditorCommand(scene, { type: 'update-screen', screenId: 'screen', position: 0.7 });
+    assert.deepEqual(scene.wires.find(wire => wire.id === 'branch').e4Route, []);
+    const routed = await designs.save(project.projectId, routingHarnessId, blocked.revision, scene);
+    const reread = await designs.get(project.projectId, routingHarnessId);
+    assert.equal(reread.revision, routed.revision);
+    assert.deepEqual(reread.content.wires.find(wire => wire.id === 'branch').e4Route, []);
+    assert.equal(e4RoutingIssues(reread.content).length, 0);
+    routingExpected = { connectors: reread.content.connectors, junctions: reread.content.junctions, screens: reread.content.screens };
+    routingChecked = true;
+  }
+  let deleted = false;
+  if (checkDeletion) {
+    const kept = await projects.copyProject(project.projectId);
+    await assert.rejects(() => projects.deleteProject(project.projectId, 0), /изменился|конфликт/i);
+    await projects.deleteProject(project.projectId, project.revision);
+    await assert.rejects(() => projects.getProject(project.projectId), /не найден/i);
+    assert.equal((await projects.getProject(kept.projectId)).harnesses.length, project.harnesses.length);
+    assert.equal((await templates.get(initial.templateId)).version, latestTemplateVersion);
+    deleted = true;
+  }
+  let restartChecked = false;
+  if (process.argv.includes('--check-restart')) {
+    const stopped = once(server, 'exit');
+    server.kill();
+    await stopped;
+    const firstLog = log;
+    log = '';
+    server = spawn(join(packageRoot, 'Techmap.Server.exe'), ['--no-browser', `--data-root=${dataRoot}`], {
+      cwd: packageRoot, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    server.stdout.on('data', chunk => { log += chunk; });
+    server.stderr.on('data', chunk => { log += chunk; });
+    const restartedUrl = await new Promise((res, rej) => {
+      const deadline = Date.now() + 30000;
+      const timer = setInterval(() => {
+        const match = /TECHMAP_HOST_URL=(https?:\/\/[^\s]+)/.exec(log);
+        if (match) { clearInterval(timer); res(match[1]); }
+        else if (server.exitCode !== null || Date.now() > deadline) {
+          clearInterval(timer); rej(new Error(`Restart failed: ${log}`));
+        }
+      }, 100);
+    });
+    const restartedPage = await fetch(restartedUrl);
+    assert.equal(restartedPage.status, 200);
+    const restartedCookie = restartedPage.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const restartedProjects = await fetch(new URL('/api/v1/projects', restartedUrl), { headers: { Cookie: restartedCookie } });
+    assert.equal(restartedProjects.status, 200);
+    const restartedTemplate = await fetch(new URL(`/api/v1/component-templates/${initial.templateId}`, restartedUrl), { headers: { Cookie: restartedCookie } });
+    assert.equal((await restartedTemplate.json()).version, latestTemplateVersion);
+    if (routingChecked && !deleted) {
+      const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${routingHarnessId}/design`, restartedUrl), {
+        headers: { Cookie: restartedCookie },
+      });
+      assert.equal(response.status, 200);
+      const content = (await response.json()).content;
+      for (const key of Object.keys(routingExpected)) assert.deepEqual(content[key], JSON.parse(JSON.stringify(routingExpected[key])));
+      assert.deepEqual(content.wires.find(wire => wire.id === 'branch').e4Route, []);
+    }
+    log = firstLog + '\n--- RESTART ---\n' + log;
+    restartChecked = true;
+  }
+  const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
+    templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
+    versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
+    revision: saved.revision, stripProfilesChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+  await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report, null, 2));
+} finally {
+  server.kill();
+  await vite.close();
+  await writeFile(join(dataRoot, 'server.log'), log);
+}

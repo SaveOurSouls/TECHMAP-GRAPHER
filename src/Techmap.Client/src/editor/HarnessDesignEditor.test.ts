@@ -135,13 +135,13 @@ describe("harness design scene adapter", () => {
       .toThrow(/отсутствует закреплённый снимок/);
   });
 
-  it("renders only a component whose immutable binding matches the exact project snapshot", () => {
+  it.each(["technology-database", "БД.СОЕД"])("renders only a component matching the project snapshot with source %s", sourceId => {
     const graph = projectComponentGraph();
     const snapshot = graph.snapshots[0]!;
     if (snapshot.content.schemaVersion !== 3) throw new Error("test fixture must be v3");
     const variant = {
       id: crypto.randomUUID(),
-      sourceId: "technology-database",
+      sourceId,
       entityType: "connector",
       articleKey: "B2B-XH-A",
       parameterValues: [],

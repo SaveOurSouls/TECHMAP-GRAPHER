@@ -13,10 +13,13 @@ import { upgradeTemplateContentV3ToV4 } from "../component-library/template-mode
 import { upgradeTemplateContentV4ToV5 } from "../component-library/template-model-v5";
 import {
   createConnectorInstanceFromComponentTemplateV3,
+  firstPlaceableArticleVariantId,
   rematerializeComponentTemplateConnectorArticle,
   type ComponentTemplatePlacementEnvelopeV3,
 } from "./component-template-placement";
 import { parseHarnessDesignDocument } from "./model";
+import { componentPlacementRequest } from "./component-placement-api";
+import { loadComponentTemplateForPlacement } from "./HarnessDesignEditor";
 
 function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
   let v2 = newTemplateContentV2();
@@ -85,6 +88,38 @@ function fixture(target: number): ComponentTemplatePlacementEnvelopeV3 {
 }
 
 describe("component template placement", () => {
+  it("keeps template ID, published version, hash and article identical after publishing a newer draft", async () => {
+    const published = fixture(2);
+    const template = await loadComponentTemplateForPlacement({
+      getDraft: async () => ({ baseVersion: 6, draftRevision: 3 }),
+      publishDraft: async () => published,
+      getVersion: async () => { throw new Error("must publish the draft"); },
+    } as never, published.templateId, 6);
+    const preview = createConnectorInstanceFromComponentTemplateV3(template as typeof published, {
+      id: crypto.randomUUID(), designation: "X1", e4Position: { x: 120, y: 100 },
+      articleVariantId: published.content.articleVariants.at(-1)!.id,
+    });
+    const request = componentPlacementRequest(preview, 4, crypto.randomUUID());
+    const binding = preview.libraryBinding;
+    if (binding?.mode !== "template") throw new Error("Expected template");
+    expect(request.sourceTemplateId).toBe(published.templateId);
+    expect(request.sourceVersion).toBe(7);
+    expect(request).toMatchObject(binding.article);
+    expect(request.instance.libraryBinding).toMatchObject({
+      templateId: request.sourceTemplateId, templateVersion: request.sourceVersion,
+      versionSha256: published.versionSha256, article: binding.article,
+      snapshot: { templateId: request.sourceTemplateId, templateVersion: request.sourceVersion,
+        versionSha256: published.versionSha256, article: binding.article },
+    });
+    for (const mismatch of [
+      { templateId: "wrong" }, { templateVersion: 6 }, { versionSha256: "b".repeat(64) },
+      { article: { ...binding.article, articleKey: "WRONG" } },
+    ]) {
+      expect(() => componentPlacementRequest({ ...preview,
+        libraryBinding: { ...binding, ...mismatch } }, 4, crypto.randomUUID())).toThrow();
+    }
+  });
+
   it("places the first real article when the cached envelope index is stale", () => {
     const template = fixture(2);
     const selected = template.content.articleVariants[0]!;
@@ -101,7 +136,7 @@ describe("component template placement", () => {
       articleVariantId: selected.id,
       snapshot: {
         articleBindings: template.content.articleVariants.map(({ sourceId, entityType, articleKey }) =>
-          ({ sourceId, entityType, articleKey })),
+          ({ sourceId: sourceId.toLowerCase(), entityType: entityType.toLowerCase(), articleKey })),
       },
     });
   });
@@ -120,6 +155,68 @@ describe("component template placement", () => {
     expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts)
       .toSatisfy((contacts: readonly { allowedTerminalArticleKeys: readonly { articleKey: string }[] }[]) =>
         contacts.every(contact => contact.allowedTerminalArticleKeys.map(item => item.articleKey).join(",") === "T-1,T-2"));
+  });
+
+  it("places v5 electrical groups without requiring graphical contact prototypes", () => {
+    const base = fixture(2);
+    if (base.content.schemaVersion !== 3) throw new Error("v3 fixture required");
+    const content = upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(base.content).content).content;
+    const independent = { ...content, logicalContacts: [], repeaters: [],
+      views: content.views.map(view => ({ ...view, contactPoints: [] })) };
+    const connector = createConnectorInstanceFromComponentTemplateV3({ ...base, content: independent }, {
+      id: crypto.randomUUID(), designation: "XS1", e4Position: { x: 0, y: 0 },
+      articleVariantId: content.articleVariants.at(-1)!.id,
+    });
+    expect(connector.contacts).toHaveLength(2);
+    expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ representations: [] })]));
+  });
+
+  it("places the first v5 article from the E4 table when no article is selected", () => {
+    const base = fixture(2);
+    const emptyCore = upgradeTemplateContentV2ToV3(newTemplateContentV2()).content;
+    const first: ArticleVariantV3 = {
+      id: crypto.randomUUID(), sourceId: "БД.СОЕД", entityType: "connector", articleKey: "XH-FIRST",
+      parameterValues: [], contactGroups: null,
+    };
+    const second = { ...structuredClone(first), id: crypto.randomUUID(), articleKey: "XH-SECOND" };
+    const v3: TemplateContentV3 = {
+      ...emptyCore,
+      articleVariants: [first, second],
+    };
+    const content = upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(v3).content).content;
+    const table = content.e4ConnectorTable as unknown as {
+      seriesDefaults: Array<{ rowId: string; values: {
+        number: string; name: string; circuitText: string | null; contactTypeGroupId: string | null;
+        standardTerminalArticleKey: null;
+      } }>;
+      articles: Array<{ rows: Array<{ seriesRowId: string; overrides: Record<string, never> }> }>;
+    };
+    table.seriesDefaults.push({
+      rowId: "real-v5-row",
+      values: {
+        number: "A1", name: "FIRST E4 ROW", circuitText: "E4-CIRCUIT",
+        contactTypeGroupId: null, standardTerminalArticleKey: null,
+      },
+    });
+    table.articles[0]!.rows.push({ seriesRowId: "real-v5-row", overrides: {} });
+    table.articles[1]!.rows.push({ seriesRowId: "real-v5-row", overrides: {} });
+    const template: ComponentTemplatePlacementEnvelopeV3 = { ...base, assets: [], content };
+
+    expect(firstPlaceableArticleVariantId(content)).toBe(first.id);
+    const placed = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J-v5-first", designation: "X1", e4Position: { x: 1, y: 2 },
+    });
+
+    expect(placed.partNumber).toBe(first.articleKey);
+    expect(placed.contacts).toHaveLength(1);
+    expect(placed.contacts[0]).toMatchObject({
+      logicalContactId: "real-v5-row",
+      number: 1,
+      circuit: "E4-CIRCUIT",
+    });
+    expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts[0])
+      .toMatchObject({ sourceNumber: "A1", name: "FIRST E4 ROW" });
   });
 
   it("materializes v4 E4 table values and remaps another article on stable series rows", () => {
@@ -210,8 +307,8 @@ describe("component template placement", () => {
     expect(connector.partNumber).toBe("XH-2");
     expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[0]!.allowedTerminalArticleKeys)
       .toEqual([
-        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-1" },
-        { sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "T-2" },
+        { sourceId: "бд.тер", entityType: "terminal", articleKey: "T-1" },
+        { sourceId: "бд.тер", entityType: "terminal", articleKey: "T-2" },
       ]);
     expect(connector.libraryBinding?.mode === "template" && connector.libraryBinding.snapshot.contacts[0]!.representations)
       .toEqual(expect.arrayContaining([expect.objectContaining({ viewKind: "e4", x: 12, y: 18 })]));

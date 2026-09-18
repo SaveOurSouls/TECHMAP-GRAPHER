@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { clearDecorationSpans } from "./e4-decoration-spans";
 import {
   panEditorCamera,
   screenToWorld,
@@ -35,6 +36,7 @@ import {
   ComponentTemplateImageCache,
   drawProjectedComponentTemplateView,
   projectComponentTemplateView,
+  projectE4DrawingCompanion,
   type ComponentTemplateViewInstance,
   type ResolveComponentTemplateAssetUrl,
 } from "./component-template-view-renderer";
@@ -739,7 +741,11 @@ export function getE4DifferentialPairLayout(
   group: E4DifferentialPairOverlay,
   objects: readonly EditorSceneObject[],
 ): E4DifferentialPairLayout | null {
-  const span = findE4CommonParallelSpan(objects, group.wireIds);
+  const common = findE4CommonParallelSpan(objects, group.wireIds);
+  if (!common) return null;
+  const span = clearDecorationSpans([common], objects.filter(object => object.kind === "connector"), 10,
+    item => Math.max(group.amplitude * 2, item.crossMaximum - item.crossMinimum))
+    .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
   if (!span) return null;
   const available = span.end - span.start;
   // A stored pitch describes the pair, while the on-screen crossover is only
@@ -783,11 +789,13 @@ export function getE4ScreenLayout(
   const alignedSpans = findE4AlignedParallelSpans(objects, screen.wireIds);
   const allCommonSpans = findE4AllCommonParallelSpans(objects, screen.wireIds);
   const fallbackSpan = findE4CommonParallelSpan(objects, screen.wireIds);
-  const spans = alignedSpans.length > 0
+  const candidates = alignedSpans.length > 0
     ? alignedSpans
     : allCommonSpans.length > 0
       ? allCommonSpans
       : fallbackSpan ? [fallbackSpan] : [];
+  const spans = clearDecorationSpans(candidates, objects.filter(object => object.kind === "connector"), e4ScreenAlongSize / 2,
+    span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
   if (spans.length === 0) return null;
   const firstWire = objects.find((object) => object.id === screen.wireIds[0] && object.kind === "wire");
   const orderedSpans = [...spans].sort((left, right) => {
@@ -1174,6 +1182,7 @@ interface E4ContactRow {
   readonly wire: string;
   readonly color: string;
   readonly secondaryColor: string;
+  readonly name?: string;
   readonly status: "available" | "not-connected";
   readonly customValues: Readonly<Record<string, string>>;
 }
@@ -1260,9 +1269,10 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
     if (!isRecord(item) || !Number.isSafeInteger(item.number) || (item.number as number) < 1) return null;
     const contactType = typeof item.contactType === "string" ? item.contactType : item.type;
     const secondaryColor = item.secondaryColor === undefined ? "" : item.secondaryColor;
+    const name = item.name === undefined ? "" : item.name;
     const textValues = [contactType, item.circuit, item.terminal, item.wire, item.color, secondaryColor];
     const customValues = parseStringRecord(item.customValues ?? item.values);
-    if (!textValues.every((entry) => typeof entry === "string") || customValues === null ||
+    if (!textValues.every((entry) => typeof entry === "string") || typeof name !== "string" || customValues === null ||
         (item.status !== "available" && item.status !== "not-connected")) return null;
     rows.push({
       number: item.number as number,
@@ -1272,6 +1282,7 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
       wire: item.wire as string,
       color: item.color as string,
       secondaryColor: secondaryColor as string,
+      name,
       status: item.status,
       customValues,
     });
@@ -1281,6 +1292,7 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
 
 function e4CellText(row: E4ContactRow, column: E4ColumnId): string {
   if (column === "number") return String(row.number);
+  if (column === "custom:template-name") return row.name ?? "";
   if (isCustomE4ColumnId(column)) return row.customValues[column.slice("custom:".length)] ?? "";
   if (column === "contactType") return row.type;
   if (column === "color") return [row.color, row.secondaryColor].filter(Boolean).join(" / ");
@@ -1639,6 +1651,9 @@ export function hitTestEditorScene(
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
     const object = paintOrder[index];
     const instance = object?.kind === "connector" ? componentViews.get(object.id) : undefined;
+    const companion = object && instance && view === "e4" ? projectE4DrawingCompanion(instance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl) : null;
+    if (companion && point.x >= companion.bounds.minX - tolerance && point.x <= companion.bounds.maxX + tolerance &&
+        point.y >= companion.bounds.minY - tolerance && point.y <= companion.bounds.maxY + tolerance) return object!.id;
     const projection = object && instance && view
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
@@ -1952,6 +1967,10 @@ export function drawEditorSceneObject(
 ) {
   context.save();
   if (object.kind === "connector" && componentTemplateViewInstance) {
+    if (view === "e4") {
+      const companion = projectE4DrawingCompanion(componentTemplateViewInstance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl);
+      if (companion) drawProjectedComponentTemplateView(context, companion, componentTemplateImageCache, selected);
+    }
     const projection = projectComponentTemplateView(
       componentTemplateViewInstance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl,
     );
@@ -2361,6 +2380,10 @@ export function getEditorSceneBounds(
       continue;
     }
     const instance = object.kind === "connector" ? componentViews.get(object.id) : undefined;
+    if (instance && view === "e4") {
+      const companion = projectE4DrawingCompanion(instance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl);
+      if (companion) bounds = expandSceneBounds(bounds, companion.bounds.minX, companion.bounds.minY, companion.bounds.maxX, companion.bounds.maxY);
+    }
     const projection = instance
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;

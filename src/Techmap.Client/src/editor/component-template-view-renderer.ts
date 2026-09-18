@@ -302,6 +302,9 @@ export function projectComponentTemplateView(
   origin: ComponentTemplateProjectionOrigin,
   resolveAssetUrl?: ResolveComponentTemplateAssetUrl,
 ): ProjectedComponentTemplateView | null {
+  // A v5 E4 table is always rendered by the schematic editor. Its drawing is
+  // projected separately as a companion, never as a replacement for that table.
+  if (viewKind === "e4" && instance.content.schemaVersion === 5) return null;
   const view = instance.content.views.find(candidate => candidate.kind === viewKind);
   if (!view) return null;
   try {
@@ -312,7 +315,8 @@ export function projectComponentTemplateView(
           const { e4ConnectorTable: _table, ...core } = instance.content;
           return { ...core, schemaVersion: 3 };
         })();
-    const materialized = materializeArticleVariantV3(v3Content, instance.articleVariantId);
+    const graphic = instance.content.schemaVersion === 5 ? { ...v3Content, articleVariants: v3Content.articleVariants.map(a=>({...a,contactGroups:null})) } : v3Content;
+    const materialized = materializeArticleVariantV3(graphic, instance.articleVariantId);
     const values = resolveTemplateParameterValuesV2(materialized.repeatContent, materialized.repeatOptions);
     const evaluate = (expression: NumericExpressionV3) => evaluateNumericExpressionV3(expression, values);
     const expansions = expandTemplateViewRepeatsV2(materialized.repeatContent, view.id, materialized.repeatOptions);
@@ -334,6 +338,7 @@ export function projectComponentTemplateView(
         parentTransform: ComponentTemplateTransform,
         parentOpacity: number,
         ancestors: ReadonlySet<string>,
+        occurrenceNumber?: number,
       ): void => {
         if (!node.visible || ancestors.has(node.id)) return;
         const transform = multiply(parentTransform, nodeTransform(node, evaluate));
@@ -342,7 +347,7 @@ export function projectComponentTemplateView(
           const command = commandForNode(
             node, layer.id, transform, opacity, evaluate, assetIds, instance.snapshotId, resolveAssetUrl,
           );
-          if (command) commands.push(command);
+          if (command) commands.push(command.kind === "text" && occurrenceNumber !== undefined ? {...command,text:command.text.replaceAll("{{n}}",String(occurrenceNumber))} : command);
           return;
         }
         if (node.geometry.childIds.some(childId => !nodesById.has(childId))) return;
@@ -350,7 +355,7 @@ export function projectComponentTemplateView(
         const nextAncestors = new Set(ancestors);
         nextAncestors.add(node.id);
         for (const child of layer.nodes) {
-          if (childIds.has(child.id)) appendNode(child, transform, opacity, nextAncestors);
+          if (childIds.has(child.id)) appendNode(child, transform, opacity, nextAncestors, occurrenceNumber);
         }
       };
 
@@ -359,7 +364,7 @@ export function projectComponentTemplateView(
         const repeated = repeatedGroupIds.has(node.id) ? occurrences.get(node.id) : undefined;
         if (repeated) {
           for (const occurrence of repeated) {
-            appendNode(node, multiply(worldOrigin, translation(occurrence.offset.x, occurrence.offset.y)), 1, new Set());
+            appendNode(node, multiply(worldOrigin, translation(occurrence.offset.x, occurrence.offset.y)), 1, new Set(), occurrence.index + 1);
           }
         } else {
           appendNode(node, worldOrigin, 1, new Set());
@@ -382,6 +387,20 @@ export function projectComponentTemplateView(
   } catch {
     return null;
   }
+}
+
+/** Places the optional article drawing above its E4 table, within its width. */
+export function projectE4DrawingCompanion(instance: ComponentTemplateViewInstance, origin: ComponentTemplateProjectionOrigin, tableWidth: number, resolveAssetUrl?: ResolveComponentTemplateAssetUrl): ProjectedComponentTemplateView | null {
+  if (instance.content.schemaVersion !== 5) return null;
+  const drawing = projectComponentTemplateView(instance, "drawing", {x:0,y:0}, resolveAssetUrl);
+  if (!drawing) return null;
+  const {minX,minY,maxX,maxY} = drawing.bounds;
+  const scale = Math.min(1, Math.max(40,tableWidth) / Math.max(1,maxX-minX), 140 / Math.max(1,maxY-minY));
+  const x = origin.x - minX * scale;
+  const y = origin.y - 20 - maxY * scale;
+  const transform = {a:scale,b:0,c:0,d:scale,e:x,f:y};
+  return {...drawing, viewKind:"e4", commands:drawing.commands.map(command=>({...command,transform:multiply(transform,command.transform)})),
+    bounds:{minX:origin.x,minY:minY*scale+y,maxX:maxX*scale+x,maxY:origin.y-20}};
 }
 
 type ImageCacheEntry =

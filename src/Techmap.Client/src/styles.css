@@ -540,3 +540,16 @@ input::placeholder { color: #8795a3; }
   .reference-form-actions, .publication-bar { align-items: stretch; flex-direction: column; }
   .reference-form-actions .primary-action, .publication-bar .primary-action { width: 100%; }
 }
+
+.project-heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.project-delete-dialog { width: min(440px, calc(100vw - 32px)); border: 1px solid #cbd5df; border-radius: 10px; padding: 20px; color: #172333; }
+.project-delete-dialog::backdrop { background: rgb(15 30 45 / 45%); }
+.project-delete-dialog h2 { margin: 0 0 12px; font-size: 20px; }
+.project-delete-dialog p { font-size: 14px; line-height: 1.5; }
+.project-delete-dialog [role=alert] { color: #a32828; }
+.project-delete-dialog .project-heading-actions { justify-content: flex-end; }
+.info-hint { position: relative; display: inline-flex; vertical-align: middle; margin-left: 6px; font-size: 13px; font-weight: 400; }
+.info-hint > button { border: 1px solid #8495a5; border-radius: 50%; background: transparent; color: #53677a; width: 20px; height: 20px; padding: 0; cursor: help; }
+.info-hint [role=tooltip] { display: none; position: absolute; z-index: 20; top: 26px; left: 0; width: min(270px, 70vw); padding: 10px; border-radius: 6px; background: #16324f; color: white; line-height: 1.4; box-shadow: 0 3px 12px #0003; }
+.info-hint:hover [role=tooltip], .info-hint:focus-within [role=tooltip] { display: block; }
+.project-delete-dialog .info-hint [role=tooltip] { left: auto; right: 0; }

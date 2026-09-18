@@ -333,7 +333,7 @@ function recountArticle(
 }
 
 /** Builds the first table-model snapshot from a current, unchanged v3 document. */
-export function createE4ConnectorSeriesTableFromV3(content: TemplateContentV3): E4ConnectorSeriesTable {
+export function createE4ConnectorSeriesTableFromV3(content: TemplateContentV3, independentE4 = false): E4ConnectorSeriesTable {
   const validation = validateTemplateContentV3Structure(content);
   if (!validation.valid)
     throw new E4ConnectorSeriesTableError("invalid_v3_content", validation.diagnostics[0]?.message ?? "Некорректный шаблон v3.");
@@ -346,10 +346,18 @@ export function createE4ConnectorSeriesTableFromV3(content: TemplateContentV3): 
     try {
       v3Rows = materializeArticleContactRowsV3(content, variant);
     } catch (caught) {
+      if (independentE4 && variant.contactGroups !== null) {
+        let number = 0;
+        v3Rows = variant.contactGroups.flatMap(group => Array.from({ length: group.contactCount }, () => ({
+          number: String(++number), name: `Контакт ${number}`, circuitText: null,
+          contactTypeGroupId: group.contactTypeGroupId,
+        })));
+      } else {
       throw new E4ConnectorSeriesTableError(
         "article_materialization_failed",
         `Не удалось подготовить таблицу Э4 для артикула «${variant.articleKey}»: ${caught instanceof Error ? caught.message : "неизвестная ошибка"}`,
       );
+      }
     }
     const ordinals = new Map<string, number>();
     const rows: E4ConnectorArticleRow[] = [];

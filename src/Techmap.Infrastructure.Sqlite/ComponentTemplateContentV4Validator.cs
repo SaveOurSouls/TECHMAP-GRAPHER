@@ -21,26 +21,26 @@ internal static class ComponentTemplateContentV4Validator
         ["standardTerminalArticleKey"] = "Стандартный контакт",
     };
 
-    internal static void Validate(JsonElement content)
+    internal static void Validate(JsonElement content, bool independentE4 = false)
     {
         RequireExactProperties(content, "content", RootProperties);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var version) || version != 4)
             Throw("Only component template schemaVersion 4 is supported.", "content.schemaVersion");
 
-        ValidateV3Core(content);
+        ValidateV3Core(content, independentE4);
         var authoritativeGroups = ReadAuthoritativeGroups(content.GetProperty("contactTypeGroups"));
         var authoritativeArticles = ReadAuthoritativeArticles(content, authoritativeGroups);
         ValidateTable(content.GetProperty("e4ConnectorTable"), authoritativeGroups, authoritativeArticles);
     }
 
-    private static void ValidateV3Core(JsonElement content)
+    private static void ValidateV3Core(JsonElement content, bool independentE4)
     {
         var projected = JsonNode.Parse(content.GetRawText())!.AsObject();
         projected["schemaVersion"] = 3;
         projected.Remove("e4ConnectorTable");
         using var document = JsonDocument.Parse(projected.ToJsonString());
-        ComponentTemplateContentV3Validator.Validate(document.RootElement);
+        ComponentTemplateContentV3Validator.Validate(document.RootElement, independentE4);
     }
 
     private static Dictionary<string, string> ReadAuthoritativeGroups(JsonElement groups) =>

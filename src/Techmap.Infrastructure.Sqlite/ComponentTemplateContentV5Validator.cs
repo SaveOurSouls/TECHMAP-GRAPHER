@@ -19,7 +19,8 @@ internal static class ComponentTemplateContentV5Validator
 
     internal static void Validate(JsonElement content)
     {
-        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings");
+        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings", "e4Presentation");
+        if (content.TryGetProperty("e4Presentation", out var presentation)) ValidatePresentation(presentation);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var version) || version != 5)
             Throw("Only component template schemaVersion 5 is supported.", "content.schemaVersion");
@@ -33,6 +34,7 @@ internal static class ComponentTemplateContentV5Validator
         projected["schemaVersion"] = 4;
         projected.Remove("compatibleTerminalArticleKeys");
         projected.Remove("terminalContactTypeBindings");
+        projected.Remove("e4Presentation");
         var terminalNodes = CompatibleTerminalNodes(content.GetProperty("compatibleTerminalArticleKeys"));
         foreach (var variant in projected["articleVariants"]!.AsArray())
         {
@@ -47,7 +49,37 @@ internal static class ComponentTemplateContentV5Validator
                 group!["allowedTerminalArticleKeys"] = TerminalNodesForGroup(terminalNodes, terminalBindings, group!["contactTypeGroupId"]!.GetValue<string>());
 
         using var projectedDocument = JsonDocument.Parse(projected.ToJsonString());
-        ComponentTemplateContentV4Validator.Validate(projectedDocument.RootElement);
+        ComponentTemplateContentV4Validator.Validate(projectedDocument.RootElement, independentE4: true);
+    }
+
+    private static void ValidatePresentation(JsonElement value)
+    {
+        const string path = "content.e4Presentation";
+        RequireExactProperties(value, path, "orientation", "baseColumns", "customFields");
+        if (RequiredText(value.GetProperty("orientation"), 32, path + ".orientation") is not ("contacts-left" or "contacts-right"))
+            Throw("Invalid orientation.", path + ".orientation");
+        var columns = value.GetProperty("baseColumns");
+        if (columns.ValueKind != JsonValueKind.Array) Throw("An array is required.", path + ".baseColumns");
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var column in columns.EnumerateArray())
+        {
+            RequireExactProperties(column, path + ".baseColumns", "key", "visible");
+            var key = RequiredText(column.GetProperty("key"), 32, path + ".baseColumns.key");
+            if (key is not ("number" or "contactType" or "circuit" or "terminal" or "wire" or "color") || !keys.Add(key) ||
+                column.GetProperty("visible").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                Throw("Invalid or duplicate base column.", path + ".baseColumns");
+        }
+        var fields = value.GetProperty("customFields");
+        if (fields.ValueKind != JsonValueKind.Array) Throw("An array is required.", path + ".customFields");
+        keys.Clear();
+        foreach (var field in fields.EnumerateArray())
+        {
+            RequireExactProperties(field, path + ".customFields", "id", "label", "visible");
+            var id = RequiredText(field.GetProperty("id"), 128, path + ".customFields.id");
+            _ = RequiredText(field.GetProperty("label"), 120, path + ".customFields.label");
+            if (!keys.Add(id) || field.GetProperty("visible").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                Throw("Invalid or duplicate custom field.", path + ".customFields");
+        }
     }
 
     private static Dictionary<string, (string ContactTypeGroupId, bool Standard)>? ValidateTerminalBindings(

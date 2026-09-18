@@ -261,6 +261,7 @@ function repeatedContactModel(
   const repeatedContactIds = new Set<string>(), repeatCountParameterIds = new Set<string>(), stridesByGroup = new Map<string, number[]>();
   repeaters.forEach((raw, domainIndex) => {
     if (!isRecord(raw) || typeof raw.countParameterId !== "string" || !Array.isArray(raw.logicalContactIds)) return;
+    if (raw.logicalContactIds.length === 0) return; // Pure graphical repeat, no electrical count constraint.
     repeatCountParameterIds.add(raw.countParameterId);
     let groupId: string | null = null, homogeneous = true, stride = 0;
     raw.logicalContactIds.forEach((candidate, contactIndex) => {

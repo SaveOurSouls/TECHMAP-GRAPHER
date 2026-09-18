@@ -11,6 +11,8 @@ import {
   type ConnectorBaseColumnKey,
   type ConnectorContact,
   type ConnectorInstance,
+  templateNameColumnId,
+  templateTerminalChoices,
 } from "./model";
 import {
   builtInWireColors,
@@ -19,9 +21,22 @@ import {
   type WireColorReference,
 } from "./wire-reference-catalog";
 import "./e4-connector-inspector.css";
+import { terminalArticleLabel } from "./terminal-article-label";
+import { InfoHint } from "../InfoHint";
 
 export interface E4ConnectorInspectorProps {
+  readonly templateAuthoring?: {
+    readonly groups: readonly { id: string; name: string }[];
+    readonly names: Readonly<Record<string, string>>;
+    readonly numbers: Readonly<Record<string, string>>;
+    readonly showName: boolean;
+    readonly onNameVisibilityChange: () => void;
+    readonly onNumberChange: (contactId: string, number: string) => void;
+    readonly onNameChange: (contactId: string, name: string) => void;
+  };
   readonly connector: ConnectorInstance;
+  readonly onRefreshTerminals?: () => void;
+  readonly refreshingTerminals?: boolean;
   readonly disabled: boolean;
   readonly onCommand: (command: EditorCommand) => void;
   readonly mode?: "panel" | "canvas";
@@ -225,10 +240,21 @@ function nextContactId(connector: ConnectorInstance, number: number): string {
   return `${prefix}:${suffix}`;
 }
 
+function TemplateNameCell({ value, label, disabled, onCommit }: { value: string; label: string; disabled: boolean; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return <input aria-label={label} value={draft} disabled={disabled} onChange={event => setDraft(event.target.value)}
+    onBlur={() => { if (draft.trim()) onCommit(draft.trim()); else setDraft(value); }}
+    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
+}
+
 /** Contact values live on the E4 object itself. The side panel only edits
  * identity and the set of visible fields. */
 export function E4ConnectorInspector({
+  templateAuthoring,
   connector,
+  onRefreshTerminals,
+  refreshingTerminals = false,
   disabled,
   onCommand,
   mode = "panel",
@@ -366,6 +392,10 @@ export function E4ConnectorInspector({
     const columns = geometry.columns.map((column) => column.kind === "base"
       ? { id: column.key, label: baseColumnLabels[column.key], width: column.width }
       : { id: `custom:${column.id}` as const, label: column.label, width: column.width });
+    if (templateAuthoring && !templateAuthoring.showName) {
+      const index = columns.findIndex(column => column.id === `custom:${templateNameColumnId}`);
+      if (index >= 0) columns.splice(index, 1);
+    }
     return (
       <section
           ref={canvasEditorRef}
@@ -386,6 +416,8 @@ export function E4ConnectorInspector({
           className="e4cce-title"
           title={canvasEditing ? "Редактирование" : "Перетащить соединитель"}
         >
+          {onRefreshTerminals && <button type="button" className="e4cce-refresh" disabled={disabled || refreshingTerminals}
+            aria-label="Обновить терминалы серии" onClick={onRefreshTerminals}>↻</button>}
           <button
             type="button"
             className="e4cce-title-add"
@@ -397,7 +429,7 @@ export function E4ConnectorInspector({
             <input
               type="text"
               value={designation}
-              disabled={disabled}
+              disabled={disabled || Boolean(templateAuthoring)}
               aria-label="Обозначение соединителя"
               title="Обозначение соединителя"
               onChange={(event) => setDesignation(event.target.value)}
@@ -426,7 +458,7 @@ export function E4ConnectorInspector({
                     type="button"
                     aria-label={`Скрыть поле ${column.label}`}
                     disabled={disabled || !canvasEditing}
-                    onClick={() => column.id.startsWith("custom:")
+                    onClick={() => column.id === "custom:template-name" && templateAuthoring ? templateAuthoring.onNameVisibilityChange() : column.id.startsWith("custom:")
                       ? onCommand({ type: "toggle-custom-field-visibility", connectorId: connector.id, fieldId: column.id.slice(7) })
                       : onCommand({ type: "toggle-base-column-visibility", connectorId: connector.id, key: column.id as ConnectorBaseColumnKey })}
                   >◉</button>
@@ -436,29 +468,42 @@ export function E4ConnectorInspector({
             <tbody>{connector.contacts.map((contact) => (
               <tr key={contact.id}>
                 {columns.length === 0 ? <td className="e4cce-empty-column">&nbsp;</td> : columns.map((column) => {
+                  const templateContact = isTemplate
+                    ? connector.libraryBinding.snapshot.contacts.find((candidate) =>
+                      candidate.logicalContactId === contact.logicalContactId)
+                    : undefined;
                   const value = column.id === "number" ? String(contact.number)
                     : column.id === "contactType" ? contact.contactType
                       : column.id === "circuit" ? contact.circuit
                         : column.id === "terminal" ? contact.terminalArticle
                           : column.id === "wire" ? contact.wire
                             : column.id === "color" ? contact.color
+                              : column.id === `custom:${templateNameColumnId}` ? templateContact?.name ?? ""
                               : contact.customValues[column.id.slice(7)] ?? "";
-                  const templateContact = isTemplate
-                    ? connector.libraryBinding.snapshot.contacts.find((candidate) =>
-                      candidate.logicalContactId === contact.logicalContactId)
-                    : undefined;
                   const terminalOptions = contact.libraryContact && article
                     ? article.allowedTerminalArticles[contact.libraryContact.kind]
-                    : templateContact?.allowedTerminalArticleKeys.map((candidate) => candidate.articleKey) ?? [];
-                  const lockedByLibrary = isLibrary && (column.id === "number" || column.id === "contactType");
+                    : isTemplate
+                      ? templateTerminalChoices(connector, contact.logicalContactId)
+                      : templateContact?.allowedTerminalArticleKeys.map((candidate) => candidate.articleKey) ?? [];
+                  const lockedByLibrary = !templateAuthoring && isLibrary && (column.id === "number" || column.id === "contactType");
+                  const cellDisabled = disabled || Boolean(templateAuthoring && (column.id === "wire" || column.id === "color" || column.id.startsWith("custom:")));
                   const lockedByLibraryTitle = isTemplate
                     ? "Номер и тип заданы закреплённым шаблоном"
                     : "Номер и тип заданы артикулом серии";
-                  const input = column.id === "color" ? (
+                  const input = templateAuthoring && column.id === "number" ? <TemplateNameCell
+                    label={`Номер, контакт ${contact.number}`} value={templateAuthoring.numbers[contact.id] ?? ""} disabled={disabled}
+                    onCommit={value => templateAuthoring.onNumberChange(contact.id, value)} />
+                    : templateAuthoring && column.id === `custom:${templateNameColumnId}` ? <TemplateNameCell
+                    label={`Назначение, контакт ${contact.number}`} value={templateAuthoring.names[contact.id] ?? ""} disabled={disabled}
+                    onCommit={value => templateAuthoring.onNameChange(contact.id, value)} />
+                    : templateAuthoring && column.id === "contactType" ? <select aria-label={`Тип, контакт ${contact.number}`} value={contact.contactType} disabled={disabled}
+                      onChange={event => updateContact(contact, { contactType: event.target.value })}>
+                      <option value="">Не назначен</option>{templateAuthoring.groups.map(group => <option key={group.id} value={group.name}>{group.name}</option>)}
+                    </select> : column.id === "color" ? (
                     <ColorCellEditor
                       contact={contact}
                       choices={colorChoices}
-                      disabled={disabled}
+                      disabled={cellDisabled}
                       editing={canvasEditing}
                       open={openColorContactId === contact.id}
                       onOpenChange={(open) => setOpenColorContactId(open ? contact.id : null)}
@@ -472,20 +517,20 @@ export function E4ConnectorInspector({
                   ) : column.id === "terminal" && isLibrary ? (
                     <select
                       value={value}
-                      disabled={disabled || !canvasEditing}
+                      disabled={cellDisabled || !canvasEditing}
                       aria-label={`${column.label}, контакт ${contact.number}`}
                       title="Допустимые терминалы для этого типа контакта"
                       onChange={(event) => updateContact(contact, { terminalArticle: event.target.value })}
                     >
                       <option value="">—</option>
-                      {isSeries && !terminalOptions.includes(value) && value && <option value={value}>{value}</option>}
-                      {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}
+                      {isSeries && !terminalOptions.includes(value) && value && <option value={value}>{terminalArticleLabel(value)}</option>}
+                      {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminalArticleLabel(terminal)}</option>)}
                     </select>
                   ) : column.id === "wire" ? <div className="e4cce-wire-picker">
                     <input
                       type="text"
                       value={value}
-                      disabled={disabled || !canvasEditing}
+                      disabled={cellDisabled || !canvasEditing}
                       aria-label={`${column.label}, контакт ${contact.number}`}
                       autoComplete="off"
                       onChange={(event) => {
@@ -522,7 +567,7 @@ export function E4ConnectorInspector({
                     max={column.id === "number" ? 300 : undefined}
                     value={value}
                     list={column.id === "terminal" && !isLibrary ? `terminal-articles-${connector.id}` : undefined}
-                    disabled={disabled || !canvasEditing || lockedByLibrary}
+                    disabled={cellDisabled || !canvasEditing || lockedByLibrary}
                     title={lockedByLibrary ? lockedByLibraryTitle : undefined}
                     aria-label={`${column.label}, контакт ${contact.number}`}
                     onChange={(event) => {
@@ -542,13 +587,15 @@ export function E4ConnectorInspector({
                       }
                     }}
                   />;
-                  const cell = column.id === "color" ? input
-                    : canvasEditing ? input : <span className="e4cce-readonly-value">{value || " "}</span>;
-                  return <td key={column.id} className={column.id === "number" ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && <span className="e4cce-row-actions">
+                  const cell = column.id === `custom:${templateNameColumnId}` && !templateAuthoring
+                    ? <span className="e4cce-readonly-value" title={value}>{value || " "}</span>
+                    : column.id === "color" ? input
+                    : canvasEditing ? input : <span className="e4cce-readonly-value">{(column.id === "terminal" ? terminalArticleLabel(value) : value) || " "}</span>;
+                  return <td key={column.id} className={column.id === "number" && !templateAuthoring ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && !templateAuthoring && <span className="e4cce-row-actions">
                     <button
                       type="button"
                       className={contact.connectionStatus === "not-connected" ? "active" : ""}
-                      disabled={disabled}
+                      disabled={disabled || Boolean(templateAuthoring)}
                       aria-label={`Контакт ${contact.number} не подключён`}
                       aria-pressed={contact.connectionStatus === "not-connected"}
                       title={contact.connectionStatus === "not-connected" ? "Снять отметку «не подключено»" : "Пометить как не подключено"}
@@ -621,6 +668,10 @@ export function E4ConnectorInspector({
       </header>
 
       <div className="e4ci-identity">
+        {onRefreshTerminals && <div>
+          <button type="button" disabled={disabled || refreshingTerminals} onClick={onRefreshTerminals}>Обновить терминалы</button>
+          <InfoHint>Загружает совместимые терминалы опубликованной серии. Закреплённая версия компонента, проводка и ручные значения сохраняются.</InfoHint>
+        </div>}
         <label>Обозначение
           <input
             value={designation}

@@ -21,6 +21,8 @@ import type { RuntimeConfig } from "./runtime-config";
 import { TransitionGate } from "./transition-gate";
 import { createHarnessCutListApi } from "./harness-cut-list-api";
 import { HarnessCutListPanel } from "./HarnessCutListPanel";
+import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { InfoHint } from "./InfoHint";
 
 const ComponentLibrary = lazy(async () => {
   const module = await import("./component-library/ComponentLibrary");
@@ -188,6 +190,8 @@ export function App({ config, session }: AppProps) {
   const [projectFilter, setProjectFilter] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectDetails | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<ProjectFormState>(emptyCreateForm);
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("draft");
@@ -445,6 +449,42 @@ export function App({ config, session }: AppProps) {
     }
   };
 
+  const deleteProject = async () => {
+    const target = deleteTarget;
+    const controller = autosaveRef.current;
+    if (!target || target.projectId !== selectedProject?.projectId || !controller ||
+        !canStartMutation() || discreteMutationRef.current) return;
+    discreteMutationRef.current = true;
+    setBusyAction("delete-project");
+    setDeleteError(null);
+    try {
+      await controller.flush();
+      const state = controller.snapshot;
+      if (state.status !== "acknowledged" || state.hasPendingDraft || state.interruptedDraft)
+        throw new Error("Сначала разрешите неподтверждённые изменения проекта.");
+      try {
+        await api.deleteProject(target.projectId, state.revision);
+      } catch (failure) {
+        // A retry after a lost successful response can safely accept absence.
+        if (!(failure instanceof ProjectApiError) || failure.code !== "project_not_found") throw failure;
+      }
+      discardAutosave();
+      transitionGateRef.current.invalidate();
+      setSelectedProject(null);
+      setSelectedHarnessId(null);
+      setEditorOpen(false);
+      setHarnessFilter("");
+      setProjects(current => current.filter(project => project.projectId !== target.projectId));
+      setDeleteTarget(null);
+      setError(null);
+    } catch (failure) {
+      setDeleteError(errorText(failure));
+    } finally {
+      discreteMutationRef.current = false;
+      setBusyAction(null);
+    }
+  };
+
   const commitHarnessChange = async (
     action: string,
     execute: (project: ProjectDetails, expectedRevision: number, commandId: string) => Promise<ProjectDetails>,
@@ -636,15 +676,21 @@ export function App({ config, session }: AppProps) {
           <div className="content-heading">
             <div>
               <p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p>
-              <h1>Проекты</h1>
-              <p>Проект объединяет жгуты, их параметры и комплект документации.</p>
+              <h1>Проекты <InfoHint>Проект объединяет жгуты, их параметры и комплект документации.</InfoHint></h1>
             </div>
-            <button className="primary-action" type="button" onClick={() => {
+            <div className="project-heading-actions"><button className="primary-action" type="button" onClick={() => {
               if (canStartMutation()) setShowCreate(true);
             }} disabled={navigationPending || isBusy}>
-              + Создать проект
+              + Новый проект
             </button>
+            <button className="delete-button" type="button" disabled={!selectedProject || navigationPending || isBusy}
+              onClick={() => { if (canStartMutation() && selectedProject) { setDeleteError(null); setDeleteTarget(selectedProject); } }}>
+              Удалить проект
+            </button></div>
           </div>
+
+          {deleteTarget && <DeleteProjectDialog project={deleteTarget} busy={busyAction === "delete-project"}
+            error={deleteError} onCancel={() => setDeleteTarget(null)} onConfirm={() => void deleteProject()} />}
 
           {error && (
             <div className="error-banner" role="alert">

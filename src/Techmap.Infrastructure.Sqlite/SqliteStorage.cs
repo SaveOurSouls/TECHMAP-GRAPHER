@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 19;
+    public const int CurrentSchemaVersion = 20;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1288,6 +1288,13 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         ) STRICT;
         """;
 
+    private const string ProjectComponentSnapshotsV5MigrationId = "M4-04-project-component-snapshots-v5";
+    private static readonly string ProjectComponentSnapshotsV5SchemaSql =
+        ProjectComponentSnapshotsV4SchemaSql.Replace(
+            "schema_version IN (3, 4)",
+            "schema_version IN (3, 4, 5)",
+            StringComparison.Ordinal);
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1705,6 +1712,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 17, MigrationId: ProjectComponentSnapshotsV4MigrationId, Sql: ProjectComponentSnapshotsV4SchemaSql),
             (Version: 18, MigrationId: ComponentTemplateContentV5MigrationId, Sql: ComponentTemplateContentV5SchemaSql),
             (Version: 19, MigrationId: ComponentTemplateDraftMigrationId, Sql: ComponentTemplateDraftSchemaSql),
+            (Version: 20, MigrationId: ProjectComponentSnapshotsV5MigrationId, Sql: ProjectComponentSnapshotsV5SchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1847,6 +1855,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ComponentTemplateDraftSchemaSql);
         }
 
+        if (schemaVersion >= 20)
+        {
+            ExecuteSchemaSql(expected, ProjectComponentSnapshotsV5SchemaSql);
+        }
+
         return ReadSchemaShape(expected);
     }
 
@@ -1985,6 +1998,11 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ComponentTemplateDraftMigrationId,
                 Sql: ComponentTemplateDraftSchemaSql,
                 Description: "Mutable component template autosave drafts"),
+            19 => (
+                Version: 20,
+                MigrationId: ProjectComponentSnapshotsV5MigrationId,
+                Sql: ProjectComponentSnapshotsV5SchemaSql,
+                Description: "Project component snapshots support content schema version 5"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -2061,7 +2079,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19))
             {
                 return false;
             }

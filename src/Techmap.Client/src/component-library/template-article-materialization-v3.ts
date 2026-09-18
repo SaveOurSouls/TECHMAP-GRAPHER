@@ -79,6 +79,7 @@ function repeatDomainsByGroup(
   const byGroup = new Map<string, GroupRepeatDomainV3[]>();
 
   content.repeaters.forEach((domain, domainIndex) => {
+    if (domain.logicalContactIds.length === 0) return;
     let domainGroupId: string | null = null;
     for (const logicalContactId of domain.logicalContactIds) {
       const contact = contacts.get(logicalContactId);

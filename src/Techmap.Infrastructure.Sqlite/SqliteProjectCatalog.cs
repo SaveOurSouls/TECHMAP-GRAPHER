@@ -60,6 +60,27 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
         return storage.ExecuteRead(unitOfWork => ReadProject(unitOfWork, projectId));
     }
 
+    public void DeleteProject(ProjectIdentity projectId, long expectedRevision)
+    {
+        ValidateProjectId(projectId);
+        if (expectedRevision < 0) throw Invalid("invalid_expected_revision", "Expected revision must be non-negative.");
+        storage.ExecuteInTransaction(unitOfWork =>
+        {
+            var currentRevision = ReadCurrentRevision(unitOfWork, projectId);
+            if (currentRevision != expectedRevision)
+                throw new ProjectCommandException("revision_conflict", "Project changed before deletion.", currentRevision);
+            // Cascades remove the project-owned graph in one transaction. Defer
+            // cross-references between its immutable journals until commit.
+            using var defer = unitOfWork.CreateCommand("PRAGMA defer_foreign_keys = ON;");
+            defer.ExecuteNonQuery();
+            using var delete = unitOfWork.CreateCommand("DELETE FROM projects WHERE project_id = $projectId;");
+            delete.Parameters.AddWithValue("$projectId", Format(projectId.Value));
+            delete.ExecuteNonQuery();
+            commandProgressHook?.Invoke("after_delete_project");
+            return true;
+        });
+    }
+
     public ProjectDetails CreateProject(CreateProjectCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);

@@ -41,7 +41,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 5;
                 """;
             command.ExecuteNonQuery();
@@ -121,6 +121,7 @@ public sealed class SqliteStorageIntegrationTests
                 "M3-04-project-component-snapshots-v4",
                 "M3-05-component-template-content-v5",
                 "M3-06-component-template-drafts",
+                "M4-04-project-component-snapshots-v5",
             ],
             history.Select(row => row.MigrationId));
         Assert.Equal(
@@ -236,7 +237,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE projects;
                 DROP TABLE project_counter;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -312,7 +313,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE project_attachments;
                 DROP TABLE attachment_blobs;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 2;
                 """;
             command.ExecuteNonQuery();
@@ -420,7 +421,7 @@ public sealed class SqliteStorageIntegrationTests
                 ALTER TABLE harnesses DROP COLUMN quantity;
                 ALTER TABLE projects DROP COLUMN revision;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 3;
                 """;
             command.ExecuteNonQuery();
@@ -488,7 +489,7 @@ public sealed class SqliteStorageIntegrationTests
                 DROP TABLE harness_documents;
                 ALTER TABLE harnesses DROP COLUMN quantity;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 4;
                 """;
             command.ExecuteNonQuery();
@@ -539,7 +540,7 @@ public sealed class SqliteStorageIntegrationTests
             command.CommandText =
                 """
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                        DELETE FROM schema_history WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 PRAGMA user_version = 6;
                 """;
             command.ExecuteNonQuery();

@@ -1,7 +1,10 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { applyEditorCommand, createWire, type EditorCommand } from "./commands";
+import { applyEditorCommand, createWire, e4RoutingIssues, type EditorCommand } from "./commands";
+import { InfoHint } from "../InfoHint";
+import { terminalArticleLabel } from "./terminal-article-label";
+import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
 import {
   createHarnessDesignApi,
   parseRecoverableHarnessDesignContent,
@@ -16,6 +19,7 @@ import {
 } from "./design-recovery-draft";
 import {
   createComponentPlacementApi,
+  componentPlacementRequest,
   type PlaceComponentRequest,
   type ProjectComponentPlacementGraph,
   type ProjectComponentSnapshotResource,
@@ -24,6 +28,7 @@ import { createComponentTemplateApi, type ComponentTemplateApi } from "../compon
 import { isTemplateContentV3, isTemplateContentV4, isTemplateContentV5 } from "../component-library/template-content";
 import {
   createConnectorInstanceFromComponentTemplateV3,
+  firstPlaceableArticleVariantId,
   rematerializeComponentTemplateConnectorArticle,
 } from "./component-template-placement";
 import {
@@ -122,8 +127,8 @@ export function buildComponentTemplateViewInstances(
     const exactVersion = binding.templateId === snapshot.sourceTemplateId &&
       binding.templateVersion === snapshot.sourceVersion &&
       binding.versionSha256 === snapshot.sourceVersionSha256;
-    const exactArticle = articleVariant?.sourceId === binding.article.sourceId &&
-      articleVariant.entityType === binding.article.entityType &&
+    const exactArticle = articleVariant?.sourceId.trim().normalize("NFC").toLowerCase() === binding.article.sourceId &&
+      articleVariant.entityType.trim().normalize("NFC").toLowerCase() === binding.article.entityType &&
       articleVariant.articleKey === binding.article.articleKey;
     if (!exactVersion || !exactArticle) return [];
     try {
@@ -246,6 +251,9 @@ function contactPointForWire(
   view: HarnessEditorView,
   materializedConnectorIds?: ReadonlySet<string>,
 ) {
+  // Routing, screen ports and painting must share the exact same endpoints,
+  // including when the graphical snapshot has not loaded yet.
+  if (view === "e4") return wireEndpointE4Anchor(document, endpoint)?.position ?? null;
   if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return findWireEndpoint(document, endpoint, view);
   const connectorId = endpoint.connectorId;
   const contactId = endpoint.contactId;
@@ -266,7 +274,6 @@ function contactPointForWire(
     : connector;
   const point = connectorContactPosition(fallbackConnector, contactId, view);
   if (!point) return null;
-  if (view === "e4") return point;
   const height = Math.max(72, 44 + connector.contacts.length * 16);
   const useLeft = other ? other.positions[view].x < connector.positions[view].x : false;
   return {
@@ -334,7 +341,10 @@ export function designToScene(
             number: contact.number,
             contactType: contact.contactType,
             circuit: contact.circuit,
-            terminal: contact.terminalArticle,
+            terminal: terminalArticleLabel(contact.terminalArticle),
+            name: connector.libraryBinding?.mode === "template"
+              ? connector.libraryBinding.snapshot.contacts.find(item => item.logicalContactId === contact.logicalContactId)?.name ?? ""
+              : "",
             wire: contact.wire,
             color: contact.color,
             secondaryColor: contact.secondaryColor ?? "",
@@ -623,6 +633,8 @@ export function HarnessDesignEditor({
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
   const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
+  const [e4Detached, setE4Detached] = useState(false);
+  const [refreshingTerminals, setRefreshingTerminals] = useState(false);
   const [uiFailureNonce, setUiFailureNonce] = useState(0);
   const [movePreview, setMovePreview] = useState<{
     readonly objectId: string;
@@ -690,6 +702,7 @@ export function HarnessDesignEditor({
     setHistory(null);
     setSelectedObjectId(null);
     setSelectedObjectIds([]);
+    setE4Detached(false);
     setEditingObjectId(null);
     setMovePreview(null);
     setComponentSnapshotsByPlacement(new Map());
@@ -851,6 +864,9 @@ export function HarnessDesignEditor({
     }
   }, [history, movePreview, view]);
 
+  const routingIssues = useMemo(() => view === "e4" && previewResult.document
+    ? e4RoutingIssues(previewResult.document) : [], [previewResult.document, view]);
+
   const run = useCallback((command: EditorCommand): boolean => {
     if (placementBusyRef.current || pendingPlacementRef.current) return false;
     const current = historyRef.current;
@@ -881,6 +897,30 @@ export function HarnessDesignEditor({
       setMovePreview(pendingMovePreviewRef.current);
     });
   }, []);
+
+  useEffect(() => {
+    if (!history) return;
+    const upgrade = (document: HarnessDesignDocument) => {
+      let changed = document;
+      for (const connector of document.connectors) {
+        if (!connector.e4TableMode && componentSnapshotsByPlacement.get(connector.id)?.content.schemaVersion === 5) {
+          changed = applyEditorCommand(changed, { type: "use-e4-table", connectorId: connector.id });
+        }
+      }
+      return changed;
+    };
+    try {
+      const present = upgrade(history.present);
+      if (present === history.present) return;
+      // A geometry migration is not an operator edit. Upgrade the undo states
+      // as well, otherwise Ctrl+Z would immediately reapply the same migration.
+      const changed = { present, past: history.past.map(upgrade), future: history.future.map(upgrade) };
+      historyRef.current = changed;
+      setHistory(changed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось восстановить табличные точки Э4.");
+    }
+  }, [history, componentSnapshotsByPlacement]);
 
   useEffect(() => () => {
     if (previewFrameRef.current !== null) cancelAnimationFrame(previewFrameRef.current);
@@ -1003,6 +1043,26 @@ export function HarnessDesignEditor({
         }
       }
     : undefined;
+  const refreshTemplateTerminals = selectedConnector && selectedTemplateSnapshot
+      ? async () => {
+        if (refreshingTerminals) return;
+        const generation = loadGeneration.current;
+        const connectorId = selectedConnector.id;
+        setRefreshingTerminals(true);
+        try {
+          const latest = await componentTemplateApi.get(selectedTemplateSnapshot.sourceTemplateId);
+          if (generation !== loadGeneration.current) return;
+          const current = historyRef.current?.present.connectors.find(item => item.id === connectorId);
+          if (!current) return;
+          const catalog = refreshedTemplateTerminalCatalog(current, latest);
+          run({ type: "refresh-template-terminals", connectorId, catalog });
+        } catch (error) {
+          if (generation === loadGeneration.current) setMessage(error instanceof Error ? error.message : "Не удалось обновить совместимые терминалы.");
+        } finally {
+          setRefreshingTerminals(false);
+        }
+      }
+    : undefined;
   const customWireColorHexes = [...new Set([
     ...(history.present.customWireColors ?? []),
     ...history.present.connectors.flatMap((connector) => connector.contacts
@@ -1058,7 +1118,6 @@ export function HarnessDesignEditor({
     const index = history.present.connectors.length;
     let preview: ReturnType<typeof createBuiltInConnectorInstance>;
     let isPersistentTemplate = false;
-    let templateArticle: { sourceId: string; entityType: string; articleKey: string } | null = null;
     if (item.componentTemplateId && item.componentTemplateVersion) {
       try {
         const template = await loadComponentTemplateForPlacement(
@@ -1070,7 +1129,8 @@ export function HarnessDesignEditor({
         // A catalog card represents the whole series. Its cached article
         // metadata may predate the loaded immutable version, whose first real
         // variant is the deterministic initial selection.
-        const variant = template.content.articleVariants[0];
+        const variantId = firstPlaceableArticleVariantId(template.content);
+        const variant = template.content.articleVariants.find(candidate => candidate.id === variantId);
         if (!variant) throw new Error("В библиотечном шаблоне нет варианта артикула для размещения.");
         preview = createConnectorInstanceFromComponentTemplateV3({
           templateId: template.templateId,
@@ -1088,11 +1148,6 @@ export function HarnessDesignEditor({
           e4Position: { x: 0, y: 0 },
         });
         isPersistentTemplate = true;
-        templateArticle = {
-          sourceId: variant.sourceId,
-          entityType: variant.entityType,
-          articleKey: variant.articleKey,
-        };
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Не удалось разместить библиотечный компонент.");
         return;
@@ -1114,7 +1169,7 @@ export function HarnessDesignEditor({
       type: "add-connector",
       connector: { ...preview, positions: { e4: placement, drawing: placement } },
     };
-    if (isPersistentTemplate && templateArticle) {
+    if (isPersistentTemplate) {
       const currentHistory = historyRef.current;
       const currentResource = resourceRef.current;
       if (!currentHistory || !currentResource) return;
@@ -1131,17 +1186,7 @@ export function HarnessDesignEditor({
         return;
       }
       const pending: PendingComponentPlacement = pendingPlacementRef.current ?? {
-        body: {
-          commandId: crypto.randomUUID(),
-          expectedRevision: latestResource.revision,
-          placementId: preview.id,
-          sourceTemplateId: item.componentTemplateId!,
-          sourceVersion: item.componentTemplateVersion!,
-          sourceId: templateArticle.sourceId,
-          entityType: templateArticle.entityType,
-          articleKey: templateArticle.articleKey,
-          instance: command.connector,
-        },
+        body: componentPlacementRequest(command.connector, latestResource.revision, crypto.randomUUID()),
         nextHistory,
         connectorId: preview.id,
         loadGeneration: generation,
@@ -1346,7 +1391,15 @@ export function HarnessDesignEditor({
 
   return (
     <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
-      {message && <div className="he-save-message" role="alert">{message}</div>}
+      {message && <div className="he-save-message" role="alert">{message.startsWith("Схема открыта в безопасном режиме")
+        ? <>Маршруты требуют проверки. <InfoHint>{message} Редактирование доступно; перемещение блока повторяет поиск маршрутов.</InfoHint></>
+        : message}</div>}
+      {routingIssues.length > 0 && <div className="he-save-message" role="status">
+        Трассировка: {routingIssues.length} требуют перестроения.
+        <InfoHint>Изменения сохраняются. Раздвиньте блоки: при каждом перемещении выполняется поиск маршрутов.
+          {routingIssues.map((issue) => <div key={issue.wireId}>{issue.wireId}: {issue.message}</div>)}
+        </InfoHint>
+      </div>}
       {recoveryDraft && <div className="he-recovery-draft" role="alert">
         <span>Есть несохранённый локальный черновик от ревизии {recoveryDraft.baseRevision}. Серверный документ не заменён.</span>
         <button type="button" onClick={() => {
@@ -1403,6 +1456,8 @@ export function HarnessDesignEditor({
         propertyInspector={selectedConnector ? (
           <E4ConnectorInspector
             connector={selectedConnector}
+            onRefreshTerminals={refreshTemplateTerminals}
+            refreshingTerminals={refreshingTerminals}
             series={selectedConnectorSeries}
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
@@ -1429,6 +1484,8 @@ export function HarnessDesignEditor({
         canvasEditor={selectedConnector ? (
           <E4ConnectorInspector
             connector={selectedConnector}
+            onRefreshTerminals={refreshTemplateTerminals}
+            refreshingTerminals={refreshingTerminals}
             series={selectedConnectorSeries}
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
@@ -1442,12 +1499,16 @@ export function HarnessDesignEditor({
             onEditingChange={(editing) => setEditingObjectId(editing ? selectedConnector.id : null)}
           />
         ) : undefined}
-        diagnostics={diagnostics.map((diagnostic) => ({
+        diagnostics={[...diagnostics.map((diagnostic) => ({
           id: diagnostic.id,
           objectId: diagnostic.target.objectId,
           label: diagnostic.designation,
           message: diagnostic.message,
-        }))}
+        })), ...routingIssues.map((issue) => ({
+          id: `routing:${issue.wireId}`, objectId: issue.wireId,
+          label: history.present.wires.find((wire) => wire.id === issue.wireId)?.circuit || issue.wireId,
+          message: issue.message,
+        }))]}
         previewMessage={previewResult.error}
         onViewChange={(nextView) => {
           setEditingObjectId(null);
@@ -1584,7 +1645,13 @@ export function HarnessDesignEditor({
           wireId,
           segmentIndex,
           position: { x: coordinate, y: coordinate },
+          detached: e4Detached,
         })}
+        e4Detached={e4Detached}
+        onE4DetachedChange={setE4Detached}
+        onE4Reroute={() => {
+          if (run({ type: "reroute-e4-wires", wireIds: selectedWireIds })) setE4Detached(false);
+        }}
         onE4WireRoutePointRemove={(wireId, routeIndex) => run({
           type: "remove-e4-wire-route-point",
           wireId,

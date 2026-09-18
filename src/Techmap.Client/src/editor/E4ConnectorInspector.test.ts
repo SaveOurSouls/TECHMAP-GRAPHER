@@ -11,7 +11,9 @@ import {
   createBuiltInConnectorInstance,
 } from "./connector-series-demo";
 import { builtInWireColors } from "./wire-reference-catalog";
-import type { ConnectorInstance } from "./model";
+import { connectorE4TableGeometry, createEmptyHarnessDesign, type ConnectorInstance } from "./model";
+import { designToScene } from "./HarnessDesignEditor";
+import { getE4ConnectorLayout } from "./CanvasViewport";
 
 function openingTag(markup: string, ariaLabel: string): string {
   const marker = `aria-label="${ariaLabel}"`;
@@ -201,6 +203,8 @@ describe("E4 connector inline editing", () => {
     expect(markup).not.toContain('aria-label="Артикул свободного блока"');
     expect(markup).toContain("JST-XH");
     expect(markup).toContain("XH-2");
+    expect(markup).toContain("Контакт 1");
+    expect(markup).toContain("Назначение");
     expect(markup).toContain("T-1");
     expect(markup).toContain("T-2");
     expect(markup).toContain("Номер и тип заданы закреплённым шаблоном");
@@ -213,6 +217,42 @@ describe("E4 connector inline editing", () => {
     expect(openingTag(markup, "Провод, контакт 1")).not.toContain("disabled");
     expect(openingTag(markup, "Цвет, контакт 1")).not.toContain("disabled");
     expect(openingTag(markup, "Терминал, контакт 1")).not.toContain("disabled");
+  });
+
+  it("keeps the composite terminal identity while rendering only its article", () => {
+    const connector = templateConnector();
+    const composite = "3:JST|14:SPH-002T-P0.5S|0:|3:PHR";
+    const changed = {
+      ...connector,
+      contacts: connector.contacts.map((contact, index) => index === 0
+        ? { ...contact, terminalArticle: composite }
+        : contact),
+      libraryBinding: connector.libraryBinding?.mode === "template" ? {
+        ...connector.libraryBinding,
+        snapshot: {
+          ...connector.libraryBinding.snapshot,
+          contacts: connector.libraryBinding.snapshot.contacts.map(contact => ({
+            ...contact,
+            allowedTerminalArticleKeys: [{ sourceId: "БД.ТЕР", entityType: "terminal", articleKey: composite }],
+          })),
+        },
+      } : connector.libraryBinding,
+    } as ConnectorInstance;
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: changed, disabled: false, onCommand: vi.fn(), mode: "canvas", editing: false,
+    }));
+    expect(markup).toContain("SPH-002T-P0.5S");
+    expect(markup).not.toContain(composite);
+    const editable = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: changed, disabled: false, onCommand: vi.fn(), mode: "canvas", editing: true,
+    }));
+    expect(selectMarkup(editable, "Терминал, контакт 1"))
+      .toContain(`<option value="${composite}" selected="">SPH-002T-P0.5S</option>`);
+    const object = designToScene({ ...createEmptyHarnessDesign(), connectors: [changed] }, "e4")[0]!;
+    const layout = getE4ConnectorLayout(object)!;
+    expect(layout.rows[0]!.terminal).toBe("SPH-002T-P0.5S");
+    expect(layout.width).toBe(connectorE4TableGeometry(changed).width);
+    expect(changed.contacts[0]!.terminalArticle).toBe(composite);
   });
 
   it("maps template terminal choices by logical contact ID", () => {

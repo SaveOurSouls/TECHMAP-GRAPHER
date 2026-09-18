@@ -14,6 +14,32 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectExportIntegrationTests
 {
     [Fact]
+    public async Task Invalid_strip_profile_in_storage_cannot_be_exported()
+    {
+        using var fixture = ExportFixture.Create();
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        using var storage = SqliteStorage.Open(lease.CanonicalPath);
+        var projects = new SqliteProjectCatalog(storage);
+        var project = projects.CreateProject(new CreateProjectCommand("TEST-STRIP", "Test", 1, ProjectStatus.Draft));
+        project = projects.AddHarness(project.ProjectId, "H1", 1);
+        // Simulate an invalid document accepted by a previous server version.
+        storage.ExecuteInTransaction(unit => {
+            using var command = unit.CreateCommand("UPDATE harness_design_documents SET content_json = $content;");
+            command.Parameters.AddWithValue("$content", """
+                {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1","stripProfiles":{"to":null}}]}
+                """);
+            command.ExecuteNonQuery();
+        });
+        var destination = fixture.Destination("invalid-strip.techmap-project.zip");
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new SqliteProjectExportService(lease, storage).ExportAsync(
+                new ProjectExportRequest(project.ProjectId, destination, "0.18.0-m4-04"),
+                TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(destination));
+        Assert.Single(projects.ListProjects());
+    }
+
+    [Fact]
     public async Task Export_does_not_include_global_component_template_assets()
     {
         using var fixture = ExportFixture.Create();

@@ -47,6 +47,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("project API", () => {
+  it("deletes the selected project with revision and CSRF, and rejects unconfirmed success", async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ projectId: details.projectId, deleted: true }));
+    const api = createProjectApi(config, session, fetcher);
+    await api.deleteProject(details.projectId, 7);
+    expect(fetcher.mock.calls[0]).toEqual([`/techmap/api/v1/projects/${details.projectId}`, expect.objectContaining({
+      method: "DELETE", body: JSON.stringify({ expectedRevision: 7 }),
+      headers: expect.objectContaining({ "X-Techmap-CSRF": session.csrfNonce }),
+    })]);
+    const invalidApi = createProjectApi(config, session, async () => jsonResponse({ projectId: "another", deleted: true }));
+    await expect(invalidApi.deleteProject(details.projectId, 7)).rejects.toThrow("не подтвердил");
+  });
+
   it("loads projects through the configured base path", async () => {
     const fetcher = vi.fn(async () => jsonResponse({ projects: [{ ...details, harnessCount: 1 }] }));
     const api = createProjectApi(config, session, fetcher);

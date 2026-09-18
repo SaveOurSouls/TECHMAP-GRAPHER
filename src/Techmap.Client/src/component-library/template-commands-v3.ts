@@ -532,12 +532,14 @@ export function renameContactTypeGroupV3(content: TemplateContentV3, groupId: st
 export function deleteContactTypeGroupV3(content: TemplateContentV3, groupId: string): TemplateContentV3 {
   requireValidInput(content);
   requireGroup(content, groupId);
-  if (content.logicalContacts.some(contact => contact.contactTypeGroupId === groupId) ||
-      content.articleVariants.some(variant => variant.contactGroups?.some(group => group.contactTypeGroupId === groupId)))
-    throw new TemplateCommandV3Error("contact_type_group_referenced", "Группа типа контакта используется контактом или вариантом артикула.");
   return requireValidResult({
     ...content,
     contactTypeGroups: content.contactTypeGroups.filter(candidate => candidate.id !== groupId),
+    logicalContacts: content.logicalContacts.map(contact => contact.contactTypeGroupId === groupId
+      ? { ...contact, contactTypeGroupId: null } : contact),
+    articleVariants: content.articleVariants.map(variant => ({ ...variant,
+      contactGroups: variant.contactGroups?.filter(group => group.contactTypeGroupId !== groupId) ?? null,
+    })),
   }, "invalid_contact_type_group_delete");
 }
 

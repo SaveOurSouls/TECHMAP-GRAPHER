@@ -15,6 +15,37 @@ namespace Techmap.Web.Tests;
 public sealed class ProjectImportIntegrationTests
 {
     [Fact]
+    public async Task Invalid_strip_profile_with_valid_archive_hashes_is_rejected_before_publication()
+    {
+        using var fixture = ImportFixture.Create();
+        var archive = await fixture.CreateMinimalArchiveAsync();
+        var entries = ReadArchive(archive);
+        var snapshot = JsonNode.Parse(entries[SqliteProjectExportService.SnapshotPath])!;
+        snapshot["harnesses"]![0]!["design"]!["content"]!["wires"] = new JsonArray(
+            new JsonObject { ["id"] = "W1", ["stripProfiles"] = new JsonObject { ["to"] = null } });
+        var snapshotBytes = Encoding.UTF8.GetBytes(snapshot.ToJsonString());
+        entries[SqliteProjectExportService.SnapshotPath] = snapshotBytes;
+        var manifest = JsonNode.Parse(entries[SqliteProjectExportService.ManifestPath])!;
+        var payload = manifest["files"]!.AsArray().Single(item =>
+            item!["path"]!.GetValue<string>() == SqliteProjectExportService.SnapshotPath)!;
+        payload["sizeBytes"] = snapshotBytes.LongLength;
+        payload["sha256"] = Convert.ToHexStringLower(SHA256.HashData(snapshotBytes));
+        var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        entries[SqliteProjectExportService.ManifestPath] = manifestBytes;
+        entries[SqliteProjectExportService.ManifestChecksumPath] = Encoding.ASCII.GetBytes(
+            Convert.ToHexStringLower(SHA256.HashData(manifestBytes)) + "\n");
+        WriteArchive(archive, entries);
+        await using var lease = DataRootLease.Acquire(fixture.DestinationDataRoot);
+        using var storage = SqliteStorage.Open(lease.CanonicalPath);
+        var error = await Assert.ThrowsAsync<ProjectImportException>(() =>
+            new SqliteProjectImportService(lease, storage).ImportAsync(
+                new ProjectImportRequest(archive, "0.18.0-m4-04"), TestContext.Current.CancellationToken));
+        Assert.Equal("import_snapshot_invalid", error.Code);
+        Assert.Empty(new SqliteProjectCatalog(storage).ListProjects());
+        Assert.Empty(QueryStrings(storage, "SELECT project_id FROM project_imports;"));
+    }
+
+    [Fact]
     public async Task Version_one_archive_uses_legacy_project_quantity_for_each_harness()
     {
         using var fixture = ImportFixture.Create();

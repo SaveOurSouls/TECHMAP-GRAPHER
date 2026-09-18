@@ -127,6 +127,17 @@ public sealed class ProjectComponentPlacementApiTests
         Assert.Equal(HttpStatusCode.NotFound, crossHarnessAsset.StatusCode);
         Assert.Equal("component_snapshot_not_found", (await crossHarnessAsset.Content
             .ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))?.Error);
+
+        using var staleDelete = await SendAsync(client, HttpMethod.Delete,
+            $"/api/v1/projects/{projectId:D}", new DeleteProjectRequest(1), csrf);
+        Assert.Equal(HttpStatusCode.Conflict, staleDelete.StatusCode);
+        using var delete = await SendAsync(client, HttpMethod.Delete,
+            $"/api/v1/projects/{projectId:D}", new DeleteProjectRequest(2), csrf);
+        delete.EnsureSuccessStatusCode();
+        using var missing = await client.GetAsync($"/api/v1/projects/{projectId:D}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        using var sharedTemplate = await client.GetAsync($"/api/v1/component-templates/{lockedVersion.TemplateId:D}", TestContext.Current.CancellationToken);
+        sharedTemplate.EnsureSuccessStatusCode();
     }
 
     private static async Task<string> StartSessionAsync(HttpClient client)

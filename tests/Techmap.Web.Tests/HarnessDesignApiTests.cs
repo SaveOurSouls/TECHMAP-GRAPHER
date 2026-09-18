@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Techmap.Contracts;
 using Techmap.Domain;
 using Techmap.Infrastructure.Sqlite;
@@ -13,6 +14,56 @@ namespace Techmap.Web.Tests;
 public sealed class HarnessDesignApiTests
 {
     private const string Origin = "http://127.0.0.1:18762";
+
+    [Theory]
+    [InlineData("layers", "[]")]
+    [InlineData("layers", "null")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":1,\"stripLengthMm\":0}]")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":0.0001,\"stripLengthMm\":2}]")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":1000000001,\"stripLengthMm\":2}]")]
+    [InlineData("layers", "[{\"index\":1.5,\"diameterMm\":1,\"stripLengthMm\":2}]")]
+    [InlineData("layers", "[{\"index\":9007199254740992,\"diameterMm\":1,\"stripLengthMm\":2}]")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":1,\"stripLengthMm\":2},{\"index\":1,\"diameterMm\":2,\"stripLengthMm\":3}]")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":2,\"stripLengthMm\":2},{\"index\":3,\"diameterMm\":1,\"stripLengthMm\":3}]")]
+    [InlineData("layers", "[{\"index\":1,\"diameterMm\":1,\"stripLengthMm\":3},{\"index\":3,\"diameterMm\":2,\"stripLengthMm\":2}]")]
+    [InlineData("sourceId", "\" \"")]
+    [InlineData("snapshotId", "\"00000000-0000-0000-0000-000000000000\"")]
+    [InlineData("snapshotSha256", "\"bad-hash\"")]
+    [InlineData("recordId", "null")]
+    [InlineData("entityType", "\"wire\"")]
+    public async Task Invalid_strip_profile_cannot_replace_a_saved_document(string property, string valueJson)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var profile = JsonSerializer.SerializeToNode(new {
+            sourceId = "test-coax", snapshotId = Guid.NewGuid().ToString("D"),
+            snapshotSha256 = new string('a', 64), recordId = new string('b', 64),
+            entityType = "coax-termination", sourceKey = "TEST-STRIP", displayName = "Test strip",
+            layers = new[] { new { index = 1, diameterMm = 1m, stripLengthMm = 2.5m },
+                new { index = 3, diameterMm = 3m, stripLengthMm = 7.5m } }
+        })!;
+        var content = new JsonObject { ["schemaVersion"] = 1, ["connectors"] = new JsonArray(), ["wires"] = new JsonArray(
+            new JsonObject { ["id"] = "W1", ["stripProfiles"] = new JsonObject {
+                ["from"] = profile, ["to"] = profile.DeepClone() } }) };
+        var initialJson = content.ToJsonString();
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(0, 1, JsonSerializer.SerializeToElement(content)), csrf);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        profile[property] = JsonNode.Parse(valueJson);
+        using var rejected = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(1, 1, JsonSerializer.SerializeToElement(content)), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var error = await rejected.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("invalid_design_content", error!.Error);
+        Assert.StartsWith($"content.wires[0].stripProfiles.from.{property}", error.Field);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(1, saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(JsonSerializer.SerializeToElement(JsonNode.Parse(initialJson)), saved.Content));
+    }
 
     [Fact]
     public async Task Empty_design_is_seeded_and_update_survives_server_restart()

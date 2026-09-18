@@ -795,6 +795,7 @@ export function TemplateCanvasV2({
       rootNodeId = node.id,
       topLevel = true,
       rootMovable = hasMovableTransform(node),
+      occurrenceNumber?: number,
     ): ReactNode {
       if (!node.visible) return null;
       const locked = ancestorLocked || layer.locked || node.locked;
@@ -904,7 +905,7 @@ export function TemplateCanvasV2({
             fontSize={fontSize}
             fontFamily="Segoe UI, sans-serif"
           >
-            {node.geometry.text}
+            {occurrenceNumber === undefined ? node.geometry.text : node.geometry.text.replaceAll("{{n}}", String(occurrenceNumber))}
           </text>
         );
       }
@@ -949,7 +950,7 @@ export function TemplateCanvasV2({
       if (missingChild) return placeholder(node, width, height, "Группа ссылается на отсутствующий узел.");
       return (
         <g {...common} data-template-group="true">
-          {layer.nodes.map(child => childIds.has(child.id) ? renderNode(child, locked, nextAncestors, rootNodeId, false, rootMovable) : null)}
+          {layer.nodes.map(child => childIds.has(child.id) ? renderNode(child, locked, nextAncestors, rootNodeId, false, rootMovable, occurrenceNumber) : null)}
         </g>
       );
     }
@@ -966,7 +967,7 @@ export function TemplateCanvasV2({
           data-template-occurrence-key={occurrence.group.key}
           transform={`translate(${formatNumber(occurrence.offset.x)} ${formatNumber(occurrence.offset.y)})`}
         >
-          {renderNode(group, false, new Set(), group.id, false, false)}
+          {renderNode(group, false, new Set(), group.id, false, false, occurrence.index + 1)}
         </g>
       ));
     }

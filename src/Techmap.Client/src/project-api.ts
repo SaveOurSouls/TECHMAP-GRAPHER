@@ -73,6 +73,7 @@ export interface ProjectCommandResult {
 export interface ProjectApi {
   listProjects(): Promise<readonly ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectDetails>;
+  deleteProject(projectId: string, expectedRevision: number): Promise<void>;
   createProject(request: CreateProjectRequest): Promise<ProjectDetails>;
   updateProject(
     projectId: string,
@@ -345,6 +346,12 @@ export function createProjectApi(
       method: "GET",
       headers: { Accept: "application/json" },
     }, parseProjectDetails),
+    deleteProject: (projectId: string, expectedRevision: number) => request(projectResource(projectId), {
+      method: "DELETE", headers: mutationHeaders, body: JSON.stringify({ expectedRevision }),
+    }, value => {
+      if (!isRecord(value) || value.projectId !== projectId || value.deleted !== true)
+        throw new Error("Сервер не подтвердил удаление проекта.");
+    }),
     createProject: (body: CreateProjectRequest) => request("projects", {
       method: "POST",
       headers: mutationHeaders,

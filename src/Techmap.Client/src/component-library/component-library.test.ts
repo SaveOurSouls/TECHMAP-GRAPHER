@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AppNavigation } from "../App";
 import { parseRuntimeConfig } from "../runtime-config";
 import { ReferenceCatalogApiError, type ReferenceCatalogSearchPage } from "../reference-catalog-api";
-import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, searchTerminalArticles, shouldAutoSaveTemplate, terminalArticleInputs, terminalArticleSearchRequest, terminalCatalogLabel } from "./ComponentLibrary";
+import { addLegacyArticleBindingsToV3, articleBindingsFromTemplateV3, ComponentLibrary, connectorArticleInputs, connectorArticleSearchRequest, createTemplateImageNodeV2, isTemplateAssetReferencedV2, isTemplateUndoShortcut, nextTemplateSelectionV2, pushTemplateUndo, searchTerminalArticles, shouldAutoSaveTemplate, terminalArticleInputs, terminalArticleSearchRequest, terminalCatalogLabel } from "./ComponentLibrary";
 import { addNodeV2, newTemplateContentV2 } from "./template-commands-v2";
 import { validateTemplateContentV2 } from "./template-model-v2";
 import {
@@ -21,6 +21,14 @@ const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 
 describe("component library UI", () => {
+  it("keeps at least 100 Ctrl+Z states", () => {
+    let stack: ReturnType<typeof newTemplateContentV3>[] = [];
+    const states = Array.from({ length: 101 }, () => newTemplateContentV3());
+    for (const state of states) stack = pushTemplateUndo(stack, state);
+    expect(stack).toHaveLength(100);
+    expect(stack[0]).toBe(states[1]);
+    expect(stack.at(-1)).toBe(states[100]);
+  });
   it("supports replacement, additive toggle, and blank selection semantics", () => {
     expect(nextTemplateSelectionV2(["a"], "b", false)).toEqual(["b"]);
     expect(nextTemplateSelectionV2(["a"], "b", true)).toEqual(["a", "b"]);
@@ -144,9 +152,10 @@ describe("component library UI", () => {
     expect(markup).toContain("Выход пучка");
     expect(markup).toContain('role="tabpanel"');
     expect(markup).toContain("Отменить");
-    expect(markup).toContain("Серия и артикулы");
+    expect(markup).toContain("Настройка серии");
     expect(markup).toContain("Типы контактов");
-    expect(markup).toContain("Артикул для предпросмотра");
+    expect(markup).not.toContain("Артикул для предпросмотра");
+    expect(markup).not.toContain("e4-table-editor");
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");

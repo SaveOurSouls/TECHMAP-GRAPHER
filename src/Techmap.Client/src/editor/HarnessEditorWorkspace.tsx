@@ -146,6 +146,9 @@ export interface HarnessEditorWorkspaceProps {
   readonly onE4DifferentialPairChange?: (state: E4DifferentialPairState | null) => void;
   readonly onE4ScreenChange?: (state: E4ScreenState | null) => void;
   readonly onE4ClearGroup?: () => void;
+  readonly e4Detached?: boolean;
+  readonly onE4DetachedChange?: (detached: boolean) => void;
+  readonly onE4Reroute?: () => void;
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
@@ -244,6 +247,9 @@ export function HarnessEditorWorkspace({
   onE4DifferentialPairChange,
   onE4ScreenChange,
   onE4ClearGroup,
+  e4Detached,
+  onE4DetachedChange,
+  onE4Reroute,
   onWireRoutePointMove,
   onWireRoutePointRemove,
   drawingSnapEnabled = true,
@@ -324,6 +330,9 @@ export function HarnessEditorWorkspace({
       onDifferentialPairChange={(state) => onE4DifferentialPairChange?.(state)}
       onScreenChange={(state) => onE4ScreenChange?.(state)}
       onClearGroup={() => onE4ClearGroup?.()}
+      detached={e4Detached}
+      onDetachedChange={onE4DetachedChange}
+      onReroute={onE4Reroute}
     />
   ) : null;
 

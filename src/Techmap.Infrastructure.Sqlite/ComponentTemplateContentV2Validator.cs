@@ -481,8 +481,11 @@ internal static partial class ComponentTemplateContentV2Validator
         foreach (var placement in placements.EnumerateArray())
         {
             var placementPath = $"{path}[{index++}]";
-            RequireExactProperties(placement, placementPath,
-                "repeatDomainId", "prototypeGroupId", "step", "contactPointIds");
+            var hasArrayLayout = placement.TryGetProperty("arrayLayout", out var arrayLayout);
+            RequireExactProperties(placement, placementPath, hasArrayLayout
+                ? new[] { "repeatDomainId", "prototypeGroupId", "step", "contactPointIds", "arrayLayout" }
+                : new[] { "repeatDomainId", "prototypeGroupId", "step", "contactPointIds" });
+            if (hasArrayLayout) ValidateArrayLayout(arrayLayout, placementPath + ".arrayLayout");
             var domainId = RequiredId(placement, "repeatDomainId", placementPath + ".repeatDomainId");
             if (!state.RepeatDomains.TryGetValue(domainId, out var domain))
                 Throw("Referenced repeat domain does not exist.", placementPath + ".repeatDomainId");
@@ -516,9 +519,26 @@ internal static partial class ComponentTemplateContentV2Validator
                 logicalIds,
                 step.GetProperty("x"),
                 step.GetProperty("y"),
+                hasArrayLayout,
                 placementPath));
         }
         return result;
+    }
+
+    private static void ValidateArrayLayout(JsonElement value, string path)
+    {
+        RequireExactProperties(value, path, "rows", "direction", "numbering", "countSource");
+        if (!TryGetSafeInteger(value.GetProperty("rows"), out var rows) || rows is < 1 or > 4)
+            Throw("Array layout rows must be between 1 and 4.", path + ".rows");
+        if (value.GetProperty("direction").ValueKind != JsonValueKind.String ||
+            value.GetProperty("direction").GetString() is not ("long-side" or "short-side"))
+            Throw("Array layout direction is invalid.", path + ".direction");
+        if (value.GetProperty("numbering").ValueKind != JsonValueKind.String ||
+            value.GetProperty("numbering").GetString() is not ("new-row" or "snake"))
+            Throw("Array layout numbering is invalid.", path + ".numbering");
+        if (value.GetProperty("countSource").ValueKind != JsonValueKind.String ||
+            value.GetProperty("countSource").GetString() is not ("article" or "parameter"))
+            Throw("Array layout count source is invalid.", path + ".countSource");
     }
 
     private static void ValidateGroups(ValidationState state)
@@ -633,6 +653,8 @@ internal static partial class ComponentTemplateContentV2Validator
                 {
                     Throw("Repeat step cannot be resolved from default parameter values.", placement.Path + ".step");
                 }
+                if (placement.HasArrayLayout && (stepX <= 0 || stepY <= 0 || stepX > 10000 || stepY > 10000))
+                    Throw("Array pitch must be positive and at most 10000.", placement.Path + ".step");
                 var lastOffsetX = (domain.DefaultCount - 1) * stepX;
                 var lastOffsetY = (domain.DefaultCount - 1) * stepY;
                 if (!double.IsFinite(lastOffsetX) || !double.IsFinite(lastOffsetY) ||
@@ -1170,6 +1192,7 @@ internal static partial class ComponentTemplateContentV2Validator
         IReadOnlyList<string> LogicalContactIds,
         JsonElement StepX,
         JsonElement StepY,
+        bool HasArrayLayout,
         string Path);
     private sealed record RepeatViewInfo(
         string Path,

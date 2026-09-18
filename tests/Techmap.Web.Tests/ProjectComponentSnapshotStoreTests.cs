@@ -9,8 +9,10 @@ namespace Techmap.Web.Tests;
 
 public sealed class ProjectComponentSnapshotStoreTests
 {
-    [Fact]
-    public void Published_v4_template_is_placed_and_snapshotted_without_downgrade()
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void Published_template_is_placed_and_snapshotted_without_downgrade(int schemaVersion)
     {
         using var fixture = Fixture.Create();
         using var storage = SqliteStorage.Open(fixture.DataRoot);
@@ -18,8 +20,17 @@ public sealed class ProjectComponentSnapshotStoreTests
         var project = catalog.CreateProject(new CreateProjectCommand("P", "Project", 1, ProjectStatus.Draft));
         var harness = catalog.AddHarness(project.ProjectId, "W1").Harnesses.Single();
         var article = ComponentTemplateContentV3ValidatorTests.ValidArticleBindings.Single();
+        var contentNode = schemaVersion == 5
+            ? ComponentTemplateContentV5ValidatorTests.ValidContent()
+            : ComponentTemplateContentV4ValidatorTests.ValidContent();
+        if (schemaVersion == 5)
+        {
+            contentNode["logicalContacts"] = new JsonArray();
+            contentNode["repeaters"] = new JsonArray();
+            foreach (var view in contentNode["views"]!.AsArray()) view!["contactPoints"] = new JsonArray();
+        }
         var template = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
-            "XH", "XH series", [article], 4, ComponentTemplateContentV4ValidatorTests.ValidContentJson);
+            "XH", "XH series", [article], schemaVersion, contentNode.ToJsonString());
         var placementId = Guid.NewGuid();
         var store = new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System);
 
@@ -28,9 +39,9 @@ public sealed class ProjectComponentSnapshotStoreTests
             placementId, template, article.SourceId, article.EntityType, article.ArticleKey,
             BoundInstance(placementId, template, article, "X1"));
 
-        Assert.Equal(4, result.Snapshot.SchemaVersion);
+        Assert.Equal(schemaVersion, result.Snapshot.SchemaVersion);
         using var content = JsonDocument.Parse(result.Snapshot.ContentJson);
-        Assert.Equal(4, content.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(schemaVersion, content.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.True(content.RootElement.TryGetProperty("e4ConnectorTable", out _));
     }
 

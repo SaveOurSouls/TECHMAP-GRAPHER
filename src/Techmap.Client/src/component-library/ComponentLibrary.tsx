@@ -1,3 +1,8 @@
+import { E4ArticlePreview } from "./E4ArticlePreview";
+import { InfoHint } from "../InfoHint";
+import { withDrawingArticleCounts } from "./drawing-array-commands";
+import { DrawingArrayPanel } from "./DrawingArrayPanel";
+import type { ConnectorSchematicPresentation } from "../editor/model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
@@ -11,7 +16,6 @@ import {
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateDraft, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
 import { readTemplateAsset } from "./template-assets";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, isTemplateContentV5, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
-import { E4ConnectorTableEditor } from "./E4ConnectorTableEditor";
 import { createE4ConnectorSeriesTableFromV3, materializeE4ConnectorArticle, setArticleContactGroupStandardTerminal, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 import { TemplateCanvasV2, type TemplatePointAngleModeV2 } from "./TemplateCanvasV2";
 import { TemplateContactsPanelV2 } from "./TemplateContactsPanelV2";
@@ -54,14 +58,19 @@ import {
   type NodeResizeHandleV3 as NodeResizeHandleV2,
 } from "./template-commands-v3";
 import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
-import { validateTemplateContentV3 as validateTemplateContentV2, type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
-import { validateTemplateContentV4, type TemplateContentV4 } from "./template-model-v4";
+import { type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
+import { type TemplateContentV4 } from "./template-model-v4";
 import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3, type TerminalContactTypeBindingV5 } from "./template-model-v5";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Draft { e4Presentation?: ConnectorSchematicPresentation; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+
+export const TEMPLATE_UNDO_LIMIT = 100;
+export function pushTemplateUndo(stack: readonly TemplateContentV2[], current: TemplateContentV2): TemplateContentV2[] {
+  return [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), current];
+}
 type LoadedTemplate = Pick<ComponentTemplate, "templateId" | "code" | "name" | "articleBindings" | "assets" | "content"> & { readonly version: number; readonly draftRevision: number };
 type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "rectangle" | "ellipse" | "bezier" | "closedContour" | "text" | "image" }>;
 
@@ -73,20 +82,26 @@ const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
 const constantValue = (expression: NumericExpressionV2) => expression.kind === "constant" ? expression.value : null;
 
-function reconcileE4ConnectorTable(content: TemplateContentV2, previous?: E4ConnectorSeriesTable): E4ConnectorSeriesTable {
-  const next = createE4ConnectorSeriesTableFromV3(content);
+export function reconcileE4ConnectorTable(content: TemplateContentV2, previous?: E4ConnectorSeriesTable): E4ConnectorSeriesTable {
+  const next = createE4ConnectorSeriesTableFromV3(content, true);
   if (!previous) return next;
   const previousDefaults = new Map(previous.seriesDefaults.map(row => [row.rowId, row]));
   const previousArticles = new Map(previous.articles.map(article => [article.articleVariantId, article]));
   return {
     ...next,
     columns: next.columns.map(column => previous.columns.find(item => item.id === column.id) ?? column),
-    seriesDefaults: next.seriesDefaults.map(row => previousDefaults.get(row.rowId) ?? row),
+    seriesDefaults: next.seriesDefaults.map(row => {
+      const old = previousDefaults.get(row.rowId);
+      return old && (old.values.contactTypeGroupId === null || content.contactTypeGroups.some(group => group.id === old.values.contactTypeGroupId)) ? old : row;
+    }),
     articles: next.articles.map(article => {
       const old = previousArticles.get(article.articleVariantId);
       if (!old) return article;
       const oldRows = new Map(old.rows.map(row => [row.seriesRowId, row]));
-      return { ...article, rows: article.rows.map(row => oldRows.get(row.seriesRowId) ?? row) };
+      return { ...article, rows: article.rows.map(row => {
+        const oldRow = oldRows.get(row.seriesRowId);
+        return oldRow && (oldRow.overrides.contactTypeGroupId == null || content.contactTypeGroups.some(group => group.id === oldRow.overrides.contactTypeGroupId)) ? oldRow : row;
+      }) };
     }),
   };
 }
@@ -106,11 +121,12 @@ function compatibleTerminalsFromV3(content: TemplateContentV2): ArticleBinding[]
   return result;
 }
 
-function applySeriesTerminalsToEditor(
+export function applySeriesTerminalsToEditor(
   content: TemplateContentV2,
   table: E4ConnectorSeriesTable,
   terminals: readonly ArticleBinding[],
   bindings: readonly TerminalContactTypeBindingV5[] | null = null,
+  updateStandards = false,
 ): { content: TemplateContentV2; table: E4ConnectorSeriesTable } {
   const allowed = new Set(terminals.map(articleIdentity));
   const terminalsForGroup = (groupId: string) => terminals.filter(terminal =>
@@ -137,8 +153,9 @@ function applySeriesTerminalsToEditor(
         ...row,
         values: {
           ...row.values,
-          standardTerminalArticleKey: terminalAllowedForGroup(row.values.standardTerminalArticleKey, row.values.contactTypeGroupId)
-            ? row.values.standardTerminalArticleKey : null,
+          standardTerminalArticleKey: !updateStandards || bindings === null
+            ? (terminalAllowedForGroup(row.values.standardTerminalArticleKey, row.values.contactTypeGroupId) ? row.values.standardTerminalArticleKey : null)
+            : bindings.find(binding => binding.standard && binding.contactTypeGroupId === row.values.contactTypeGroupId)?.terminalArticleKey ?? null,
         },
       })),
       articles: table.articles.map(article => ({
@@ -158,6 +175,20 @@ function applySeriesTerminalsToEditor(
       })),
     },
   };
+}
+
+/** XX sets the first contact type count; other groups remain operator-controlled. */
+export function addSeriesArticles(content: TemplateContentV2, inputs: readonly NewArticleVariantV3Input[]): TemplateContentV2 {
+  let base = content;
+  if (inputs.some(input => input.contactCount !== undefined) && !base.contactTypeGroups.length)
+    [base] = addContactTypeGroupV3(base, "Сигнальные");
+  let next = addArticleVariantsV3(base, inputs);
+  inputs.forEach((input, index) => {
+    if (input.contactCount === undefined) return;
+    const variant = next.articleVariants[base.articleVariants.length + index]!;
+    next = setArticleVariantContactGroupV3(next, variant.id, base.contactTypeGroups[0]!.id, input.contactCount, []);
+  });
+  return next;
 }
 
 export const isTemplateUndoShortcut = (
@@ -368,17 +399,16 @@ export function ComponentLibrary({ config, session }: Props) {
   const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
   const [selectedArticleVariantId, setSelectedArticleVariantId] = useState<string | null>(null);
   const [pendingLogicalContactId, setPendingLogicalContactId] = useState<string | null>(null);
-  const [connectorArticleQuery, setConnectorArticleQuery] = useState("");
-  const [connectorArticleSuggestions, setConnectorArticleSuggestions] = useState<readonly NewArticleVariantV3Input[]>([]);
-  const [connectorArticleSearchState, setConnectorArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [connectorArticleSearchMessage, setConnectorArticleSearchMessage] = useState<string | null>(null);
   const [terminalArticleQuery, setTerminalArticleQuery] = useState("");
   const [terminalArticleSuggestions, setTerminalArticleSuggestions] = useState<readonly ArticleBinding[]>([]);
   const [terminalArticleSearchState, setTerminalArticleSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [terminalArticleSearchMessage, setTerminalArticleSearchMessage] = useState<string | null>(null);
   const [pointAngleMode, setPointAngleMode] = useState<TemplatePointAngleModeV2>("snap-15");
+  const [graphicEditorMode, setGraphicEditorMode] = useState<"e4" | "drawing">("e4");
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
+  const e4View = draft.content.views.find(view => view.kind === "e4");
+  const drawingView = draft.content.views.find(view => view.kind === "drawing");
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
   const activeLayer = activeView?.layers.find(layer => layer.id === activeLayerId) ?? activeView?.layers[0];
   const selected = activeView?.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
@@ -394,8 +424,10 @@ export function ComponentLibrary({ config, session }: Props) {
   const articlePreview = useMemo(() => {
     if (!selectedArticleVariantId) return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: null };
     try {
-      const materialized = materializeArticleVariantV3(draft.content, selectedArticleVariantId);
-      const rows = materializeArticleContactRowsV3(draft.content, materialized.variant);
+      const graphic = withDrawingArticleCounts(draft.content);
+      const graphicCore = { ...graphic, articleVariants: graphic.articleVariants.map(item => ({ ...item, contactGroups: null })) };
+      const materialized = materializeArticleVariantV3(graphicCore, selectedArticleVariantId);
+      const rows = materializeArticleContactRowsV3(graphicCore, materialized.variant);
       const groupNames = new Map(draft.content.contactTypeGroups.map(group => [group.id, group.name]));
       const counts = materialized.repeatCounts.map(item => `${groupNames.get(item.contactTypeGroupId) ?? "Группа"}: ${item.requestedContactCount}`);
       const configured = materialized.variant.contactGroups?.reduce((sum, group) => sum + group.contactCount, 0);
@@ -405,6 +437,10 @@ export function ComponentLibrary({ config, session }: Props) {
       return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: errorText(caught) };
     }
   }, [draft.content, selectedArticleVariantId]);
+  const e4PreviewContent = useMemo(() => {
+    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation).content; }
+    catch { return null; }
+  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation]);
   const effectivePreviewParameterValues = useMemo<Readonly<Record<string, ParameterValueV2>>>(() => ({
     ...previewParameterValues,
     ...articlePreview.values,
@@ -441,34 +477,6 @@ export function ComponentLibrary({ config, session }: Props) {
       setSelectedArticleVariantId(null);
   }, [draft.content.articleVariants, selectedArticleVariantId]);
   useEffect(() => {
-    const query = connectorArticleQuery.trim();
-    if (!query) {
-      setConnectorArticleSuggestions([]);
-      setConnectorArticleSearchState("idle");
-      setConnectorArticleSearchMessage(null);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setConnectorArticleSearchState("loading");
-      setConnectorArticleSearchMessage(null);
-      void referenceApi.searchCatalog(CONNECTOR_REFERENCE_SOURCE_V3, connectorArticleSearchRequest(query), controller.signal).then(page => {
-        if (controller.signal.aborted) return;
-        setConnectorArticleSuggestions(connectorArticleInputs(page.items));
-        setConnectorArticleSearchState("ready");
-      }).catch((caught: unknown) => {
-        if (controller.signal.aborted) return;
-        setConnectorArticleSuggestions([]);
-        setConnectorArticleSearchState("error");
-        setConnectorArticleSearchMessage(errorText(caught));
-      });
-    }, 250);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [connectorArticleQuery, referenceApi]);
-  useEffect(() => {
     const query = terminalArticleQuery.trim();
     if (!query) {
       setTerminalArticleSuggestions([]);
@@ -497,13 +505,13 @@ export function ComponentLibrary({ config, session }: Props) {
   function setLoadedDraft(item: LoadedTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[], bindings: readonly TerminalContactTypeBindingV5[] | null = null) {
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
     const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
-    setDraft({ templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
+    setGraphicEditorMode("e4");
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
     setDirty(migrated); setAutoSaveFailed(false); setUpgradedFromV1(migrated); setAssetMismatch(mismatch); setDiagnostics(nextDiagnostics); setSaved(null);
     setPreviewParameterValues({});
-    setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
 
@@ -548,11 +556,11 @@ export function ComponentLibrary({ config, session }: Props) {
 
   function resetNewDraft() {
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
+    setGraphicEditorMode("e4");
     setSelectedId(null); setUndoStack([]); setDirty(true); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
     setPendingLogicalContactId(null);
     setSelectedArticleVariantId(null);
     setPreviewParameterValues({});
-    setConnectorArticleQuery(""); setConnectorArticleSuggestions([]); setConnectorArticleSearchState("idle"); setConnectorArticleSearchMessage(null);
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
   async function startNew() {
@@ -578,7 +586,15 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
     if (content === draft.content) return;
-    setUndoStack(stack => [...stack.slice(-49), draft.content]); setDraft(current => ({ ...current, content, e4ConnectorTable: reconcileE4ConnectorTable(content, current.e4ConnectorTable) }));
+    const bindings = draft.terminalContactTypeBindings?.filter(binding => content.contactTypeGroups.some(group => group.id === binding.contactTypeGroupId)) ?? null;
+    const reconciled = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
+    const existingRows = new Set(draft.e4ConnectorTable.seriesDefaults.map(row => row.rowId));
+    const table = { ...reconciled, seriesDefaults: reconciled.seriesDefaults.map(row => existingRows.has(row.rowId) ? row : {
+      ...row, values: { ...row.values, standardTerminalArticleKey: bindings?.find(binding => binding.standard && binding.contactTypeGroupId === row.values.contactTypeGroupId)?.terminalArticleKey ?? null },
+    }) };
+    const projected = applySeriesTerminalsToEditor(content, table, draft.compatibleTerminalArticleKeys, bindings);
+    setUndoStack(stack => pushTemplateUndo(stack, draft.content));
+    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, terminalContactTypeBindings: bindings }));
     if (selection !== undefined) setSelectedId(selection); markDirty(); setError(null);
   }
   function command(action: () => TemplateContentV2, selection?: string | null) { try { changeContent(action(), selection); } catch (caught) { setError(errorText(caught)); } }
@@ -589,15 +605,7 @@ export function ComponentLibrary({ config, session }: Props) {
     terminals: readonly ArticleBinding[],
   ) {
     try {
-      const content = setArticleVariantContactGroupV3(draft.content, variantId, groupId, count, terminals);
-      let table = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
-      const allowed = new Set(terminals.map(articleIdentity));
-      const materialized = materializeE4ConnectorArticle(table, variantId);
-      const containsInvalidStandard = materialized.rows.some(row => row.contactTypeGroupId === groupId &&
-        row.standardTerminalArticleKey !== null && !allowed.has(articleIdentity(row.standardTerminalArticleKey)));
-      if (containsInvalidStandard) table = setArticleContactGroupStandardTerminal(table, variantId, groupId, null);
-      setUndoStack(stack => [...stack.slice(-49), draft.content]);
-      setDraft(current => ({ ...current, content, e4ConnectorTable: table }));
+      changeContent(setArticleVariantContactGroupV3(draft.content, variantId, groupId, count, terminals));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
   }
@@ -630,13 +638,8 @@ export function ComponentLibrary({ config, session }: Props) {
           ? articleIdentity(binding.terminalArticleKey) === identity && standard
           : binding.standard,
       }));
-      let table = draft.e4ConnectorTable;
-      for (const article of table.articles) {
-        const group = article.contactGroups.find(candidate => candidate.contactTypeGroupId === selected.contactTypeGroupId);
-        if (group?.contactCount) table = setArticleContactGroupStandardTerminal(table, article.articleVariantId,
-          selected.contactTypeGroupId, standard ? terminal : null);
-      }
-      setDraft(current => ({ ...current, terminalContactTypeBindings: bindings, e4ConnectorTable: table }));
+      const projected = applySeriesTerminalsToEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, bindings, true);
+      setDraft(current => ({ ...current, terminalContactTypeBindings: bindings, e4ConnectorTable: projected.table, content: projected.content }));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
   }
@@ -646,7 +649,7 @@ export function ComponentLibrary({ config, session }: Props) {
       let table = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
       if (materializeE4ConnectorArticle(table, variantId).rows.some(row => row.contactTypeGroupId === groupId))
         table = setArticleContactGroupStandardTerminal(table, variantId, groupId, null);
-      setUndoStack(stack => [...stack.slice(-49), draft.content]);
+      setUndoStack(stack => pushTemplateUndo(stack, draft.content));
       setDraft(current => ({ ...current, content, e4ConnectorTable: table }));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
@@ -665,20 +668,13 @@ export function ComponentLibrary({ config, session }: Props) {
     if (assetMismatch) { setError("Сохранение заблокировано: metadata assets не совпадают с версией шаблона."); return null; }
     const reconciliation = reconcileTemplateEnvelopeAssets(draft.content, draft.assets);
     if (reconciliation.diagnostics.length) { setAssetMismatch(true); setDiagnostics(reconciliation.diagnostics); setError(reconciliation.diagnostics[0]!.message); return null; }
-    const validation = validateTemplateContentV2(draft.content);
-    if (!validation.valid) { setDiagnostics(validation.diagnostics); setError(validation.diagnostics[0]!.message); return null; }
     try {
       expandTemplateRepeatsV2(compatibilityContent);
-      for (const variant of draft.content.articleVariants) {
-        const materialized = materializeArticleVariantV3(draft.content, variant);
-        expandTemplateRepeatsV2(materialized.repeatContent, materialized.repeatOptions);
-        materializeArticleContactRowsV3(draft.content, materialized.variant);
-      }
     }
     catch (caught) { setError(errorText(caught)); return null; }
     let v5Content;
     try {
-      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings).content;
+      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation).content;
     } catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: v5Content };
     return body;
@@ -722,24 +718,31 @@ export function ComponentLibrary({ config, session }: Props) {
     const projected = applySeriesTerminalsToEditor(content, table, terminals, bindings);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
     setDirty(false); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setSaved("Сохранено"); setError(null);
   }
-  async function save() {
-    if (!dirty && draft.draftRevision === 0) return;
+  async function save(): Promise<boolean> {
+    if (!dirty && draft.draftRevision === 0) return true;
     setBusy(true);
     try {
       const result = await publishWorkingDraft();
-      if (result) { applyPersisted(result); await loadList(); }
-      else setAutoSaveFailed(true);
-    } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); }
+      if (result) { applyPersisted(result); await loadList(); return true; }
+      setAutoSaveFailed(true); return false;
+    } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); return false; }
     finally { setBusy(false); }
+  }
+  async function saveAndExitDrawing() {
+    if (await save()) {
+      setGraphicEditorMode("e4");
+      if (e4View) setViewId(e4View.id);
+    }
   }
 
   useEffect(() => {
+    if (graphicEditorMode === "drawing") return;
     if (!shouldAutoSaveTemplate({ dirty, failed: autoSaveFailed, busy, assetMismatch, code: draft.code, name: draft.name })) return;
     const timer = window.setTimeout(() => {
       setBusy(true);
@@ -750,7 +753,7 @@ export function ComponentLibrary({ config, session }: Props) {
       }).catch(caught => { setAutoSaveFailed(true); setError(errorText(caught)); }).finally(() => setBusy(false));
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [assetMismatch, autoSaveFailed, busy, dirty, draft]);
+  }, [assetMismatch, autoSaveFailed, busy, dirty, draft, graphicEditorMode]);
 
   async function removeTemplate() {
     if (!draft.templateId) return;
@@ -882,14 +885,22 @@ export function ComponentLibrary({ config, session }: Props) {
   const resolveAssetUrl = (assetId: string) => draft.templateId && draft.version > 0 ? api.assetContentUrl(draft.templateId, draft.version, assetId) : "";
 
   return <div className="component-library">
-    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ</p><h1>Серии и компоненты</h1><p>Здесь задаются серия, артикулы и таблица контактов Э4. Графика используется для вспомогательных видов.</p></div><button className="primary-action" type="button" onClick={() => void startNew()} disabled={busy}>+ Новая серия</button></header>
+    <header className="content-heading library-heading"><div><p className="eyebrow">M2 · БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ</p><h1>Серии и компоненты <InfoHint>Здесь задаются серия, артикулы и таблица контактов Э4. Графика используется для вспомогательных видов.</InfoHint></h1></div><button className="primary-action" type="button" onClick={() => void startNew()} disabled={busy}>+ Новая серия</button></header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="Закрыть">×</button></div>}
     {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыта прежняя версия шаблона.</strong><span>Она преобразована только в памяти и будет сохранена как новая версия v3.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
     {!upgradedFromV1 && diagnostics.length > 0 && <div className="library-diagnostics" role="alert">{diagnostics.map(item => <span key={`${item.code}/${item.path}`}>{item.path}: {item.message}</span>)}</div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
-      <section className="library-editor" aria-busy={busy}>
+      <section className={`library-editor ${graphicEditorMode === "drawing" ? "drawing-mode" : ""}`} aria-busy={busy}>
         <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span className={autoSaveFailed ? "library-save-state error" : "library-save-state"} role="status">{busy ? "Сохранение…" : autoSaveFailed ? "Не сохранено" : dirty ? "Изменено" : saved ?? "Сохранено"}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
+        <div className="graphic-editor-switcher" role="toolbar" aria-label="Редактор графики">
+          <button type="button" className={graphicEditorMode === "e4" ? "active" : ""} onClick={() => { setGraphicEditorMode("e4"); if (e4View) setViewId(e4View.id); }}>Схема Э4</button>
+          <button type="button" className={graphicEditorMode === "drawing" ? "active" : ""} onClick={() => { setGraphicEditorMode("drawing"); if (drawingView) setViewId(drawingView.id); }}>Рисунок</button>
+          <InfoHint>Рисунок редактируется в отдельной рабочей области и всегда сопровождает схему Э4, если задан.</InfoHint>
+        </div>
+        <div className="library-series-workspace">
+        {graphicEditorMode === "e4" && <>
         <TemplateSeriesPanelV3
+          independentE4
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
           onChangeCompatibleTerminalArticleKeys={setCompatibleTerminals}
@@ -897,31 +908,21 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetTerminalContactTypeGroup={setSeriesTerminalContactType}
           standardTerminalIdentities={standardTerminalIdentities}
           onSetSeriesStandardTerminal={setSeriesStandardTerminal}
-          connectorArticleQuery={connectorArticleQuery}
-          connectorArticleSuggestions={connectorArticleSuggestions}
-          connectorArticleSearchState={connectorArticleSearchState}
-          connectorArticleSearchMessage={connectorArticleSearchMessage}
-          onConnectorArticleQueryChange={setConnectorArticleQuery}
           terminalArticleQuery={terminalArticleQuery}
           terminalArticleSuggestions={terminalArticleSuggestions}
           terminalArticleSearchState={terminalArticleSearchState}
           terminalArticleSearchMessage={terminalArticleSearchMessage}
           onTerminalArticleQueryChange={setTerminalArticleQuery}
           selectedArticleVariantId={selectedArticleVariantId}
-          articlePreviewMessage={articlePreview.message}
-          articlePreviewError={articlePreview.error}
-          articlePreviewRows={articlePreview.rows}
           onSelectArticleVariant={variantId => { setSelectedArticleVariantId(variantId); setPreviewParameterValues({}); }}
           onAddContactTypeGroup={name => command(() => addContactTypeGroupV3(draft.content, name)[0])}
           onRenameContactTypeGroup={(groupId, name) => command(() => renameContactTypeGroupV3(draft.content, groupId, name))}
           onDeleteContactTypeGroup={groupId => command(() => deleteContactTypeGroupV3(draft.content, groupId))}
           onAddArticleVariants={inputs => {
             try {
-              changeContent(addArticleVariantsV3(draft.content, inputs));
-              if (inputs.some(input => input.sourceId === CONNECTOR_REFERENCE_SOURCE_V3)) {
-                setConnectorArticleQuery("");
-                setConnectorArticleSuggestions([]);
-              }
+              const content = addSeriesArticles(draft.content, inputs);
+              changeContent(content);
+              setSelectedArticleVariantId(content.articleVariants.at(-1)!.id);
               return true;
             } catch (caught) {
               setError(errorText(caught));
@@ -935,7 +936,20 @@ export function ComponentLibrary({ config, session }: Props) {
           standardTerminalArticleKeys={standardTerminalArticleKeys}
           onSetStandardTerminal={setStandardTerminal}
         />
-        <E4ConnectorTableEditor table={draft.e4ConnectorTable} selectedArticleVariantId={selectedArticleVariantId} disabled={busy || assetMismatch} onChange={table => { setDraft(current => ({ ...current, e4ConnectorTable: table })); markDirty(); }} />
+        {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
+          onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
+          onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
+        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={compatibilityContent} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
+        </>}
+        </div>
+        {<section className={`drawing-editor-shell ${graphicEditorMode === "drawing" ? "" : "drawing-hidden"}`} role="dialog" aria-modal="true" aria-label="Редактор рисунка">
+          <header><strong>Рисунок · {draft.code}</strong>
+            <label>Артикул<select aria-label="Артикул рисунка" value={selectedArticleVariantId ?? ""} onChange={e=>setSelectedArticleVariantId(e.target.value || null)}><option value="">Прототип</option>{draft.content.articleVariants.map(a=><option key={a.id} value={a.id}>{a.articleKey}</option>)}</select></label>
+            <button type="button" className="primary-action" onClick={() => void saveAndExitDrawing()} disabled={busy || assetMismatch}>Сохранить и выйти</button>
+          </header>
+          {error && <div className="error-banner" role="alert">{error}</div>}
+          {activeView && activeLayer && <DrawingArrayPanel content={draft.content} viewId={activeView.id} layerId={activeLayer.id} selectedIds={selectedIds} onChange={changeContent} onError={setError} />}
+          <details className="drawing-settings"><summary>Слои, ресурсы и параметры <InfoHint>Ctrl+Z отменяет до 100 изменений. Текст {"{{n}}"} в группе массива заменяется номером элемента. Прототип редактируется через выбор объекта в правой панели.</InfoHint></summary>
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
         <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
         {activeView && <TemplateContactsPanelV2
@@ -1003,9 +1017,10 @@ export function ComponentLibrary({ config, session }: Props) {
           )[0])}
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
+          </details>
         <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
         <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
-          <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
+          <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {selectedNodeIds.length > 1 && <><p className="readonly-note">Выбрано объектов: {selectedNodeIds.length}. Перетаскивание перемещает их одной операцией.</p><button type="button" onClick={groupSelection}>Сгруппировать</button></>}
             {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <button type="button" onClick={ungroupSelection}>Разгруппировать</button>}
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
@@ -1025,6 +1040,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" title={selected.node.kind === "group" ? "Сначала разгруппируйте объект" : undefined} onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked || selected.node.kind === "group"}>Удалить объект</button></>}
           </aside>
         </div>
+        </section>}
       </section>
     </div>
   </div>;

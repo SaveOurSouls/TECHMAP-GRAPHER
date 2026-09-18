@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { InfoHint } from "../InfoHint";
 import {
   clampScreenPosition,
   e4WireSelectionCapabilities,
@@ -22,6 +23,9 @@ export interface E4WireSelectionMenuProps {
   readonly onDifferentialPairChange: (state: E4DifferentialPairState | null) => void;
   readonly onScreenChange: (state: E4ScreenState | null) => void;
   readonly onClearGroup: () => void;
+  readonly detached?: boolean;
+  readonly onDetachedChange?: (detached: boolean) => void;
+  readonly onReroute?: () => void;
   readonly onDismiss?: () => void;
 }
 
@@ -48,6 +52,9 @@ export function E4WireSelectionMenu({
   onDifferentialPairChange,
   onScreenChange,
   onClearGroup,
+  detached = false,
+  onDetachedChange,
+  onReroute,
   onDismiss,
 }: E4WireSelectionMenuProps) {
   const capabilities = e4WireSelectionCapabilities(selectedWireIds);
@@ -234,6 +241,12 @@ export function E4WireSelectionMenu({
       </section>
 
       <footer className="e4wm-footer">
+        {onDetachedChange && <div>
+          <button type="button" disabled={disabled} aria-pressed={detached}
+            onClick={() => onDetachedChange(!detached)}>{detached ? "Вернуть привязку" : "Открепить привязку"}</button>
+          <InfoHint>Временно разрешает двигать сегменты через соседние провода. Электрические подключения и препятствия таблиц сохраняются. Для упорядочивания нажмите «Перестроить».</InfoHint>
+        </div>}
+        {onReroute && <button type="button" disabled={disabled} onClick={onReroute}>Перестроить</button>}
         <button
           type="button"
           disabled={disabled || !capabilities.canClearGroup || !canClearGroup}

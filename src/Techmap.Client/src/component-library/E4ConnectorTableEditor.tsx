@@ -1,4 +1,4 @@
-import { useMemo, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type FocusEvent, type KeyboardEvent } from "react";
 import {
   applyE4ConnectorRowEdit,
   materializeE4ConnectorArticle,
@@ -71,13 +71,16 @@ interface TextCellProps {
 }
 
 function TextCell({ value, label, disabled, onCommit }: TextCellProps) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
   const commit = (event: FocusEvent<HTMLInputElement>) => {
     if (event.currentTarget.value !== value) onCommit(event.currentTarget.value);
   };
   return <input
     type="text"
     aria-label={label}
-    defaultValue={value}
+    value={draft}
+    onChange={event => setDraft(event.target.value)}
     disabled={disabled}
     onBlur={commit}
     onKeyDown={commitOnEnter}
@@ -161,7 +164,7 @@ export function E4ConnectorTableEditor(props: E4ConnectorTableEditorProps) {
         <tbody>{materialized.rows.map((row, rowIndex) => {
           const terminals = compatibleTerminals(article, row.contactTypeGroupId);
           const terminalValue = row.standardTerminalArticleKey === null ? "" : articleIdentity(row.standardTerminalArticleKey);
-          return <tr key={row.seriesRowId}>
+          return <tr key={`${article.articleVariantId}:${row.seriesRowId}`}>
             {visibleColumns.map(column => <td key={column.id} className={`e4-table-editor__${COLUMN_CLASS[column.id]}`}>
               {column.id === "number" && <TextCell value={row.number} label={`Номер контакта, строка ${rowIndex + 1}`} disabled={Boolean(props.disabled)} onCommit={value => apply(row, { number: value })} />}
               {column.id === "name" && <TextCell value={row.name} label={`Назначение, строка ${rowIndex + 1}`} disabled={Boolean(props.disabled)} onCommit={value => apply(row, { name: value })} />}

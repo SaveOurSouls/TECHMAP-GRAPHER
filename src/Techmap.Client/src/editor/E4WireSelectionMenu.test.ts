@@ -103,6 +103,20 @@ describe("E4 wire selection menu handlers", () => {
     expect(onClearGroup).toHaveBeenCalledOnce();
   });
 
+  it("offers a temporary detached routing override", () => {
+    const changes: boolean[] = [];
+    const reroutes: number[] = [];
+    const { tree } = renderMenu({
+      onDetachedChange: value => changes.push(value),
+      onReroute: () => reroutes.push(1),
+    });
+    const detach = buttonWithText(tree, "Открепить привязку");
+    (detach.props.onClick as () => void)();
+    expect(changes).toEqual([true]);
+    (buttonWithText(tree, "Перестроить").props.onClick as () => void)();
+    expect(reroutes).toEqual([1]);
+  });
+
   it("switches the conducting terminal above, below and to both sides", () => {
     const onScreenChange = vi.fn();
     const { tree } = renderMenu({

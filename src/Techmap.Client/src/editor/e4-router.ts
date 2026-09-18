@@ -111,14 +111,14 @@ export const E4_BRIDGE_RADIUS = 7;
 export const E4_BRIDGE_MINIMUM_SPACING = E4_BRIDGE_RADIUS * 2 + 7;
 
 /**
- * Finds a shortest obstacle-aware orthogonal route. Length is minimized first;
- * the number of bends is the deterministic tie-breaker.
+ * Finds an obstacle-aware orthogonal route minimizing length plus crossing
+ * surcharge; the number of bends is the deterministic tie-breaker.
  */
 export function routeE4Wire(request: E4RoutingRequest): E4RouteResult {
   return routeE4WireThroughWaypoints(request, []);
 }
 
-/** Finds one globally shortest route through the supplied ordered mandatory points. */
+/** Searches one route through ordered mandatory points with the same routing score. */
 export function routeE4WireThroughWaypoints(
   request: E4RoutingRequest,
   waypoints: readonly Point[],

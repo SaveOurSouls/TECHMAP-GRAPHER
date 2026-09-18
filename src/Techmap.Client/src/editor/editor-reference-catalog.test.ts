@@ -33,8 +33,8 @@ describe("editor reference catalog", () => {
     };
     expect(componentTemplateSummaryToEditorCatalogItem(template)).toMatchObject({
       id: `component-template:${template.templateId}:7`,
-      title: "JST XH",
-      subtitle: "JST-XH · версия 7",
+      title: "JST-XH",
+      subtitle: "JST XH · версия 7",
       placement: "connector",
       componentTemplateId: template.templateId,
       componentTemplateVersion: 7,
@@ -60,13 +60,13 @@ describe("editor reference catalog", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       id: `component-template:${template.templateId}:7`,
-      title: "JST XH",
-      subtitle: "JST-XH · 2 артикула · версия 7",
+      title: "JST-XH",
+      subtitle: "JST XH · 2 артикула · версия 7",
       componentTemplateId: template.templateId,
       componentTemplateVersion: 7,
       componentArticles: template.articleBindings,
     });
-    expect(filterComponentTemplates([template], "b10b").map((item) => item.title)).toEqual(["JST XH"]);
+    expect(filterComponentTemplates([template], "b10b").map((item) => item.title)).toEqual(["JST-XH"]);
     expect(filterComponentTemplates([template], "jst")).toHaveLength(1);
   });
 

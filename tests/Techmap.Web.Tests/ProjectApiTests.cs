@@ -8,6 +8,23 @@ namespace Techmap.Web.Tests;
 
 public sealed class ProjectApiTests
 {
+    [Fact]
+    public async Task Project_deletion_requires_csrf_and_expected_revision()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var (_, project) = await SendProjectCommandAsync<ProjectDetailsResponse>(client, HttpMethod.Post,
+            "/api/v1/projects", new CreateProjectRequest("DELETE-SECURITY", "Test"), csrf);
+        var path = $"/api/v1/projects/{project.ProjectId:D}";
+        using var forbidden = await SendCommandAsync(client, HttpMethod.Delete, path, new DeleteProjectRequest(0), "wrong");
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        using var missingRevision = await SendCommandAsync(client, HttpMethod.Delete, path, new DeleteProjectRequest(null), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, missingRevision.StatusCode);
+        using var stillThere = await client.GetAsync(path, TestContext.Current.CancellationToken);
+        stillThere.EnsureSuccessStatusCode();
+    }
+
     private const string CanonicalOrigin = "http://127.0.0.1:18762";
 
     [Fact]

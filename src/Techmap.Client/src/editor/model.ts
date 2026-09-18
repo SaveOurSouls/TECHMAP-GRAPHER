@@ -1,4 +1,6 @@
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
+import { terminalArticleLabel } from "./terminal-article-label";
+import { clearDecorationSpans } from "./e4-decoration-spans";
 
 export type EditorView = "e4" | "drawing";
 
@@ -120,6 +122,8 @@ export type ConnectorE4TableColumn =
   | { readonly kind: "base"; readonly key: ConnectorBaseColumnKey; readonly x: number; readonly width: number }
   | { readonly kind: "custom"; readonly id: string; readonly label: string; readonly x: number; readonly width: number };
 
+export const templateNameColumnId = "template-name";
+
 export interface ConnectorE4TableGeometry {
   readonly width: number;
   readonly height: number;
@@ -187,7 +191,8 @@ export function connectorE4TableColumnWidth(
     : connectorE4TableMetrics.baseColumnWidths[key];
   const headerWidth = e4TextWidth(label) + connectorE4TableMetrics.cellHorizontalPadding +
     connectorE4TableMetrics.headerControlWidth;
-  const contentWidth = Math.max(0, ...values.map(e4TextWidth)) + connectorE4TableMetrics.cellHorizontalPadding;
+  const contentWidth = Math.max(0, ...values.map(e4TextWidth)) + connectorE4TableMetrics.cellHorizontalPadding +
+    (key === "terminal" ? 22 : 0);
   return Math.ceil(Math.min(
     connectorE4TableMetrics.maximumColumnWidth,
     Math.max(minimum, headerWidth, contentWidth),
@@ -214,6 +219,10 @@ export interface ConnectorContact {
 }
 
 export interface ConnectorInstance {
+  /** v5 uses the editable E4 table; graphical points belong to the drawing. */
+  readonly e4TableMode?: boolean;
+  /** Versioned compatibility supplement; never changes the pinned template. */
+  readonly terminalCatalog?: ConnectorTerminalCatalog;
   readonly id: string;
   readonly designation: string;
   /** Editable footer code for a free connector. Series connectors derive it from their library. */
@@ -224,6 +233,22 @@ export interface ConnectorInstance {
   readonly positions: Readonly<Record<EditorView, Point>>;
   readonly layerIds: Readonly<Record<EditorView, string>>;
   readonly libraryBinding?: ConnectorLibraryBinding;
+}
+
+export interface ConnectorTerminalCatalog {
+  readonly templateId: string;
+  readonly version: number;
+  readonly versionSha256: string;
+  readonly byContact: Readonly<Record<string, readonly string[]>>;
+}
+
+export function templateTerminalChoices(connector: ConnectorInstance, logicalContactId: string | undefined): readonly string[] {
+  if (connector.libraryBinding?.mode !== "template" || !logicalContactId) return [];
+  return [...new Set([
+    ...connector.libraryBinding.snapshot.contacts.find(contact => contact.logicalContactId === logicalContactId)
+      ?.allowedTerminalArticleKeys.map(article => article.articleKey) ?? [],
+    ...connector.terminalCatalog?.byContact[logicalContactId] ?? [],
+  ])];
 }
 
 export type WireEndpoint =
@@ -491,9 +516,11 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
           ...connector.contacts.map((contact) => column.key === "number" ? String(contact.number)
             : column.key === "contactType" ? contact.contactType
               : column.key === "circuit" ? contact.circuit
-                : column.key === "terminal" ? contact.terminalArticle
+                : column.key === "terminal" ? terminalArticleLabel(contact.terminalArticle)
                   : column.key === "wire" ? contact.wire
-                    : [contact.color, contact.secondaryColor].filter(Boolean).join(" / ")),
+                    // Colour is rendered as a swatch, so its name must not
+                    // resize the table and move every connected anchor.
+                    : ""),
         ],
       ),
     }));
@@ -510,6 +537,15 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
         connector.contacts.map((contact) => contact.customValues[field.id] ?? ""),
       ),
     }));
+  if (connector.libraryBinding?.mode === "template") {
+    const names = new Map(connector.libraryBinding.snapshot.contacts.map(contact => [contact.logicalContactId, contact.name]));
+    const templateName: ConnectorE4TableColumn = {
+      kind: "custom", id: templateNameColumnId, label: "Назначение", x: 0,
+      width: connectorE4TableColumnWidth(null, "Назначение", connector.contacts.map(contact => names.get(contact.logicalContactId ?? "") ?? "")),
+    };
+    const numberIndex = baseColumns.findIndex(column => column.kind === "base" && column.key === "number");
+    baseColumns.splice(numberIndex < 0 ? baseColumns.length : numberIndex + 1, 0, templateName);
+  }
   const contactsFirst = connector.schematic.orientation === "contacts-left";
   const orderedColumns = contactsFirst
     ? [...baseColumns, ...customColumns]
@@ -664,7 +700,8 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
       const start = wireEndpointE4Anchor(document, wire.from);
       const end = wireEndpointE4Anchor(document, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-      validateOrthogonalE4Route(start, wire.e4Route, end);
+      const screenBranch = [wire.from, wire.to].some(isScreenEndpoint) && [wire.from, wire.to].some(isJunctionEndpoint);
+      validateOrthogonalE4Route(start, wire.e4Route, end, screenBranch ? 0 : defaultE4WireLead);
     }
   }
   validateParsedGroups(document, wireIds);
@@ -821,8 +858,9 @@ export function wireScreenConnectionGeometry(
   });
   if (segmentLists.length === 0 || segmentLists.some((segments) => segments.length === 0)) return null;
 
-  const spans: ScreenRouteSpan[] = [];
-  const aligned = segmentLists.every((segments) => segments.length === segmentLists[0]!.length);
+  let spans: ScreenRouteSpan[] = [];
+  const aligned = segmentLists.every((segments) => segments.length === segmentLists[0]!.length &&
+    segments.every((segment, index) => segment.orientation === segmentLists[0]![index]!.orientation));
   if (aligned) for (let index = 0; index < segmentLists[0]!.length; index += 1) {
     const selected = segmentLists.map((segments) => segments[index]!);
     if (selected.some((segment) => segment.orientation !== selected[0]!.orientation)) continue;
@@ -868,6 +906,9 @@ export function wireScreenConnectionGeometry(
       }
     }
   }
+  spans = clearDecorationSpans(spans, document.connectors.map(connector => ({
+    ...connector.positions.e4, ...connectorE4TableGeometry(connector),
+  })), e4ScreenAlongSize / 2, span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
   if (spans.length === 0) return null;
   spans.sort((left, right) => left.routeIndex - right.routeIndex || left.start - right.start);
   const pathLength = spans.reduce((sum, span) => sum + span.end - span.start, 0);
@@ -1135,6 +1176,8 @@ function parseConnector(value: unknown): ConnectorInstance {
     }
   }
   const connector: ConnectorInstance = {
+    ...(record.e4TableMode === true ? { e4TableMode: true } : {}),
+    ...(record.terminalCatalog === undefined ? {} : { terminalCatalog: parseConnectorTerminalCatalog(record.terminalCatalog) }),
     id: requireText(record.id, "ID соединителя"),
     designation,
     libraryCode: record.libraryCode === undefined
@@ -1223,6 +1266,9 @@ function validateComponentTemplateBinding(
   binding: Extract<ConnectorLibraryBinding, { readonly mode: "template" }>,
 ): void {
   validateTemplateBindingSnapshotIdentity(binding);
+  if (connector.terminalCatalog && connector.terminalCatalog.templateId !== binding.templateId) {
+    throw new Error("Список терминалов принадлежит другому шаблону.");
+  }
   if (connector.partNumber !== binding.article.articleKey) {
     throw new Error("Артикул соединителя не совпадает с закреплённым вариантом шаблона.");
   }
@@ -1241,11 +1287,24 @@ function validateComponentTemplateBinding(
         contact.number !== index + 1 || contact.libraryContact !== null) {
       throw new Error("Контакты не соответствуют закреплённой материализации шаблона.");
     }
-    if (contact.terminalArticle && !snapshotContact.allowedTerminalArticleKeys.some((candidate) =>
-      candidate.articleKey === contact.terminalArticle)) {
+    if (contact.terminalArticle && !templateTerminalChoices(connector, contact.logicalContactId).includes(contact.terminalArticle)) {
       throw new Error("Терминал контакта не входит в список совместимых терминалов закреплённого шаблона.");
     }
   });
+}
+
+function parseConnectorTerminalCatalog(value: unknown): ConnectorTerminalCatalog {
+  const record = requireRecord(value, "Список терминалов задан неверно.");
+  const byContact = requireRecord(record.byContact, "Контакты списка терминалов заданы неверно.");
+  return {
+    templateId: requireText(record.templateId, "ID шаблона терминалов"),
+    version: requireInteger(record.version, "Версия списка терминалов", 1, 1_000_000),
+    versionSha256: parseSha256(record.versionSha256, "Хэш списка терминалов"),
+    byContact: Object.fromEntries(Object.entries(byContact).map(([key, values]) => {
+      if (!Array.isArray(values) || values.length > 256) throw new Error("Список терминалов контакта задан неверно.");
+      return [key, [...new Set(values.map(value => requireBoundedText(value, "Артикул терминала", 512)))]];
+    })),
+  };
 }
 
 function validateTemplateBindingSnapshotIdentity(
@@ -1418,7 +1477,7 @@ function parseConnectorLibraryContact(value: unknown): ConnectorLibraryContact |
   };
 }
 
-function parseConnectorSchematic(value: unknown): ConnectorSchematicPresentation {
+export function parseConnectorSchematic(value: unknown): ConnectorSchematicPresentation {
   if (value === undefined) {
     return { orientation: "contacts-right", baseColumns: createDefaultConnectorBaseColumns(), customFields: [] };
   }

@@ -132,8 +132,8 @@ public sealed class SqliteProjectComponentSnapshotStore(
 
     private static void ValidateSource(ComponentTemplateVersion source)
     {
-        if (source.TemplateId == Guid.Empty || source.Version <= 0 || source.SchemaVersion is not (3 or 4))
-            throw Invalid("component_template_version_invalid", "Only a published component template version 3 or 4 can be placed.", "sourceTemplateId");
+        if (source.TemplateId == Guid.Empty || source.Version <= 0 || source.SchemaVersion is not (3 or 4 or 5))
+            throw Invalid("component_template_version_invalid", "Only a published component template version 3, 4 or 5 can be placed.", "sourceTemplateId");
         var canonical = SqliteComponentTemplateStore.ValidateAndCanonicalizeContent(source.ContentJson, source.SchemaVersion);
         if (!string.Equals(canonical, source.ContentJson, StringComparison.Ordinal))
             throw Invalid("component_template_version_invalid", "The component template content is not canonical.", "sourceTemplateId");

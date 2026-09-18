@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyEditorCommand, createConnector, createWire, normalizeE4RoutingDocument } from "./commands";
+import { applyEditorCommand, createConnector, createWire, e4RoutingIssues, normalizeE4RoutingDocument } from "./commands";
 import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEditorCommand } from "./history";
 import { validateE4Route } from "./e4-router";
+import { designToScene } from "./HarnessDesignEditor";
+import { getE4ScreenLayout, getE4DifferentialPairLayout } from "./CanvasViewport";
 import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
 import { selectConnectorSeriesArticle } from "./connector-series";
 import {
@@ -71,6 +73,99 @@ function templateConnector(): ConnectorInstance {
 }
 
 describe("shared harness editor model", () => {
+  it("refreshes compatible terminals without changing the pinned template identity", () => {
+    const connector = templateConnector();
+    let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
+    document = applyEditorCommand(document, {
+      type: "refresh-template-terminals",
+      connectorId: connector.id,
+      catalog: {
+        templateId: "template-1", version: 4, versionSha256: "b".repeat(64),
+        byContact: { "logical-1": ["T-3"] },
+      },
+    });
+    document = applyEditorCommand(document, {
+      type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id,
+      terminalArticle: "T-3",
+    });
+    expect(document.connectors[0]!.libraryBinding).toMatchObject({
+      mode: "template", templateId: "template-1", templateVersion: 3,
+      versionSha256: "a".repeat(64), articleVariantId: "variant-1",
+    });
+    expect(document.connectors[0]!.contacts[0]!.terminalArticle).toBe("T-3");
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(document))).connectors[0]!.contacts[0]!.terminalArticle).toBe("T-3");
+    expect(document.connectors[0]!.libraryBinding).toEqual(connector.libraryBinding);
+  });
+
+  it("keeps the full screen and braid outside tables, with the painted port exactly at the electrical endpoint", () => {
+    const base = connectionDocument();
+    for (const position of [0, 0.25, 0.8, 1]) {
+      const document = applyEditorCommand(base, { type: "create-screen", screen: {
+        id: "screen", wireIds: ["w1", "w2"], position, width: 46, label: "SH", terminalSide: "both",
+      } });
+      const scene = designToScene(document, "e4");
+      const geometry = wireScreenConnectionGeometry(document, "screen")!;
+      const painted = getE4ScreenLayout(document.screens[0]!, scene)!;
+      expect(painted.center).toEqual(geometry.center);
+      expect(painted.terminals).toEqual(geometry.terminals);
+      expect(painted.center.x - painted.alongSize / 2).toBeGreaterThan(connectorE4TableGeometry(document.connectors[0]!).width);
+      expect(painted.center.x + painted.alongSize / 2).toBeLessThan(document.connectors[1]!.positions.e4.x);
+      const pair = getE4DifferentialPairLayout({ id: "pair", wireIds: ["w1", "w2"], step: 25, amplitude: 5 }, scene)!;
+      expect(pair.motifs[0]!.coloredFrom).toBeGreaterThan(connectorE4TableGeometry(document.connectors[0]!).width);
+      expect(pair.motifs.at(-1)!.coloredTo).toBeLessThan(document.connectors[1]!.positions.e4.x);
+    }
+  });
+
+  it("changes a swatch without moving anchors or rejecting an existing routing collision", () => {
+    const valid = singleWireConnectionDocument();
+    const blocked = { ...valid, connectors: [...valid.connectors,
+      createConnector("obstacle", "X3", 2, { x: 650, y: 30 })] };
+    expect(e4RoutingIssues(blocked).length).toBeGreaterThan(0);
+    const before = blocked.connectors.map(connectorE4TableGeometry);
+    const changed = applyEditorCommand(blocked, { type: "update-contact", connectorId: "x1",
+      contactId: "x1:contact:1", color: "Красный", secondaryColor: "Жёлтый" });
+    expect(changed.connectors.map(connectorE4TableGeometry)).toEqual(before);
+    expect(changed.wires[0]!.color).not.toBe(blocked.wires[0]!.color);
+    expect(changed.wires[0]!.e4Route).toEqual(blocked.wires[0]!.e4Route);
+    expect(changed.connectors[1]!.contacts[0]).toMatchObject({ color: "Красный", secondaryColor: "Жёлтый" });
+    expect(() => parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed)))).not.toThrow();
+  });
+
+  it("commits a temporarily blocked drag, survives reload and repairs on the next drag", () => {
+    const valid = singleWireConnectionDocument();
+    const blocked = applyEditorCommand(valid, { type: "move-connector", connectorId: "x2", view: "e4",
+      position: { x: 200, y: 30 } });
+    expect(blocked.connectors[1]!.positions.e4).toEqual({ x: 200, y: 30 });
+    expect(e4RoutingIssues(blocked).length).toBeGreaterThan(0);
+    const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(blocked)));
+    const repaired = applyEditorCommand(restored, { type: "move-connector", connectorId: "x2", view: "e4",
+      position: { x: 1200, y: 0 } });
+    expect(e4RoutingIssues(repaired)).toEqual([]);
+    expect(repaired.wires[0]!.from).toEqual(valid.wires[0]!.from);
+    expect(repaired.wires[0]!.to).toEqual(valid.wires[0]!.to);
+  });
+
+  it("projects the screen branch straight onto its target and follows screen movement", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, { type: "create-screen",
+      screen: { id: "screen", wireIds: ["w2"], position: 0.5, width: 16, label: "SH" } });
+    document = applyEditorCommand(document, { type: "create-junction",
+      junction: { id: "j", position: { x: 850, y: 64 }, wireIds: ["w1", "branch"] },
+      branchWire: createWire("branch", createScreenEndpoint("screen"), createJunctionEndpoint("j")) });
+    const port = wireEndpointE4Anchor(document, createScreenEndpoint("screen"))!.position;
+    expect(document.junctions[0]!.position).toEqual({ x: port.x, y: 64 });
+    expect(document.wires.find((wire) => wire.id === "branch")!.e4Route).toEqual([]);
+    expect(() => parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)))).not.toThrow();
+    const moved = applyEditorCommand(document, { type: "update-screen", screenId: "screen", position: 0.7 });
+    const movedPort = wireEndpointE4Anchor(moved, createScreenEndpoint("screen"))!.position;
+    expect(movedPort.x).not.toBe(port.x);
+    expect(moved.junctions[0]!.position).toEqual({ x: movedPort.x, y: 64 });
+    expect(moved.wires.find((wire) => wire.id === "branch")!.e4Route).toEqual([]);
+    expect(e4RoutingIssues(moved)).toEqual([]);
+    expect(() => applyEditorCommand(moved, { type: "set-e4-wire-route", wireId: "branch",
+      route: [{ x: movedPort.x, y: 40 }, { x: 850, y: 40 }] })).toThrow(/прямым/);
+  });
+
   it("keeps E4 and drawing positions separate while sharing one connector", () => {
     const connector = createConnector("x1", "X1", 2, { x: 10, y: 20 }, { x: 40, y: 50 });
     const added = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });
@@ -872,6 +967,25 @@ describe("shared harness editor model", () => {
       wire.e4Route,
       { position: connectorContactPosition(document.connectors[1]!, "x2:contact:1", "e4")!, leadDirection: "left" },
     )).not.toThrow();
+  });
+
+  it("detaches only geometric clearance and then optimizes the selected wire with its neighbours", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, { type: "set-e4-wire-route", wireId: "w1",
+      route: [{ x: 648, y: 64 }, { x: 740, y: 64 }, { x: 740, y: 160 },
+        { x: 900, y: 160 }, { x: 900, y: 64 }, { x: 976, y: 64 }] });
+    // A manually pinned neighbour must not prevent a temporary drag.
+    document = { ...document, wires: document.wires.map(wire => ({ ...wire, e4RouteMode: "manual" as const })) };
+    const endpoints = document.wires.map(wire => [wire.from, wire.to]);
+    const moved = applyEditorCommand(document, { type: "move-e4-wire-segment", wireId: "w1",
+      segmentIndex: 3, position: { x: 0, y: 88 }, detached: true });
+    expect(moved.wires[0]!.e4Route[2]!.y).toBe(88);
+    expect(moved.wires.map(wire => [wire.from, wire.to])).toEqual(endpoints);
+    expect(e4RoutingIssues(moved).length).toBeGreaterThan(0);
+    const repaired = applyEditorCommand(moved, { type: "reroute-e4-wires", wireIds: ["w1", "w2"] });
+    expect(e4RoutingIssues(repaired)).toEqual([]);
+    expect(repaired.wires[0]!.e4Route).toEqual([]);
+    expect(repaired.wires.map(wire => [wire.from, wire.to])).toEqual(endpoints);
   });
 
   it("preserves manual E4 guide geometry when a connected connector moves", () => {

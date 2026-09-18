@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArticlePatternExpansionError, expandArticlePattern } from "./article-pattern-expansion";
+import { expandArticlePattern } from "./article-pattern-expansion";
 import type { ArticleKeyV3, TemplateContentV3 } from "./template-model-v3";
 import { articleContactCountIssueV3, articleContactCountRuleV3, TEMPLATE_V3_LIMITS } from "./template-model-v3";
 import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
 import "./TemplateSeriesPanelV3.css";
+import { InfoHint } from "../InfoHint";
 
 export interface NewArticleVariantV3Input {
   readonly sourceId: string;
   readonly entityType: string;
   readonly articleKey: string;
+  readonly contactCount?: number;
 }
 
 export const CONNECTOR_ARTICLE_SOURCE_V3 = "БД.СОЕД";
@@ -29,6 +31,15 @@ export function contactTypeNameExistsV3(
   return Boolean(normalized) && content.contactTypeGroups.some(
     group => group.name.trim().toLocaleLowerCase("ru-RU") === normalized,
   );
+}
+
+export function patternContactCount(pattern: string, article: string): number {
+  const match = /X{2,}/.exec(pattern.trim());
+  if (!match) throw new Error("В шаблоне отсутствует XX.");
+  const suffixLength = pattern.trim().length - match.index - match[0].length;
+  const count = Number(article.slice(match.index, suffixLength ? -suffixLength : undefined));
+  if (!Number.isSafeInteger(count) || count < 0 || count > 2000) throw new Error("Количество пинов из шаблона должно быть от 0 до 2000.");
+  return count;
 }
 
 export interface ArticleAddPreviewV3 {
@@ -58,10 +69,11 @@ export function articleAddPreviewV3(
     if (!pattern.trim() && !variables.trim()) return { articles: [], error: null };
     try {
       articles = expandArticlePattern(pattern, variables, { maximumArticleCount: remaining });
+      articles.forEach(article => patternContactCount(pattern, article));
     } catch (caught) {
       return {
         articles: [],
-        error: caught instanceof ArticlePatternExpansionError ? caught.message : "Не удалось проверить шаблон артикулов.",
+        error: caught instanceof Error ? caught.message : "Не удалось проверить шаблон артикулов.",
       };
     }
   }
@@ -76,23 +88,10 @@ export function articleAddPreviewV3(
 }
 
 export interface TemplateSeriesPanelV3Props {
+  readonly independentE4?: boolean;
   readonly content: TemplateContentV3;
   readonly selectedArticleVariantId?: string | null;
-  readonly articlePreviewMessage?: string | null;
-  readonly articlePreviewError?: string | null;
-  readonly articlePreviewRows?: readonly {
-    readonly key: string;
-    readonly number: string;
-    readonly name: string;
-    readonly circuitText: string | null;
-    readonly contactTypeGroupId: string | null;
-  }[];
   readonly onSelectArticleVariant?: (variantId: string | null) => void;
-  readonly connectorArticleQuery?: string;
-  readonly connectorArticleSuggestions?: readonly NewArticleVariantV3Input[];
-  readonly connectorArticleSearchState?: "idle" | "loading" | "ready" | "error";
-  readonly connectorArticleSearchMessage?: string | null;
-  readonly onConnectorArticleQueryChange?: (query: string) => void;
   readonly terminalArticleQuery?: string;
   readonly terminalArticleSuggestions?: readonly ArticleKeyV3[];
   readonly terminalArticleSearchState?: "idle" | "loading" | "ready" | "error";
@@ -348,10 +347,10 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
     if (next) onChange?.(next);
   };
   return <section className="series-v3-series-terminals" aria-label="Совместимые терминалы серии">
-    <header><div><strong>Совместимые терминалы серии</strong><small>Этот список доступен в поле «Терминал» для всех строк Э4 серии.</small></div>
+    <header><div><strong>Совместимые терминалы серии</strong><InfoHint>Назначьте тип контакта и стандартный терминал для серии. Ручные правки терминалов в строках артикулов сохраняются.</InfoHint></div>
       <button type="button" disabled={!onChange} onClick={addTerminal}>+ Вручную</button></header>
     <div className="series-v3-terminal-reference-search">
-      <label>Найти терминал в активной базе <small>(technology-terminals)</small>
+      <label>Добавить терминал
         <input type="search" value={terminalQuery} placeholder="Например, SXH-001T"
           onChange={event => onTerminalQueryChange?.(event.target.value)} />
       </label>
@@ -359,7 +358,7 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
       {terminalSearchMessage && <small className="series-v3-reference-error" role="alert">{terminalSearchMessage}</small>}
       {terminalSearchState === "ready" && terminalQuery.trim() && terminalSuggestions.length === 0 && <small>Подходящие терминалы не найдены.</small>}
       {terminalSuggestions.length > 0 && <div className="series-v3-terminal-reference-options" role="listbox" aria-label="Терминалы из справочника для серии">
-        {terminalSuggestions.map(terminal => {
+        {terminalSuggestions.filter(terminal => !terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal))).map(terminal => {
           const exists = terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal));
           return <button type="button" key={terminalIdentity(terminal)} disabled={exists}
             onClick={() => addTerminalFromReference(terminal)}>
@@ -397,7 +396,33 @@ function VariantIdentityEditor({ variant, onUpdate }: {
     onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />;
 }
 
-function ArticleVariantsTable({ content, compatibleTerminals, selectedArticleVariantId, onSelect, onUpdate, onDelete, onSet }: {
+function ContactCountInput({ value, label, onFocus, onCommit, title, invalid }: {
+  value: number; label: string; onFocus: () => void; onCommit: (value: number) => void; title: string; invalid: boolean;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const count = Number(draft);
+    if (draft.trim() && Number.isSafeInteger(count) && count >= 0 && count <= 2000) {
+      if (count !== value) onCommit(count);
+    } else setDraft(String(value));
+  };
+  return <input type="number" min="0" max="2000" step="1" value={draft} aria-label={label} aria-invalid={invalid || undefined} title={title}
+    onFocus={onFocus} onChange={event => setDraft(event.target.value)} onBlur={commit}
+    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
+}
+
+function ArticleVariantsTable({ independentE4, content, compatibleTerminals, selectedArticleVariantId, onSelect, onUpdate, onDelete, onSet }: {
+  readonly independentE4?: boolean;
+  /** Deprecated compatibility inputs; the series editor no longer renders a connector search. */
+  readonly articlePreviewMessage?: string | null;
+  readonly articlePreviewError?: string | null;
+  readonly articlePreviewRows?: readonly unknown[];
+  readonly connectorArticleQuery?: string;
+  readonly connectorArticleSuggestions?: readonly NewArticleVariantV3Input[];
+  readonly connectorArticleSearchState?: "idle" | "loading" | "ready" | "error";
+  readonly connectorArticleSearchMessage?: string | null;
+  readonly onConnectorArticleQueryChange?: (query: string) => void;
   readonly content: TemplateContentV3;
   readonly compatibleTerminals: readonly ArticleKeyV3[];
   readonly selectedArticleVariantId?: string | null;
@@ -414,21 +439,17 @@ function ArticleVariantsTable({ content, compatibleTerminals, selectedArticleVar
         <th aria-label="Действия" />
       </tr></thead>
       <tbody>{content.articleVariants.map(variant => <tr key={variant.id}
-        className={variant.id === selectedArticleVariantId ? "selected" : undefined}>
-        <td><VariantIdentityEditor variant={variant} onUpdate={onUpdate} /></td>
+        className={variant.id === selectedArticleVariantId ? "selected" : undefined} onClick={() => onSelect?.(variant.id)} onFocus={() => onSelect?.(variant.id)}>
+        <td><button type="button" className="series-v3-select-article" aria-label={`Открыть артикул ${variant.articleKey}`} aria-pressed={variant.id === selectedArticleVariantId} onClick={() => onSelect?.(variant.id)}>▸</button><VariantIdentityEditor variant={variant} onUpdate={onUpdate} /></td>
         {content.contactTypeGroups.map(group => {
           const editor = articleContactGroupEditorValueV3(content, variant.id, group.id);
-          const help = articleContactGroupCountHelpV3(content, group.id, editor.contactCount, editor.inherited);
+          const help = independentE4 ? { invalid: false, text: "Количество строк Э4 от 0 до 2000; графика задаётся отдельно." } : articleContactGroupCountHelpV3(content, group.id, editor.contactCount, editor.inherited);
           return <td key={group.id} className="series-v3-count-cell">
-            <input type="number" min="0" max="2000" step="1" value={editor.contactCount}
-              aria-label={`Количество контактов ${group.name} артикула ${variant.articleKey}`}
-              aria-invalid={help.invalid || undefined} title={help.text}
+            <ContactCountInput value={editor.contactCount}
+              label={`Количество контактов ${group.name} артикула ${variant.articleKey}`}
+              invalid={help.invalid} title={help.text}
               onFocus={() => onSelect?.(variant.id)}
-              onChange={event => {
-                const count = Number(event.target.value);
-                if (Number.isSafeInteger(count) && count >= 0 && count <= 2_000)
-                  onSet(variant.id, group.id, count, compatibleTerminals);
-              }} />
+              onCommit={count => onSet(variant.id, group.id, count, compatibleTerminals)} />
           </td>;
         })}
         <td className="series-v3-row-actions">
@@ -471,19 +492,28 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
       sourceId: CONNECTOR_ARTICLE_SOURCE_V3,
       entityType: CONNECTOR_ARTICLE_ENTITY_V3,
       articleKey: value,
+      ...(articleAddMode === "pattern" ? { contactCount: patternContactCount(articlePattern, value) } : {}),
     }));
     const accepted = props.onAddArticleVariants(inputs);
     if (!accepted) return;
     if (articleAddMode === "single") setArticleKey("");
     else setArticleVariables("");
   };
-  const addReferenceArticle = (input: NewArticleVariantV3Input) => {
-    if (props.content.articleVariants.some(variant => variant.articleKey === input.articleKey)) return;
-    props.onAddArticleVariants([input]);
-  };
-  return <details className="template-series-v3">
-    <summary>Серия и артикулы <span>{props.content.articleVariants.length}</span></summary>
+  return <section className="template-series-v3" aria-label="Настройка серии">
     <div className="template-series-v3-body">
+      <section className="series-v3-groups" aria-label="Группы типов контактов">
+        <header><strong>Типы контактов</strong><InfoHint>Группы контактов серии: сигнальные, силовые и другие.</InfoHint></header>
+        <form className="series-v3-add-contact-type" onSubmit={addGroup}>
+          <label>Тип контакта<select aria-label="Новый тип контакта" value={contactTypeChoice} onChange={event => setContactTypeChoice(event.target.value)}>
+            {CONTACT_TYPE_PRESETS_V3.map(preset => <option key={preset} value={preset}>{preset}</option>)}
+            <option value={CUSTOM_CONTACT_TYPE_V3}>Другой тип</option>
+          </select></label>
+          {contactTypeChoice === CUSTOM_CONTACT_TYPE_V3 && <label>Название типа<input value={customContactTypeName} onChange={event => setCustomContactTypeName(event.target.value)} placeholder="Например, коаксиальные" aria-label="Название другого типа контакта" /></label>}
+          <button type="submit" disabled={!pendingContactTypeName || duplicateContactType}>+ Тип</button>
+          {duplicateContactType && <p className="series-v3-group-error" role="alert">Тип «{pendingContactTypeName}» уже добавлен.</p>}
+        </form>
+        {props.content.contactTypeGroups.length ? <ul>{props.content.contactTypeGroups.map(group => <GroupNameEditor key={group.id} id={group.id} name={group.name} onRename={props.onRenameContactTypeGroup} onDelete={props.onDeleteContactTypeGroup} />)}</ul> : <p>Типы контактов ещё не добавлены.</p>}
+      </section>
       <SeriesTerminalEditor
         terminals={props.compatibleTerminalArticleKeys ?? []}
         groups={props.content.contactTypeGroups}
@@ -498,87 +528,11 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
         terminalSearchMessage={props.terminalArticleSearchMessage ?? null}
         onTerminalQueryChange={props.onTerminalArticleQueryChange}
       />
-      <details className="series-v3-guide">
-        <summary>Как заполнить шаблон</summary>
-        <ol aria-label="Порядок заполнения шаблона">
-          <li>Укажите серию соединителя и краткое описание.</li>
-          <li>Добавьте нужные типы контактов. В одной серии может быть несколько типов.</li>
-          <li>Добавьте артикулы по одному или массово по шаблону с <code>XX</code>. Ведущие нули сохраняются.</li>
-          <li>Для каждого артикула задайте количество контактов каждого типа.</li>
-          <li>Укажите допустимые терминалы из БД.ТЕР.</li>
-          <li>Выберите артикул и проверьте автоматически подготовленную таблицу Э4.</li>
-          <li>Сохраните новую версию серии.</li>
-        </ol>
-        <p>Основной вид Э4 всегда формируется как таблица. Редактор графических примитивов используется только для вспомогательных видов и чертежа.</p>
-      </details>
-      <section className="series-v3-preview" aria-label="Предпросмотр артикула серии">
-        <label>Артикул для предпросмотра<select value={props.selectedArticleVariantId ?? ""} onChange={event => props.onSelectArticleVariant?.(event.target.value || null)}>
-          <option value="">Параметры шаблона</option>
-          {props.content.articleVariants.map(variant => <option key={variant.id} value={variant.id}>{variant.articleKey}</option>)}
-        </select></label>
-        {props.articlePreviewError ? <p className="series-v3-preview-error" role="alert">{props.articlePreviewError}</p>
-          : props.articlePreviewMessage ? <p className="series-v3-preview-status" role="status">{props.articlePreviewMessage}</p>
-            : <p>Выберите артикул, чтобы проверить строки таблицы Э4.</p>}
-        {props.articlePreviewRows && props.articlePreviewRows.length > 0 && <div className="series-v3-preview-table-wrap">
-          <div className="series-v3-preview-rows" role="table" aria-label="Материализованные строки контактов">
-            <div role="rowgroup"><div role="row"><strong role="columnheader">№</strong><strong role="columnheader">Группа</strong><strong role="columnheader">Цепь / имя</strong></div></div>
-            <div role="rowgroup">{props.articlePreviewRows.slice(0, 12).map(row => <div role="row" key={row.key}>
-              <span role="cell">{row.number}</span>
-              <span role="cell">{props.content.contactTypeGroups.find(group => group.id === row.contactTypeGroupId)?.name ?? "—"}</span>
-              <span role="cell">{row.circuitText || row.name}</span>
-            </div>)}</div>
-          </div>
-          {props.articlePreviewRows.length > 12 && <small>Показаны 12 из {props.articlePreviewRows.length}</small>}
-        </div>}
-      </section>
-      <section className="series-v3-groups" aria-label="Группы типов контактов">
-        <header><strong>Типы контактов</strong><small>Группы контактов серии: сигнальные, силовые и другие</small></header>
-        <form className="series-v3-add-contact-type" onSubmit={addGroup}>
-          <label>Тип контакта<select aria-label="Новый тип контакта" value={contactTypeChoice} onChange={event => setContactTypeChoice(event.target.value)}>
-            {CONTACT_TYPE_PRESETS_V3.map(preset => <option key={preset} value={preset}>{preset}</option>)}
-            <option value={CUSTOM_CONTACT_TYPE_V3}>Другой тип</option>
-          </select></label>
-          {contactTypeChoice === CUSTOM_CONTACT_TYPE_V3 && <label>Название типа<input value={customContactTypeName} onChange={event => setCustomContactTypeName(event.target.value)} placeholder="Например, коаксиальные" aria-label="Название другого типа контакта" /></label>}
-          <button type="submit" disabled={!pendingContactTypeName || duplicateContactType}>+ Тип</button>
-          {duplicateContactType && <p className="series-v3-group-error" role="alert">Тип «{pendingContactTypeName}» уже добавлен.</p>}
-        </form>
-        {props.content.contactTypeGroups.length ? <ul>{props.content.contactTypeGroups.map(group => <GroupNameEditor key={group.id} id={group.id} name={group.name} onRename={props.onRenameContactTypeGroup} onDelete={props.onDeleteContactTypeGroup} />)}</ul> : <p>Типы контактов ещё не добавлены.</p>}
-      </section>
       <section className="series-v3-variants" aria-label="Артикулы серии">
-        <header><strong>Артикулы серии</strong><small>Каждый артикул задаёт число контактов по группам</small></header>
-        {props.onConnectorArticleQueryChange && <div className="series-v3-reference-search">
-          <label>Добавить из справочника соединителей
-            <input
-              type="search"
-              aria-label="Поиск артикула в справочнике соединителей"
-              value={props.connectorArticleQuery ?? ""}
-              placeholder="Начните вводить артикул"
-              autoComplete="off"
-              onChange={event => props.onConnectorArticleQueryChange?.(event.currentTarget.value)}
-            />
-          </label>
-          {props.connectorArticleSearchState === "loading" && <p role="status">Ищем в активном справочнике…</p>}
-          {props.connectorArticleSearchMessage && <p className="series-v3-reference-error" role="alert">{props.connectorArticleSearchMessage}</p>}
-          {props.connectorArticleSearchState === "ready" && (props.connectorArticleQuery ?? "").trim() &&
-            (props.connectorArticleSuggestions?.length ?? 0) === 0 && <p>Подходящие артикулы не найдены.</p>}
-          {(props.connectorArticleSuggestions?.length ?? 0) > 0 && <div className="series-v3-reference-options" role="listbox" aria-label="Артикулы из справочника соединителей">
-            {props.connectorArticleSuggestions!.map(suggestion => {
-              const added = props.content.articleVariants.some(variant => variant.articleKey === suggestion.articleKey);
-              return <button
-                type="button"
-                role="option"
-                aria-selected={added}
-                key={`${suggestion.sourceId}:${suggestion.entityType}:${suggestion.articleKey}`}
-                disabled={added}
-                onClick={() => addReferenceArticle(suggestion)}
-              ><strong>{suggestion.articleKey}</strong><span>{added ? "Уже в серии" : "+ Добавить"}</span></button>;
-            })}
-          </div>}
-          <small>Поиск выполняется в опубликованном активном справочнике. Ручной ввод и массовый шаблон остаются доступны ниже.</small>
-        </div>}
+        <header><strong>Артикулы серии</strong><InfoHint>Каждый артикул задаёт число контактов по группам.{props.independentE4 && " Количество строк Э4 — от 0 до 2000; графика задаётся отдельно."}</InfoHint></header>
         <form className="series-v3-add-variant" onSubmit={addVariants}>
           <fieldset className="series-v3-add-mode">
-            <legend>Способ добавления</legend>
+            <legend>Способ добавления <InfoHint>XX задаёт количество пинов первого типа контакта. Другие количества можно изменить в таблице.</InfoHint></legend>
             <label><input type="radio" name="article-add-mode" value="single" checked={articleAddMode === "single"} onChange={() => setArticleAddMode("single")} />Один артикул</label>
             <label><input type="radio" name="article-add-mode" value="pattern" checked={articleAddMode === "pattern"} onChange={() => setArticleAddMode("pattern")} />По шаблону</label>
           </fieldset>
@@ -595,12 +549,12 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
           <button type="submit" disabled={Boolean(addPreview.error) || addPreview.articles.length === 0}>+ {addPreview.articles.length > 1 ? `${addPreview.articles.length} артикулов` : "Артикул"}</button>
         </form>
         {props.content.articleVariants.length ? <>
-          <ArticleVariantsTable content={props.content} compatibleTerminals={props.compatibleTerminalArticleKeys ?? []} selectedArticleVariantId={props.selectedArticleVariantId}
+          <ArticleVariantsTable independentE4={props.independentE4} content={props.content} compatibleTerminals={props.compatibleTerminalArticleKeys ?? []} selectedArticleVariantId={props.selectedArticleVariantId}
             onSelect={props.onSelectArticleVariant} onUpdate={props.onUpdateArticleVariant}
             onDelete={props.onDeleteArticleVariant} onSet={props.onSetArticleContactGroup} />
           {!props.content.contactTypeGroups.length && <p>Создайте хотя бы один тип контакта, чтобы появилась колонка количества.</p>}
         </> : <p>Артикулы серии ещё не добавлены.</p>}
       </section>
     </div>
-  </details>;
+  </section>;
 }

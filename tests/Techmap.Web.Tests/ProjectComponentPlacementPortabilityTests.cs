@@ -9,15 +9,33 @@ namespace Techmap.Web.Tests;
 
 public sealed class ProjectComponentPlacementPortabilityTests
 {
-    [Fact]
-    public async Task Export_import_remaps_component_ids_but_preserves_wire_cable_and_template_identity()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task Backup_accepts_placed_component_schemas_used_by_startup_validation(int schemaVersion)
+    {
+        using var fixture = Fixture.Create();
+        using var storage = SqliteStorage.Open(fixture.SourceDataRoot);
+        _ = CreateSourceGraph(storage, schemaVersion);
+        using var backups = new SqliteStorageBackupService(fixture.SourceDataRoot, storage.Layout.DatabasePath);
+        var result = await backups.CreateAsync(
+            new StorageBackupRequest(Path.Combine(fixture.Root, "backups"), "0.19.0-m4-05"),
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(result);
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task Export_import_remaps_component_ids_but_preserves_wire_cable_and_template_identity(int schemaVersion)
     {
         using var fixture = Fixture.Create();
         SourceGraph source;
         await using (var sourceLease = DataRootLease.Acquire(fixture.SourceDataRoot))
         {
             using var sourceStorage = SqliteStorage.Open(sourceLease.CanonicalPath);
-            source = CreateSourceGraph(sourceStorage, schemaVersion: 4);
+            source = CreateSourceGraph(sourceStorage, schemaVersion);
             await new SqliteProjectExportService(sourceLease, sourceStorage).ExportAsync(
                 new ProjectExportRequest(source.ProjectId, fixture.ArchivePath, "0.4.0-m3.01"),
                 TestContext.Current.CancellationToken);
@@ -103,7 +121,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var article = ComponentTemplateContentV3ValidatorTests.ValidArticleBindings.Single();
         var template = new SqliteComponentTemplateStore(storage, TimeProvider.System).Create(
             "XH", "XH series", [article], schemaVersion,
-            schemaVersion == 4
+            schemaVersion == 5 ? ComponentTemplateContentV5ValidatorTests.ValidContent().ToJsonString() : schemaVersion == 4
                 ? ComponentTemplateContentV4ValidatorTests.ValidContentJson
                 : ComponentTemplateContentV3ValidatorTests.ValidContentJson);
         var store = new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System);

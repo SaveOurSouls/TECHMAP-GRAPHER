@@ -290,6 +290,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
             }
 
             ValidateCableInstances(root);
+            HarnessStripProfileValidator.Validate(root);
 
             return root.GetRawText();
         }

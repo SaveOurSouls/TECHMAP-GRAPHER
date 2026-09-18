@@ -64,6 +64,17 @@ public static class ProjectEndpoints
                     return Results.Ok(ToResponse(project));
                 }));
 
+        app.MapDelete("/api/v1/projects/{projectId:guid}", (
+            Guid projectId,
+            [Microsoft.AspNetCore.Mvc.FromBody] DeleteProjectRequest request,
+            IProjectCatalog catalog) => Execute(() =>
+            {
+                var revision = request.ExpectedRevision ?? throw new ProjectCatalogException(
+                    "invalid_expected_revision", "The expected revision is required.", "expectedRevision");
+                catalog.DeleteProject(new ProjectIdentity(projectId), revision);
+                return Results.Ok(new { projectId, deleted = true });
+            }));
+
         app.MapPost("/api/v1/projects/{projectId:guid}/copies", (
             HttpContext context,
             Guid projectId,

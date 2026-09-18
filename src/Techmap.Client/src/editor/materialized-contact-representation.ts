@@ -39,6 +39,7 @@ export function selectMaterializedContactRepresentation(
   contactIdOrLogicalContactId: string,
   viewKind: MaterializedContactViewKind,
 ): ComponentTemplateContactRepresentationSnapshot | null {
+  if (viewKind === "e4" && connector.e4TableMode) return null;
   const contact = snapshotContactFor(connector, contactIdOrLogicalContactId);
   if (!contact) return null;
   const repeated = contact.logicalContactId !== contact.prototypeLogicalContactId;

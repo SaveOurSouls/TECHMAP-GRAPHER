@@ -148,9 +148,7 @@ describe("template series v3 end-to-end workflow", () => {
     expect(withoutSpareGroup.contactTypeGroups.some(group => group.id === spareId)).toBe(false);
     expect(validateTemplateContentV3(withoutSpareGroup).valid).toBe(true);
 
-    expect(() => deleteContactTypeGroupV3(withoutSpareGroup, signalId)).toThrowError(expect.objectContaining({
-      code: "contact_type_group_referenced",
-    } satisfies Partial<TemplateCommandV3Error>));
+    expect(deleteContactTypeGroupV3(withoutSpareGroup, signalId).logicalContacts.every(contact => contact.contactTypeGroupId !== signalId)).toBe(true);
 
     const withoutArticle = removeArticleVariantV3(withoutSpareGroup, variantId);
     const withoutSignalPoint = deleteContactPointV3(withoutArticle, e4.id, signalPointId);
@@ -211,7 +209,7 @@ describe("template series v3 end-to-end workflow", () => {
       onChangeCompatibleTerminalArticleKeys: vi.fn(),
     });
 
-    expect(markup).toContain("technology-terminals");
+    expect(markup).toContain("Добавить терминал");
     expect(markup).toContain("SXH-002T-P0.6");
     expect(markup).toContain("Совместимые терминалы серии");
     expect(markup).toContain("<th>Артикул</th><th>Тип контакта</th><th>Стандартный</th>");

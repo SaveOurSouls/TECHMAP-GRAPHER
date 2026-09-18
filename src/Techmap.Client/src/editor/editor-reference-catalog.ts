@@ -328,10 +328,10 @@ export function componentTemplateSummaryToEditorCatalogItems(
       : articleRemainder10 >= 2 && articleRemainder10 <= 4 ? "артикула" : "артикулов";
   return [{
     id: `component-template:${template.templateId}:${template.version}`,
-    title: template.name,
+    title: template.code,
     subtitle: articleCount > 0
-      ? `${template.code} · ${articleCount} ${articleWord} · версия ${template.version}`
-      : `${template.code} · версия ${template.version}`,
+      ? `${template.name} · ${articleCount} ${articleWord} · версия ${template.version}`
+      : `${template.name} · версия ${template.version}`,
     category: componentLibrarySource.label,
     accent: "#496b88",
     placement: "connector",

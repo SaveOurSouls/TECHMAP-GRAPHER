@@ -1,3 +1,4 @@
+import { arrayPositions } from "./array-layout";
 import {
   TEMPLATE_V2_LIMITS,
   repeatOccurrenceKeyV2,
@@ -343,6 +344,7 @@ export function expandRepeatPlacementV2(
 
   const stepX = numericValue(values, placement.step.x);
   const stepY = numericValue(values, placement.step.y);
+  const arrayOffsets = placement.arrayLayout ? arrayPositions(count, { ...placement.arrayLayout, numbering: placement.arrayLayout.numbering === "snake" ? "snake" : "new-row" }, stepX, stepY) : null;
   const lastOffsetX = (count - 1) * stepX;
   const lastOffsetY = (count - 1) * stepY;
   if (![lastOffsetX, lastOffsetY].every(value => Number.isFinite(value) && Math.abs(value) <= TEMPLATE_V2_LIMITS.coordinate)) {
@@ -389,7 +391,7 @@ export function expandRepeatPlacementV2(
   const occurrences: RepeatOccurrenceDescriptorV2[] = [];
   const stride = domain.logicalContactIds.length;
   for (let index = 0; index < count; index += 1) {
-    const offset = Object.freeze({ x: index * stepX, y: index * stepY });
+    const offset = Object.freeze(arrayOffsets?.[index] ?? { x: index * stepX, y: index * stepY });
     const key = repeatOccurrenceKeyV2(domain.id, index, placement.prototypeGroupId);
     const group = Object.freeze({ key, prototypeGroupId: placement.prototypeGroupId, offset });
     const nodes = Object.freeze([...descendants].filter(prototypeNodeId => prototypeNodeId !== prototype.id).map(prototypeNodeId => Object.freeze({

@@ -7,6 +7,16 @@ namespace Techmap.Web.Tests;
 
 public sealed class GoogleSheetsWorkbookDownloaderTests
 {
+    [Fact]
+    public void Browser_tab_parameters_do_not_limit_the_workbook_or_change_its_identity()
+    {
+        var whole = GoogleSheetsWorkbookAddressParser.Parse("https://docs.google.com/spreadsheets/d/abcdefghijklmnop/edit");
+        foreach (var suffix in new[] { "?gid=0#gid=0", "?gid=123", "#gid=456" })
+            Assert.Equal(whole, GoogleSheetsWorkbookAddressParser.Parse(
+                "https://docs.google.com/spreadsheets/d/abcdefghijklmnop/edit" + suffix));
+        Assert.DoesNotContain("gid", whole.ExportUri.Query);
+    }
+
     private static readonly byte[] XlsxHeader = [0x50, 0x4b, 0x03, 0x04, 0x14, 0x00];
 
     [Theory]

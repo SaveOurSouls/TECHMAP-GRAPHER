@@ -6,6 +6,21 @@ import {
 } from "../component-library/template-content";
 import { HarnessDesignApiError } from "./design-api";
 import type { ConnectorInstance } from "./model";
+import { validateConnectorLibraryMetadata } from "./model";
+
+/** Derive the request from the same immutable binding that produced the preview. */
+export function componentPlacementRequest(
+  instance: ConnectorInstance, expectedRevision: number, commandId: string,
+): PlaceComponentRequest {
+  const binding = instance.libraryBinding;
+  if (binding?.mode !== "template") throw new Error("Нет привязки к библиотечному шаблону.");
+  validateConnectorLibraryMetadata(instance);
+  return {
+    commandId, expectedRevision, placementId: instance.id,
+    sourceTemplateId: binding.templateId, sourceVersion: binding.templateVersion,
+    ...binding.article, instance,
+  };
+}
 
 export interface PlaceComponentRequest {
   readonly commandId: string;

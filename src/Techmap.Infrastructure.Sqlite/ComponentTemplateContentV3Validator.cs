@@ -21,7 +21,7 @@ internal static partial class ComponentTemplateContentV3Validator
     private static readonly string[] RootProperties =
         ["schemaVersion", "views", "logicalContacts", "parameters", "repeaters", "assets", "contactTypeGroups", "articleVariants"];
 
-    internal static void Validate(JsonElement content)
+    internal static void Validate(JsonElement content, bool independentE4 = false)
     {
         RequireExactProperties(content, "content", RootProperties);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
@@ -43,7 +43,7 @@ internal static partial class ComponentTemplateContentV3Validator
         var groupIds = groupNames.Keys.ToHashSet(StringComparer.Ordinal);
         var contactGroups = ValidateLogicalContacts(contacts, groupIds);
         ValidateV2CompatibleCore(content, groupNames);
-        var materializations = ValidateArticleVariants(repeaters, variants, groupIds, contactGroups);
+        var materializations = ValidateArticleVariants(repeaters, variants, groupIds, contactGroups, independentE4);
         ValidateArticleMaterializations(content, groupNames, repeaters, contactGroups, materializations);
         ValidateNewIdsAgainstCore(content);
     }
@@ -93,7 +93,8 @@ internal static partial class ComponentTemplateContentV3Validator
         JsonElement repeaters,
         JsonElement variants,
         IReadOnlySet<string> validGroupIds,
-        IReadOnlyDictionary<string, string?> contactGroups)
+        IReadOnlyDictionary<string, string?> contactGroups,
+        bool independentE4)
     {
         var repeatCountParameterIds = new HashSet<string>(StringComparer.Ordinal);
         var domainsByGroup = new Dictionary<string, List<int>>(StringComparer.Ordinal);
@@ -105,6 +106,7 @@ internal static partial class ComponentTemplateContentV3Validator
             var domainPath = $"content.repeaters[{domainIndex++}]";
             var countId = domain.GetProperty("countParameterId");
             var ids = domain.GetProperty("logicalContactIds");
+            if (ids.GetArrayLength() == 0) continue; // Graphical arrays do not participate in electrical counts.
             repeatCountParameterIds.Add(countId.GetString()!);
             string? domainGroup = null;
             var stride = 0;
@@ -173,7 +175,7 @@ internal static partial class ComponentTemplateContentV3Validator
 
             foreach (var parameterValue in parameterValues.EnumerateArray())
             {
-                if (parameterValue.ValueKind == JsonValueKind.Object &&
+                if (!independentE4 && parameterValue.ValueKind == JsonValueKind.Object &&
                     parameterValue.TryGetProperty("parameterId", out var parameterId) &&
                     parameterId.ValueKind == JsonValueKind.String &&
                     repeatCountParameterIds.Contains(parameterId.GetString()!))
@@ -206,6 +208,12 @@ internal static partial class ComponentTemplateContentV3Validator
                 ValidateTerminalArticles(
                     RequiredArray(group, "allowedTerminalArticleKeys", groupPath + ".allowedTerminalArticleKeys"),
                     groupPath + ".allowedTerminalArticleKeys");
+            }
+
+            if (independentE4)
+            {
+                materializations.Add(new ArticleMaterialization(path, overrides));
+                continue;
             }
 
             foreach (var groupId in validGroupIds)
