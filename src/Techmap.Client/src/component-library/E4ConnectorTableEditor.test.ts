@@ -37,4 +37,29 @@ describe("E4ConnectorTableEditor", () => {
     const changed = updateE4ConnectorTableCell(hidden, fixture.articleId, rowId, "article", { name: "LOCAL" });
     expect(materializeE4ConnectorArticle(changed, fixture.articleId).rows[0]!.name).toBe("LOCAL");
   });
+
+  it("renders the editable E4 preset of the selected article", () => {
+    const fixture = tableFixture();
+    const first = fixture.table.articles[0]!;
+    const second = {
+      ...first,
+      articleVariantId: "article-02",
+      articleKey: "PHR-02",
+      rows: first.rows.map((row, index) => ({
+        ...row,
+        overrides: index === 0 ? { ...row.overrides, name: "PRESET FOR PHR-02" } : row.overrides,
+      })),
+    };
+    const table = { ...fixture.table, articles: [first, second] };
+    const markup = renderToStaticMarkup(createElement(E4ConnectorTableEditor, {
+      table,
+      selectedArticleVariantId: second.articleVariantId,
+      onChange: vi.fn(),
+    }));
+
+    expect(markup).toContain("PHR-02");
+    expect(markup).toContain('value="PRESET FOR PHR-02"');
+    expect(markup).toContain('aria-label="Назначение, строка 1"');
+    expect(markup).not.toContain('value="DATA"');
+  });
 });

@@ -78,6 +78,8 @@
 .series-v3-article-table th { position: sticky; top: 0; z-index: 1; padding: 6px 7px; background: #eef5f8; color: #496274; text-align: left; white-space: nowrap; }
 .series-v3-article-table th:first-child { min-width: 145px; }
 .series-v3-article-table td { padding: 4px; border-top: 1px solid #e1e9ee; vertical-align: middle; }
+.series-v3-article-table tbody tr { cursor: pointer; }
+.series-v3-article-table tbody tr:focus-visible { outline: 2px solid #287b9f; outline-offset: -2px; }
 .series-v3-article-table tr.selected td { background: #edf7fa; }
 .series-v3-article-table .series-v3-article-key { min-width: 145px; }
 .series-v3-count-cell { min-width: 85px; width: 95px; }

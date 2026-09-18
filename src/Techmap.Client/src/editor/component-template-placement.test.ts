@@ -13,6 +13,7 @@ import { upgradeTemplateContentV3ToV4 } from "../component-library/template-mode
 import { upgradeTemplateContentV4ToV5 } from "../component-library/template-model-v5";
 import {
   createConnectorInstanceFromComponentTemplateV3,
+  firstPlaceableArticleVariantId,
   rematerializeComponentTemplateConnectorArticle,
   type ComponentTemplatePlacementEnvelopeV3,
 } from "./component-template-placement";
@@ -120,6 +121,53 @@ describe("component template placement", () => {
     expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts)
       .toSatisfy((contacts: readonly { allowedTerminalArticleKeys: readonly { articleKey: string }[] }[]) =>
         contacts.every(contact => contact.allowedTerminalArticleKeys.map(item => item.articleKey).join(",") === "T-1,T-2"));
+  });
+
+  it("places the first v5 article from the E4 table when no article is selected", () => {
+    const base = fixture(2);
+    const emptyCore = upgradeTemplateContentV2ToV3(newTemplateContentV2()).content;
+    const first: ArticleVariantV3 = {
+      id: crypto.randomUUID(), sourceId: "БД.СОЕД", entityType: "connector", articleKey: "XH-FIRST",
+      parameterValues: [], contactGroups: null,
+    };
+    const second = { ...structuredClone(first), id: crypto.randomUUID(), articleKey: "XH-SECOND" };
+    const v3: TemplateContentV3 = {
+      ...emptyCore,
+      articleVariants: [first, second],
+    };
+    const content = upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(v3).content).content;
+    const table = content.e4ConnectorTable as unknown as {
+      seriesDefaults: Array<{ rowId: string; values: {
+        number: string; name: string; circuitText: string | null; contactTypeGroupId: string | null;
+        standardTerminalArticleKey: null;
+      } }>;
+      articles: Array<{ rows: Array<{ seriesRowId: string; overrides: Record<string, never> }> }>;
+    };
+    table.seriesDefaults.push({
+      rowId: "real-v5-row",
+      values: {
+        number: "A1", name: "FIRST E4 ROW", circuitText: "E4-CIRCUIT",
+        contactTypeGroupId: null, standardTerminalArticleKey: null,
+      },
+    });
+    table.articles[0]!.rows.push({ seriesRowId: "real-v5-row", overrides: {} });
+    table.articles[1]!.rows.push({ seriesRowId: "real-v5-row", overrides: {} });
+    const template: ComponentTemplatePlacementEnvelopeV3 = { ...base, assets: [], content };
+
+    expect(firstPlaceableArticleVariantId(content)).toBe(first.id);
+    const placed = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J-v5-first", designation: "X1", e4Position: { x: 1, y: 2 },
+    });
+
+    expect(placed.partNumber).toBe(first.articleKey);
+    expect(placed.contacts).toHaveLength(1);
+    expect(placed.contacts[0]).toMatchObject({
+      logicalContactId: "real-v5-row",
+      number: 1,
+      circuit: "E4-CIRCUIT",
+    });
+    expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts[0])
+      .toMatchObject({ sourceNumber: "A1", name: "FIRST E4 ROW" });
   });
 
   it("materializes v4 E4 table values and remaps another article on stable series rows", () => {

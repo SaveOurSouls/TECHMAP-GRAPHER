@@ -86,7 +86,7 @@ export function createConnectorInstanceFromComponentTemplateV3(
     throw new Error("Ресурсы шаблона не совпадают с ресурсами его закрепляемой версии.");
   }
   const id = requireText(options.id, "ID соединителя");
-  const selectedVariant = options.articleVariant ?? options.articleVariantId ?? content.articleVariants[0]?.id;
+  const selectedVariant = options.articleVariant ?? options.articleVariantId ?? firstPlaceableArticleVariantId(content);
   if (selectedVariant === undefined) throw new Error("В шаблоне нет варианта артикула для размещения.");
   const variant = selectedArticleVariant(content, selectedVariant);
   const rows = materializePlacementRows(content, variant.id);
@@ -149,6 +149,14 @@ export function createConnectorInstanceFromComponentTemplateV3(
 
 /** Schema-neutral placement entry point. The v3 name remains as a compatibility alias. */
 export const createConnectorInstanceFromComponentTemplate = createConnectorInstanceFromComponentTemplateV3;
+
+/** A series card has no article selection; use its first article with E4 rows. */
+export function firstPlaceableArticleVariantId(content: SupportedTemplateContent): string | undefined {
+  if (content.schemaVersion === 3) return content.articleVariants[0]?.id;
+  const rowCounts = new Map(content.e4ConnectorTable.articles.map(article => [article.articleVariantId, article.rows.length]));
+  return content.articleVariants.find(article => (rowCounts.get(article.id) ?? 0) > 0)?.id
+    ?? content.articleVariants[0]?.id;
+}
 
 /**
  * Re-materializes another article from the same immutable template version.
@@ -217,25 +225,28 @@ function materializePlacementRows(
   if (content.schemaVersion === 3) return coreRows.map(row => ({ ...row, standardTerminalArticleKey: null }));
   const table = content.schemaVersion === 5 ? projectTemplateContentV5TableToV1(content) : content.e4ConnectorTable;
   const tableArticle = materializeE4ConnectorArticle(table, articleVariantId);
-  if (tableArticle.rows.length !== coreRows.length)
-    throw new Error("Таблица Э4 не совпадает с материализованными контактами артикула.");
   const allowedByGroup = new Map(tableArticle.contactGroups.map(group => [
     group.contactTypeGroupId,
     group.allowedTerminalArticleKeys,
   ]));
-  return coreRows.map((core, index) => {
-    const table = tableArticle.rows[index]!;
+  const coreByKey = new Map(coreRows.map(row => [row.key, row]));
+  const mayUseIndexFallback = coreRows.length === tableArticle.rows.length;
+  return tableArticle.rows.map((tableRow, index) => {
+    // The E4 table is the published electrical model. The graphical core only
+    // supplies optional point representations for rows it can materialize.
+    const core = coreByKey.get(tableRow.seriesRowId) ?? (mayUseIndexFallback ? coreRows[index] : undefined);
     const allowed = content.schemaVersion === 5 ? content.compatibleTerminalArticleKeys
-      : table.contactTypeGroupId === null ? [] : allowedByGroup.get(table.contactTypeGroupId) ?? [];
+      : tableRow.contactTypeGroupId === null ? [] : allowedByGroup.get(tableRow.contactTypeGroupId) ?? [];
     return {
-      ...core,
-      key: table.seriesRowId,
-      contactTypeGroupId: table.contactTypeGroupId,
-      number: table.number,
-      name: table.name,
-      circuitText: table.circuitText,
+      key: tableRow.seriesRowId,
+      prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
+      representations: core?.representations ?? [],
+      contactTypeGroupId: tableRow.contactTypeGroupId,
+      number: tableRow.number,
+      name: tableRow.name,
+      circuitText: tableRow.circuitText,
       allowedTerminalArticleKeys: allowed,
-      standardTerminalArticleKey: table.standardTerminalArticleKey,
+      standardTerminalArticleKey: tableRow.standardTerminalArticleKey,
     };
   });
 }

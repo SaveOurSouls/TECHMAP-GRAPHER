@@ -414,7 +414,16 @@ function ArticleVariantsTable({ content, compatibleTerminals, selectedArticleVar
         <th aria-label="Действия" />
       </tr></thead>
       <tbody>{content.articleVariants.map(variant => <tr key={variant.id}
-        className={variant.id === selectedArticleVariantId ? "selected" : undefined}>
+        className={variant.id === selectedArticleVariantId ? "selected" : undefined}
+        data-article-variant-id={variant.id}
+        aria-label={`Открыть таблицу Э4 артикула ${variant.articleKey}`}
+        tabIndex={0}
+        onClick={() => onSelect?.(variant.id)}
+        onKeyDown={event => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onSelect?.(variant.id);
+        }}>
         <td><VariantIdentityEditor variant={variant} onUpdate={onUpdate} /></td>
         {content.contactTypeGroups.map(group => {
           const editor = articleContactGroupEditorValueV3(content, variant.id, group.id);
@@ -433,7 +442,7 @@ function ArticleVariantsTable({ content, compatibleTerminals, selectedArticleVar
         })}
         <td className="series-v3-row-actions">
           <button type="button" className="series-v3-delete-article" aria-label={`Удалить артикул ${variant.articleKey}`}
-            onClick={() => onDelete(variant.id)}>×</button>
+            onClick={event => { event.stopPropagation(); onDelete(variant.id); }}>×</button>
         </td>
       </tr>)}</tbody>
     </table>

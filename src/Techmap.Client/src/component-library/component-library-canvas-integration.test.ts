@@ -24,8 +24,10 @@ vi.mock("./template-commands-v3", async importOriginal => {
     ...actual,
     newTemplateContentV3: () => {
       const initial = actual.newTemplateContentV3();
-      const view = initial.views[0]!;
-      return actual.addBasicNodeV3(initial, view.id, view.layers[0]!.id, "polyline")[0];
+      const drawing = initial.views.find(view => view.kind === "drawing")!;
+      const withPolyline = actual.addBasicNodeV3(initial, drawing.id, drawing.layers[0]!.id, "polyline")[0];
+      const updatedDrawing = withPolyline.views.find(view => view.id === drawing.id)!;
+      return { ...withPolyline, views: [updatedDrawing, ...withPolyline.views.filter(view => view.id !== drawing.id)] };
     },
     moveNodePointV3: (...args: Parameters<typeof actual.moveNodePointV3>) => {
       harness.movePoint(...args);

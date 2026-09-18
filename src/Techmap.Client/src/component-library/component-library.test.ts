@@ -127,30 +127,23 @@ describe("component library UI", () => {
     expect(markup).toContain('aria-current="page"');
   });
 
-  it("renders view tabs, primitive tools and versioned save action", () => {
+  it("renders the E4 table as the primary view and keeps graphics in other view tabs", () => {
     const markup = renderToStaticMarkup(createElement(ComponentLibrary, { config, session }));
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
-    expect(markup).toContain("Прямоугольник");
-    expect(markup).toContain("Эллипс");
-    expect(markup).toContain("Ломаная");
-    expect(markup).toContain("Безье");
-    expect(markup).toContain("Контур");
-    expect(markup).toContain("Привязка угла");
-    expect(markup).toContain("Свободно");
-    expect(markup).toContain("Создать контакт");
-    expect(markup).toContain("Разместить связанную точку");
-    expect(markup).toContain("Выход пучка");
+    expect(markup).toContain('class="library-e4-workarea"');
+    expect(markup).toContain("Таблица Э4");
+    expect(markup).not.toContain('class="library-tools"');
     expect(markup).toContain('role="tabpanel"');
-    expect(markup).toContain("Отменить");
+    expect(markup).not.toContain("Отменить");
     expect(markup).toContain("Серия и артикулы");
     expect(markup).toContain("Типы контактов");
     expect(markup).toContain("Артикул для предпросмотра");
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Изображения");
     expect(markup).toContain("Загрузить PNG");
-    expect(markup).toContain("Добавить слой");
+    expect(markup).not.toContain("Добавить слой");
     expect(markup).toContain("Записать версию");
     expect(markup).toContain("Изменено");
   });

@@ -63,6 +63,9 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain('aria-label="Таблица артикулов серии"');
     expect(markup).toContain("Сигнальные, шт.");
     expect(markup).toContain('aria-label="Количество контактов Сигнальные артикула B2B-XH-A"');
+    expect(markup).toContain(`data-article-variant-id="${content.articleVariants[0]!.id}"`);
+    expect(markup).toContain('aria-label="Открыть таблицу Э4 артикула B2B-XH-A"');
+    expect(markup).toContain('tabindex="0"');
     expect(markup).toContain("не имеет повторяемого сегмента");
     expect(markup).toContain("Создайте прототип контакта и один домен повтора");
     expect(markup).toContain("либо укажите 0");

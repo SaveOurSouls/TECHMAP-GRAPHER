@@ -24,6 +24,7 @@ import { createComponentTemplateApi, type ComponentTemplateApi } from "../compon
 import { isTemplateContentV3, isTemplateContentV4, isTemplateContentV5 } from "../component-library/template-content";
 import {
   createConnectorInstanceFromComponentTemplateV3,
+  firstPlaceableArticleVariantId,
   rematerializeComponentTemplateConnectorArticle,
 } from "./component-template-placement";
 import {
@@ -1070,7 +1071,8 @@ export function HarnessDesignEditor({
         // A catalog card represents the whole series. Its cached article
         // metadata may predate the loaded immutable version, whose first real
         // variant is the deterministic initial selection.
-        const variant = template.content.articleVariants[0];
+        const variantId = firstPlaceableArticleVariantId(template.content);
+        const variant = variantId ? template.content.articleVariants.find(candidate => candidate.id === variantId) : undefined;
         if (!variant) throw new Error("В библиотечном шаблоне нет варианта артикула для размещения.");
         preview = createConnectorInstanceFromComponentTemplateV3({
           templateId: template.templateId,

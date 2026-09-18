@@ -430,6 +430,17 @@ export function ComponentLibrary({ config, session }: Props) {
       result[articleIdentity(binding.terminalArticleKey)] = binding.contactTypeGroupId;
     return result;
   }, [draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings]);
+  const selectArticleVariant = (variantId: string | null) => {
+    setSelectedArticleVariantId(variantId);
+    setPreviewParameterValues({});
+    if (!variantId) return;
+    const e4View = draft.content.views.find(view => view.kind === "e4");
+    if (e4View) {
+      setViewId(e4View.id);
+      setSelectedId(null);
+      setPendingLogicalContactId(null);
+    }
+  };
   const standardTerminalIdentities = useMemo(() => new Set((draft.terminalContactTypeBindings ?? [])
     .filter(binding => binding.standard).map(binding => articleIdentity(binding.terminalArticleKey))),
   [draft.terminalContactTypeBindings]);
@@ -911,7 +922,7 @@ export function ComponentLibrary({ config, session }: Props) {
           articlePreviewMessage={articlePreview.message}
           articlePreviewError={articlePreview.error}
           articlePreviewRows={articlePreview.rows}
-          onSelectArticleVariant={variantId => { setSelectedArticleVariantId(variantId); setPreviewParameterValues({}); }}
+          onSelectArticleVariant={selectArticleVariant}
           onAddContactTypeGroup={name => command(() => addContactTypeGroupV3(draft.content, name)[0])}
           onRenameContactTypeGroup={(groupId, name) => command(() => renameContactTypeGroupV3(draft.content, groupId, name))}
           onDeleteContactTypeGroup={groupId => command(() => deleteContactTypeGroupV3(draft.content, groupId))}
@@ -935,10 +946,12 @@ export function ComponentLibrary({ config, session }: Props) {
           standardTerminalArticleKeys={standardTerminalArticleKeys}
           onSetStandardTerminal={setStandardTerminal}
         />
-        <E4ConnectorTableEditor table={draft.e4ConnectorTable} selectedArticleVariantId={selectedArticleVariantId} disabled={busy || assetMismatch} onChange={table => { setDraft(current => ({ ...current, e4ConnectorTable: table })); markDirty(); }} />
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
         <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
-        {activeView && <TemplateContactsPanelV2
+        {activeView?.kind === "e4" && <div className="library-e4-workarea" id={`template-view-panel-${activeView.id}`} role="tabpanel" aria-labelledby={`template-view-tab-${activeView.id}`}>
+          <E4ConnectorTableEditor key={selectedArticleVariantId ?? "no-article"} table={draft.e4ConnectorTable} selectedArticleVariantId={selectedArticleVariantId} disabled={busy || assetMismatch} onChange={table => { setDraft(current => ({ ...current, e4ConnectorTable: table })); markDirty(); }} />
+        </div>}
+        {activeView && activeView.kind !== "e4" && <TemplateContactsPanelV2
           key={`${activeView.id}:${pendingLogicalContactId ?? ""}`}
           content={compatibilityContent}
           activeViewId={activeView.id}
@@ -950,7 +963,7 @@ export function ComponentLibrary({ config, session }: Props) {
           onSelectContactPoint={setSelectedId}
           onSelectBundlePort={setSelectedId}
         />}
-        {activeView && <TemplateLayersPanelV2
+        {activeView && activeView.kind !== "e4" && <TemplateLayersPanelV2
           layers={activeView.layers}
           activeLayerId={activeLayer?.id ?? null}
           onActivate={id => { setActiveLayerIds(current => ({ ...current, [activeView.id]: id })); setSelectedId(null); }}
@@ -961,7 +974,7 @@ export function ComponentLibrary({ config, session }: Props) {
           onToggleLocked={id => { const layer = activeView.layers.find(item => item.id === id)!; command(() => setLayerLockedV2(draft.content, activeView.id, id, !layer.locked)); }}
           onDelete={id => { const fallback = activeView.layers.find(item => item.id !== id); if (!fallback) return; command(() => deleteLayerV2(draft.content, activeView.id, id), null); setActiveLayerIds(current => ({ ...current, [activeView.id]: fallback.id })); }}
         />}
-        {activeView && <TemplateParametersPanelV2
+        {activeView && activeView.kind !== "e4" && <TemplateParametersPanelV2
           content={compatibilityContent}
           activeViewId={activeView.id}
           activeLayerId={selected?.layer.id ?? activeLayer?.id ?? null}
@@ -1003,8 +1016,8 @@ export function ComponentLibrary({ config, session }: Props) {
           )[0])}
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
-        <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        {activeView?.kind !== "e4" && <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>}
+        {activeView?.kind !== "e4" && <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {selectedNodeIds.length > 1 && <><p className="readonly-note">Выбрано объектов: {selectedNodeIds.length}. Перетаскивание перемещает их одной операцией.</p><button type="button" onClick={groupSelection}>Сгруппировать</button></>}
             {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <button type="button" onClick={ungroupSelection}>Разгруппировать</button>}
@@ -1024,7 +1037,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && selected.node.transform.rotationDegrees.kind === "constant" && <div className="rotation-control"><NumericField label="Поворот, °" value={selected.node.transform.rotationDegrees.value} step={15} disabled={selected.layer.locked || selected.node.locked} change={rotateSelection} /><div className="property-order"><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value - 90 : 0)}>−90°</button><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value + 90 : 0)}>+90°</button></div></div>}
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" title={selected.node.kind === "group" ? "Сначала разгруппируйте объект" : undefined} onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked || selected.node.kind === "group"}>Удалить объект</button></>}
           </aside>
-        </div>
+        </div>}
       </section>
     </div>
   </div>;

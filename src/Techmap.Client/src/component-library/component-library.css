@@ -49,6 +49,8 @@
 .library-view-tabs { padding: 0 13px; display: flex; gap: 3px; overflow-x: auto; border-bottom: 1px solid #dfe6eb; background: #f9fbfc; }
 .library-view-tabs button { min-width: max-content; padding: 11px 13px 9px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #5b6d7c; cursor: pointer; }
 .library-view-tabs button.active { border-bottom-color: #217ca7; color: #17688f; font-weight: 750; }
+.library-e4-workarea { min-width: 0; min-height: 510px; padding: 18px; background: #f4f7f9; }
+.library-e4-workarea .e4-table-editor { padding: 16px; border: 1px solid #d4dfe5; border-radius: 10px; background: #fff; box-shadow: 0 6px 22px rgb(40 64 81 / 7%); }
 .library-tools { min-height: 48px; padding: 7px 13px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #dfe6eb; }
 .library-tools span { margin-right: 5px; color: #71808d; font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .library-tools button { padding: 7px 10px; border: 1px solid #ccd8df; border-radius: 6px; background: #fff; color: #345267; font-size: 11px; font-weight: 700; cursor: pointer; }
