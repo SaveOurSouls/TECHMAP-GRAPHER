@@ -1,3 +1,5 @@
+import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
+import { copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection, rotateDrawingSelection, styleDrawingSelection, drawingKeyboardAction, type DrawingClipboard } from "./drawing-selection";
 import { E4ArticlePreview } from "./E4ArticlePreview";
 import { InfoHint } from "../InfoHint";
 import { defaultDrawingSnaps } from "./drawing-geometry";
@@ -6,7 +8,7 @@ import { drawingSelection, articleDrawingView, drawingContactContent, type Artic
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { DrawingArrayPanel } from "./DrawingArrayPanel";
 import type { ConnectorSchematicPresentation } from "../editor/model";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import {
@@ -408,6 +410,9 @@ export function ComponentLibrary({ config, session }: Props) {
   const [terminalArticleSearchMessage, setTerminalArticleSearchMessage] = useState<string | null>(null);
   const [pointAngleMode, setPointAngleMode] = useState<TemplatePointAngleModeV2>("snap-15");
   const [graphicEditorMode, setGraphicEditorMode] = useState<"e4" | "drawing">("e4");
+  const clipboard = useRef<DrawingClipboard | null>(null);
+  const [hasClipboard,setHasClipboard] = useState(false);
+  const pasteCount=useRef(0);
   const [drawingSnaps, setDrawingSnaps] = useState(defaultDrawingSnaps);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
@@ -416,9 +421,11 @@ export function ComponentLibrary({ config, session }: Props) {
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
   const activeLayer = activeView?.layers.find(layer => layer.id === activeLayerId) ?? activeView?.layers[0];
   const selected = activeView?.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
-  const selectedNodeIds = activeView && activeLayer
-    ? selectedIds.filter(id => activeLayer.nodes.some(node => node.id === id))
+  const selectedNodeIds = activeView
+    ? selectedIds.filter(id => activeView.layers.some(layer => layer.nodes.some(node => node.id === id)))
     : [];
+  const selectedNodes = activeView?.layers.flatMap(layer => layer.nodes.filter(node => selectedNodeIds.includes(node.id))) ?? [];
+  const selectionLocked = activeView?.layers.some(layer => layer.nodes.some(node => selectedNodeIds.includes(node.id) && (node.locked || layer.locked))) ?? true;
   const selectedContactPoint = activeView?.contactPoints.find(point => point.id === selectedId);
   const selectedBundlePort = activeView?.bundlePorts.find(point => point.id === selectedId);
   const selectedPoint = selectedContactPoint ?? selectedBundlePort;
@@ -673,6 +680,30 @@ export function ComponentLibrary({ config, session }: Props) {
     window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener);
   }, [undo, busy]);
 
+  useEffect(() => {
+    if(graphicEditorMode !== "drawing") return;
+    const listener=(event:KeyboardEvent)=>{
+      if(busy || event.repeat) return;
+      const action=drawingKeyboardAction(event);
+      if(!action || action !== "paste" && !selectedNodeIds.length || action === "paste" && !clipboard.current) return;
+      event.preventDefault();
+      if(action==="copy") copySelection(); else if(action==="paste") pasteSelection(); else deleteSelection();
+    };
+    window.addEventListener("keydown",listener); return ()=>window.removeEventListener("keydown",listener);
+  });
+  function copySelection() {
+    if(!activeView) return;
+    try { clipboard.current=copyDrawingSelection(draft.content,activeView.id,selectedNodeIds); pasteCount.current=0; setHasClipboard(true); setError(null); } catch(caught) {setError(errorText(caught));}
+  }
+  function pasteSelection() {
+    if(!activeView || !activeLayer || !clipboard.current) return;
+    try {const [content,ids]=pasteDrawingSelection(draft.content,activeView.id,activeLayer.id,clipboard.current,-12*(pasteCount.current+1)); changeContent(content); setSelectedIds(ids);pasteCount.current++;} catch(caught){setError(errorText(caught));}
+  }
+  function deleteSelection() {
+    if(!activeView || !selectedNodeIds.length) return;
+    command(()=>deleteDrawingSelection(draft.content,activeView.id,selectedNodeIds),null);
+  }
+
   function validatedBody(working = draft) {
     if (!working.code.trim() || !working.name.trim()) { setError("Укажите серию соединителя и описание."); return null; }
     if (assetMismatch) { setError("Сохранение заблокировано: metadata assets не совпадают с версией шаблона."); return null; }
@@ -850,6 +881,7 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function moveCanvasNode(nodeId: string, deltaX: number, deltaY: number) {
     if (!activeView) return;
+    if(selectedNodeIds.length>1 && selectedNodeIds.includes(nodeId)) { command(()=>moveDrawingSelection(draft.content,activeView.id,selectedNodeIds,deltaX,deltaY)); return; }
     const point = activeView.contactPoints.find(point => point.id === nodeId);
     if (point && point.x.kind === "constant" && point.y.kind === "constant") {
       const x = point.x.value + deltaX, y = point.y.value + deltaY;
@@ -868,6 +900,11 @@ export function ComponentLibrary({ config, session }: Props) {
       draft.content,
     ));
   }
+  function selectBoxObjects(ids: readonly string[]) {
+    setSelectedIds(ids);
+    const layer=activeView?.layers.find(layer=>layer.nodes.some(node=>node.id===ids[0]));
+    if(activeView && layer) setActiveLayerIds(current=>({...current,[activeView.id]:layer.id}));
+  }
   function selectCanvasObject(id: string | null, extend: boolean) {
     if (!id) { setSelectedIds([]); return; }
     const nodeLayer = activeView?.layers.find(layer => layer.nodes.some(node => node.id === id));
@@ -875,7 +912,7 @@ export function ComponentLibrary({ config, session }: Props) {
     if (activeView && nodeLayer) setActiveLayerIds(current => ({ ...current, [activeView.id]: nodeLayer.id }));
     if (!extend || !isNode) { setSelectedIds([id]); return; }
     setSelectedIds(current => nextTemplateSelectionV2(
-      current.every(candidate => nodeLayer!.nodes.some(node => node.id === candidate)) ? current : [], id, true,
+      current.filter(candidate => activeView?.layers.some(layer=>layer.nodes.some(node=>node.id===candidate))), id, true,
     ));
   }
   function groupSelection() {
@@ -1066,11 +1103,11 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
           </details>
-        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={copySelection} disabled={!selectedNodeIds.length} title="Ctrl+C">Копировать</button><button type="button" onClick={pasteSelection} disabled={!hasClipboard || !activeLayer || activeLayer.locked} title="Ctrl+V">Вставить</button><button type="button" onClick={deleteSelection} disabled={!selectedNodeIds.length || selectionLocked} title="Delete">Удалить</button><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedNodeIds,angle,center))} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedTableRow?.number ?? selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
-            {selectedNodeIds.length > 1 && <><p className="readonly-note">Выбрано объектов: {selectedNodeIds.length}. Перетаскивание перемещает их одной операцией.</p><button type="button" onClick={groupSelection}>Сгруппировать</button></>}
-            {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <button type="button" onClick={ungroupSelection}>Разгруппировать</button>}
+            {selectedNodeIds.length > 1 && <><button type="button" onClick={groupSelection} disabled={selectionLocked || !selectedNodeIds.every(id=>activeLayer?.nodes.some(node=>node.id===id))}>Сгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}
+            {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <><button type="button" onClick={ungroupSelection}>Разгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
              {selectedContactPoint && selectedLogicalContact && <label>Контакт таблицы №<select value={selectedRowBinding?.seriesRowId ?? ""} onChange={event => { const seriesRowId = event.target.value; setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]); setDraft(current => ({...current,drawingContactBindings:[...(current.drawingContactBindings ?? []).filter(binding => binding.logicalContactId !== selectedLogicalContact.id && binding.seriesRowId !== seriesRowId),...(seriesRowId ? [{logicalContactId:selectedLogicalContact.id,seriesRowId}] : [])]})); markDirty(); }}><option value="">Не привязан</option>{drawingTableRows.map(row => <option key={row.seriesRowId} value={row.seriesRowId}>{row.number} · {row.name}</option>)}</select></label>}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
@@ -1087,7 +1124,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selectedIds.length === 1 && selected?.node && !editableNode && <><p className="readonly-note">Сложный или параметризованный объект доступен только для чтения. Его данные сохраняются без потерь.</p><label>Тип<input value={selected.node.kind} readOnly /></label></>}
             {editableNode && selected && <NodeProperties node={editableNode} disabled={selected.layer.locked || editableNode.locked} edit={changes => command(() => editNodeV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, changes))} move={(x, y) => command(() => setNodePosition(draft.content, activeView!.id, selected.layer.id, editableNode, x, y))} toggleLock={() => command(() => setNodeLockedV2(draft.content, activeView!.id, selected.layer.id, editableNode.id, !editableNode.locked))} />}
             {selected && selectedNodeIds.length === 1 && selected.node.transform.rotationDegrees.kind === "constant" && <div className="rotation-control"><NumericField label="Поворот, °" value={selected.node.transform.rotationDegrees.value} step={15} disabled={selected.layer.locked || selected.node.locked} change={rotateSelection} /><div className="property-order"><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value - 90 : 0)}>−90°</button><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value + 90 : 0)}>+90°</button></div></div>}
-            {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" title={selected.node.kind === "group" ? "Сначала разгруппируйте объект" : undefined} onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked || selected.node.kind === "group"}>Удалить объект</button></>}
+            {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={deleteSelection} disabled={selectionLocked}>Удалить объект</button></>}
           </aside>
           <aside className="drawing-articles" aria-label="Рисунки артикулов"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => setSelectedArticleVariantId(article.id)}>{article.articleKey}{draft.articleDrawings?.some(d => d.articleVariantId === article.id) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length || activeView?.kind !== "drawing"} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<span role="status">{saved}</span></aside>
         </div>
@@ -1164,7 +1201,7 @@ function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: Edit
       </div>
     </section>
     <div className="coordinate-grid"><NumericField label="X" value={position.x} disabled={disabled} change={value => move(value, position.y)} /><NumericField label="Y" value={position.y} disabled={disabled} change={value => move(position.x, value)} />{dimensions && <><NumericField label="Ширина" value={dimensions.width} min={1} disabled={disabled} change={value => editDimension(node, "width", value, edit)} /><NumericField label="Высота" value={dimensions.height} min={1} disabled={disabled} change={value => editDimension(node, "height", value, edit)} /></>}</div>
-    <NumericField label="Прозрачность 0…1" value={node.opacity} min={0} max={1} step={0.05} disabled={disabled} change={value => { if (value >= 0 && value <= 1) edit({ opacity: value }); }} />
+    <NumericField label="Прозрачность, %" value={Math.round((1-node.opacity)*100)} min={0} max={100} step={1} disabled={disabled} change={value => { if (value >= 0 && value <= 100) edit({ opacity: 1-value/100 }); }} />
     {(node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") && <p className="readonly-note">Перетаскивайте маркеры точек. Двойной щелчок по сегменту добавляет вершину, по внутренней вершине — удаляет её.</p>}
     {(node.kind === "line" || node.kind === "polyline") && <NumericField label="Радиус изгиба" value={constantValue(node.geometry.bendRadius) ?? 0} min={0} disabled={disabled || node.geometry.bendRadius.kind !== "constant"} change={value => { if (value >= 0) edit({ geometry: { ...node.geometry, bendRadius: constantExpressionV2(value) } }); }} />}
     {node.kind === "text" && <label>Текст<input value={node.geometry.text} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, text: event.target.value } })} /></label>}

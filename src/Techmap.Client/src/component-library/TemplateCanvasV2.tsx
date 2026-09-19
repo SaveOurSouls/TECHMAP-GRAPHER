@@ -1,3 +1,4 @@
+import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
 import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { rootNodeRotationCenterV3 } from "./template-commands-v3";
 import { hatchTile } from "./drawing-hatch";
@@ -30,6 +31,8 @@ export interface TemplateCanvasV2Props {
   selectedIds?: readonly string[];
   onSelect: (id: string | null) => void;
   onSelectionChange?: (id: string | null, extend: boolean) => void;
+  onBoxSelection?: (ids: readonly string[]) => void;
+  onSelectionRotate?: (angle: number, center: {x:number;y:number}) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
   onNodeRotate?: (id: string, rotationDegrees: number) => void;
@@ -70,6 +73,7 @@ interface DragStateV2 {
   readonly pointerId: number;
   readonly startClientX: number;
   readonly startClientY: number;
+  readonly clearOnClick?: boolean;
   readonly start: SvgPoint;
   readonly latest: SvgPoint;
 }
@@ -542,6 +546,8 @@ export function TemplateCanvasV2({
   selectedIds,
   onSelect,
   onSelectionChange,
+  onBoxSelection,
+  onSelectionRotate,
   onNodeMove,
   onNodeResize,
   onNodeRotate,
@@ -555,6 +561,8 @@ export function TemplateCanvasV2({
   width = TEMPLATE_CANVAS_V2_WIDTH,
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
+  const marqueeRef = useRef<{pointerId:number;start:SvgPoint;client:SvgPoint;latest:SvgPoint} | null>(null);
+  const [marquee,setMarquee] = useState<SelectionBox | null>(null);
   const dragRef = useRef<DragStateV2 | null>(null);
   const hatchPrefix = useId().replaceAll(":", "");
   const resizeRef = useRef<ResizeStateV2 | null>(null);
@@ -598,6 +606,7 @@ export function TemplateCanvasV2({
   }
 
   useEffect(() => {
+    marqueeRef.current=null; setMarquee(null);
     rotationRef.current = null;
     setRotationPreview(null);
     dragRef.current = null;
@@ -634,6 +643,8 @@ export function TemplateCanvasV2({
   };
 
   const beginNodeGesture = (event: ReactPointerEvent<SVGElement>, id: string, selectable: boolean, movable: boolean) => {
+    if(event.button !== 0) return;
+    const clearOnClick = selectedIdSet.has(id) && !(event.ctrlKey || event.metaKey || event.shiftKey);
     select(event, id, selectable);
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!movable || !onNodeMove) return;
@@ -642,7 +653,7 @@ export function TemplateCanvasV2({
     if (!start || !svg) return;
     try { svg.setPointerCapture(event.pointerId); } catch { /* Capture can fail for a pointer that already ended. */ }
     dragRef.current = {
-      id,
+      id, clearOnClick,
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -666,6 +677,8 @@ export function TemplateCanvasV2({
   };
 
   const moveNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const box = marqueeRef.current;
+    if(box && box.pointerId === event.pointerId) { const point=pointFromEvent(event); if(!point) return; marqueeRef.current={...box,latest:point}; setMarquee({left:Math.min(box.start[0],point[0]),top:Math.min(box.start[1],point[1]),right:Math.max(box.start[0],point[0]),bottom:Math.max(box.start[1],point[1])}); return; }
     const rotation = rotationRef.current;
     if (rotation && rotation.pointerId === event.pointerId) {
       const point = pointFromEvent(event);
@@ -716,6 +729,7 @@ export function TemplateCanvasV2({
   };
 
   const clearNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    marqueeRef.current=null; setMarquee(null);
     rotationRef.current = null;
     setRotationPreview(null);
     const drag = dragRef.current;
@@ -734,12 +748,19 @@ export function TemplateCanvasV2({
   };
 
   const endNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const box=marqueeRef.current;
+    if(box && box.pointerId === event.pointerId) {
+      const point=pointFromEvent(event) ?? box.latest;
+      const moved=Math.hypot(event.clientX-box.client[0],event.clientY-box.client[1])>=3;
+      const ids=moved && view ? nodesInsideSelectionBox(view,{left:Math.min(box.start[0],point[0]),top:Math.min(box.start[1],point[1]),right:Math.max(box.start[0],point[0]),bottom:Math.max(box.start[1],point[1])},evaluate,repeatPreview) : [];
+      clearNodeGesture(event); onBoxSelection?.(ids); return;
+    }
     const rotation = rotationRef.current;
     if (rotation && rotation.pointerId === event.pointerId) {
       const point = pointFromEvent(event);
       const angle = point ? rotation.rotation + (Math.atan2(point[1] - rotation.center[1], point[0] - rotation.center[0]) - rotation.startAngle) * 180 / Math.PI : rotation.latest;
       clearNodeGesture(event);
-      onNodeRotate?.(rotation.id, angle);
+      if(rotation.id === "selection") onSelectionRotate?.(angle,{x:rotation.center[0],y:rotation.center[1]}); else onNodeRotate?.(rotation.id, angle);
       return;
     }
     const pointDrag = pointDragRef.current;
@@ -786,6 +807,7 @@ export function TemplateCanvasV2({
     );
     clearNodeGesture(event);
     if (completed) { const delta = snapDelta(drag.id, drag.start, finalPoint); onNodeMove?.(drag.id, delta[0], delta[1]); }
+    else if(drag.clearOnClick) { if(onBoxSelection) onBoxSelection([]); else onSelect(null); }
   };
 
   const beginResizeGesture = (event: ReactPointerEvent<SVGElement>, id: string, handle: NodeResizeHandleV2) => {
@@ -875,7 +897,7 @@ export function TemplateCanvasV2({
         "data-selected": selectedIdSet.has(rootNodeId) ? "true" : undefined,
         "data-locked": locked ? "true" : undefined,
         opacity: node.opacity,
-        transform: (rotationPreview?.id === node.id ? `rotate(${rotationPreview.angle} ${rotationPreview.center[0]} ${rotationPreview.center[1]}) ` : "") + previewTransform(node.id, transform, topLevel),
+        transform: ((rotationPreview?.id === node.id || rotationPreview?.id === "selection" && topLevel && selectedIdSet.has(node.id)) ? `rotate(${rotationPreview.angle} ${rotationPreview.center[0]} ${rotationPreview.center[1]}) ` : "") + previewTransform(node.id, transform, topLevel),
         pointerEvents: layer.locked ? "none" as const : undefined,
         "data-draggable": topLevel && !locked && onNodeMove && rootMovable ? "true" : undefined,
         onPointerDown: (event: ReactPointerEvent<SVGElement>) => beginNodeGesture(event, rootNodeId, !layer.locked, !locked && rootMovable),
@@ -1189,13 +1211,15 @@ export function TemplateCanvasV2({
     if (!bounds) return null;
     const preview = dragPreview && selectedIdSet.has(dragPreview.id) ? dragPreview : null;
     const deltaX = preview?.deltaX ?? 0, deltaY = preview?.deltaY ?? 0;
-    return <g className="template-selection" data-selection-kind="multi" transform={`translate(${formatNumber(deltaX)} ${formatNumber(deltaY)})`}>
+    return <g className="template-selection" data-selection-kind="multi" transform={(rotationPreview?.id === "selection" ? `rotate(${rotationPreview.angle} ${rotationPreview.center[0]} ${rotationPreview.center[1]}) ` : "") + `translate(${formatNumber(deltaX)} ${formatNumber(deltaY)})`}>
       <rect
         data-multi-selection-bounds="true"
         x={bounds.left}
         y={bounds.top}
         width={bounds.right - bounds.left}
         height={bounds.bottom - bounds.top}
+        style={{pointerEvents:"all",fill:"transparent",cursor:"move"}}
+        onPointerDown={event => { const id=[...selectedIdSet][0]; if(id) beginNodeGesture(event,id,true,true); }}
       />
     </g>;
   }
@@ -1340,7 +1364,14 @@ export function TemplateCanvasV2({
       width="100%"
       height="100%"
       style={{ display: "block", touchAction: "none" }}
-      onPointerDown={() => onSelectionChange ? onSelectionChange(null, false) : onSelect(null)}
+      onPointerDown={event => {
+        if(event.button !== 0) return;
+        if(!onBoxSelection) { onSelectionChange ? onSelectionChange(null,false) : onSelect(null); return; }
+        const point=pointFromEvent(event); if(!point) return;
+        event.preventDefault(); try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Released pointer. */ }
+        marqueeRef.current={pointerId:event.pointerId,start:point,client:[event.clientX,event.clientY],latest:point};
+        setMarquee(null);
+      }}
       onPointerMove={moveNodeGesture}
       onPointerUp={endNodeGesture}
       onPointerCancel={clearNodeGesture}
@@ -1359,6 +1390,15 @@ export function TemplateCanvasV2({
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
       {renderMultiSelectionOverlay()}
       {renderSelectionOverlay()}
+      {marquee && <rect data-selection-marquee="true" x={marquee.left} y={marquee.top} width={marquee.right-marquee.left} height={marquee.bottom-marquee.top} fill="#1685d11a" stroke="#1685d1" strokeDasharray="4 3" pointerEvents="none" />}
+      {(() => {
+        if(!onSelectionRotate || !view || selectedIdSet.size<2 || view.repeatPlacements.some(p=>selectedIdSet.has(p.prototypeGroupId))) return null;
+        const nodes=view.layers.flatMap(layer=>layer.nodes.filter(node=>selectedIdSet.has(node.id)).map(node=>({node,layer})));
+        if(nodes.length!==selectedIdSet.size || nodes.some(({node,layer})=>node.locked || layer.locked || Object.values(node.transform).some(value=>value.kind!=="constant"))) return null;
+        const bounds=selectionBounds(view,[...selectedIdSet],evaluate); if(!bounds) return null;
+        const center={x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2},y=bounds.top-25;
+        return <g className="template-rotation-handle"><line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" /><circle data-selection-rotation-handle="true" cx={center.x} cy={y} r="7" fill="#fff" stroke="#147ca8" strokeWidth="2" aria-label="Повернуть выделение вокруг центра" role="button" onPointerDown={event=>{event.preventDefault();event.stopPropagation();const point=pointFromEvent(event);if(!point)return;try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} rotationRef.current={id:"selection",pointerId:event.pointerId,center:[center.x,center.y],startAngle:Math.atan2(point[1]-center.y,point[0]-center.x),rotation:0,latest:0};}} /></g>;
+      })()}
       {(() => {
         if (!onNodeRotate || selectedIdSet.size !== 1) return null;
         const located = view?.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
