@@ -985,6 +985,12 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-series-workspace">
         {graphicEditorMode === "e4" && <>
         <TemplateSeriesPanelV3
+          articlePreview={<>
+        {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
+          onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
+          onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
+        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={{...compatibilityContent, views: compatibilityContent.views.map(view => articleDrawingView(view, draft.articleDrawings, selectedArticleVariantId))}} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
+          </>}
           independentE4
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
@@ -1021,10 +1027,6 @@ export function ComponentLibrary({ config, session }: Props) {
           standardTerminalArticleKeys={standardTerminalArticleKeys}
           onSetStandardTerminal={setStandardTerminal}
         />
-        {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
-          onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
-          onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
-        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={{...compatibilityContent, views: compatibilityContent.views.map(view => articleDrawingView(view, draft.articleDrawings, selectedArticleVariantId))}} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
         </>}
         </div>
         {<section className={`drawing-editor-shell ${graphicEditorMode === "drawing" ? "" : "drawing-hidden"}`} role="dialog" aria-modal="true" aria-label="Редактор рисунка">

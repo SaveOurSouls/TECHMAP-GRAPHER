@@ -179,3 +179,16 @@
 .drawing-editor-shell .library-tools { gap:5px; }
 .drawing-editor-shell .library-tools button { padding:5px 7px; font-size:11px; }
 .drawing-editor-shell .library-tools .drawing-snaps { text-transform:none; }
+
+/* M4-17: one article selection controls both representations. */
+.library-series-workspace { display:block; }
+.series-v3-article-workspace { display:grid; grid-template-columns:minmax(190px,.75fr) minmax(260px,1.25fr); gap:12px; border:1px solid #dce3e8; border-radius:8px; padding:8px; }
+.series-v3-article-preview { min-width:0; display:flex; flex-direction:column; gap:8px; }
+.library-series-workspace .library-e4-preview { position:static; }
+.series-v3-article-preview .library-e4-companion { grid-column:auto; }
+@container component-library-editor (max-width:500px) { .series-v3-article-workspace { grid-template-columns:1fr; } }
+
+.series-v3-article-workspace { grid-column:1 / -1; min-width:0; }
+
+.series-v3-article-workspace .series-v3-variants { padding:6px; }
+.series-v3-article-workspace .series-v3-add-variant { grid-template-columns:minmax(0,1fr); }

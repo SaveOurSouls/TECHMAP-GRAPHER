@@ -1573,3 +1573,18 @@ function singleWireConnectionDocument() {
     wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
   });
 }
+
+describe("E4 drawing placement history",()=>{
+  it("persists independent position/visibility and undoes each operation without moving the table",()=>{
+    const connector=templateConnector(),document={...createEmptyHarnessDesign(),connectors:[connector]};
+    const initial=createEditorHistory(document);
+    const moved=executeEditorCommand(initial,{type:"set-drawing-placement",connectorId:connector.id,drawingId:"drawing-1",offset:{x:150,y:-40}});
+    const hidden=executeEditorCommand(moved,{type:"set-drawing-placement",connectorId:connector.id,drawingId:"drawing-1",visible:false});
+    const restored=parseHarnessDesignDocument(JSON.parse(JSON.stringify(hidden.present)));
+    expect(restored.connectors[0]!.drawingPlacements).toEqual([{drawingId:"drawing-1",visible:false,offset:{x:150,y:-40}}]);
+    expect(restored.connectors[0]!.positions).toEqual(connector.positions);
+    expect(undoEditorCommand(hidden).present).toEqual(moved.present);
+    expect(undoEditorCommand(moved).present).toEqual(document);
+    expect(()=>parseHarnessDesignDocument({...document,connectors:[{...connector,drawingPlacements:[{drawingId:"a",visible:true,offset:{x:NaN,y:0}}]}]})).toThrow();
+  });
+});

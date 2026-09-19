@@ -16,6 +16,32 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("null")]
+    [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":\"bad\",\"y\":0}}]")]
+    [InlineData("[{\"drawingId\":\"a\",\"visible\":1,\"offset\":{\"x\":0,\"y\":0}}]")]
+    [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":0,\"y\":0}},{\"drawingId\":\"a\",\"visible\":false,\"offset\":{\"x\":1,\"y\":1}}]")]
+    public async Task Drawing_placements_round_trip_and_invalid_edits_preserve_document(string invalid)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[{"id":"test","drawingPlacements":[
+              {"drawingId":"figure-1","visible":false,"offset":{"x":350,"y":-80}}]}],"wires":[]}
+            """)!;
+        var initial = JsonSerializer.SerializeToElement(content);
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId), new PutHarnessDesignRequest(0,1,initial),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        content["connectors"]![0]!["drawingPlacements"] = JsonNode.Parse(invalid);
+        using var rejected = await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(initial,saved.Content));
+    }
+
+    [Theory]
     [InlineData("null", 0, 0)]
     [InlineData("{}", 0, 0)]
     [InlineData("{\"fromMm\":-1,\"toMm\":0}", 0, 0)]

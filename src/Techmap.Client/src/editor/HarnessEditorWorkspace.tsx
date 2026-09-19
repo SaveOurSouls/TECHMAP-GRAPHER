@@ -113,6 +113,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onWireConnect?: (
@@ -230,7 +231,7 @@ export function HarnessEditorWorkspace({
   onActiveWireStripEndChange,
   onWireStripProfileClear,
   onObjectMove,
-  onObjectMovePreview,
+  onObjectMovePreview, onDrawingMove,
   onObjectEditRequest,
   onWireConnect,
   onWireReconnect,
@@ -516,6 +517,7 @@ export function HarnessEditorWorkspace({
           onObjectSelect={selectObject}
           onObjectGroupSelect={selectObjectGroup}
           onObjectMove={onObjectMove}
+          onDrawingMove={onDrawingMove}
           onObjectMovePreview={onObjectMovePreview}
           onObjectEditRequest={onObjectEditRequest}
           onWireConnect={onWireConnect}

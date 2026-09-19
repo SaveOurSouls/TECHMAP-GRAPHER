@@ -1,3 +1,6 @@
+import { createTemplateContentV5FromEditor } from "../component-library/template-model-v5";
+import { createE4ConnectorSeriesTableFromV3 } from "../component-library/e4-connector-series-table";
+import { projectE4DrawingCompanions, shortestDrawingLink } from "./component-template-view-renderer";
 import { describe, expect, it, vi } from "vitest";
 import { newTemplateContentV3 } from "../component-library/template-commands-v3";
 import type { TemplateContentV3, TemplateNodeV3 } from "../component-library/template-model-v3";
@@ -378,5 +381,39 @@ describe("project component template view", () => {
     drawImage.mockClear();
     drawProjectedComponentTemplateView(context, projection, cache);
     expect(drawImage).not.toHaveBeenCalled();
+  });
+});
+
+describe("independent E4 companion drawings",()=>{
+  it("filters the pinned article, moves only one drawing and hides it without changing its geometry",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    const a=rectangle(layer.id),b={...rectangle(layer.id),id:id()},excluded={...rectangle(layer.id),id:id()};
+    layer.nodes=[a,b,excluded];
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[],[],undefined,[{articleVariantId:instance.articleVariantId,nodeIds:[a.id,b.id],contactPointIds:[]}]).content;
+    const original=projectE4DrawingCompanions({...instance,content:v5},{x:100,y:200},300);
+    expect(original.map(d=>d.drawingId)).toEqual([a.id,b.id]);
+    const moved=projectE4DrawingCompanions({...instance,content:v5,drawingPlacements:[{drawingId:a.id,visible:false,offset:{x:750,y:80}}]},{x:100,y:200},300);
+    expect(moved[0]!.visible).toBe(false);
+    expect(moved[0]!.bounds.minX).toBeCloseTo(original[0]!.bounds.minX+750);
+    expect(moved[0]!.bounds.minY).toBeCloseTo(original[0]!.bounds.minY+80);
+    expect(moved[1]).toEqual(original[1]);
+    const object:EditorSceneObject={id:instance.objectId,layerId:"connectors",kind:"connector",label:"X1",x:100,y:200,width:300,height:80,color:"#000"};
+    const layers=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
+    const hidden={...instance,content:v5,drawingPlacements:[{drawingId:a.id,visible:false,offset:{x:750,y:80}},{drawingId:b.id,visible:false,offset:{x:0,y:0}}]};
+    expect(hitTestEditorScene([object],layers,{x:moved[0]!.bounds.minX+1,y:moved[0]!.bounds.minY+1},1,"e4",[hidden])).toBeNull();
+  });
+  it("keeps grouped primitives in a single listing entry",()=>{
+    const {content,instance}=fixture(),layer=content.views[1]!.layers[0]!;
+    const a=rectangle(layer.id),b=rectangle(layer.id),group={...base("group",layer.id),kind:"group" as const,geometry:{childIds:[a.id,b.id]}};
+    layer.nodes=[a,b,group];
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[]).content;
+    const drawings=projectE4DrawingCompanions({...instance,content:v5},{x:0,y:0},300);
+    expect(drawings).toHaveLength(1);expect(drawings[0]!.drawingId).toBe(group.id);expect(drawings[0]!.commands).toHaveLength(2);
+  });
+  it("uses one shortest segment for side, diagonal and overlapping bounds",()=>{
+    const table={minX:0,minY:0,maxX:100,maxY:50};
+    expect(shortestDrawingLink(table,{minX:140,minY:10,maxX:200,maxY:40})).toEqual([{x:100,y:25},{x:140,y:25}]);
+    expect(shortestDrawingLink(table,{minX:120,minY:80,maxX:200,maxY:100})).toEqual([{x:100,y:50},{x:120,y:80}]);
+    const [a,b]=shortestDrawingLink(table,{minX:20,minY:10,maxX:40,maxY:20});expect(a).toEqual(b);
   });
 });

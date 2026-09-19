@@ -44,6 +44,7 @@ import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export type EditorCommand =
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
+  | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
   | { readonly type: "refresh-template-terminals"; readonly connectorId: string; readonly catalog: NonNullable<ConnectorInstance["terminalCatalog"]> }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
@@ -183,6 +184,13 @@ export function applyEditorCommand(
         { ...document, connectors: [...document.connectors, command.connector] },
         command.connector.id,
       ), command.connector.contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
+    case "set-drawing-placement":
+      return updateConnector(document,command.connectorId,connector=>{
+        if(connector.libraryBinding?.mode!=="template") throw new Error("Рисунок доступен библиотечному компоненту.");
+        if(!command.drawingId.trim() || command.offset && (!Number.isFinite(command.offset.x) || !Number.isFinite(command.offset.y))) throw new Error("Некорректное положение рисунка.");
+        const previous=connector.drawingPlacements?.find(p=>p.drawingId===command.drawingId) ?? {drawingId:command.drawingId,visible:true,offset:{x:0,y:0}};
+        return {...connector,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {})}]};
+      });
     case "move-connector":
       {
       if (!Number.isFinite(command.position.x) || !Number.isFinite(command.position.y)) {
@@ -274,6 +282,7 @@ export function applyEditorCommand(
       const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
         ...candidate,
         positions: item.positions,
+        drawingPlacements: item.drawingPlacements,
       }));
       return rememberCustomWireColors(updated, contacts.flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));
     }
@@ -318,6 +327,7 @@ export function applyEditorCommand(
       const updated = updateConnectorE4Geometry(document, command.connectorId, (item) => ({
         ...command.connector,
         positions: item.positions,
+        drawingPlacements: item.drawingPlacements,
       }));
       return rememberCustomWireColors(updated, command.connector.contacts
         .flatMap((contact) => [contact.color, contact.secondaryColor ?? ""]));

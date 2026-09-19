@@ -192,6 +192,22 @@ try {
     assert.equal(unchangedGraph.snapshots[0].sourceVersionSha256, published.versionSha256);
     terminalRefreshChecked = true;
   }
+  let drawingPlacementExpected = null;
+  if (process.argv.includes('--check-drawing-placement')) {
+    const { applyEditorCommand } = await module('editor/commands.ts');
+    const current = await designs.get(project.projectId,harnessId);
+    const drawingId = content.views.find(v=>v.kind==='drawing').layers[0].nodes[0].id;
+    let updated = applyEditorCommand(current.content,{type:'set-drawing-placement',connectorId:preview.id,drawingId,offset:{x:330,y:90}});
+    updated = applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId,visible:false});
+    await designs.save(project.projectId,harnessId,current.revision,updated);
+    const reread = await designs.get(project.projectId,harnessId);
+    drawingPlacementExpected = [{drawingId,visible:false,offset:{x:330,y:90}}];
+    assert.deepEqual(reread.content.connectors[0].drawingPlacements,drawingPlacementExpected);
+    assert.deepEqual(reread.content.connectors[0].positions,current.content.connectors[0].positions);
+    assert.deepEqual(reread.content.connectors[0].libraryBinding,current.content.connectors[0].libraryBinding);
+    const graphAgain = await placements.list(project.projectId,harnessId);
+    assert.deepEqual(graphAgain.placements[0].instance.drawingPlacements,drawingPlacementExpected);
+  }
   let stripProfilesChecked = false;
   if (process.argv.includes('--check-strip-profiles')) {
     const { createConnector, createWire } = await module('editor/commands.ts');
@@ -360,6 +376,11 @@ try {
     const reloadedTemplate = await restartedTemplate.json();
     assert.equal(reloadedTemplate.version, latestTemplateVersion);
     if (process.argv.includes('--check-drawing-editor')) { assert.deepEqual(reloadedTemplate.content.articleDrawings, content.articleDrawings); assert.deepEqual(reloadedTemplate.content.drawingContactBindings, content.drawingContactBindings); }
+    if(drawingPlacementExpected && !deleted) {
+      const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).content.connectors[0].drawingPlacements,drawingPlacementExpected);
+    }
     if (routingChecked && !deleted) {
       const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${routingHarnessId}/design`, restartedUrl), {
         headers: { Cookie: restartedCookie },
@@ -382,7 +403,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

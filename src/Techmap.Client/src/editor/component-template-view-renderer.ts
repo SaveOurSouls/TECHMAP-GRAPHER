@@ -1,3 +1,4 @@
+import type { ConnectorDrawingPlacement } from "./model";
 import { articleDrawingView } from "../component-library/drawing-bindings";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
 import { materializeArticleVariantV3 } from "../component-library/template-article-materialization-v3";
@@ -18,6 +19,7 @@ import type { HarnessEditorView } from "./editor-types";
 import { roundedPolylineCommandsV2 } from "../component-library/rounded-polyline-v2";
 
 export interface ComponentTemplateViewInstance {
+  readonly drawingPlacements?: readonly ConnectorDrawingPlacement[];
   /** Placement id; for editor connectors this is the EditorSceneObject id. */
   readonly objectId: string;
   readonly snapshotId: string;
@@ -394,18 +396,46 @@ export function projectComponentTemplateView(
   }
 }
 
-/** Places the optional article drawing above its E4 table, within its width. */
-export function projectE4DrawingCompanion(instance: ComponentTemplateViewInstance, origin: ComponentTemplateProjectionOrigin, tableWidth: number, resolveAssetUrl?: ResolveComponentTemplateAssetUrl): ProjectedComponentTemplateView | null {
-  if (instance.content.schemaVersion !== 5) return null;
-  const drawing = projectComponentTemplateView(instance, "drawing", {x:0,y:0}, resolveAssetUrl);
-  if (!drawing) return null;
-  const {minX,minY,maxX,maxY} = drawing.bounds;
-  const scale = Math.min(1, Math.max(40,tableWidth) / Math.max(1,maxX-minX), 140 / Math.max(1,maxY-minY));
-  const x = origin.x - minX * scale;
-  const y = origin.y - 20 - maxY * scale;
-  const transform = {a:scale,b:0,c:0,d:scale,e:x,f:y};
-  return {...drawing, viewKind:"e4", commands:drawing.commands.map(command=>({...command,transform:multiply(transform,command.transform)})),
-    bounds:{minX:origin.x,minY:minY*scale+y,maxX:maxX*scale+x,maxY:origin.y-20}};
+export interface E4DrawingCompanion extends ProjectedComponentTemplateView {
+  readonly drawingId:string;
+  readonly label:string;
+  readonly visible:boolean;
+  readonly offset:{x:number;y:number};
+}
+
+/** Independent root figures (groups remain one drawing) from the pinned article. */
+export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstance,origin:ComponentTemplateProjectionOrigin,tableWidth:number,resolveAssetUrl?:ResolveComponentTemplateAssetUrl):E4DrawingCompanion[] {
+  if(instance.content.schemaVersion!==5) return [];
+  const drawing=projectComponentTemplateView(instance,"drawing",{x:0,y:0},resolveAssetUrl);
+  const source=instance.content.views.find(v=>v.kind==="drawing");
+  if(!drawing || !source) return [];
+  const view=articleDrawingView(source,instance.content.articleDrawings,instance.articleVariantId);
+  const nodes=view.layers.flatMap(l=>l.nodes),owned=new Set(nodes.flatMap(n=>n.kind==="group" ? n.geometry.childIds : []));
+  const scale=Math.min(1,Math.max(40,tableWidth)/Math.max(1,drawing.bounds.maxX-drawing.bounds.minX),140/Math.max(1,drawing.bounds.maxY-drawing.bounds.minY));
+  return nodes.filter(n=>!owned.has(n.id) && n.visible).flatMap((node,index)=>{
+    const ids=new Set<string>();
+    const visit=(id:string)=>{if(ids.has(id))return;ids.add(id);const n=nodes.find(n=>n.id===id);if(n?.kind==="group")n.geometry.childIds.forEach(visit);};visit(node.id);
+    const commands=drawing.commands.filter(c=>ids.has(c.nodeId));if(!commands.length)return [];
+    const placement=instance.drawingPlacements?.find(p=>p.drawingId===node.id),offset=placement?.offset ?? {x:0,y:0};
+    const transform={a:scale,b:0,c:0,d:scale,e:origin.x-drawing.bounds.minX*scale+offset.x,f:origin.y-20-drawing.bounds.maxY*scale+offset.y};
+    const projected=commands.map(command=>({...command,transform:multiply(transform,command.transform)}));
+    const label=node.kind==="image" ? (instance.content.assets.find(a=>a.assetId===node.geometry.assetId)?.fileName ?? `Изображение ${index+1}`) : node.kind==="group" ? `Группа ${index+1}` : `Рисунок ${index+1}`;
+    return [{...drawing,viewKind:"e4" as const,drawingId:node.id,label,visible:placement?.visible!==false,offset,commands:projected,bounds:combinedBounds(projected)}];
+  });
+}
+
+/** Compatibility aggregate for fit-to-view and hit testing. */
+export function projectE4DrawingCompanion(instance:ComponentTemplateViewInstance,origin:ComponentTemplateProjectionOrigin,tableWidth:number,resolveAssetUrl?:ResolveComponentTemplateAssetUrl):ProjectedComponentTemplateView|null {
+  const drawings=projectE4DrawingCompanions(instance,origin,tableWidth,resolveAssetUrl).filter(d=>d.visible);
+  const commands=drawings.flatMap(d=>d.commands);
+  return commands.length ? {...drawings[0]!,commands,bounds:combinedBounds(commands)} : null;
+}
+
+/** Closest points of two axis-aligned bounds. Overlap needs no visible link. */
+export function shortestDrawingLink(a:ComponentTemplateViewBounds,b:ComponentTemplateViewBounds):readonly [ComponentTemplateProjectionOrigin,ComponentTemplateProjectionOrigin] {
+  const axis=(amin:number,amax:number,bmin:number,bmax:number):[number,number]=>amax<bmin ? [amax,bmin] : bmax<amin ? [amin,bmax] : [(Math.max(amin,bmin)+Math.min(amax,bmax))/2,(Math.max(amin,bmin)+Math.min(amax,bmax))/2];
+  const [ax,bx]=axis(a.minX,a.maxX,b.minX,b.maxX),[ay,by]=axis(a.minY,a.maxY,b.minY,b.maxY);
+  return [{x:ax,y:ay},{x:bx,y:by}];
 }
 
 type ImageCacheEntry =

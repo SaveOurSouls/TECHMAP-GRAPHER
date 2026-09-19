@@ -218,7 +218,14 @@ export interface ConnectorContact {
   readonly libraryContact?: ConnectorLibraryContact | null;
 }
 
+export interface ConnectorDrawingPlacement {
+  readonly drawingId: string;
+  readonly visible: boolean;
+  readonly offset: Point;
+}
+
 export interface ConnectorInstance {
+  readonly drawingPlacements?: readonly ConnectorDrawingPlacement[];
   /** v5 uses the editable E4 table; graphical points belong to the drawing. */
   readonly e4TableMode?: boolean;
   /** Versioned compatibility supplement; never changes the pinned template. */
@@ -1202,6 +1209,7 @@ function parseConnector(value: unknown): ConnectorInstance {
     }
   }
   const connector: ConnectorInstance = {
+    ...(record.drawingPlacements === undefined ? {} : {drawingPlacements: parseDrawingPlacements(record.drawingPlacements)}),
     ...(record.e4TableMode === true ? { e4TableMode: true } : {}),
     ...(record.terminalCatalog === undefined ? {} : { terminalCatalog: parseConnectorTerminalCatalog(record.terminalCatalog) }),
     id: requireText(record.id, "ID соединителя"),
@@ -1221,6 +1229,17 @@ function parseConnector(value: unknown): ConnectorInstance {
   };
   validateConnectorLibraryMetadata(connector);
   return connector;
+}
+
+export function parseDrawingPlacements(value:unknown):ConnectorDrawingPlacement[] {
+  if(!Array.isArray(value) || value.length>2000) throw new Error("Некорректный список рисунков компонента.");
+  const result=value.map(item=>{
+    const record=requireRecord(item,"Некорректный рисунок.");
+    if(typeof record.visible!=="boolean") throw new Error("Некорректная видимость рисунка.");
+    return {drawingId:requireText(record.drawingId,"ID рисунка"),visible:record.visible,offset:parsePoint(record.offset)};
+  });
+  if(new Set(result.map(p=>p.drawingId)).size!==result.length) throw new Error("Повторный ID рисунка.");
+  return result;
 }
 
 /** Validates additive library metadata without requiring the external series catalog. */

@@ -153,3 +153,7 @@
   .e4ci-header { align-items: flex-start; flex-direction: column; }
 }
 .e4cce-refresh { position: absolute; right: 4px; top: 2px; width: 22px; min-height: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #2584a8; cursor: pointer; }
+
+.he-companion-list { display:flex; flex-direction:column; gap:5px; padding:8px; border-bottom:1px solid #dce3e8; font-size:12px; }
+.he-companion-list label { display:flex; align-items:center; gap:6px; }
+.he-companion-list input[type="checkbox"] { width:14px; height:14px; min-width:14px; padding:0; margin:0; flex:0 0 14px; }

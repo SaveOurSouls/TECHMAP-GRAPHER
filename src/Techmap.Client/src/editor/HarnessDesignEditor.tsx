@@ -1,3 +1,4 @@
+import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
@@ -160,6 +161,7 @@ export function buildComponentTemplateViewInstances(
       snapshotId: snapshot.snapshotId,
       articleVariantId: binding.articleVariantId,
       content: snapshot.content,
+      ...(connector.drawingPlacements ? {drawingPlacements:connector.drawingPlacements} : {}),
     }];
   });
 }
@@ -1453,7 +1455,13 @@ export function HarnessDesignEditor({
         resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
-        propertyInspector={selectedConnector ? (
+        onDrawingMove={(connectorId,drawingId,offset)=>run({type:"set-drawing-placement",connectorId,drawingId,offset})}
+        propertyInspector={selectedConnector ? (<>
+          {view==="e4" && (()=>{
+            const instance=componentTemplateViewInstances.find(i=>i.objectId===selectedConnector.id);
+            const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];
+            return drawings.length ? <section className="he-companion-list" aria-label="Рисунки компонента"><strong>Рисунки артикула</strong><InfoHint>Показать или скрыть рисунок на Э4. Перетаскивайте рисунок мышью; прямая пунктирная линия связывает его с таблицей. Группа фигур перемещается как один рисунок.</InfoHint>{drawings.map(d=><label key={d.drawingId}><input type="checkbox" aria-label={`Показать ${d.label}`} checked={d.visible} disabled={selectedConnectorLayer?.locked===true} onChange={e=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,visible:e.target.checked})}/>{d.label}</label>)}</section> : null;
+          })()}
           <E4ConnectorInspector
             connector={selectedConnector}
             onRefreshTerminals={refreshTemplateTerminals}
@@ -1467,7 +1475,7 @@ export function HarnessDesignEditor({
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
           />
-        ) : view === "drawing" && selectedWireIds.length >= 2 ? (
+        </>) : view === "drawing" && selectedWireIds.length >= 2 ? (
           <CableSelectionPanel
             selectedWireIds={selectedWireIds}
             cable={selectedCable}

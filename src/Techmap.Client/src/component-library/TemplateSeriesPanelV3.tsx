@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ReactNode, type FormEvent } from "react";
 import { expandArticlePattern } from "./article-pattern-expansion";
 import type { ArticleKeyV3, TemplateContentV3 } from "./template-model-v3";
 import { articleContactCountIssueV3, articleContactCountRuleV3, TEMPLATE_V3_LIMITS } from "./template-model-v3";
@@ -88,6 +88,7 @@ export function articleAddPreviewV3(
 }
 
 export interface TemplateSeriesPanelV3Props {
+  readonly articlePreview?: ReactNode;
   readonly independentE4?: boolean;
   readonly content: TemplateContentV3;
   readonly selectedArticleVariantId?: string | null;
@@ -528,7 +529,7 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
         terminalSearchMessage={props.terminalArticleSearchMessage ?? null}
         onTerminalQueryChange={props.onTerminalArticleQueryChange}
       />
-      <section className="series-v3-variants" aria-label="Артикулы серии">
+      <section className="series-v3-article-workspace" aria-label="Артикулы и представления"><section className="series-v3-variants" aria-label="Артикулы серии">
         <header><strong>Артикулы серии</strong><InfoHint>Каждый артикул задаёт число контактов по группам.{props.independentE4 && " Количество строк Э4 — от 0 до 2000; графика задаётся отдельно."}</InfoHint></header>
         <form className="series-v3-add-variant" onSubmit={addVariants}>
           <fieldset className="series-v3-add-mode">
@@ -554,7 +555,7 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
             onDelete={props.onDeleteArticleVariant} onSet={props.onSetArticleContactGroup} />
           {!props.content.contactTypeGroups.length && <p>Создайте хотя бы один тип контакта, чтобы появилась колонка количества.</p>}
         </> : <p>Артикулы серии ещё не добавлены.</p>}
-      </section>
+      </section>{props.articlePreview && <aside className="series-v3-article-preview">{props.articlePreview}</aside>}</section>
     </div>
   </section>;
 }

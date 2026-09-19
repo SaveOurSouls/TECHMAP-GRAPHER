@@ -289,6 +289,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     "content");
             }
 
+            ValidateDrawingPlacements(root);
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);
 
@@ -301,6 +302,31 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "The harness design content is not valid JSON.",
                 "content",
                 innerException: error);
+        }
+    }
+
+    private static void ValidateDrawingPlacements(JsonElement root)
+    {
+        if (!root.TryGetProperty("connectors", out var connectors) || connectors.ValueKind != JsonValueKind.Array) return;
+        var index = 0;
+        foreach (var connector in connectors.EnumerateArray())
+        {
+            var field = $"content.connectors[{index++}].drawingPlacements";
+            if (connector.ValueKind != JsonValueKind.Object || !connector.TryGetProperty("drawingPlacements", out var drawings)) continue;
+            if (drawings.ValueKind != JsonValueKind.Array || drawings.GetArrayLength() > 2000)
+                throw Invalid("invalid_drawing_placements", "Invalid component drawing list.", field);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var drawing in drawings.EnumerateArray())
+            {
+                if (drawing.ValueKind != JsonValueKind.Object ||
+                    !drawing.TryGetProperty("drawingId", out var id) || id.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(id.GetString()) || id.GetString()!.Length > 1024 || !ids.Add(id.GetString()!) ||
+                    !drawing.TryGetProperty("visible", out var visible) || visible.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+                    !drawing.TryGetProperty("offset", out var offset) || offset.ValueKind != JsonValueKind.Object ||
+                    !offset.TryGetProperty("x", out var x) || x.ValueKind != JsonValueKind.Number || !x.TryGetDouble(out var dx) || !double.IsFinite(dx) ||
+                    !offset.TryGetProperty("y", out var y) || y.ValueKind != JsonValueKind.Number || !y.TryGetDouble(out var dy) || !double.IsFinite(dy))
+                    throw Invalid("invalid_drawing_placements", "Invalid component drawing position or visibility.", field);
+            }
         }
     }
 

@@ -36,7 +36,7 @@ import {
   ComponentTemplateImageCache,
   drawProjectedComponentTemplateView,
   projectComponentTemplateView,
-  projectE4DrawingCompanion,
+  projectE4DrawingCompanion, projectE4DrawingCompanions, shortestDrawingLink,
   type ComponentTemplateViewInstance,
   type ResolveComponentTemplateAssetUrl,
 } from "./component-template-view-renderer";
@@ -68,6 +68,7 @@ export interface CanvasViewportProps {
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   /** Selects all members of a linked E4 overlay in one state update. */
   readonly onObjectGroupSelect?: (objectIds: readonly string[]) => void;
+  readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   /** Shows a transient move without adding an undo entry. Passing null clears it. */
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
@@ -163,6 +164,8 @@ interface PointerDrag {
   readonly clientY: number;
   readonly camera: EditorCamera;
 }
+
+interface DrawingPointerDrag { readonly kind:"companion"; readonly pointerId:number; readonly clientX:number; readonly clientY:number; readonly objectId:string; readonly drawingId:string; readonly offset:EditorPoint; }
 
 interface ObjectPointerDrag {
   readonly kind: "object";
@@ -1654,9 +1657,8 @@ export function hitTestEditorScene(
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
     const object = paintOrder[index];
     const instance = object?.kind === "connector" ? componentViews.get(object.id) : undefined;
-    const companion = object && instance && view === "e4" ? projectE4DrawingCompanion(instance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl) : null;
-    if (companion && point.x >= companion.bounds.minX - tolerance && point.x <= companion.bounds.maxX + tolerance &&
-        point.y >= companion.bounds.minY - tolerance && point.y <= companion.bounds.maxY + tolerance) return object!.id;
+    const companions = object && instance && view === "e4" ? projectE4DrawingCompanions(instance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl) : [];
+    if(companions.some(companion=>companion.visible && point.x >= companion.bounds.minX-tolerance && point.x <= companion.bounds.maxX+tolerance && point.y >= companion.bounds.minY-tolerance && point.y <= companion.bounds.maxY+tolerance)) return object!.id;
     const projection = object && instance && view
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
@@ -1971,8 +1973,12 @@ export function drawEditorSceneObject(
   context.save();
   if (object.kind === "connector" && componentTemplateViewInstance) {
     if (view === "e4") {
-      const companion = projectE4DrawingCompanion(componentTemplateViewInstance, object, getE4ConnectorLayout(object)?.width ?? object.width, resolveComponentTemplateAssetUrl);
-      if (companion) drawProjectedComponentTemplateView(context, companion, componentTemplateImageCache, selected);
+      const layout=getE4ConnectorLayout(object);
+      for(const companion of projectE4DrawingCompanions(componentTemplateViewInstance,object,layout?.width ?? object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible)) {
+        const [from,to]=shortestDrawingLink({minX:object.x,minY:object.y,maxX:object.x+(layout?.width ?? object.width),maxY:object.y+(layout?.height ?? object.height)},companion.bounds);
+        context.save();context.strokeStyle="#7b8996";context.lineWidth=1;context.setLineDash([4,4]);context.beginPath();context.moveTo(from.x,from.y);context.lineTo(to.x,to.y);context.stroke();context.restore();
+        drawProjectedComponentTemplateView(context,companion,componentTemplateImageCache,selected);
+      }
     }
     const projection = projectComponentTemplateView(
       componentTemplateViewInstance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl,
@@ -2658,7 +2664,7 @@ export function CanvasViewport({
   onViewportSizeChange,
   onObjectSelect,
   onObjectGroupSelect,
-  onObjectMove,
+  onObjectMove, onDrawingMove,
   onObjectMovePreview,
   onWireConnect,
   onWireReconnect,
@@ -2681,12 +2687,14 @@ export function CanvasViewport({
   if (!componentTemplateImageCacheRef.current) {
     componentTemplateImageCacheRef.current = new ComponentTemplateImageCache();
   }
-  const dragRef = useRef<PointerDrag | ObjectPointerDrag | WireRoutePointerDrag |
+  const dragRef = useRef<PointerDrag | ObjectPointerDrag | DrawingPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | null>(null);
   const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
   const inlineDragActivatedRef = useRef(false);
   const suppressInlineDoubleClickUntilRef = useRef(0);
   const [inlineDragOffset, setInlineDragOffset] = useState<EditorPoint | null>(null);
+  const [drawingPreview,setDrawingPreview]=useState<{objectId:string;drawingId:string;offset:EditorPoint}|null>(null);
+  const displayInstances=drawingPreview ? componentTemplateViewInstances.map(instance=>instance.objectId===drawingPreview.objectId ? {...instance,drawingPlacements:[...(instance.drawingPlacements ?? []).filter(p=>p.drawingId!==drawingPreview.drawingId),{drawingId:drawingPreview.drawingId,visible:true,offset:drawingPreview.offset}]} : instance) : componentTemplateViewInstances;
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
@@ -2766,7 +2774,7 @@ export function CanvasViewport({
         cables,
         overlays,
         connectorAlignmentGuides,
-        componentTemplateViewInstances,
+        displayInstances,
         resolveComponentTemplateAssetUrl,
         componentTemplateImageCacheRef.current!,
       );
@@ -2783,7 +2791,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [cables, camera, componentTemplateViewInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
+  }, [cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -2907,6 +2915,14 @@ export function CanvasViewport({
     }
     if (tool === "select") {
       const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      if(view==="e4" && onDrawingMove && event.button===0) {
+        for(const object of [...objects].reverse()) {
+          const layer=layers.find(l=>l.id===object.layerId),instance=componentTemplateViewInstances.find(i=>i.objectId===object.id);
+          if(object.kind!=="connector" || !instance || !layer?.visible || layer.locked) continue;
+          const drawing=projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width ?? object.width,resolveComponentTemplateAssetUrl).reverse().find(d=>d.visible && worldPoint.x>=d.bounds.minX && worldPoint.x<=d.bounds.maxX && worldPoint.y>=d.bounds.minY && worldPoint.y<=d.bounds.maxY);
+          if(drawing) {event.currentTarget.setPointerCapture(event.pointerId);onObjectSelect(object.id,false);dragRef.current={kind:"companion",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId:object.id,drawingId:drawing.drawingId,offset:drawing.offset};return;}
+        }
+      }
       if (view === "e4") {
         const endpoint = hitTestE4ScreenConnection(overlays.screens, objects, worldPoint, camera.zoom, layers) ??
           hitTestConnectorContact(objects, layers, worldPoint, camera.zoom, view);
@@ -3044,7 +3060,8 @@ export function CanvasViewport({
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    if (drag.kind === "pan") {
+    if(drag.kind==="companion") { setDrawingPreview({objectId:drag.objectId,drawingId:drag.drawingId,offset:{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom}});
+    } else if (drag.kind === "pan") {
       onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
     } else if (drag.kind === "object" && inlineObjectDragMoved(event.clientX - drag.clientX, event.clientY - drag.clientY)) {
       const destination = snappedObjectDestination(drag.objectId, inlineObjectDragDestination(
@@ -3079,7 +3096,11 @@ export function CanvasViewport({
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    if (dragRef.current?.kind === "object") {
+    if(dragRef.current?.kind==="companion") {
+      const drag=dragRef.current;
+      if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) onDrawingMove?.(drag.objectId,drag.drawingId,{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom});
+      setDrawingPreview(null);
+    } else if (dragRef.current?.kind === "object") {
       const drag = dragRef.current;
       const deltaX = event.clientX - drag.clientX;
       const deltaY = event.clientY - drag.clientY;
@@ -3141,6 +3162,7 @@ export function CanvasViewport({
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
+    if(dragRef.current.kind==="companion") setDrawingPreview(null);
     if (dragRef.current.kind === "object") {
       onObjectMovePreview?.(dragRef.current.objectId, null);
       setConnectorAlignmentGuides({});
