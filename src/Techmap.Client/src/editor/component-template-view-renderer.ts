@@ -1,5 +1,7 @@
+import { articleDrawingView } from "../component-library/drawing-bindings";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
 import { materializeArticleVariantV3 } from "../component-library/template-article-materialization-v3";
+import { hatchTile, type DrawingHatch } from "../component-library/drawing-hatch";
 import type {
   NumericExpressionV3,
   TemplateContentV3,
@@ -55,6 +57,7 @@ interface ProjectedCommandBase {
   readonly strokeWidth: number;
   readonly strokeDash: "solid" | "dash" | "dot" | "dash-dot";
   readonly fill: string | null;
+  readonly hatch?: DrawingHatch;
 }
 
 export type ProjectedComponentTemplateCommand =
@@ -144,6 +147,7 @@ function commonCommand(
     strokeWidth,
     strokeDash: node.stroke.dash ?? "solid",
     fill: node.fill.color,
+    hatch: node.fill.hatch,
   };
 }
 
@@ -305,8 +309,9 @@ export function projectComponentTemplateView(
   // A v5 E4 table is always rendered by the schematic editor. Its drawing is
   // projected separately as a companion, never as a replacement for that table.
   if (viewKind === "e4" && instance.content.schemaVersion === 5) return null;
-  const view = instance.content.views.find(candidate => candidate.kind === viewKind);
-  if (!view) return null;
+  const sourceView = instance.content.views.find(candidate => candidate.kind === viewKind);
+  if (!sourceView) return null;
+  const view = articleDrawingView(sourceView, instance.content.schemaVersion === 5 ? instance.content.articleDrawings : undefined, instance.articleVariantId);
   try {
     const v3Content: TemplateContentV3 = instance.content.schemaVersion === 3
       ? instance.content
@@ -443,6 +448,8 @@ export class ComponentTemplateImageCache {
   }
 }
 
+const hatchPatterns = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasPattern>>();
+
 function applyCommandTransform(context: CanvasRenderingContext2D, command: ProjectedComponentTemplateCommand): void {
   const { a, b, c, d, e, f } = command.transform;
   context.transform(a, b, c, d, e, f);
@@ -455,6 +462,24 @@ function applyCommandTransform(context: CanvasRenderingContext2D, command: Proje
       : command.strokeDash === "dash-dot" ? [6 * unit, 3 * unit, unit, 3 * unit]
         : []);
   context.fillStyle = command.fill ?? "rgba(0, 0, 0, 0)";
+  if (command.fill && command.hatch && typeof document !== "undefined") {
+    const key = JSON.stringify([command.fill,command.hatch]);
+    const cache = hatchPatterns.get(context) ?? new Map<string,CanvasPattern>();
+    if (!hatchPatterns.has(context)) hatchPatterns.set(context,cache);
+    const cached = cache.get(key);
+    if (cached) { context.fillStyle = cached; return; }
+    const hatch = command.hatch, tile = hatchTile(hatch), canvas = document.createElement("canvas");
+    canvas.width = canvas.height = Math.ceil(hatch.spacing);
+    const brush = canvas.getContext("2d");
+    if (brush) {
+      brush.scale(canvas.width / hatch.spacing, canvas.height / hatch.spacing);
+      brush.strokeStyle = brush.fillStyle = command.fill; brush.lineWidth = 1;
+      for (const [x1, y1, x2, y2] of tile.lines) { brush.beginPath(); brush.moveTo(x1!, y1!); brush.lineTo(x2!, y2!); brush.stroke(); }
+      for (const [x, y, r] of tile.dots) { brush.beginPath(); brush.arc(x!, y!, r!, 0, 2 * Math.PI); brush.fill(); }
+      const pattern = context.createPattern(canvas, "repeat");
+      if (pattern) { pattern.setTransform(new DOMMatrix().rotate(hatch.angle).scale(hatch.spacing / canvas.width)); context.fillStyle = pattern; if(cache.size>=128) cache.clear(); cache.set(key,pattern); }
+    }
+  }
 }
 
 function paintPath(context: CanvasRenderingContext2D, command: ProjectedComponentTemplateCommand): void {

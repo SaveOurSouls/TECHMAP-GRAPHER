@@ -1,3 +1,4 @@
+import { type ArticleDrawing, type DrawingContactBinding } from "./drawing-bindings";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { parseConnectorSchematic, type ConnectorSchematicPresentation } from "../editor/model";
 import {
@@ -37,6 +38,8 @@ export interface TerminalContactTypeBindingV5 {
 }
 
 export interface TemplateContentV5 extends Omit<TemplateContentV3, "schemaVersion" | "articleVariants"> {
+  readonly articleDrawings?: ArticleDrawing[];
+  readonly drawingContactBindings?: DrawingContactBinding[];
   readonly e4Presentation?: ConnectorSchematicPresentation;
   readonly schemaVersion: 5;
   readonly compatibleTerminalArticleKeys: ArticleKeyV3[];
@@ -59,7 +62,7 @@ const ROOT_KEYS = [
   "schemaVersion", "views", "logicalContacts", "parameters", "repeaters", "assets",
   "contactTypeGroups", "compatibleTerminalArticleKeys", "articleVariants", "e4ConnectorTable",
 ] as const;
-const OPTIONAL_ROOT_KEYS = ["terminalContactTypeBindings", "e4Presentation"] as const;
+const OPTIONAL_ROOT_KEYS = ["terminalContactTypeBindings", "e4Presentation", "articleDrawings", "drawingContactBindings"] as const;
 const ARTICLE_GROUP_KEYS = ["contactTypeGroupId", "contactCount"] as const;
 const TABLE_KEYS = ["modelVersion", "columns", "contactTypeGroups", "seriesDefaults", "articles"] as const;
 const TABLE_ARTICLE_KEYS = ["articleVariantId", "sourceId", "entityType", "articleKey", "contactGroups", "rows"] as const;
@@ -268,6 +271,8 @@ function projectV5ToV4(value: Record<string, unknown>, terminals: readonly Artic
   delete projected.compatibleTerminalArticleKeys;
   delete projected.terminalContactTypeBindings;
   delete projected.e4Presentation;
+  delete projected.articleDrawings;
+  delete projected.drawingContactBindings;
   const configuredArticleIds = new Set<string>();
   if (Array.isArray(projected.articleVariants)) for (const variant of projected.articleVariants) {
     if (!isRecord(variant) || !Array.isArray(variant.contactGroups)) continue;
@@ -287,6 +292,38 @@ function projectV5ToV4(value: Record<string, unknown>, terminals: readonly Artic
   return projected;
 }
 
+function validateDrawingBindings(value: Record<string, unknown>, diagnostics: TemplateV3Diagnostic[]) {
+  const ids = (items: unknown, key: string) => new Set(Array.isArray(items) ? items.filter(isRecord).map(item => item[key]) : []);
+  const articles = ids(value.articleVariants, "id"), contacts = ids(value.logicalContacts, "id");
+  const views = Array.isArray(value.views) ? value.views.filter(isRecord).filter(view => view.kind === "drawing") : [];
+  const nodes = new Set(views.flatMap(view => Array.isArray(view.layers) ? view.layers.filter(isRecord).flatMap(layer => Array.isArray(layer.nodes) ? layer.nodes.filter(isRecord).map(node => node.id) : []) : []));
+  const points = new Set(views.flatMap(view => Array.isArray(view.contactPoints) ? view.contactPoints.filter(isRecord).map(point => point.id) : []));
+  const rows = ids(isRecord(value.e4ConnectorTable) ? value.e4ConnectorTable.seriesDefaults : [], "rowId");
+  for (const key of ["articleDrawings", "drawingContactBindings"] as const) {
+    const items = value[key]; if (items === undefined) continue;
+    if (!Array.isArray(items)) { diagnostics.push(error("array_required", `$.${key}`, "Ожидается массив.")); continue; }
+    const seen = new Set<unknown>(), seenRows = new Set<unknown>();
+    items.forEach((item, index) => {
+      const path = `$.${key}[${index}]`;
+      if (key === "articleDrawings") {
+        if (!exact(item, ["articleVariantId", "nodeIds", "contactPointIds"], path, diagnostics)) return;
+        if (!articles.has(item.articleVariantId) || seen.has(item.articleVariantId)) diagnostics.push(error("invalid_drawing_article", path, "Артикул рисунка отсутствует или повторяется."));
+        seen.add(item.articleVariantId);
+        for (const [field, allowed] of [["nodeIds", nodes], ["contactPointIds", points]] as const) {
+          const values = item[field];
+          if (!Array.isArray(values) || values.some(id => !allowed.has(id)) || new Set(values).size !== values.length)
+            diagnostics.push(error("invalid_drawing_selection", `${path}.${field}`, "Объекты рисунка отсутствуют или повторяются."));
+        }
+      } else {
+        if (!exact(item, ["logicalContactId", "seriesRowId"], path, diagnostics)) return;
+        if (!contacts.has(item.logicalContactId) || !rows.has(item.seriesRowId) || seen.has(item.logicalContactId) || seenRows.has(item.seriesRowId))
+          diagnostics.push(error("invalid_drawing_contact", path, "Связь контакта со строкой отсутствует или повторяется."));
+        seen.add(item.logicalContactId); seenRows.add(item.seriesRowId);
+      }
+    });
+  }
+}
+
 export function validateTemplateContentV5(value: unknown): TemplateV5Validation {
   if (!isRecord(value)) return { valid: false, diagnostics: [error("object_required", "$", "Содержимое шаблона v5 должно быть объектом.")] };
   const diagnostics: TemplateV3Diagnostic[] = [];
@@ -294,6 +331,7 @@ export function validateTemplateContentV5(value: unknown): TemplateV5Validation 
     try { parseConnectorSchematic(value.e4Presentation); }
     catch { diagnostics.push(error("invalid_e4_presentation", "$.e4Presentation", "Некорректная преднастройка таблицы Э4.")); }
   }
+  validateDrawingBindings(value, diagnostics);
   const exactShapes = validateV5Shapes(value, diagnostics);
   if (value.schemaVersion !== 5)
     diagnostics.push(error("schema_version", "$.schemaVersion", "Поддерживается schemaVersion 5."));
@@ -407,6 +445,8 @@ export function createTemplateContentV5FromEditor(
   compatibleTerminalArticleKeys: readonly ArticleKeyV3[],
   terminalContactTypeBindings: readonly TerminalContactTypeBindingV5[] | null = [],
   e4Presentation?: ConnectorSchematicPresentation,
+  articleDrawings?: readonly ArticleDrawing[],
+  drawingContactBindings?: readonly DrawingContactBinding[],
 ): TemplateV5Upgrade {
   content = withDrawingArticleCounts(content);
   const coreValidation = validateTemplateContentV3Structure(content);
@@ -435,6 +475,8 @@ export function createTemplateContentV5FromEditor(
     })) }),
     articleVariants,
     e4ConnectorTable: upgradeE4ConnectorSeriesTableV1ToV2(table),
+    ...(articleDrawings ? {articleDrawings: structuredClone(articleDrawings) as ArticleDrawing[]} : {}),
+    ...(drawingContactBindings ? {drawingContactBindings: structuredClone(drawingContactBindings) as DrawingContactBinding[]} : {}),
     ...(e4Presentation ? { e4Presentation: parseConnectorSchematic(e4Presentation) } : {}),
   };
   const validation = validateTemplateContentV5(result);
@@ -444,7 +486,7 @@ export function createTemplateContentV5FromEditor(
 
 /** Projects v5 into the existing reusable v3 editor core. */
 export function projectTemplateContentV5ToV3(content: TemplateContentV5): TemplateContentV3 {
-  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, terminalContactTypeBindings: _bindings, e4ConnectorTable: _table, e4Presentation: _presentation, ...core } = content;
+  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, terminalContactTypeBindings: _bindings, e4ConnectorTable: _table, e4Presentation: _presentation, articleDrawings: _drawings, drawingContactBindings: _contactBindings, ...core } = content;
   return withDrawingArticleCounts({
     ...structuredClone(core),
     schemaVersion: 3,

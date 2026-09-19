@@ -541,7 +541,7 @@ describe("template v3 immutable commands", () => {
 
     const [withBezier, bezierId] = addBasicNodeV3(initial, view.id, layer.id, "bezier");
     expect(() => setRootNodeRotationAroundCenterV3(withBezier, view.id, layer.id, bezierId, 45))
-      .toThrowError(expect.objectContaining({ code: "unsupported_rotation_geometry" }));
+      .not.toThrow();
   });
 
   it("rejects structural operations when an imported outer group contains a repeat prototype", () => {

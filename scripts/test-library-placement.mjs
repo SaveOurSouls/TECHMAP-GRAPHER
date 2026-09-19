@@ -103,6 +103,22 @@ try {
       }));
     }
   }
+  if (process.argv.includes('--check-drawing-editor')) {
+    const { projectTemplateContentV5ToV3, createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1 } = await module('component-library/template-model-v5.ts');
+    const { addBasicNodeV3, editContactPointV3, setRootNodeRotationAroundCenterV3, resizeNodeV3 } = await module('component-library/template-commands-v3.ts');
+    const { drawingSelection } = await module('component-library/drawing-bindings.ts');
+    let core = projectTemplateContentV5ToV3(content);
+    const drawing = core.views.find(view => view.kind === 'drawing'), layer = drawing.layers[0];
+    let nodeId, pointId;
+    [core,nodeId] = addBasicNodeV3(core,drawing.id,layer.id,'rectangle');
+    [core,pointId] = addContactPointV3(core,drawing.id,{number:'1',name:'Test drawing point',contactTypeGroupId:core.contactTypeGroups[0].id});
+    core = setRootNodeRotationAroundCenterV3(core,drawing.id,layer.id,nodeId,37);
+    core = resizeNodeV3(core,drawing.id,layer.id,nodeId,'se',20,15);
+    core = editContactPointV3(core,drawing.id,pointId,{x:{kind:'constant',value:123},y:{kind:'constant',value:234}});
+    core.views.find(view => view.id === drawing.id).layers[0].nodes[0].fill={color:'#2563eb',hatch:{kind:'cross',spacing:8,angle:30}};
+    const selection = drawingSelection(core.views.find(view => view.id === drawing.id),[nodeId,pointId],core.articleVariants[0].id);
+    content = createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[selection],[{logicalContactId:core.logicalContacts[0].id,seriesRowId:content.e4ConnectorTable.seriesDefaults[0].rowId}]).content;
+  }
   const initial = await templates.create({ code: 'API-SMOKE', name: 'Test series', articleBindings: [article], content });
   const draft = await templates.saveDraft(initial.templateId, { expectedVersion: initial.version, expectedDraftRevision: 0,
     code: initial.code, name: 'Published newer draft', articleBindings: [article], content });
@@ -133,6 +149,21 @@ try {
     assert.equal(saved.content.connectors[0].contacts.length, 12);
     assert.deepEqual(saved.content.connectors[0].schematic, content.e4Presentation);
     assert.deepEqual((await templates.get(initial.templateId)).content.e4Presentation, content.e4Presentation);
+  }
+  if (process.argv.includes('--check-drawing-editor')) {
+    const restored = await templates.get(initial.templateId);
+    assert.deepEqual(restored.content.articleDrawings, content.articleDrawings);
+    assert.deepEqual(restored.content.drawingContactBindings, content.drawingContactBindings);
+    const drawing = restored.content.views.find(view => view.kind === 'drawing');
+    assert.deepEqual(drawing.layers[0].nodes[0].fill.hatch,{kind:'cross',spacing:8,angle:30});
+    const contact = saved.content.connectors[0].libraryBinding.snapshot.contacts[0];
+    assert.equal(contact.sourceNumber,'1');
+    assert.equal(contact.representations[0].x,123);
+    assert.equal(contact.representations[0].y,234);
+    const { projectComponentTemplateView } = await module('editor/component-template-view-renderer.ts');
+    const rendered = projectComponentTemplateView({objectId:preview.id,snapshotId:'smoke',content:restored.content,articleVariantId:content.articleVariants[0].id},'drawing',{x:0,y:0});
+    assert.equal(rendered.commands.length,1);
+    assert.equal(rendered.commands[0].hatch.kind,'cross');
   }
   let terminalRefreshChecked = false;
   if (process.argv.includes('--check-terminal-refresh')) {
@@ -326,7 +357,9 @@ try {
     const restartedProjects = await fetch(new URL('/api/v1/projects', restartedUrl), { headers: { Cookie: restartedCookie } });
     assert.equal(restartedProjects.status, 200);
     const restartedTemplate = await fetch(new URL(`/api/v1/component-templates/${initial.templateId}`, restartedUrl), { headers: { Cookie: restartedCookie } });
-    assert.equal((await restartedTemplate.json()).version, latestTemplateVersion);
+    const reloadedTemplate = await restartedTemplate.json();
+    assert.equal(reloadedTemplate.version, latestTemplateVersion);
+    if (process.argv.includes('--check-drawing-editor')) { assert.deepEqual(reloadedTemplate.content.articleDrawings, content.articleDrawings); assert.deepEqual(reloadedTemplate.content.drawingContactBindings, content.drawingContactBindings); }
     if (routingChecked && !deleted) {
       const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${routingHarnessId}/design`, restartedUrl), {
         headers: { Cookie: restartedCookie },
@@ -349,7 +382,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

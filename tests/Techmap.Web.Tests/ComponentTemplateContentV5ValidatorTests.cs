@@ -11,6 +11,32 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
     [Fact]
+    public void Drawing_selection_and_contact_identity_survive_validation_and_reject_dangling_references()
+    {
+        var content = ValidContent();
+        var drawing = content["views"]!.AsArray().First(view => view!["kind"]!.GetValue<string>() == "drawing")!;
+        var nodes = drawing["layers"]![0]!["nodes"]!.AsArray();
+        var point = drawing["contactPoints"]![0]!;
+        content["articleDrawings"] = new JsonArray(new JsonObject
+        {
+            ["articleVariantId"] = content["articleVariants"]![0]!["id"]!.DeepClone(),
+            ["nodeIds"] = new JsonArray(nodes.Select(node => node!["id"]!.DeepClone()).ToArray()),
+            ["contactPointIds"] = new JsonArray(point["id"]!.DeepClone()),
+        });
+        content["drawingContactBindings"] = new JsonArray(new JsonObject
+        {
+            ["logicalContactId"] = point["logicalContactId"]!.DeepClone(),
+            ["seriesRowId"] = content["e4ConnectorTable"]!["seriesDefaults"]![0]!["rowId"]!.DeepClone(),
+        });
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        content["drawingContactBindings"]![0]!["seriesRowId"] = "missing";
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        content["drawingContactBindings"]![0]!["seriesRowId"] = content["e4ConnectorTable"]!["seriesDefaults"]![0]!["rowId"]!.DeepClone();
+        content["articleDrawings"]![0]!["nodeIds"]!.AsArray().Add("missing");
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
+    [Fact]
     public void E4_presentation_is_optional_and_validated_before_projection()
     {
         var content = ValidContent();

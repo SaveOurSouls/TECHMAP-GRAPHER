@@ -1195,11 +1195,20 @@ function localNodeBounds(
     constantGeometryValue(node.geometry.bendRadius);
     return boundsFromPoints(node.geometry.points);
   }
-  if (node.kind === "bezier")
-    throw new TemplateCommandV3Error(
-      "unsupported_rotation_geometry",
-      "Поворот кривой Безье будет доступен после точного расчёта её визуальных границ.",
-    );
+  if (node.kind === "bezier") {
+    const points = node.geometry.points.map(p => ({x:constantGeometryValue(p.x),y:constantGeometryValue(p.y)}));
+    const extrema = [...points.filter((_,i) => i % 3 === 0)];
+    for (let i=0;i+3<points.length;i+=3) {
+      const [p0,p1,p2,p3] = points.slice(i,i+4) as [typeof points[number],typeof points[number],typeof points[number],typeof points[number]];
+      for (const key of ["x","y"] as const) {
+        const a=-p0[key]+3*p1[key]-3*p2[key]+p3[key], b=2*(p0[key]-2*p1[key]+p2[key]), c=p1[key]-p0[key];
+        const discriminant=b*b-4*a*c;
+        const roots=Math.abs(a)<1e-12 ? (Math.abs(b)<1e-12 ? [] : [-c/b]) : discriminant<0 ? [] : [(-b+Math.sqrt(discriminant))/(2*a),(-b-Math.sqrt(discriminant))/(2*a)];
+        for (const t of roots) if(t>0 && t<1) { const u=1-t; extrema.push({x:u*u*u*p0.x+3*u*u*t*p1.x+3*u*t*t*p2.x+t*t*t*p3.x,y:u*u*u*p0.y+3*u*u*t*p1.y+3*u*t*t*p2.y+t*t*t*p3.y}); }
+      }
+    }
+    return {minX:Math.min(...extrema.map(p=>p.x)),minY:Math.min(...extrema.map(p=>p.y)),maxX:Math.max(...extrema.map(p=>p.x)),maxY:Math.max(...extrema.map(p=>p.y))};
+  }
   if (node.kind === "closedContour")
     return boundsFromPoints(node.geometry.points);
   if (node.kind === "rectangle") {
@@ -1254,6 +1263,12 @@ function multiplyMatrices(left: MatrixV3, right: MatrixV3): MatrixV3 {
     e: left.a * right.e + left.c * right.f + left.e,
     f: left.b * right.e + left.d * right.f + left.f,
   };
+}
+
+/** Same pivot for interactive preview and committed rotation. */
+export function rootNodeRotationCenterV3(node: TemplateNodeV3, nodes: readonly TemplateNodeV3[]): {x:number;y:number} {
+  const bounds = localNodeBounds(node, new Map(nodes.map(item => [item.id,item])), new Set());
+  return transformPoint(constantTransformMatrix(node.transform), (bounds.minX+bounds.maxX)/2, (bounds.minY+bounds.maxY)/2);
 }
 
 /** Sets an absolute rotation for one root node while preserving its world-space geometric center. */

@@ -248,17 +248,24 @@ function materializePlacementRows(
     group.allowedTerminalArticleKeys,
   ]));
   const coreByKey = new Map(coreRows.map(row => [row.key, row]));
+  const explicitBindings = new Map(content.schemaVersion === 5 ? content.drawingContactBindings?.map(binding => [binding.seriesRowId, binding.logicalContactId]) : []);
+  const explicitlyBoundContacts = new Set(explicitBindings.values());
   const mayUseIndexFallback = coreRows.length === tableArticle.rows.length;
   return tableArticle.rows.map((tableRow, index) => {
     // The E4 table is the published electrical model. The graphical core only
     // supplies optional point representations for rows it can materialize.
-    const core = coreByKey.get(tableRow.seriesRowId) ?? (mayUseIndexFallback ? coreRows[index] : undefined);
+    const boundId = explicitBindings.get(tableRow.seriesRowId);
+    const candidate = coreByKey.get(tableRow.seriesRowId) ?? (mayUseIndexFallback ? coreRows[index] : undefined);
+    const core = boundId ? coreByKey.get(boundId) : candidate && !explicitlyBoundContacts.has(candidate.prototypeLogicalContactId) ? candidate : undefined;
     const allowed = content.schemaVersion === 5 ? content.compatibleTerminalArticleKeys
       : tableRow.contactTypeGroupId === null ? [] : allowedByGroup.get(tableRow.contactTypeGroupId) ?? [];
     return {
       key: tableRow.seriesRowId,
       prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
-      representations: core?.representations ?? [],
+      representations: (core?.representations ?? []).filter(representation => {
+        const drawing = content.schemaVersion === 5 ? content.articleDrawings?.find(item => item.articleVariantId === articleVariantId) : undefined;
+        return representation.viewKind !== "drawing" || !drawing || drawing.contactPointIds.includes(representation.pointId);
+      }),
       contactTypeGroupId: tableRow.contactTypeGroupId,
       number: tableRow.number,
       name: tableRow.name,

@@ -956,8 +956,22 @@ internal static partial class ComponentTemplateContentV2Validator
 
     private static void ValidateFill(JsonElement fill, string path)
     {
-        RequireExactProperties(fill, path, "color");
+        var hasHatch = fill.ValueKind == JsonValueKind.Object && fill.TryGetProperty("hatch", out _);
+        RequireExactProperties(fill, path, hasHatch ? ["color", "hatch"] : ["color"]);
         ValidateColor(fill.GetProperty("color"), path + ".color", allowNull: true);
+        if (hasHatch) {
+            var hatch = fill.GetProperty("hatch");
+            RequireExactProperties(hatch, path + ".hatch", "kind", "spacing", "angle");
+            if (hatch.GetProperty("kind").ValueKind != JsonValueKind.String ||
+                hatch.GetProperty("kind").GetString() is not ("parallel" or "cross" or "double" or "dots" or "brick"))
+                Throw("Unsupported hatch kind.", path + ".hatch.kind");
+            foreach (var key in new[] { "spacing", "angle" }) {
+                var number = hatch.GetProperty(key);
+                if (number.ValueKind != JsonValueKind.Number || !number.TryGetDouble(out var value) || !double.IsFinite(value) ||
+                    (key == "spacing" ? value < 2 || value > 100 : Math.Abs(value) > 360))
+                    Throw("Invalid hatch spacing or angle.", path + ".hatch." + key);
+            }
+        }
     }
 
     private static void ValidateColor(JsonElement color, string path, bool allowNull)

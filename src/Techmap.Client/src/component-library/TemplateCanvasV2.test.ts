@@ -407,7 +407,7 @@ describe("TemplateCanvasV2", () => {
     expect(markup).toContain('data-point-segment="3"');
   });
 
-  it("does not expose resize handles for parameterized or rotated geometry", () => {
+  it("hides resize handles for parameters and exposes them after rotation", () => {
     const parameterized = node({
       id: ids.rectangle,
       kind: "rectangle",
@@ -420,7 +420,7 @@ describe("TemplateCanvasV2", () => {
       transform: { ...identity, rotationDegrees: c(15) },
       geometry: { x: c(10), y: c(20), width: c(80), height: c(40), cornerRadii: [c(0), c(0), c(0), c(0)] },
     });
-    expect(render(content([rotated]), { selectedId: ids.rectangle, onNodeResize: () => undefined })).not.toContain("data-resize-handle");
+    expect(render(content([rotated]), { selectedId: ids.rectangle, onNodeResize: () => undefined })).toContain("data-resize-handle");
   });
 
   it("evaluates parameter defaults, formulas and explicit overrides without eval", () => {

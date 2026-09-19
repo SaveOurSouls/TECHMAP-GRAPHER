@@ -8,6 +8,29 @@ namespace Techmap.Web.Tests;
 
 public sealed class ComponentTemplateContentV2ValidatorTests
 {
+    [Theory]
+    [InlineData("parallel")]
+    [InlineData("cross")]
+    [InlineData("double")]
+    [InlineData("dots")]
+    [InlineData("brick")]
+    public void Hatch_presets_validate_density_angle_and_exact_keys(string kind)
+    {
+        var content = ValidContent();
+        var fill = content["views"]![0]!["layers"]![0]!["nodes"]![0]!["fill"]!;
+        fill["color"] = "#123456";
+        fill["hatch"] = new JsonObject { ["kind"] = kind, ["spacing"] = 8, ["angle"] = 45 };
+        ComponentTemplateContentV2Validator.Validate(Element(content));
+        fill["hatch"]!["spacing"] = 0;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV2Validator.Validate(Element(content)));
+        fill["hatch"]!["spacing"] = 8;
+        fill["hatch"]!["angle"] = 361;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV2Validator.Validate(Element(content)));
+        fill["hatch"]!["angle"] = 45;
+        fill["hatch"]!["unknown"] = 1;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV2Validator.Validate(Element(content)));
+    }
+
     [Fact]
     public void Complete_contract_with_distinct_view_repeat_placements_is_valid()
     {

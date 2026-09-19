@@ -1,4 +1,5 @@
 import type { DrawingArrayLayout } from "./array-layout";
+import { hatchKinds, type DrawingHatch } from "./drawing-hatch";
 export const TEMPLATE_V2_LIMITS = Object.freeze({
   views: 34, layers: 128, nodes: 5_000, contacts: 2_000, parameters: 128,
   repeaters: 64, assets: 64, presets: 500, expressionDepth: 8, expressionNodes: 64,
@@ -21,7 +22,7 @@ export interface TransformV2 {
 }
 export type StrokeDashV2 = "solid" | "dash" | "dot" | "dash-dot";
 export interface StrokeV2 { color: string; width: NumericExpressionV2; dash?: StrokeDashV2; }
-export interface FillV2 { color: string | null; }
+export interface FillV2 { color: string | null; hatch?: DrawingHatch; }
 
 interface NodeBaseV2 {
   id: string; layerId: string; visible: boolean; locked: boolean; opacity: number;
@@ -162,7 +163,15 @@ function validateNode(value: unknown, path: string, layerId: string, context: Ex
     expression(value.stroke.width, `${path}.stroke.width`, context);
     if (hasOwn(value.stroke, "dash") && !strokeDashes.has(String(value.stroke.dash))) context.diagnostics.push({ code: "invalid_stroke_dash", path: `${path}.stroke.dash`, message: "Неизвестный тип штриха." });
   }
-  if (exact(value.fill, ["color"], `${path}.fill`, context.diagnostics) && value.fill.color !== null && (typeof value.fill.color !== "string" || !COLOR.test(value.fill.color))) context.diagnostics.push({ code: "invalid_color", path: `${path}.fill.color`, message: "Нужен цвет #RRGGBB, #RRGGBBAA или null." });
+  if (exact(value.fill, isRecord(value.fill) && hasOwn(value.fill, "hatch") ? ["color", "hatch"] : ["color"], `${path}.fill`, context.diagnostics)) {
+    if (value.fill.color !== null && (typeof value.fill.color !== "string" || !COLOR.test(value.fill.color))) context.diagnostics.push({ code: "invalid_color", path: `${path}.fill.color`, message: "Нужен цвет #RRGGBB, #RRGGBBAA или null." });
+    if (hasOwn(value.fill, "hatch")) {
+      const hatch = value.fill.hatch;
+      if (exact(hatch, ["kind", "spacing", "angle"], `${path}.fill.hatch`, context.diagnostics) &&
+          (!hatchKinds.includes(hatch.kind as DrawingHatch["kind"]) || typeof hatch.spacing !== "number" || !Number.isFinite(hatch.spacing) || hatch.spacing < 2 || hatch.spacing > 100 || typeof hatch.angle !== "number" || !Number.isFinite(hatch.angle) || Math.abs(hatch.angle) > 360))
+        context.diagnostics.push({ code: "invalid_hatch", path: `${path}.fill.hatch`, message: "Некорректный вид, шаг (2–100) или угол штриховки (−360…360)." });
+    }
+  }
   validateGeometry(value.kind, value.geometry, `${path}.geometry`, context, assetIds);
 }
 

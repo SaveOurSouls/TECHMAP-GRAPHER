@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { rootNodeRotationCenterV3 } from "./template-commands-v3";
+import { hatchTile } from "./drawing-hatch";
 import type {
   NumericExpressionV2,
   ParameterValueV2,
@@ -11,6 +13,7 @@ import type {
 import { expandTemplateViewRepeatsV2, type RepeatOccurrenceDescriptorV2 } from "./template-repeat-v2";
 import type { NodeResizeHandleV2 } from "./template-commands-v2";
 import { roundedPolylinePathV2 } from "./rounded-polyline-v2";
+import { drawingOutline, drawingLayerOutlines, snapDrawingPoint, snapDrawingTranslation, type DrawingSnaps } from "./drawing-geometry";
 export { roundedPolylinePathV2 } from "./rounded-polyline-v2";
 
 export const TEMPLATE_CANVAS_V2_WIDTH = 720;
@@ -29,6 +32,8 @@ export interface TemplateCanvasV2Props {
   onSelectionChange?: (id: string | null, extend: boolean) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
+  onNodeRotate?: (id: string, rotationDegrees: number) => void;
+  snaps?: DrawingSnaps;
   onNodePointMove?: (id: string, pointIndex: number, deltaX: number, deltaY: number) => void;
   onNodePointDelete?: (id: string, pointIndex: number) => void;
   onNodePointInsert?: (id: string, segmentIndex: number, x: number, y: number) => void;
@@ -539,6 +544,8 @@ export function TemplateCanvasV2({
   onSelectionChange,
   onNodeMove,
   onNodeResize,
+  onNodeRotate,
+  snaps = { corners: false, contours: false, tangents: false },
   onNodePointMove,
   onNodePointDelete,
   onNodePointInsert,
@@ -549,7 +556,10 @@ export function TemplateCanvasV2({
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
   const dragRef = useRef<DragStateV2 | null>(null);
+  const hatchPrefix = useId().replaceAll(":", "");
   const resizeRef = useRef<ResizeStateV2 | null>(null);
+  const rotationRef = useRef<{ id: string; pointerId: number; center: SvgPoint; startAngle: number; rotation: number; latest: number } | null>(null);
+  const [rotationPreview, setRotationPreview] = useState<{ id: string; center: SvgPoint; angle: number } | null>(null);
   const pointDragRef = useRef<PointDragStateV2 | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewV2 | null>(null);
   const [resizePreview, setResizePreview] = useState<ResizePreviewV2 | null>(null);
@@ -558,6 +568,19 @@ export function TemplateCanvasV2({
   const selectedIdSet = new Set(selectedIds ?? (selectedId ? [selectedId] : []));
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const snapTolerance = () => { const rect = svgRef.current?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? 7 / Math.min(rect.width / width,rect.height / height) : 7; };
+  const outlines = view?.layers.filter(layer => layer.visible).flatMap(layer => drawingLayerOutlines(layer.nodes,evaluate)) ?? [];
+  const targets = (id: string) => outlines.filter(outline => outline.id !== id && !selectedIdSet.has(outline.id));
+  const snapDelta = (id: string, start: SvgPoint, point: SvgPoint): SvgPoint => {
+    const delta = { x: point[0] - start[0], y: point[1] - start[1] };
+    const outline = outlines.find(item => item.id === id);
+    if (outline) { const result = snapDrawingTranslation(outline, delta, targets(id), snaps, snapTolerance()); return [result.x, result.y]; }
+    const contact = view?.contactPoints.find(p => p.id === id) ?? view?.bundlePorts.find(p => p.id === id);
+    const x = contact && evaluate(contact.x), y = contact && evaluate(contact.y);
+    if (x != null && y != null) { const result = snapDrawingPoint({ x: x + delta.x, y: y + delta.y }, targets(id), snaps, snapTolerance()); return [result.x - x, result.y - y]; }
+    return [delta.x, delta.y];
+  };
   const logicalContacts = new Map(content.logicalContacts.map(contact => [contact.id, contact]));
   const repeatPreview = new Map<string, readonly RepeatOccurrenceDescriptorV2[]>();
   const repeatedGroupIds = new Set<string>();
@@ -575,6 +598,8 @@ export function TemplateCanvasV2({
   }
 
   useEffect(() => {
+    rotationRef.current = null;
+    setRotationPreview(null);
     dragRef.current = null;
     resizeRef.current = null;
     pointDragRef.current = null;
@@ -627,7 +652,29 @@ export function TemplateCanvasV2({
     setDragPreview({ id, deltaX: 0, deltaY: 0 });
   };
 
+  const resizeDelta = (resize: ResizeStateV2, point: SvgPoint) => {
+    const node = view?.layers.flatMap(layer => layer.nodes).find(node => node.id === resize.id);
+    if (!node) return null;
+    let dx = point[0] - resize.start[0], dy = point[1] - resize.start[1];
+    const outline = drawingOutline(node,evaluate);
+    const corner = ({nw:0,ne:1,se:2,sw:3} as Record<string,number>)[resize.handle];
+    if (outline && corner !== undefined && !outline.curved) {
+      const origin = outline.points[corner];
+      if (origin) { const snapped = snapDrawingPoint({x:origin.x+dx,y:origin.y+dy},targets(resize.id),snaps,snapTolerance()); dx=snapped.x-origin.x; dy=snapped.y-origin.y; }
+    }
+    return templateDeltaToNodeDeltaV2(dx,dy,evaluate(node.transform.rotationDegrees) ?? 0,evaluate(node.transform.scaleX) ?? 1,evaluate(node.transform.scaleY) ?? 1);
+  };
+
   const moveNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const rotation = rotationRef.current;
+    if (rotation && rotation.pointerId === event.pointerId) {
+      const point = pointFromEvent(event);
+      if (!point) return;
+      const angle = (Math.atan2(point[1] - rotation.center[1], point[0] - rotation.center[0]) - rotation.startAngle) * 180 / Math.PI;
+      rotationRef.current = { ...rotation, latest: rotation.rotation + angle };
+      setRotationPreview({ id: rotation.id, center: rotation.center, angle });
+      return;
+    }
     const pointDrag = pointDragRef.current;
     if (pointDrag && pointDrag.pointerId === event.pointerId) {
       const point = pointFromEvent(event);
@@ -639,8 +686,9 @@ export function TemplateCanvasV2({
         origin, viewDelta, anchor,
         pointDrag.angleMode,
       );
-      const adjusted = snappedViewDelta && templateDeltaToNodeDeltaV2(
-        snappedViewDelta.deltaX, snappedViewDelta.deltaY,
+      const snappedPoint = snappedViewDelta && snapDrawingPoint({ x: origin.x + snappedViewDelta.deltaX, y: origin.y + snappedViewDelta.deltaY }, targets(pointDrag.id), snaps, snapTolerance(), anchor);
+      const adjusted = snappedPoint && templateDeltaToNodeDeltaV2(
+        snappedPoint.x - origin.x, snappedPoint.y - origin.y,
         pointDrag.rotationDegrees, pointDrag.scaleX, pointDrag.scaleY,
       );
       if (!adjusted) return;
@@ -653,7 +701,9 @@ export function TemplateCanvasV2({
       const point = pointFromEvent(event);
       if (!point) return;
       resizeRef.current = { ...resize, latest: point };
-      setResizePreview({ id: resize.id, handle: resize.handle, deltaX: point[0] - resize.start[0], deltaY: point[1] - resize.start[1] });
+      const node = view?.layers.flatMap(layer => layer.nodes).find(node => node.id === resize.id);
+      const delta = resizeDelta(resize,point);
+      if (delta) setResizePreview({ id: resize.id, handle: resize.handle, ...delta });
       return;
     }
     const drag = dragRef.current;
@@ -661,10 +711,13 @@ export function TemplateCanvasV2({
     const point = pointFromEvent(event);
     if (!point) return;
     dragRef.current = { ...drag, latest: point };
-    setDragPreview({ id: drag.id, deltaX: point[0] - drag.start[0], deltaY: point[1] - drag.start[1] });
+    const delta = snapDelta(drag.id, drag.start, point);
+    setDragPreview({ id: drag.id, deltaX: delta[0], deltaY: delta[1] });
   };
 
   const clearNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    rotationRef.current = null;
+    setRotationPreview(null);
     const drag = dragRef.current;
     const pointDrag = pointDragRef.current;
     const resize = resizeRef.current;
@@ -681,6 +734,14 @@ export function TemplateCanvasV2({
   };
 
   const endNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const rotation = rotationRef.current;
+    if (rotation && rotation.pointerId === event.pointerId) {
+      const point = pointFromEvent(event);
+      const angle = point ? rotation.rotation + (Math.atan2(point[1] - rotation.center[1], point[0] - rotation.center[0]) - rotation.startAngle) * 180 / Math.PI : rotation.latest;
+      clearNodeGesture(event);
+      onNodeRotate?.(rotation.id, angle);
+      return;
+    }
     const pointDrag = pointDragRef.current;
     if (pointDrag && pointDrag.pointerId === event.pointerId) {
       const finalPoint = pointFromEvent(event) ?? pointDrag.latest;
@@ -694,8 +755,9 @@ export function TemplateCanvasV2({
         origin, completed, anchor,
         pointDrag.angleMode,
       );
-      const adjusted = snappedViewDelta && templateDeltaToNodeDeltaV2(
-        snappedViewDelta.deltaX, snappedViewDelta.deltaY,
+      const snappedPoint = snappedViewDelta && snapDrawingPoint({ x: origin.x + snappedViewDelta.deltaX, y: origin.y + snappedViewDelta.deltaY }, targets(pointDrag.id), snaps, snapTolerance(), anchor);
+      const adjusted = snappedPoint && templateDeltaToNodeDeltaV2(
+        snappedPoint.x - origin.x, snappedPoint.y - origin.y,
         pointDrag.rotationDegrees, pointDrag.scaleX, pointDrag.scaleY,
       );
       clearNodeGesture(event);
@@ -710,7 +772,9 @@ export function TemplateCanvasV2({
         { clientX: event.clientX, clientY: event.clientY, templateX: finalPoint[0], templateY: finalPoint[1] },
       );
       clearNodeGesture(event);
-      if (completed) onNodeResize?.(resize.id, resize.handle, completed.deltaX, completed.deltaY);
+      const node = view?.layers.flatMap(layer => layer.nodes).find(node => node.id === resize.id);
+      const local = completed && resizeDelta(resize,finalPoint);
+      if (local) onNodeResize?.(resize.id, resize.handle, local.deltaX, local.deltaY);
       return;
     }
     const drag = dragRef.current;
@@ -721,7 +785,7 @@ export function TemplateCanvasV2({
       { clientX: event.clientX, clientY: event.clientY, templateX: finalPoint[0], templateY: finalPoint[1] },
     );
     clearNodeGesture(event);
-    if (completed) onNodeMove?.(drag.id, completed.deltaX, completed.deltaY);
+    if (completed) { const delta = snapDelta(drag.id, drag.start, finalPoint); onNodeMove?.(drag.id, delta[0], delta[1]); }
   };
 
   const beginResizeGesture = (event: ReactPointerEvent<SVGElement>, id: string, handle: NodeResizeHandleV2) => {
@@ -811,13 +875,13 @@ export function TemplateCanvasV2({
         "data-selected": selectedIdSet.has(rootNodeId) ? "true" : undefined,
         "data-locked": locked ? "true" : undefined,
         opacity: node.opacity,
-        transform: previewTransform(node.id, transform, topLevel),
+        transform: (rotationPreview?.id === node.id ? `rotate(${rotationPreview.angle} ${rotationPreview.center[0]} ${rotationPreview.center[1]}) ` : "") + previewTransform(node.id, transform, topLevel),
         pointerEvents: layer.locked ? "none" as const : undefined,
         "data-draggable": topLevel && !locked && onNodeMove && rootMovable ? "true" : undefined,
         onPointerDown: (event: ReactPointerEvent<SVGElement>) => beginNodeGesture(event, rootNodeId, !layer.locked, !locked && rootMovable),
       };
       const shape = {
-        fill: node.fill.color ?? "none",
+        fill: node.fill.color && node.fill.hatch ? `url(#${hatchPrefix}-${node.id})` : node.fill.color ?? "none",
         stroke: node.stroke.color,
         strokeWidth,
         strokeDasharray: strokeDasharray(node.stroke.dash, strokeWidth),
@@ -927,6 +991,7 @@ export function TemplateCanvasV2({
         return (
           <g {...common} data-underlay={node.geometry.underlay ? "true" : "false"}>
             <svg
+      ref={svgRef}
               data-template-image-frame={node.id}
               x={x}
               y={y}
@@ -1019,8 +1084,8 @@ export function TemplateCanvasV2({
         data-template-point-id={point.id}
         data-template-point-kind={kind}
         data-selected={selectedId === point.id ? "true" : undefined}
-        transform={`translate(${formatNumber(x)} ${formatNumber(y)})`}
-        onPointerDown={event => select(event, point.id)}
+        transform={`translate(${formatNumber(x + (dragPreview?.id === point.id ? dragPreview.deltaX : 0))} ${formatNumber(y + (dragPreview?.id === point.id ? dragPreview.deltaY : 0))})`}
+        onPointerDown={event => beginNodeGesture(event, point.id, true, point.x.kind === "constant" && point.y.kind === "constant")}
         onKeyDown={event => selectFromKeyboard(event, point.id)}
         role="button"
         tabIndex={0}
@@ -1044,8 +1109,8 @@ export function TemplateCanvasV2({
         data-template-point-kind="contact"
         data-template-occurrence-key={point.key}
         data-template-repeat-index={occurrence.index}
-        transform={`translate(${formatNumber(point.x)} ${formatNumber(point.y)})`}
-        onPointerDown={event => select(event, point.prototypeContactPointId)}
+        transform={`translate(${formatNumber(point.x + (dragPreview?.id === point.prototypeContactPointId ? dragPreview.deltaX : 0))} ${formatNumber(point.y + (dragPreview?.id === point.prototypeContactPointId ? dragPreview.deltaY : 0))})`}
+        onPointerDown={event => { const prototype = view?.contactPoints.find(p => p.id === point.prototypeContactPointId); beginNodeGesture(event, point.prototypeContactPointId, true, prototype?.x.kind === "constant" && prototype?.y.kind === "constant"); }}
         onKeyDown={event => selectFromKeyboard(event, point.prototypeContactPointId)}
         role="button"
         tabIndex={0}
@@ -1215,9 +1280,7 @@ export function TemplateCanvasV2({
       </g>;
     }
     if (!onNodeResize) return null;
-    const transformIsPlain = node.transform.rotationDegrees.kind === "constant" && node.transform.rotationDegrees.value === 0 &&
-      node.transform.scaleX.kind === "constant" && node.transform.scaleX.value === 1 &&
-      node.transform.scaleY.kind === "constant" && node.transform.scaleY.value === 1;
+    const transformIsPlain = transformIsConstant && evaluate(node.transform.scaleX) !== 0 && evaluate(node.transform.scaleY) !== 0;
     const geometryIsConstant = node.kind === "line"
       ? node.geometry.points.length === 2 && node.geometry.points.every(point => expressionIsConstant(point.x) && expressionIsConstant(point.y))
       : node.kind === "rectangle"
@@ -1283,12 +1346,37 @@ export function TemplateCanvasV2({
       onPointerCancel={clearNodeGesture}
     >
       <rect width={width} height={height} fill="#fff" />
+      <defs>{view?.layers.flatMap(layer => layer.nodes).filter(node => node.fill.hatch && node.fill.color).map(node => {
+        const hatch = node.fill.hatch!, tile = hatchTile(hatch);
+        return <pattern key={node.id} id={`${hatchPrefix}-${node.id}`} patternUnits="userSpaceOnUse" width={hatch.spacing} height={hatch.spacing} patternTransform={`rotate(${hatch.angle})`}>
+          {tile.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={node.fill.color!} strokeWidth="1" />)}
+          {tile.dots.map(([cx, cy, r], i) => <circle key={i} cx={cx} cy={cy} r={r} fill={node.fill.color!} />)}
+        </pattern>;
+      })}</defs>
       {view ? view.layers.map(renderLayer) : <text x="24" y="36" fill="#7b4c16" fontSize="14">Вид шаблона не найден</text>}
       {view?.contactPoints.map(point => repeatedPointIds.has(point.id) ? null : renderPoint(point, "contact"))}
       {view && renderRepeatedPoints()}
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
       {renderMultiSelectionOverlay()}
       {renderSelectionOverlay()}
+      {(() => {
+        if (!onNodeRotate || selectedIdSet.size !== 1) return null;
+        const located = view?.layers.flatMap(layer => layer.nodes.map(node => ({ layer, node }))).find(item => item.node.id === selectedId);
+        if (!located || located.layer.locked || located.node.locked || located.node.transform.rotationDegrees.kind !== "constant") return null;
+        if (located.layer.nodes.some(node => node.kind === "group" && node.geometry.childIds.includes(located.node.id)) || view?.repeatPlacements.some(p => p.prototypeGroupId === located.node.id)) return null;
+        let center; try { center = rootNodeRotationCenterV3(located.node, located.layer.nodes); } catch { return null; }
+        const outline = outlines.find(item => item.id === selectedId);
+        const y = (outline ? Math.min(...outline.points.map(p => p.y)) : center.y - 35) - 25;
+        return <g className="template-rotation-handle">
+          <line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" />
+          <circle cx={center.x} cy={y} r="7" fill="#fff" stroke="#147ca8" strokeWidth="2" role="button" aria-label="Повернуть вокруг центра" data-rotation-handle="true"
+            onPointerDown={event => { event.stopPropagation(); event.preventDefault(); const point = pointFromEvent(event); if (!point) return;
+              const rotation = evaluate(located.node.transform.rotationDegrees) ?? 0;
+              try { event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId); } catch { /* Pointer may already be released. */ }
+              rotationRef.current = { id: located.node.id, pointerId: event.pointerId, center: [center.x, center.y], startAngle: Math.atan2(point[1] - center.y, point[0] - center.x), rotation, latest: rotation };
+            }} /><circle cx={center.x} cy={center.y} r="2" fill="#147ca8" pointerEvents="none" />
+        </g>;
+      })()}
       {repeatPreviewError && <g data-template-repeat-error="true" pointerEvents="none">
         <rect x="16" y="16" width={Math.min(width - 32, 520)} height="42" rx="6" fill="#fff7e6" stroke="#a86519" />
         <text x="28" y="34" fill="#7b4c16" fontSize="11" fontWeight="700">Повторы показаны как прототипы</text>

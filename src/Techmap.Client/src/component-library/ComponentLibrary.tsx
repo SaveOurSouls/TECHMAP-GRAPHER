@@ -1,5 +1,8 @@
 import { E4ArticlePreview } from "./E4ArticlePreview";
 import { InfoHint } from "../InfoHint";
+import { defaultDrawingSnaps } from "./drawing-geometry";
+import { hatchKinds, hatchLabels, type DrawingHatch } from "./drawing-hatch";
+import { drawingSelection, articleDrawingView, drawingContactContent, type ArticleDrawing, type DrawingContactBinding } from "./drawing-bindings";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { DrawingArrayPanel } from "./DrawingArrayPanel";
 import type { ConnectorSchematicPresentation } from "../editor/model";
@@ -65,7 +68,7 @@ import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { e4Presentation?: ConnectorSchematicPresentation; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Draft { e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
 
 export const TEMPLATE_UNDO_LIMIT = 100;
 export function pushTemplateUndo(stack: readonly TemplateContentV2[], current: TemplateContentV2): TemplateContentV2[] {
@@ -76,7 +79,7 @@ type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "recta
 
 const newDraft = (): Draft => {
   const content = newTemplateContentV2();
-  return { templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
+  return { articleDrawings: [], drawingContactBindings: [], templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
 };
 const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content.views.map(view => [view.id, view.layers[0]!.id]));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
@@ -395,7 +398,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [diagnostics, setDiagnostics] = useState<readonly TemplateV2Diagnostic[]>([]);
   const [upgradedFromV1, setUpgradedFromV1] = useState(false);
   const [assetMismatch, setAssetMismatch] = useState(false);
-  const [undoStack, setUndoStack] = useState<TemplateContentV2[]>([]);
+  const [undoStack, setUndoStack] = useState<Draft[]>([]);
   const [previewParameterValues, setPreviewParameterValues] = useState<Readonly<Record<string, number>>>({});
   const [selectedArticleVariantId, setSelectedArticleVariantId] = useState<string | null>(null);
   const [pendingLogicalContactId, setPendingLogicalContactId] = useState<string | null>(null);
@@ -405,6 +408,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [terminalArticleSearchMessage, setTerminalArticleSearchMessage] = useState<string | null>(null);
   const [pointAngleMode, setPointAngleMode] = useState<TemplatePointAngleModeV2>("snap-15");
   const [graphicEditorMode, setGraphicEditorMode] = useState<"e4" | "drawing">("e4");
+  const [drawingSnaps, setDrawingSnaps] = useState(defaultDrawingSnaps);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
   const e4View = draft.content.views.find(view => view.kind === "e4");
@@ -420,7 +424,11 @@ export function ComponentLibrary({ config, session }: Props) {
   const selectedPoint = selectedContactPoint ?? selectedBundlePort;
   const selectedLogicalContact = selectedContactPoint ? draft.content.logicalContacts.find(contact => contact.id === selectedContactPoint.logicalContactId) : undefined;
   const editableNode = selectedIds.length === 1 && selected?.node && isEditableConstantNode(selected.node) ? selected.node : null;
-  const compatibilityContent = useMemo(() => projectTemplateContentV3CoreToV2(draft.content), [draft.content]);
+  const previewDrawingCore = useMemo(() => drawingContactContent(draft.content, draft.e4ConnectorTable, draft.drawingContactBindings ?? [], selectedArticleVariantId), [draft.content, draft.e4ConnectorTable, draft.drawingContactBindings, selectedArticleVariantId]);
+  const compatibilityContent = useMemo(() => projectTemplateContentV3CoreToV2(previewDrawingCore), [previewDrawingCore]);
+  const drawingTableRows = selectedArticleVariantId ? materializeE4ConnectorArticle(draft.e4ConnectorTable, selectedArticleVariantId).rows : draft.e4ConnectorTable.seriesDefaults.map(row => ({ ...row.values, seriesRowId: row.rowId }));
+  const selectedRowBinding = draft.drawingContactBindings?.find(binding => binding.logicalContactId === selectedLogicalContact?.id);
+  const selectedTableRow = drawingTableRows.find(row => row.seriesRowId === selectedRowBinding?.seriesRowId);
   const articlePreview = useMemo(() => {
     if (!selectedArticleVariantId) return { values: {} as Readonly<Record<string, ParameterValueV2>>, rows: [], message: null, error: null };
     try {
@@ -438,9 +446,9 @@ export function ComponentLibrary({ config, session }: Props) {
     }
   }, [draft.content, selectedArticleVariantId]);
   const e4PreviewContent = useMemo(() => {
-    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation).content; }
+    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings).content; }
     catch { return null; }
-  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation]);
+  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings]);
   const effectivePreviewParameterValues = useMemo<Readonly<Record<string, ParameterValueV2>>>(() => ({
     ...previewParameterValues,
     ...articlePreview.values,
@@ -505,7 +513,7 @@ export function ComponentLibrary({ config, session }: Props) {
   function setLoadedDraft(item: LoadedTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[], bindings: readonly TerminalContactTypeBindingV5[] | null = null) {
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
     const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
-    setDraft({ e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setGraphicEditorMode("e4");
     setPendingLogicalContactId(null);
@@ -593,8 +601,10 @@ export function ComponentLibrary({ config, session }: Props) {
       ...row, values: { ...row.values, standardTerminalArticleKey: bindings?.find(binding => binding.standard && binding.contactTypeGroupId === row.values.contactTypeGroupId)?.terminalArticleKey ?? null },
     }) };
     const projected = applySeriesTerminalsToEditor(content, table, draft.compatibleTerminalArticleKeys, bindings);
-    setUndoStack(stack => pushTemplateUndo(stack, draft.content));
-    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, terminalContactTypeBindings: bindings }));
+    setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
+    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, terminalContactTypeBindings: bindings,
+      articleDrawings: current.articleDrawings?.filter(drawing => content.articleVariants.some(a => a.id === drawing.articleVariantId)).map(drawing => ({...drawing,nodeIds:drawing.nodeIds.filter(id => content.views.some(view => view.layers.some(layer => layer.nodes.some(node => node.id === id)))),contactPointIds:drawing.contactPointIds.filter(id => content.views.some(view => view.contactPoints.some(point => point.id === id)))})),
+      drawingContactBindings: current.drawingContactBindings?.filter(binding => content.logicalContacts.some(contact => contact.id === binding.logicalContactId) && table.seriesDefaults.some(row => row.rowId === binding.seriesRowId)) }));
     if (selection !== undefined) setSelectedId(selection); markDirty(); setError(null);
   }
   function command(action: () => TemplateContentV2, selection?: string | null) { try { changeContent(action(), selection); } catch (caught) { setError(errorText(caught)); } }
@@ -649,24 +659,24 @@ export function ComponentLibrary({ config, session }: Props) {
       let table = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
       if (materializeE4ConnectorArticle(table, variantId).rows.some(row => row.contactTypeGroupId === groupId))
         table = setArticleContactGroupStandardTerminal(table, variantId, groupId, null);
-      setUndoStack(stack => pushTemplateUndo(stack, draft.content));
+      setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
       setDraft(current => ({ ...current, content, e4ConnectorTable: table }));
       markDirty(); setError(null);
     } catch (caught) { setError(errorText(caught)); }
   }
   const undo = useCallback(() => setUndoStack(stack => {
     const previous = stack.at(-1); if (!previous) return stack;
-    setDraft(current => ({ ...current, content: previous, e4ConnectorTable: reconcileE4ConnectorTable(previous, current.e4ConnectorTable) })); setSelectedId(null); markDirty(); return stack.slice(0, -1);
+    setDraft(current => ({ ...previous, templateId: current.templateId, version: current.version, draftRevision: current.draftRevision })); setSelectedId(null); markDirty(); return stack.slice(0, -1);
   }), []);
   useEffect(() => {
-    const listener = (event: KeyboardEvent) => { if (isTemplateUndoShortcut(event)) { event.preventDefault(); undo(); } };
+    const listener = (event: KeyboardEvent) => { if (!busy && isTemplateUndoShortcut(event)) { event.preventDefault(); undo(); } };
     window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener);
-  }, [undo]);
+  }, [undo, busy]);
 
-  function validatedBody() {
-    if (!draft.code.trim() || !draft.name.trim()) { setError("Укажите серию соединителя и описание."); return null; }
+  function validatedBody(working = draft) {
+    if (!working.code.trim() || !working.name.trim()) { setError("Укажите серию соединителя и описание."); return null; }
     if (assetMismatch) { setError("Сохранение заблокировано: metadata assets не совпадают с версией шаблона."); return null; }
-    const reconciliation = reconcileTemplateEnvelopeAssets(draft.content, draft.assets);
+    const reconciliation = reconcileTemplateEnvelopeAssets(working.content, working.assets);
     if (reconciliation.diagnostics.length) { setAssetMismatch(true); setDiagnostics(reconciliation.diagnostics); setError(reconciliation.diagnostics[0]!.message); return null; }
     try {
       expandTemplateRepeatsV2(compatibilityContent);
@@ -674,9 +684,9 @@ export function ComponentLibrary({ config, session }: Props) {
     catch (caught) { setError(errorText(caught)); return null; }
     let v5Content;
     try {
-      v5Content = createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation).content;
+      v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings).content;
     } catch (caught) { setError(errorText(caught)); return null; }
-    const body = { code: draft.code.trim(), name: draft.name.trim(), articleBindings: articleBindingsFromTemplateV3(draft.content), content: v5Content };
+    const body = { code: working.code.trim(), name: working.name.trim(), articleBindings: articleBindingsFromTemplateV3(working.content), content: v5Content };
     return body;
   }
 
@@ -718,7 +728,7 @@ export function ComponentLibrary({ config, session }: Props) {
     const projected = applySeriesTerminalsToEditor(content, table, terminals, bindings);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(result.content) ? structuredClone(result.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingContactBindings ?? []) : [], templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
@@ -734,6 +744,23 @@ export function ComponentLibrary({ config, session }: Props) {
     } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); return false; }
     finally { setBusy(false); }
   }
+  async function saveArticleDrawing(articleVariantId: string) {
+    if (!activeView || activeView.kind !== "drawing") return;
+    const drawing = drawingSelection(activeView, selectedIds, articleVariantId);
+    if (!drawing.nodeIds.length && !drawing.contactPointIds.length) return;
+    const working = { ...draft, articleDrawings: [...(draft.articleDrawings ?? []).filter(item => item.articleVariantId !== articleVariantId), drawing] };
+    const body = validatedBody(working); if (!body) return;
+    setBusy(true);
+    try {
+      const result = working.templateId ? await api.saveDraft(working.templateId, {expectedVersion:working.version,expectedDraftRevision:working.draftRevision,...body}) : await api.create(body);
+      setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
+      setDraft(working);
+      if ("baseVersion" in result) applySavedDraft(result); else applyPersisted(result);
+      setSaved(`Рисунок ${draft.content.articleVariants.find(a => a.id === articleVariantId)?.articleKey} сохранён`);
+      await loadList();
+    } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
+  }
+
   async function saveAndExitDrawing() {
     if (await save()) {
       setGraphicEditorMode("e4");
@@ -795,7 +822,18 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function appendContact() {
     if (!activeView) return;
-    try { const [content, id] = addContactPointV2(draft.content, activeView.id); changeContent(content, id); } catch (caught) { setError(errorText(caught)); }
+    try {
+      const placed = new Set(activeView.contactPoints.map(point => point.logicalContactId));
+      const row = drawingTableRows.find(row => !(draft.drawingContactBindings ?? []).some(binding => binding.seriesRowId === row.seriesRowId && placed.has(binding.logicalContactId)));
+      if (!row) { setError("В таблице выбранного артикула нет свободных контактов. Добавьте строки в схеме Э4."); return; }
+      const binding = draft.drawingContactBindings?.find(binding => binding.seriesRowId === row.seriesRowId);
+      const existing = draft.content.logicalContacts.find(contact => contact.id === binding?.logicalContactId || contact.id === row.seriesRowId);
+      const [content, id] = existing ? linkLogicalContactPointV2(draft.content, activeView.id, existing.id)
+        : addContactPointV2(draft.content, activeView.id, {number: draft.content.logicalContacts.some(contact => contact.number === row.number) ? undefined : row.number, name:row.name || `Контакт ${row.number}`, circuitText:row.circuitText, contactTypeGroupId:row.contactTypeGroupId});
+      const logicalContactId = content.views.find(view => view.id === activeView.id)!.contactPoints.find(point => point.id === id)!.logicalContactId;
+      changeContent(content, id);
+      setDraft(current => ({ ...current, drawingContactBindings: [...(current.drawingContactBindings ?? []).filter(binding => binding.logicalContactId !== logicalContactId && binding.seriesRowId !== row.seriesRowId), {logicalContactId,seriesRowId:row.seriesRowId}] }));
+    } catch (caught) { setError(errorText(caught)); }
   }
   function placeLinkedContact(logicalContactId: string) {
     if (!activeView) return;
@@ -812,6 +850,16 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function moveCanvasNode(nodeId: string, deltaX: number, deltaY: number) {
     if (!activeView) return;
+    const point = activeView.contactPoints.find(point => point.id === nodeId);
+    if (point && point.x.kind === "constant" && point.y.kind === "constant") {
+      const x = point.x.value + deltaX, y = point.y.value + deltaY;
+      command(() => editContactPointV2(draft.content, activeView.id, point.id, { x: constantExpressionV2(x), y: constantExpressionV2(y) }), point.id); return;
+    }
+    const port = activeView.bundlePorts.find(point => point.id === nodeId);
+    if (port && port.x.kind === "constant" && port.y.kind === "constant") {
+      const x = port.x.value + deltaX, y = port.y.value + deltaY;
+      command(() => editBundlePortV2(draft.content, activeView.id, port.id, { x: constantExpressionV2(x), y: constantExpressionV2(y) }), port.id); return;
+    }
     const layer = activeView.layers.find(item => item.nodes.some(node => node.id === nodeId));
     if (!layer) { setError("Перемещаемый объект не найден в активном виде."); return; }
     const movingIds = selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1 ? selectedNodeIds : [nodeId];
@@ -939,7 +987,7 @@ export function ComponentLibrary({ config, session }: Props) {
         {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
           onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
           onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
-        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={compatibilityContent} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
+        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={{...compatibilityContent, views: compatibilityContent.views.map(view => articleDrawingView(view, draft.articleDrawings, selectedArticleVariantId))}} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
         </>}
         </div>
         {<section className={`drawing-editor-shell ${graphicEditorMode === "drawing" ? "" : "drawing-hidden"}`} role="dialog" aria-modal="true" aria-label="Редактор рисунка">
@@ -948,7 +996,7 @@ export function ComponentLibrary({ config, session }: Props) {
             <button type="button" className="primary-action" onClick={() => void saveAndExitDrawing()} disabled={busy || assetMismatch}>Сохранить и выйти</button>
           </header>
           {error && <div className="error-banner" role="alert">{error}</div>}
-          {activeView && activeLayer && <DrawingArrayPanel content={draft.content} viewId={activeView.id} layerId={activeLayer.id} selectedIds={selectedIds} onChange={changeContent} onError={setError} />}
+          <details className="drawing-array-settings"><summary>Массив рисунка</summary>{activeView && activeLayer && <DrawingArrayPanel content={draft.content} viewId={activeView.id} layerId={activeLayer.id} selectedIds={selectedIds} onChange={changeContent} onError={setError} />}</details>
           <details className="drawing-settings"><summary>Слои, ресурсы и параметры <InfoHint>Ctrl+Z отменяет до 100 изменений. Текст {"{{n}}"} в группе массива заменяется номером элемента. Прототип редактируется через выбор объекта в правой панели.</InfoHint></summary>
         <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
         <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
@@ -1018,15 +1066,17 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
           </details>
-        <div className="library-tools"><span>Примитивы</span>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
-          <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
+        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+          <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedTableRow?.number ?? selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {selectedNodeIds.length > 1 && <><p className="readonly-note">Выбрано объектов: {selectedNodeIds.length}. Перетаскивание перемещает их одной операцией.</p><button type="button" onClick={groupSelection}>Сгруппировать</button></>}
             {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <button type="button" onClick={ungroupSelection}>Разгруппировать</button>}
             {!selected?.node && !selectedPoint && activeView && <ViewAndLayerProperties content={draft.content} viewId={activeView.id} layerId={activeLayer?.id ?? null} change={changeContent} command={command} selectLayer={id => setActiveLayerIds(current => ({ ...current, [activeView.id]: id }))} selectView={setViewId} />}
+             {selectedContactPoint && selectedLogicalContact && <label>Контакт таблицы №<select value={selectedRowBinding?.seriesRowId ?? ""} onChange={event => { const seriesRowId = event.target.value; setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]); setDraft(current => ({...current,drawingContactBindings:[...(current.drawingContactBindings ?? []).filter(binding => binding.logicalContactId !== selectedLogicalContact.id && binding.seriesRowId !== seriesRowId),...(seriesRowId ? [{logicalContactId:selectedLogicalContact.id,seriesRowId}] : [])]})); markDirty(); }}><option value="">Не привязан</option>{drawingTableRows.map(row => <option key={row.seriesRowId} value={row.seriesRowId}>{row.number} · {row.name}</option>)}</select></label>}
              {selectedContactPoint && selectedLogicalContact && activeView && <ContactPointProperties
                point={selectedContactPoint}
-               logical={selectedLogicalContact}
+               logical={selectedTableRow ? {...selectedLogicalContact, ...selectedTableRow} : selectedLogicalContact}
+               tableBound={Boolean(selectedRowBinding)}
                groups={draft.content.contactTypeGroups}
                editLogical={changes => command(() => editLogicalContactV2(draft.content, selectedLogicalContact.id, changes))}
                editPoint={changes => command(() => editContactPointV2(draft.content, activeView.id, selectedContactPoint.id, changes))}
@@ -1039,6 +1089,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && selected.node.transform.rotationDegrees.kind === "constant" && <div className="rotation-control"><NumericField label="Поворот, °" value={selected.node.transform.rotationDegrees.value} step={15} disabled={selected.layer.locked || selected.node.locked} change={rotateSelection} /><div className="property-order"><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value - 90 : 0)}>−90°</button><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value + 90 : 0)}>+90°</button></div></div>}
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" title={selected.node.kind === "group" ? "Сначала разгруппируйте объект" : undefined} onClick={() => command(() => deleteNodeV2(draft.content, activeView!.id, selected.layer.id, selected.node.id), null)} disabled={selected.layer.locked || selected.node.locked || selected.node.kind === "group"}>Удалить объект</button></>}
           </aside>
+          <aside className="drawing-articles" aria-label="Рисунки артикулов"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => setSelectedArticleVariantId(article.id)}>{article.articleKey}{draft.articleDrawings?.some(d => d.articleVariantId === article.id) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length || activeView?.kind !== "drawing"} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<span role="status">{saved}</span></aside>
         </div>
         </section>}
       </section>
@@ -1051,14 +1102,15 @@ function ViewAndLayerProperties({ content, viewId, layerId, change, command, sel
   return <><label>Название вида<input value={view.name} onChange={event => command(() => renameViewV2(content, view.id, event.target.value))} /></label>{view.kind === "additional" && <button className="danger-action" onClick={() => { const fallback = content.views.find(item => item.id !== view.id)!; command(() => deleteAdditionalViewV2(content, view.id), null); selectView(fallback.id); }}>Удалить дополнительный вид</button>}{layer && <><label>Название слоя<input value={layer.name} disabled={layer.locked} onChange={event => command(() => renameLayerV2(content, view.id, layer.id, event.target.value))} /></label><div className="property-order"><button disabled={layer.locked || view.layers[0]!.id === layer.id} onClick={() => command(() => reorderLayerV2(content, view.id, layer.id, view.layers.indexOf(layer) - 1))}>Выше</button><button disabled={layer.locked || view.layers.at(-1)!.id === layer.id} onClick={() => command(() => reorderLayerV2(content, view.id, layer.id, view.layers.indexOf(layer) + 1))}>Ниже</button></div><button className="danger-action" disabled={layer.locked || view.layers.length === 1} onClick={() => { const fallback = view.layers.find(item => item.id !== layer.id)!; change(deleteLayerV2(content, view.id, layer.id), null); selectLayer(fallback.id); }}>Удалить слой</button></>}</>;
 }
 
-function ContactPointProperties({ point, logical, groups, editLogical, editPoint, remove }: { point: ViewContactPointV2; logical: LogicalContactV2; groups: TemplateContentV2["contactTypeGroups"]; editLogical: (changes: LogicalContactEditV2) => void; editPoint: (changes: ContactPointEditV2) => void; remove: () => void }) {
+function ContactPointProperties({ point, logical, groups, editLogical, editPoint, remove, tableBound }: { tableBound?: boolean; point: ViewContactPointV2; logical: LogicalContactV2; groups: TemplateContentV2["contactTypeGroups"]; editLogical: (changes: LogicalContactEditV2) => void; editPoint: (changes: ContactPointEditV2) => void; remove: () => void }) {
   const x = constantValue(point.x), y = constantValue(point.y);
   return <>
     <strong>Общие данные контакта</strong>
-    <label>Номер контакта<input value={logical.number} onChange={event => editLogical({ number: event.target.value })} /></label>
-    <label>Название<input value={logical.name} onChange={event => editLogical({ name: event.target.value })} /></label>
-    <label>Цепь<input value={logical.circuitText ?? ""} onChange={event => editLogical({ circuitText: event.target.value })} placeholder="Например, DATA+" /></label>
-    <label>Группа контакта<select value={logical.contactTypeGroupId ?? ""} onChange={event => editLogical({ contactTypeGroupId: event.target.value || null })}><option value="">Не задана</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+    {tableBound && <InfoHint>Номер, название, цепь, тип и стандартный терминал наследуются из строки таблицы Э4. Здесь меняется только положение точки.</InfoHint>}
+    <label>Номер контакта<input disabled={tableBound} value={logical.number} onChange={event => editLogical({ number: event.target.value })} /></label>
+    <label>Название<input disabled={tableBound} value={logical.name} onChange={event => editLogical({ name: event.target.value })} /></label>
+    <label>Цепь<input disabled={tableBound} value={logical.circuitText ?? ""} onChange={event => editLogical({ circuitText: event.target.value })} placeholder="Например, DATA+" /></label>
+    <label>Группа контакта<select disabled={tableBound} value={logical.contactTypeGroupId ?? ""} onChange={event => editLogical({ contactTypeGroupId: event.target.value || null })}><option value="">Не задана</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
     <strong>Точка в активном виде</strong>
     {x !== null && y !== null ? <div className="coordinate-grid">
       <NumericField label="X" value={x} change={value => editPoint({ x: constantExpressionV2(value) })} />
@@ -1095,8 +1147,14 @@ function NodeProperties({ node, disabled, edit, move, toggleLock }: { node: Edit
     <section className="node-style-panel" aria-label="Стиль фигуры">
       <strong>Стиль</strong>
       {canFill && <div className="style-section">
-        <label className="check-field"><input type="checkbox" checked={fillEnabled} disabled={disabled} onChange={event => edit({ fill: { color: event.target.checked ? node.fill.color ?? "#ffffff" : null } })} />Заливка</label>
-        {fillEnabled && <label>Цвет заливки<input type="color" value={node.fill.color ?? "#ffffff"} disabled={disabled} onChange={event => edit({ fill: { color: event.target.value } })} /></label>}
+        <label className="check-field"><input type="checkbox" checked={fillEnabled} disabled={disabled} onChange={event => edit({ fill: { ...node.fill, color: event.target.checked ? node.fill.color ?? "#ffffff" : null } })} />Заливка</label>
+        {fillEnabled && <>
+          <label>Цвет заливки<input type="color" value={node.fill.color ?? "#ffffff"} disabled={disabled} onChange={event => edit({ fill: { ...node.fill, color: event.target.value } })} /></label>
+          <div className="style-swatches" aria-label="Быстрый выбор цвета заливки">{colors.map(color => <button key={color} type="button" aria-label={`Цвет заливки ${color}`} title={color} style={{background:color}} disabled={disabled} onClick={() => edit({fill:{...node.fill,color}})} />)}</div>
+          <label>Штриховка<select disabled={disabled} value={node.fill.hatch?.kind ?? "solid"} onChange={e => edit({fill: e.target.value === "solid" ? {color:node.fill.color} : {...node.fill,hatch:{kind:e.target.value as DrawingHatch["kind"],spacing:node.fill.hatch?.spacing ?? 8,angle:node.fill.hatch?.angle ?? 45}}})}><option value="solid">Сплошная</option>{hatchKinds.map(kind => <option key={kind} value={kind}>{hatchLabels[kind]}</option>)}</select></label>
+          {node.fill.hatch && <div className="coordinate-grid"><NumericField label="Шаг штриховки" min={2} max={100} value={node.fill.hatch.spacing} disabled={disabled} change={spacing => { if(spacing>=2 && spacing<=100) edit({fill:{...node.fill,hatch:{...node.fill.hatch!,spacing}}}); }} /><NumericField label="Угол штриховки, °" min={-360} max={360} value={node.fill.hatch.angle} disabled={disabled} change={angle => { if(Math.abs(angle)<=360) edit({fill:{...node.fill,hatch:{...node.fill.hatch!,angle}}}); }} /></div>}
+          <InfoHint>Мотивы для разрезов: линии, сетка, пары, точки и кладка. Назначение материала выбирает автор; набор не заменяет требования ГОСТ 2.306 и ISO 128 к конкретному документу. Меньше шаг — плотнее штриховка.</InfoHint>
+        </>}
       </div>}
       <div className="style-section">
         <label>Цвет линии<input type="color" value={node.stroke.color} disabled={disabled} onChange={event => updateStroke({ color: event.target.value })} /></label>

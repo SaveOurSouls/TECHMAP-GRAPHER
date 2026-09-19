@@ -162,3 +162,20 @@
 .library-e4-companion > header { display:flex; align-items:center; gap:8px; }
 .library-e4-companion svg { height:260px; }
 @media(max-width:900px) { .library-e4-companion { grid-column:auto; } .drawing-editor-shell { inset:0; border-radius:0; } }
+
+.drawing-editor-shell .library-workarea { grid-template-columns:minmax(240px,1fr) 240px 230px; }
+.drawing-snaps { display:flex; align-items:center; gap:7px; }
+.drawing-snaps label { display:flex; align-items:center; gap:3px; }
+.drawing-articles { overflow:auto; padding:10px; background:#fff; border-left:1px solid #ccd8de; display:flex; flex-direction:column; gap:7px; }
+.drawing-articles > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px; }
+.drawing-articles button { padding:5px; overflow-wrap:anywhere; }
+.drawing-articles .active { outline:1px solid #147ca8; border-radius:4px; }
+.drawing-articles [role="status"] { font-size:11px; color:#35774d; }
+.template-rotation-handle { cursor:grab; }
+@media(max-width:1000px) { .drawing-editor-shell .library-workarea { grid-template-columns:minmax(220px,1fr) 200px 180px; overflow:auto; } }
+
+.drawing-array-settings { flex-shrink:0; max-height:28vh; overflow:auto; }
+.drawing-array-settings > summary { font-size:12px; cursor:pointer; padding:3px; }
+.drawing-editor-shell .library-tools { gap:5px; }
+.drawing-editor-shell .library-tools button { padding:5px 7px; font-size:11px; }
+.drawing-editor-shell .library-tools .drawing-snaps { text-transform:none; }

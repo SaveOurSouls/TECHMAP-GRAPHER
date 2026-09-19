@@ -19,7 +19,7 @@ internal static class ComponentTemplateContentV5Validator
 
     internal static void Validate(JsonElement content)
     {
-        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings", "e4Presentation");
+        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings", "e4Presentation", "articleDrawings", "drawingContactBindings");
         if (content.TryGetProperty("e4Presentation", out var presentation)) ValidatePresentation(presentation);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var version) || version != 5)
@@ -35,6 +35,8 @@ internal static class ComponentTemplateContentV5Validator
         projected.Remove("compatibleTerminalArticleKeys");
         projected.Remove("terminalContactTypeBindings");
         projected.Remove("e4Presentation");
+        projected.Remove("articleDrawings");
+        projected.Remove("drawingContactBindings");
         var terminalNodes = CompatibleTerminalNodes(content.GetProperty("compatibleTerminalArticleKeys"));
         foreach (var variant in projected["articleVariants"]!.AsArray())
         {
@@ -50,6 +52,63 @@ internal static class ComponentTemplateContentV5Validator
 
         using var projectedDocument = JsonDocument.Parse(projected.ToJsonString());
         ComponentTemplateContentV4Validator.Validate(projectedDocument.RootElement, independentE4: true);
+        ValidateDrawingBindings(content);
+    }
+
+    private static void ValidateDrawingBindings(JsonElement content)
+    {
+        var articles = content.GetProperty("articleVariants").EnumerateArray().Select(a => a.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+        var contacts = content.GetProperty("logicalContacts").EnumerateArray().Select(a => a.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+        var rows = content.GetProperty("e4ConnectorTable").GetProperty("seriesDefaults").EnumerateArray().Select(a => a.GetProperty("rowId").GetString()!).ToHashSet(StringComparer.Ordinal);
+        var nodes = new HashSet<string>(StringComparer.Ordinal);
+        var points = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var view in content.GetProperty("views").EnumerateArray())
+        {
+            if (view.GetProperty("kind").GetString() != "drawing") continue;
+            foreach (var layer in view.GetProperty("layers").EnumerateArray())
+                foreach (var node in layer.GetProperty("nodes").EnumerateArray()) nodes.Add(node.GetProperty("id").GetString()!);
+            foreach (var point in view.GetProperty("contactPoints").EnumerateArray()) points.Add(point.GetProperty("id").GetString()!);
+        }
+        if (content.TryGetProperty("articleDrawings", out var drawings))
+        {
+            if (drawings.ValueKind != JsonValueKind.Array) Throw("An array is required.", "content.articleDrawings");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var drawing in drawings.EnumerateArray())
+            {
+                const string path = "content.articleDrawings";
+                RequireExactProperties(drawing, path, "articleVariantId", "nodeIds", "contactPointIds");
+                var id = RequiredText(drawing.GetProperty("articleVariantId"), 128, path);
+                if (!articles.Contains(id) || !seen.Add(id)) Throw("Unknown or duplicate drawing article.", path);
+                ValidateDrawingIds(drawing.GetProperty("nodeIds"), nodes, path + ".nodeIds");
+                ValidateDrawingIds(drawing.GetProperty("contactPointIds"), points, path + ".contactPointIds");
+            }
+        }
+        if (content.TryGetProperty("drawingContactBindings", out var bindings))
+        {
+            const string path = "content.drawingContactBindings";
+            if (bindings.ValueKind != JsonValueKind.Array) Throw("An array is required.", path);
+            var seenContacts = new HashSet<string>(StringComparer.Ordinal);
+            var seenRows = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var binding in bindings.EnumerateArray())
+            {
+                RequireExactProperties(binding, path, "logicalContactId", "seriesRowId");
+                var contact = RequiredText(binding.GetProperty("logicalContactId"), 128, path);
+                var row = RequiredText(binding.GetProperty("seriesRowId"), 512, path);
+                if (!contacts.Contains(contact) || !rows.Contains(row) || !seenContacts.Add(contact) || !seenRows.Add(row))
+                    Throw("Unknown or duplicate drawing contact binding.", path);
+            }
+        }
+    }
+
+    private static void ValidateDrawingIds(JsonElement values, HashSet<string> allowed, string path)
+    {
+        if (values.ValueKind != JsonValueKind.Array) Throw("An array is required.", path);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in values.EnumerateArray())
+        {
+            var id = RequiredText(value, 128, path);
+            if (!allowed.Contains(id) || !seen.Add(id)) Throw("Unknown or duplicate drawing object.", path);
+        }
     }
 
     private static void ValidatePresentation(JsonElement value)
