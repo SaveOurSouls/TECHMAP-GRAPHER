@@ -289,6 +289,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     "content");
             }
 
+            HarnessPhysicalTopologyValidator.Validate(root);
             ValidateDrawingPlacements(root);
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);

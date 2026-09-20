@@ -19,6 +19,8 @@ export interface ObjectInspectorProps {
 }
 
 const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
+  "physical-node": "Узел ветви",
+  "physical-segment": "Участок ветви",
   connector: "Соединитель",
   wire: "Провод",
   text: "Текст",

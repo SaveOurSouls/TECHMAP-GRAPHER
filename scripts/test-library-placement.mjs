@@ -378,6 +378,32 @@ try {
     assert.deepEqual((await designs.get(copy.projectId, copiedHarness.harnessId)).content.cables[0], expectedCable);
     cableStripChecked = true;
   }
+  let physicalTopologyChecked = false;
+  let physicalHarnessId;
+  let expectedTopology;
+  if (process.argv.includes('--check-topology')) {
+    const { applyEditorCommand, createConnector, createWire } = await module('editor/commands.ts');
+    const { createEmptyHarnessDesign } = await module('editor/model.ts');
+    const { physicalSegmentPoints, splitPhysicalSegment } = await module('editor/physical-topology.ts');
+    const { buildHarnessSelectionIndex, resolveHarnessSelection } = await module('editor/harness-selection.ts');
+    project = (await projects.addHarness(project.projectId, {commandId:crypto.randomUUID(),expectedRevision:project.revision}, {designation:'PHYSICAL-ROUTES',quantity:1})).project;
+    physicalHarnessId=project.harnesses.find(h=>h.designation==='PHYSICAL-ROUTES').harnessId;
+    let d=createEmptyHarnessDesign();
+    for(const [id,x,y] of [['A',0,0],['B',700,500],['C',1400,1000]]) d=applyEditorCommand(d,{type:'add-connector',connector:createConnector(id,id,2,{x,y})});
+    const end=(id,n)=>({connectorId:id,contactId:`${id}:contact:${n}`});
+    for(const [id,a,an,b,bn] of [['W1','A',1,'B',1],['W2','A',2,'C',1],['W3','B',2,'C',2]]) d=applyEditorCommand(d,{type:'add-wire',wire:createWire(id,end(a,an),end(b,bn),100)});
+    const topology={snap:true,nodes:[{id:'NA',connectorId:'A',position:{x:170,y:60}},{id:'NB',connectorId:'B',position:{x:170,y:60}},{id:'NC',connectorId:'C',position:{x:170,y:60}},{id:'J',position:{x:500,y:260}}],segments:[{id:'S0',from:'NA',to:'J',bends:[{x:300,y:60}]},{id:'S1',from:'J',to:'NB',bends:[]},{id:'S2',from:'J',to:'NC',bends:[]}],routes:[{wireId:'W1',steps:[{segmentId:'S0',reverse:false},{segmentId:'S1',reverse:false}]},{wireId:'W2',steps:[{segmentId:'S0',reverse:false},{segmentId:'S2',reverse:false}]},{wireId:'W3',steps:[{segmentId:'S1',reverse:true},{segmentId:'S2',reverse:false}]}]};
+    d=applyEditorCommand(d,{type:'set-physical-topology',topology});
+    d=applyEditorCommand(d,{type:'set-physical-topology',topology:splitPhysicalSegment(d,'S0',1,'BEND','S3')});
+    d=applyEditorCommand(d,{type:'move-connector',connectorId:'A',view:'drawing',position:{x:30,y:50}});
+    assert.deepEqual(physicalSegmentPoints(d,d.physicalTopology.segments[0])[0],{x:200,y:110});
+    assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['S1']).wireIds.sort(),['W1','W3']);
+    assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['W1'],true).wireIds,['W1']);
+    await designs.save(project.projectId,physicalHarnessId,0,d);
+    expectedTopology=d.physicalTopology;
+    assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
+    physicalTopologyChecked=true;
+  }
   let deleted = false;
   if (checkDeletion) {
     const kept = await projects.copyProject(project.projectId);
@@ -447,13 +473,18 @@ try {
       assert.equal(response.status, 200);
       assert.deepEqual((await response.json()).content.cables[0], JSON.parse(JSON.stringify(expectedCable)));
     }
+    if (physicalTopologyChecked && !deleted) {
+      const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${physicalHarnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).content.physicalTopology,expectedTopology);
+    }
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

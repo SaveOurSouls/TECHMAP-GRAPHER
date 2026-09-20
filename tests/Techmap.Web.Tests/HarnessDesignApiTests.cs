@@ -16,6 +16,45 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("missing-node")]
+    [InlineData("duplicate-node")]
+    [InlineData("disconnected-route")]
+    [InlineData("missing-wire")]
+    [InlineData("invalid-point")]
+    public async Task Physical_routes_round_trip_and_reject_invalid_edits(string mutation)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1"}],
+             "physicalTopology":{"snap":true,"nodes":[{"id":"A","position":{"x":0,"y":0}},
+               {"id":"B","position":{"x":200,"y":40}},{"id":"C","position":{"x":300,"y":100}}],
+              "segments":[{"id":"S0","from":"A","to":"B","bends":[{"x":100,"y":20}]},
+               {"id":"S1","from":"B","to":"C","bends":[]}],
+              "routes":[{"wireId":"W1","steps":[{"segmentId":"S0","reverse":false},{"segmentId":"S1","reverse":false}]}]}}
+            """)!;
+        var original = JsonSerializer.SerializeToElement(content);
+        using var accepted = await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var t = content["physicalTopology"]!;
+        switch (mutation)
+        {
+            case "missing-node": t["segments"]![0]!["from"] = "absent"; break;
+            case "duplicate-node": t["nodes"]![1]!["id"] = "A"; break;
+            case "disconnected-route": t["routes"]![0]!["steps"]![1]!["reverse"] = true; break;
+            case "missing-wire": t["routes"]![0]!["wireId"] = "absent"; break;
+            case "invalid-point": t["nodes"]![0]!["position"]!["x"] = "bad"; break;
+        }
+        using var rejected = await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("null")]
     [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":\"bad\",\"y\":0}}]")]
     [InlineData("[{\"drawingId\":\"a\",\"visible\":1,\"offset\":{\"x\":0,\"y\":0}}]")]

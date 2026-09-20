@@ -1,3 +1,4 @@
+import { parsePhysicalTopology, type PhysicalTopology } from "./physical-topology";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { clearDecorationSpans } from "./e4-decoration-spans";
@@ -519,6 +520,7 @@ export interface EditorViewState {
 }
 
 export interface HarnessDesignDocument {
+  readonly physicalTopology?: PhysicalTopology;
   readonly schemaVersion: 1;
   /** User-created wire colors retained by this harness even when temporarily unused. */
   readonly customWireColors?: readonly string[];
@@ -692,6 +694,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
         .flatMap((contact) => [contact.color, contact.secondaryColor ?? ""])),
     ]),
   };
+  document = { ...document, physicalTopology: parsePhysicalTopology(record.physicalTopology, document) };
   const connectorIds = new Set(document.connectors.map((connector) => connector.id));
   if (connectorIds.size !== document.connectors.length) throw new Error("ID соединителей должны быть уникальны.");
   const wireIds = new Set(document.wires.map((wire) => wire.id));

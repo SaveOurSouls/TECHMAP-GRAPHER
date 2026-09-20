@@ -318,3 +318,9 @@
 .cut-list-table tr.is-related { background: #fff4d8; box-shadow: inset 3px 0 #da9c22; }
 .he-relations .cut-list-table { font-size: 10px; }
 .he-relations small { color: var(--ui-muted); }
+
+.he-physical-fields { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin:5px 0; }
+.he-physical-fields select { max-width:115px; }
+.he-physical-fields input { width:65px; }
+.he-physical-list { max-height:150px; overflow:auto; }
+.he-physical-list button { font-size:11px; }

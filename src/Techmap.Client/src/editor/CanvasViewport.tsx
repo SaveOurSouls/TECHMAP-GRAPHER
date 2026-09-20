@@ -1106,7 +1106,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
-  if (object.kind === "wire" || object.kind === "dimension") {
+  if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
     if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
       geometry.primitives.some((primitive) => polygonContainsPoint(primitive.polygon, point, tolerance)))) return true;
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
@@ -1144,7 +1144,8 @@ export function hitTestWireRoutePoint(
   point: EditorPoint,
   zoom: number,
 ): number | null {
-  if (object?.kind !== "wire") return null;
+  if (object?.kind !== "wire" && object?.kind !== "physical-segment") return null;
+  if (object.metadata?.physicalRoute === "true") return null;
   const points = object.points ?? [];
   const tolerance = 10 / zoom;
   for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
@@ -1655,6 +1656,8 @@ export function hitTestEditorScene(
   const paintOrder = objectsInPaintOrder(objects, layers);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const tolerance = 7 / zoom;
+  const node = paintOrder.find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
+  if (node) return node.id;
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
     const object = paintOrder[index];
     const instance = object?.kind === "connector" ? componentViews.get(object.id) : undefined;
@@ -1972,6 +1975,12 @@ export function drawEditorSceneObject(
   componentTemplateImageCache = new ComponentTemplateImageCache(),
 ) {
   context.save();
+  if (object.kind === "physical-node") {
+    context.beginPath(); context.arc(object.x + 5, object.y + 5, 5, 0, Math.PI * 2);
+    context.fillStyle = selected ? "#1179ac" : "#ffffff"; context.fill(); context.strokeStyle = "#1179ac"; context.stroke();
+    context.font = "11px Arial"; context.fillStyle = "#34566a"; context.fillText(object.label, object.x + 12, object.y);
+    context.restore(); return;
+  }
   if (object.kind === "connector" && componentTemplateViewInstance) {
     if (view === "e4") {
       const layout=getE4ConnectorLayout(object);
@@ -1991,14 +2000,14 @@ export function drawEditorSceneObject(
       return;
     }
   }
-  if (object.kind === "wire" || object.kind === "dimension") {
+  if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
       context.beginPath();
       points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
       context.strokeStyle = selected ? "#1179ac" : object.color;
       context.lineWidth = selected ? 4 : object.kind === "wire" ? 3 : 1.5;
-      if (object.kind === "dimension") context.setLineDash([7, 5]);
+      if (object.kind === "dimension" || object.kind === "physical-segment" || object.metadata?.routeMissing === "true") context.setLineDash([7, 5]);
       if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
       else context.stroke();
       context.setLineDash([]);
@@ -2363,7 +2372,7 @@ export function getEditorSceneBounds(
   const visibleObjects = objectsInPaintOrder(objects, layers);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of visibleObjects) {
-    if (object.kind === "wire" || object.kind === "dimension") {
+    if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
       const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
       for (const point of points) {
         bounds = expandSceneBounds(bounds, point.x, point.y, point.x, point.y);
@@ -3050,11 +3059,11 @@ export function CanvasViewport({
       );
       const selectedObject = objects.find((item) => item.id === selectedObjectId);
       const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
-        selectedObject?.kind === "wire" && onCanvasDoubleClick !== undefined;
+        (selectedObject?.kind === "wire" || selectedObject?.kind === "physical-segment") && onCanvasDoubleClick !== undefined;
       if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || event.shiftKey);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
-      if (object && object.kind === "connector" && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind === "connector" || object.kind === "physical-node") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",

@@ -1,3 +1,4 @@
+import { parsePhysicalTopology, prunePhysicalTopology, type PhysicalTopology } from "./physical-topology";
 import {
   connectorBaseColumnKeys,
   connectorE4TableGeometry,
@@ -43,6 +44,7 @@ import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export type EditorCommand =
+  | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
@@ -175,7 +177,14 @@ export function applyEditorCommand(
   document: HarnessDesignDocument,
   command: EditorCommand,
 ): HarnessDesignDocument {
+  return prunePhysicalTopology(applyCommand(document, command));
+}
+
+function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {
   switch (command.type) {
+    case "set-physical-topology":
+      if (document.views.drawing.layers.some(layer => layer.id === "wires" && layer.locked)) throw new Error("Слой проводов заблокирован.");
+      return { ...document, physicalTopology: parsePhysicalTopology(command.topology, document) };
     case "add-connector":
       if (document.connectors.some((item) => item.id === command.connector.id)) {
         throw new Error("Соединитель с таким ID уже существует.");
