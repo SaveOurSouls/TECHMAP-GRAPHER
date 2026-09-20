@@ -796,6 +796,7 @@ export function ComponentLibrary({ config, session }: Props) {
     finally { setBusy(false); }
   }
   function openDrawingTarget(target:DrawingTarget,articleId=selectedArticleVariantId) {
+    if (!draft.templateId || busy) return;
     const separated=separateLegacyDrawings(draft.content,draft.articleDrawings);
     let content=separated.content;
     if(content!==draft.content){changeContent(content);setDraft(current=>({...current,articleDrawings:separated.drawings}));}
@@ -831,11 +832,12 @@ export function ComponentLibrary({ config, session }: Props) {
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
 
+  function returnToLibrary() {
+    setGraphicEditorMode("e4");
+    if (e4View) setViewId(e4View.id);
+  }
   async function saveAndExitDrawing() {
-    if (await save()) {
-      setGraphicEditorMode("e4");
-      if (e4View) setViewId(e4View.id);
-    }
+    if (await save()) returnToLibrary();
   }
 
   useEffect(() => {
@@ -1028,8 +1030,8 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span className={autoSaveFailed ? "library-save-state error" : "library-save-state"} role="status">{busy ? "Сохранение…" : autoSaveFailed ? "Не сохранено" : dirty ? "Изменено" : saved ?? "Сохранено"}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
         <div className="graphic-editor-switcher" role="toolbar" aria-label="Редактор графики">
           <button type="button" className={graphicEditorMode === "e4" ? "active" : ""} onClick={() => { setGraphicEditorMode("e4"); if (e4View) setViewId(e4View.id); }}>Схема Э4</button>
-          <button type="button" className={graphicEditorMode === "drawing" ? "active" : ""} onClick={() => openDrawingTarget(drawingTarget)}>Рисунок</button>
-          <InfoHint>Рисунки редактируются отдельно и назначаются нужному разделу: Схема Э4, Чертёж или Маршрут.</InfoHint>
+          <button type="button" className={graphicEditorMode === "drawing" ? "active" : ""} disabled={!draft.templateId || busy} onClick={() => openDrawingTarget(drawingTarget)}>Рисунок</button>
+          <InfoHint>Сначала выберите серию слева или создайте новую: заполните серию и описание, затем запишите версию. Рисунки редактируются отдельно для Схемы Э4, Чертежа или Маршрута.</InfoHint>
         </div>
         <div className="library-series-workspace">
         {graphicEditorMode === "e4" && <>
@@ -1088,6 +1090,8 @@ export function ComponentLibrary({ config, session }: Props) {
         {<section className={`drawing-editor-shell ${graphicEditorMode === "drawing" ? "" : "drawing-hidden"}`} role="dialog" aria-modal="true" aria-label="Редактор рисунка" onCopy={event=>{if((event.target as HTMLElement).closest("input,textarea,select,[contenteditable=true]") || !selectedNodeIds.length)return;event.preventDefault();copySelection(event.clipboardData);}}>
           <header><strong>Рисунок · {draft.code}</strong><label>Раздел<select aria-label="Раздел рисунка" value={drawingTarget} onChange={e=>openDrawingTarget(e.target.value as DrawingTarget)}><option value="e4">Схема Э4</option><option value="drawing">Чертёж</option><option value="route">Маршрут</option></select></label><InfoHint>Рисунок сохраняется только для выбранного раздела. Перетаскивайте PNG, JPG, BMP, SVG, HEIC или вставляйте изображение Ctrl+V на поле. Изображения преобразуются в PNG локально. «Открыть» выделяет сохранённый набор для редактирования.</InfoHint>
             <label>Артикул<select aria-label="Артикул рисунка" value={selectedArticleVariantId ?? ""} onChange={e=>openDrawingTarget(drawingTarget,e.target.value || null)}><option value="">Прототип</option>{draft.content.articleVariants.map(a=><option key={a.id} value={a.id}>{a.articleKey}</option>)}</select></label>
+            <button type="button" onClick={returnToLibrary} disabled={busy}>В библиотеку</button>
+            <InfoHint>Возврат сохраняет изменения в текущем редакторе. В библиотеке можно исправить данные серии и записать версию.</InfoHint>
             <button type="button" className="primary-action" onClick={() => void saveAndExitDrawing()} disabled={busy || assetMismatch}>Сохранить и выйти</button>
           </header>
           {error && <div className="error-banner" role="alert">{error}</div>}

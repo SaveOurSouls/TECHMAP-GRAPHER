@@ -395,13 +395,38 @@ describe("project component template view", () => {
 });
 
 describe("independent E4 companion drawings",()=>{
+  it("places ungrouped article primitives across layers as one intact drawing",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    const a=rectangle(layer.id),otherLayer={...layer,id:id(),nodes:[] as TemplateNodeV3[]};
+    const b={...rectangle(otherLayer.id),transform:{...a.transform,translateX:constant(25)}};
+    layer.nodes=[a];otherLayer.nodes=[b];view.layers.push(otherLayer);
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[],[],undefined,[{articleVariantId:instance.articleVariantId,nodeIds:[a.id,b.id],contactPointIds:[]}]).content;
+    const pinned={...instance,content:v5},origin={x:100,y:200};
+    const original=projectE4DrawingCompanions(pinned,origin,300);
+    expect(original).toHaveLength(1);
+    expect(original[0]!.drawingId).toBe(view.id);
+    expect(original[0]!.commands.map(c=>c.nodeId)).toEqual([a.id,b.id]);
+    expect(projectE4DrawingCompanions({...pinned,drawingPlacements:[{drawingId:a.id,visible:false,offset:{x:600,y:70},scale:3}]},origin,300)).toEqual(original);
+    const moved=projectE4DrawingCompanions({...pinned,drawingPlacements:[{drawingId:view.id,visible:false,offset:{x:80,y:90}}]},origin,300)[0]!;
+    expect(moved.visible).toBe(false);
+    original[0]!.commands.forEach((command,i)=>{
+      expect(moved.commands[i]!.transform.e-command.transform.e).toBeCloseTo(80);
+      expect(moved.commands[i]!.transform.f-command.transform.f).toBeCloseTo(90);
+    });
+    const scaled=projectE4DrawingCompanions({...pinned,drawingPlacements:[{drawingId:view.id,visible:true,offset:{x:0,y:0},scale:2}]},origin,300)[0]!;
+    expect(scaled.bounds.maxX-scaled.bounds.minX).toBeCloseTo(2*(original[0]!.bounds.maxX-original[0]!.bounds.minX));
+    expect(scaled.commands[1]!.transform.e-scaled.commands[0]!.transform.e).toBeCloseTo(2*(original[0]!.commands[1]!.transform.e-original[0]!.commands[0]!.transform.e));
+  });
   it("filters the pinned article, moves only one drawing and hides it without changing its geometry",()=>{
     const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
-    const a=rectangle(layer.id),b={...rectangle(layer.id),id:id()},excluded={...rectangle(layer.id),id:id()};
-    layer.nodes=[a,b,excluded];
-    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[],[],undefined,[{articleVariantId:instance.articleVariantId,nodeIds:[a.id,b.id],contactPointIds:[]}]).content;
+    const children=Array.from({length:4},()=>rectangle(layer.id)),excluded=rectangle(layer.id);
+    const a={...base("group",layer.id),kind:"group" as const,geometry:{childIds:children.slice(0,2).map(n=>n.id)}};
+    const b={...base("group",layer.id),kind:"group" as const,geometry:{childIds:children.slice(2).map(n=>n.id)}};
+    layer.nodes=[a,b,...children,excluded];
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[],[],undefined,[{articleVariantId:instance.articleVariantId,nodeIds:[a.id,b.id,...children.map(n=>n.id)],contactPointIds:[]}]).content;
     const original=projectE4DrawingCompanions({...instance,content:v5},{x:100,y:200},300);
     expect(original.map(d=>d.drawingId)).toEqual([a.id,b.id]);
+    expect(original.map(d=>d.commands.length)).toEqual([2,2]);
     const moved=projectE4DrawingCompanions({...instance,content:v5,drawingPlacements:[{drawingId:a.id,visible:false,offset:{x:750,y:80}}]},{x:100,y:200},300);
     expect(moved[0]!.visible).toBe(false);
     expect(moved[0]!.bounds.minX).toBeCloseTo(original[0]!.bounds.minX+750);

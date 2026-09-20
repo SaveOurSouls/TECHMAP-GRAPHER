@@ -24,6 +24,8 @@ internal static class HarnessDrawingDocumentsValidator
             if(!ids.Add(Text(table,"id")) || Text(table,"kind") is not ("bom" or "connections" or "cut"))throw Invalid();
             Point(table,"position");
             if(table.TryGetProperty("dock",out var dock) && (dock.ValueKind!=JsonValueKind.String || dock.GetString() is not ("left" or "right" or "top" or "bottom")))throw Invalid();
+            if(table.TryGetProperty("width",out var width) && (width.ValueKind!=JsonValueKind.Number||!width.TryGetDouble(out var widthValue)||!double.IsFinite(widthValue)||widthValue<280||widthValue>4000))throw Invalid();
+            if(table.TryGetProperty("height",out var height) && (height.ValueKind!=JsonValueKind.Number||!height.TryGetDouble(out var heightValue)||!double.IsFinite(heightValue)||heightValue<160||heightValue>4000))throw Invalid();
         }
         foreach(var leader in Array(d,"leaders",10000).EnumerateArray())
         {

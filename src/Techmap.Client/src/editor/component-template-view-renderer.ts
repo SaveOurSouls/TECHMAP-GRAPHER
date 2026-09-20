@@ -407,7 +407,7 @@ export interface E4DrawingCompanion extends ProjectedComponentTemplateView {
   readonly offset:{x:number;y:number};
 }
 
-/** Independent root figures (groups remain one drawing) from the pinned article. */
+/** Loose primitives form one drawing. Explicit groups can represent several whole drawings. */
 export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstance,origin:ComponentTemplateProjectionOrigin,tableWidth:number,resolveAssetUrl?:ResolveComponentTemplateAssetUrl):E4DrawingCompanion[] {
   if(instance.content.schemaVersion!==5) return [];
   const drawing=projectComponentTemplateView(instance,"drawing",{x:0,y:0},resolveAssetUrl,"e4");
@@ -417,16 +417,21 @@ export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstanc
   const view=articleDrawingView(source,instance.content.articleDrawings,instance.articleVariantId,"e4");
   const nodes=view.layers.flatMap(l=>l.nodes),owned=new Set(nodes.flatMap(n=>n.kind==="group" ? n.geometry.childIds : []));
   const scale=Math.min(1,Math.max(40,tableWidth)/Math.max(1,drawing.bounds.maxX-drawing.bounds.minX),140/Math.max(1,drawing.bounds.maxY-drawing.bounds.minY));
-  return nodes.filter(n=>!owned.has(n.id) && n.visible).flatMap((node,index)=>{
+  const roots=nodes.filter(n=>!owned.has(n.id) && n.visible && view.layers.some(l=>l.id===n.layerId && l.visible));
+  const separate=roots.every(n=>n.kind==="group" || n.kind==="image");
+  const parts=separate ? roots.map(node=>({id:node.id,roots:[node]})) : [{id:roots.length===1 ? roots[0]!.id : view.id,roots}];
+  return parts.flatMap((part,index)=>{
     const ids=new Set<string>();
-    const visit=(id:string)=>{if(ids.has(id))return;ids.add(id);const n=nodes.find(n=>n.id===id);if(n?.kind==="group")n.geometry.childIds.forEach(visit);};visit(node.id);
+    const visit=(id:string)=>{if(ids.has(id))return;ids.add(id);const n=nodes.find(n=>n.id===id);if(n?.kind==="group")n.geometry.childIds.forEach(visit);};part.roots.forEach(node=>visit(node.id));
     const commands=drawing.commands.filter(c=>ids.has(c.nodeId));if(!commands.length)return [];
-    const placement=instance.drawingPlacements?.find(p=>p.drawingId===node.id),offset=placement?.offset ?? {x:0,y:0};
-    const placedScale=scale*drawingScale(instance.drawingPlacements,node.id);
+    // Old per-primitive offsets must not tear apart an assembled drawing.
+    const placement=instance.drawingPlacements?.find(p=>p.drawingId===part.id),offset=placement?.offset ?? {x:0,y:0};
+    const placedScale=scale*drawingScale(instance.drawingPlacements,part.id);
     const transform={a:placedScale,b:0,c:0,d:placedScale,e:origin.x-drawing.bounds.minX*placedScale+offset.x,f:origin.y-20-drawing.bounds.maxY*placedScale+offset.y};
     const projected=commands.map(command=>({...command,transform:multiply(transform,command.transform)}));
-    const label=node.kind==="image" ? (instance.content.assets.find(a=>a.assetId===node.geometry.assetId)?.fileName ?? `Изображение ${index+1}`) : node.kind==="group" ? `Группа ${index+1}` : `Рисунок ${index+1}`;
-    return [{...drawing,viewKind:"e4" as const,drawingId:node.id,label,visible:placement?.visible!==false,offset,commands:projected,bounds:combinedBounds(projected)}];
+    const node=part.roots.length===1 ? part.roots[0] : undefined;
+    const label=node?.kind==="image" ? (instance.content.assets.find(a=>a.assetId===node.geometry.assetId)?.fileName ?? `Изображение ${index+1}`) : `Рисунок ${index+1}`;
+    return [{...drawing,viewKind:"e4" as const,drawingId:part.id,label,visible:placement?.visible!==false,offset,commands:projected,bounds:combinedBounds(projected)}];
   });
 }
 

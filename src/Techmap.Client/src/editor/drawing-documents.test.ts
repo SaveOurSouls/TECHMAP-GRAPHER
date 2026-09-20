@@ -7,9 +7,29 @@ import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./
 
 const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire",sourceKey:"SAME",displayName:"Провод"};
 import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from "./drawing-dimensions";
-import { tableWindowPosition } from "./DrawingTableWindows";
+import { tableWindowPosition, tableWindowStyle, resizeTableWindow } from "./DrawingTableWindows";
 
 describe("drawing tables and position leaders",()=>{
+  it("preserves resized windows through serialization and a single Undo",()=>{
+    const table={id:"T",kind:"bom" as const,position:{x:10,y:20}};
+    const d={...physicalFixture(),drawingDocuments:{...emptyDrawingDocuments(),tables:[table]}};
+    const size=resizeTableWindow({width:760,height:380},120,60);
+    const h=executeEditorCommand(createEditorHistory(d),{type:"set-drawing-documents",documents:{...d.drawingDocuments,tables:[{...table,...size}]}});
+    const saved=parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present)));
+    expect(saved.drawingDocuments!.tables[0]).toEqual({...table,width:880,height:440});
+    expect(tableWindowStyle(saved.drawingDocuments!.tables[0]!,{offsetX:2,offsetY:3,zoom:2})).toEqual({left:22,top:43,width:880,height:440});
+    expect(undoEditorCommand(h).present).toBe(d);
+    expect(tableWindowStyle(table,{offsetX:0,offsetY:0,zoom:1})).toMatchObject({width:760,height:380});
+  });
+  it("resizes away from the pinned edge and limits window size",()=>{
+    expect(resizeTableWindow({width:760,height:380},-100,80,"right")).toEqual({width:860,height:460});
+    expect(resizeTableWindow({width:760,height:380},100,-80,"bottom")).toEqual({width:860,height:460});
+    expect(resizeTableWindow({width:760,height:380},-9999,-9999)).toEqual({width:280,height:160});
+    expect(resizeTableWindow({width:760,height:380},9999,9999)).toEqual({width:4000,height:4000});
+  });
+  it.each([{width:279},{height:159},{width:4001},{height:4001},{width:null},{width:"760"},{height:NaN}])("rejects invalid window size %j",size=>{
+    expect(()=>parseHarnessDesignDocument({...physicalFixture(),drawingDocuments:{...emptyDrawingDocuments(),tables:[{id:"T",kind:"bom",position:{x:0,y:0},...size}]}})).toThrow();
+  });
   it("keeps source versions separate, sums exactly and excludes material cable members",()=>{
     const d=physicalFixture();
     const doc={...d,wires:d.wires.map((w,i)=>({...w,lengthMm:100.1,cutRoundingStepMm:.001,materialBinding:i===2?{...material,snapshotSha256:"c".repeat(64)}:material}))};

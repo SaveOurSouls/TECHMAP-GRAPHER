@@ -21,6 +21,12 @@ const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 
 describe("component library UI", () => {
+  it("disables drawing entry without a saved series and always provides a return action", () => {
+    const markup=renderToStaticMarkup(createElement(ComponentLibrary,{config,session}));
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Рисунок<\/button>/);
+    expect(markup).toContain("Сначала выберите серию");
+    expect(markup).toMatch(/<button type="button">В библиотеку<\/button>/);
+  });
   it("keeps at least 100 Ctrl+Z states", () => {
     let stack: ReturnType<typeof newTemplateContentV3>[] = [];
     const states = Array.from({ length: 101 }, () => newTemplateContentV3());

@@ -13,8 +13,13 @@ const clientRoot = join(root, 'src/Techmap.Client');
 const require = createRequire(join(clientRoot, 'package.json'));
 const { createServer } = await import(pathToFileURL(require.resolve('vite')).href);
 const packageRoot = resolve(process.argv[2] ?? join(root, 'artifacts/m4-03-r6-final/TECHMAP-GRAPHER'));
-const checkDeletion = process.argv.includes('--check-deletion');
-const checkTerminalLabels = process.argv.includes('--check-terminal-labels');
+const flags = new Set(process.argv.slice(3));
+// Drawing scenarios share a populated independent E4 table and an editable base drawing.
+if (flags.has('--check-drawing-targets') || flags.has('--check-drawing-array')) flags.add('--check-drawing-editor');
+if (flags.has('--check-drawing-editor')) flags.add('--independent-e4');
+assert.ok(!(flags.has('--v4') && flags.has('--independent-e4')), '--v4 cannot be combined with independent E4/drawing scenarios');
+const checkDeletion = flags.has('--check-deletion');
+const checkTerminalLabels = flags.has('--check-terminal-labels');
 const terminalKey = '3:JST|14:SPH-002T-P0.5S|0:|3:PHR';
 const testsRoot = join(root, 'artifacts/library-placement-smoke');
 await mkdir(testsRoot, { recursive: true });
@@ -25,7 +30,7 @@ let server = spawn(join(packageRoot, 'Techmap.Server.exe'), ['--no-browser', `--
 let log = '';
 server.stdout.on('data', chunk => { log += chunk; });
 server.stderr.on('data', chunk => { log += chunk; });
-const vite = await createServer({ root: clientRoot, configFile: false, server: { middlewareMode: true }, appType: 'custom' });
+const vite = await createServer({ root: clientRoot, configFile: false, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
 try {
   const url = await new Promise((res, rej) => {
     const timeout = setTimeout(() => { clearInterval(timer); rej(new Error(`Server timeout: ${log}`)); }, 30000);
@@ -71,16 +76,16 @@ try {
   const harnessId = project.harnesses[0].harnessId;
   let content = newTemplateContentV3();
   [content] = addContactPointV3(content, content.views[0].id, { number: '1', name: 'Test contact' });
-  const article = { sourceId: process.argv.includes('--independent-e4') ? 'БД.СОЕД' : 'smoke-library', entityType: 'connector', articleKey: 'TEST-ARTICLE' };
+  const article = { sourceId: flags.has('--independent-e4') ? 'БД.СОЕД' : 'smoke-library', entityType: 'connector', articleKey: 'TEST-ARTICLE' };
   content.articleVariants = [{ ...article, id: crypto.randomUUID(), parameterValues: [], contactGroups: null }];
   content = upgradeTemplateContentV3ToV4(content).content;
-  if (!process.argv.includes('--v4')) {
+  if (!flags.has('--v4')) {
     content = upgradeTemplateContentV4ToV5(content).content;
     content.logicalContacts = [];
     content.repeaters = [];
     content.views = content.views.map(view => ({ ...view, contactPoints: [] }));
   }
-  if (process.argv.includes('--independent-e4')) {
+  if (flags.has('--independent-e4')) {
     const { createE4ConnectorSeriesTableFromV3 } = await module('component-library/e4-connector-series-table.ts');
     const { createTemplateContentV5FromEditor } = await module('component-library/template-model-v5.ts');
     const { parseConnectorSchematic } = await module('editor/model.ts');
@@ -103,7 +108,7 @@ try {
       }));
     }
   }
-  if (process.argv.includes('--check-drawing-editor')) {
+  if (flags.has('--check-drawing-editor')) {
     const { projectTemplateContentV5ToV3, createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1 } = await module('component-library/template-model-v5.ts');
     const { addBasicNodeV3, editContactPointV3, setRootNodeRotationAroundCenterV3, resizeNodeV3 } = await module('component-library/template-commands-v3.ts');
     const { drawingSelection } = await module('component-library/drawing-bindings.ts');
@@ -119,22 +124,45 @@ try {
     const selection = drawingSelection(core.views.find(view => view.id === drawing.id),[nodeId,pointId],core.articleVariants[0].id);
     content = createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[selection],[{logicalContactId:core.logicalContacts[0].id,seriesRowId:content.e4ConnectorTable.seriesDefaults[0].rowId}]).content;
   }
-  if (process.argv.includes('--check-drawing-targets')) {
+  if (flags.has('--check-drawing-targets')) {
     const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
-    const {addAdditionalViewV3,addBasicNodeV3}=await module('component-library/template-commands-v3.ts');
+    const {addAdditionalViewV3,addBasicNodeV3,linkLogicalContactPointV3}=await module('component-library/template-commands-v3.ts');
     const {applyE4ConnectorRowEdit}=await module('component-library/e4-connector-series-table.ts');
     let core=projectTemplateContentV5ToV3(content),table=projectTemplateContentV5TableToV1(content);
-    const drawings=content.articleDrawings.map(d=>({...d,target:'drawing',viewId:core.views.find(v=>v.kind==='drawing').id}));
+    const drawingViewId=core.views.find(v=>v.kind==='drawing').id;
+    const contactBindings=[...content.drawingContactBindings];
+    // Reuse one electrical identity in all views. Every explicit target must cover the table.
+    for(const [index,row] of table.seriesDefaults.entries()) {
+      if(contactBindings.some(b=>b.seriesRowId===row.rowId))continue;
+      let pointId;
+      [core,pointId]=addContactPointV3(core,drawingViewId,{number:String(index+1),contactTypeGroupId:row.values.contactTypeGroupId,
+        x:{kind:'constant',value:123},y:{kind:'constant',value:234+index*24}});
+      const point=core.views.find(v=>v.id===drawingViewId).contactPoints.find(p=>p.id===pointId);
+      contactBindings.push({logicalContactId:point.logicalContactId,seriesRowId:row.rowId});
+    }
+    const drawings=content.articleDrawings.map(d=>({...d,target:'drawing',viewId:drawingViewId,
+      contactPointIds:flags.has('--check-drawing-array')?d.contactPointIds:core.views.find(v=>v.id===drawingViewId).contactPoints.map(p=>p.id)}));
     for(const target of ['e4','route']) {
       let viewId,nodeId;[core,viewId]=addAdditionalViewV3(core,target);
       [core,nodeId]=addBasicNodeV3(core,viewId,core.views.find(v=>v.id===viewId).layers[0].id,'ellipse');
-      drawings.push({target,viewId,articleVariantId:core.articleVariants[0].id,nodeIds:[nodeId],contactPointIds:[]});
+      const contactPointIds=[];
+      for(const [index,binding] of contactBindings.entries()) {
+        let pointId;
+        [core,pointId]=linkLogicalContactPointV3(core,viewId,binding.logicalContactId,
+          {x:{kind:'constant',value:target==='e4'?40:80},y:{kind:'constant',value:40+index*24}});
+        contactPointIds.push(pointId);
+      }
+      drawings.push({target,viewId,articleVariantId:core.articleVariants[0].id,nodeIds:[nodeId],contactPointIds});
+    }
+    if(flags.has('--check-drawing-array')) {
+      const prototypePoints=new Set(drawings.find(d=>d.target==='drawing').contactPointIds);
+      core.views=core.views.map(v=>v.id===drawingViewId?{...v,contactPoints:v.contactPoints.filter(p=>prototypePoints.has(p.id))}:v);
     }
     table=applyE4ConnectorRowEdit(table,{articleVariantId:core.articleVariants[0].id,seriesRowId:table.articles[0].rows[0].seriesRowId,scope:'article',changes:{wire:'ПВ-3',color:'Красный',secondaryColor:'Белый',customValues:{note:'Preset'}}});
-    content=createTemplateContentV5FromEditor(core,table,content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,drawings,content.drawingContactBindings).content;
+    content=createTemplateContentV5FromEditor(core,table,content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,drawings,contactBindings).content;
     content.e4Presentation.baseColumns=content.e4Presentation.baseColumns.map(c=>({...c,visible:true}));
   }
-  if (process.argv.includes('--check-drawing-array')) {
+  if (flags.has('--check-drawing-array')) {
     const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
     const {setDrawingArray}=await module('component-library/drawing-array-commands.ts');
     const {drawingSelection}=await module('component-library/drawing-bindings.ts');
@@ -145,7 +173,7 @@ try {
     const selection={...drawingSelection(changed,[changed.repeatPlacements[0].prototypeGroupId],core.articleVariants[0].id),target:'drawing',viewId:view.id};
     content=createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,content.articleDrawings.map(d=>d===binding?selection:d),content.drawingContactBindings).content;
   }
-  if (process.argv.includes('--check-purpose')) {
+  if (flags.has('--check-purpose')) {
     content = { ...content, e4ConnectorTable: { ...content.e4ConnectorTable,
       columns: content.e4ConnectorTable.columns.map(column => column.id === 'name' ? { ...column, visible: false } : column) } };
   }
@@ -161,7 +189,7 @@ try {
   const result = await placements.place(project.projectId, harnessId, body);
   const graph = await placements.list(project.projectId, harnessId);
   const saved = await designs.get(project.projectId, harnessId);
-  if(process.argv.includes('--check-drawing-targets')) {
+  if(flags.has('--check-drawing-targets')) {
     assert.deepEqual(graph.snapshots[0].content.articleDrawings,content.articleDrawings);
     assert.equal(saved.content.connectors[0].contacts[0].wire,'ПВ-3');
     assert.equal(saved.content.connectors[0].contacts[0].color,'Красный');
@@ -170,6 +198,33 @@ try {
     const instance={objectId:preview.id,snapshotId:'smoke',content:graph.snapshots[0].content,articleVariantId:content.articleVariants[0].id};
     assert.deepEqual(projectE4DrawingCompanions(instance,{x:0,y:0},200).map(d=>d.drawingId),content.articleDrawings.find(d=>d.target==='e4').nodeIds);
     assert.deepEqual(projectComponentTemplateView(instance,'drawing',{x:0,y:0},undefined,'route').commands.map(c=>c.nodeId),content.articleDrawings.find(d=>d.target==='route').nodeIds);
+    const {validateArticleDrawingContacts}=await module('component-library/drawing-contact-validation.ts');
+    const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1}=await module('component-library/template-model-v5.ts');
+    const core=projectTemplateContentV5ToV3(content),table=projectTemplateContentV5TableToV1(content);
+    for(const target of ['e4','drawing','route']) {
+      const drawing=content.articleDrawings.find(d=>d.target===target);
+      validateArticleDrawingContacts(core,table,content.drawingContactBindings,drawing);
+      const incomplete=structuredClone(content);
+      incomplete.articleDrawings.find(d=>d.target===target).contactPointIds.pop();
+      await assert.rejects(()=>templates.save(published.templateId,{expectedVersion:published.version,
+        code:published.code,name:published.name,articleBindings:[article],content:incomplete}),/Drawing must contain/);
+      const afterRejected=await templates.get(published.templateId);
+      assert.equal(afterRejected.version,published.version,'Invalid drawing must not publish a new version');
+      assert.equal(afterRejected.versionSha256,published.versionSha256);
+      assert.deepEqual(afterRejected.content,content);
+
+      const cleared=structuredClone(content);
+      const empty=cleared.articleDrawings.find(d=>d.target===target);
+      empty.nodeIds=[];empty.contactPointIds=[];
+      validateArticleDrawingContacts(core,table,content.drawingContactBindings,empty);
+      const clearedInstance={...instance,content:cleared};
+      const e4=projectE4DrawingCompanions(clearedInstance,{x:0,y:0},200);
+      const sheet=projectComponentTemplateView(clearedInstance,'drawing',{x:0,y:0});
+      const route=projectComponentTemplateView(clearedInstance,'drawing',{x:0,y:0},undefined,'route');
+      assert.equal(e4.length===0,target==='e4','Clear E4 only in its own section');
+      assert.equal(!sheet?.commands.length,target==='drawing','Clear drawing only in its own section');
+      assert.equal(!route?.commands.length,target==='route','Clear route only in its own section');
+    }
   }
   let latestTemplateVersion = published.version;
   const snapshot = graph.snapshots[0];
@@ -185,12 +240,12 @@ try {
     assert.equal(saved.content.connectors[0].contacts[0].terminalArticle, terminalKey);
     assert.equal(terminalArticleLabel(saved.content.connectors[0].contacts[0].terminalArticle), 'SPH-002T-P0.5S');
   }
-  if (process.argv.includes('--independent-e4')) {
+  if (flags.has('--independent-e4')) {
     assert.equal(saved.content.connectors[0].contacts.length, 12);
     assert.deepEqual(saved.content.connectors[0].schematic, { ...content.e4Presentation, showName: content.e4ConnectorTable.columns.find(column => column.id === "name")?.visible ?? true });
     assert.deepEqual((await templates.get(initial.templateId)).content.e4Presentation, content.e4Presentation);
   }
-  if (process.argv.includes('--check-drawing-editor')) {
+  if (flags.has('--check-drawing-editor')) {
     const restored = await templates.get(initial.templateId);
     assert.deepEqual(restored.content.articleDrawings, content.articleDrawings);
     assert.deepEqual(restored.content.drawingContactBindings, content.drawingContactBindings);
@@ -198,15 +253,17 @@ try {
     assert.deepEqual(drawing.layers[0].nodes[0].fill.hatch,{kind:'cross',spacing:8,angle:30,backgroundColor:'#ffffff'});
     const contact = saved.content.connectors[0].libraryBinding.snapshot.contacts[0];
     assert.equal(contact.sourceNumber,'1');
-    assert.equal(contact.representations[0].x,123);
-    assert.equal(contact.representations[0].y,234);
+    const drawingPoint=contact.representations.find(point=>point.viewId===drawing.id);
+    assert.ok(drawingPoint,'The placed contact must retain its drawing representation');
+    assert.equal(drawingPoint.x,123);
+    assert.equal(drawingPoint.y,234);
     const { projectComponentTemplateView } = await module('editor/component-template-view-renderer.ts');
     const rendered = projectComponentTemplateView({objectId:preview.id,snapshotId:'smoke',content:restored.content,articleVariantId:content.articleVariants[0].id},'drawing',{x:0,y:0});
-    assert.equal(rendered.commands.length,process.argv.includes('--check-drawing-array')?12:1);
+    assert.equal(rendered.commands.length,flags.has('--check-drawing-array')?12:1);
     assert.equal(rendered.commands[0].hatch.kind,'cross');
   }
   let terminalRefreshChecked = false;
-  if (process.argv.includes('--check-terminal-refresh')) {
+  if (flags.has('--check-terminal-refresh')) {
     const { refreshedTemplateTerminalCatalog } = await module('editor/template-terminal-catalog.ts');
     const { applyEditorCommand } = await module('editor/commands.ts');
     const terminal = { sourceId: 'technology-terminals', entityType: 'terminal', articleKey: 'TEST-NEW-TERMINAL' };
@@ -233,13 +290,13 @@ try {
     terminalRefreshChecked = true;
   }
   let drawingPlacementExpected = null;
-  if (process.argv.includes('--check-drawing-placement')) {
+  if (flags.has('--check-drawing-placement')) {
     const { applyEditorCommand } = await module('editor/commands.ts');
     const current = await designs.get(project.projectId,harnessId);
     const drawingId = content.articleDrawings.find(d=>d.target==='e4')?.nodeIds[0] ?? content.views.find(v=>v.kind==='drawing').layers[0].nodes[0].id;
     let updated = applyEditorCommand(current.content,{type:'set-drawing-placement',connectorId:preview.id,drawingId,offset:{x:330,y:90}});
     updated = applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId,visible:false});
-    if(process.argv.includes('--check-drawing-scale')) {
+    if(flags.has('--check-drawing-scale')) {
       updated=applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId,scale:2});
       updated=applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId:'view:drawing',scale:1.5});
       const {materializedContactWorldRepresentation}=await module('editor/materialized-contact-representation.ts');
@@ -248,14 +305,14 @@ try {
       for(const contact of before.contacts) {
         const a=materializedContactWorldRepresentation(before,contact.id,'drawing');
         const b=materializedContactWorldRepresentation(after,contact.id,'drawing');
-        if(process.argv.includes('--check-drawing-array'))assert.ok(a&&b);
+        if(flags.has('--check-drawing-array'))assert.ok(a&&b);
         if(a&&b)for(const axis of ['x','y'])assert.ok(Math.abs((b.position[axis]-before.positions.drawing[axis])-(a.position[axis]-before.positions.drawing[axis])*1.5)<1e-8);
       }
     }
     await designs.save(project.projectId,harnessId,current.revision,updated);
     const reread = await designs.get(project.projectId,harnessId);
     drawingPlacementExpected = [{drawingId,visible:false,offset:{x:330,y:90}}];
-    if(process.argv.includes('--check-drawing-scale'))drawingPlacementExpected=[{...drawingPlacementExpected[0],scale:2},{drawingId:'view:drawing',visible:true,offset:{x:0,y:0},scale:1.5}];
+    if(flags.has('--check-drawing-scale'))drawingPlacementExpected=[{...drawingPlacementExpected[0],scale:2},{drawingId:'view:drawing',visible:true,offset:{x:0,y:0},scale:1.5}];
     assert.deepEqual(reread.content.connectors[0].drawingPlacements,drawingPlacementExpected);
     assert.deepEqual(reread.content.connectors[0].positions,current.content.connectors[0].positions);
     assert.deepEqual(reread.content.connectors[0].libraryBinding,current.content.connectors[0].libraryBinding);
@@ -263,7 +320,7 @@ try {
     assert.deepEqual(graphAgain.placements[0].instance.drawingPlacements,drawingPlacementExpected);
   }
   let purposeExpected = null;
-  if (process.argv.includes('--check-purpose')) {
+  if (flags.has('--check-purpose')) {
     const { applyEditorCommand } = await module('editor/commands.ts');
     const { connectorContactName, connectorE4TableGeometry } = await module('editor/model.ts');
     assert.equal(preview.schematic.showName, false);
@@ -287,7 +344,7 @@ try {
     assert.equal(graphAgain.placements[0].instance.schematic.showName, false);
   }
   let stripProfilesChecked = false;
-  if (process.argv.includes('--check-strip-profiles')) {
+  if (flags.has('--check-strip-profiles')) {
     const { createConnector, createWire } = await module('editor/commands.ts');
     const { createMutationHeaders } = await module('local-session.ts');
     const left = createConnector(crypto.randomUUID(), 'STRIP-X1', 1, { x: 500, y: 100 });
@@ -321,7 +378,7 @@ try {
   let routingChecked = false;
   let routingHarnessId;
   let routingExpected;
-  if (process.argv.includes('--check-routing')) {
+  if (flags.has('--check-routing')) {
     const { applyEditorCommand, createConnector, createWire, e4RoutingIssues } = await module('editor/commands.ts');
     const { createEmptyHarnessDesign, createScreenEndpoint, createJunctionEndpoint, wireEndpointE4Anchor } = await module('editor/model.ts');
     project = (await projects.addHarness(project.projectId, { commandId: crypto.randomUUID(), expectedRevision: project.revision }, {
@@ -360,7 +417,7 @@ try {
   }
   let cableStripChecked = false;
   let screenSpansHarnessId, screenSpansExpected;
-  if(process.argv.includes('--check-screen-spans')) {
+  if(flags.has('--check-screen-spans')) {
     const {applyEditorCommand,createConnector,createWire,e4RoutingIssues}=await module('editor/commands.ts');
     const {createEmptyHarnessDesign,createScreenEndpoint,wireScreenConnectionGeometry,wireEndpointE4Anchor,validateOrthogonalE4Route}=await module('editor/model.ts');
     project=(await projects.addHarness(project.projectId,{commandId:crypto.randomUUID(),expectedRevision:project.revision},{designation:'SCREEN-SPANS',quantity:1})).project;
@@ -392,7 +449,7 @@ try {
   }
   let cableHarnessId;
   let expectedCable;
-  if (process.argv.includes('--check-cable-strip')) {
+  if (flags.has('--check-cable-strip')) {
     const { applyEditorCommand, createConnector, createWire } = await module('editor/commands.ts');
     const { createEmptyHarnessDesign, calculateCableSheathStrip } = await module('editor/model.ts');
     const { buildCableSheathGeometry } = await module('editor/cable-sheath-geometry.ts');
@@ -429,7 +486,7 @@ try {
     assert.equal(cut.items.length, 1);
     assert.equal(cut.items[0].cutLengthMm, 101);
     assert.equal(cut.items[0].totalMetres, 0.202);
-    if (process.argv.includes('--check-selection')) {
+    if (flags.has('--check-selection')) {
       const { buildLiveCutList } = await module('editor/live-cut-list.ts');
       const { buildHarnessSelectionIndex, resolveHarnessSelection } = await module('editor/harness-selection.ts');
       const live = buildLiveCutList(reread.content, project.projectId, cableHarnessId, 2);
@@ -463,7 +520,7 @@ try {
   let physicalHarnessId;
   let expectedTopology;
   let expectedDrawingDocuments;
-  if (process.argv.includes('--check-topology')) {
+  if (flags.has('--check-topology')) {
     const { applyEditorCommand, createConnector, createWire } = await module('editor/commands.ts');
     const { createEmptyHarnessDesign } = await module('editor/model.ts');
     const { physicalSegmentPoints, splitPhysicalSegment } = await module('editor/physical-topology.ts');
@@ -476,7 +533,7 @@ try {
     for(const [id,a,an,b,bn] of [['W1','A',1,'B',1],['W2','A',2,'C',1],['W3','B',2,'C',2]]) d=applyEditorCommand(d,{type:'add-wire',wire:createWire(id,end(a,an),end(b,bn),100)});
     const topology={snap:true,nodes:[{id:'NA',connectorId:'A',position:{x:170,y:60}},{id:'NB',connectorId:'B',position:{x:170,y:60}},{id:'NC',connectorId:'C',position:{x:170,y:60}},{id:'J',position:{x:500,y:260}}],segments:[{id:'S0',from:'NA',to:'J',bends:[{x:300,y:60}]},{id:'S1',from:'J',to:'NB',bends:[]},{id:'S2',from:'J',to:'NC',bends:[]}],routes:[{wireId:'W1',steps:[{segmentId:'S0',reverse:false},{segmentId:'S1',reverse:false}]},{wireId:'W2',steps:[{segmentId:'S0',reverse:false},{segmentId:'S2',reverse:false}]},{wireId:'W3',steps:[{segmentId:'S1',reverse:true},{segmentId:'S2',reverse:false}]}]};
     d=applyEditorCommand(d,{type:'set-physical-topology',topology});
-    if(process.argv.includes('--check-coverings')) {
+    if(flags.has('--check-coverings')) {
       const {createReferenceCatalogApi}=await module('reference-catalog-api.ts');
       const {coveringPaths,pathLength}=await module('editor/physical-coverings.ts');
       const api=createReferenceCatalogApi(config,session,fetcher);
@@ -497,7 +554,7 @@ try {
     assert.deepEqual(physicalSegmentPoints(d,d.physicalTopology.segments[0])[0],{x:200,y:110});
     assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['S1']).wireIds.sort(),['W1','W3']);
     assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['W1'],true).wireIds,['W1']);
-    if(process.argv.includes('--check-documents')) {
+    if(flags.has('--check-documents')) {
       const {buildDrawingBom,moveDrawingAnnotation,drawingDocumentScene}=await module('editor/drawing-documents.ts');
       const rows=buildDrawingBom(d),row=rows.find(r=>r.objectIds.includes('A'));
       d=applyEditorCommand(d,{type:'set-drawing-documents',documents:{tables:[{id:'BOM',kind:'bom',position:{x:100,y:1200}},{id:'CONNECTIONS',kind:'connections',position:{x:100,y:1650}}],leaders:[{id:'LEADER',objectId:'A',rowKey:row.key,anchorOffset:{x:10,y:10},circle:{x:200,y:-50}}],bomOrder:rows.map(r=>r.key)}});
@@ -509,8 +566,8 @@ try {
       assert.equal(scene.find(o=>o.id==='LEADER').label,String(row.position));
     }
     await designs.save(project.projectId,physicalHarnessId,0,d);
-    if(process.argv.includes('--check-documents')) assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.drawingDocuments,d.drawingDocuments);
-    if(process.argv.includes('--check-cut-diagram')) {
+    if(flags.has('--check-documents')) assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.drawingDocuments,d.drawingDocuments);
+    if(flags.has('--check-cut-diagram')) {
       const {buildCutDiagram,cutBlankIds}=await module('editor/cut-diagram.ts');
 
       d={...d,wires:d.wires.map(w=>w.id==='W1'?{...w,lengthMm:100.125,endCorrectionFromMm:-1.25,endCorrectionToMm:2,cutRoundingStepMm:1,materialBinding:{sourceId:'s',snapshotId:crypto.randomUUID(),snapshotSha256:'a'.repeat(64),recordId:'b'.repeat(64),entityType:'wire',sourceKey:'TEST-WIRE',displayName:'Test wire'}}:w)};
@@ -532,7 +589,7 @@ try {
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
   }
-  if(process.argv.includes('--check-common-drawing')) {
+  if(flags.has('--check-common-drawing')) {
     const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
     const {addBundlePortV3}=await module('component-library/template-commands-v3.ts');
     const {materializedContactWorldRepresentation}=await module('editor/materialized-contact-representation.ts');
@@ -554,7 +611,7 @@ try {
     assert.deepEqual(JSON.parse(JSON.stringify(read.content.connectors[0].libraryBinding.snapshot)),JSON.parse(JSON.stringify(c.libraryBinding.snapshot)));
   }
   let drawingWorkspaceChecked=false,drawingWorkspaceHarnessId,drawingWorkspaceExpected;
-  if(process.argv.includes('--check-drawing-workspace')) {
+  if(flags.has('--check-drawing-workspace')) {
     const {createEmptyHarnessDesign,parseHarnessDesignDocument}=await module('editor/model.ts');
     const {createConnector,createWire,applyEditorCommand}=await module('editor/commands.ts');
     const {dimensionRouteKey}=await module('editor/drawing-dimensions.ts');
@@ -568,7 +625,7 @@ try {
     d=applyEditorCommand(d,{type:'set-wire-route',wireId:'DW',route:[{x:380,y:108},{x:380,y:268}]});
     const base={wireId:'DW',pointCount:4,routeKey:dimensionRouteKey(d,d.wires[0]),mode:'aligned',offset:40};
     const key=buildDrawingBom(d)[0].key;
-    d=applyEditorCommand(d,{type:'set-drawing-documents',documents:{tables:[{id:'DT',kind:'bom',dock:'bottom',position:{x:10,y:20}},{id:'DC',kind:'cut',dock:'right',position:{x:20,y:40}}],leaders:[],bomOrder:[],bomText:{[key]:{name:'Edited component',note:'API drawing test'}},dimensions:[{...base,id:'D1',from:0,to:1,lengthMm:100.125},{...base,id:'D2',from:1,to:3,lengthMm:200.125}]}});
+    d=applyEditorCommand(d,{type:'set-drawing-documents',documents:{tables:[{id:'DT',kind:'bom',dock:'bottom',position:{x:10,y:20},width:880,height:440},{id:'DC',kind:'cut',dock:'right',position:{x:20,y:40},width:640,height:360}],leaders:[],bomOrder:[],bomText:{[key]:{name:'Edited component',note:'API drawing test'}},dimensions:[{...base,id:'D1',from:0,to:1,lengthMm:100.125},{...base,id:'D2',from:1,to:3,lengthMm:200.125}]}});
     assert.equal(d.wires[0].lengthMm,300.25);
     const stored=await designs.save(project.projectId,hid,0,d);
     const reread=await designs.get(project.projectId,hid);assert.deepEqual(reread.content.drawingDocuments,JSON.parse(JSON.stringify(d.drawingDocuments)));
@@ -593,7 +650,7 @@ try {
     deleted = true;
   }
   let restartChecked = false;
-  if (process.argv.includes('--check-restart')) {
+  if (flags.has('--check-restart')) {
     const stopped = once(server, 'exit');
     server.kill();
     await stopped;
@@ -622,7 +679,7 @@ try {
     const restartedTemplate = await fetch(new URL(`/api/v1/component-templates/${initial.templateId}`, restartedUrl), { headers: { Cookie: restartedCookie } });
     const reloadedTemplate = await restartedTemplate.json();
     assert.equal(reloadedTemplate.version, latestTemplateVersion);
-    if (process.argv.includes('--check-drawing-editor')) { assert.deepEqual(reloadedTemplate.content.articleDrawings, content.articleDrawings); assert.deepEqual(reloadedTemplate.content.drawingContactBindings, content.drawingContactBindings); }
+    if (flags.has('--check-drawing-editor')) { assert.deepEqual(reloadedTemplate.content.articleDrawings, content.articleDrawings); assert.deepEqual(reloadedTemplate.content.drawingContactBindings, content.drawingContactBindings); }
     if (purposeExpected && !deleted) {
       const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`, restartedUrl), { headers: { Cookie: restartedCookie } });
       assert.equal(response.status, 200);
@@ -670,10 +727,10 @@ try {
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
-  const report = { status: 'ok', drawingWorkspaceChecked,drawingWorkspaceHarnessId,commonDrawingChecked:process.argv.includes('--check-common-drawing'), screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
+  const report = { status: 'ok', drawingTargetsChecked:flags.has('--check-drawing-targets'), drawingWorkspaceChecked,drawingWorkspaceHarnessId,commonDrawingChecked:flags.has('--check-common-drawing'), screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:flags.has('--check-drawing-array'), drawingScaleChecked:flags.has('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: flags.has('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:flags.has('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:flags.has('--check-documents') && physicalTopologyChecked, cutDiagramChecked:flags.has('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

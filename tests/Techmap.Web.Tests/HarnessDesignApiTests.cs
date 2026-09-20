@@ -16,6 +16,32 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("{\"width\":279}")]
+    [InlineData("{\"height\":159}")]
+    [InlineData("{\"width\":4001}")]
+    [InlineData("{\"height\":4001}")]
+    [InlineData("{\"width\":null}")]
+    [InlineData("{\"width\":\"760\"}")]
+    [InlineData("{\"height\":true}")]
+    public async Task Table_window_sizes_round_trip_and_invalid_changes_preserve_revision(string invalid)
+    {
+        await using var factory=new TechmapWebApplicationFactory(); using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=JsonNode.Parse("""
+          {"schemaVersion":1,"connectors":[],"wires":[],"drawingDocuments":{
+          "tables":[{"id":"T","kind":"bom","position":{"x":20,"y":40},"width":880,"height":440}],"leaders":[],"bomOrder":[]}}
+          """)!;
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        foreach(var field in JsonNode.Parse(invalid)!.AsObject())content["drawingDocuments"]!["tables"]![0]![field.Key]=field.Value?.DeepClone();
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("point")]
     [InlineData("duplicate")]
     [InlineData("kind")]
