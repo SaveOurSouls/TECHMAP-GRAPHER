@@ -139,7 +139,7 @@ try {
     const {setDrawingArray}=await module('component-library/drawing-array-commands.ts');
     const {drawingSelection}=await module('component-library/drawing-bindings.ts');
     let core=projectTemplateContentV5ToV3(content);
-    const view=core.views.find(v=>v.kind==='drawing'),binding=content.articleDrawings.find(d=>d.target==='drawing');
+    const view=core.views.find(v=>v.kind==='drawing'),binding=content.articleDrawings.find(d=>d.target==='drawing'||!d.target);
     core=setDrawingArray(core,view.id,view.layers[0].id,[...binding.nodeIds,...binding.contactPointIds],{rows:2,direction:'long-side',numbering:'snake',countSource:'article',count:12,pitchX:160,pitchY:300});
     const changed=core.views.find(v=>v.id===view.id);
     const selection={...drawingSelection(changed,[changed.repeatPlacements[0].prototypeGroupId],core.articleVariants[0].id),target:'drawing',viewId:view.id};
@@ -532,6 +532,35 @@ try {
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
   }
+  let drawingWorkspaceChecked=false,drawingWorkspaceHarnessId,drawingWorkspaceExpected;
+  if(process.argv.includes('--check-drawing-workspace')) {
+    const {createEmptyHarnessDesign,parseHarnessDesignDocument}=await module('editor/model.ts');
+    const {createConnector,createWire,applyEditorCommand}=await module('editor/commands.ts');
+    const {dimensionRouteKey}=await module('editor/drawing-dimensions.ts');
+    const {buildDrawingBom}=await module('editor/drawing-documents.ts');
+    const latest=await projects.getProject(project.projectId);
+    project=(await projects.addHarness(project.projectId,{commandId:crypto.randomUUID(),expectedRevision:latest.revision},{designation:'DRAWING-WORKSPACE',quantity:1})).project;
+    const hid=project.harnesses.find(h=>h.designation==='DRAWING-WORKSPACE').harnessId;
+    let d=createEmptyHarnessDesign();
+    for(const [id,x,y] of [['DA',80,80],['DB',620,240]])d=applyEditorCommand(d,{type:'add-connector',connector:createConnector(id,id,2,{x,y})});
+    d=applyEditorCommand(d,{type:'add-wire',wire:createWire('DW',{connectorId:'DA',contactId:'DA:contact:1'},{connectorId:'DB',contactId:'DB:contact:1'},null)});
+    d=applyEditorCommand(d,{type:'set-wire-route',wireId:'DW',route:[{x:380,y:108},{x:380,y:268}]});
+    const base={wireId:'DW',pointCount:4,routeKey:dimensionRouteKey(d,d.wires[0]),mode:'aligned',offset:40};
+    const key=buildDrawingBom(d)[0].key;
+    d=applyEditorCommand(d,{type:'set-drawing-documents',documents:{tables:[{id:'DT',kind:'bom',dock:'bottom',position:{x:10,y:20}},{id:'DC',kind:'cut',dock:'right',position:{x:20,y:40}}],leaders:[],bomOrder:[],bomText:{[key]:{name:'Edited component',note:'API drawing test'}},dimensions:[{...base,id:'D1',from:0,to:1,lengthMm:100.125},{...base,id:'D2',from:1,to:3,lengthMm:200.125}]}});
+    assert.equal(d.wires[0].lengthMm,300.25);
+    const stored=await designs.save(project.projectId,hid,0,d);
+    const reread=await designs.get(project.projectId,hid);assert.deepEqual(reread.content.drawingDocuments,JSON.parse(JSON.stringify(d.drawingDocuments)));
+    const cut=await (await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${hid}/cut-list`)).json();
+    assert.equal(cut.items.find(r=>r.wireId==='DW').cutLengthMm,301);
+    await assert.rejects(()=>designs.save(project.projectId,hid,reread.revision,{...d,wires:d.wires.map(w=>({...w,lengthMm:999}))}));
+    assert.equal((await designs.get(project.projectId,hid)).revision,reread.revision);
+    const partial=applyEditorCommand(d,{type:'set-drawing-documents',documents:{...d.drawingDocuments,dimensions:[d.drawingDocuments.dimensions[0]]}});
+    assert.equal(partial.wires[0].lengthMm,null);
+    const partialSaved=await designs.save(project.projectId,hid,stored.revision,partial);
+    await designs.save(project.projectId,hid,partialSaved.revision,d);
+    drawingWorkspaceChecked=true;drawingWorkspaceHarnessId=hid;drawingWorkspaceExpected=JSON.parse(JSON.stringify(parseHarnessDesignDocument(d)));
+  }
   let deleted = false;
   if (checkDeletion) {
     const kept = await projects.copyProject(project.projectId);
@@ -613,10 +642,14 @@ try {
       assert.deepEqual(content.physicalTopology,expectedTopology);
       if(expectedDrawingDocuments)assert.deepEqual(content.drawingDocuments,expectedDrawingDocuments);
     }
+    if(drawingWorkspaceChecked && !deleted){
+      const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${drawingWorkspaceHarnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
+      assert.equal(response.status,200);assert.deepEqual((await response.json()).content,drawingWorkspaceExpected);
+    }
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
-  const report = { status: 'ok', screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
+  const report = { status: 'ok', drawingWorkspaceChecked,drawingWorkspaceHarnessId, screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
     revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
