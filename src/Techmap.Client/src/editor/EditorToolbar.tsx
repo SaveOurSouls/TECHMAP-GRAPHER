@@ -15,7 +15,9 @@ const tools: readonly ToolDefinition[] = [
   { id: "connector", label: "Соединитель", shortcut: "C", glyph: "▣", views: ["e4", "drawing"] },
   { id: "wire", label: "Провод", shortcut: "W", glyph: "╱", views: ["e4", "drawing"] },
   { id: "text", label: "Текст", shortcut: "T", glyph: "T", views: ["e4", "drawing"] },
-  { id: "dimension", label: "Размер", shortcut: "D", glyph: "↔", views: ["drawing"] },
+  { id: "dimension-horizontal", label: "Горизонтальный размер", shortcut: "", glyph: "↔", views: ["drawing"] },
+  { id: "dimension-vertical", label: "Вертикальный размер", shortcut: "", glyph: "↕", views: ["drawing"] },
+  { id: "dimension", label: "Свободный размер", shortcut: "D", glyph: "⤢", views: ["drawing"] },
 ];
 
 export interface EditorToolbarProps {

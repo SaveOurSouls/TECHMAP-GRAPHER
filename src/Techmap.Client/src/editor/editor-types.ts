@@ -8,7 +8,7 @@ export type EditorTool =
   | "connector"
   | "wire"
   | "text"
-  | "dimension";
+  | "dimension" | "dimension-horizontal" | "dimension-vertical";
 
 export type EditorObjectKind = "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor";
 

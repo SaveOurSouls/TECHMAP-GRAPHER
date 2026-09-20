@@ -1,3 +1,4 @@
+import type { DimensionMode } from "./drawing-dimensions";
 import { screenCrossSections } from "./e4-screen-spans";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
 import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
@@ -66,6 +67,7 @@ export interface CanvasViewportProps {
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly overlay?: ReactNode;
   readonly drawingWindows?:ReactNode;
+  readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
@@ -1929,6 +1931,14 @@ export function drawEditorSceneObject(
       return;
     }
   }
+  if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&object.points?.length===4){
+    const [a,p,q,b]=object.points as readonly [EditorPoint,EditorPoint,EditorPoint,EditorPoint];
+    context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?2:1;
+    context.setLineDash([]);context.beginPath();context.moveTo(a.x,a.y);context.lineTo(p.x,p.y);context.moveTo(p.x,p.y);context.lineTo(q.x,q.y);context.lineTo(b.x,b.y);context.stroke();
+    const angle=Math.atan2(q.y-p.y,q.x-p.x),dx=Math.cos(angle),dy=Math.sin(angle);
+    for(const [point,sign] of [[p,1],[q,-1]] as const){context.beginPath();context.moveTo(point.x,point.y);context.lineTo(point.x+sign*dx*8-dy*3,point.y+sign*dy*8+dx*3);context.lineTo(point.x+sign*dx*8+dy*3,point.y+sign*dy*8-dx*3);context.closePath();context.fill();}
+    context.translate((p.x+q.x)/2,(p.y+q.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
+  }
   if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
@@ -2612,7 +2622,7 @@ export function CanvasViewport({
   e4Overlays,
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
-  overlay, drawingWindows,
+  overlay, drawingWindows,onDimensionCreate,
   diagnosticOverlay,
   inlineEditor,
   onCameraChange,
@@ -2656,6 +2666,9 @@ export function CanvasViewport({
     const previous=instance.drawingPlacements?.find(p=>p.drawingId===change.drawingId)??{drawingId:change.drawingId,visible:true,offset:{x:0,y:0}};
     return {...instance,drawingPlacements:[...(instance.drawingPlacements??[]).filter(p=>p.drawingId!==change.drawingId),{...previous,...("scale" in change?{scale:change.scale}:{offset:change.offset})}]};
   });
+  const [dimensionStart,setDimensionStart]=useState<{wireId:string;index:number;point:EditorPoint;pointCount:number}[]>([]);
+  const [dimensionMessage,setDimensionMessage]=useState("");
+  useEffect(()=>{setDimensionStart([]);setDimensionMessage("");},[tool,view]);
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
@@ -2808,6 +2821,17 @@ export function CanvasViewport({
         camera,
       };
       return;
+    }
+    if(view==="drawing"&&tool.startsWith("dimension")&&event.button===0){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const candidates=objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(w=>(w.points??[]).map((p,index)=>({wireId:w.id,index,point:p,pointCount:w.points!.length}))).filter(c=>Math.hypot(c.point.x-point.x,c.point.y-point.y)*camera.zoom<=12).sort((a,b)=>Number(b.wireId===selectedObjectId)-Number(a.wireId===selectedObjectId));
+      if(!candidates.length){setDimensionMessage("Укажите конец провода или перегиб");return;}
+      if(!dimensionStart.length){setDimensionStart(candidates);setDimensionMessage("Укажите вторую точку того же провода");return;}
+      const end=candidates.find(c=>dimensionStart.some(a=>a.wireId===c.wireId&&a.index!==c.index));
+      const start=end&&dimensionStart.find(a=>a.wireId===end.wireId&&a.index!==end.index);
+      if(!end||!start){setDimensionMessage("Нужны две разные точки одного провода");return;}
+      onDimensionCreate?.(end.wireId,start.index,end.index,end.pointCount,tool==="dimension-horizontal"?"horizontal":tool==="dimension-vertical"?"vertical":"aligned");
+      setDimensionStart([]);return;
     }
     if (tool === "wire") {
       const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
@@ -3342,6 +3366,7 @@ export function CanvasViewport({
                 : "Сегменты: перетащить; двойной щелчок по изгибу — удалить"
               : "Ctrl + колесо — масштаб"}</span>
       </div>
+      {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите первую точку провода"}</div></>}
       {drawingWindows}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}

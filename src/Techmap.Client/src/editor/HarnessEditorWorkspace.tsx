@@ -1,3 +1,4 @@
+import type { DimensionMode } from "./drawing-dimensions";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CanvasViewport,
@@ -96,6 +97,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
   readonly relationPanel?: ReactNode;
+  readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
   readonly cables?: readonly CableInstance[];
@@ -218,7 +220,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest, drawingWindows,
+  highlightedObjectIds = [], relationPanel, revealRequest, drawingWindows,onDimensionCreate,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -348,7 +350,7 @@ export function HarnessEditorWorkspace({
   const changeView = (nextView: HarnessEditorView) => {
     if (controlledView === undefined) setLocalView(nextView);
     onViewChange?.(nextView);
-    if (nextView === "e4" && tool === "dimension") setTool("select");
+    if (nextView === "e4" && tool.startsWith("dimension")) setTool("select");
   };
 
   const changeObjects = (nextObjects: readonly EditorSceneObject[]) => {
@@ -528,6 +530,7 @@ export function HarnessEditorWorkspace({
           overlay={e4WireMenu}
           drawingWindows={view==="drawing"?drawingWindows?.(camera):undefined}
           diagnosticOverlay={diagnosticOverlay}
+          onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}

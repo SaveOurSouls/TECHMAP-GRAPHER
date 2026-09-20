@@ -6,6 +6,7 @@ import { parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
 const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire",sourceKey:"SAME",displayName:"Провод"};
+import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from "./drawing-dimensions";
 import { tableWindowPosition } from "./DrawingTableWindows";
 
 describe("drawing tables and position leaders",()=>{
@@ -57,6 +58,19 @@ describe("drawing tables and position leaders",()=>{
     expect(buildDrawingBom(h.present)[0]).toMatchObject({name:"Edited",note:"Note"});
     expect(undoEditorCommand(h).present).toBe(d);
     expect(()=>parseHarnessDesignDocument({...h.present,drawingDocuments:{...documents,tables:[{...table,dock:"bad"}]}})).toThrow();
+  });
+
+  it("calculates a total dimension or a complete sum of non-overlapping sections",()=>{
+    const d=physicalFixture(),wire=d.wires[0]!,key=dimensionRouteKey(d,wire);
+    expect(measuredWireLength([{id:"a",wireId:wire.id,from:0,to:3,pointCount:4,routeKey:key,mode:"aligned",offset:20,lengthMm:350}])).toBe(350);
+    expect(measuredWireLength([
+      {id:"a",wireId:wire.id,from:0,to:1,pointCount:4,routeKey:key,mode:"horizontal",offset:20,lengthMm:100},
+      {id:"b",wireId:wire.id,from:1,to:3,pointCount:4,routeKey:key,mode:"vertical",offset:20,lengthMm:250},
+    ])).toBe(350);
+    expect(measuredWireLength([{id:"a",wireId:wire.id,from:0,to:1,pointCount:4,routeKey:key,mode:"aligned",offset:20,lengthMm:100}])).toBeNull();
+    expect(()=>measuredWireLength([{id:"a",wireId:wire.id,from:0,to:2,pointCount:4,routeKey:key,mode:"aligned",offset:20,lengthMm:100},{id:"b",wireId:wire.id,from:1,to:3,pointCount:4,routeKey:key,mode:"aligned",offset:20,lengthMm:250}])).toThrow();
+    expect(validateDrawingDimensions([{id:"a",wireId:wire.id,from:0,to:3,pointCount:4,routeKey:key,mode:"aligned",offset:20,lengthMm:350}],d)).toHaveLength(1);
+    expect(()=>validateDrawingDimensions([{id:"a",wireId:wire.id,from:0,to:3,pointCount:4,routeKey:"stale",mode:"aligned",offset:20,lengthMm:350}],d)).toThrow();
   });
 
 });

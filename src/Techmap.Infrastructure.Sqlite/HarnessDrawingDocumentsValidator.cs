@@ -39,6 +39,7 @@ internal static class HarnessDrawingDocumentsValidator
                 foreach(var field in entry.Value.EnumerateObject())if(field.Name is not ("designation" or "name" or "note")||field.Value.ValueKind!=JsonValueKind.String||field.Value.GetString()!.Length>4096)throw Invalid();
             }
         }
+        HarnessDrawingDimensionsValidator.Validate(root,d,ids);
         var keys=new HashSet<string>(StringComparer.Ordinal);
         foreach(var key in Array(d,"bomOrder",50000).EnumerateArray())if(key.ValueKind!=JsonValueKind.String || key.GetString() is not {} s || string.IsNullOrWhiteSpace(s)||s.Length>4096||!keys.Add(s))throw Invalid();
     }

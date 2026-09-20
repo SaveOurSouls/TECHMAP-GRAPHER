@@ -1,3 +1,4 @@
+import { validateDrawingDimensions, type DrawingDimension } from "./drawing-dimensions";
 import type { EditorSceneObject } from "./editor-types";
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireEndpoint } from "./model";
 import { coveringPaths } from "./physical-coverings";
@@ -5,7 +6,7 @@ import { physicalNodePoint, physicalSegmentPoints } from "./physical-topology";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom" }
 export interface PositionLeader { readonly id: string; readonly objectId: string; readonly rowKey: string; readonly anchorOffset: Point; readonly circle: Point }
-export interface DrawingDocuments { readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {designation?:string;name?:string;note?:string}> }
+export interface DrawingDocuments { readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {designation?:string;name?:string;note?:string}> }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly designation: string; readonly name: string;
@@ -78,6 +79,8 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle))return fail();
   if(new Set(d.bomOrder).size!==d.bomOrder.length||d.bomOrder.some(k=>!text(k,4096)))return fail();
   if(d.bomText!==undefined){if(!d.bomText||typeof d.bomText!=="object"||Array.isArray(d.bomText)||Object.keys(d.bomText).length>50000)return fail();for(const [key,edit] of Object.entries(d.bomText)){if(!text(key,4096)||!edit||typeof edit!=="object"||Array.isArray(edit)||Object.entries(edit).some(([k,v])=>!["designation","name","note"].includes(k)||typeof v!=="string"||v.length>4096))return fail();}}
+  const dimensions=validateDrawingDimensions(d.dimensions,document);
+  for(const item of dimensions??[]){if(ids.has(item.id))return fail();ids.add(item.id);}
   // Missing targets are intentionally retained and visibly diagnosed, never reassigned by proximity.
   return d;
 }
