@@ -51,6 +51,23 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     }
 
     [Fact]
+    public void Drawing_targets_allow_one_set_per_section_and_reject_unknown_sections()
+    {
+        var content=ValidContent();
+        var view=content["views"]!.AsArray().First(v=>v!["kind"]!.GetValue<string>()=="drawing")!;
+        var sets=new JsonArray();
+        foreach(var target in new[]{"e4","drawing","route"}) sets.Add(new JsonObject {
+            ["articleVariantId"]=content["articleVariants"]![0]!["id"]!.DeepClone(),
+            ["target"]=target,["viewId"]=view["id"]!.DeepClone(),
+            ["nodeIds"]=new JsonArray(),["contactPointIds"]=new JsonArray()
+        });
+        content["articleDrawings"]=sets;
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        sets[2]!["target"]="unknown";
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
+    [Fact]
     public void E4_presentation_is_optional_and_validated_before_projection()
     {
         var content = ValidContent();

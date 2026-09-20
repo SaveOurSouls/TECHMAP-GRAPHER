@@ -82,6 +82,14 @@ expands every exact package ID and version. The reviewed license families are:
 
 ## License texts
 
+HEIC import uses the unmodified libheif JavaScript decoder distributed with
+`heic-to 1.5.2` (LGPL-3.0-or-later), based on libheif 1.22.2.
+Library notices, JavaScript source and build description are included under
+`ThirdParty/heic-to`. Upstream source: https://github.com/hoppergee/heic-to
+and https://github.com/strukturag/libheif/tree/v1.22.2.
+The decoder is a separate worker asset and can be replaced and rebuilt using
+the application source. The importer does not upload images to any service.
+
 MIT: <https://spdx.org/licenses/MIT.html>
 
 Apache-2.0: <https://spdx.org/licenses/Apache-2.0.html>

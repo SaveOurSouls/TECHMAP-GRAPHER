@@ -119,6 +119,21 @@ try {
     const selection = drawingSelection(core.views.find(view => view.id === drawing.id),[nodeId,pointId],core.articleVariants[0].id);
     content = createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[selection],[{logicalContactId:core.logicalContacts[0].id,seriesRowId:content.e4ConnectorTable.seriesDefaults[0].rowId}]).content;
   }
+  if (process.argv.includes('--check-drawing-targets')) {
+    const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
+    const {addAdditionalViewV3,addBasicNodeV3}=await module('component-library/template-commands-v3.ts');
+    const {applyE4ConnectorRowEdit}=await module('component-library/e4-connector-series-table.ts');
+    let core=projectTemplateContentV5ToV3(content),table=projectTemplateContentV5TableToV1(content);
+    const drawings=content.articleDrawings.map(d=>({...d,target:'drawing',viewId:core.views.find(v=>v.kind==='drawing').id}));
+    for(const target of ['e4','route']) {
+      let viewId,nodeId;[core,viewId]=addAdditionalViewV3(core,target);
+      [core,nodeId]=addBasicNodeV3(core,viewId,core.views.find(v=>v.id===viewId).layers[0].id,'ellipse');
+      drawings.push({target,viewId,articleVariantId:core.articleVariants[0].id,nodeIds:[nodeId],contactPointIds:[]});
+    }
+    table=applyE4ConnectorRowEdit(table,{articleVariantId:core.articleVariants[0].id,seriesRowId:table.articles[0].rows[0].seriesRowId,scope:'article',changes:{wire:'ПВ-3',color:'Красный',secondaryColor:'Белый',customValues:{note:'Preset'}}});
+    content=createTemplateContentV5FromEditor(core,table,content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,drawings,content.drawingContactBindings).content;
+    content.e4Presentation.baseColumns=content.e4Presentation.baseColumns.map(c=>({...c,visible:true}));
+  }
   if (process.argv.includes('--check-purpose')) {
     content = { ...content, e4ConnectorTable: { ...content.e4ConnectorTable,
       columns: content.e4ConnectorTable.columns.map(column => column.id === 'name' ? { ...column, visible: false } : column) } };
@@ -135,6 +150,16 @@ try {
   const result = await placements.place(project.projectId, harnessId, body);
   const graph = await placements.list(project.projectId, harnessId);
   const saved = await designs.get(project.projectId, harnessId);
+  if(process.argv.includes('--check-drawing-targets')) {
+    assert.deepEqual(graph.snapshots[0].content.articleDrawings,content.articleDrawings);
+    assert.equal(saved.content.connectors[0].contacts[0].wire,'ПВ-3');
+    assert.equal(saved.content.connectors[0].contacts[0].color,'Красный');
+    assert.equal(saved.content.connectors[0].contacts[0].customValues.note,'Preset');
+    const {projectE4DrawingCompanions,projectComponentTemplateView}=await module('editor/component-template-view-renderer.ts');
+    const instance={objectId:preview.id,snapshotId:'smoke',content:graph.snapshots[0].content,articleVariantId:content.articleVariants[0].id};
+    assert.deepEqual(projectE4DrawingCompanions(instance,{x:0,y:0},200).map(d=>d.drawingId),content.articleDrawings.find(d=>d.target==='e4').nodeIds);
+    assert.deepEqual(projectComponentTemplateView(instance,'drawing',{x:0,y:0},undefined,'route').commands.map(c=>c.nodeId),content.articleDrawings.find(d=>d.target==='route').nodeIds);
+  }
   let latestTemplateVersion = published.version;
   const snapshot = graph.snapshots[0];
   assert.equal(snapshot.sourceTemplateId, preview.libraryBinding.templateId);

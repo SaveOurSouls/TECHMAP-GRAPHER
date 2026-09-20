@@ -64,7 +64,7 @@ internal static class ComponentTemplateContentV5Validator
         var points = new HashSet<string>(StringComparer.Ordinal);
         foreach (var view in content.GetProperty("views").EnumerateArray())
         {
-            if (view.GetProperty("kind").GetString() != "drawing") continue;
+
             foreach (var layer in view.GetProperty("layers").EnumerateArray())
                 foreach (var node in layer.GetProperty("nodes").EnumerateArray()) nodes.Add(node.GetProperty("id").GetString()!);
             foreach (var point in view.GetProperty("contactPoints").EnumerateArray()) points.Add(point.GetProperty("id").GetString()!);
@@ -76,9 +76,23 @@ internal static class ComponentTemplateContentV5Validator
             foreach (var drawing in drawings.EnumerateArray())
             {
                 const string path = "content.articleDrawings";
-                RequireExactProperties(drawing, path, "articleVariantId", "nodeIds", "contactPointIds");
+                RequireExactPropertiesWithOptional(drawing, path, ["articleVariantId", "nodeIds", "contactPointIds"], "target", "viewId");
+                var target = drawing.TryGetProperty("target", out var targetValue) ? RequiredText(targetValue, 16, path + ".target") : null;
+                if (target is not null && target is not ("e4" or "drawing" or "route")) Throw("Unknown drawing target.", path);
+                if (target is null && drawing.TryGetProperty("viewId", out _)) Throw("Drawing target required.", path);
+                if (target is not null)
+                {
+                    if (!drawing.TryGetProperty("viewId", out var viewId)) Throw("Drawing view required.", path);
+                    var idOfView = RequiredText(viewId, 128, path + ".viewId");
+                    var view = content.GetProperty("views").EnumerateArray().FirstOrDefault(v => v.GetProperty("id").GetString() == idOfView);
+                    if (view.ValueKind != JsonValueKind.Object) Throw("Unknown drawing view.", path);
+                    var ownNodes=view.GetProperty("layers").EnumerateArray().SelectMany(l=>l.GetProperty("nodes").EnumerateArray()).Select(n=>n.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+                    var ownPoints=view.GetProperty("contactPoints").EnumerateArray().Select(p=>p.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+                    ValidateDrawingIds(drawing.GetProperty("nodeIds"),ownNodes,path);
+                    ValidateDrawingIds(drawing.GetProperty("contactPointIds"),ownPoints,path);
+                }
                 var id = RequiredText(drawing.GetProperty("articleVariantId"), 128, path);
-                if (!articles.Contains(id) || !seen.Add(id)) Throw("Unknown or duplicate drawing article.", path);
+                if (!articles.Contains(id) || !seen.Add(id + ":" + (target ?? "legacy"))) Throw("Unknown or duplicate drawing article.", path);
                 ValidateDrawingIds(drawing.GetProperty("nodeIds"), nodes, path + ".nodeIds");
                 ValidateDrawingIds(drawing.GetProperty("contactPointIds"), points, path + ".contactPointIds");
             }

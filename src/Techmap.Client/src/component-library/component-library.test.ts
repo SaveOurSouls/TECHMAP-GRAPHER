@@ -150,7 +150,7 @@ describe("component library UI", () => {
     expect(markup).toContain("Создать контакт");
     expect(markup).toContain("Разместить связанную точку");
     expect(markup).toContain("Выход пучка");
-    expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain('aria-label="Поле редактирования рисунка"');
     expect(markup).toContain("Отменить");
     expect(markup).toContain("Настройка серии");
     expect(markup).toContain("Типы контактов");
@@ -158,7 +158,7 @@ describe("component library UI", () => {
     expect(markup).not.toContain("e4-table-editor");
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Изображения");
-    expect(markup).toContain("Загрузить PNG");
+    expect(markup).toContain("+ Изображение");
     expect(markup).toContain("Добавить слой");
     expect(markup).toContain("Записать версию");
     expect(markup).toContain("Изменено");

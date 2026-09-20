@@ -158,7 +158,8 @@ function ColorCellEditor({
       <div className="e4cce-color-popover" hidden={!open}>
         <label>Основной цвет
           <select
-            value={primary}
+            aria-label={`Основной цвет, контакт ${contact.number}`}
+            value={choices.find(choice => normalizedColorKey(choice.name) === normalizedColorKey(primary))?.name ?? primary}
             disabled={disabled}
             onChange={(event) => {
               onChange({ color: event.target.value, secondaryColor: secondary });
@@ -171,7 +172,8 @@ function ColorCellEditor({
         </label>
         <label>Второй цвет
           <select
-            value={secondary}
+            aria-label={`Второй цвет, контакт ${contact.number}`}
+            value={choices.find(choice => normalizedColorKey(choice.name) === normalizedColorKey(secondary))?.name ?? secondary}
             disabled={disabled}
             onChange={(event) => {
               onChange({ color: primary, secondaryColor: event.target.value });

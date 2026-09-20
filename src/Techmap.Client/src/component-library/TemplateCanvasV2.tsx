@@ -1115,13 +1115,15 @@ export function TemplateCanvasV2({
     const stem = point.direction === "left" ? "M -13 0 H -5"
       : point.direction === "right" ? "M 5 0 H 13"
         : point.direction === "up" ? "M 0 -13 V -5" : "M 0 5 V 13";
+    const previewX = stretchPreview && selectedIdSet.has(point.id) ? stretchPreview.anchor[0] + (x - stretchPreview.anchor[0]) * stretchPreview.factor : x;
+    const previewY = stretchPreview && selectedIdSet.has(point.id) ? stretchPreview.anchor[1] + (y - stretchPreview.anchor[1]) * stretchPreview.factor : y;
     return (
       <g
         key={point.id}
         data-template-point-id={point.id}
         data-template-point-kind={kind}
         data-selected={selectedIdSet.has(point.id) ? "true" : undefined}
-        transform={`translate(${formatNumber(x + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaX : 0))} ${formatNumber(y + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaY : 0))})`}
+        transform={`translate(${formatNumber(previewX + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaX : 0))} ${formatNumber(previewY + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaY : 0))})`}
         onPointerDown={event => beginNodeGesture(event, point.id, true, point.x.kind === "constant" && point.y.kind === "constant")}
         onKeyDown={event => selectFromKeyboard(event, point.id)}
         role="button"
@@ -1371,6 +1373,8 @@ export function TemplateCanvasV2({
 
   return (
     <svg
+      tabIndex={0}
+      onPointerDownCapture={e=>e.currentTarget.focus()}
       className="template-canvas-v2"
       viewBox={`0 0 ${formatNumber(width)} ${formatNumber(height)}`}
       preserveAspectRatio="xMidYMid meet"

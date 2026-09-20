@@ -15,6 +15,7 @@ import {
   materializeArticleContactRowsV3,
   type MaterializedArticleContactRowV3,
 } from "../component-library/template-article-contact-rows-v3";
+import { findArticleDrawing } from "../component-library/drawing-bindings";
 import { materializeE4ConnectorArticle } from "../component-library/e4-connector-series-table";
 import { ArticleVariantMaterializationV3Error } from "../component-library/template-article-materialization-v3";
 import {
@@ -272,7 +273,7 @@ function materializePlacementRows(
       customValues: tableRow.customValues,
       prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
       representations: (core?.representations ?? []).filter(representation => {
-        const drawing = content.schemaVersion === 5 ? content.articleDrawings?.find(item => item.articleVariantId === articleVariantId) : undefined;
+        const drawing = content.schemaVersion === 5 ? findArticleDrawing(content.articleDrawings,articleVariantId,"drawing") : undefined;
         return representation.viewKind !== "drawing" || !drawing || drawing.contactPointIds.includes(representation.pointId);
       }),
       contactTypeGroupId: tableRow.contactTypeGroupId,

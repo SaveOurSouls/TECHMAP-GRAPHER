@@ -90,6 +90,15 @@ function templateConnector(reverseRuntimeContacts = false): ConnectorInstance {
 }
 
 describe("E4 connector inline editing", () => {
+  it("selects saved wire colors regardless of case and Russian spelling", () => {
+    const connector = templateConnector();
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: {...connector, contacts: connector.contacts.map(c => ({...c, color: "Красный", secondaryColor: "Чёрный"}))},
+      disabled: false, editing: true, mode: "canvas", onCommand: vi.fn(),
+    }));
+    expect(selectMarkup(markup, "Основной цвет, контакт 1")).toContain('value="красный" selected=""');
+    expect(selectMarkup(markup, "Второй цвет, контакт 1")).toContain('value="черный" selected=""');
+  });
   it("updates and dismisses wire suggestions without reading a pooled event", () => {
     const initial = Object.freeze({ other: "UL1061 30AWG" });
     const focused = updateWireQueryState(initial, "contact-1", "НВ-4 0,2 мм²");

@@ -22,6 +22,7 @@ import { TransitionGate } from "./transition-gate";
 import { createHarnessCutListApi } from "./harness-cut-list-api";
 import { HarnessCutListPanel } from "./HarnessCutListPanel";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { RouteDrawingsPanel } from "./RouteDrawingsPanel";
 import { InfoHint } from "./InfoHint";
 
 const ComponentLibrary = lazy(async () => {
@@ -924,6 +925,7 @@ export function App({ config, session }: AppProps) {
                             setEditorOpen(true);
                           }}
                         />
+                        {activeHarnessTab==="route"&&<RouteDrawingsPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId}/>}
                         <HarnessCutListPanel
                           onReveal={objectId => {
                             setEditorReveal({projectId: selectedProject.projectId, harnessId: selectedHarness.harnessId, objectId});

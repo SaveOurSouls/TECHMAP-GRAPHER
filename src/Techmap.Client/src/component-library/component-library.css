@@ -82,7 +82,11 @@
 .template-contact text { fill: #8f3434; font-size: 13px; font-weight: 750; }
 .template-contact.selected circle { fill: #fff2df; stroke-width: 4; }
 .template-canvas-v2 [data-template-point-id][data-selected="true"] > circle { fill: #ffe1a8; stroke: #1685d1; stroke-width: 3; }
-.template-canvas-v2 [data-selection-stretch-handle] { cursor: nwse-resize; pointer-events: all; }
+.template-canvas-v2 [data-selection-stretch-handle] { fill: #fff; stroke: #1685d1; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: nwse-resize; pointer-events: all; }
+.route-drawings { margin-top: 12px; display: grid; gap: 8px; }
+.route-drawings header { display: flex; gap: 8px; align-items: center; }
+.route-drawings figure { margin: 0; border: 1px solid var(--ui-border); padding: 8px; border-radius: 6px; }
+.route-drawings .template-canvas-v2 { min-height: 0; height: 240px; }
 .library-properties { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; border-left: 1px solid #ccd8de; background: #fff; }
 .library-properties h3 { padding-bottom: 10px; border-bottom: 1px solid #e2e8ec; }
 .library-properties > strong { color: #2e5269; font-size: 12px; }

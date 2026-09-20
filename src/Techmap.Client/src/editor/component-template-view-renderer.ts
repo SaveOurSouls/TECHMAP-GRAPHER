@@ -1,5 +1,5 @@
 import type { ConnectorDrawingPlacement } from "./model";
-import { articleDrawingView } from "../component-library/drawing-bindings";
+import { articleDrawingView, findArticleDrawing, type DrawingTarget } from "../component-library/drawing-bindings";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
 import { materializeArticleVariantV3 } from "../component-library/template-article-materialization-v3";
 import { hatchTile, type DrawingHatch } from "../component-library/drawing-hatch";
@@ -307,13 +307,15 @@ export function projectComponentTemplateView(
   viewKind: HarnessEditorView,
   origin: ComponentTemplateProjectionOrigin,
   resolveAssetUrl?: ResolveComponentTemplateAssetUrl,
+  drawingTarget: DrawingTarget = viewKind,
 ): ProjectedComponentTemplateView | null {
   // A v5 E4 table is always rendered by the schematic editor. Its drawing is
   // projected separately as a companion, never as a replacement for that table.
   if (viewKind === "e4" && instance.content.schemaVersion === 5) return null;
-  const sourceView = instance.content.views.find(candidate => candidate.kind === viewKind);
+  const binding=instance.content.schemaVersion===5 ? findArticleDrawing(instance.content.articleDrawings,instance.articleVariantId,drawingTarget) : undefined;
+  const sourceView = instance.content.views.find(candidate => binding?.viewId ? candidate.id===binding.viewId : candidate.kind === viewKind);
   if (!sourceView) return null;
-  const view = articleDrawingView(sourceView, instance.content.schemaVersion === 5 ? instance.content.articleDrawings : undefined, instance.articleVariantId);
+  const view = articleDrawingView(sourceView, instance.content.schemaVersion === 5 ? instance.content.articleDrawings : undefined, instance.articleVariantId,drawingTarget);
   try {
     const v3Content: TemplateContentV3 = instance.content.schemaVersion === 3
       ? instance.content
@@ -406,10 +408,11 @@ export interface E4DrawingCompanion extends ProjectedComponentTemplateView {
 /** Independent root figures (groups remain one drawing) from the pinned article. */
 export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstance,origin:ComponentTemplateProjectionOrigin,tableWidth:number,resolveAssetUrl?:ResolveComponentTemplateAssetUrl):E4DrawingCompanion[] {
   if(instance.content.schemaVersion!==5) return [];
-  const drawing=projectComponentTemplateView(instance,"drawing",{x:0,y:0},resolveAssetUrl);
-  const source=instance.content.views.find(v=>v.kind==="drawing");
+  const drawing=projectComponentTemplateView(instance,"drawing",{x:0,y:0},resolveAssetUrl,"e4");
+  const binding=findArticleDrawing(instance.content.articleDrawings,instance.articleVariantId,"e4");
+  const source=instance.content.views.find(v=>binding?.viewId ? v.id===binding.viewId : v.kind==="drawing");
   if(!drawing || !source) return [];
-  const view=articleDrawingView(source,instance.content.articleDrawings,instance.articleVariantId);
+  const view=articleDrawingView(source,instance.content.articleDrawings,instance.articleVariantId,"e4");
   const nodes=view.layers.flatMap(l=>l.nodes),owned=new Set(nodes.flatMap(n=>n.kind==="group" ? n.geometry.childIds : []));
   const scale=Math.min(1,Math.max(40,tableWidth)/Math.max(1,drawing.bounds.maxX-drawing.bounds.minX),140/Math.max(1,drawing.bounds.maxY-drawing.bounds.minY));
   return nodes.filter(n=>!owned.has(n.id) && n.visible).flatMap((node,index)=>{

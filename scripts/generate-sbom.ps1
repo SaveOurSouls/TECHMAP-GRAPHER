@@ -32,6 +32,7 @@ Copy-Item -LiteralPath $DotNetThirdPartyNoticesPath -Destination (Join-Path $pac
 
 function Get-PnpmLicense([string]$Name) {
     switch -Wildcard ($Name) {
+        "heic-to" { "LGPL-3.0-or-later"; break }
         "@typescript/typescript-*" { "Apache-2.0"; break }
         "typescript" { "Apache-2.0"; break }
         "detect-libc" { "Apache-2.0"; break }
@@ -90,7 +91,7 @@ foreach ($line in Get-Content -LiteralPath $pnpmLock) {
     if ($separator -le 0) { throw "Malformed pnpm package key: $key" }
     $name = $key.Substring(0, $separator)
     $version = $key.Substring($separator + 1)
-    $scope = if ($name -in @("react", "react-dom", "scheduler")) { "distributed" } else { "build/test" }
+    $scope = if ($name -in @("react", "react-dom", "scheduler", "heic-to")) { "distributed" } else { "build/test" }
     $pnpmPackages += New-SpdxPackage "npm" $name $version (Get-PnpmLicense $name) $scope "pkg:npm/$([uri]::EscapeDataString($name))@$version"
 }
 

@@ -85,6 +85,11 @@ Remove-Item -LiteralPath (Join-Path $packageRoot "aspnetcorev2_inprocess.dll") -
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\README-START.html") -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") -Destination $packageRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "THIRD-PARTY-NOTICES.md") -Destination $packageRoot
+$heicNotices = Join-Path $packageRoot "ThirdParty/heic-to"
+New-Item -ItemType Directory -Force -Path $heicNotices | Out-Null
+foreach ($file in @("LICENSE", "README.md", "package.json", "esbuild.mjs", "src")) {
+    Copy-Item -LiteralPath (Join-Path $clientRoot "node_modules/heic-to/$file") -Destination $heicNotices -Recurse
+}
 $examplesRoot = Join-Path $packageRoot "Examples"
 New-Item -ItemType Directory -Force -Path $examplesRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\Examples\README.txt") -Destination $examplesRoot

@@ -4,7 +4,7 @@ import { E4ArticlePreview } from "./E4ArticlePreview";
 import { InfoHint } from "../InfoHint";
 import { defaultDrawingSnaps } from "./drawing-geometry";
 import { hatchKinds, hatchLabels, type DrawingHatch } from "./drawing-hatch";
-import { drawingSelection, articleDrawingView, drawingContactContent, type ArticleDrawing, type DrawingContactBinding } from "./drawing-bindings";
+import { drawingSelection, articleDrawingView, drawingContactContent, type ArticleDrawing, type DrawingContactBinding, type DrawingTarget, findArticleDrawing, separateLegacyDrawings } from "./drawing-bindings";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { DrawingArrayPanel } from "./DrawingArrayPanel";
 import type { ConnectorSchematicPresentation } from "../editor/model";
@@ -19,7 +19,8 @@ import {
   type ReferenceCatalogSearchRequest,
 } from "../reference-catalog-api";
 import { createComponentTemplateApi, type ArticleBinding, type ComponentTemplate, type ComponentTemplateDraft, type ComponentTemplateSummary, type TemplateAsset } from "./component-template-api";
-import { readTemplateAsset } from "./template-assets";
+import { IMAGE_IMPORT_ACCEPT, importDrawingImage } from "./image-import";
+import { addAdditionalViewV3 } from "./template-commands-v3";
 import { isTemplateContentV1, isTemplateContentV2, isTemplateContentV3, isTemplateContentV4, isTemplateContentV5, reconcileTemplateEnvelopeAssets, upgradeComponentTemplateContentV1ToV3, upgradeComponentTemplateContentV2 } from "./template-content";
 import { createE4ConnectorSeriesTableFromV3, materializeE4ConnectorArticle, setArticleContactGroupStandardTerminal, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 import { TemplateCanvasV2, type TemplatePointAngleModeV2 } from "./TemplateCanvasV2";
@@ -393,6 +394,8 @@ export function ComponentLibrary({ config, session }: Props) {
   const selectedId = selectedIds.at(-1) ?? null;
   const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
   const [busy, setBusy] = useState(false);
+  const [drawingTarget,setDrawingTarget]=useState<DrawingTarget>("drawing");
+  const [removeDrawingPrompt,setRemoveDrawingPrompt]=useState(false);
   const [dirty, setDirty] = useState(true);
   const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -686,8 +689,9 @@ export function ComponentLibrary({ config, session }: Props) {
       if(busy || event.repeat) return;
       const action=drawingKeyboardAction(event);
       if(!action || action !== "paste" && !selectedIds.length || action === "paste" && !clipboard.current) return;
+      if(action==="paste") return;
       event.preventDefault();
-      if(action==="copy") copySelection(); else if(action==="paste") pasteSelection(); else deleteSelection();
+      if(action==="copy") copySelection(); else deleteSelection();
     };
     window.addEventListener("keydown",listener); return ()=>window.removeEventListener("keydown",listener);
   });
@@ -775,11 +779,30 @@ export function ComponentLibrary({ config, session }: Props) {
     } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); return false; }
     finally { setBusy(false); }
   }
-  async function saveArticleDrawing(articleVariantId: string) {
-    if (!activeView || activeView.kind !== "drawing") return;
-    const drawing = drawingSelection(activeView, selectedIds, articleVariantId);
+  function openDrawingTarget(target:DrawingTarget,articleId=selectedArticleVariantId) {
+    const separated=separateLegacyDrawings(draft.content,draft.articleDrawings);
+    let content=separated.content;
+    if(content!==draft.content){changeContent(content);setDraft(current=>({...current,articleDrawings:separated.drawings}));}
+    const binding=findArticleDrawing(separated.drawings,articleId,target);
+    const name=target==="e4"?"Рисунки · Схема Э4":"Рисунки · Маршрут";
+    let view=content.views.find(v=>binding?.viewId ? v.id===binding.viewId : target==="drawing" || binding && !binding.target ? v.kind==="drawing" : v.name===name);
+    if(!view){const [next,id]=addAdditionalViewV3(content,name);content=next;view=content.views.find(v=>v.id===id)!;changeContent(content);}
+    setDrawingTarget(target);setViewId(view.id);setGraphicEditorMode("drawing");setSelectedArticleVariantId(articleId);
+    setSelectedIds(binding?[...binding.nodeIds,...binding.contactPointIds]:[]);
+  }
+  function clearTargetDrawings() {
+    if(!activeView)return;
+    const empty={...draft.content,views:draft.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)};
+    changeContent(empty,null);
+    setDraft(current=>({...current,articleDrawings:current.articleDrawings?.map(d=>d.target===drawingTarget || !d.target&&drawingTarget==="drawing"?{...d,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[]}:d)}));
+    setRemoveDrawingPrompt(false);
+  }
+  async function saveArticleDrawing(articleVariantId: string,all=false) {
+    if (!activeView) return;
+    const drawing = {...drawingSelection(activeView, selectedIds, articleVariantId),target:drawingTarget,viewId:activeView.id};
     if (!drawing.nodeIds.length && !drawing.contactPointIds.length) return;
-    const working = { ...draft, articleDrawings: [...(draft.articleDrawings ?? []).filter(item => item.articleVariantId !== articleVariantId), drawing] };
+    const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
+    const working = { ...draft, articleDrawings: [...(draft.articleDrawings ?? []).filter(item => !(articleIds.includes(item.articleVariantId)&&item.target===drawingTarget)), ...articleIds.map(id=>({...drawing,articleVariantId:id}))] };
     const body = validatedBody(working); if (!body) return;
     setBusy(true);
     try {
@@ -825,14 +848,24 @@ export function ComponentLibrary({ config, session }: Props) {
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
 
-  async function addAsset(file: File) {
+  async function addAsset(file: File,place=false) {
     setBusy(true);
     try {
-      const assetInput = await readTemplateAsset(file);
+      const assetInput = await importDrawingImage(file);
       let persisted: ComponentTemplate | null = null;
       if (!draft.templateId || dirty || draft.draftRevision > 0) { persisted = await publishWorkingDraft(); if (!persisted) return; applyPersisted(persisted); }
       const result = await api.addAsset(persisted?.templateId ?? draft.templateId!, { expectedVersion: persisted?.version ?? draft.version, ...assetInput });
-      applyPersisted(result, true); await loadList();
+      applyPersisted(result, true);
+      if(place && activeView && activeLayer) {
+        const asset=result.assets.find(a=>!draft.assets.some(old=>old.assetId===a.assetId)) ?? result.assets.find(a=>a.fileName===assetInput.fileName);
+        if(asset && isTemplateContentV5(result.content)) {
+          const core=projectTemplateContentV5ToV3(result.content),node=createTemplateImageNodeV2(asset.assetId,activeLayer.id);
+          const next=addNodeV2(core,activeView.id,activeLayer.id,node,0);
+          setUndoStack([{...draft, templateId:result.templateId, version:result.version, draftRevision:0, assets:[...result.assets], content:core, e4ConnectorTable:projectTemplateContentV5TableToV1(result.content)}]);
+          setDraft(current=>({...current,content:next}));setSelectedId(node.id);markDirty();
+        }
+      }
+      await loadList();
     } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
   }
   async function removeAsset(assetId: string) {
@@ -908,7 +941,6 @@ export function ComponentLibrary({ config, session }: Props) {
   function selectCanvasObject(id: string | null, extend: boolean) {
     if (!id) { setSelectedIds([]); return; }
     const nodeLayer = activeView?.layers.find(layer => layer.nodes.some(node => node.id === id));
-    const isNode = Boolean(nodeLayer);
     if (activeView && nodeLayer) setActiveLayerIds(current => ({ ...current, [activeView.id]: nodeLayer.id }));
     if (!extend) { setSelectedIds([id]); return; }
     setSelectedIds(current => nextTemplateSelectionV2(
@@ -979,8 +1011,8 @@ export function ComponentLibrary({ config, session }: Props) {
         <div className="library-metadata"><label>Серия соединителя<input aria-label="Серия соединителя" value={draft.code} onChange={event => { setDraft(current => ({ ...current, code: event.target.value })); markDirty(); }} placeholder="Например, JST XH" /></label><label>Описание<input aria-label="Описание серии" value={draft.name} onChange={event => { setDraft(current => ({ ...current, name: event.target.value })); markDirty(); }} placeholder="Например, разъёмы JST XH" /></label><div><span className={autoSaveFailed ? "library-save-state error" : "library-save-state"} role="status">{busy ? "Сохранение…" : autoSaveFailed ? "Не сохранено" : dirty ? "Изменено" : saved ?? "Сохранено"}</span><button className="primary-action" onClick={() => { setAutoSaveFailed(false); void save(); }} disabled={busy || assetMismatch || (!dirty && draft.draftRevision === 0)}>{busy ? "Сохраняем…" : "Записать версию"}</button>{draft.templateId && <button type="button" className="danger-action" onClick={() => void removeTemplate()} disabled={busy}>Удалить серию</button>}</div></div>
         <div className="graphic-editor-switcher" role="toolbar" aria-label="Редактор графики">
           <button type="button" className={graphicEditorMode === "e4" ? "active" : ""} onClick={() => { setGraphicEditorMode("e4"); if (e4View) setViewId(e4View.id); }}>Схема Э4</button>
-          <button type="button" className={graphicEditorMode === "drawing" ? "active" : ""} onClick={() => { setGraphicEditorMode("drawing"); if (drawingView) setViewId(drawingView.id); }}>Рисунок</button>
-          <InfoHint>Рисунок редактируется в отдельной рабочей области и всегда сопровождает схему Э4, если задан.</InfoHint>
+          <button type="button" className={graphicEditorMode === "drawing" ? "active" : ""} onClick={() => openDrawingTarget(drawingTarget)}>Рисунок</button>
+          <InfoHint>Рисунки редактируются отдельно и назначаются нужному разделу: Схема Э4, Чертёж или Маршрут.</InfoHint>
         </div>
         <div className="library-series-workspace">
         {graphicEditorMode === "e4" && <>
@@ -989,7 +1021,14 @@ export function ComponentLibrary({ config, session }: Props) {
         {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
           onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
           onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
-        {e4PreviewContent && drawingView?.layers.some(l=>l.visible && l.nodes.some(n=>n.visible)) && <section className="library-e4-companion" aria-label="Рисунок выбранного артикула"><header><strong>Рисунок артикула</strong><InfoHint>Рисунок показывается рядом со схемой Э4 и использует тот же выбранный артикул.</InfoHint></header><TemplateCanvasV2 content={{...compatibilityContent, views: compatibilityContent.views.map(view => articleDrawingView(view, draft.articleDrawings, selectedArticleVariantId))}} viewId={drawingView.id} selectedId={null} selectedIds={[]} onSelect={() => undefined} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} /></section>}
+        {e4PreviewContent && selectedArticleVariantId && (["e4","drawing","route"] as const).map(target=>{
+          const binding=findArticleDrawing(draft.articleDrawings,selectedArticleVariantId,target);
+          const view=compatibilityContent.views.find(v=>binding?.viewId ? v.id===binding.viewId : v.kind==="drawing");
+          if(!view || target==="route"&&!binding)return null;
+          const filtered=articleDrawingView(view,draft.articleDrawings,selectedArticleVariantId,target);
+          if(!filtered.layers.some(l=>l.nodes.some(n=>n.visible))&&!filtered.contactPoints.length)return null;
+          return <section key={target} className="library-e4-companion" aria-label={`Рисунок ${target}`}><header><strong>Рисунок · {({e4:"Схема Э4",drawing:"Чертёж",route:"Маршрут"})[target]}</strong><button type="button" onClick={()=>openDrawingTarget(target)}>Редактировать</button></header><TemplateCanvasV2 content={{...compatibilityContent,views:compatibilityContent.views.map(v=>v.id===view.id?filtered:v)}} viewId={view.id} selectedId={null} selectedIds={[]} onSelect={()=>{}} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues}/></section>;
+        })}
           </>}
           independentE4
           content={draft.content}
@@ -1030,15 +1069,15 @@ export function ComponentLibrary({ config, session }: Props) {
         </>}
         </div>
         {<section className={`drawing-editor-shell ${graphicEditorMode === "drawing" ? "" : "drawing-hidden"}`} role="dialog" aria-modal="true" aria-label="Редактор рисунка">
-          <header><strong>Рисунок · {draft.code}</strong>
-            <label>Артикул<select aria-label="Артикул рисунка" value={selectedArticleVariantId ?? ""} onChange={e=>setSelectedArticleVariantId(e.target.value || null)}><option value="">Прототип</option>{draft.content.articleVariants.map(a=><option key={a.id} value={a.id}>{a.articleKey}</option>)}</select></label>
+          <header><strong>Рисунок · {draft.code}</strong><label>Раздел<select aria-label="Раздел рисунка" value={drawingTarget} onChange={e=>openDrawingTarget(e.target.value as DrawingTarget)}><option value="e4">Схема Э4</option><option value="drawing">Чертёж</option><option value="route">Маршрут</option></select></label><InfoHint>Рисунок сохраняется только для выбранного раздела. Перетаскивайте PNG, JPG, BMP, SVG, HEIC или вставляйте изображение Ctrl+V на поле. Изображения преобразуются в PNG локально. «Открыть» выделяет сохранённый набор для редактирования.</InfoHint>
+            <label>Артикул<select aria-label="Артикул рисунка" value={selectedArticleVariantId ?? ""} onChange={e=>openDrawingTarget(drawingTarget,e.target.value || null)}><option value="">Прототип</option>{draft.content.articleVariants.map(a=><option key={a.id} value={a.id}>{a.articleKey}</option>)}</select></label>
             <button type="button" className="primary-action" onClick={() => void saveAndExitDrawing()} disabled={busy || assetMismatch}>Сохранить и выйти</button>
           </header>
           {error && <div className="error-banner" role="alert">{error}</div>}
           <details className="drawing-array-settings"><summary>Массив рисунка</summary>{activeView && activeLayer && <DrawingArrayPanel content={draft.content} viewId={activeView.id} layerId={activeLayer.id} selectedIds={selectedIds} onChange={changeContent} onError={setError} />}</details>
           <details className="drawing-settings"><summary>Слои, ресурсы и параметры <InfoHint>Ctrl+Z отменяет до 100 изменений. Текст {"{{n}}"} в группе массива заменяется номером элемента. Прототип редактируется через выбор объекта в правой панели.</InfoHint></summary>
-        <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Загрузить PNG<input type="file" accept="image/png" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file); }} /></label><small>PNG хранится в версии шаблона и размещается ссылкой в активном слое.</small></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
-        <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>
+        <details className="library-assets"><summary>Изображения <span>{draft.assets.length}</span></summary><div className="asset-upload"><label className={busy ? "disabled" : ""}>+ Изображение<input type="file" accept={IMAGE_IMPORT_ACCEPT} disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void addAsset(file,true); }} /></label><InfoHint>PNG, JPG, BMP, SVG, HEIC: загрузите файл, перетащите его на поле или вставьте Ctrl+V. Изображение хранится в шаблоне как PNG. Выделите нужные объекты и сохраните их для артикула или всей серии.</InfoHint></div>{draft.assets.length > 0 && <div className="asset-list">{draft.assets.map(asset => <article key={asset.assetId}><div className="asset-preview">{draft.templateId && <img src={resolveAssetUrl(asset.assetId)} alt="" />}</div><div><strong>{asset.fileName}</strong><small>{(asset.sizeBytes / 1024).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} КиБ</small></div><div className="asset-actions"><button type="button" onClick={() => placeAsset(asset)} disabled={busy || !activeLayer || activeLayer.locked}>На вид</button><button type="button" className="asset-remove" onClick={() => void removeAsset(asset.assetId)} disabled={busy} aria-label={`Удалить изображение ${asset.fileName}`}>×</button></div></article>)}</div>}</details>
+        {graphicEditorMode !== "drawing" && <div className="library-view-tabs" role="tablist" aria-label="Виды графического шаблона">{draft.content.views.map(view => <button key={view.id} id={`template-view-tab-${view.id}`} role="tab" aria-selected={view.id === activeView?.id} aria-controls={`template-view-panel-${view.id}`} className={view.id === activeView?.id ? "active" : ""} onClick={() => { setViewId(view.id); setSelectedId(null); setPendingLogicalContactId(null); }}>{view.name}</button>)}<button onClick={addView}>+ Вид</button></div>}
         {activeView && <TemplateContactsPanelV2
           key={`${activeView.id}:${pendingLogicalContactId ?? ""}`}
           content={compatibilityContent}
@@ -1106,7 +1145,7 @@ export function ComponentLibrary({ config, session }: Props) {
         />}
           </details>
         <div className="library-tools"><span>Примитивы</span><button type="button" onClick={copySelection} disabled={!selectedNodeIds.length} title="Ctrl+C">Копировать</button><button type="button" onClick={pasteSelection} disabled={!hasClipboard || !activeLayer || activeLayer.locked} title="Ctrl+V">Вставить</button><button type="button" onClick={deleteSelection} disabled={!selectedIds.length || selectionLocked} title="Delete">Удалить</button><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-workarea" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(file&&!busy)void addAsset(file,true);}} onPaste={e=>{if((e.target as HTMLElement).closest("input,textarea,select"))return;const file=Array.from(e.clipboardData.files)[0];if(file&&!busy){e.preventDefault();void addAsset(file,true);}else if(!busy&&clipboard.current){e.preventDefault();pasteSelection();}}} inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="region" aria-label="Поле редактирования рисунка">{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedTableRow?.number ?? selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {selectedNodeIds.length > 1 && <><button type="button" onClick={groupSelection} disabled={selectionLocked || !selectedNodeIds.every(id=>activeLayer?.nodes.some(node=>node.id===id))}>Сгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}
             {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <><button type="button" onClick={ungroupSelection}>Разгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}
@@ -1128,7 +1167,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && selected.node.transform.rotationDegrees.kind === "constant" && <div className="rotation-control"><NumericField label="Поворот, °" value={selected.node.transform.rotationDegrees.value} step={15} disabled={selected.layer.locked || selected.node.locked} change={rotateSelection} /><div className="property-order"><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value - 90 : 0)}>−90°</button><button type="button" disabled={selected.layer.locked || selected.node.locked} onClick={() => rotateSelection(selected.node.transform.rotationDegrees.kind === "constant" ? selected.node.transform.rotationDegrees.value + 90 : 0)}>+90°</button></div></div>}
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={deleteSelection} disabled={selectionLocked}>Удалить объект</button></>}
           </aside>
-          <aside className="drawing-articles" aria-label="Рисунки артикулов"><header className="ui-section-heading"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint></header>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => setSelectedArticleVariantId(article.id)}>{article.articleKey}{draft.articleDrawings?.some(d => d.articleVariantId === article.id) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length || activeView?.kind !== "drawing"} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<span role="status">{saved}</span></aside>
+          <aside className="drawing-articles" aria-label="Рисунки артикулов"><header className="ui-section-heading"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint></header>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => openDrawingTarget(drawingTarget,article.id)} title="Открыть сохранённый рисунок">{article.articleKey}{findArticleDrawing(draft.articleDrawings,article.id,drawingTarget) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<button type="button" disabled={busy||!selectedIds.length||!draft.content.articleVariants.length} onClick={()=>void saveArticleDrawing(draft.content.articleVariants[0]!.id,true)}>Сохранить для всей серии</button><button type="button" disabled={busy} onClick={()=>setRemoveDrawingPrompt(true)}>Очистить рисунки раздела</button>{removeDrawingPrompt&&<div role="alertdialog" aria-label="Очистить рисунки раздела"><p>Удалить рисунки этого раздела для серии? Контакты таблицы сохранятся. Доступна отмена Ctrl+Z.</p><button type="button" onClick={clearTargetDrawings}>Очистить</button><button type="button" onClick={()=>setRemoveDrawingPrompt(false)}>Отмена</button></div>}<span role="status">{saved}</span></aside>
         </div>
         </section>}
       </section>

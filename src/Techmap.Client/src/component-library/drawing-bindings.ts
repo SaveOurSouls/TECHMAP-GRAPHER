@@ -2,7 +2,28 @@ import type { TemplateContentV3 } from "./template-model-v3";
 import type { TemplateViewV2 } from "./template-model-v2";
 import { materializeE4ConnectorArticle, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 
-export interface ArticleDrawing { articleVariantId: string; nodeIds: string[]; contactPointIds: string[] }
+export type DrawingTarget = "e4" | "drawing" | "route";
+export interface ArticleDrawing { articleVariantId: string; nodeIds: string[]; contactPointIds: string[]; target?: DrawingTarget; viewId?: string }
+export function findArticleDrawing(drawings:readonly ArticleDrawing[]|undefined,articleId:string|null,target:DrawingTarget) {
+  return drawings?.find(d=>d.articleVariantId===articleId && d.target===target)
+    ?? drawings?.find(d=>d.articleVariantId===articleId && !d.target && target!=="route");
+}
+
+/** Split the old shared drawing once, so editing E4 never changes the drawing sheet. */
+export function separateLegacyDrawings(content:TemplateContentV3,drawings:readonly ArticleDrawing[]|undefined):{content:TemplateContentV3;drawings:ArticleDrawing[]} {
+  const legacy=drawings?.filter(d=>!d.target)??[],source=content.views.find(v=>v.kind==="drawing");
+  if(!legacy.length||!source)return {content,drawings:[...(drawings??[])]};
+  const clone=structuredClone(source),ids=new Map<string,string>();
+  for(const id of [clone.id,...clone.layers.flatMap(l=>[l.id,...l.nodes.map(n=>n.id)]),...clone.contactPoints.map(p=>p.id),...clone.bundlePorts.map(p=>p.id)])ids.set(id,crypto.randomUUID());
+  clone.id=ids.get(clone.id)!;clone.name="Рисунки · Схема Э4";clone.kind="additional";
+  for(const layer of clone.layers){layer.id=ids.get(layer.id)!;for(const node of layer.nodes){node.id=ids.get(node.id)!;node.layerId=layer.id;if(node.kind==="group")node.geometry.childIds=node.geometry.childIds.map(id=>ids.get(id)!);}}
+  for(const point of [...clone.contactPoints,...clone.bundlePorts])point.id=ids.get(point.id)!;
+  for(const repeat of clone.repeatPlacements){repeat.prototypeGroupId=ids.get(repeat.prototypeGroupId)!;repeat.contactPointIds=repeat.contactPointIds.map(id=>ids.get(id)!);}
+  return {content:{...content,views:[...content.views,clone]},drawings:[...(drawings??[]).filter(d=>d.target),...legacy.flatMap(d=>[
+    {...d,target:"drawing" as const,viewId:source.id},
+    {...d,target:"e4" as const,viewId:clone.id,nodeIds:d.nodeIds.map(id=>ids.get(id)!),contactPointIds:d.contactPointIds.map(id=>ids.get(id)!)},
+  ]).filter((d,index,all)=>!(drawings??[]).some(old=>old.articleVariantId===d.articleVariantId&&old.target===d.target))]};
+}
 export interface DrawingContactBinding { logicalContactId: string; seriesRowId: string }
 
 /** A group is selected as a whole, including its descendants. */
@@ -21,9 +42,10 @@ export function drawingSelection(view: TemplateViewV2, selectedIds: readonly str
     contactPointIds: view.contactPoints.filter(point => selected.has(point.id)).map(point => point.id) };
 }
 
-export function articleDrawingView(view: TemplateViewV2, drawings: readonly ArticleDrawing[] | undefined, articleId: string | null): TemplateViewV2 {
-  const drawing = drawings?.find(item => item.articleVariantId === articleId);
-  if (!drawing || view.kind !== "drawing") return view;
+export function articleDrawingView(view: TemplateViewV2, drawings: readonly ArticleDrawing[] | undefined, articleId: string | null, target:DrawingTarget="drawing"): TemplateViewV2 {
+  const drawing = findArticleDrawing(drawings,articleId,target);
+  if (!drawing) return drawings?.some(d=>d.articleVariantId===articleId && d.target) ? {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],repeatPlacements:[]} : view;
+  if(drawing.viewId && drawing.viewId!==view.id) return {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],repeatPlacements:[]};
   const nodes = new Set(drawing.nodeIds), points = new Set(drawing.contactPointIds);
   return { ...view, layers: view.layers.map(layer => ({ ...layer, nodes: layer.nodes.map(node => ({ ...node, visible: node.visible && nodes.has(node.id) })) })),
     contactPoints: view.contactPoints.filter(point => points.has(point.id)),

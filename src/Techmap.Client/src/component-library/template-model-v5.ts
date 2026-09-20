@@ -295,7 +295,7 @@ function projectV5ToV4(value: Record<string, unknown>, terminals: readonly Artic
 function validateDrawingBindings(value: Record<string, unknown>, diagnostics: TemplateV3Diagnostic[]) {
   const ids = (items: unknown, key: string) => new Set(Array.isArray(items) ? items.filter(isRecord).map(item => item[key]) : []);
   const articles = ids(value.articleVariants, "id"), contacts = ids(value.logicalContacts, "id");
-  const views = Array.isArray(value.views) ? value.views.filter(isRecord).filter(view => view.kind === "drawing") : [];
+  const views = Array.isArray(value.views) ? value.views.filter(isRecord) : [];
   const nodes = new Set(views.flatMap(view => Array.isArray(view.layers) ? view.layers.filter(isRecord).flatMap(layer => Array.isArray(layer.nodes) ? layer.nodes.filter(isRecord).map(node => node.id) : []) : []));
   const points = new Set(views.flatMap(view => Array.isArray(view.contactPoints) ? view.contactPoints.filter(isRecord).map(point => point.id) : []));
   const rows = ids(isRecord(value.e4ConnectorTable) ? value.e4ConnectorTable.seriesDefaults : [], "rowId");
@@ -306,12 +306,16 @@ function validateDrawingBindings(value: Record<string, unknown>, diagnostics: Te
     items.forEach((item, index) => {
       const path = `$.${key}[${index}]`;
       if (key === "articleDrawings") {
-        if (!exact(item, ["articleVariantId", "nodeIds", "contactPointIds"], path, diagnostics)) return;
-        if (!articles.has(item.articleVariantId) || seen.has(item.articleVariantId)) diagnostics.push(error("invalid_drawing_article", path, "Артикул рисунка отсутствует или повторяется."));
-        seen.add(item.articleVariantId);
+        if (!exactWithOptional(item, ["articleVariantId", "nodeIds", "contactPointIds"], ["target","viewId"], path, diagnostics)) return;
+        if(item.target !== undefined && !["e4","drawing","route"].includes(String(item.target))) diagnostics.push(error("invalid_drawing_target",path,"Неизвестный раздел рисунка."));
+        const view=item.viewId===undefined ? undefined : views.find(v=>v.id===item.viewId);
+        if((item.target!==undefined || item.viewId!==undefined) && (!view || item.target===undefined)) diagnostics.push(error("invalid_drawing_view",path,"Вид рисунка отсутствует."));
+        const identity=`${item.articleVariantId}:${item.target ?? "legacy"}`;
+        if (!articles.has(item.articleVariantId) || seen.has(identity)) diagnostics.push(error("invalid_drawing_article", path, "Артикул рисунка отсутствует или повторяется."));
+        seen.add(identity);
         for (const [field, allowed] of [["nodeIds", nodes], ["contactPointIds", points]] as const) {
           const values = item[field];
-          if (!Array.isArray(values) || values.some(id => !allowed.has(id)) || new Set(values).size !== values.length)
+          if (!Array.isArray(values) || values.some(id => !allowed.has(id) || view && !(field==="nodeIds" ? (Array.isArray(view.layers) ? view.layers.filter(isRecord).flatMap(l=>Array.isArray(l.nodes)?l.nodes.filter(isRecord):[]).some(n=>n.id===id) : false) : (Array.isArray(view.contactPoints) && view.contactPoints.filter(isRecord).some(p=>p.id===id)))) || new Set(values).size !== values.length)
             diagnostics.push(error("invalid_drawing_selection", `${path}.${field}`, "Объекты рисунка отсутствуют или повторяются."));
         }
       } else {
