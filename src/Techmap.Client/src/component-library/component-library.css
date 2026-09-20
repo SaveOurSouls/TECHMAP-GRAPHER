@@ -81,6 +81,8 @@
 .template-contact path { fill: none; stroke: #c54848; stroke-width: 2; }
 .template-contact text { fill: #8f3434; font-size: 13px; font-weight: 750; }
 .template-contact.selected circle { fill: #fff2df; stroke-width: 4; }
+.template-canvas-v2 [data-template-point-id][data-selected="true"] > circle { fill: #ffe1a8; stroke: #1685d1; stroke-width: 3; }
+.template-canvas-v2 [data-selection-stretch-handle] { cursor: nwse-resize; pointer-events: all; }
 .library-properties { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; border-left: 1px solid #ccd8de; background: #fff; }
 .library-properties h3 { padding-bottom: 10px; border-bottom: 1px solid #e2e8ec; }
 .library-properties > strong { color: #2e5269; font-size: 12px; }

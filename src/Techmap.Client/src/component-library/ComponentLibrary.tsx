@@ -1,5 +1,5 @@
 import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
-import { copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection, rotateDrawingSelection, styleDrawingSelection, drawingKeyboardAction, type DrawingClipboard } from "./drawing-selection";
+import { copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection, stretchDrawingSelection, rotateDrawingSelection, styleDrawingSelection, drawingKeyboardAction, type DrawingClipboard } from "./drawing-selection";
 import { E4ArticlePreview } from "./E4ArticlePreview";
 import { InfoHint } from "../InfoHint";
 import { defaultDrawingSnaps } from "./drawing-geometry";
@@ -685,7 +685,7 @@ export function ComponentLibrary({ config, session }: Props) {
     const listener=(event:KeyboardEvent)=>{
       if(busy || event.repeat) return;
       const action=drawingKeyboardAction(event);
-      if(!action || action !== "paste" && !selectedNodeIds.length || action === "paste" && !clipboard.current) return;
+      if(!action || action !== "paste" && !selectedIds.length || action === "paste" && !clipboard.current) return;
       event.preventDefault();
       if(action==="copy") copySelection(); else if(action==="paste") pasteSelection(); else deleteSelection();
     };
@@ -700,8 +700,8 @@ export function ComponentLibrary({ config, session }: Props) {
     try {const [content,ids]=pasteDrawingSelection(draft.content,activeView.id,activeLayer.id,clipboard.current,-12*(pasteCount.current+1)); changeContent(content); setSelectedIds(ids);pasteCount.current++;} catch(caught){setError(errorText(caught));}
   }
   function deleteSelection() {
-    if(!activeView || !selectedNodeIds.length) return;
-    command(()=>deleteDrawingSelection(draft.content,activeView.id,selectedNodeIds),null);
+    if(!activeView || !selectedIds.length) return;
+    command(()=>deleteDrawingSelection(draft.content,activeView.id,selectedIds),null);
   }
 
   function validatedBody(working = draft) {
@@ -881,7 +881,7 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function moveCanvasNode(nodeId: string, deltaX: number, deltaY: number) {
     if (!activeView) return;
-    if(selectedNodeIds.length>1 && selectedNodeIds.includes(nodeId)) { command(()=>moveDrawingSelection(draft.content,activeView.id,selectedNodeIds,deltaX,deltaY)); return; }
+    if(selectedIds.length>1 && selectedIds.includes(nodeId)) { command(()=>moveDrawingSelection(draft.content,activeView.id,selectedIds,deltaX,deltaY)); return; }
     const point = activeView.contactPoints.find(point => point.id === nodeId);
     if (point && point.x.kind === "constant" && point.y.kind === "constant") {
       const x = point.x.value + deltaX, y = point.y.value + deltaY;
@@ -910,9 +910,9 @@ export function ComponentLibrary({ config, session }: Props) {
     const nodeLayer = activeView?.layers.find(layer => layer.nodes.some(node => node.id === id));
     const isNode = Boolean(nodeLayer);
     if (activeView && nodeLayer) setActiveLayerIds(current => ({ ...current, [activeView.id]: nodeLayer.id }));
-    if (!extend || !isNode) { setSelectedIds([id]); return; }
+    if (!extend) { setSelectedIds([id]); return; }
     setSelectedIds(current => nextTemplateSelectionV2(
-      current.filter(candidate => activeView?.layers.some(layer=>layer.nodes.some(node=>node.id===candidate))), id, true,
+      current, id, true,
     ));
   }
   function groupSelection() {
@@ -1105,8 +1105,8 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
           </details>
-        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={copySelection} disabled={!selectedNodeIds.length} title="Ctrl+C">Копировать</button><button type="button" onClick={pasteSelection} disabled={!hasClipboard || !activeLayer || activeLayer.locked} title="Ctrl+V">Вставить</button><button type="button" onClick={deleteSelection} disabled={!selectedNodeIds.length || selectionLocked} title="Delete">Удалить</button><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
-        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedNodeIds,angle,center))} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={copySelection} disabled={!selectedNodeIds.length} title="Ctrl+C">Копировать</button><button type="button" onClick={pasteSelection} disabled={!hasClipboard || !activeLayer || activeLayer.locked} title="Ctrl+V">Вставить</button><button type="button" onClick={deleteSelection} disabled={!selectedIds.length || selectionLocked} title="Delete">Удалить</button><button type="button" onClick={appendContact} disabled={!activeView}>Контакт</button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}>{({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Безье", closedContour: "Контур", text: "Текст" })[kind]}</button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
+        <div className="library-workarea" inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="tabpanel" aria-labelledby={activeView ? `template-view-tab-${activeView.id}` : undefined}>{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} parameterDefaults={effectivePreviewParameterValues} />}
           <aside className="library-properties"><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedTableRow?.number ?? selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
             {selectedNodeIds.length > 1 && <><button type="button" onClick={groupSelection} disabled={selectionLocked || !selectedNodeIds.every(id=>activeLayer?.nodes.some(node=>node.id===id))}>Сгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}
             {selectedNodeIds.length === 1 && selected?.node.kind === "group" && <><button type="button" onClick={ungroupSelection}>Разгруппировать</button><DrawingSelectionProperties allNodes={activeView?.layers.flatMap(layer=>layer.nodes)} nodes={selectedNodes} disabled={selectionLocked} change={style=>command(()=>styleDrawingSelection(draft.content,activeView!.id,selectedNodeIds,style))} /></>}

@@ -1,5 +1,6 @@
 import { describe,it,expect } from "vitest";
-import { addBasicNodeV3, addLayerV3, groupRootNodesV3, moveNodeV3, newTemplateContentV3, projectTemplateContentV3CoreToV2 } from "./template-commands-v3";
+import { addContactPointV3, addBasicNodeV3, addLayerV3, groupRootNodesV3, moveNodeV3, newTemplateContentV3, projectTemplateContentV3CoreToV2 } from "./template-commands-v3";
+import { stretchDrawingSelection } from "./drawing-selection";
 import { copyDrawingSelection,pasteDrawingSelection,deleteDrawingSelection,moveDrawingSelection,rotateDrawingSelection,styleDrawingSelection,nodesInsideSelectionBox,selectionBounds,drawingKeyboardAction,drawingStyleLeaves } from "./drawing-selection";
 import { drawingLayerOutlines } from "./drawing-geometry";
 import { validateTemplateContentV3Structure } from "./template-model-v3";
@@ -15,6 +16,24 @@ function fixture() {
 }
 const evaluate=(expression:any)=>expression.kind==="constant" ? expression.value as number : null;
 describe("drawing selection commands",()=>{
+  it("selects, moves and stretches contacts with rotated figures without changing electrical identity",()=>{
+    let {content,viewId,a,b}=fixture();let pointId:string;
+    [content,pointId]=addContactPointV3(content,viewId);
+    const point=content.views[1]!.contactPoints.find(p=>p.id===pointId)!;
+    const ids=[a,b,pointId],bounds=selectionBounds(content.views[1]!,ids,evaluate)!;
+    expect(nodesInsideSelectionBox(content.views[1]!,bounds,evaluate)).toContain(pointId);
+    const rotated=rotateDrawingSelection(content,viewId,ids,33,{x:0,y:0});
+    const result=stretchDrawingSelection(rotated,viewId,ids,2,{x:0,y:0});
+    const moved=moveDrawingSelection(result,viewId,ids,10,20);
+    expect(moved.logicalContacts).toEqual(content.logicalContacts);
+    expect(moved.views[1]!.contactPoints[0]!.logicalContactId).toBe(point.logicalContactId);
+    expect(evaluate(moved.views[1]!.contactPoints[0]!.x)).toBeCloseTo(evaluate(rotated.views[1]!.contactPoints[0]!.x)!*2+10);
+    expect(evaluate(result.views[1]!.layers[0]!.nodes[0]!.transform.scaleX)).toBe(2);
+    expect(validateTemplateContentV3Structure(moved).valid).toBe(true);
+    const html=renderToStaticMarkup(createElement(TemplateCanvasV2,{content:projectTemplateContentV3CoreToV2(moved),viewId,selectedId:a,selectedIds:ids,onSelect:()=>{},onSelectionStretch:()=>{},resolveAssetUrl:()=>""}));
+    expect(html.match(/data-selection-stretch-handle=/g)).toHaveLength(4);
+    expect(html).toContain('data-selected="true"');
+  });
   it("requires every repeated occurrence inside the window",()=>{
     const {content,a}=fixture(),view=content.views[1]!,bounds=selectionBounds(view,[a],evaluate)!;
     const repeats=new Map([[a,[{offset:{x:0,y:0}},{offset:{x:400,y:0}}]]]);

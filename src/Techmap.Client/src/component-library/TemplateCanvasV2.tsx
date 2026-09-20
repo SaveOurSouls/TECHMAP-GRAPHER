@@ -32,6 +32,7 @@ export interface TemplateCanvasV2Props {
   onSelect: (id: string | null) => void;
   onSelectionChange?: (id: string | null, extend: boolean) => void;
   onBoxSelection?: (ids: readonly string[]) => void;
+  onSelectionStretch?: (factor:number,anchor:{x:number;y:number})=>void;
   onSelectionRotate?: (angle: number, center: {x:number;y:number}) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
@@ -547,6 +548,7 @@ export function TemplateCanvasV2({
   onSelect,
   onSelectionChange,
   onBoxSelection,
+  onSelectionStretch,
   onSelectionRotate,
   onNodeMove,
   onNodeResize,
@@ -561,6 +563,8 @@ export function TemplateCanvasV2({
   width = TEMPLATE_CANVAS_V2_WIDTH,
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
+  const stretchRef=useRef<{pointerId:number;anchor:SvgPoint;start:SvgPoint;factor:number}|null>(null);
+  const [stretchPreview,setStretchPreview]=useState<{factor:number;anchor:SvgPoint}|null>(null);
   const marqueeRef = useRef<{pointerId:number;start:SvgPoint;client:SvgPoint;latest:SvgPoint} | null>(null);
   const [marquee,setMarquee] = useState<SelectionBox | null>(null);
   const dragRef = useRef<DragStateV2 | null>(null);
@@ -677,6 +681,13 @@ export function TemplateCanvasV2({
   };
 
   const moveNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const stretch=stretchRef.current;
+    if(stretch && stretch.pointerId===event.pointerId) {
+      const point=pointFromEvent(event);if(!point)return;
+      const dx=stretch.start[0]-stretch.anchor[0],dy=stretch.start[1]-stretch.anchor[1];
+      const factor=Math.max(.01,((point[0]-stretch.anchor[0])*dx+(point[1]-stretch.anchor[1])*dy)/Math.max(1,dx*dx+dy*dy));
+      stretchRef.current={...stretch,factor};setStretchPreview({factor,anchor:stretch.anchor});return;
+    }
     const box = marqueeRef.current;
     if(box && box.pointerId === event.pointerId) { const point=pointFromEvent(event); if(!point) return; marqueeRef.current={...box,latest:point}; setMarquee({left:Math.min(box.start[0],point[0]),top:Math.min(box.start[1],point[1]),right:Math.max(box.start[0],point[0]),bottom:Math.max(box.start[1],point[1])}); return; }
     const rotation = rotationRef.current;
@@ -729,6 +740,7 @@ export function TemplateCanvasV2({
   };
 
   const clearNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    stretchRef.current=null;setStretchPreview(null);
     marqueeRef.current=null; setMarquee(null);
     rotationRef.current = null;
     setRotationPreview(null);
@@ -748,6 +760,8 @@ export function TemplateCanvasV2({
   };
 
   const endNodeGesture = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const stretch=stretchRef.current;
+    if(stretch && stretch.pointerId===event.pointerId){onSelectionStretch?.(stretch.factor,{x:stretch.anchor[0],y:stretch.anchor[1]});stretchRef.current=null;setStretchPreview(null);return;}
     const box=marqueeRef.current;
     if(box && box.pointerId === event.pointerId) {
       const point=pointFromEvent(event) ?? box.latest;
@@ -851,6 +865,7 @@ export function TemplateCanvasV2({
   };
 
   const previewTransform = (nodeId: string, transform: string, topLevel: boolean): string => {
+    if(stretchPreview && topLevel && selectedIdSet.has(nodeId)) return `translate(${stretchPreview.anchor.join(" ")}) scale(${stretchPreview.factor}) translate(${-stretchPreview.anchor[0]} ${-stretchPreview.anchor[1]}) ${transform}`;
     const preview = templateRootDragPreviewV2(nodeId, topLevel, dragPreview, selectedIdSet);
     if (!preview) return transform;
     return `translate(${formatNumber(preview.deltaX)} ${formatNumber(preview.deltaY)}) ${transform}`;
@@ -1105,8 +1120,8 @@ export function TemplateCanvasV2({
         key={point.id}
         data-template-point-id={point.id}
         data-template-point-kind={kind}
-        data-selected={selectedId === point.id ? "true" : undefined}
-        transform={`translate(${formatNumber(x + (dragPreview?.id === point.id ? dragPreview.deltaX : 0))} ${formatNumber(y + (dragPreview?.id === point.id ? dragPreview.deltaY : 0))})`}
+        data-selected={selectedIdSet.has(point.id) ? "true" : undefined}
+        transform={`translate(${formatNumber(x + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaX : 0))} ${formatNumber(y + (dragPreview && (dragPreview.id === point.id || selectedIdSet.has(point.id) && selectedIdSet.has(dragPreview.id)) ? dragPreview.deltaY : 0))})`}
         onPointerDown={event => beginNodeGesture(event, point.id, true, point.x.kind === "constant" && point.y.kind === "constant")}
         onKeyDown={event => selectFromKeyboard(event, point.id)}
         role="button"
@@ -1207,6 +1222,7 @@ export function TemplateCanvasV2({
         if (bounds) selectedBounds.push(bounds);
       }
     }
+    for(const point of [...view.contactPoints,...view.bundlePorts].filter(p=>selectedIdSet.has(p.id))){const x=evaluate(point.x),y=evaluate(point.y);if(x!==null&&y!==null)selectedBounds.push({left:x-5,top:y-5,right:x+5,bottom:y+5});}
     const bounds = unionTemplateBoundsV2(selectedBounds);
     if (!bounds) return null;
     const preview = dragPreview && selectedIdSet.has(dragPreview.id) ? dragPreview : null;
@@ -1390,11 +1406,16 @@ export function TemplateCanvasV2({
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
       {renderMultiSelectionOverlay()}
       {renderSelectionOverlay()}
+      {(() => {
+        if(!onSelectionStretch || !view || !(selectedIdSet.size>1 || view.layers.some(l=>l.nodes.some(n=>selectedIdSet.has(n.id)&&n.kind==="group"))))return null;
+        const bounds=selectionBounds(view,[...selectedIdSet],evaluate);if(!bounds)return null;
+        return <g className="template-selection">{([[bounds.left,bounds.top,bounds.right,bounds.bottom],[bounds.right,bounds.top,bounds.left,bounds.bottom],[bounds.right,bounds.bottom,bounds.left,bounds.top],[bounds.left,bounds.bottom,bounds.right,bounds.top]] as const).map(([x,y,ax,ay],i)=><circle key={i} cx={x} cy={y} r="6" data-selection-stretch-handle={i} aria-label="Растянуть выделение" onPointerDown={event=>{event.preventDefault();event.stopPropagation();try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} stretchRef.current={pointerId:event.pointerId,anchor:[ax,ay],start:[x,y],factor:1};}}/>)}{stretchPreview&&<rect pointerEvents="none" x={bounds.left} y={bounds.top} width={bounds.right-bounds.left} height={bounds.bottom-bounds.top} transform={`translate(${stretchPreview.anchor.join(' ')}) scale(${stretchPreview.factor}) translate(${-stretchPreview.anchor[0]} ${-stretchPreview.anchor[1]})`}/>}</g>;
+      })()}
       {marquee && <rect data-selection-marquee="true" x={marquee.left} y={marquee.top} width={marquee.right-marquee.left} height={marquee.bottom-marquee.top} fill="#1685d11a" stroke="#1685d1" strokeDasharray="4 3" pointerEvents="none" />}
       {(() => {
         if(!onSelectionRotate || !view || selectedIdSet.size<2 || view.repeatPlacements.some(p=>selectedIdSet.has(p.prototypeGroupId))) return null;
         const nodes=view.layers.flatMap(layer=>layer.nodes.filter(node=>selectedIdSet.has(node.id)).map(node=>({node,layer})));
-        if(nodes.length!==selectedIdSet.size || nodes.some(({node,layer})=>node.locked || layer.locked || Object.values(node.transform).some(value=>value.kind!=="constant"))) return null;
+        if(nodes.some(({node,layer})=>node.locked || layer.locked || Object.values(node.transform).some(value=>value.kind!=="constant"))) return null;
         const bounds=selectionBounds(view,[...selectedIdSet],evaluate); if(!bounds) return null;
         const center={x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2},y=bounds.top-25;
         return <g className="template-rotation-handle"><line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" /><circle data-selection-rotation-handle="true" cx={center.x} cy={y} r="7" fill="#fff" stroke="#147ca8" strokeWidth="2" aria-label="Повернуть выделение вокруг центра" role="button" onPointerDown={event=>{event.preventDefault();event.stopPropagation();const point=pointFromEvent(event);if(!point)return;try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} rotationRef.current={id:"selection",pointerId:event.pointerId,center:[center.x,center.y],startAngle:Math.atan2(point[1]-center.y,point[0]-center.x),rotation:0,latest:0};}} /></g>;
