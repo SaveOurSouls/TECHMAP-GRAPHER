@@ -329,3 +329,18 @@
 .he-document-table table {border-collapse:collapse;font-size:11px;min-width:600px;}
 .he-document-table td,.he-document-table th {padding:4px;border:1px solid #dce5ea;text-align:left;}
 .he-document-table input {width:90px;}
+
+.he-cut-backdrop {position:fixed;inset:0;z-index:1000;background:#172f4159;display:flex;align-items:center;justify-content:center;padding:24px;}
+.he-cut-dialog {background:#fff;border:1px solid #cbd9e2;border-radius:10px;box-shadow:0 12px 45px #1234;width:min(950px,95vw);max-height:92vh;overflow:auto;padding:18px;color:#23485d;}
+.he-cut-dialog>.ui-section-heading {position:sticky;top:-18px;background:white;padding:8px 0;z-index:1;}
+.he-cut-dialog>.ui-section-heading>button:last-child {margin-left:auto;}
+.he-cut-dialog p,.he-cut-dialog li {font-size:12px;}
+.he-cut-svg {display:block;width:100%;min-width:500px;border:1px solid #e0e8ec;margin:12px 0;background:#fcfdfe;}
+.he-cut-svg text {font:12px Arial;fill:#23485d;}
+.he-cut-end-tables {display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:12px;}
+.he-cut-layers {width:100%;border-collapse:collapse;margin-top:7px;}
+.he-cut-layers th,.he-cut-layers td {border:1px solid #dce5ea;padding:5px;text-align:left;}
+.he-cut-fields {display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.he-cut-fields label {font-size:11px;display:grid;gap:3px;}
+.he-cut-fields input {width:140px;}
+@media(max-width:700px){.he-cut-backdrop{padding:8px}.he-cut-end-tables{grid-template-columns:1fr}.he-cut-dialog{padding:10px}}

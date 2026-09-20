@@ -381,6 +381,7 @@ try {
   let physicalTopologyChecked = false;
   let physicalHarnessId;
   let expectedTopology;
+  let expectedDrawingDocuments;
   if (process.argv.includes('--check-topology')) {
     const { applyEditorCommand, createConnector, createWire } = await module('editor/commands.ts');
     const { createEmptyHarnessDesign } = await module('editor/model.ts');
@@ -428,8 +429,25 @@ try {
     }
     await designs.save(project.projectId,physicalHarnessId,0,d);
     if(process.argv.includes('--check-documents')) assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.drawingDocuments,d.drawingDocuments);
+    if(process.argv.includes('--check-cut-diagram')) {
+      const {buildCutDiagram,cutBlankIds}=await module('editor/cut-diagram.ts');
+
+      d={...d,wires:d.wires.map(w=>w.id==='W1'?{...w,lengthMm:100.125,endCorrectionFromMm:-1.25,endCorrectionToMm:2,cutRoundingStepMm:1,materialBinding:{sourceId:'s',snapshotId:crypto.randomUUID(),snapshotSha256:'a'.repeat(64),recordId:'b'.repeat(64),entityType:'wire',sourceKey:'TEST-WIRE',displayName:'Test wire'}}:w)};
+      const strip={sourceId:'test-strip',snapshotId:crypto.randomUUID(),snapshotSha256:'c'.repeat(64),recordId:'d'.repeat(64),entityType:'coax-termination',sourceKey:'STRIP',displayName:'Test strip',layers:[{index:1,diameterMm:1,stripLengthMm:5},{index:2,diameterMm:2,stripLengthMm:12}]};
+      d={...d,wires:d.wires.map(w=>w.id==='W1'?{...w,stripProfiles:{from:strip,to:strip}}:w)};
+      const current=await designs.get(project.projectId,physicalHarnessId);
+      await designs.save(project.projectId,physicalHarnessId,current.revision,d);
+      const actualCut=await (await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${physicalHarnessId}/cut-list`)).json();
+      const actualRow=actualCut.items.find(r=>r.wireId==='W1');assert.equal(actualRow.cutLengthMm,101);assert.equal(actualRow.totalMetres,.101);
+      const reread=await designs.get(project.projectId,physicalHarnessId);assert.deepEqual(reread.content.wires.find(w=>w.id==='W1').stripProfiles,{from:strip,to:strip});
+      const cut=buildCutDiagram(d,'W1',2); assert.equal(cut.cutLengthMm,101); assert.equal(cut.totalMetres,.202); assert.equal(cut.a.label,'A:1'); assert.deepEqual(cutBlankIds(d).includes('W1'),true);
+      d=applyEditorCommand(d,{type:'add-cable',cable:{id:'CUT-CABLE',memberWireIds:['W1','W2'],lengthMm:200,endCorrectionFromMm:0,endCorrectionToMm:0,cutRoundingStepMm:1}});
+      assert.equal(buildCutDiagram(d,'W1',1).objectId,'CUT-CABLE');
+    }
+
 
     expectedTopology=d.physicalTopology;
+    expectedDrawingDocuments=d.drawingDocuments;
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
   }
@@ -505,7 +523,9 @@ try {
     if (physicalTopologyChecked && !deleted) {
       const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${physicalHarnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
       assert.equal(response.status,200);
-      assert.deepEqual((await response.json()).content.physicalTopology,expectedTopology);
+      const content=(await response.json()).content;
+      assert.deepEqual(content.physicalTopology,expectedTopology);
+      if(expectedDrawingDocuments)assert.deepEqual(content.drawingDocuments,expectedDrawingDocuments);
     }
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
@@ -513,7 +533,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {
