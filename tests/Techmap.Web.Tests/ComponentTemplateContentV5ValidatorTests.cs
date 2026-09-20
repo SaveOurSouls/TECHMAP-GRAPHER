@@ -10,6 +10,45 @@ public sealed class ComponentTemplateContentV5ValidatorTests
 {
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
+    [Theory]
+    [InlineData("e4")]
+    [InlineData("drawing")]
+    [InlineData("route")]
+    public void Generator_contract_round_trips_and_rejects_ambiguous_ownership_and_partial_rows(string target)
+    {
+        var content=ValidContent();
+        var view=content["views"]!.AsArray().First(v=>v!["kind"]!.GetValue<string>()=="drawing")!;
+        view["repeatPlacements"]=new JsonArray();
+        var nodes=view["layers"]![0]!["nodes"]!.AsArray();
+        nodes.Add(JsonNode.Parse("""
+        {"id":"90000000-0000-4000-8000-000000000001","layerId":"00000000-0000-4000-8000-000000000004","kind":"rectangle","visible":true,"locked":false,"opacity":1,
+         "transform":{"translateX":{"kind":"constant","value":0},"translateY":{"kind":"constant","value":0},"rotationDegrees":{"kind":"constant","value":0},"scaleX":{"kind":"constant","value":1},"scaleY":{"kind":"constant","value":1}},
+         "stroke":{"color":"#000000","width":{"kind":"constant","value":1}},"fill":{"color":null},
+         "geometry":{"x":{"kind":"constant","value":0},"y":{"kind":"constant","value":0},"width":{"kind":"constant","value":10},"height":{"kind":"constant","value":10},"cornerRadii":[{"kind":"constant","value":0},{"kind":"constant","value":0},{"kind":"constant","value":0},{"kind":"constant","value":0}]}}
+        """));
+        var owned=nodes.Where(n=>n!["kind"]!.GetValue<string>()=="group").SelectMany(n=>n!["geometry"]!["childIds"]!.AsArray()).Select(n=>n!.GetValue<string>()).ToHashSet();
+        var roots=nodes.Where(n=>!owned.Contains(n!["id"]!.GetValue<string>())).Select(n=>n!["id"]!.DeepClone()).ToArray();
+        var g=new JsonObject {
+            ["id"]=Guid.NewGuid().ToString(),["viewId"]=view["id"]!.DeepClone(),["target"]=target,
+            ["axis"]="horizontal",["pitch"]=40,["rowPitch"]=30,["rows"]=1,["baseColumns"]=1,
+            ["traversal"]="along",["numbering"]="snake",["reverse"]=false,["corner"]="top-left",["endPointIds"]=new JsonArray(),
+            ["roles"]=new JsonObject{["start"]=new JsonArray(),["period"]=new JsonArray(roots),["end"]=new JsonArray(),["static"]=new JsonArray()},
+            ["periodPointIds"]=new JsonArray(view["contactPoints"]![0]!["id"]!.DeepClone()),["fixedPointIds"]=new JsonArray(),
+            ["articles"]=new JsonArray(new JsonObject{["articleId"]=content["articleVariants"]![0]!["id"]!.DeepClone(),["nodeIds"]=new JsonArray()})
+        };
+        content["drawingGenerators"]=new JsonArray(g);
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        ComponentTemplateContentV5Validator.Validate(Element(JsonNode.Parse(content.ToJsonString())!));
+        g["rows"]=2;
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        g["rows"]=1;g["articles"]![0]!["nodeIds"]!.AsArray().Add(roots[0]!.DeepClone());
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        g["articles"]![0]!["nodeIds"]=new JsonArray();g["pitch"]=0;
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        g["pitch"]=40;g["roles"]!["end"]!.AsArray().Add("missing");
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
     [Fact]
     public void Drawing_rejects_missing_contacts_and_allows_one_common_point_only_for_drawing()
     {

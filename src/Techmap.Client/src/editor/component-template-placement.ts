@@ -2,6 +2,7 @@ import { evaluateNumericExpressionV3 } from "../component-library/template-comma
 import { resolveTemplateParameterValuesV2 } from "../component-library/template-repeat-v2";
 import { materializeArticleVariantV3 } from "../component-library/template-article-materialization-v3";
 import { drawingArrayContactRows } from "../component-library/drawing-array-contacts";
+import { materializeGenerator } from "../component-library/drawing-generator";
 import {
   parseConnectorSchematic,
   defaultLayerIds,
@@ -253,6 +254,7 @@ export function materializePlacementRows(
   if (content.schemaVersion === 3) return coreRows.map(row => ({ ...row, standardTerminalArticleKey: null }));
   const table = content.schemaVersion === 5 ? projectTemplateContentV5TableToV1(content) : content.e4ConnectorTable;
   const tableArticle = materializeE4ConnectorArticle(table, articleVariantId);
+  const generated = content.schemaVersion === 5 ? (content.drawingGenerators ?? []).filter(g => g.target === "drawing" && g.articles.some(a => a.articleId === articleVariantId)).map(g => materializeGenerator(core, table, content.drawingContactBindings ?? [], g, articleVariantId)) : [];
   const arrayContacts=content.schemaVersion===5?drawingArrayContactRows(core,table,content.drawingContactBindings??[],articleVariantId):[];
   const drawing=content.schemaVersion===5?findArticleDrawing(content.articleDrawings,articleVariantId,"drawing"):undefined;
   const drawingView=core.views.find(v=>drawing?.viewId?v.id===drawing.viewId:v.kind==="drawing");
@@ -284,7 +286,8 @@ export function materializePlacementRows(
       secondaryColor: tableRow.secondaryColor,
       customValues: tableRow.customValues,
       prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
-      representations: [...(common?[common]:[]),...(core?.representations ?? []).filter(r=>!arrayPoints.has(`${r.viewId}:${r.pointId}`)),...arrayContacts.filter(item=>item.row?.seriesRowId===tableRow.seriesRowId).map(item=>({viewId:item.viewId,viewName:item.viewName,viewKind:item.viewKind,pointId:item.point.prototypeContactPointId,occurrenceKey:item.point.key,x:item.point.x,y:item.point.y,direction:item.point.direction}))].filter(representation => {
+      representations: [...generated.flatMap(g=>g.points.filter(p=>p.row.seriesRowId===tableRow.seriesRowId).map(({point})=>({viewId:g.view.id,viewName:g.view.name,viewKind:"drawing" as const,pointId:point.id,x:point.x.kind==="constant"?point.x.value:0,y:point.y.kind==="constant"?point.y.value:0,direction:point.direction}))),...(common?[common]:[]),...(core?.representations ?? []).filter(r=>!arrayPoints.has(`${r.viewId}:${r.pointId}`)),...arrayContacts.filter(item=>item.row?.seriesRowId===tableRow.seriesRowId).map(item=>({viewId:item.viewId,viewName:item.viewName,viewKind:item.viewKind,pointId:item.point.prototypeContactPointId,occurrenceKey:item.point.key,x:item.point.x,y:item.point.y,direction:item.point.direction}))].filter(representation => {
+        if (generated.length && representation.viewKind === "drawing") return generated.some(g=>g.points.some(p=>p.point.id===representation.pointId));
         const drawing = content.schemaVersion === 5 ? findArticleDrawing(content.articleDrawings,articleVariantId,"drawing") : undefined;
         return representation.viewKind !== "drawing" || (common ? representation.pointId===common.pointId : !drawing || drawing.contactPointIds.includes(representation.pointId));
       }),

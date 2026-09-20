@@ -287,4 +287,16 @@
 .drawing-editor-shell .drawing-ribbon .library-tools > * { flex-shrink:0; }
 .drawing-editor-shell .drawing-ribbon .library-tools .drawing-snaps { display:flex; white-space:nowrap; }
 .drawing-ribbon .library-tools .angle-snap-control { margin-left:0; }
+.drawing-editor-shell .library-workarea:has(.generator-preview) { display:grid; grid-template-columns:minmax(240px,2fr) minmax(230px,1fr); }
+.generator-preview { display:flex; flex-direction:column; min-height:0; min-width:0; border-left:1px solid var(--ui-border); background:var(--ui-soft); }
+.generator-preview > strong, .generator-preview > span { padding:8px 12px; font-size:12px; }
+.generator-preview > svg { min-height:0; flex:1; width:100%; }
+.drawing-ribbon [aria-label="Генератор рисунков"] { flex-flow:column wrap; align-items:flex-start; align-content:flex-start; height:100%; gap:6px 12px; background:transparent; padding:0; }
+.generator-roles { display:flex; gap:4px; }
+.drawing-ribbon .generator-variants input { width:180px; }
+.drawing-ribbon [aria-label="Генератор рисунков"] output { max-width:280px; font-size:12px; }
 .template-canvas-v2 { user-select:none; }
+.drawing-ribbon .generator-reverse { display:flex; flex-direction:row; align-items:center; gap:6px; min-height:28px; }
+.drawing-ribbon .generator-reverse input { width:16px; height:16px; min-height:0; margin:0; }
+.generator-variant-controls { display:flex; align-items:flex-end; gap:4px; }
+.generator-variant-controls > button { min-width:28px; }

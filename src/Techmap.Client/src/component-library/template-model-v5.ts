@@ -1,5 +1,6 @@
 import { type ArticleDrawing, type DrawingContactBinding } from "./drawing-bindings";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
+import { materializeGenerator, validateDrawingGenerators, type DrawingGenerator } from "./drawing-generator";
 import { parseConnectorSchematic, type ConnectorSchematicPresentation } from "../editor/model";
 import {
   createE4ConnectorSeriesTableFromV3,
@@ -38,6 +39,7 @@ export interface TerminalContactTypeBindingV5 {
 }
 
 export interface TemplateContentV5 extends Omit<TemplateContentV3, "schemaVersion" | "articleVariants"> {
+  readonly drawingGenerators?: DrawingGenerator[];
   readonly articleDrawings?: ArticleDrawing[];
   readonly drawingContactBindings?: DrawingContactBinding[];
   readonly e4Presentation?: ConnectorSchematicPresentation;
@@ -62,7 +64,7 @@ const ROOT_KEYS = [
   "schemaVersion", "views", "logicalContacts", "parameters", "repeaters", "assets",
   "contactTypeGroups", "compatibleTerminalArticleKeys", "articleVariants", "e4ConnectorTable",
 ] as const;
-const OPTIONAL_ROOT_KEYS = ["terminalContactTypeBindings", "e4Presentation", "articleDrawings", "drawingContactBindings"] as const;
+const OPTIONAL_ROOT_KEYS = ["terminalContactTypeBindings", "e4Presentation", "articleDrawings", "drawingContactBindings", "drawingGenerators"] as const;
 const ARTICLE_GROUP_KEYS = ["contactTypeGroupId", "contactCount"] as const;
 const TABLE_KEYS = ["modelVersion", "columns", "contactTypeGroups", "seriesDefaults", "articles"] as const;
 const TABLE_ARTICLE_KEYS = ["articleVariantId", "sourceId", "entityType", "articleKey", "contactGroups", "rows"] as const;
@@ -273,6 +275,7 @@ function projectV5ToV4(value: Record<string, unknown>, terminals: readonly Artic
   delete projected.e4Presentation;
   delete projected.articleDrawings;
   delete projected.drawingContactBindings;
+  delete projected.drawingGenerators;
   const configuredArticleIds = new Set<string>();
   if (Array.isArray(projected.articleVariants)) for (const variant of projected.articleVariants) {
     if (!isRecord(variant) || !Array.isArray(variant.contactGroups)) continue;
@@ -357,6 +360,14 @@ export function validateTemplateContentV5(value: unknown): TemplateV5Validation 
       path: item.path,
       message: item.message,
     })));
+  }
+  if (!diagnostics.length && value.drawingGenerators !== undefined) {
+    try {
+      const content = value as unknown as TemplateContentV5, core = projectTemplateContentV5ToV3(content), table = projectTemplateContentV5TableToV1(content);
+      validateDrawingGenerators(core, table, value.drawingGenerators);
+      for (const g of content.drawingGenerators ?? []) for (const article of g.articles) materializeGenerator(core, table, content.drawingContactBindings ?? [], g, article.articleId);
+    }
+    catch (caught) { diagnostics.push(error("invalid_drawing_generator", "$.drawingGenerators", (caught as Error).message)); }
   }
   return { valid: diagnostics.length === 0, diagnostics };
 }
@@ -455,6 +466,7 @@ export function createTemplateContentV5FromEditor(
   e4Presentation?: ConnectorSchematicPresentation,
   articleDrawings?: readonly ArticleDrawing[],
   drawingContactBindings?: readonly DrawingContactBinding[],
+  drawingGenerators?: readonly DrawingGenerator[],
 ): TemplateV5Upgrade {
   content = withDrawingArticleCounts(content);
   const coreValidation = validateTemplateContentV3Structure(content);
@@ -485,6 +497,7 @@ export function createTemplateContentV5FromEditor(
     e4ConnectorTable: upgradeE4ConnectorSeriesTableV1ToV2(table),
     ...(articleDrawings ? {articleDrawings: structuredClone(articleDrawings) as ArticleDrawing[]} : {}),
     ...(drawingContactBindings ? {drawingContactBindings: structuredClone(drawingContactBindings) as DrawingContactBinding[]} : {}),
+    ...(drawingGenerators ? {drawingGenerators: structuredClone(drawingGenerators) as DrawingGenerator[]} : {}),
     ...(e4Presentation ? { e4Presentation: parseConnectorSchematic(e4Presentation) } : {}),
   };
   const validation = validateTemplateContentV5(result);
@@ -494,7 +507,7 @@ export function createTemplateContentV5FromEditor(
 
 /** Projects v5 into the existing reusable v3 editor core. */
 export function projectTemplateContentV5ToV3(content: TemplateContentV5): TemplateContentV3 {
-  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, terminalContactTypeBindings: _bindings, e4ConnectorTable: _table, e4Presentation: _presentation, articleDrawings: _drawings, drawingContactBindings: _contactBindings, ...core } = content;
+  const { schemaVersion: _schemaVersion, compatibleTerminalArticleKeys, terminalContactTypeBindings: _bindings, e4ConnectorTable: _table, e4Presentation: _presentation, articleDrawings: _drawings, drawingContactBindings: _contactBindings, drawingGenerators: _generators, ...core } = content;
   return withDrawingArticleCounts({
     ...structuredClone(core),
     schemaVersion: 3,

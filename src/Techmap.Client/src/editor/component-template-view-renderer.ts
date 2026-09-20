@@ -1,4 +1,6 @@
 import { drawingScale } from "./drawing-scale";
+import { materializeGenerator } from "../component-library/drawing-generator";
+import { projectTemplateContentV5TableToV1 } from "../component-library/template-model-v5";
 import type { ConnectorDrawingPlacement } from "./model";
 import { articleDrawingView, findArticleDrawing, type DrawingTarget } from "../component-library/drawing-bindings";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
@@ -313,6 +315,17 @@ export function projectComponentTemplateView(
   // A v5 E4 table is always rendered by the schematic editor. Its drawing is
   // projected separately as a companion, never as a replacement for that table.
   if (viewKind === "e4" && instance.content.schemaVersion === 5) return null;
+  if (instance.content.schemaVersion === 5) {
+    const content = instance.content;
+    const generator = content.drawingGenerators?.find(g => g.target === drawingTarget && g.articles.some(a => a.articleId === instance.articleVariantId));
+    if (generator) {
+      const generated = materializeGenerator(projectTemplateContentV5ToV3(content), projectTemplateContentV5TableToV1(content), content.drawingContactBindings ?? [], generator, instance.articleVariantId);
+      const runtime = { ...content, drawingGenerators: undefined, views: generated.content.views, logicalContacts: generated.content.logicalContacts,
+        articleDrawings: [...(content.articleDrawings ?? []).filter(d => !(d.articleVariantId === instance.articleVariantId && d.target === drawingTarget)),
+          { articleVariantId: instance.articleVariantId, target: drawingTarget, viewId: generated.view.id, nodeIds: generated.view.layers.flatMap(l => l.nodes.map(n => n.id)), contactPointIds: generated.view.contactPoints.map(p => p.id) }] };
+      return projectComponentTemplateView({ ...instance, content: runtime }, viewKind, origin, resolveAssetUrl, drawingTarget);
+    }
+  }
   const binding=instance.content.schemaVersion===5 ? findArticleDrawing(instance.content.articleDrawings,instance.articleVariantId,drawingTarget) : undefined;
   const sourceView = instance.content.views.find(candidate => binding?.viewId ? candidate.id===binding.viewId : candidate.kind === viewKind);
   if (!sourceView) return null;
@@ -411,6 +424,14 @@ export interface E4DrawingCompanion extends ProjectedComponentTemplateView {
 export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstance,origin:ComponentTemplateProjectionOrigin,tableWidth:number,resolveAssetUrl?:ResolveComponentTemplateAssetUrl):E4DrawingCompanion[] {
   if(instance.content.schemaVersion!==5) return [];
   const drawing=projectComponentTemplateView(instance,"drawing",{x:0,y:0},resolveAssetUrl,"e4");
+  const generator = instance.content.drawingGenerators?.find(g => g.target === "e4" && g.articles.some(a => a.articleId === instance.articleVariantId));
+  if (drawing && generator) {
+    const placement = instance.drawingPlacements?.find(p => p.drawingId === generator.id), offset = placement?.offset ?? {x:0,y:0};
+    const scale = Math.min(1, Math.max(40,tableWidth)/Math.max(1,drawing.bounds.maxX-drawing.bounds.minX),140/Math.max(1,drawing.bounds.maxY-drawing.bounds.minY)) * drawingScale(instance.drawingPlacements,generator.id);
+    const transform = {a:scale,b:0,c:0,d:scale,e:origin.x-drawing.bounds.minX*scale+offset.x,f:origin.y-20-drawing.bounds.maxY*scale+offset.y};
+    const commands = drawing.commands.map(command=>({...command,transform:multiply(transform,command.transform)}));
+    return [{...drawing,viewKind:"e4",drawingId:generator.id,label:"Рисунок",visible:placement?.visible!==false,offset,commands,bounds:combinedBounds(commands)}];
+  }
   const binding=findArticleDrawing(instance.content.articleDrawings,instance.articleVariantId,"e4");
   const source=instance.content.views.find(v=>binding?.viewId ? v.id===binding.viewId : v.kind==="drawing");
   if(!drawing || !source) return [];

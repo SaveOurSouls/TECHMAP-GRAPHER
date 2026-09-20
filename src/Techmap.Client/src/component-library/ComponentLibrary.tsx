@@ -1,3 +1,5 @@
+import { DrawingGeneratorPanel } from "./DrawingGeneratorPanel";
+import { newDrawingGenerator, reconcileDrawingGenerators, generatorFromLegacyArray, assignGeneratorRole, guardGeneratorArticleEdit, materializeGenerator, validateDrawingGenerators, type DrawingGenerator, type GeneratorRole } from "./drawing-generator";
 import { validateArticleDrawingContacts } from "./drawing-contact-validation";
 import { drawingArrayContactRows } from "./drawing-array-contacts";
 import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
@@ -74,7 +76,7 @@ import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Draft { drawingGenerators?: DrawingGenerator[]; e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
 
 export const TEMPLATE_UNDO_LIMIT = 100;
 export function pushTemplateUndo(stack: readonly TemplateContentV2[], current: TemplateContentV2): TemplateContentV2[] {
@@ -417,6 +419,8 @@ export function ComponentLibrary({ config, session }: Props) {
   const [pointAngleMode, setPointAngleMode] = useState<TemplatePointAngleModeV2>("snap-15");
   const [graphicEditorMode, setGraphicEditorMode] = useState<"e4" | "drawing">("e4");
   const clipboard = useRef<DrawingClipboard | null>(null);
+  const [generatorPreviewPeriods,setGeneratorPreviewPeriods]=useState<number|undefined>();
+  const [generatorMode, setGeneratorMode] = useState<"source" | "article">("source");
   const [drawingTab, setDrawingTab] = useState("tools");
   const [propertyTab, setPropertyTab] = useState<"geometry" | "stroke" | "fill">("geometry");
   const textEditorRef = useRef<HTMLInputElement | null>(null);
@@ -427,6 +431,8 @@ export function ComponentLibrary({ config, session }: Props) {
   const [drawingSnaps, setDrawingSnaps] = useState(defaultDrawingSnaps);
 
   const activeView = draft.content.views.find(view => view.id === viewId) ?? draft.content.views[0];
+  const activeGenerator = draft.drawingGenerators?.find(g=>g.viewId===activeView?.id);
+  const generatorArticleMode = graphicEditorMode === "drawing" && !!activeGenerator && generatorMode === "article";
   const e4View = draft.content.views.find(view => view.kind === "e4");
   const drawingView = draft.content.views.find(view => view.kind === "drawing");
   const activeLayerId = activeView ? activeLayerIds[activeView.id] ?? activeView.layers[0]!.id : null;
@@ -436,7 +442,8 @@ export function ComponentLibrary({ config, session }: Props) {
     ? selectedIds.filter(id => activeView.layers.some(layer => layer.nodes.some(node => node.id === id)))
     : [];
   const selectedNodes = activeView?.layers.flatMap(layer => layer.nodes.filter(node => selectedNodeIds.includes(node.id))) ?? [];
-  const selectionLocked = activeView?.layers.some(layer => layer.nodes.some(node => selectedNodeIds.includes(node.id) && (node.locked || layer.locked))) ?? true;
+  const generatedSelection = generatorArticleMode && selectedIds.some(id=>id.startsWith("generator:"));
+  const selectionLocked = generatedSelection || (activeView?.layers.some(layer => layer.nodes.some(node => selectedNodeIds.includes(node.id) && (node.locked || layer.locked))) ?? true);
   const selectedContactPoint = activeView?.contactPoints.find(point => point.id === selectedId);
   const selectedBundlePort = activeView?.bundlePorts.find(point => point.id === selectedId);
   const selectedPoint = selectedContactPoint ?? selectedBundlePort;
@@ -467,9 +474,9 @@ export function ComponentLibrary({ config, session }: Props) {
     }
   }, [draft.content, selectedArticleVariantId]);
   const e4PreviewContent = useMemo(() => {
-    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings).content; }
+    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators).content; }
     catch { return null; }
-  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings]);
+  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators]);
   const effectivePreviewParameterValues = useMemo<Readonly<Record<string, ParameterValueV2>>>(() => ({
     ...previewParameterValues,
     ...articlePreview.values,
@@ -498,6 +505,36 @@ export function ComponentLibrary({ config, session }: Props) {
   const standardTerminalIdentities = useMemo(() => new Set((draft.terminalContactTypeBindings ?? [])
     .filter(binding => binding.standard).map(binding => articleIdentity(binding.terminalArticleKey))),
   [draft.terminalContactTypeBindings]);
+
+  let generatedPreview: ReturnType<typeof materializeGenerator> | null = null;
+  let generatorPreviewError = "Выберите артикул и назначьте роли";
+  if(activeGenerator && selectedArticleVariantId) try { generatedPreview=materializeGenerator(draft.content,draft.e4ConnectorTable,draft.drawingContactBindings??[],activeGenerator,selectedArticleVariantId,generatorMode==="source"?generatorPreviewPeriods:undefined); } catch(caught){generatorPreviewError=errorText(caught);}
+  function createGenerator() {
+    if(!activeView)return;
+    if(!activeView.repeatPlacements.length){changeGenerator(newDrawingGenerator(activeView.id,drawingTarget));return;}
+    try {
+      const result=generatorFromLegacyArray(draft.content,activeView.id,drawingTarget);
+      setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);
+      setDraft(current=>({...current,content:result.content,drawingGenerators:[...(current.drawingGenerators??[]),result.generator]}));
+      setViewId(result.generator.viewId);setSelectedIds([]);markDirty();setError(null);
+    }catch(caught){setError(errorText(caught));}
+  }
+  function changeGenerator(generator: DrawingGenerator, replaceArticleIds: string[] = []) {
+    const generators=[...(draft.drawingGenerators??[]).filter(g=>g.id!==generator.id),generator];
+    try { validateDrawingGenerators(draft.content,draft.e4ConnectorTable,generators); }
+    catch(caught){setError(errorText(caught));return;}
+    setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);
+    setDraft(current=>({...current,drawingGenerators:generators,articleDrawings:current.articleDrawings?.filter(d=>!(replaceArticleIds.includes(d.articleVariantId)&&d.target===generator.target))}));markDirty();setError(null);
+  }
+  function assignGenerator(role: GeneratorRole) {
+    if(!activeGenerator)return;
+    try { changeGenerator(assignGeneratorRole(draft.content,activeGenerator,role,selectedIds)); } catch(caught){setError(errorText(caught));}
+  }
+  function applyGenerator(ids: string[]) {
+    if(!activeGenerator)return;
+    const next={...activeGenerator,articles:[...activeGenerator.articles.filter(a=>!ids.includes(a.articleId)),...ids.map(articleId=>activeGenerator.articles.find(a=>a.articleId===articleId)??{articleId,nodeIds:[]})]};
+    try { validateDrawingGenerators(draft.content,draft.e4ConnectorTable,[next]); for(const id of ids)materializeGenerator(draft.content,draft.e4ConnectorTable,draft.drawingContactBindings??[],next,id); changeGenerator(next,ids); } catch(caught){setError(errorText(caught));}
+  }
 
   async function loadList() { try { setItems(await api.list()); setError(null); } catch (caught) { setError(errorText(caught)); } }
   useEffect(() => { void loadList(); }, [api]);
@@ -534,7 +571,7 @@ export function ComponentLibrary({ config, session }: Props) {
   function setLoadedDraft(item: LoadedTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[], bindings: readonly TerminalContactTypeBindingV5[] | null = null) {
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
     const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
-    setDraft({ e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ drawingGenerators: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setGraphicEditorMode("e4");
     setPendingLogicalContactId(null);
@@ -615,6 +652,11 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function changeContent(content: TemplateContentV2, selection?: string | null) {
     if (content === draft.content) return;
+    let generators = draft.drawingGenerators;
+    if (generatorArticleMode && activeGenerator && selectedArticleVariantId) {
+      try { const next = guardGeneratorArticleEdit(draft.content, content, activeGenerator, selectedArticleVariantId, selectedIds); generators = generators?.map(g=>g.id===next.id?next:g); }
+      catch(caught) { setError(errorText(caught)); return; }
+    }
     const bindings = draft.terminalContactTypeBindings?.filter(binding => content.contactTypeGroups.some(group => group.id === binding.contactTypeGroupId)) ?? null;
     const reconciled = reconcileE4ConnectorTable(content, draft.e4ConnectorTable);
     const existingRows = new Set(draft.e4ConnectorTable.seriesDefaults.map(row => row.rowId));
@@ -623,12 +665,15 @@ export function ComponentLibrary({ config, session }: Props) {
     }) };
     const projected = applySeriesTerminalsToEditor(content, table, draft.compatibleTerminalArticleKeys, bindings);
     setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
-    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, terminalContactTypeBindings: bindings,
+    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, drawingGenerators: generators, terminalContactTypeBindings: bindings,
       articleDrawings: current.articleDrawings?.filter(drawing => content.articleVariants.some(a => a.id === drawing.articleVariantId)).map(drawing => ({...drawing,nodeIds:drawing.nodeIds.filter(id => content.views.some(view => view.layers.some(layer => layer.nodes.some(node => node.id === id)))),contactPointIds:drawing.contactPointIds.filter(id => content.views.some(view => view.contactPoints.some(point => point.id === id)))})),
       drawingContactBindings: current.drawingContactBindings?.filter(binding => content.logicalContacts.some(contact => contact.id === binding.logicalContactId) && table.seriesDefaults.some(row => row.rowId === binding.seriesRowId)) }));
     if (selection !== undefined) setSelectedId(selection); markDirty(); setError(null);
   }
-  function command(action: () => TemplateContentV2, selection?: string | null) { try { changeContent(action(), selection); } catch (caught) { setError(errorText(caught)); } }
+  function command(action: () => TemplateContentV2, selection?: string | null) { try {
+    if(generatedSelection)throw new Error("Основа защищена. Перейдите в «Исходник».");
+    changeContent(action(), selection);
+  } catch (caught) { setError(errorText(caught)); } }
   function setArticleContactGroup(
     variantId: string,
     groupId: string,
@@ -735,7 +780,7 @@ export function ComponentLibrary({ config, session }: Props) {
     let v5Content;
     try {
       for(const drawing of working.articleDrawings??[])validateArticleDrawingContacts(working.content,working.e4ConnectorTable,working.drawingContactBindings??[],drawing);
-      v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings).content;
+      v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings, working.drawingGenerators).content;
     } catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: working.code.trim(), name: working.name.trim(), articleBindings: articleBindingsFromTemplateV3(working.content), content: v5Content };
     return body;
@@ -779,7 +824,7 @@ export function ComponentLibrary({ config, session }: Props) {
     const projected = applySeriesTerminalsToEditor(content, table, terminals, bindings);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(result.content) ? structuredClone(result.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingContactBindings ?? []) : [], templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ drawingGenerators: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(result.content) ? structuredClone(result.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingContactBindings ?? []) : [], templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
@@ -797,6 +842,20 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function openDrawingTarget(target:DrawingTarget,articleId=selectedArticleVariantId) {
     if (!draft.templateId || busy) return;
+    setGeneratorPreviewPeriods(undefined);
+    const generator=draft.drawingGenerators?.find(g=>g.target===target);
+    if(generator){
+      // Opening a generated drawing without a prior article selection must still
+      // show a concrete variant in the result pane. Prefer the current article,
+      // then the first assigned variant, and finally the first series variant.
+      const initialArticleId = articleId
+        ?? generator.articles[0]?.articleId
+        ?? draft.content.articleVariants[0]?.id
+        ?? null;
+      setDrawingTarget(target);setViewId(generator.viewId);setGraphicEditorMode("drawing");setSelectedArticleVariantId(initialArticleId);setSelectedIds([]);
+      if(!initialArticleId || !generator.articles.some(a=>a.articleId===initialArticleId))setGeneratorMode("source");
+      return;
+    }
     const separated=separateLegacyDrawings(draft.content,draft.articleDrawings);
     let content=separated.content;
     if(content!==draft.content){changeContent(content);setDraft(current=>({...current,articleDrawings:separated.drawings}));}
@@ -809,6 +868,14 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   function clearTargetDrawings() {
     if(!activeView)return;
+    if(activeGenerator){
+      if(generatorArticleMode){setError("Очистка основы доступна в режиме «Исходник».");return;}
+      setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);
+      setDraft(current=>({...current,drawingGenerators:current.drawingGenerators?.filter(g=>g.id!==activeGenerator.id),
+        content:{...current.content,views:current.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)},
+        articleDrawings:[...(current.articleDrawings??[]).filter(d=>d.target!==drawingTarget),...current.content.articleVariants.map(a=>({articleVariantId:a.id,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[]}))]}));
+      markDirty();setRemoveDrawingPrompt(false);setSelectedIds([]);return;
+    }
     const empty={...draft.content,views:draft.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)};
     changeContent(empty,null);
     setDraft(current=>({...current,articleDrawings:current.articleDrawings?.map(d=>d.target===drawingTarget || !d.target&&drawingTarget==="drawing"?{...d,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[],bundlePortIds:[]}:d)}));
@@ -816,6 +883,16 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   async function saveArticleDrawing(articleVariantId: string,all=false) {
     if (!activeView) return;
+    if(activeGenerator){
+      const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
+      const generator={...activeGenerator,articles:[...activeGenerator.articles.filter(a=>!articleIds.includes(a.articleId)),...articleIds.map(articleId=>activeGenerator.articles.find(a=>a.articleId===articleId)??{articleId,nodeIds:[]})]};
+      const working={...draft,drawingGenerators:draft.drawingGenerators?.map(g=>g.id===generator.id?generator:g),articleDrawings:draft.articleDrawings?.filter(d=>!(articleIds.includes(d.articleVariantId)&&d.target===drawingTarget))};
+      const body=validatedBody(working);if(!body||!working.templateId)return;
+      setBusy(true);
+      try {const result=await api.saveDraft(working.templateId,{expectedVersion:working.version,expectedDraftRevision:working.draftRevision,...body});setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);setDraft(working);applySavedDraft(result);}
+      catch(caught){setError(errorText(caught));}finally{setBusy(false);}
+      return;
+    }
     const drawing = {...drawingSelection(activeView, selectedIds, articleVariantId),target:drawingTarget,viewId:activeView.id};
     if (!drawing.nodeIds.length && !drawing.contactPointIds.length && !drawing.bundlePortIds?.length) return;
     const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
@@ -880,7 +957,10 @@ export function ComponentLibrary({ config, session }: Props) {
           const core=projectTemplateContentV5ToV3(result.content),node=createTemplateImageNodeV2(asset.assetId,activeLayer.id);
           const next=addNodeV2(core,activeView.id,activeLayer.id,node,0);
           setUndoStack([{...draft, templateId:result.templateId, version:result.version, draftRevision:0, assets:[...result.assets], content:core, e4ConnectorTable:projectTemplateContentV5TableToV1(result.content)}]);
-          setDraft(current=>({...current,content:next}));setSelectedId(node.id);markDirty();
+          setDraft(current=>({...current,content:next,drawingGenerators:current.drawingGenerators?.map(g=>
+            generatorArticleMode && g.id===activeGenerator?.id && selectedArticleVariantId
+              ? guardGeneratorArticleEdit(core,next,g,selectedArticleVariantId)
+              : g)}));setSelectedId(node.id);markDirty();
         }
       }
       await loadList();
@@ -1041,6 +1121,12 @@ export function ComponentLibrary({ config, session }: Props) {
           onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
           onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
         {e4PreviewContent && selectedArticleVariantId && (["e4","drawing","route"] as const).map(target=>{
+          const generator=draft.drawingGenerators?.find(g=>g.target===target&&g.articles.some(a=>a.articleId===selectedArticleVariantId));
+          if(generator){
+            try { const generated=materializeGenerator(draft.content,draft.e4ConnectorTable,draft.drawingContactBindings??[],generator,selectedArticleVariantId);
+              return <section key={target} className="library-e4-companion" aria-label={`Рисунок ${target}`}><header><strong>Рисунок · {({e4:"Схема Э4",drawing:"Чертёж",route:"Маршрут"})[target]}</strong><button type="button" onClick={()=>openDrawingTarget(target)}>Редактировать</button></header><TemplateCanvasV2 content={projectTemplateContentV3CoreToV2(generated.content)} viewId={generator.viewId} selectedId={null} onSelect={()=>{}} resolveAssetUrl={resolveAssetUrl}/></section>;
+            } catch(caught){return <span role="status" key={target}>{errorText(caught)}</span>;}
+          }
           const binding=findArticleDrawing(draft.articleDrawings,selectedArticleVariantId,target);
           const view=compatibilityContent.views.find(v=>binding?.viewId ? v.id===binding.viewId : v.kind==="drawing");
           if(!view || target==="route"&&!binding)return null;
@@ -1095,7 +1181,7 @@ export function ComponentLibrary({ config, session }: Props) {
             <button type="button" className="primary-action" onClick={() => void saveAndExitDrawing()} disabled={busy || assetMismatch}>Сохранить и выйти</button>
           </header>
           {error && <div className="error-banner" role="alert">{error}</div>}
-          <nav className="drawing-ribbon-tabs" aria-label="Инструменты рисунка">{Object.entries({tools:"Фигуры",properties:"Свойства",array:"Массив",contacts:"Контакты",layers:"Слои",assets:"Изображения",parameters:"Параметры",articles:"Артикулы"}).map(([id,label])=><button type="button" key={id} aria-pressed={drawingTab===id} onClick={()=>setDrawingTab(id)}>{label}</button>)}</nav>
+          <nav className="drawing-ribbon-tabs" aria-label="Инструменты рисунка">{Object.entries({tools:"Фигуры",properties:"Свойства",generator:"Генератор",array:"Массив",contacts:"Контакты",layers:"Слои",assets:"Изображения",parameters:"Параметры",articles:"Артикулы"}).map(([id,label])=><button type="button" key={id} aria-pressed={drawingTab===id} onClick={()=>setDrawingTab(id)}>{label}</button>)}</nav>
           <div className="drawing-ribbon" data-ribbon-tab={drawingTab}>
 {drawingTab === "tools" && <div className="drawing-ribbon-page">        <div className="library-tools"><span>Примитивы</span><button type="button" onClick={()=>copySelection()} disabled={!selectedNodeIds.length} title="Ctrl+C">Копировать</button><button type="button" onClick={pasteSelection} disabled={!hasClipboard || !activeLayer || activeLayer.locked} title="Ctrl+V">Вставить</button><button type="button" onClick={deleteSelection} disabled={!selectedIds.length || selectionLocked} title="Delete">Удалить</button><button type="button" className="drawing-primitive" title="Контакт" aria-label="Контакт" onClick={appendContact} disabled={!activeView}><DrawingToolIcon kind="contact"/></button>{(["line", "polyline", "rectangle", "ellipse", "bezier", "closedContour", "text"] as const).map(kind => <button key={kind} className="drawing-primitive" title={drawingToolLabels[kind]} aria-label={drawingToolLabels[kind]} onClick={() => appendBasic(kind)} disabled={!activeLayer || activeLayer.locked}><DrawingToolIcon kind={kind}/></button>)}<label className="angle-snap-control">Угол<select aria-label="Привязка угла" value={pointAngleMode} onChange={event => setPointAngleMode(event.target.value as TemplatePointAngleModeV2)}><option value="snap-15">15°</option><option value="free">Свободно</option></select></label><span className="drawing-snaps">{(["corners", "contours", "tangents"] as const).map(key => <label key={key}><input type="checkbox" checked={drawingSnaps[key]} onChange={e => setDrawingSnaps(current => ({ ...current, [key]: e.target.checked }))} />{({corners:"Углы",contours:"Контуры",tangents:"Касательные"})[key]}</label>)}<InfoHint>Ctrl + колесо — масштаб поля около курсора; Home — исходный масштаб. Привязки действуют при перемещении фигур, контактов и вершин. Касательные — для концов линий и прямых сторон рядом с окружностью.</InfoHint></span><button className="undo-tool" onClick={undo} disabled={undoStack.length === 0} title="Ctrl+Z">↶ Отменить</button></div>
 </div>}
@@ -1121,6 +1207,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={deleteSelection} disabled={selectionLocked}>Удалить объект</button></>}
           </aside>
 </div>}
+{drawingTab === "generator" && <div className="drawing-ribbon-page"><DrawingGeneratorPanel generator={activeGenerator} previewPeriods={generatorPreviewPeriods} setPreviewPeriods={setGeneratorPreviewPeriods} mode={generatorMode} articleId={selectedArticleVariantId} articles={draft.content.articleVariants.map(a=>({id:a.id,articleKey:a.articleKey,count:materializeE4ConnectorArticle(draft.e4ConnectorTable,a.id).rows.length}))} change={changeGenerator} assign={assignGenerator} apply={applyGenerator} choose={id=>{setGeneratorPreviewPeriods(undefined);setSelectedArticleVariantId(id);setSelectedIds([]);if(!activeGenerator?.articles.some(a=>a.articleId===id))setGeneratorMode("source");}} setMode={mode=>{setGeneratorPreviewPeriods(undefined);setGeneratorMode(mode);setSelectedIds([]);}} create={createGenerator}/></div>}
 {drawingTab === "array" && <div className="drawing-ribbon-page">{activeView && activeLayer && <DrawingArrayPanel content={draft.content} viewId={activeView.id} layerId={activeLayer.id} selectedIds={selectedIds} onChange={changeContent} onError={setError} />}</div>}
 {drawingTab === "contacts" && <div className="drawing-ribbon-page">{activeView && <TemplateContactsPanelV2
           key={`${activeView.id}:${pendingLogicalContactId ?? ""}`}
@@ -1194,8 +1281,9 @@ export function ComponentLibrary({ config, session }: Props) {
           </div>}
 {drawingTab === "articles" && <div className="drawing-ribbon-page">          <aside className="drawing-articles" aria-label="Рисунки артикулов"><header className="ui-section-heading"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint></header>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => openDrawingTarget(drawingTarget,article.id)} title="Открыть сохранённый рисунок">{article.articleKey}{findArticleDrawing(draft.articleDrawings,article.id,drawingTarget) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<button type="button" disabled={busy||!selectedIds.length||!draft.content.articleVariants.length} onClick={()=>void saveArticleDrawing(draft.content.articleVariants[0]!.id,true)}>Сохранить для всей серии</button><button type="button" disabled={busy} onClick={()=>setRemoveDrawingPrompt(true)}>Очистить рисунки раздела</button>{removeDrawingPrompt&&<div role="alertdialog" aria-label="Очистить рисунки раздела"><p>Удалить рисунки этого раздела для серии? Контакты таблицы сохранятся. Доступна отмена Ctrl+Z.</p><button type="button" onClick={clearTargetDrawings}>Очистить</button><button type="button" onClick={()=>setRemoveDrawingPrompt(false)}>Отмена</button></div>}<span role="status">{saved}</span></aside></div>}
           </div>
-        <div className="library-workarea" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(file&&!busy)void addAsset(file,true);}} onPaste={e=>{if((e.target as HTMLElement).closest("input,textarea,select"))return; if(!busy&&clipboard.current&&useInternalDrawingClipboard(e.clipboardData.getData("text/plain"),clipboardToken.current,clipboardSynchronized.current)){e.preventDefault();pasteSelection();return;} const file=Array.from(e.clipboardData.files)[0];if(file&&!busy){e.preventDefault();void addAsset(file,true);}}} inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="region" aria-label="Поле редактирования рисунка">{activeView && <TemplateCanvasV2 content={compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onEditText={id => { setSelectedId(id); setDrawingTab("properties"); setPropertyTab("geometry"); requestAnimationFrame(() => { textEditorRef.current?.focus(); textEditorRef.current?.select(); }); }} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} repeatedContactLabels={repeatedContactLabels} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-workarea" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(file&&!busy)void addAsset(file,true);}} onPaste={e=>{if((e.target as HTMLElement).closest("input,textarea,select"))return; if(!busy&&clipboard.current&&useInternalDrawingClipboard(e.clipboardData.getData("text/plain"),clipboardToken.current,clipboardSynchronized.current)){e.preventDefault();pasteSelection();return;} const file=Array.from(e.clipboardData.files)[0];if(file&&!busy){e.preventDefault();void addAsset(file,true);}}} inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="region" aria-label="Поле редактирования рисунка">{activeView && <TemplateCanvasV2 content={generatorArticleMode && generatedPreview ? projectTemplateContentV3CoreToV2(generatedPreview.content) : compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onEditText={id => { setSelectedId(id); setDrawingTab("properties"); setPropertyTab("geometry"); requestAnimationFrame(() => { textEditorRef.current?.focus(); textEditorRef.current?.select(); }); }} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} repeatedContactLabels={repeatedContactLabels} parameterDefaults={effectivePreviewParameterValues} />}
 
+        {activeGenerator && generatorMode === "source" && <aside className="generator-preview" aria-label="Результат генератора"><strong>Вариант · {draft.content.articleVariants.find(a=>a.id===selectedArticleVariantId)?.articleKey}</strong>{generatedPreview ? <TemplateCanvasV2 content={projectTemplateContentV3CoreToV2(generatedPreview.content)} viewId={activeGenerator.viewId} selectedId={null} onSelect={()=>{}} resolveAssetUrl={resolveAssetUrl}/> : <span role="status">{generatorPreviewError}</span>}</aside>}
         </div>
         </section>}
       </section>
