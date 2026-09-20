@@ -1476,7 +1476,8 @@ function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly s
 }
 
 function e4RoutingScore(document: HarnessDesignDocument): number {
-  const paths = document.wires.map((wire) => [wireEndpointE4Anchor(document, wire.from)!.position,
+  const carriers = document.wires.filter(wire => ![wire.from,wire.to].some(isScreenEndpoint));
+  const paths = carriers.map((wire) => [wireEndpointE4Anchor(document, wire.from)!.position,
     ...wire.e4Route, wireEndpointE4Anchor(document, wire.to)!.position]);
   let score = paths.reduce((sum, points) => sum + polylineLength(points) + points.slice(1, -1)
     .filter((point, index) => (points[index]!.x === point.x) !== (point.x === points[index + 2]!.x)).length * 8, 0);
@@ -1491,8 +1492,8 @@ function e4RoutingScore(document: HarnessDesignDocument): number {
       if (horizontal === (b0.y === b1.y)) continue;
       const point = horizontal ? { x: b0.x, y: a0.y } : { x: a0.x, y: b0.y };
       if (pointOnOrthogonalSegment(point, a0, a1) && pointOnOrthogonalSegment(point, b0, b1) &&
-          !document.junctions.some((junction) => junction.wireIds.includes(document.wires[i]!.id) &&
-            junction.wireIds.includes(document.wires[j]!.id) && pointsMatch(point, junction.position))) {
+          !document.junctions.some((junction) => junction.wireIds.includes(carriers[i]!.id) &&
+            junction.wireIds.includes(carriers[j]!.id) && pointsMatch(point, junction.position))) {
         crossings.add(`${point.x}:${point.y}`);
       }
     }
@@ -1675,7 +1676,6 @@ function createE4RoutingRequest(
   };
   const relatedScreenIds = new Set([
     ...[wire.from, wire.to].flatMap((endpoint) => isScreenEndpoint(endpoint) ? [endpoint.screenId] : []),
-    ...document.screens.filter((screen) => screen.wireIds.includes(wireId)).map((screen) => screen.id),
   ]);
   const screenRelatedWireIds = new Set([
     ...document.screens.filter((screen) => relatedScreenIds.has(screen.id)).flatMap((screen) => screen.wireIds),
@@ -1703,6 +1703,9 @@ function createE4RoutingRequest(
     occupiedRoutes: [
       ...document.wires.flatMap((candidate) => {
       if (excludedWireIds.has(candidate.id)) return [];
+      // Shield leads follow the finished carrier routes. They must never push
+      // those routes around, while carriers still reserve space for each other.
+      if (relatedScreenIds.size === 0 && [candidate.from,candidate.to].some(isScreenEndpoint)) return [];
       if (screenRelatedWireIds.has(candidate.id)) return [];
       const points = fullWirePoints(candidate);
       const allowedTouchPoints = document.junctions

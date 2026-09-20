@@ -1,3 +1,4 @@
+import { screenCrossSections } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology, type PhysicalTopology } from "./physical-topology";
@@ -308,6 +309,7 @@ export type WireCrossingStyle = "none" | "bridge";
 export type E4RouteLeadDirection = "left" | "right" | "up" | "down" | null;
 
 export interface E4RouteAnchor {
+  readonly leadLength?: number;
   readonly position: Point;
   readonly leadDirection: E4RouteLeadDirection;
 }
@@ -814,6 +816,7 @@ function wireEndpointE4AnchorInternal(
     );
     return geometry ? {
       position: geometry.connectionPoint,
+      leadLength: 8,
       leadDirection: geometry.orientation === "horizontal"
         ? geometry.terminalSide === "above" ? "up" : "down"
         : geometry.terminalSide === "above" ? "left" : "right",
@@ -828,26 +831,6 @@ function wireEndpointE4AnchorInternal(
     leadDirection: materialized?.direction ??
       (connector.schematic.orientation === "contacts-left" ? "left" : "right"),
   } : null;
-}
-
-interface ScreenRouteSpan {
-  readonly orientation: "horizontal" | "vertical";
-  readonly start: number;
-  readonly end: number;
-  readonly crossMinimum: number;
-  readonly crossMaximum: number;
-  readonly routeIndex: number;
-  readonly routeSignature: string;
-  readonly firstWireDirection: 1 | -1;
-}
-
-interface ScreenRouteSegment {
-  readonly orientation: "horizontal" | "vertical";
-  readonly start: number;
-  readonly end: number;
-  readonly cross: number;
-  readonly routeIndex: number;
-  readonly direction: 1 | -1;
 }
 
 export interface WireScreenConnectionGeometry {
@@ -876,90 +859,17 @@ export function wireScreenConnectionGeometry(
   const screen = document.screens.find((item) => item.id === screenId);
   if (!screen) return null;
   const nextResolving = new Set([...resolvingScreenIds, screenId]);
-  const segmentLists: ScreenRouteSegment[][] = screen.wireIds.map((wireId): ScreenRouteSegment[] => {
-    const wire = document.wires.find((item) => item.id === wireId);
-    if (!wire) return [];
-    const start = wireEndpointE4AnchorInternal(document, wire.from, nextResolving)?.position;
-    const end = wireEndpointE4AnchorInternal(document, wire.to, nextResolving)?.position;
-    if (!start || !end) return [];
-    const points = [start, ...wire.e4Route, end];
-    const segments: ScreenRouteSegment[] = [];
-    points.slice(1).forEach((current, index) => {
-      const previous = points[index]!;
-      if (previous.y === current.y && previous.x !== current.x) segments.push({
-        orientation: "horizontal",
-        start: Math.min(previous.x, current.x),
-        end: Math.max(previous.x, current.x),
-        cross: previous.y,
-        routeIndex: index,
-        direction: current.x >= previous.x ? 1 : -1,
-      });
-      else if (previous.x === current.x && previous.y !== current.y) segments.push({
-        orientation: "vertical",
-        start: Math.min(previous.y, current.y),
-        end: Math.max(previous.y, current.y),
-        cross: previous.x,
-        routeIndex: index,
-        direction: current.y >= previous.y ? 1 : -1,
-      });
-    });
-    return segments;
-  });
-  if (segmentLists.length === 0 || segmentLists.some((segments) => segments.length === 0)) return null;
-
-  let spans: ScreenRouteSpan[] = [];
-  const aligned = segmentLists.every((segments) => segments.length === segmentLists[0]!.length &&
-    segments.every((segment, index) => segment.orientation === segmentLists[0]![index]!.orientation));
-  if (aligned) for (let index = 0; index < segmentLists[0]!.length; index += 1) {
-    const selected = segmentLists.map((segments) => segments[index]!);
-    if (selected.some((segment) => segment.orientation !== selected[0]!.orientation)) continue;
-    const start = Math.max(...selected.map((segment) => segment.start));
-    const end = Math.min(...selected.map((segment) => segment.end));
-    if (end > start) spans.push({
-      orientation: selected[0]!.orientation,
-      start,
-      end,
-      crossMinimum: Math.min(...selected.map((segment) => segment.cross)),
-      crossMaximum: Math.max(...selected.map((segment) => segment.cross)),
-      routeIndex: selected[0]!.routeIndex,
-      routeSignature: selected.map((segment) => segment.routeIndex).join(":"),
-      firstWireDirection: selected[0]!.direction,
-    });
-  }
-  if (spans.length === 0) {
-    const seen = new Set(spans.map((span) => `${span.orientation}:${span.routeSignature}`));
-    for (const orientation of ["horizontal", "vertical"] as const) {
-      const candidates = [...new Set(segmentLists.flatMap((segments) => segments
-        .filter((segment) => segment.orientation === orientation)
-        .map((segment) => segment.start)))].sort((left, right) => left - right);
-      for (const start of candidates) {
-        const selected = segmentLists.map((segments) => segments
-          .filter((segment) => segment.orientation === orientation && segment.start <= start && segment.end > start)
-          .sort((left, right) => right.end - left.end || left.routeIndex - right.routeIndex)[0]);
-        if (selected.some((segment) => segment === undefined)) continue;
-        const end = Math.min(...selected.map((segment) => segment!.end));
-        if (end <= start) continue;
-        const key = `${orientation}:${selected.map((segment) => segment!.routeIndex).join(":")}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        spans.push({
-          orientation,
-          start,
-          end,
-          crossMinimum: Math.min(...selected.map((segment) => segment!.cross)),
-          crossMaximum: Math.max(...selected.map((segment) => segment!.cross)),
-          routeIndex: selected[0]!.routeIndex,
-          routeSignature: selected.map((segment) => segment!.routeIndex).join(":"),
-          firstWireDirection: selected[0]!.direction,
-        });
-      }
-    }
-  }
+  let spans = screenCrossSections(screen.wireIds.map(wireId => {
+    const wire = document.wires.find(item => item.id === wireId);
+    const start = wire && wireEndpointE4AnchorInternal(document, wire.from, nextResolving)?.position;
+    const end = wire && wireEndpointE4AnchorInternal(document, wire.to, nextResolving)?.position;
+    return {id:wireId, points:wire && start && end ? [start,...wire.e4Route,end] : []};
+  }));
   spans = clearDecorationSpans(spans, document.connectors.map(connector => ({
     ...connector.positions.e4, ...connectorE4TableGeometry(connector),
   })), e4ScreenAlongSize / 2, span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
   if (spans.length === 0) return null;
-  spans.sort((left, right) => left.routeIndex - right.routeIndex || left.start - right.start);
+  spans.sort((left, right) => left.firstWireDirection * (left.start - right.start));
   const pathLength = spans.reduce((sum, span) => sum + span.end - span.start, 0);
   const requestedDistance = pathLength * Math.max(0, Math.min(1, screen.position));
   let accumulated = 0;
@@ -1057,6 +967,7 @@ export function createOrthogonalE4Route(
 }
 
 function validateLead(anchor: E4RouteAnchor, adjacent: Point, minimumLead: number): void {
+  minimumLead = Math.min(minimumLead, anchor.leadLength ?? minimumLead);
   if (anchor.leadDirection === null) return;
   const horizontal = anchor.leadDirection === "left" || anchor.leadDirection === "right";
   const distance = anchor.leadDirection === "left"
@@ -1073,6 +984,7 @@ function validateLead(anchor: E4RouteAnchor, adjacent: Point, minimumLead: numbe
 }
 
 function leadPoint(anchor: E4RouteAnchor, minimumLead: number): Point {
+  minimumLead = Math.min(minimumLead, anchor.leadLength ?? minimumLead);
   if (anchor.leadDirection === "left") return { x: anchor.position.x - minimumLead, y: anchor.position.y };
   if (anchor.leadDirection === "right") return { x: anchor.position.x + minimumLead, y: anchor.position.y };
   if (anchor.leadDirection === "up") return { x: anchor.position.x, y: anchor.position.y - minimumLead };

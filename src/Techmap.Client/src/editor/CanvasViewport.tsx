@@ -1,3 +1,4 @@
+import { screenCrossSections } from "./e4-screen-spans";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
 import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
@@ -794,23 +795,14 @@ export function getE4ScreenLayout(
   screen: E4ScreenOverlay,
   objects: readonly EditorSceneObject[],
 ): E4ScreenLayout | null {
-  const alignedSpans = findE4AlignedParallelSpans(objects, screen.wireIds);
-  const allCommonSpans = findE4AllCommonParallelSpans(objects, screen.wireIds);
-  const fallbackSpan = findE4CommonParallelSpan(objects, screen.wireIds);
-  const candidates = alignedSpans.length > 0
-    ? alignedSpans
-    : allCommonSpans.length > 0
-      ? allCommonSpans
-      : fallbackSpan ? [fallbackSpan] : [];
+  const candidates = screenCrossSections(screen.wireIds.map(id => {
+    const wire=objects.find(object=>object.id===id && object.kind==="wire");
+    return {id,points:wire ? getE4WireRoute(wire) : []};
+  }));
   const spans = clearDecorationSpans(candidates, objects.filter(object => object.kind === "connector"), e4ScreenAlongSize / 2,
     span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
   if (spans.length === 0) return null;
-  const firstWire = objects.find((object) => object.id === screen.wireIds[0] && object.kind === "wire");
-  const orderedSpans = [...spans].sort((left, right) => {
-    const leftIndex = firstWire ? left.segmentByWireId[firstWire.id]?.index ?? Number.MAX_SAFE_INTEGER : 0;
-    const rightIndex = firstWire ? right.segmentByWireId[firstWire.id]?.index ?? Number.MAX_SAFE_INTEGER : 0;
-    return leftIndex - rightIndex || left.start - right.start;
-  });
+  const orderedSpans = [...spans].sort((a,b)=>a.firstWireDirection*(a.start-b.start));
   const pathLength = orderedSpans.reduce((sum, item) => sum + (item.end - item.start), 0);
   const requestedDistance = pathLength * Math.max(0, Math.min(1, screen.position));
   let distance = 0;
@@ -887,97 +879,6 @@ export function hitTestE4DifferentialPair(
  * bundle. If routes do not have a compatible segment sequence the caller
  * falls back to the longest single span for backwards compatibility.
  */
-function findE4AlignedParallelSpans(
-  objects: readonly EditorSceneObject[],
-  wireIds: readonly string[],
-): readonly E4ParallelSpan[] {
-  const wires = wireIds.map((wireId) => objects.find((object) => object.id === wireId && object.kind === "wire"));
-  if (wires.length === 0 || wires.some((wire) => wire === undefined)) return [];
-  const segmentLists = wires.map((wire) => e4WireSegments(getE4WireRoute(wire!)));
-  if (segmentLists.some((segments) => segments.length !== segmentLists[0]!.length)) return [];
-  const count = Math.min(...segmentLists.map((segments) => segments.length));
-  const result: E4ParallelSpan[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const selected = segmentLists.map((segments) => segments[index]!);
-    if (selected.some((segment) => segment.orientation !== selected[0]!.orientation)) return [];
-    const orientation = selected[0]!.orientation;
-    const starts = selected.map((segment) => orientation === "horizontal"
-      ? Math.min(segment.start.x, segment.end.x)
-      : Math.min(segment.start.y, segment.end.y));
-    const ends = selected.map((segment) => orientation === "horizontal"
-      ? Math.max(segment.start.x, segment.end.x)
-      : Math.max(segment.start.y, segment.end.y));
-    const start = Math.max(...starts);
-    const end = Math.min(...ends);
-    if (end <= start) continue;
-    const crosses = selected.map((segment) => orientation === "horizontal" ? segment.start.y : segment.start.x);
-    result.push({
-      orientation,
-      start,
-      end,
-      crossMinimum: Math.min(...crosses),
-      crossMaximum: Math.max(...crosses),
-      firstWireDirection: segmentAxisDirection(selected[0]!, orientation),
-      segmentByWireId: Object.fromEntries(wireIds.map((wireId, wireIndex) => [wireId, selected[wireIndex]!])),
-    });
-  }
-  return result;
-}
-
-/**
- * Finds every usable common span when selected routes no longer have the same
- * number of bends. This keeps the screen slider usable after automatic
- * rerouting instead of locking it to the single longest segment.
- */
-function findE4AllCommonParallelSpans(
-  objects: readonly EditorSceneObject[],
-  wireIds: readonly string[],
-): readonly E4ParallelSpan[] {
-  const wires = wireIds.map((wireId) => objects.find((object) => object.id === wireId && object.kind === "wire"));
-  if (wires.length === 0 || wires.some((wire) => wire === undefined)) return [];
-  const result: E4ParallelSpan[] = [];
-  const seen = new Set<string>();
-  for (const orientation of ["horizontal", "vertical"] as const) {
-    const segmentsByWire = wires.map((wire) => e4WireSegments(getE4WireRoute(wire!))
-      .flatMap((segment, routeIndex) => segment.orientation === orientation ? [{
-        segment,
-        routeIndex,
-        start: orientation === "horizontal"
-          ? Math.min(segment.start.x, segment.end.x)
-          : Math.min(segment.start.y, segment.end.y),
-        end: orientation === "horizontal"
-          ? Math.max(segment.start.x, segment.end.x)
-          : Math.max(segment.start.y, segment.end.y),
-      }] : []));
-    if (segmentsByWire.some((segments) => segments.length === 0)) continue;
-    const candidateStarts = [...new Set(segmentsByWire.flatMap((segments) => segments.map((item) => item.start)))]
-      .sort((left, right) => left - right);
-    for (const start of candidateStarts) {
-      const selected = segmentsByWire.map((segments) => segments
-        .filter((item) => item.start <= start && item.end > start)
-        .sort((left, right) => right.end - left.end || left.routeIndex - right.routeIndex)[0]);
-      if (selected.some((item) => item === undefined)) continue;
-      const end = Math.min(...selected.map((item) => item!.end));
-      if (end <= start) continue;
-      const signature = selected.map((item) => item!.routeIndex).join(":");
-      const key = `${orientation}:${signature}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const crosses = selected.map((item) => orientation === "horizontal" ? item!.segment.start.y : item!.segment.start.x);
-      result.push({
-        orientation,
-        start,
-        end,
-        crossMinimum: Math.min(...crosses),
-        crossMaximum: Math.max(...crosses),
-        firstWireDirection: segmentAxisDirection(selected[0]!.segment, orientation),
-        segmentByWireId: Object.fromEntries(wireIds.map((wireId, index) => [wireId, selected[index]!.segment])),
-      });
-    }
-  }
-  return result;
-}
-
 function getE4ScreenPositionForPoint(layout: E4ScreenLayout, point: EditorPoint): number {
   let accumulated = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -986,9 +887,8 @@ function getE4ScreenPositionForPoint(layout: E4ScreenLayout, point: EditorPoint)
     const minimum = span.start;
     const maximum = span.end;
     const axis = span.orientation === "horizontal" ? point.x : point.y;
-    const cross = span.orientation === "horizontal" ? point.y : point.x;
     const along = Math.max(minimum, Math.min(maximum, axis));
-    const distance = Math.hypot(axis - along, cross - (span.crossMinimum + span.crossMaximum) / 2);
+    const distance = Math.abs(axis - along);
     if (distance < bestDistance) {
       bestDistance = distance;
       bestAlong = accumulated + (span.firstWireDirection === 1 ? along - minimum : maximum - along);
@@ -2984,8 +2884,9 @@ export function CanvasViewport({
         }
       }
       if (view === "e4") {
+        const screen = hitTestE4Screen(overlays.screens, objects, worldPoint, camera.zoom, layers);
         const endpoint = hitTestE4ScreenConnection(overlays.screens, objects, worldPoint, camera.zoom, layers) ??
-          hitTestConnectorContact(objects, layers, worldPoint, camera.zoom, view);
+          (screen ? null : hitTestConnectorContact(objects, layers, worldPoint, camera.zoom, view));
         if (endpoint && onWireToolRequest) {
           setWireStart(endpoint);
           if ("screenId" in endpoint) {
@@ -2997,7 +2898,6 @@ export function CanvasViewport({
           onWireToolRequest();
           return;
         }
-        const screen = hitTestE4Screen(overlays.screens, objects, worldPoint, camera.zoom, layers);
         if (screen) {
           selectLinkedE4Group(screen.wireIds);
           if (onE4ScreenPositionChange) {

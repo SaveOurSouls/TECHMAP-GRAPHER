@@ -73,6 +73,45 @@ function templateConnector(): ConnectorInstance {
 }
 
 describe("shared harness editor model", () => {
+  it("covers staggered bends from the first to the last contact span with matching drawn and electrical ports",()=>{
+    const base=connectionDocument();
+    const wires=base.wires.map((wire,index)=>({...wire,e4Route:index===0
+      ? [{x:520,y:64},{x:520,y:40},{x:850,y:40},{x:850,y:64},{x:976,y:64}]
+      : [{x:650,y:88},{x:650,y:120},{x:920,y:120},{x:920,y:88},{x:976,y:88}]}));
+    let previous=-Infinity;
+    for(let i=0;i<=100;i++){
+      const document={...base,wires,screens:[{id:"screen",wireIds:["w1","w2"],position:i/100,width:46,label:"SH",terminalSide:"both" as const}]};
+      const geometry=wireScreenConnectionGeometry(document,"screen")!;
+      const painted=getE4ScreenLayout(document.screens[0]!,designToScene(document,"e4"))!;
+      expect(geometry.orientation).toBe("horizontal");
+      expect(geometry.center.x).toBeGreaterThan(previous);
+      expect(painted.center).toEqual(geometry.center);
+      expect(painted.terminals).toEqual(geometry.terminals);
+      if(i===0)expect(geometry.center.x).toBeLessThan(520);
+      if(i===100)expect(geometry.center.x).toBeGreaterThan(920);
+      previous=geometry.center.x;
+    }
+  });
+
+  it("routes carriers identically with and without a shield lead, and allows bends to a component contact",()=>{
+    const base=connectionDocument();
+    const command={type:"reroute-e4-wires" as const,wireIds:["w1","w2"]};
+    const plain=applyEditorCommand(base,command);
+    let shielded=applyEditorCommand(base,{type:"create-screen",screen:{id:"shield",wireIds:["w1","w2"],position:.1,width:46,label:"SH",terminalSide:"below"}});
+    shielded=applyEditorCommand(shielded,{type:"add-wire",wire:createWire("lead",createScreenEndpoint("shield","below"),{connectorId:"x1",contactId:"x1:contact:3"})});
+    const lead=shielded.wires.find(w=>w.id==="lead")!;
+    expect(lead.e4Route.length).toBeGreaterThan(0);
+    expect(()=>validateOrthogonalE4Route(wireEndpointE4Anchor(shielded,lead.from)!,lead.e4Route,wireEndpointE4Anchor(shielded,lead.to)!)).not.toThrow();
+    shielded=applyEditorCommand(shielded,command);
+    expect(shielded.wires.filter(w=>w.id!=="lead").map(w=>w.e4Route)).toEqual(plain.wires.map(w=>w.e4Route));
+    const carriers=shielded.wires.filter(w=>w.id!=="lead");
+    for(const position of [0,.5,1]){
+      shielded=applyEditorCommand(shielded,{type:"update-screen",screenId:"shield",position});
+      expect(shielded.wires.filter(w=>w.id!=="lead")).toEqual(carriers);
+      expect(e4RoutingIssues(shielded)).toEqual([]);
+      expect(()=>parseHarnessDesignDocument(JSON.parse(JSON.stringify(shielded)))).not.toThrow();
+    }
+  });
   it("refreshes compatible terminals without changing the pinned template identity", () => {
     const connector = templateConnector();
     let document = applyEditorCommand(createEmptyHarnessDesign(), { type: "add-connector", connector });

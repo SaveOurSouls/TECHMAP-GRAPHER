@@ -3,6 +3,8 @@ import type { Point } from "./model";
 export type E4RouteDirection = "left" | "right" | "up" | "down" | null;
 
 export interface E4RouterAnchor {
+  /** A small symbol port may use a shorter lead than a component contact. */
+  readonly leadLength?: number;
   readonly position: Point;
   readonly leadDirection: E4RouteDirection;
   /** The obstacle containing this contact. Its outward lead may leave this obstacle. */
@@ -295,6 +297,7 @@ function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptio
 
 function validateAnchor(anchor: E4RouterAnchor, label: string): void {
   requirePoint(anchor.position, label);
+  if(anchor.leadLength!==undefined&&(!Number.isFinite(anchor.leadLength)||anchor.leadLength<0))throw new Error(`${label}: неверная длина выхода.`);
   if (!["left", "right", "up", "down", null].includes(anchor.leadDirection)) {
     throw new Error(`${label} имеет неизвестное направление выхода.`);
   }
@@ -310,6 +313,7 @@ function requireFinite(value: number, label: string): void {
 }
 
 function leadPoint(anchor: E4RouterAnchor, length: number, obstacles: readonly Rect[]): Point {
+  length=Math.min(length,anchor.leadLength??length);
   const ownObstacle = anchor.obstacleId === undefined
     ? undefined
     : obstacles.find((obstacle) => obstacle.id === anchor.obstacleId);
@@ -691,6 +695,7 @@ function clamp(value: number, first: number, second: number): number {
 }
 
 function validateRouteLead(anchor: E4RouterAnchor, segment: Segment, isStart: boolean, length: number): void {
+  length=Math.min(length,anchor.leadLength??length);
   if (anchor.leadDirection === null) return;
   const adjacent = isStart ? segment.end : segment.start;
   const deltaX = adjacent.x - anchor.position.x;

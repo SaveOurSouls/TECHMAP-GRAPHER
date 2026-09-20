@@ -960,7 +960,7 @@ describe("harness editor workspace", () => {
     expect(overlays.screens).toEqual([]);
   });
 
-  it("keeps screen position normalized while following aligned spans through a bend", () => {
+  it("keeps the screen upright and covers all horizontal sections through staggered bends", () => {
     const routed: readonly EditorSceneObject[] = [
       {
         id: "route-a", layerId: "top", kind: "wire", label: "A",
@@ -975,13 +975,13 @@ describe("harness editor workspace", () => {
     ];
     const base = { id: "screen", wireIds: ["route-a", "route-b"], label: "SH", width: 18 };
     expect(getE4ScreenLayout({ ...base, position: 0.1 }, routed)).toMatchObject({
-      center: { x: 26, y: 10 }, orientation: "horizontal", pathLength: 260,
+      center: { x: 20, y: 10 }, orientation: "horizontal", pathLength: 200,
     });
     expect(getE4ScreenLayout({ ...base, position: 0.5 }, routed)).toMatchObject({
-      center: { x: 90, y: 70 }, orientation: "vertical", pathLength: 260,
+      center: { x: 100, y: 60 }, orientation: "horizontal", pathLength: 200,
     });
     expect(getE4ScreenLayout({ ...base, position: 0.9 }, routed)).toMatchObject({
-      center: { x: 174, y: 110 }, orientation: "horizontal", pathLength: 260,
+      center: { x: 180, y: 110 }, orientation: "horizontal", pathLength: 200,
     });
   });
 
@@ -1000,13 +1000,13 @@ describe("harness editor workspace", () => {
     ];
     const base = { id: "screen", wireIds: ["route-a", "route-b"], label: "SH", width: 18 };
     expect(getE4ScreenLayout({ ...base, position: 0.1 }, routed)).toMatchObject({
-      center: { x: 174, y: 110 }, orientation: "horizontal", pathLength: 260,
+      center: { x: 180, y: 110 }, orientation: "horizontal", pathLength: 200,
     });
     expect(getE4ScreenLayout({ ...base, position: 0.5 }, routed)).toMatchObject({
-      center: { x: 90, y: 70 }, orientation: "vertical", pathLength: 260,
+      center: { x: 100, y: 110 }, orientation: "horizontal", pathLength: 200,
     });
     expect(getE4ScreenLayout({ ...base, position: 0.9 }, routed)).toMatchObject({
-      center: { x: 26, y: 10 }, orientation: "horizontal", pathLength: 260,
+      center: { x: 20, y: 10 }, orientation: "horizontal", pathLength: 200,
     });
   });
 

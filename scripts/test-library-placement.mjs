@@ -359,6 +359,37 @@ try {
     routingChecked = true;
   }
   let cableStripChecked = false;
+  let screenSpansHarnessId, screenSpansExpected;
+  if(process.argv.includes('--check-screen-spans')) {
+    const {applyEditorCommand,createConnector,createWire,e4RoutingIssues}=await module('editor/commands.ts');
+    const {createEmptyHarnessDesign,createScreenEndpoint,wireScreenConnectionGeometry,wireEndpointE4Anchor,validateOrthogonalE4Route}=await module('editor/model.ts');
+    project=(await projects.addHarness(project.projectId,{commandId:crypto.randomUUID(),expectedRevision:project.revision},{designation:'SCREEN-SPANS',quantity:1})).project;
+    screenSpansHarnessId=project.harnesses.find(h=>h.designation==='SCREEN-SPANS').harnessId;
+    let scene=createEmptyHarnessDesign();
+    for(const [id,x] of [['left',0],['right',1000]])scene=applyEditorCommand(scene,{type:'add-connector',connector:createConnector(id,id,4,{x,y:0})});
+    scene=applyEditorCommand(scene,{type:'flip-connector-orientation',connectorId:'right'});
+    for(let i=1;i<=2;i++)scene=applyEditorCommand(scene,{type:'add-wire',wire:createWire('carrier'+i,{connectorId:'left',contactId:`left:contact:${i}`},{connectorId:'right',contactId:`right:contact:${i}`})});
+    scene={...scene,wires:scene.wires.map((w,i)=>({...w,e4RouteMode:'manual',e4Route:i===0
+      ? [{x:520,y:64},{x:520,y:40},{x:850,y:40},{x:850,y:64},{x:976,y:64}]
+      : [{x:650,y:88},{x:650,y:120},{x:920,y:120},{x:920,y:88},{x:976,y:88}]}))};
+    scene=applyEditorCommand(scene,{type:'create-screen',screen:{id:'shield',wireIds:['carrier1','carrier2'],position:0,width:46,label:'SH',terminalSide:'below'}});
+    scene=applyEditorCommand(scene,{type:'add-wire',wire:createWire('screen-lead',createScreenEndpoint('shield','below'),{connectorId:'left',contactId:'left:contact:3'})});
+    const carriers=scene.wires.filter(w=>w.id!=='screen-lead');
+    let previous=-Infinity,revision=0;
+    for(const position of [0,.25,.5,.75,1]) {
+      scene=applyEditorCommand(scene,{type:'update-screen',screenId:'shield',position});
+      const geometry=wireScreenConnectionGeometry(scene,'shield');
+      assert.equal(geometry.orientation,'horizontal');assert.ok(geometry.center.x>previous);previous=geometry.center.x;
+      assert.deepEqual(scene.wires.filter(w=>w.id!=='screen-lead'),carriers);
+      const lead=scene.wires.find(w=>w.id==='screen-lead');
+      assert.ok(lead.e4Route.length>0);
+      validateOrthogonalE4Route(wireEndpointE4Anchor(scene,lead.from),lead.e4Route,wireEndpointE4Anchor(scene,lead.to));
+      assert.equal(e4RoutingIssues(scene).length,0);
+      const saved=await designs.save(project.projectId,screenSpansHarnessId,revision,scene);revision=saved.revision;
+      const read=await designs.get(project.projectId,screenSpansHarnessId);assert.deepEqual(read.content.screens,scene.screens);
+    }
+    screenSpansExpected=JSON.parse(JSON.stringify((await designs.get(project.projectId,screenSpansHarnessId)).content));
+  }
   let cableHarnessId;
   let expectedCable;
   if (process.argv.includes('--check-cable-strip')) {
@@ -554,6 +585,11 @@ try {
       assert.equal(response.status,200);
       assert.deepEqual((await response.json()).content.connectors[0].drawingPlacements,drawingPlacementExpected);
     }
+    if(screenSpansExpected && !deleted) {
+      const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${screenSpansHarnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).content,screenSpansExpected);
+    }
     if (routingChecked && !deleted) {
       const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${routingHarnessId}/design`, restartedUrl), {
         headers: { Cookie: restartedCookie },
@@ -580,7 +616,7 @@ try {
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
-  const report = { status: 'ok', drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
+  const report = { status: 'ok', screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
     revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };

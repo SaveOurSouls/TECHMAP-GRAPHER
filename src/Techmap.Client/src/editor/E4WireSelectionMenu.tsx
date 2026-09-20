@@ -218,7 +218,7 @@ export function E4WireSelectionMenu({
                 </button>
               ))}
             </div>
-            <label htmlFor="e4-screen-position">Положение экрана</label>
+            <label htmlFor="e4-screen-position">Положение экрана <InfoHint>Экран перемещается вдоль всего доступного диапазона проводов с отступом от компонентов. Высота следует проводам в выбранном сечении. Вывод к контакту компонента — обычный ортогональный провод; подключение к другому проводу — прямой участок.</InfoHint></label>
             <output htmlFor="e4-screen-position">{clampScreenPosition(screen.positionPercent)}%</output>
             <input
               id="e4-screen-position"
@@ -228,7 +228,7 @@ export function E4WireSelectionMenu({
               step="1"
               value={clampScreenPosition(screen.positionPercent)}
               disabled={disabled}
-              aria-label="Положение экрана вдоль выбранного участка"
+              aria-label="Положение экрана вдоль проводов"
               onChange={(event) => onScreenChange({
                 ...screen,
                 positionPercent: clampScreenPosition(Number(event.target.value)),
