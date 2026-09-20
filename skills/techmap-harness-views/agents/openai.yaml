@@ -1,0 +1,4 @@
+interface:
+  display_name: "TECHMAP: связанные виды жгута"
+  short_description: "Чертёж, Э4, спецификация, резка и подсветка связей"
+  default_prompt: "Используй $techmap-harness-views для разработки связанной подсветки проводов между чертежом и таблицами TECHMAP-GRAPHER."
