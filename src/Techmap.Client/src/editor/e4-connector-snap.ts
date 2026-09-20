@@ -8,8 +8,10 @@ export interface E4ConnectorSnapTarget {
   readonly width: number;
   readonly height: number;
   readonly contactSide: "left" | "right";
-  /** First contact centre, in world coordinates. Empty tables have no row guide. */
+  /** Legacy first contact centre, in world coordinates. */
   readonly firstContactY?: number;
+  /** All contact row centres, in world coordinates. Empty tables have no row guide. */
+  readonly contactRowsY?: readonly number[];
 }
 
 export interface E4ConnectorSnapGuides {
@@ -34,10 +36,11 @@ export function snapE4ConnectorPosition(
   const contactSideX = (table: E4ConnectorSnapTarget, x: number) =>
     x + (table.contactSide === "right" ? table.width : 0);
   const proposedContactX = contactSideX(moving, position.x);
-  const proposedFirstContactY = moving.firstContactY === undefined
-    ? undefined : position.y + moving.firstContactY - moving.y;
+  // Only the first visible row of the dragged table is the moving reference.
+  const firstRow = moving.contactRowsY?.[0] ?? moving.firstContactY;
+  const proposedRows = firstRow === undefined ? [] : [position.y + firstRow - moving.y];
   let closestX: E4ConnectorSnapTarget | undefined;
-  let closestY: E4ConnectorSnapTarget | undefined;
+  let closestY: { readonly target: E4ConnectorSnapTarget; readonly targetY: number; readonly movingY: number } | undefined;
   let xDistance = threshold;
   let yDistance = threshold;
   for (const target of targets) {
@@ -47,18 +50,21 @@ export function snapE4ConnectorPosition(
       closestX = target;
       xDistance = horizontalDistance;
     }
-    if (proposedFirstContactY !== undefined && target.firstContactY !== undefined) {
-      const verticalDistance = Math.abs(target.firstContactY - proposedFirstContactY);
+    const targetRows = target.contactRowsY?.length ? target.contactRowsY
+      : target.firstContactY === undefined ? [] : [target.firstContactY];
+    for (const targetY of targetRows) for (const proposedY of proposedRows) {
+      const verticalDistance = Math.abs(targetY - proposedY);
       if (verticalDistance <= yDistance && (verticalDistance < yDistance || !closestY)) {
-        closestY = target;
+        closestY = { target, targetY, movingY: proposedY };
         yDistance = verticalDistance;
       }
     }
   }
   const snappedX = closestX
     ? position.x + contactSideX(closestX, closestX.x) - proposedContactX : position.x;
-  const snappedY = closestY && proposedFirstContactY !== undefined
-    ? position.y + closestY.firstContactY! - proposedFirstContactY : position.y;
+  const snappedY = closestY
+    ? position.y + closestY.targetY - closestY.movingY
+    : position.y;
   return {
     position: { x: snappedX, y: snappedY },
     guides: {
@@ -68,9 +74,9 @@ export function snapE4ConnectorPosition(
         toY: Math.max(snappedY + moving.height, closestX.y + closestX.height),
       } } : {}),
       ...(closestY ? { horizontal: {
-        y: closestY.firstContactY!,
-        fromX: Math.min(snappedX, closestY.x),
-        toX: Math.max(snappedX + moving.width, closestY.x + closestY.width),
+        y: closestY.targetY,
+        fromX: Math.min(snappedX, closestY.target.x),
+        toX: Math.max(snappedX + moving.width, closestY.target.x + closestY.target.width),
       } } : {}),
     },
   };

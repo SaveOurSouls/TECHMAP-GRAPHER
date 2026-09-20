@@ -117,6 +117,8 @@ export interface ConnectorCustomField {
 }
 
 export interface ConnectorSchematicPresentation {
+  /** Instance-only E4 row order. Contact identity and drawing geometry stay canonical. */
+  readonly rowOrder?: readonly string[];
   readonly showName?: boolean;
   readonly orientation: ConnectorSchematicOrientation;
   readonly baseColumns: readonly ConnectorBaseColumn[];
@@ -552,6 +554,16 @@ export function createDefaultConnectorBaseColumns(): readonly ConnectorBaseColum
   return connectorBaseColumnKeys.map((key) => ({ key, visible: true }));
 }
 
+export function connectorE4Contacts(connector: ConnectorInstance): readonly ConnectorContact[] {
+  const contacts = new Map(connector.contacts.map(contact => [contact.id, contact]));
+  const ordered = (connector.schematic.rowOrder ?? []).flatMap(id => {
+    const contact = contacts.get(id);
+    contacts.delete(id);
+    return contact ? [contact] : [];
+  });
+  return [...ordered, ...contacts.values()];
+}
+
 export function connectorE4TableGeometry(connector: ConnectorInstance): ConnectorE4TableGeometry {
   const baseColumns: ConnectorE4TableColumn[] = connector.schematic.baseColumns
     .filter((column) => column.visible)
@@ -629,7 +641,7 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
   const height = connectorE4TableMetrics.titleHeight + connectorE4TableMetrics.headerHeight +
     connector.contacts.length * connectorE4TableMetrics.rowHeight + connectorE4TableMetrics.footerHeight;
   const contactX = contactsFirst ? 0 : width;
-  const contactPoints = Object.fromEntries(connector.contacts.map((contact, index) => [
+  const contactPoints = Object.fromEntries(connectorE4Contacts(connector).map((contact, index) => [
     contact.id,
     {
       x: contactX,
@@ -1131,6 +1143,9 @@ function parseConnector(value: unknown): ConnectorInstance {
     libraryContact: contact.libraryContact ?? null,
   }));
   const schematic = parseConnectorSchematic(record.schematic);
+  if (schematic.rowOrder?.some(id => !contacts.some(contact => contact.id === id))) {
+    throw new Error("Порядок строк ссылается на отсутствующий контакт.");
+  }
   const customFieldIds = new Set(schematic.customFields.map((field) => field.id));
   for (const contact of contacts) {
     if (Object.keys(contact.customValues).some((fieldId) => !customFieldIds.has(fieldId))) {
@@ -1465,7 +1480,14 @@ export function parseConnectorSchematic(value: unknown): ConnectorSchematicPrese
     ? []
     : parseCustomFields(record.customFields);
   if (record.showName !== undefined && typeof record.showName !== "boolean") throw new Error("Видимость назначения задана неверно.");
-  return { orientation, baseColumns, customFields, ...(record.showName === undefined ? {} : { showName: record.showName as boolean }) };
+  if (record.rowOrder !== undefined && (!Array.isArray(record.rowOrder) ||
+      record.rowOrder.some(id => typeof id !== "string" || !id.trim()) ||
+      new Set(record.rowOrder).size !== record.rowOrder.length)) {
+    throw new Error("Порядок строк контактов задан неверно.");
+  }
+  return { orientation, baseColumns, customFields,
+    ...(record.rowOrder === undefined ? {} : { rowOrder: record.rowOrder as string[] }),
+    ...(record.showName === undefined ? {} : { showName: record.showName as boolean }) };
 }
 
 function parseBaseColumns(value: unknown): readonly ConnectorBaseColumn[] {

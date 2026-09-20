@@ -2606,6 +2606,7 @@ function e4ConnectorSnapTarget(object: EditorSceneObject): E4ConnectorSnapTarget
     height: layout.height,
     contactSide: layout.connectionSide,
     firstContactY: layout.contactPoints[0]?.y,
+    contactRowsY: layout.contactPoints.map(point => point.y),
   };
 }
 

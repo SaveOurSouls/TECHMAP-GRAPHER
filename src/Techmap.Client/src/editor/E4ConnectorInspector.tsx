@@ -8,6 +8,7 @@ import {
 import {
   connectorBaseColumnKeys,
   connectorContactName,
+  connectorE4Contacts,
   connectorE4TableGeometry,
   type ConnectorBaseColumnKey,
   type ConnectorContact,
@@ -393,6 +394,7 @@ export function E4ConnectorInspector({
       : isTemplate ? connector.libraryBinding.snapshot.code : connector.libraryCode ?? "FREE";
     const colorChoices = wireColors ?? connectorColorChoices(connector);
     const geometry = connectorE4TableGeometry(connector);
+    const rows = connectorE4Contacts(connector);
     const columns = geometry.columns.map((column) => column.kind === "base"
       ? { id: column.key, label: baseColumnLabels[column.key], width: column.width }
       : { id: `custom:${column.id}` as const, label: column.label, width: column.width });
@@ -472,7 +474,7 @@ export function E4ConnectorInspector({
                 </th>
               ))}
             </tr></thead>
-            <tbody>{connector.contacts.map((contact) => (
+            <tbody>{rows.map((contact, rowIndex) => (
               <tr key={contact.id}>
                 {columns.length === 0 ? <td className="e4cce-empty-column">&nbsp;</td> : columns.map((column) => {
                   const templateContact = isTemplate
@@ -597,6 +599,12 @@ export function E4ConnectorInspector({
                   const cell = column.id === "color" ? input
                     : canvasEditing ? input : <span className="e4cce-readonly-value">{(column.id === "terminal" ? terminalArticleLabel(value) : value) || " "}</span>;
                   return <td key={column.id} className={column.id === "number" && !templateAuthoring ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && !templateAuthoring && <span className="e4cce-row-actions">
+                    <button type="button" disabled={disabled || rowIndex === 0}
+                      aria-label={`Переместить контакт ${contact.number} вверх`} title="Строку вверх"
+                      onClick={() => onCommand({ type: "move-contact-row", connectorId: connector.id, contactId: contact.id, direction: -1 })}>↑</button>
+                    <button type="button" disabled={disabled || rowIndex === rows.length - 1}
+                      aria-label={`Переместить контакт ${contact.number} вниз`} title="Строку вниз"
+                      onClick={() => onCommand({ type: "move-contact-row", connectorId: connector.id, contactId: contact.id, direction: 1 })}>↓</button>
                     <button
                       type="button"
                       className={contact.connectionStatus === "not-connected" ? "active" : ""}
@@ -746,7 +754,7 @@ export function E4ConnectorInspector({
 
       <div className="e4ci-canvas-edit-note">
         <strong>Редактирование таблицы</strong>
-        <InfoHint>Двойной клик по таблице включает редактирование. Изменяйте значения контактов прямо в схеме Э4. Кнопки глаза в заголовках скрывают поле; вернуть его можно ниже.</InfoHint>
+        <InfoHint>Двойной клик по таблице включает редактирование. Стрелки рядом с номером перемещают строку целиком только в Э4; значения, номера контактов и соединения сохраняются. Ctrl+Z отменяет перестановку. Кнопки глаза в заголовках скрывают поле; вернуть его можно ниже.</InfoHint>
       </div>
 
       <details className="e4ci-column-settings" open>

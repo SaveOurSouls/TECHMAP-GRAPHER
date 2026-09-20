@@ -926,7 +926,7 @@ export function App({ config, session }: AppProps) {
                           }}
                         />
                         {activeHarnessTab==="route"&&<RouteDrawingsPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId}/>}
-                        <HarnessCutListPanel
+                        {activeHarnessTab === "drawing" && <HarnessCutListPanel
                           onReveal={objectId => {
                             setEditorReveal({projectId: selectedProject.projectId, harnessId: selectedHarness.harnessId, objectId});
                             setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, "drawing"));
@@ -935,7 +935,7 @@ export function App({ config, session }: AppProps) {
                           api={cutListApi}
                           projectId={selectedProject.projectId}
                           harnessId={selectedHarness.harnessId}
-                        />
+                        />}
                       </section>
                     ) : (
                       <div className="harness-detail-empty">

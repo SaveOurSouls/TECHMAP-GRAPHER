@@ -7,7 +7,8 @@ import type { HarnessDesignDocument } from "./model";
 import { buildLiveCutList } from "./live-cut-list";
 import type { resolveHarnessSelection } from "./harness-selection";
 
-export function HarnessRelationsPanel({ document, projectId, harnessId, quantity, related, wholeNet, onWholeNet, onReveal, onClear, unsaved, hiddenCount, revision, onCommand, onOpenCut }: {
+export function HarnessRelationsPanel({ document, projectId, harnessId, quantity, related, wholeNet, onWholeNet, onReveal, onClear, unsaved, hiddenCount, revision, onCommand, onOpenCut, showCut = false }: {
+  showCut?: boolean;
   onOpenCut?:()=>void;revision:number; onCommand:(command:EditorCommand)=>boolean;
   document: HarnessDesignDocument; projectId: string; harnessId: string; quantity: number;
   related: ReturnType<typeof resolveHarnessSelection>; wholeNet: boolean; onWholeNet: (value: boolean) => void;
@@ -25,11 +26,11 @@ export function HarnessRelationsPanel({ document, projectId, harnessId, quantity
     </div>
     {hiddenCount > 0 && <small role="status">На скрытых слоях: {hiddenCount}</small>}
     {related.unresolvedIds.length > 0 && <small role="status">Объект отсутствует в текущем документе.</small>}
-    {onOpenCut?<button type="button" className="ui-control" onClick={onOpenCut}>Схема резки / разделки</button>:<CutDiagramPanel document={document} quantity={quantity} revision={revision} unsaved={unsaved} relatedIds={related.rowIds} onReveal={onReveal} onCommand={onCommand}/>}
+    {showCut && <>{onOpenCut?<button type="button" className="ui-control" onClick={onOpenCut}>Схема резки / разделки</button>:<CutDiagramPanel document={document} quantity={quantity} revision={revision} unsaved={unsaved} relatedIds={related.rowIds} onReveal={onReveal} onCommand={onCommand}/>}
     <details><summary>Карта резки · {list.items.length}</summary>
       <div className="he-relations-actions"><label><input type="checkbox" checked={onlyRelated} onChange={e => setOnlyRelated(e.target.checked)} />Только связанные</label></div>
       <small role="status">{unsaved ? `Текущий документ · не сохранён · база r${revision}` : `Сохранённая ревизия r${revision}`}</small>
       <HarnessCutListTable cutList={displayed} onReveal={onReveal} highlightedIds={related.rowIds} />
-    </details>
+    </details></>}
   </section>;
 }

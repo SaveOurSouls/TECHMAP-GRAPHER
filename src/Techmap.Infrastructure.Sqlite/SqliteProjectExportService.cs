@@ -1107,6 +1107,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
         try {
             HarnessStripProfileValidator.Validate(design.Content);
             SqliteHarnessDesignDocumentStore.ValidateCableInstances(design.Content);
+            HarnessE4RowOrderValidator.Validate(design.Content);
         }
         catch (HarnessDesignDocumentException) { return false; }
         return true;

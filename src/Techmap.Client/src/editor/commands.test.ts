@@ -8,6 +8,7 @@ import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connec
 import { selectConnectorSeriesArticle } from "./connector-series";
 import {
   connectorContactPosition,
+  connectorE4Contacts,
   connectorE4TableGeometry,
   calculateWireCutLength,
   createJunctionEndpoint,
@@ -73,6 +74,44 @@ function templateConnector(): ConnectorInstance {
 }
 
 describe("shared harness editor model", () => {
+  it("reorders E4 rows without altering contacts, drawing anchors or wire identity; undo restores routes", () => {
+    const before = connectionDocument();
+    const connector = before.connectors[0]!;
+    const history = executeEditorCommand(createEditorHistory(before), {
+      type: "move-contact-row", connectorId: connector.id, contactId: connector.contacts[0]!.id, direction: 1,
+    });
+    const after = history.present;
+    const moved = after.connectors[0]!;
+    expect(moved.contacts).toEqual(connector.contacts);
+    expect(connectorE4Contacts(moved).map(c => c.number)).toEqual([2, 1, 3, 4]);
+    expect(after.wires.map(w => [w.id, w.from, w.to, w.lengthMm, w.drawingRoute])).toEqual(before.wires.map(w => [w.id, w.from, w.to, w.lengthMm, w.drawingRoute]));
+    for (const contact of connector.contacts) {
+      expect(connectorContactPosition(moved, contact.id, "drawing")).toEqual(connectorContactPosition(connector, contact.id, "drawing"));
+    }
+    expect(connectorContactPosition(moved, connector.contacts[0]!.id, "e4")!.y).toBe(connectorContactPosition(connector, connector.contacts[1]!.id, "e4")!.y);
+    expect(after.wires[0]!.e4Route).not.toEqual(before.wires[0]!.e4Route);
+    for (const wire of after.wires) {
+      expect(() => validateOrthogonalE4Route(wireEndpointE4Anchor(after, wire.from)!, wire.e4Route, wireEndpointE4Anchor(after, wire.to)!)).not.toThrow();
+    }
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(after))).connectors[0]!.schematic.rowOrder).toEqual(moved.schematic.rowOrder);
+    expect(undoEditorCommand(history).present).toEqual(before);
+    expect(redoEditorCommand(undoEditorCommand(history)).present).toEqual(after);
+    const unchanged = applyEditorCommand(after, { type: "move-contact-row", connectorId: moved.id, contactId: moved.contacts[1]!.id, direction: -1 });
+    expect(unchanged).toEqual(after);
+    const resolved = applyEditorCommand(after, { type: "move-contact-row", connectorId: moved.id, contactId: moved.contacts[0]!.id, direction: -1 });
+    expect(e4RoutingIssues(resolved)).toEqual([]);
+  });
+
+  it("drops retired row IDs and rejects duplicate or unknown persisted rows", () => {
+    let document: ReturnType<typeof createEmptyHarnessDesign> = { ...createEmptyHarnessDesign(), connectors: [createConnector("x", "X", 3, { x: 0, y: 0 })] };
+    document = applyEditorCommand(document, { type: "move-contact-row", connectorId: "x", contactId: "x:contact:1", direction: 1 });
+    document = applyEditorCommand(document, { type: "remove-contact", connectorId: "x", contactId: "x:contact:1" });
+    expect(document.connectors[0]!.schematic.rowOrder).toEqual(["x:contact:2", "x:contact:3"]);
+    expect(() => parseHarnessDesignDocument(document)).not.toThrow();
+    for (const rowOrder of [["missing"], ["x:contact:2", "x:contact:2"]]) {
+      expect(() => parseHarnessDesignDocument({ ...document, connectors: [{ ...document.connectors[0]!, schematic: { ...document.connectors[0]!.schematic, rowOrder } }] })).toThrow(/Порядок строк/);
+    }
+  });
   it("covers staggered bends from the first to the last contact span with matching drawn and electrical ports",()=>{
     const base=connectionDocument();
     const wires=base.wires.map((wire,index)=>({...wire,e4Route:index===0

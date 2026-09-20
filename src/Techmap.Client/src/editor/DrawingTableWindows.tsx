@@ -17,9 +17,9 @@ export function tableWindowStyle(table:DrawingTable,camera:EditorCamera):CSSProp
 export function resizeTableWindow(size:{width:number;height:number},dx:number,dy:number,dock?:DrawingTable["dock"]){
   return {width:Math.max(280,Math.min(4000,Math.round(size.width+(dock==="right"?-dx:dx)))),height:Math.max(160,Math.min(4000,Math.round(size.height+(dock==="bottom"?-dy:dy))))};
 }
-export function DrawingTableWindows(props:{document:HarnessDesignDocument;camera:EditorCamera;quantity:number;revision:number;unsaved:boolean;selectedIds:readonly string[];onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void}) {
+export function DrawingTableWindows(props:{view?:"e4"|"drawing";document:HarnessDesignDocument;camera:EditorCamera;quantity:number;revision:number;unsaved:boolean;selectedIds:readonly string[];onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void}) {
   const d=props.document.drawingDocuments??emptyDrawingDocuments();
-  return <>{d.tables.map(table=><TableWindow key={table.id} {...props} table={table}/>)}</>;
+  return <>{d.tables.filter(table=>props.view!=="e4"||table.kind==="connections").map(table=><TableWindow key={table.id} {...props} table={table}/>)}</>;
 }
 function TableWindow({table,camera,document,quantity,revision,unsaved,selectedIds,onChange,onCommand,onReveal}:Parameters<typeof DrawingTableWindows>[0]&{table:DrawingTable}) {
   const drag=useRef<{x:number;y:number}|null>(null);

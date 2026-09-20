@@ -528,7 +528,7 @@ export function HarnessEditorWorkspace({
           componentTemplateViewInstances={componentTemplateViewInstances}
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}
-          drawingWindows={view==="drawing"?drawingWindows?.(camera):undefined}
+          drawingWindows={drawingWindows?.(camera)}
           diagnosticOverlay={diagnosticOverlay}
           onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
           onCameraChange={setCamera}

@@ -16,7 +16,7 @@ import {
 import { builtInWireColors } from "./wire-reference-catalog";
 import { connectorE4TableGeometry, createEmptyHarnessDesign, type ConnectorInstance } from "./model";
 import { designToScene } from "./HarnessDesignEditor";
-import { getE4ConnectorLayout } from "./CanvasViewport";
+import { getE4ConnectorLayout, hitTestConnectorContact } from "./CanvasViewport";
 
 function openingTag(markup: string, ariaLabel: string): string {
   const marker = `aria-label="${ariaLabel}"`;
@@ -90,6 +90,27 @@ function templateConnector(reverseRuntimeContacts = false): ConnectorInstance {
 }
 
 describe("E4 connector inline editing", () => {
+  it("keeps pinned template contacts canonical while rendering and picking the reordered E4 rows", () => {
+    const connector = templateConnector();
+    const document = { ...createEmptyHarnessDesign(), connectors: [connector] };
+    const changed = applyEditorCommand(document, { type: "move-contact-row", connectorId: connector.id, contactId: connector.contacts[0]!.id, direction: 1 });
+    const moved = changed.connectors[0]!;
+    expect(moved.contacts).toEqual(connector.contacts);
+    expect(moved.libraryBinding).toEqual(connector.libraryBinding);
+    expect(() => parseHarnessDesignDocument(changed)).not.toThrow();
+    const scene = designToScene(changed, "e4");
+    const layout = getE4ConnectorLayout(scene[0]!)!;
+    expect(layout.rows.map(r => r.number)).toEqual([2, 1]);
+    expect(hitTestConnectorContact(scene, changed.views.e4.layers.map(layer => ({ ...layer, label: layer.name })), layout.contactPoints[0]!, 1, "e4")).toEqual({ connectorId: connector.id, contactIndex: 0 });
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector: moved, mode: "canvas", editing: true, disabled: false, onCommand: vi.fn() }));
+    expect(openingTag(markup, "Переместить контакт 2 вверх")).toContain('disabled=""');
+    expect(openingTag(markup, "Переместить контакт 1 вверх")).not.toContain('disabled=""');
+    expect(openingTag(markup, "Переместить контакт 1 вниз")).toContain('disabled=""');
+    const readonly = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector: moved, mode: "canvas", disabled: false, onCommand: vi.fn() }));
+    expect(readonly).not.toContain("Переместить контакт");
+    const library = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector: moved, mode: "canvas", editing: true, disabled: false, onCommand: vi.fn(), templateAuthoring: { groups: [], names: {}, numbers: {}, showName: true, onNameVisibilityChange: vi.fn(), onNumberChange: vi.fn(), onNameChange: vi.fn() } }));
+    expect(library).not.toContain("Переместить контакт");
+  });
   it("selects saved wire colors regardless of case and Russian spelling", () => {
     const connector = templateConnector();
     const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {

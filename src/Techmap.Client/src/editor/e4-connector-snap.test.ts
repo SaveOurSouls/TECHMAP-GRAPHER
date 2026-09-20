@@ -24,6 +24,29 @@ describe("E4 connector alignment", () => {
     expect(result.guides.horizontal).toEqual({ y: 144, fromX: 100, toX: 557 });
   });
 
+  it("aligns the moving first row with a nearest non-first target row", () => {
+    const moving: E4ConnectorSnapTarget = {
+      id: "moving", x: 400, y: 200, width: 220, height: 148,
+      contactSide: "right", contactRowsY: [224, 248, 272],
+    };
+    const target: E4ConnectorSnapTarget = {
+      ...leftTable, contactRowsY: [104, 128, 152, 176],
+    };
+    const result = snapE4ConnectorPosition(moving, [target], { x: 400, y: 130 }, 1);
+
+    expect(result.position).toEqual({ x: 400, y: 128 });
+    expect(result.guides.horizontal).toEqual({ y: 152, fromX: 100, toX: 620 });
+  });
+
+  it("does not pull the table towards a match on a lower moving row", () => {
+    const moving = { ...leftTable, id: "moving", x: 400, y: 200,
+      firstContactY: 224, contactRowsY: [224, 248, 272] };
+    const target = { ...leftTable, contactRowsY: [144] };
+    const result = snapE4ConnectorPosition(moving, [target], { x: 400, y: 98 }, 1);
+    expect(result.position.y).toBe(98);
+    expect(result.guides.horizontal).toBeUndefined();
+  });
+
   it("aligns the actual contact edges for left and right orientations", () => {
     const moving: E4ConnectorSnapTarget = {
       id: "moving", x: 400, y: 200, width: 220, height: 148,

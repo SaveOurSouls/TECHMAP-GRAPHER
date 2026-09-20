@@ -114,7 +114,7 @@
 .e4-connector-canvas-editor td > input:hover:not(:disabled) { border-color: #9cc6d8; background: #f7fcfe; }
 .e4-connector-canvas-editor td > input:focus { z-index: 1; border-color: #1685b2; background: #fff; box-shadow: inset 0 0 0 1px #1685b2; }
 .e4-connector-canvas-editor td > select:hover:not(:disabled) { border-color: #9cc6d8; background: #f7fcfe; }
-.e4-connector-canvas-editor td.e4cce-number > input { padding-right: 35px; }
+.e4-connector-canvas-editor td.e4cce-number > input { padding-right: 5px; }
 .e4cce-readonly-value { display: block; width: 100%; height: 23px; padding: 4px 5px; overflow: hidden; color: #284957; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .e4cce-color-readonly { width: 100%; height: 23px; padding: 3px 4px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; justify-content: center; gap: 4px; overflow: hidden; }
 .e4cce-color-swatch { display: block; width: 24px; height: 13px; flex: 0 0 auto; border: 1px solid #8297a2; border-radius: 2px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 35%); }
@@ -136,9 +136,9 @@
 .e4cce-color-popover input[type="color"] { width: 30px; height: 26px; padding: 1px; border: 1px solid #c7d6dc; border-radius: 4px; background: #fff; cursor: pointer; }
 .e4cce-color-auto { min-height: 26px; border: 1px solid #b9ccd5; border-radius: 4px; background: #eef6f9; color: #27657e; font: 700 9px Inter, Arial, sans-serif; cursor: pointer; }
 .e4cce-color-auto:disabled { cursor: default; opacity: .5; }
-.e4-connector-canvas-editor.contacts-left td.e4cce-number > input { padding-right: 5px; padding-left: 35px; }
-.e4cce-row-actions { position: absolute; z-index: 2; right: 1px; top: 2px; display: flex; gap: 1px; opacity: 0; }
-.e4-connector-canvas-editor.contacts-left .e4cce-row-actions { right: auto; left: 1px; }
+.e4-connector-canvas-editor.contacts-left td.e4cce-number > input { padding-right: 5px; padding-left: 5px; }
+.e4cce-row-actions { position: absolute; z-index: 2; left: 100%; top: 1px; display: flex; gap: 1px; padding: 1px 2px; background: #fff; box-shadow: 0 1px 4px #28495740; opacity: 0; }
+.e4-connector-canvas-editor.contacts-left .e4cce-row-actions { left: auto; right: 100%; }
 .e4-connector-canvas-editor tr:hover .e4cce-row-actions, .e4cce-row-actions:focus-within { opacity: 1; }
 .e4cce-row-actions button { width: 16px; height: 18px; padding: 0; border: 0; border-radius: 3px; background: #edf4f7; color: #68818d; font-size: 11px; cursor: pointer; }
 .e4cce-row-actions button:hover:not(:disabled) { background: #dcecf2; color: #0a7199; }

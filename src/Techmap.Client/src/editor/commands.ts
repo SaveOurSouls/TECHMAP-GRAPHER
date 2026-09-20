@@ -4,6 +4,7 @@ import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-docum
 import { parsePhysicalTopology, prunePhysicalTopology, type PhysicalTopology } from "./physical-topology";
 import {
   connectorBaseColumnKeys,
+  connectorE4Contacts,
   connectorE4TableGeometry,
   templateTerminalChoices,
   calculateWireCutLength,
@@ -62,6 +63,7 @@ export type EditorCommand =
   | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
+  | { readonly type: "move-contact-row"; readonly connectorId: string; readonly contactId: string; readonly direction: -1 | 1 }
   | { readonly type: "set-name-column-visibility"; readonly connectorId: string; readonly visible: boolean; readonly scope?: "document" }
   | { readonly type: "toggle-base-column-visibility"; readonly connectorId: string; readonly key: ConnectorBaseColumnKey }
   | { readonly type: "add-custom-field"; readonly connectorId: string; readonly field: ConnectorCustomField }
@@ -419,6 +421,23 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         return { ...connector, contacts };
       });
       return rememberCustomWireColors(updated, [command.contact.color, command.contact.secondaryColor ?? ""]);
+    }
+    case "move-contact-row": {
+      const reorder = (connector: ConnectorInstance): ConnectorInstance => {
+        const rows = connectorE4Contacts(connector).map(contact => contact.id);
+        const index = rows.indexOf(command.contactId);
+        if (index < 0) throw new Error("Контакт не найден.");
+        const next = index + command.direction;
+        if (next < 0 || next >= rows.length) return connector;
+        [rows[index], rows[next]] = [rows[next]!, rows[index]!];
+        return { ...connector, schematic: { ...connector.schematic, rowOrder: rows } };
+      };
+      try { return updateConnectorE4Geometry(document, command.connectorId, reorder); }
+      catch {
+        // A temporary crossing must not prevent the next row move that resolves it.
+        // Keep valid contact leads and report clearance conflicts through diagnostics.
+        return retainEditableE4Routes(updateConnector(document, command.connectorId, reorder));
+      }
     }
     case "remove-contact": {
       const connector = document.connectors.find((item) => item.id === command.connectorId);
@@ -1016,7 +1035,13 @@ function updateConnectorE4Geometry(
   update: (connector: ConnectorInstance) => ConnectorInstance,
 ): HarnessDesignDocument {
   const before = document.connectors.find((connector) => connector.id === connectorId);
-  const changed = updateConnector(document, connectorId, update);
+  const changed = updateConnector(document, connectorId, connector => {
+    const next = update(connector);
+    // Article changes/removal can retire contacts; new rows keep their default order.
+    return next.schematic.rowOrder ? { ...next, schematic: { ...next.schematic,
+      rowOrder: next.schematic.rowOrder.filter(id => next.contacts.some(contact => contact.id === id)),
+    } } : next;
+  });
   const after = changed.connectors.find((connector) => connector.id === connectorId);
   if (!before || !after) throw new Error("Соединитель не найден.");
   const oldGeometry = connectorE4TableGeometry(before);

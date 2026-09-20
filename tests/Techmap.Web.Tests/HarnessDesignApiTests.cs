@@ -16,6 +16,34 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("[\"c1\",\"c1\"]")]
+    [InlineData("[\"missing\"]")]
+    [InlineData("[1]")]
+    [InlineData("null")]
+    public async Task E4_row_order_round_trips_without_changing_contacts_and_rejects_invalid_ids(string invalid)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[{"id":"X1","contacts":[{"id":"c1","number":1},{"id":"c2","number":2}],
+            "schematic":{"rowOrder":["c2","c1"]}}],"wires":[]}
+            """)!;
+        var original = JsonSerializer.SerializeToElement(content);
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId), new PutHarnessDesignRequest(0, 1, original), csrf);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        Assert.True(JsonElement.DeepEquals(original, saved!.Content));
+        content["connectors"]![0]!["schematic"]!["rowOrder"] = JsonNode.Parse(invalid);
+        using var rejected = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId), new PutHarnessDesignRequest(1, 1, JsonSerializer.SerializeToElement(content)), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var unchanged = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        Assert.Equal(1, unchanged!.Revision);
+        Assert.True(JsonElement.DeepEquals(original, unchanged.Content));
+    }
+
+    [Theory]
     [InlineData("{\"width\":279}")]
     [InlineData("{\"height\":159}")]
     [InlineData("{\"width\":4001}")]
