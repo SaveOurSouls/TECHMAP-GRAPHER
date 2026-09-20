@@ -52,6 +52,10 @@ function selection(content:TemplateContentV3,viewId:string,ids:readonly string[]
 }
 
 export interface DrawingClipboard { nodes:TemplateNodeV2[]; roots:string[]; source:TemplateContentV3; viewId:string }
+/** A successful native copy replaces any old image. Later external copies are honored. */
+export function useInternalDrawingClipboard(text:string, token:string|null, synchronized:boolean):boolean {
+  return token!==null && (!synchronized || text===token);
+}
 export function copyDrawingSelection(content:TemplateContentV3,viewId:string,ids:readonly string[]):DrawingClipboard {
   const selected=selection(content,viewId,ids,false);
   return structuredClone({nodes:selected.nodes,roots:selected.roots.map(node=>node.id),source:content,viewId});

@@ -14,6 +14,14 @@ const evaluate = (value: {kind:string;value?:number}) => value.kind === "constan
 const off = {corners:false,contours:false,tangents:false};
 
 describe("M4-15 drawing editor", () => {
+  it("aligns a long moving edge to a shorter target segment and honors disabled contours",()=>{
+    const moving={id:"long",closed:false,points:[{x:0,y:0},{x:100,y:0}]};
+    const target={id:"short",closed:false,points:[{x:40,y:12},{x:60,y:12}]};
+    expect(snapDrawingTranslation(moving,{x:0,y:10},[target],{...off,contours:true},3)).toEqual({x:0,y:12});
+    expect(snapDrawingTranslation(moving,{x:0,y:10},[target],off,3)).toEqual({x:0,y:10});
+    const point={id:"contact",closed:false,points:[{x:102,y:10}]};
+    expect(snapDrawingTranslation(moving,{x:0,y:10},[point],{...off,corners:true},3)).toEqual({x:2,y:10});
+  });
   it.each([13,45,90,137,270])("resizes rotated rectangle at %s° with fixed opposite corner", angle => {
     let content = newTemplateContentV3(); const view=content.views[1]!,layer=view.layers[0]!;
     let id:string; [content,id] = addBasicNodeV3(content,view.id,layer.id,"rectangle");

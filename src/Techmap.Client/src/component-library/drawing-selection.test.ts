@@ -1,6 +1,6 @@
 import { describe,it,expect } from "vitest";
 import { addContactPointV3, addBasicNodeV3, addLayerV3, groupRootNodesV3, moveNodeV3, newTemplateContentV3, projectTemplateContentV3CoreToV2 } from "./template-commands-v3";
-import { stretchDrawingSelection } from "./drawing-selection";
+import { stretchDrawingSelection, useInternalDrawingClipboard } from "./drawing-selection";
 import { copyDrawingSelection,pasteDrawingSelection,deleteDrawingSelection,moveDrawingSelection,rotateDrawingSelection,styleDrawingSelection,nodesInsideSelectionBox,selectionBounds,drawingKeyboardAction,drawingStyleLeaves } from "./drawing-selection";
 import { drawingLayerOutlines } from "./drawing-geometry";
 import { validateTemplateContentV3Structure } from "./template-model-v3";
@@ -16,6 +16,12 @@ function fixture() {
 }
 const evaluate=(expression:any)=>expression.kind==="constant" ? expression.value as number : null;
 describe("drawing selection commands",()=>{
+  it("pastes the copied figure over a stale image, but honors a later external copy",()=>{
+    expect(useInternalDrawingClipboard("","token",false)).toBe(true);
+    expect(useInternalDrawingClipboard("token","token",true)).toBe(true);
+    expect(useInternalDrawingClipboard("","token",true)).toBe(false);
+    expect(useInternalDrawingClipboard("",null,false)).toBe(false);
+  });
   it("selects, moves and stretches contacts with rotated figures without changing electrical identity",()=>{
     let {content,viewId,a,b}=fixture();let pointId:string;
     [content,pointId]=addContactPointV3(content,viewId);

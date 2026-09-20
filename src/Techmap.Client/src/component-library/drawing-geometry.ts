@@ -106,6 +106,12 @@ export function snapDrawingTranslation(moving: DrawingOutline, delta: DrawingPoi
   const accept = (x: number, y: number) => { const d = Math.hypot(x, y); if (d < best) { best = d; correction = { x, y }; } };
   const points = moving.points.map(p => ({ x: p.x + delta.x, y: p.y + delta.y }));
   for (const point of points) { const snapped = snapDrawingPoint(point, targets, settings, tolerance); if (snapped !== point) accept(snapped.x - point.x, snapped.y - point.y); }
+  // The target's endpoint may lie inside the moving side even when neither moving
+  // endpoint is near the target segment (short line against a long rectangle side).
+  if (settings.contours) for (const target of targets) for (const point of target.corners ?? target.points) {
+    const projected = snapDrawingPoint(point, [{...moving,points,circle:moving.circle ? {...moving.circle,center:{x:moving.circle.center.x+delta.x,y:moving.circle.center.y+delta.y}} : undefined}], {corners:false,contours:true,tangents:false}, tolerance);
+    if (projected !== point) accept(point.x-projected.x,point.y-projected.y);
+  }
   if (settings.tangents && !moving.curved) for (const target of targets) if (target.circle) {
     for (let i = 0; i < points.length - (moving.closed ? 0 : 1); i++) {
       const a = points[i]!, b = points[(i + 1) % points.length]!, dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);

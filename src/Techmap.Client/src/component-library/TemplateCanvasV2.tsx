@@ -1,4 +1,4 @@
-import { spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
+import { drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
 import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
 import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { rootNodeRotationCenterV3 } from "./template-commands-v3";
@@ -35,6 +35,7 @@ export interface TemplateCanvasV2Props {
   onBoxSelection?: (ids: readonly string[]) => void;
   onSelectionStretch?: (factor:number,anchor:{x:number;y:number})=>void;
   onSelectionRotate?: (angle: number, center: {x:number;y:number}) => void;
+  onEditText?: (id: string) => void;
   onNodeMove?: (id: string, deltaX: number, deltaY: number) => void;
   onNodeResize?: (id: string, handle: NodeResizeHandleV2, deltaX: number, deltaY: number) => void;
   onNodeRotate?: (id: string, rotationDegrees: number) => void;
@@ -552,6 +553,7 @@ export function TemplateCanvasV2({
   onBoxSelection,
   onSelectionStretch,
   onSelectionRotate,
+  onEditText,
   onNodeMove,
   onNodeResize,
   onNodeRotate,
@@ -606,11 +608,20 @@ export function TemplateCanvasV2({
 
   const snapTolerance = () => { const rect = svgRef.current?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? 7 / screenScale : 7; };
   const outlines = view?.layers.filter(layer => layer.visible).flatMap(layer => drawingLayerOutlines(layer.nodes,evaluate)) ?? [];
-  const targets = (id: string) => outlines.filter(outline => outline.id !== id && !selectedIdSet.has(outline.id));
+  const pointOutlines = [...(view?.contactPoints ?? []), ...(view?.bundlePorts ?? [])].flatMap(point => {
+    const x=evaluate(point.x), y=evaluate(point.y);
+    return x===null || y===null ? [] : [{id:point.id,points:[{x,y}],closed:false}];
+  });
+  const targets = (id: string) => [...outlines, ...pointOutlines].filter(outline => outline.id !== id && !selectedIdSet.has(outline.id));
   const snapDelta = (id: string, start: SvgPoint, point: SvgPoint): SvgPoint => {
     const delta = { x: point[0] - start[0], y: point[1] - start[1] };
-    const outline = outlines.find(item => item.id === id);
-    if (outline) { const result = snapDrawingTranslation(outline, delta, targets(id), snaps, snapTolerance()); return [result.x, result.y]; }
+    const moving = [...outlines,...pointOutlines].filter(item => item.id === id || selectedIdSet.has(id) && selectedIdSet.has(item.id));
+    if (moving.length) {
+      const candidates = moving.map(outline => snapDrawingTranslation(outline,delta,targets(id),snaps,snapTolerance()))
+        .filter(result=>result.x!==delta.x || result.y!==delta.y)
+        .sort((a,b)=>Math.hypot(a.x-delta.x,a.y-delta.y)-Math.hypot(b.x-delta.x,b.y-delta.y));
+      const result=candidates[0] ?? delta; return [result.x,result.y];
+    }
     const contact = view?.contactPoints.find(p => p.id === id) ?? view?.bundlePorts.find(p => p.id === id);
     const x = contact && evaluate(contact.x), y = contact && evaluate(contact.y);
     if (x != null && y != null) { const result = snapDrawingPoint({ x: x + delta.x, y: y + delta.y }, targets(id), snaps, snapTolerance()); return [result.x - x, result.y - y]; }
@@ -1022,6 +1033,7 @@ export function TemplateCanvasV2({
         return (
           <text
             {...common}
+            onDoubleClick={event => { event.stopPropagation(); onEditText?.(rootNodeId); }}
             x={x}
             y={y}
             fill={node.fill.color ?? node.stroke.color}
@@ -1152,12 +1164,12 @@ export function TemplateCanvasV2({
         tabIndex={0}
         aria-label={label}
       >
-        {kind === "contact"
+        <g transform={`scale(${Math.min(1,1/screenScale)})`}>{kind === "contact"
           ? <circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
           : <path d="M 0 -8 L 8 0 L 0 8 L -8 0 Z" fill="#edf7fb" stroke="#36708e" strokeWidth="2" />}
         <path d={stem} fill="none" stroke={kind === "contact" ? "#c54848" : "#36708e"} strokeWidth="2" />
         {number && <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{number}</text>}
-        <title>{label}</title>
+        <title>{label}</title></g>
       </g>
     );
   }
@@ -1177,10 +1189,10 @@ export function TemplateCanvasV2({
         tabIndex={0}
         aria-label={`Контакт ${point.number}: ${point.name}; направление ${point.direction}; повтор ${occurrence.index + 1}`}
       >
-        <circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
+        <g transform={`scale(${Math.min(1,1/screenScale)})`}><circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
         <path d={point.direction === "left" ? "M -13 0 H -5" : point.direction === "right" ? "M 5 0 H 13" : point.direction === "up" ? "M 0 -13 V -5" : "M 0 5 V 13"} fill="none" stroke="#c54848" strokeWidth="2" />
         <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{point.number}</text>
-        <title>{`${point.name} · ${point.direction}`}</title>
+        <title>{`${point.name} · ${point.direction}`}</title></g>
       </g>
     );})));
   }
@@ -1286,7 +1298,9 @@ export function TemplateCanvasV2({
       const scaleY = node.transform.scaleY.kind === "constant" ? node.transform.scaleY.value : 1;
       const translateX = node.transform.translateX.kind === "constant" ? node.transform.translateX.value : 0;
       const translateY = node.transform.translateY.kind === "constant" ? node.transform.translateY.value : 0;
-      const deletePoint = (event: ReactMouseEvent<SVGCircleElement>, pointIndex: number) => {
+      const handleRadii = previewed.map((point,index)=>drawingHandleRadii(screenScale,scaleX,scaleY,
+        Math.min(...previewed.filter((_,i)=>i!==index).map(other=>Math.hypot((other[0]-point[0])*scaleX,(other[1]-point[1])*scaleY)))));
+      const deletePoint = (event: ReactMouseEvent<SVGEllipseElement>, pointIndex: number) => {
         event.preventDefault();
         event.stopPropagation();
         if ((node.kind === "line" || node.kind === "polyline") && pointIndex > 0 && pointIndex < points.length - 1 ||
@@ -1331,7 +1345,7 @@ export function TemplateCanvasV2({
             onDoubleClick={event => insertPoint(event, segmentIndex)} />
             );
           })}
-        {previewed.map((point, pointIndex) => <circle key={pointIndex} cx={point[0]} cy={point[1]} r={pointIndex === 0 || pointIndex === points.length - 1 ? 6 : 5}
+        {previewed.map((point, pointIndex) => <ellipse key={pointIndex} cx={point[0]} cy={point[1]} rx={handleRadii[pointIndex]!.rx} ry={handleRadii[pointIndex]!.ry}
           data-point-handle={pointIndex}
           data-point-role={node.kind === "bezier" && pointIndex % 3 !== 0 ? "control" : "anchor"}
           onPointerDown={event => beginPointGesture(
@@ -1398,6 +1412,22 @@ export function TemplateCanvasV2({
   return (
     <svg
       ref={svgRef}
+      onDoubleClick={event=>{
+        if(!onEditText || !view)return;
+        const point=pointFromEvent(event); if(!point)return;
+        // Pointer capture retargets dblclick to the SVG, so hit-test text here as
+        // well as on the glyph. Convert to local coordinates for rotated text.
+        for(const layer of [...view.layers].reverse()) for(const node of [...layer.nodes].reverse()) {
+          if(!layer.visible || layer.locked || !node.visible || node.locked || node.kind!=="text")continue;
+          const t=node.transform, values=[t.translateX,t.translateY,t.rotationDegrees,t.scaleX,t.scaleY,node.geometry.x,node.geometry.y,node.geometry.fontSize].map(evaluate);
+          if(values.some(value=>value===null))continue;
+          const [tx,ty,angle,sx,sy,x,y,size]=values as number[];
+          const local=templatePointToNodePointV2(point[0],point[1],tx!,ty!,angle!,sx!,sy!);
+          if(local && local.x>=x! && local.x<=x!+size!*Math.max(1,node.geometry.text.length)*.65 && local.y>=y!-size! && local.y<=y!+size!*.25) {
+            event.preventDefault(); onEditText(node.id); return;
+          }
+        }
+      }}
       onKeyDown={e=>{if(e.key==="Home" && onNodeMove){e.preventDefault();setCamera({x:0,y:0,zoom:1});}}}
       tabIndex={0}
       onPointerDownCapture={e=>e.currentTarget.focus()}

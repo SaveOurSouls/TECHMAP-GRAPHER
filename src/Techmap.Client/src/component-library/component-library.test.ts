@@ -147,9 +147,9 @@ describe("component library UI", () => {
     expect(markup).toContain("Контур");
     expect(markup).toContain("Привязка угла");
     expect(markup).toContain("Свободно");
-    expect(markup).toContain("Создать контакт");
-    expect(markup).toContain("Разместить связанную точку");
-    expect(markup).toContain("Выход пучка");
+    expect(markup).toContain('aria-label="Инструменты рисунка"');
+    expect(markup).toContain('data-ribbon-tab="tools"');
+    expect(markup).not.toContain("Диагностика точек подключения");
     expect(markup).toContain('aria-label="Поле редактирования рисунка"');
     expect(markup).toContain("Отменить");
     expect(markup).toContain("Настройка серии");
@@ -158,8 +158,8 @@ describe("component library UI", () => {
     expect(markup).not.toContain("e4-table-editor");
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
     expect(markup).toContain("Изображения");
-    expect(markup).toContain("+ Изображение");
-    expect(markup).toContain("Добавить слой");
+    expect(markup).toContain("Контакты");
+    expect(markup).toContain("Слои");
     expect(markup).toContain("Записать версию");
     expect(markup).toContain("Изменено");
   });

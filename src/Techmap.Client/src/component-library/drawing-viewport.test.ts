@@ -1,6 +1,13 @@
 import {describe,it,expect} from "vitest";
-import {spacedHandleBounds,zoomDrawingCamera} from "./drawing-viewport";
+import {drawingHandleRadii,spacedHandleBounds,zoomDrawingCamera} from "./drawing-viewport";
 describe("drawing viewport and compact handles",()=>{
+  it.each([.1,1,8,32])("keeps grips small at camera scale %s and compensates stretched geometry",zoom=>{
+    const radii=drawingHandleRadii(zoom,20,.25,1000);
+    expect(radii.rx*zoom*20).toBeCloseTo(5);
+    expect(radii.ry*zoom*.25).toBeCloseTo(5);
+    const tiny=drawingHandleRadii(zoom,20,.25,8/zoom);
+    expect(tiny.rx*zoom*20).toBeCloseTo(2);
+  });
   it("anchors wheel zoom at the same screen point and clamps extremes",()=>{
     const camera={x:100,y:-40,zoom:2},point={x:160,y:70};
     const next=zoomDrawingCamera(camera,point,-120);
