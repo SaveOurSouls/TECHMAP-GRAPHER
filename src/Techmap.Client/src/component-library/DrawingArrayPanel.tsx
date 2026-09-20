@@ -1,3 +1,4 @@
+import { DraftNumberInput } from "./DraftNumberInput";
 import { useState } from "react";
 import { InfoHint } from "../InfoHint";
 import type { TemplateContentV3 } from "./template-model-v3";
@@ -23,8 +24,8 @@ export function DrawingArrayPanel({ content, viewId, layerId, selectedIds, onCha
     <label>Нумерация<select value={input.direction} onChange={e=>setInput({...input,direction:e.target.value as DrawingArrayInput["direction"]})}><option value="long-side">Вдоль рядов</option><option value="short-side">Поперёк рядов</option></select></label>
     <label>Переход<select value={input.numbering} onChange={e=>setInput({...input,numbering:e.target.value as DrawingArrayInput["numbering"]})}><option value="new-row">С начала ряда</option><option value="snake">Змейка</option></select></label>
     <label>Количество<select value={input.countSource} onChange={e=>setInput({...input,countSource:e.target.value as DrawingArrayInput["countSource"]})}><option value="article">По артикулу</option><option value="parameter">Вручную</option></select></label>
-    <label>{input.countSource==="article"?"Без артикула":"Элементов"}<input aria-label="Элементов массива" type="number" min={1} max={1000} value={input.count} onChange={e=>setInput({...input,count:Number(e.target.value)})}/></label>
-    {(["pitchX","pitchY"] as const).map(key=><label key={key}>Шаг {key==="pitchX"?"X":"Y"}<input type="number" aria-label={`Шаг массива ${key==="pitchX"?"X":"Y"}`} min={0.1} max={10000} step={0.1} value={input[key]} onChange={e=>setInput({...input,[key]:Number(e.target.value)})}/></label>)}
+    <label>{input.countSource==="article"?"Без артикула":"Элементов"}<DraftNumberInput aria-label="Элементов массива" min={1} max={1000} value={input.count} onValueChange={count=>setInput({...input,count})}/></label>
+    {(["pitchX","pitchY"] as const).map(key=><label key={key}>Шаг {key==="pitchX"?"X":"Y"}<DraftNumberInput aria-label={`Шаг массива ${key==="pitchX"?"X":"Y"}`} min={0.1} max={10000} step={0.1} value={input[key]} onValueChange={value=>setInput({...input,[key]:value})}/></label>)}
     <button type="button" onClick={()=>{try{const next=setDrawingArray(content,viewId,layerId,selectedIds,input,domainId||undefined);onChange(next);setDomainId(next.views.find(v=>v.id===viewId)!.repeatPlacements.at(-1)!.repeatDomainId);}catch(error){onError((error as Error).message);}}}>Применить</button>
     <InfoHint>Выделите фигуры и точки контактов одного элемента (Ctrl — несколько), затем примените массив. Количество повторов задаётся артикулом или полем «Элементов»; изменение геометрического масштаба не меняет число контактов. Точки последовательно связываются со строками таблицы, лишние точки неполного элемента скрываются. Добавьте текст {"{{n}}"} в прототип для номеров 1…N. Изменения прототипа распространяются на все артикулы. X идёт вдоль рядов, Y — между рядами. Для комбинированного корпуса размещайте группы вручную. Неравное число элементов образует неполный последний ряд; сверяйте вид и контакт 1 с чертежом корпуса.</InfoHint>
   </div>;

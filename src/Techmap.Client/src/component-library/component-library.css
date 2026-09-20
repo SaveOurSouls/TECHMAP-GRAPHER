@@ -300,3 +300,22 @@
 .drawing-ribbon .generator-reverse input { width:16px; height:16px; min-height:0; margin:0; }
 .generator-variant-controls { display:flex; align-items:flex-end; gap:4px; }
 .generator-variant-controls > button { min-width:28px; }
+
+/* M4-53: persistent tools, contextual ribbon and an independent right inspector. */
+.drawing-editor-shell > .drawing-ribbon-tools { height:auto; flex:0 0 auto; padding:4px 12px; overflow-x:auto; border-bottom:1px solid var(--ui-border); }
+.drawing-editor-shell > .drawing-ribbon-tools .library-tools { display:flex; flex-wrap:nowrap; align-items:center; width:max-content; margin:0; padding:0; border:0; }
+.drawing-ribbon-tools .library-tools > * { flex-shrink:0; }
+.drawing-ribbon-tools .drawing-snaps { display:flex; white-space:nowrap; }
+.drawing-editor-shell .drawing-ribbon[data-ribbon-tab=tools], .drawing-editor-shell .drawing-ribbon[data-ribbon-tab=properties] { display:none; }
+.drawing-body { display:flex; flex:1; min-height:0; min-width:0; overflow:hidden; }
+.drawing-body > .library-workarea { flex:1; order:0; min-height:0; }
+.drawing-properties-sidebar { order:1; flex:0 0 280px; min-width:0; overflow:auto; border-left:1px solid var(--ui-border); background:#fff; }
+.drawing-editor-shell .drawing-properties-sidebar .library-properties { display:flex; flex-direction:column; gap:8px; padding:10px; border:0; }
+.drawing-properties-sidebar .library-properties > h3 { margin:0; font-size:12px; }
+.drawing-properties-sidebar .library-properties :is(input,select) { min-width:0; max-width:100%; }
+.drawing-properties-sidebar .library-properties[data-property-tab=stroke] > :is(.rotation-control,.property-order,.danger-action),
+.drawing-properties-sidebar .library-properties[data-property-tab=fill] > :is(.rotation-control,.property-order,.danger-action) { display:none; }
+.drawing-properties-sidebar .library-properties label { gap:3px; font-size:11px; }
+.drawing-properties-sidebar .library-properties input:not([type=checkbox]), .drawing-properties-sidebar .library-properties select { height:28px; padding:3px 6px; }
+.drawing-properties-sidebar .node-style-panel { padding:8px; gap:6px; }
+@media(max-width:800px) { .drawing-properties-sidebar { flex-basis:220px; } .drawing-editor-shell .library-workarea:has(.generator-preview) { grid-template-columns:minmax(120px,2fr) minmax(90px,1fr); } }

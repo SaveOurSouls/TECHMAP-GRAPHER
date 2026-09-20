@@ -76,6 +76,17 @@ public sealed class BrowserLifecycleTracker
         }
     }
 
+    public void ObservePageActivity()
+    {
+        lock (gate)
+        {
+            if (enabled && hasObservedConnection && connections.Count == 0)
+            {
+                disconnectedAt = timeProvider.GetUtcNow();
+            }
+        }
+    }
+
     /// <summary>
     /// Returns true only after a page connected and the final connection has
     /// remained closed for the entire grace period. A browser launch failure

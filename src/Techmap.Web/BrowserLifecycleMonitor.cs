@@ -20,6 +20,8 @@ public sealed class BrowserLifecycleMonitor(
 
     public IDisposable OpenConnection() => tracker.OpenConnection();
 
+    public void ObservePageActivity() => tracker.ObservePageActivity();
+
     public async Task WaitForBrowserClosedAsync(CancellationToken cancellationToken = default)
     {
         using var timer = new PeriodicTimer(PollInterval);

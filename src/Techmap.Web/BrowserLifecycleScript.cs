@@ -10,6 +10,12 @@ public static class BrowserLifecycleScript
           const lifecycleUrl = new URL('api/v1/browser-lifecycle', document.baseURI);
           let active = true;
           let controller;
+          // A live page is not a closed browser merely because its streaming
+          // request was interrupted. Keep an independent authenticated pulse.
+          const pulse = () => {
+            if (active) fetch(sessionUrl, { credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
+          };
+          const pulseTimer = window.setInterval(pulse, 3000);
 
           const connect = async () => {
             if (!active || controller) return;
@@ -22,7 +28,7 @@ public static class BrowserLifecycleScript
                 signal: current.signal
               });
               if (!sessionResponse.ok) {
-                if (sessionResponse.status === 401 || sessionResponse.status === 404) active = false;
+                if (sessionResponse.status === 404) active = false;
                 return;
               }
               const session = await sessionResponse.json();
@@ -38,7 +44,7 @@ public static class BrowserLifecycleScript
                 signal: current.signal
               });
               if (!response.ok || !response.body) {
-                if (response.status === 401 || response.status === 404) active = false;
+                if (response.status === 404) active = false;
                 return;
               }
               const reader = response.body.getReader();
@@ -66,6 +72,7 @@ public static class BrowserLifecycleScript
             active = true;
             connect();
           });
+          document.addEventListener('visibilitychange', () => { if (!document.hidden) { pulse(); connect(); } });
         })();
         """;
 }

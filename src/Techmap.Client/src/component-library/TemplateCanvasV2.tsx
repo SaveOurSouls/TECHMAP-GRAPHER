@@ -15,7 +15,7 @@ import type {
 import { expandTemplateViewRepeatsV2, type RepeatOccurrenceDescriptorV2 } from "./template-repeat-v2";
 import type { NodeResizeHandleV2 } from "./template-commands-v2";
 import { roundedPolylinePathV2 } from "./rounded-polyline-v2";
-import { drawingOutline, drawingLayerOutlines, snapDrawingPoint, snapDrawingTranslation, type DrawingSnaps } from "./drawing-geometry";
+import { drawingOutline, drawingLayerOutlines, snapDrawingPoint, snapDrawingResizeDelta, snapDrawingTranslation, type DrawingSnaps } from "./drawing-geometry";
 export { roundedPolylinePathV2 } from "./rounded-polyline-v2";
 
 export const TEMPLATE_CANVAS_V2_WIDTH = 720;
@@ -706,10 +706,9 @@ export function TemplateCanvasV2({
     if (!node) return null;
     let dx = point[0] - resize.start[0], dy = point[1] - resize.start[1];
     const outline = drawingOutline(node,evaluate);
-    const corner = ({nw:0,ne:1,se:2,sw:3} as Record<string,number>)[resize.handle];
-    if (outline && corner !== undefined && !outline.curved) {
-      const origin = outline.points[corner];
-      if (origin) { const snapped = snapDrawingPoint({x:origin.x+dx,y:origin.y+dy},targets(resize.id),snaps,snapTolerance()); dx=snapped.x-origin.x; dy=snapped.y-origin.y; }
+    if (outline && !outline.curved) {
+      const snapped = snapDrawingResizeDelta(outline, { x: dx, y: dy }, resize.handle, targets(resize.id), snaps, snapTolerance(), evaluate(node.transform.rotationDegrees) ?? 0);
+      dx = snapped.x; dy = snapped.y;
     }
     return templateDeltaToNodeDeltaV2(dx,dy,evaluate(node.transform.rotationDegrees) ?? 0,evaluate(node.transform.scaleX) ?? 1,evaluate(node.transform.scaleY) ?? 1);
   };

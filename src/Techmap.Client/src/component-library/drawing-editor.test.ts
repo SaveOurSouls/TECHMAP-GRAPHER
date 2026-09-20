@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { addBasicNodeV3, newTemplateContentV3, setRootNodeRotationAroundCenterV3, rootNodeRotationCenterV3, resizeNodeV3, constantExpressionV3 as c, addArticleVariantsV3, addContactTypeGroupV3, setArticleVariantContactGroupV3, addContactPointV3, editContactPointV3, projectTemplateContentV3CoreToV2 } from "./template-commands-v3";
-import { drawingOutline, circleTangents, snapDrawingPoint, snapDrawingTranslation } from "./drawing-geometry";
+import { drawingOutline, circleTangents, snapDrawingPoint, snapDrawingResizeDelta, snapDrawingTranslation } from "./drawing-geometry";
 import { TemplateCanvasV2, templateDeltaToNodeDeltaV2 } from "./TemplateCanvasV2";
 import { drawingSelection, drawingContactContent } from "./drawing-bindings";
 import { createE4ConnectorSeriesTableFromV3 } from "./e4-connector-series-table";
@@ -21,6 +21,21 @@ describe("M4-15 drawing editor", () => {
     expect(snapDrawingTranslation(moving,{x:0,y:10},[target],off,3)).toEqual({x:0,y:10});
     const point={id:"contact",closed:false,points:[{x:102,y:10}]};
     expect(snapDrawingTranslation(moving,{x:0,y:10},[point],{...off,corners:true},3)).toEqual({x:2,y:10});
+  });
+  it("snaps both endpoints of a resized vertical edge", () => {
+    const moving={id:"moving",closed:true,points:[{x:0,y:0},{x:20,y:0},{x:20,y:20},{x:0,y:20}]};
+    const target={id:"target",closed:true,points:[{x:40,y:20},{x:60,y:20},{x:60,y:50},{x:40,y:50}]};
+    expect(snapDrawingResizeDelta(moving,{x:20,y:10},"e",[target],{...off,contours:true},2)).toEqual({x:20,y:10});
+    expect(snapDrawingResizeDelta(moving,{x:19,y:10},"e",[target],{...off,contours:true},2)).toEqual({x:20,y:10});
+  });
+  it("aligns touching rectangles on both axes, even with an already aligned horizontal edge (C1)", () => {
+    const upper={id:"upper",closed:true,points:[{x:0,y:0},{x:100,y:0},{x:100,y:50},{x:0,y:50}]};
+    const lower={id:"lower",closed:true,points:[{x:0,y:50},{x:98,y:50},{x:98,y:100},{x:0,y:100}]};
+    expect(snapDrawingResizeDelta(lower,{x:0,y:0},"e",[upper],{...off,contours:true},3)).toEqual({x:2,y:0});
+    expect(snapDrawingTranslation(lower,{x:0,y:0},[upper],{...off,contours:true},3)).toEqual({x:2,y:0});
+    expect(snapDrawingResizeDelta(lower,{x:0,y:0},"e",[upper],off,3)).toEqual({x:0,y:0});
+    const transpose=(o:typeof lower)=>({...o,points:o.points.map(p=>({x:p.y,y:p.x}))});
+    expect(snapDrawingTranslation(transpose(lower),{x:0,y:0},[transpose(upper)],{...off,contours:true},3)).toEqual({x:0,y:2});
   });
   it.each([13,45,90,137,270])("resizes rotated rectangle at %s° with fixed opposite corner", angle => {
     let content = newTemplateContentV3(); const view=content.views[1]!,layer=view.layers[0]!;

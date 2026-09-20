@@ -44,7 +44,7 @@ public sealed class LocalHttpSecurityTests
         var setCookie = Assert.Single(page.Headers.GetValues("Set-Cookie"));
         var cookieValue = ReadCookieValue(setCookie);
 
-        Assert.Contains($"{LocalHttpSession.CookieName}=", setCookie, StringComparison.Ordinal);
+        Assert.StartsWith($"{LocalHttpSession.CookieName}.", setCookie, StringComparison.Ordinal);
         Assert.Contains("path=/", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("httponly", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", setCookie, StringComparison.OrdinalIgnoreCase);

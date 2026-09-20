@@ -126,6 +126,23 @@ public sealed class BrowserLifecycleTrackerTests
         TimeProvider.System,
         NullLogger<BrowserLifecycleMonitor>.Instance);
 
+    [Fact]
+    public void Live_page_pulses_keep_server_alive_after_stream_loss_but_closed_page_still_stops()
+    {
+        var time = new MutableTimeProvider();
+        var tracker = new BrowserLifecycleTracker(time, GracePeriod);
+        tracker.Enable();
+        tracker.OpenConnection().Dispose();
+        for (var i = 0; i < 30; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(3));
+            tracker.ObservePageActivity();
+            Assert.False(tracker.ShouldStop());
+        }
+        time.Advance(GracePeriod);
+        Assert.True(tracker.ShouldStop());
+    }
+
     private sealed class TestApplicationLifetime : IHostApplicationLifetime
     {
         public CancellationToken ApplicationStarted => CancellationToken.None;

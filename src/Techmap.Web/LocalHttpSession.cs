@@ -14,12 +14,16 @@ public sealed class LocalHttpSession
 
     public string InstanceId { get; } = Guid.NewGuid().ToString("D");
 
+    // Cookies are shared across ports on 127.0.0.1. A second local server must
+    // not overwrite the session of an already open editor.
+    public string InstanceCookieName => $"{CookieName}.{InstanceId}";
+
     public string EncodedCsrfNonce => WebEncoders.Base64UrlEncode(csrfNonce);
 
     public void IssueCookie(HttpResponse response, PathString configuredPathBase)
     {
         response.Cookies.Append(
-            CookieName,
+            InstanceCookieName,
             WebEncoders.Base64UrlEncode(sessionToken),
             new CookieOptions
             {
@@ -32,7 +36,7 @@ public sealed class LocalHttpSession
     }
 
     public bool HasValidCookie(HttpRequest request) =>
-        request.Cookies.TryGetValue(CookieName, out var value) &&
+        request.Cookies.TryGetValue(InstanceCookieName, out var value) &&
         HasFixedTimeValue(value, sessionToken);
 
     public bool HasValidCsrfNonce(HttpRequest request) =>

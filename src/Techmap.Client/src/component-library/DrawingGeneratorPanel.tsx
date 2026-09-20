@@ -1,3 +1,4 @@
+import { DraftNumberInput } from "./DraftNumberInput";
 import { InfoHint } from "../InfoHint";
 import { generatorRoles, generatorLayout, type DrawingGenerator, type GeneratorRole } from "./drawing-generator";
 
@@ -20,7 +21,7 @@ export function DrawingGeneratorPanel({ generator: g, mode, articleId, articles,
     {disabled && <button onClick={()=>setMode("source")}>Редактировать исходник</button>}
     <span className="generator-roles">{generatorRoles.map(role=><button disabled={disabled} key={role} onClick={()=>assign(role)}>{({start:"Начало",period:"Период",end:"Конец",static:"Статичные"})[role]} · {g.roles[role].length}</button>)}</span>
     <label>Рост<select aria-label="Ось генератора" disabled={disabled} value={g.axis} onChange={e=>change({...g,axis:e.target.value as DrawingGenerator["axis"]})}><option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option></select></label>
-    {([['pitch','Шаг'],['rowPitch','Между рядами'],['baseColumns','Базовых колонок']] as const).map(([key,label])=><label key={key}>{label}<input aria-label={label} type="number" min={key==='baseColumns'?1:0.1} max={key==='baseColumns'?1000:10000} step={key==='baseColumns'?1:0.1} disabled={disabled} value={g[key]} onChange={e=>change({...g,[key]:Number(e.target.value)})}/></label>)}
+    {([['pitch','Шаг'],['rowPitch','Между рядами'],['baseColumns','Базовых колонок']] as const).map(([key,label])=><label key={key}>{label}<DraftNumberInput aria-label={label} min={key==='baseColumns'?1:0.1} max={key==='baseColumns'?1000:10000} step={key==='baseColumns'?1:0.1} disabled={disabled} value={g[key]} onValueChange={value=>change({...g,[key]:value})}/></label>)}
     <label>Ряды<select aria-label="Ряды генератора" disabled={disabled} value={g.rows} onChange={e=>change({...g,rows:Number(e.target.value)})}>{[1,2,3,4].map(n=><option key={n}>{n}</option>)}</select></label>
     <label>Нумерация<select aria-label="Обход контактов" disabled={disabled} value={g.traversal} onChange={e=>change({...g,traversal:e.target.value as DrawingGenerator['traversal']})}><option value="along">Вдоль</option><option value="across">Поперёк</option></select></label>
     <label>Переход<select aria-label="Переход нумерации" disabled={disabled} value={g.numbering} onChange={e=>change({...g,numbering:e.target.value as DrawingGenerator['numbering']})}><option value="new-row">Новый ряд</option><option value="snake">Змейка</option></select></label>
@@ -30,7 +31,7 @@ export function DrawingGeneratorPanel({ generator: g, mode, articleId, articles,
     <div className="generator-variant-controls"><label className="generator-variants">Вариант<input aria-label="Вариант генератора" type="range" min={0} max={Math.max(0,articles.length-1)} value={index} disabled={!articles.length} onChange={e=>choose(articles[Number(e.target.value)]!.id)}/></label>
     <button aria-label="Предыдущий вариант" disabled={index===0} onClick={()=>choose(articles[index-1]!.id)}>‹</button><button aria-label="Следующий вариант" disabled={index>=articles.length-1} onClick={()=>choose(articles[index+1]!.id)}>›</button></div>
     <output>{summary}</output>
-    <label>Проверить N<input aria-label="Проверочное число периодов" type="number" min={1} max={1000} placeholder="по артикулу" value={previewPeriods??""} disabled={disabled} onChange={e=>setPreviewPeriods(e.target.value===""?undefined:Number(e.target.value))}/></label>
+    <label>Проверить N<DraftNumberInput aria-label="Проверочное число периодов" min={1} max={1000} placeholder="по артикулу" value={previewPeriods??""} disabled={disabled} onEmpty={()=>setPreviewPeriods(undefined)} onValueChange={setPreviewPeriods}/></label>
     <InfoHint>Рисуйте торцы для базового числа колонок. Конец смещается на разницу колонок × шаг; начало и статичные фигуры остаются на месте. В «Исходнике» редактируйте прототип на основном поле, результат выбранного варианта показан рядом. В режиме «Артикул» основа защищена, новые фигуры принадлежат только ему. Ползунок не изменяет документ. Контакты нумеруются по колонке № таблицы; {'{{n}}'} в тексте периода показывает номер первого контакта ячейки.</InfoHint>
   </div>;
 }

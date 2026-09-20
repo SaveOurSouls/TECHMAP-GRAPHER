@@ -103,8 +103,26 @@ export function snapDrawingPoint(point: DrawingPoint, targets: readonly DrawingO
 /** Translates a straight side onto a circle tangent without changing its angle. */
 export function snapDrawingTranslation(moving: DrawingOutline, delta: DrawingPoint, targets: readonly DrawingOutline[], settings: DrawingSnaps, tolerance: number): DrawingPoint {
   let correction: DrawingPoint | null = null, best = tolerance;
-  const accept = (x: number, y: number) => { const d = Math.hypot(x, y); if (d < best) { best = d; correction = { x, y }; } };
+  let correctionX: number | undefined, correctionY: number | undefined;
+  const accept = (x: number, y: number) => {
+    const d = Math.hypot(x, y);
+    // Coincident horizontal edges must not suppress a nearby vertical edge.
+    if (d < 1e-8 || d > tolerance) return;
+    if (Math.abs(y) < 1e-8 && (correctionX === undefined || Math.abs(x) < Math.abs(correctionX))) correctionX = x;
+    else if (Math.abs(x) < 1e-8 && (correctionY === undefined || Math.abs(y) < Math.abs(correctionY))) correctionY = y;
+    else if (d < best) { best = d; correction = { x, y }; }
+  };
   const points = moving.points.map(p => ({ x: p.x + delta.x, y: p.y + delta.y }));
+  // Compare parallel sides separately: nearest-point projection can return an
+  // exact horizontal hit and hide the equally relevant vertical alignment.
+  if (settings.contours && !moving.curved) for (const target of targets) if (!target.curved) {
+    for (let i=0;i<points.length-(moving.closed?0:1);i++) for(let j=0;j<target.points.length-(target.closed?0:1);j++) {
+      const a=points[i]!, b=points[(i+1)%points.length]!, c=target.points[j]!, d=target.points[(j+1)%target.points.length]!;
+      const overlap=(a:number,b:number,c:number,d:number)=>Math.max(Math.min(a,b),Math.min(c,d))<=Math.min(Math.max(a,b),Math.max(c,d))+tolerance;
+      if(Math.abs(a.x-b.x)<1e-8 && Math.abs(c.x-d.x)<1e-8 && overlap(a.y,b.y,c.y,d.y))accept(c.x-a.x,0);
+      if(Math.abs(a.y-b.y)<1e-8 && Math.abs(c.y-d.y)<1e-8 && overlap(a.x,b.x,c.x,d.x))accept(0,c.y-a.y);
+    }
+  }
   for (const point of points) { const snapped = snapDrawingPoint(point, targets, settings, tolerance); if (snapped !== point) accept(snapped.x - point.x, snapped.y - point.y); }
   // The target's endpoint may lie inside the moving side even when neither moving
   // endpoint is near the target segment (short line against a long rectangle side).
@@ -123,6 +141,33 @@ export function snapDrawingTranslation(moving: DrawingOutline, delta: DrawingPoi
       for (const sign of [-1, 1]) accept(nx * (sign * radius - distance), ny * (sign * radius - distance));
     }
   }
-  const result = correction as DrawingPoint | null;
+  const result = correctionX !== undefined || correctionY !== undefined ? {x:correctionX ?? 0,y:correctionY ?? 0} : correction as DrawingPoint | null;
   return result ? { x: delta.x + result.x, y: delta.y + result.y } : delta;
+}
+
+/** Snap active box edges in the node's rotated frame, keeping the opposite edges fixed. */
+export function snapDrawingResizeDelta(
+  moving: DrawingOutline, delta: DrawingPoint, handle: string,
+  targets: readonly DrawingOutline[], settings: DrawingSnaps, tolerance: number, rotationDegrees = 0,
+): DrawingPoint {
+  const angle = rotationDegrees * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+  const local = (p:DrawingPoint):DrawingPoint => ({x:p.x*cos+p.y*sin,y:-p.x*sin+p.y*cos});
+  const world = (p:DrawingPoint):DrawingPoint => ({x:p.x*cos-p.y*sin,y:p.x*sin+p.y*cos});
+  const transform = (o:DrawingOutline):DrawingOutline => ({...o,points:o.points.map(local),corners:o.corners?.map(local),circle:o.circle?{...o.circle,center:local(o.circle.center)}:undefined});
+  const box=transform(moving), candidates=targets.map(transform), d=local(delta);
+  if(handle === "start" || handle === "end") {
+    const origin=box.points[handle === "start" ? 0 : 1];
+    if(!origin)return delta;
+    const snap=snapDrawingPoint({x:origin.x+d.x,y:origin.y+d.y},candidates,settings,tolerance);
+    return world({x:snap.x-origin.x,y:snap.y-origin.y});
+  }
+  if(box.points.length!==4 || box.curved)return delta;
+  const xSide=handle.includes("e")?"e":handle.includes("w")?"w":null;
+  const ySide=handle.includes("s")?"s":handle.includes("n")?"n":null;
+  const points=box.points.map((p,i)=>({x:p.x+((xSide==="e"&&(i===1||i===2)||xSide==="w"&&(i===0||i===3))?d.x:0),
+    y:p.y+((ySide==="s"&&(i===2||i===3)||ySide==="n"&&(i===0||i===1))?d.y:0)}));
+  const edgeSnap=(a:number,b:number)=>snapDrawingTranslation({id:box.id,closed:false,points:[points[a]!,points[b]!]},{x:0,y:0},candidates,settings,tolerance);
+  const cx=xSide?edgeSnap(xSide==="e"?1:3,xSide==="e"?2:0).x:0;
+  const cy=ySide?edgeSnap(ySide==="s"?2:0,ySide==="s"?3:1).y:0;
+  return world({x:d.x+cx,y:d.y+cy});
 }

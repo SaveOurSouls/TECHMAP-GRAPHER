@@ -380,12 +380,13 @@ app.MapGet("/api/v1/diagnostics", (
         diagnostics.BusyTimeoutMilliseconds,
         diagnostics.JournalMode));
 });
-app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session) =>
-    session.HasValidCookie(context.Request)
-        ? Results.Ok(new SessionBootstrapResponse(session.EncodedCsrfNonce, session.InstanceId))
-        : Results.Json(
-            new ApiErrorResponse("invalid_session"),
-            statusCode: StatusCodes.Status401Unauthorized));
+app.MapGet("/api/v1/session", (HttpContext context, LocalHttpSession session, BrowserLifecycleMonitor lifecycle) =>
+{
+    if (!session.HasValidCookie(context.Request))
+        return Results.Json(new ApiErrorResponse("invalid_session"), statusCode: StatusCodes.Status401Unauthorized);
+    lifecycle.ObservePageActivity();
+    return Results.Ok(new SessionBootstrapResponse(session.EncodedCsrfNonce, session.InstanceId));
+});
 app.MapPost("/api/v1/browser-lifecycle", async (
     HttpContext context,
     LocalHttpSession session,
