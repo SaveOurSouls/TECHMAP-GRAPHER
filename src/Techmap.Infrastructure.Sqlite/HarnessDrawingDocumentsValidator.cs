@@ -21,13 +21,23 @@ internal static class HarnessDrawingDocumentsValidator
         if(root.TryGetProperty("physicalTopology",out var t)&&t.ValueKind==JsonValueKind.Object) foreach(var key in new[]{"nodes","segments","coverings"})if(t.TryGetProperty(key,out var list)&&list.ValueKind==JsonValueKind.Array)foreach(var e in list.EnumerateArray())ids.Add(Text(e,"id"));
         foreach(var table in Array(d,"tables",20).EnumerateArray())
         {
-            if(!ids.Add(Text(table,"id")) || Text(table,"kind") is not ("bom" or "connections"))throw Invalid();
+            if(!ids.Add(Text(table,"id")) || Text(table,"kind") is not ("bom" or "connections" or "cut"))throw Invalid();
             Point(table,"position");
+            if(table.TryGetProperty("dock",out var dock) && (dock.ValueKind!=JsonValueKind.String || dock.GetString() is not ("left" or "right" or "top" or "bottom")))throw Invalid();
         }
         foreach(var leader in Array(d,"leaders",10000).EnumerateArray())
         {
             var id=Text(leader,"id");if(!ids.Add(id)||!ids.Add(id+":anchor"))throw Invalid();
             _=Text(leader,"objectId");_=Text(leader,"rowKey",4096);Point(leader,"anchorOffset");Point(leader,"circle");
+        }
+        if(d.TryGetProperty("bomText",out var edits))
+        {
+            if(edits.ValueKind!=JsonValueKind.Object||edits.EnumerateObject().Count()>50000)throw Invalid();
+            foreach(var entry in edits.EnumerateObject())
+            {
+                if(string.IsNullOrWhiteSpace(entry.Name)||entry.Name.Length>4096||entry.Value.ValueKind!=JsonValueKind.Object)throw Invalid();
+                foreach(var field in entry.Value.EnumerateObject())if(field.Name is not ("designation" or "name" or "note")||field.Value.ValueKind!=JsonValueKind.String||field.Value.GetString()!.Length>4096)throw Invalid();
+            }
         }
         var keys=new HashSet<string>(StringComparer.Ordinal);
         foreach(var key in Array(d,"bomOrder",50000).EnumerateArray())if(key.ValueKind!=JsonValueKind.String || key.GetString() is not {} s || string.IsNullOrWhiteSpace(s)||s.Length>4096||!keys.Add(s))throw Invalid();

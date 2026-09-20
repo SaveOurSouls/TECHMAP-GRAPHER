@@ -40,8 +40,8 @@ function CutField({label,value,nullable,onCommit}:{label:string;value:number|nul
   return <label>{label}<input type="text" inputMode="decimal" aria-label={label} aria-invalid={invalid} value={draft} onChange={e=>{setDraft(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/>{invalid&&<small role="alert">Проверьте значение и допустимую длину.</small>}</label>;
 }
 
-export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,onReveal,onCommand}:{document:HarnessDesignDocument;quantity:number;revision:number;unsaved:boolean;relatedIds:readonly string[];onReveal:(id:string)=>void;onCommand:(c:EditorCommand)=>boolean}) {
-  const [open,setOpen]=useState(false),[selected,setSelected]=useState("");
+export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,onReveal,onCommand,embedded=false}:{embedded?:boolean;document:HarnessDesignDocument;quantity:number;revision:number;unsaved:boolean;relatedIds:readonly string[];onReveal:(id:string)=>void;onCommand:(c:EditorCommand)=>boolean}) {
+  const [open,setOpen]=useState(embedded),[selected,setSelected]=useState("");
   const trigger=useRef<HTMLButtonElement>(null);
   const close=()=>{setOpen(false);trigger.current?.focus();};
   const ids=cutBlankIds(document);
@@ -53,14 +53,14 @@ export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,o
     if(!diagram)return false;const patch={[field]:value===""&&field==="lengthMm"?null:Number(value)};
     return onCommand(diagram.kind==="cable"?{type:"update-cable",cableId:diagram.objectId,...patch}:{type:"update-wire",wireId:diagram.objectId,...patch});
   };
-  return <section className="he-relations"><button ref={trigger} className="ui-control" type="button" disabled={!ids.length} onClick={()=>{setSelected(related ?? ids[0] ?? "");setOpen(true);}}>Схема резки / разделки</button>
-    {open&&<div className="he-cut-backdrop"><section className="he-cut-dialog" role="dialog" aria-modal="true" aria-label="Схема резки и разделки" onKeyDown={e=>{
-        if(e.key==="Escape"){e.preventDefault();e.stopPropagation();close();}
+  return <section className="he-relations">{!embedded&&<button ref={trigger} className="ui-control" type="button" disabled={!ids.length} onClick={()=>{setSelected(related ?? ids[0] ?? "");setOpen(true);}}>Схема резки / разделки</button>}
+    {open&&<div className={embedded?"":"he-cut-backdrop"}><section className={embedded?"he-cut-embedded":"he-cut-dialog"} role={embedded?"region":"dialog"} aria-modal={embedded?undefined:true} aria-label="Схема резки и разделки" onKeyDown={e=>{
+        if(!embedded&&e.key==="Escape"){e.preventDefault();e.stopPropagation();close();}
         if(e.key==="Delete"||e.key==="Backspace")e.stopPropagation();
-        if(e.key==="Tab") {const controls=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),summary,[tabindex="0"]')).filter(n=>n.getClientRects().length);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&window.document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&window.document.activeElement===last){e.preventDefault();first?.focus();}}
+        if(!embedded&&e.key==="Tab") {const controls=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),summary,[tabindex="0"]')).filter(n=>n.getClientRects().length);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&window.document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&window.document.activeElement===last){e.preventDefault();first?.focus();}}
       }}>
-      <header className="ui-section-heading"><strong>Резка и разделка</strong><InfoHint>Заготовка = физическая длина + поправки A/B, затем округление вверх до шага. Масштаб изображения условный. Разделка обрабатывает ту же заготовку и не создаёт второй расход. Кабель учитывается целиком; профили его жил показаны ниже. Профиль без данных не считается нулевой разделкой.</InfoHint><button className="ui-control" type="button" autoFocus onClick={close}>Закрыть</button></header>
-      <div className="he-relations-actions"><select aria-label="Заготовка" value={active} onChange={e=>setSelected(e.target.value)}>{ids.map(id=><option key={id} value={id}>{document.wires.find(w=>w.id===id)?.circuit || id}</option>)}</select><span role="status">{unsaved?`Текущий документ · не сохранён · база r${revision}`:`Сохранённая ревизия r${revision}`}</span><button className="ui-control" type="button" disabled={!diagram} onClick={()=>{if(diagram)onReveal(diagram.objectId);close();}}>На чертеже</button></div>
+      <header className="ui-section-heading"><strong>Резка и разделка</strong><InfoHint>Заготовка = физическая длина + поправки A/B, затем округление вверх до шага. Масштаб изображения условный. Разделка обрабатывает ту же заготовку и не создаёт второй расход. Кабель учитывается целиком; профили его жил показаны ниже. Профиль без данных не считается нулевой разделкой.</InfoHint>{!embedded&&<button className="ui-control" type="button" autoFocus onClick={close}>Закрыть</button>}</header>
+      <div className="he-relations-actions"><select aria-label="Заготовка" value={active} onChange={e=>setSelected(e.target.value)}>{ids.map(id=><option key={id} value={id}>{document.wires.find(w=>w.id===id)?.circuit || id}</option>)}</select><span role="status">{unsaved?`Текущий документ · не сохранён · база r${revision}`:`Сохранённая ревизия r${revision}`}</span><button className="ui-control" type="button" disabled={!diagram} onClick={()=>{if(diagram)onReveal(diagram.objectId);if(!embedded)close();}}>На чертеже</button></div>
       {diagram?<><strong>{diagram.material ?? "Материал не закреплён"}</strong><div className="he-cut-fields">{([
         ["lengthMm","Исходная длина, мм",diagram.sourceLengthMm], ["endCorrectionFromMm","Поправка A, мм",diagram.correctionA], ["endCorrectionToMm","Поправка B, мм",diagram.correctionB], ["cutRoundingStepMm","Шаг округления, мм",diagram.roundingMm],
       ] as const).map(([key,label,value])=><CutField key={`${diagram.objectId}:${key}`} label={label} value={value} nullable={key==="lengthMm"} onCommit={value=>commit(key,value)}/>)}</div>

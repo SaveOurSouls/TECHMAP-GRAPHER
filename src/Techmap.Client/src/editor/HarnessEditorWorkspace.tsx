@@ -96,6 +96,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
   readonly relationPanel?: ReactNode;
+  readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
   readonly cables?: readonly CableInstance[];
   readonly saveState?: EditorSaveState;
@@ -217,7 +218,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest,
+  highlightedObjectIds = [], relationPanel, revealRequest, drawingWindows,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -515,7 +516,7 @@ export function HarnessEditorWorkspace({
           view={view}
           tool={tool}
           camera={camera}
-          objects={viewportObjects}
+          objects={drawingWindows && view==="drawing"?viewportObjects.filter(o=>o.kind!=="drawing-table"):viewportObjects}
           layers={layers}
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
@@ -525,6 +526,7 @@ export function HarnessEditorWorkspace({
           componentTemplateViewInstances={componentTemplateViewInstances}
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}
+          drawingWindows={view==="drawing"?drawingWindows?.(camera):undefined}
           diagnosticOverlay={diagnosticOverlay}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}

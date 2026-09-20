@@ -19,14 +19,16 @@ public sealed class HarnessDesignApiTests
     [InlineData("point")]
     [InlineData("duplicate")]
     [InlineData("kind")]
+    [InlineData("dock")]
+    [InlineData("bomText")]
     public async Task Drawing_documents_round_trip_and_validate_annotation_edits(string mutation)
     {
         await using var factory=new TechmapWebApplicationFactory(); using var client=factory.CreateLocalClient();
         var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
         var content=JsonNode.Parse("""
           {"schemaVersion":1,"connectors":[],"wires":[],"drawingDocuments":{
-           "tables":[{"id":"T","kind":"bom","position":{"x":10,"y":20}}],
-           "leaders":[{"id":"L","objectId":"missing","rowKey":"source","anchorOffset":{"x":1,"y":2},"circle":{"x":100,"y":200}}],"bomOrder":["source"]}}
+           "tables":[{"id":"T","kind":"cut","dock":"right","position":{"x":10,"y":20}}],
+           "leaders":[{"id":"L","objectId":"missing","rowKey":"source","anchorOffset":{"x":1,"y":2},"circle":{"x":100,"y":200}}],"bomOrder":["source"],"bomText":{"source":{"note":"Edited"}}}}
           """)!;
         var original=JsonSerializer.SerializeToElement(content);
         using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
@@ -34,6 +36,8 @@ public sealed class HarnessDesignApiTests
         var d=content["drawingDocuments"]!;
         if(mutation=="point")d["leaders"]![0]!["circle"]!["x"]="bad";
         if(mutation=="duplicate")d["leaders"]![0]!["id"]="T";
+        if(mutation=="dock")d["tables"]![0]!["dock"]="unknown";
+        if(mutation=="bomText")d["bomText"]!["source"]!["note"]=42;
         if(mutation=="kind")d["tables"]![0]!["kind"]="unknown";
         using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
         Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);

@@ -6,6 +6,8 @@ import { parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
 const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire",sourceKey:"SAME",displayName:"Провод"};
+import { tableWindowPosition } from "./DrawingTableWindows";
+
 describe("drawing tables and position leaders",()=>{
   it("keeps source versions separate, sums exactly and excludes material cable members",()=>{
     const d=physicalFixture();
@@ -44,4 +46,17 @@ describe("drawing tables and position leaders",()=>{
     expect(drawingDocumentScene({...h.present,connectors:[]}).find(o=>o.id==="L")!.label).toBe("?");
     expect(()=>parseHarnessDesignDocument({...h.present,drawingDocuments:{...documents,tables:[{...documents.tables[0],position:{x:NaN,y:0}}]}})).toThrow();
   });
+  it("keeps floating coordinates in drawing space and docking independent of camera",()=>{
+    const table={id:"cut",kind:"cut" as const,position:{x:100,y:200}};
+    expect(tableWindowPosition(table,{offsetX:10,offsetY:20,zoom:2})).toEqual({left:210,top:420});
+    expect(tableWindowPosition({...table,dock:"right"},{offsetX:-1000,offsetY:-2000,zoom:.2})).toEqual({right:8,top:8});
+    const d=physicalFixture(),key=buildDrawingBom(d)[0]!.key;
+    const documents={...emptyDrawingDocuments(),tables:[{...table,dock:"bottom" as const}],bomText:{[key]:{name:"Edited",note:"Note"}}};
+    const h=executeEditorCommand(createEditorHistory(d),{type:"set-drawing-documents",documents});
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(documents);
+    expect(buildDrawingBom(h.present)[0]).toMatchObject({name:"Edited",note:"Note"});
+    expect(undoEditorCommand(h).present).toBe(d);
+    expect(()=>parseHarnessDesignDocument({...h.present,drawingDocuments:{...documents,tables:[{...table,dock:"bad"}]}})).toThrow();
+  });
+
 });

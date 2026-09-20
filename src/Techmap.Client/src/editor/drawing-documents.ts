@@ -3,9 +3,9 @@ import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, t
 import { coveringPaths } from "./physical-coverings";
 import { physicalNodePoint, physicalSegmentPoints } from "./physical-topology";
 
-export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections"; readonly position: Point }
+export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom" }
 export interface PositionLeader { readonly id: string; readonly objectId: string; readonly rowKey: string; readonly anchorOffset: Point; readonly circle: Point }
-export interface DrawingDocuments { readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[] }
+export interface DrawingDocuments { readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {designation?:string;name?:string;note?:string}> }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly designation: string; readonly name: string;
@@ -43,7 +43,7 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
   for(const c of document.physicalTopology?.coverings ?? []) if(c.material) add(materialKey("protection",c.material),c.id,c.name,c.material.displayName,c.lengthMm===null?null:c.lengthMm/1000,"м","Защитное покрытие");
   const order=document.drawingDocuments?.bomOrder ?? [];
   const keys=[...rows.keys()].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?Number.MAX_SAFE_INTEGER:ai)-(bi<0?Number.MAX_SAFE_INTEGER:bi);});
-  return keys.map((key,i)=>{const r=rows.get(key)!;return {key,sourceIdentity:key,position:i+1,designation:r.designation.join(", "),name:r.name,amount:r.unknown?null:Number(r.amountMicros*BigInt(quantity))/1e6,unit:r.unit,note:r.note+(r.unknown?" · длина не задана":""),objectIds:[...r.objectIds]};});
+  return keys.map((key,i)=>{const r=rows.get(key)!,edit=document.drawingDocuments?.bomText?.[key];return {key,sourceIdentity:key,position:i+1,designation:edit?.designation??r.designation.join(", "),name:edit?.name??r.name,amount:r.unknown?null:Number(r.amountMicros*BigInt(quantity))/1e6,unit:r.unit,note:edit?.note??r.note+(r.unknown?" · длина не задана":""),objectIds:[...r.objectIds]};});
 }
 
 export function connectionEndLabel(document: HarnessDesignDocument,end:WireEndpoint):string {
@@ -73,10 +73,11 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;
   const point=(p:Point)=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e7&&Math.abs(p.y)<=1e7;
   for(const t of [...d.tables,...d.leaders]){if(!t||!text(t.id)||ids.has(t.id))return fail();ids.add(t.id);}
-  for(const t of d.tables)if(!["bom","connections"].includes(t.kind)||!point(t.position))return fail();
+  for(const t of d.tables)if(!["bom","connections","cut"].includes(t.kind)||!point(t.position)||(t.dock!==undefined&&!["left","right","top","bottom"].includes(t.dock)))return fail();
   for(const l of d.leaders){if(ids.has(`${l.id}:anchor`))return fail();ids.add(`${l.id}:anchor`);}
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle))return fail();
   if(new Set(d.bomOrder).size!==d.bomOrder.length||d.bomOrder.some(k=>!text(k,4096)))return fail();
+  if(d.bomText!==undefined){if(!d.bomText||typeof d.bomText!=="object"||Array.isArray(d.bomText)||Object.keys(d.bomText).length>50000)return fail();for(const [key,edit] of Object.entries(d.bomText)){if(!text(key,4096)||!edit||typeof edit!=="object"||Array.isArray(edit)||Object.entries(edit).some(([k,v])=>!["designation","name","note"].includes(k)||typeof v!=="string"||v.length>4096))return fail();}}
   // Missing targets are intentionally retained and visibly diagnosed, never reassigned by proximity.
   return d;
 }
@@ -84,7 +85,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
 export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1):EditorSceneObject[] {
   const d=document.drawingDocuments;if(!d)return [];
   const rows=buildDrawingBom(document,quantity);
-  const tables:EditorSceneObject[]=d.tables.map(t=>{
+  const tables:EditorSceneObject[]=d.tables.filter(t=>t.kind!=="cut" && !t.dock).map(t=>{
     const headers=t.kind==="bom"?["Поз.","Обозначение","Наименование","Кол-во","Примечание"]:["Провод","A","B","Цепь","Материал","Маршрут"];
     const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map(w=>[w.id,connectionEndLabel(document,w.from),connectionEndLabel(document,w.to),w.circuit,w.materialBinding?.displayName ?? "—",document.physicalTopology?.routes.some(r=>r.wireId===w.id)?"Задан":"Не задан"]);
     const widths=t.kind==="bom"?[45,140,200,95,240]:[140,130,130,110,160,100];

@@ -65,6 +65,7 @@ export interface CanvasViewportProps {
   /** Resolves an asset inside the exact project snapshot. */
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly overlay?: ReactNode;
+  readonly drawingWindows?:ReactNode;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
@@ -2610,7 +2611,7 @@ export function CanvasViewport({
   e4Overlays,
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
-  overlay,
+  overlay, drawingWindows,
   diagnosticOverlay,
   inlineEditor,
   onCameraChange,
@@ -3340,6 +3341,7 @@ export function CanvasViewport({
                 : "Сегменты: перетащить; двойной щелчок по изгибу — удалить"
               : "Ctrl + колесо — масштаб"}</span>
       </div>
+      {drawingWindows}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}
       {inlineEditor && inlineObject && inlineLayout && (
