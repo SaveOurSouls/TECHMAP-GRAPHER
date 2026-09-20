@@ -507,7 +507,7 @@ internal static partial class ComponentTemplateContentV2Validator
             var pointIndex = 0;
             foreach (var pointId in orderedPointIds)
             {
-                if (pointLogicalIds.TryGetValue(pointId, out var logicalId) && !domain.LogicalContactIds.Contains(logicalId))
+                if (pointLogicalIds.TryGetValue(pointId, out var logicalId) && !domain.LogicalContactIds.Contains(logicalId) && !(hasArrayLayout && domain.LogicalContactIds.Count == 0))
                     Throw("Repeat point must belong to a logical contact in its repeat domain.", $"{placementPath}.contactPointIds[{pointIndex}]");
                 logicalIds.Add(logicalId!);
                 pointIndex++;
@@ -673,11 +673,11 @@ internal static partial class ComponentTemplateContentV2Validator
                     .ToDictionary(item => item.logicalId, item => item.order, StringComparer.Ordinal);
                 var orderedLogicalIds = placement.LogicalContactIds
                     .Select((logicalId, placementOrder) => (logicalId, placementOrder))
-                    .OrderBy(item => domainOrder[item.logicalId])
+                    .OrderBy(item => domainOrder.GetValueOrDefault(item.logicalId, item.placementOrder))
                     .ThenBy(item => item.placementOrder)
                     .Select(item => item.logicalId)
                     .ToArray();
-                var stride = domain.LogicalContactIds.Count;
+                var stride = domain.LogicalContactIds.Count == 0 && placement.HasArrayLayout ? placement.ContactPointIds.Count : domain.LogicalContactIds.Count;
                 for (var occurrence = 0L; occurrence < domain.DefaultCount; occurrence++)
                 {
                     foreach (var logicalId in orderedLogicalIds)

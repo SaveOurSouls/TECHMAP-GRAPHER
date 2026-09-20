@@ -45,6 +45,7 @@ export interface TemplateCanvasV2Props {
   pointAngleMode?: TemplatePointAngleModeV2;
   resolveAssetUrl: (assetId: string) => string;
   parameterDefaults?: TemplateParameterDefaultsV2;
+  repeatedContactLabels?: Readonly<Record<string,{number:string;name:string}|null>>;
   width?: number;
   height?: number;
 }
@@ -561,6 +562,7 @@ export function TemplateCanvasV2({
   pointAngleMode = "free",
   resolveAssetUrl,
   parameterDefaults,
+  repeatedContactLabels,
   width = TEMPLATE_CANVAS_V2_WIDTH,
   height = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
@@ -1161,7 +1163,7 @@ export function TemplateCanvasV2({
   }
 
   function renderRepeatedPoints(): ReactNode {
-    return [...repeatPreview.values()].flatMap(occurrences => occurrences.flatMap(occurrence => occurrence.contactPoints.map(point => (
+    return [...repeatPreview.values()].flatMap(occurrences => occurrences.flatMap(occurrence => occurrence.contactPoints.filter(point=>repeatedContactLabels?.[`${viewId}:${point.key}`]!==null).map(original => { const point={...original,...repeatedContactLabels?.[`${viewId}:${original.key}`]}; return (
       <g
         key={`${viewId}:${point.key}`}
         data-template-point-id={point.prototypeContactPointId}
@@ -1180,7 +1182,7 @@ export function TemplateCanvasV2({
         <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{point.number}</text>
         <title>{`${point.name} · ${point.direction}`}</title>
       </g>
-    ))));
+    );})));
   }
 
   function renderMultiSelectionOverlay(): ReactNode {

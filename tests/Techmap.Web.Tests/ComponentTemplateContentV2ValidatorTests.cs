@@ -38,6 +38,21 @@ public sealed class ComponentTemplateContentV2ValidatorTests
     }
 
     [Fact]
+    public void Graphic_arrays_can_repeat_point_representations_without_repeating_electrical_contacts()
+    {
+        var content = ValidContent();
+        content["repeaters"]![0]!["logicalContactIds"] = new JsonArray();
+        foreach (var view in content["views"]!.AsArray())
+        foreach (var placement in view!["repeatPlacements"]!.AsArray())
+        {
+            placement!["arrayLayout"] = new JsonObject { ["rows"] = 2, ["direction"] = "short-side", ["numbering"] = "snake", ["countSource"] = "article" };
+            placement["step"]!["x"] = new JsonObject { ["kind"] = "constant", ["value"] = 20 };
+            placement["step"]!["y"] = new JsonObject { ["kind"] = "constant", ["value"] = 20 };
+        }
+        ComponentTemplateContentV2Validator.Validate(Element(content));
+    }
+
+    [Fact]
     public void Complete_contract_with_distinct_view_repeat_placements_is_valid()
     {
         var content = ValidContent();

@@ -374,7 +374,7 @@ export function expandRepeatPlacementV2(
     if (!point) throw new TemplateRepeatV2Error("contact_point_missing", `Точка контакта ${pointId} не найдена.`);
     const logical = logicalContacts.get(point.logicalContactId);
     if (!logical) throw new TemplateRepeatV2Error("logical_contact_missing", `Логический контакт ${point.logicalContactId} не найден.`);
-    const logicalIndex = domainOrder.get(logical.id);
+    const logicalIndex = domainOrder.get(logical.id) ?? (placement.arrayLayout && domain.logicalContactIds.length===0 ? placementIndex : undefined);
     if (logicalIndex === undefined) {
       throw new TemplateRepeatV2Error("repeat_contact_mismatch", `Контакт ${logical.id} не входит в домен повтора.`);
     }
@@ -389,7 +389,7 @@ export function expandRepeatPlacementV2(
   }).sort((left, right) => left.logicalIndex - right.logicalIndex || left.placementIndex - right.placementIndex);
 
   const occurrences: RepeatOccurrenceDescriptorV2[] = [];
-  const stride = domain.logicalContactIds.length;
+  const stride = domain.logicalContactIds.length || (placement.arrayLayout ? placement.contactPointIds.length : 0);
   for (let index = 0; index < count; index += 1) {
     const offset = Object.freeze(arrayOffsets?.[index] ?? { x: index * stepX, y: index * stepY });
     const key = repeatOccurrenceKeyV2(domain.id, index, placement.prototypeGroupId);
