@@ -70,6 +70,7 @@ export interface CanvasViewportProps {
   /** Selects all members of a linked E4 overlay in one state update. */
   readonly onObjectGroupSelect?: (objectIds: readonly string[]) => void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
+  readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
   /** Shows a transient move without adding an undo entry. Passing null clears it. */
   readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
@@ -1976,6 +1977,18 @@ export function drawEditorSceneObject(
   componentTemplateImageCache = new ComponentTemplateImageCache(),
 ) {
   context.save();
+  if(object.kind==="drawing-table") {
+    const widths=JSON.parse(object.metadata?.widths ?? "[]") as number[],headers=JSON.parse(object.metadata?.headers ?? "[]") as string[],rows=JSON.parse(object.metadata?.rows ?? "[]") as string[][];
+    context.fillStyle="#fff";context.fillRect(object.x,object.y,object.width,object.height);context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=selected?2:1;context.strokeRect(object.x,object.y,object.width,object.height);
+    context.fillStyle=object.color;context.font="bold 12px Arial";context.fillText(object.label,object.x+8,object.y+17);
+    const paintRow=(row:string[],y:number,height:number,bold:boolean)=>{let x=object.x;context.font=`${bold?"bold ":""}11px Arial`;row.forEach((value,i)=>{context.strokeRect(x,y,widths[i]!,height);context.save();context.beginPath();context.rect(x+3,y+1,widths[i]!-6,height-2);context.clip();context.fillText(value,x+5,y+height/2+4);context.restore();x+=widths[i]!;});};
+    paintRow(headers,object.y+24,28,true);rows.forEach((r,i)=>paintRow(r,object.y+52+i*32,32,false));context.restore();return;
+  }
+  if(object.kind==="position-leader") {
+    const a=object.points?.[0],b=object.points?.[1];if(a&&b){context.strokeStyle=object.color;context.lineWidth=selected?2:1;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();context.beginPath();context.arc(b.x,b.y,12,0,Math.PI*2);context.fillStyle="#fff";context.fill();context.stroke();context.fillStyle=object.color;context.textAlign="center";context.textBaseline="middle";context.font="12px Arial";context.fillText(object.label,b.x,b.y);}
+    context.restore();return;
+  }
+  if(object.kind==="leader-anchor") {context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+4,object.y+4,4,0,Math.PI*2);context.fill();context.restore();return;}
   if (object.kind === "physical-covering") {
     for (const points of object.paths ?? [object.points ?? []]) {
     context.globalAlpha = selected ? .65 : .3; context.lineJoin = "miter"; context.miterLimit = 4; context.lineCap = "butt";
@@ -2587,6 +2600,12 @@ function redrawCanvas(
       points.forEach((point, i) => i ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
       context.stroke(); context.restore();
     }
+    if(highlighted.has(object.id)&&object.kind!=="wire") {
+      context.save();context.strokeStyle="#f2af28";context.globalAlpha=.7;context.lineWidth=6/Math.max(.5,camera.zoom);
+      if(object.kind==="physical-covering") {for(const path of object.paths??[]){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();}}
+      else context.strokeRect(object.x-4,object.y-4,object.width+8,object.height+8);
+      context.restore();
+    }
     drawEditorSceneObject(
       context,
       object,
@@ -2695,7 +2714,7 @@ export function CanvasViewport({
   onViewportSizeChange,
   onObjectSelect,
   onObjectGroupSelect,
-  onObjectMove, onDrawingMove,
+  onRelatedObjectsSelect, onObjectMove, onDrawingMove,
   onObjectMovePreview,
   onWireConnect,
   onWireReconnect,
@@ -3068,13 +3087,18 @@ export function CanvasViewport({
         componentTemplateViewInstances,
         resolveComponentTemplateAssetUrl,
       );
+      const table=objects.find(o=>o.id===objectId&&o.kind==="drawing-table");
+      if(table && worldPoint.y>=table.y+52 && onRelatedObjectsSelect) {
+        const rows=JSON.parse(table.metadata?.rowObjectIds ?? "[]") as string[][];
+        const ids=rows[Math.floor((worldPoint.y-table.y-52)/32)];if(ids){onRelatedObjectsSelect(ids);return;}
+      }
       const selectedObject = objects.find((item) => item.id === selectedObjectId);
       const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
         (selectedObject?.kind === "wire" || selectedObject?.kind === "physical-segment") && onCanvasDoubleClick !== undefined;
       if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || event.shiftKey);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
-      if (object && (object.kind === "connector" || object.kind === "physical-node") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind === "connector" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",

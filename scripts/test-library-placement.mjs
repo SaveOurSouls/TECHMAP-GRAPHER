@@ -415,7 +415,20 @@ try {
     assert.deepEqual(physicalSegmentPoints(d,d.physicalTopology.segments[0])[0],{x:200,y:110});
     assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['S1']).wireIds.sort(),['W1','W3']);
     assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['W1'],true).wireIds,['W1']);
+    if(process.argv.includes('--check-documents')) {
+      const {buildDrawingBom,moveDrawingAnnotation,drawingDocumentScene}=await module('editor/drawing-documents.ts');
+      const rows=buildDrawingBom(d),row=rows.find(r=>r.objectIds.includes('A'));
+      d=applyEditorCommand(d,{type:'set-drawing-documents',documents:{tables:[{id:'BOM',kind:'bom',position:{x:100,y:1200}},{id:'CONNECTIONS',kind:'connections',position:{x:100,y:1650}}],leaders:[{id:'LEADER',objectId:'A',rowKey:row.key,anchorOffset:{x:10,y:10},circle:{x:200,y:-50}}],bomOrder:rows.map(r=>r.key)}});
+      const moved=moveDrawingAnnotation(d,'LEADER',{x:220,y:-80});
+      assert.deepEqual(moved.leaders[0].anchorOffset,{x:10,y:10});
+      d=applyEditorCommand(d,{type:'set-drawing-documents',documents:moved});
+      const scene=drawingDocumentScene(d);
+      assert.deepEqual(JSON.parse(scene.find(o=>o.id==='BOM').metadata.headers),['Поз.','Обозначение','Наименование','Кол-во','Примечание']);
+      assert.equal(scene.find(o=>o.id==='LEADER').label,String(row.position));
+    }
     await designs.save(project.projectId,physicalHarnessId,0,d);
+    if(process.argv.includes('--check-documents')) assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.drawingDocuments,d.drawingDocuments);
+
     expectedTopology=d.physicalTopology;
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
@@ -500,7 +513,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

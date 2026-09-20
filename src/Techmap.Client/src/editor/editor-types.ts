@@ -10,7 +10,7 @@ export type EditorTool =
   | "text"
   | "dimension";
 
-export type EditorObjectKind = "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering";
+export type EditorObjectKind = "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor";
 
 export interface EditorPoint {
   readonly x: number;

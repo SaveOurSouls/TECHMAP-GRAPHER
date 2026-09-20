@@ -16,6 +16,32 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("point")]
+    [InlineData("duplicate")]
+    [InlineData("kind")]
+    public async Task Drawing_documents_round_trip_and_validate_annotation_edits(string mutation)
+    {
+        await using var factory=new TechmapWebApplicationFactory(); using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=JsonNode.Parse("""
+          {"schemaVersion":1,"connectors":[],"wires":[],"drawingDocuments":{
+           "tables":[{"id":"T","kind":"bom","position":{"x":10,"y":20}}],
+           "leaders":[{"id":"L","objectId":"missing","rowKey":"source","anchorOffset":{"x":1,"y":2},"circle":{"x":100,"y":200}}],"bomOrder":["source"]}}
+          """)!;
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var d=content["drawingDocuments"]!;
+        if(mutation=="point")d["leaders"]![0]!["circle"]!["x"]="bad";
+        if(mutation=="duplicate")d["leaders"]![0]!["id"]="T";
+        if(mutation=="kind")d["tables"]![0]!["kind"]="unknown";
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("missing")]
     [InlineData("bounds")]
     [InlineData("material")]

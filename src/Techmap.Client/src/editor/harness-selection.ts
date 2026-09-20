@@ -24,6 +24,10 @@ export function buildHarnessSelectionIndex(document: HarnessDesignDocument) {
   }
   for (const node of document.physicalTopology?.nodes ?? []) components.set(node.id, new Set(document.physicalTopology!.segments.filter(s => s.from === node.id || s.to === node.id).flatMap(s => [...components.get(s.id) ?? []])));
   for (const c of document.physicalTopology?.coverings ?? []) components.set(c.id,new Set(c.spans.flatMap(s=>[...components.get(s.segmentId) ?? []])));
+  for(const l of document.drawingDocuments?.leaders ?? []) {
+    const ids=wires.has(l.objectId)?[l.objectId]:document.cables.find(c=>c.id===l.objectId)?.memberWireIds ?? [...components.get(l.objectId) ?? []];
+    components.set(l.id,new Set(ids));components.set(`${l.id}:anchor`,new Set(ids));
+  }
   const known = new Set([...components.keys(), ...wires.keys(), ...document.connectors.map(c => c.id),
     ...document.junctions.map(j => j.id), ...document.screens.map(s => s.id), ...document.cables.map(c => c.id)]);
   const cables = new Map(document.cables.map(cable => [cable.id, cable.memberWireIds]));

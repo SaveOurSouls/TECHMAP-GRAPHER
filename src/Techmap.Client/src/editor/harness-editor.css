@@ -324,3 +324,8 @@
 .he-physical-fields input { width:65px; }
 .he-physical-list { max-height:150px; overflow:auto; }
 .he-physical-list button { font-size:11px; }
+
+.he-document-table {overflow:auto;max-height:240px;margin:6px 0;}
+.he-document-table table {border-collapse:collapse;font-size:11px;min-width:600px;}
+.he-document-table td,.he-document-table th {padding:4px;border:1px solid #dce5ea;text-align:left;}
+.he-document-table input {width:90px;}
