@@ -115,7 +115,7 @@ try {
     core = setRootNodeRotationAroundCenterV3(core,drawing.id,layer.id,nodeId,37);
     core = resizeNodeV3(core,drawing.id,layer.id,nodeId,'se',20,15);
     core = editContactPointV3(core,drawing.id,pointId,{x:{kind:'constant',value:123},y:{kind:'constant',value:234}});
-    core.views.find(view => view.id === drawing.id).layers[0].nodes[0].fill={color:'#2563eb',hatch:{kind:'cross',spacing:8,angle:30}};
+    core.views.find(view => view.id === drawing.id).layers[0].nodes[0].fill={color:'#2563eb',hatch:{kind:'cross',spacing:8,angle:30,backgroundColor:'#ffffff'}};
     const selection = drawingSelection(core.views.find(view => view.id === drawing.id),[nodeId,pointId],core.articleVariants[0].id);
     content = createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[selection],[{logicalContactId:core.logicalContacts[0].id,seriesRowId:content.e4ConnectorTable.seriesDefaults[0].rowId}]).content;
   }
@@ -133,6 +133,17 @@ try {
     table=applyE4ConnectorRowEdit(table,{articleVariantId:core.articleVariants[0].id,seriesRowId:table.articles[0].rows[0].seriesRowId,scope:'article',changes:{wire:'ПВ-3',color:'Красный',secondaryColor:'Белый',customValues:{note:'Preset'}}});
     content=createTemplateContentV5FromEditor(core,table,content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,drawings,content.drawingContactBindings).content;
     content.e4Presentation.baseColumns=content.e4Presentation.baseColumns.map(c=>({...c,visible:true}));
+  }
+  if (process.argv.includes('--check-drawing-array')) {
+    const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
+    const {setDrawingArray}=await module('component-library/drawing-array-commands.ts');
+    const {drawingSelection}=await module('component-library/drawing-bindings.ts');
+    let core=projectTemplateContentV5ToV3(content);
+    const view=core.views.find(v=>v.kind==='drawing'),binding=content.articleDrawings.find(d=>d.target==='drawing');
+    core=setDrawingArray(core,view.id,view.layers[0].id,[...binding.nodeIds,...binding.contactPointIds],{rows:2,direction:'long-side',numbering:'snake',countSource:'article',count:12,pitchX:160,pitchY:300});
+    const changed=core.views.find(v=>v.id===view.id);
+    const selection={...drawingSelection(changed,[changed.repeatPlacements[0].prototypeGroupId],core.articleVariants[0].id),target:'drawing',viewId:view.id};
+    content=createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,content.articleDrawings.map(d=>d===binding?selection:d),content.drawingContactBindings).content;
   }
   if (process.argv.includes('--check-purpose')) {
     content = { ...content, e4ConnectorTable: { ...content.e4ConnectorTable,
@@ -184,14 +195,14 @@ try {
     assert.deepEqual(restored.content.articleDrawings, content.articleDrawings);
     assert.deepEqual(restored.content.drawingContactBindings, content.drawingContactBindings);
     const drawing = restored.content.views.find(view => view.kind === 'drawing');
-    assert.deepEqual(drawing.layers[0].nodes[0].fill.hatch,{kind:'cross',spacing:8,angle:30});
+    assert.deepEqual(drawing.layers[0].nodes[0].fill.hatch,{kind:'cross',spacing:8,angle:30,backgroundColor:'#ffffff'});
     const contact = saved.content.connectors[0].libraryBinding.snapshot.contacts[0];
     assert.equal(contact.sourceNumber,'1');
     assert.equal(contact.representations[0].x,123);
     assert.equal(contact.representations[0].y,234);
     const { projectComponentTemplateView } = await module('editor/component-template-view-renderer.ts');
     const rendered = projectComponentTemplateView({objectId:preview.id,snapshotId:'smoke',content:restored.content,articleVariantId:content.articleVariants[0].id},'drawing',{x:0,y:0});
-    assert.equal(rendered.commands.length,1);
+    assert.equal(rendered.commands.length,process.argv.includes('--check-drawing-array')?12:1);
     assert.equal(rendered.commands[0].hatch.kind,'cross');
   }
   let terminalRefreshChecked = false;
@@ -225,12 +236,26 @@ try {
   if (process.argv.includes('--check-drawing-placement')) {
     const { applyEditorCommand } = await module('editor/commands.ts');
     const current = await designs.get(project.projectId,harnessId);
-    const drawingId = content.views.find(v=>v.kind==='drawing').layers[0].nodes[0].id;
+    const drawingId = content.articleDrawings.find(d=>d.target==='e4')?.nodeIds[0] ?? content.views.find(v=>v.kind==='drawing').layers[0].nodes[0].id;
     let updated = applyEditorCommand(current.content,{type:'set-drawing-placement',connectorId:preview.id,drawingId,offset:{x:330,y:90}});
     updated = applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId,visible:false});
+    if(process.argv.includes('--check-drawing-scale')) {
+      updated=applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId,scale:2});
+      updated=applyEditorCommand(updated,{type:'set-drawing-placement',connectorId:preview.id,drawingId:'view:drawing',scale:1.5});
+      const {materializedContactWorldRepresentation}=await module('editor/materialized-contact-representation.ts');
+      const before=current.content.connectors[0],after=updated.connectors[0];
+      assert.deepEqual(after.contacts,before.contacts);
+      for(const contact of before.contacts) {
+        const a=materializedContactWorldRepresentation(before,contact.id,'drawing');
+        const b=materializedContactWorldRepresentation(after,contact.id,'drawing');
+        if(process.argv.includes('--check-drawing-array'))assert.ok(a&&b);
+        if(a&&b)for(const axis of ['x','y'])assert.ok(Math.abs((b.position[axis]-before.positions.drawing[axis])-(a.position[axis]-before.positions.drawing[axis])*1.5)<1e-8);
+      }
+    }
     await designs.save(project.projectId,harnessId,current.revision,updated);
     const reread = await designs.get(project.projectId,harnessId);
     drawingPlacementExpected = [{drawingId,visible:false,offset:{x:330,y:90}}];
+    if(process.argv.includes('--check-drawing-scale'))drawingPlacementExpected=[{...drawingPlacementExpected[0],scale:2},{drawingId:'view:drawing',visible:true,offset:{x:0,y:0},scale:1.5}];
     assert.deepEqual(reread.content.connectors[0].drawingPlacements,drawingPlacementExpected);
     assert.deepEqual(reread.content.connectors[0].positions,current.content.connectors[0].positions);
     assert.deepEqual(reread.content.connectors[0].libraryBinding,current.content.connectors[0].libraryBinding);
@@ -555,7 +580,7 @@ try {
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
-  const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
+  const report = { status: 'ok', drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
     revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };

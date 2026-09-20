@@ -1,3 +1,5 @@
+import { DrawingResizeGrip } from "./DrawingResizeGrip";
+import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { clearDecorationSpans } from "./e4-decoration-spans";
 import {
@@ -69,6 +71,7 @@ export interface CanvasViewportProps {
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   /** Selects all members of a linked E4 overlay in one state update. */
   readonly onObjectGroupSelect?: (objectIds: readonly string[]) => void;
+  readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
@@ -2714,7 +2717,7 @@ export function CanvasViewport({
   onViewportSizeChange,
   onObjectSelect,
   onObjectGroupSelect,
-  onRelatedObjectsSelect, onObjectMove, onDrawingMove,
+  onRelatedObjectsSelect, onObjectMove, onDrawingMove, onDrawingScale,
   onObjectMovePreview,
   onWireConnect,
   onWireReconnect,
@@ -2744,7 +2747,13 @@ export function CanvasViewport({
   const suppressInlineDoubleClickUntilRef = useRef(0);
   const [inlineDragOffset, setInlineDragOffset] = useState<EditorPoint | null>(null);
   const [drawingPreview,setDrawingPreview]=useState<{objectId:string;drawingId:string;offset:EditorPoint}|null>(null);
-  const displayInstances=drawingPreview ? componentTemplateViewInstances.map(instance=>instance.objectId===drawingPreview.objectId ? {...instance,drawingPlacements:[...(instance.drawingPlacements ?? []).filter(p=>p.drawingId!==drawingPreview.drawingId),{drawingId:drawingPreview.drawingId,visible:true,offset:drawingPreview.offset}]} : instance) : componentTemplateViewInstances;
+  const [scalePreview,setScalePreview]=useState<{objectId:string;drawingId:string;scale:number}|null>(null);
+  const displayInstances=componentTemplateViewInstances.map(instance=>{
+    const change=drawingPreview?.objectId===instance.objectId?drawingPreview:scalePreview?.objectId===instance.objectId?scalePreview:null;
+    if(!change)return instance;
+    const previous=instance.drawingPlacements?.find(p=>p.drawingId===change.drawingId)??{drawingId:change.drawingId,visible:true,offset:{x:0,y:0}};
+    return {...instance,drawingPlacements:[...(instance.drawingPlacements??[]).filter(p=>p.drawingId!==change.drawingId),{...previous,...("scale" in change?{scale:change.scale}:{offset:change.offset})}]};
+  });
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
@@ -3411,6 +3420,13 @@ export function CanvasViewport({
         onDrop={drop}
         onDoubleClick={doubleClick}
       />
+      {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{
+        const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
+        const drawings=view==="e4"?projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width??object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible):[];
+        const projected=view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
+        const targets=view==="e4"?drawings.map(d=>({id:d.drawingId,x:d.bounds.maxX,y:d.bounds.minY,ax:d.bounds.minX,ay:d.bounds.maxY})) : projected?[{id:DRAWING_VIEW_PLACEMENT_ID,x:projected.bounds.maxX,y:projected.bounds.maxY,ax:object.x,ay:object.y}]:[];
+        return targets.map(t=><DrawingResizeGrip key={`${object.id}:${t.id}`} x={t.x*camera.zoom+camera.offsetX} y={t.y*camera.zoom+camera.offsetY} vx={(t.x-t.ax)*camera.zoom} vy={(t.y-t.ay)*camera.zoom} scale={drawingScale(instance.drawingPlacements,t.id)} preview={scale=>setScalePreview(scale===null?null:{objectId:object.id,drawingId:t.id,scale})} commit={scale=>onDrawingScale(object.id,t.id,scale)}/>);
+      })}
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
         <span>{tool === "wire"

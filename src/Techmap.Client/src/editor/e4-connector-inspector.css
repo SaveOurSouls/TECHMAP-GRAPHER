@@ -178,3 +178,8 @@
 .e4ci-base-columns > .info-hint { justify-self: end; align-self: center; }
 .e4ci-section-title { align-items: center; }
 .e4ci-name-global button { min-height: 28px; font-size: 10px; }
+
+.drawing-scale-control { display:inline-flex; align-items:center; gap:4px; margin-left:auto; }
+.drawing-scale-control input[type="number"] { width:70px; min-width:0; height:28px; padding:3px 5px; }
+
+.he-drawing-resize { position:absolute; z-index:4; width:12px; height:12px; min-height:0; padding:0; border:2px solid #1685d1; border-radius:50%; background:white; cursor:nesw-resize; touch-action:none; }

@@ -1,3 +1,4 @@
+import { drawingScale } from "./drawing-scale";
 import type {
   ComponentTemplateContactRepresentationSnapshot,
   ComponentTemplateContactSnapshot,
@@ -45,9 +46,9 @@ export function selectMaterializedContactRepresentation(
   const repeated = contact.logicalContactId !== contact.prototypeLogicalContactId;
   return contact.representations.find(representation =>
     representation.viewKind === viewKind &&
-    (repeated
+    (connector.e4TableMode || (repeated
       ? representation.occurrenceKey === contact.logicalContactId
-      : representation.occurrenceKey === undefined)) ?? null;
+      : representation.occurrenceKey === undefined))) ?? null;
 }
 
 /** Translates template-local contact geometry into the selected harness view. */
@@ -63,10 +64,11 @@ export function materializedContactWorldRepresentation(
   );
   if (!representation) return null;
   const origin = connector.positions[viewKind];
+  const scale=viewKind==="drawing"?drawingScale(connector.drawingPlacements):1;
   return {
     position: {
-      x: origin.x + representation.x,
-      y: origin.y + representation.y,
+      x: origin.x + representation.x*scale,
+      y: origin.y + representation.y*scale,
     },
     direction: representation.direction,
     representation,

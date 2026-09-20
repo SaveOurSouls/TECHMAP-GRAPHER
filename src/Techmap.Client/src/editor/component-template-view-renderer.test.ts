@@ -60,6 +60,16 @@ function fixture(): { readonly content: TemplateContentV3; readonly instance: Co
 }
 
 describe("project component template view", () => {
+  it("scales drawing geometry uniformly without changing its pinned content",()=>{
+    const {content,instance}=fixture();const view=content.views[1]!;view.layers[0]!.nodes.push(rectangle(view.layers[0]!.id));
+    const before=projectComponentTemplateView(instance,"drawing",{x:100,y:200})!;
+    const after=projectComponentTemplateView({...instance,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},scale:2}]},"drawing",{x:100,y:200})!;
+    expect(after.bounds.maxX-after.bounds.minX).toBeCloseTo(2*(before.bounds.maxX-before.bounds.minX));
+    expect(after.bounds.maxY-after.bounds.minY).toBeCloseTo(2*(before.bounds.maxY-before.bounds.minY));
+    expect(after.bounds.minX-100).toBeCloseTo(2*(before.bounds.minX-100));
+    expect(after.commands[0]!.nodeId).toBe(before.commands[0]!.nodeId);
+  });
+
   it("selects only the matching E4 or drawing view and keeps layer paint order at instance origin", () => {
     const { content, instance } = fixture();
     const [e4, drawing] = content.views;
@@ -397,6 +407,10 @@ describe("independent E4 companion drawings",()=>{
     expect(moved[0]!.bounds.minX).toBeCloseTo(original[0]!.bounds.minX+750);
     expect(moved[0]!.bounds.minY).toBeCloseTo(original[0]!.bounds.minY+80);
     expect(moved[1]).toEqual(original[1]);
+    const scaled=projectE4DrawingCompanions({...instance,content:v5,drawingPlacements:[{drawingId:a.id,visible:true,offset:{x:0,y:0},scale:2}]},{x:100,y:200},300);
+    expect(scaled[0]!.bounds.maxX-scaled[0]!.bounds.minX).toBeCloseTo(2*(original[0]!.bounds.maxX-original[0]!.bounds.minX));
+    expect(scaled[0]!.bounds.maxY-scaled[0]!.bounds.minY).toBeCloseTo(2*(original[0]!.bounds.maxY-original[0]!.bounds.minY));
+    expect(scaled[1]).toEqual(original[1]);
     const object:EditorSceneObject={id:instance.objectId,layerId:"connectors",kind:"connector",label:"X1",x:100,y:200,width:300,height:80,color:"#000"};
     const layers=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
     const hidden={...instance,content:v5,drawingPlacements:[{drawingId:a.id,visible:false,offset:{x:750,y:80}},{drawingId:b.id,visible:false,offset:{x:0,y:0}}]};

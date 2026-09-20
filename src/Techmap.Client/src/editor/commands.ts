@@ -1,3 +1,4 @@
+import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology, prunePhysicalTopology, type PhysicalTopology } from "./physical-topology";
 import {
@@ -48,7 +49,7 @@ export type EditorCommand =
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
-  | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly visible?:boolean; readonly offset?:Point }
+  | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
   | { readonly type: "refresh-template-terminals"; readonly connectorId: string; readonly catalog: NonNullable<ConnectorInstance["terminalCatalog"]> }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
@@ -203,8 +204,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       return updateConnector(document,command.connectorId,connector=>{
         if(connector.libraryBinding?.mode!=="template") throw new Error("Рисунок доступен библиотечному компоненту.");
         if(!command.drawingId.trim() || command.offset && (!Number.isFinite(command.offset.x) || !Number.isFinite(command.offset.y))) throw new Error("Некорректное положение рисунка.");
+        if(command.scale!==undefined&&!validDrawingScale(command.scale)) throw new Error("Масштаб рисунка: 5–2000%.");
         const previous=connector.drawingPlacements?.find(p=>p.drawingId===command.drawingId) ?? {drawingId:command.drawingId,visible:true,offset:{x:0,y:0}};
-        return {...connector,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {})}]};
+        return {...connector,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {}),...(command.scale===undefined?{}:{scale:command.scale})}]};
       });
     case "move-connector":
       {

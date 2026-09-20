@@ -1,3 +1,7 @@
+import {materializedContactWorldRepresentation} from "../editor/materialized-contact-representation";
+import {applyEditorCommand} from "../editor/commands";
+import {createEmptyHarnessDesign,parseHarnessDesignDocument} from "../editor/model";
+import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "../editor/history";
 import {describe,it,expect} from "vitest";
 import {newTemplateContentV3,addBasicNodeV3,addContactPointV3,addArticleVariantsV3,addContactTypeGroupV3,setArticleVariantContactGroupV3} from "./template-commands-v3";
 import {createE4ConnectorSeriesTableFromV3} from "./e4-connector-series-table";
@@ -30,5 +34,15 @@ describe("drawing arrays with table-bound contacts",()=>{
   if(placed.libraryBinding?.mode!=="template")throw new Error("Missing binding");
   expect(placed.libraryBinding.snapshot.contacts.map(c=>c.representations.length)).toEqual([1,1,1,1,1]);
   expect(new Set(placed.contacts.map(c=>c.id)).size).toBe(5);
+  const before=placed.contacts.map(c=>materializedContactWorldRepresentation(placed,c.id,"drawing")!.position);
+  const document={...createEmptyHarnessDesign(),connectors:[placed]};
+  const command={type:"set-drawing-placement" as const,connectorId:placed.id,drawingId:"view:drawing",scale:2};
+  const scaled=applyEditorCommand(document,command);
+  const restored=parseHarnessDesignDocument(JSON.parse(JSON.stringify(scaled)));
+  expect(restored.connectors[0]!.drawingPlacements![0]!.scale).toBe(2);
+  expect(restored.connectors[0]!.contacts.map(c=>materializedContactWorldRepresentation(restored.connectors[0]!,c.id,"drawing")!.position)).toEqual(before.map(p=>({x:p.x*2,y:p.y*2})));
+  expect(restored.connectors[0]!.contacts.map(c=>c.id)).toEqual(placed.contacts.map(c=>c.id));
+  expect(undoEditorCommand(executeEditorCommand(createEditorHistory(document),command)).present).toEqual(document);
+
  });
 });

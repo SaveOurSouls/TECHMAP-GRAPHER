@@ -113,6 +113,9 @@ public sealed class HarnessDesignApiTests
     [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":\"bad\",\"y\":0}}]")]
     [InlineData("[{\"drawingId\":\"a\",\"visible\":1,\"offset\":{\"x\":0,\"y\":0}}]")]
     [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":0,\"y\":0}},{\"drawingId\":\"a\",\"visible\":false,\"offset\":{\"x\":1,\"y\":1}}]")]
+    [InlineData("""[{"drawingId":"a","visible":true,"offset":{"x":0,"y":0},"scale":0}]""")]
+    [InlineData("""[{"drawingId":"a","visible":true,"offset":{"x":0,"y":0},"scale":21}]""")]
+    [InlineData("""[{"drawingId":"a","visible":true,"offset":{"x":0,"y":0},"scale":"2"}]""")]
     public async Task Drawing_placements_round_trip_and_invalid_edits_preserve_document(string invalid)
     {
         await using var factory = new TechmapWebApplicationFactory();
@@ -121,7 +124,7 @@ public sealed class HarnessDesignApiTests
         var ids = await CreateHarnessAsync(client, csrf);
         var content = JsonNode.Parse("""
             {"schemaVersion":1,"connectors":[{"id":"test","drawingPlacements":[
-              {"drawingId":"figure-1","visible":false,"offset":{"x":350,"y":-80}}]}],"wires":[]}
+              {"drawingId":"figure-1","visible":false,"offset":{"x":350,"y":-80},"scale":2}]}],"wires":[]}
             """)!;
         var initial = JsonSerializer.SerializeToElement(content);
         using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId), new PutHarnessDesignRequest(0,1,initial),csrf);

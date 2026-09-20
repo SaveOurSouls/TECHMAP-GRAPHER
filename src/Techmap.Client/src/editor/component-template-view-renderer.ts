@@ -1,3 +1,4 @@
+import { drawingScale } from "./drawing-scale";
 import type { ConnectorDrawingPlacement } from "./model";
 import { articleDrawingView, findArticleDrawing, type DrawingTarget } from "../component-library/drawing-bindings";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
@@ -335,7 +336,8 @@ export function projectComponentTemplateView(
     const repeatedGroupIds = new Set(occurrences.keys());
     const assetIds = new Set(instance.content.assets.map(asset => asset.assetId));
     const commands: ProjectedComponentTemplateCommand[] = [];
-    const worldOrigin = translation(origin.x, origin.y);
+    const scale=drawingTarget==="drawing" ? drawingScale(instance.drawingPlacements) : 1;
+    const worldOrigin = {...translation(origin.x, origin.y),a:scale,d:scale};
 
     for (const layer of view.layers) {
       if (!layer.visible) continue;
@@ -420,7 +422,8 @@ export function projectE4DrawingCompanions(instance:ComponentTemplateViewInstanc
     const visit=(id:string)=>{if(ids.has(id))return;ids.add(id);const n=nodes.find(n=>n.id===id);if(n?.kind==="group")n.geometry.childIds.forEach(visit);};visit(node.id);
     const commands=drawing.commands.filter(c=>ids.has(c.nodeId));if(!commands.length)return [];
     const placement=instance.drawingPlacements?.find(p=>p.drawingId===node.id),offset=placement?.offset ?? {x:0,y:0};
-    const transform={a:scale,b:0,c:0,d:scale,e:origin.x-drawing.bounds.minX*scale+offset.x,f:origin.y-20-drawing.bounds.maxY*scale+offset.y};
+    const placedScale=scale*drawingScale(instance.drawingPlacements,node.id);
+    const transform={a:placedScale,b:0,c:0,d:placedScale,e:origin.x-drawing.bounds.minX*placedScale+offset.x,f:origin.y-20-drawing.bounds.maxY*placedScale+offset.y};
     const projected=commands.map(command=>({...command,transform:multiply(transform,command.transform)}));
     const label=node.kind==="image" ? (instance.content.assets.find(a=>a.assetId===node.geometry.assetId)?.fileName ?? `Изображение ${index+1}`) : node.kind==="group" ? `Группа ${index+1}` : `Рисунок ${index+1}`;
     return [{...drawing,viewKind:"e4" as const,drawingId:node.id,label,visible:placement?.visible!==false,offset,commands:projected,bounds:combinedBounds(projected)}];

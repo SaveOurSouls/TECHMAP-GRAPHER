@@ -1,3 +1,5 @@
+import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
+import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
@@ -327,8 +329,8 @@ export function designToScene(
       const materializedContactPoints = connector.contacts.map((contact) => {
         const representation = selectMaterializedContactRepresentation(connector, contact.id, view);
         return representation ? {
-          x: representation.x,
-          y: representation.y,
+          x: representation.x*(view==="drawing"?drawingScale(connector.drawingPlacements):1),
+          y: representation.y*(view==="drawing"?drawingScale(connector.drawingPlacements):1),
           direction: representation.direction,
           status: contact.connectionStatus,
         } : null;
@@ -1045,6 +1047,9 @@ export function HarnessDesignEditor({
     harnessQuantity,
   );
   const layers = toUiLayers(history.present, view);
+  const selectedDrawingConnector = view === "drawing"
+    ? history.present.connectors.find(connector => connector.id === selectedObjectId && connector.libraryBinding?.mode === "template")
+    : undefined;
   const selectedConnector = view === "e4" && selectedObjectId
     ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
     : null;
@@ -1514,7 +1519,9 @@ export function HarnessDesignEditor({
             if (id) { setRelatedSourceIds([id]); setSelectedObjectId(null); setSelectedObjectIds([]); }
             setEditingObjectId(null); setView("drawing"); onViewChange?.("drawing");
             setRevealRequest({token: Date.now(), objectIds: [...found.wireIds, ...found.componentIds]});
-          }} /></>}
+          }} />
+          {selectedDrawingConnector && <section className="he-companion-list"><header className="ui-section-heading"><strong>Масштаб рисунка</strong><DrawingScaleControl label="Масштаб рисунка на чертеже" value={drawingScale(selectedDrawingConnector.drawingPlacements)} disabled={layers.some(layer=>layer.id===selectedDrawingConnector.layerIds.drawing&&layer.locked)} onChange={scale=>run({type:"set-drawing-placement",connectorId:selectedDrawingConnector.id,drawingId:DRAWING_VIEW_PLACEMENT_ID,scale})}/><InfoHint>Пропорциональный масштаб рисунка и его контактных точек. Электрические связи и заданные длины проводов сохраняются. Можно тянуть угловой маркер на поле.</InfoHint></header></section>}
+        </>}
         cables={(previewResult.document ?? history.present).cables}
         e4Overlays={view === "e4" ? {
           crossingStyle: history.present.views.e4.wireCrossingStyle,
@@ -1526,12 +1533,13 @@ export function HarnessDesignEditor({
         resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
+        onDrawingScale={(connectorId,drawingId,scale)=>run({type:"set-drawing-placement",connectorId,drawingId,scale})}
         onDrawingMove={(connectorId,drawingId,offset)=>run({type:"set-drawing-placement",connectorId,drawingId,offset})}
         propertyInspector={selectedObjectId && (history.present.drawingDocuments?.tables.some(t=>t.id===selectedObjectId) || history.present.drawingDocuments?.leaders.some(l=>l.id===selectedObjectId||`${l.id}:anchor`===selectedObjectId) || history.present.physicalTopology?.coverings?.some(c=>c.id===selectedObjectId) || history.present.physicalTopology?.nodes.some(n=>n.id===selectedObjectId) || history.present.physicalTopology?.segments.some(s=>s.id===selectedObjectId)) ? <></> : selectedConnector ? (<>
           {view==="e4" && (()=>{
             const instance=componentTemplateViewInstances.find(i=>i.objectId===selectedConnector.id);
             const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];
-            return drawings.length ? <section className="he-companion-list" aria-label="Рисунки компонента"><header className="ui-section-heading"><strong>Рисунки артикула</strong><InfoHint>Показать или скрыть рисунок на Э4. Перетаскивайте рисунок мышью; прямая пунктирная линия связывает его с таблицей. Группа фигур перемещается как один рисунок.</InfoHint></header>{drawings.map(d=><label key={d.drawingId}><input type="checkbox" aria-label={`Показать ${d.label}`} checked={d.visible} disabled={selectedConnectorLayer?.locked===true} onChange={e=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,visible:e.target.checked})}/>{d.label}</label>)}</section> : null;
+            return drawings.length ? <section className="he-companion-list" aria-label="Рисунки компонента"><header className="ui-section-heading"><strong>Рисунки артикула</strong><InfoHint>Показать или скрыть рисунок на Э4. Перетаскивайте рисунок мышью; прямая пунктирная линия связывает его с таблицей. Группа фигур перемещается как один рисунок.</InfoHint></header>{drawings.map(d=><label key={d.drawingId}><input type="checkbox" aria-label={`Показать ${d.label}`} checked={d.visible} disabled={selectedConnectorLayer?.locked===true} onChange={e=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,visible:e.target.checked})}/>{d.label}<DrawingScaleControl label={`Масштаб ${d.label}`} value={drawingScale(selectedConnector.drawingPlacements,d.drawingId)} disabled={selectedConnectorLayer?.locked===true} onChange={scale=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,scale})}/></label>)}</section> : null;
           })()}
           <E4ConnectorInspector
             connector={selectedConnector}

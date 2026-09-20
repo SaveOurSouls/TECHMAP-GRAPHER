@@ -328,6 +328,8 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     !offset.TryGetProperty("x", out var x) || x.ValueKind != JsonValueKind.Number || !x.TryGetDouble(out var dx) || !double.IsFinite(dx) ||
                     !offset.TryGetProperty("y", out var y) || y.ValueKind != JsonValueKind.Number || !y.TryGetDouble(out var dy) || !double.IsFinite(dy))
                     throw Invalid("invalid_drawing_placements", "Invalid component drawing position or visibility.", field);
+                if (drawing.TryGetProperty("scale", out var scale) && (scale.ValueKind != JsonValueKind.Number || !scale.TryGetDouble(out var factor) || !double.IsFinite(factor) || factor < .05 || factor > 20))
+                    throw Invalid("invalid_drawing_placements", "Drawing scale must be between 0.05 and 20.", field);
             }
         }
     }

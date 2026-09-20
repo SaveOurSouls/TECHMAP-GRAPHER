@@ -1,3 +1,4 @@
+import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology, type PhysicalTopology } from "./physical-topology";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
@@ -230,6 +231,7 @@ export interface ConnectorContact {
 }
 
 export interface ConnectorDrawingPlacement {
+  readonly scale?:number;
   readonly drawingId: string;
   readonly visible: boolean;
   readonly offset: Point;
@@ -1251,7 +1253,8 @@ export function parseDrawingPlacements(value:unknown):ConnectorDrawingPlacement[
   const result=value.map(item=>{
     const record=requireRecord(item,"Некорректный рисунок.");
     if(typeof record.visible!=="boolean") throw new Error("Некорректная видимость рисунка.");
-    return {drawingId:requireText(record.drawingId,"ID рисунка"),visible:record.visible,offset:parsePoint(record.offset)};
+    if(record.scale!==undefined && (typeof record.scale!=="number" || !validDrawingScale(record.scale))) throw new Error("Масштаб рисунка: 5–2000%.");
+    return {drawingId:requireText(record.drawingId,"ID рисунка"),visible:record.visible,offset:parsePoint(record.offset),...(record.scale===undefined?{}:{scale:record.scale as number})};
   });
   if(new Set(result.map(p=>p.drawingId)).size!==result.length) throw new Error("Повторный ID рисунка.");
   return result;

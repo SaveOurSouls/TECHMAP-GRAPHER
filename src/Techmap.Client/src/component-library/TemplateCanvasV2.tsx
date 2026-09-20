@@ -1470,6 +1470,11 @@ export function TemplateCanvasV2({
             }} /><circle cx={center.x} cy={center.y} r="2" fill="#147ca8" pointerEvents="none" />
         </g>;
       })()}
+      {onNodeMove && <g className="drawing-zoom-controls" transform={`translate(${camera.x+12/screenScale} ${camera.y+(height/camera.zoom)-28/screenScale}) scale(${1/screenScale})`}>
+        {[-1,0,1].map((direction,index)=><g key={direction} role="button" tabIndex={0} aria-label={direction===0?"Исходный масштаб":direction<0?"Уменьшить поле":"Увеличить поле"} onPointerDown={e=>e.stopPropagation()} onClick={()=>setCamera(previous=>direction===0?{x:0,y:0,zoom:1}:zoomDrawingCamera(previous,{x:previous.x+width/(2*previous.zoom),y:previous.y+height/(2*previous.zoom)},-direction*150))} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();setCamera(previous=>direction===0?{x:0,y:0,zoom:1}:zoomDrawingCamera(previous,{x:previous.x+width/(2*previous.zoom),y:previous.y+height/(2*previous.zoom)},-direction*150));}}}>
+          <rect x={index*45} width="43" height="23" rx="3" fill="#fff" stroke="#b9c7d0"/><text x={index*45+21.5} y="16" textAnchor="middle" fontSize="11" fill="#30495d" pointerEvents="none">{direction===0?`${Math.round(camera.zoom*100)}%`:direction<0?"−":"+"}</text>
+        </g>)}
+      </g>}
       {repeatPreviewError && <g data-template-repeat-error="true" pointerEvents="none">
         <rect x="16" y="16" width={Math.min(width - 32, 520)} height="42" rx="6" fill="#fff7e6" stroke="#a86519" />
         <text x="28" y="34" fill="#7b4c16" fontSize="11" fontWeight="700">Повторы показаны как прототипы</text>
