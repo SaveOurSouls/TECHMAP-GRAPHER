@@ -671,8 +671,8 @@ export function E4ConnectorInspector({
       </header>
 
       <div className="e4ci-identity">
-        {onRefreshTerminals && <div>
-          <button type="button" disabled={disabled || refreshingTerminals} onClick={onRefreshTerminals}>Обновить терминалы</button>
+        {onRefreshTerminals && <div className="e4ci-refresh-row">
+          <button className="ui-control" type="button" disabled={disabled || refreshingTerminals} onClick={onRefreshTerminals}>Обновить терминалы</button>
           <InfoHint>Загружает совместимые терминалы опубликованной серии. Закреплённая версия компонента, проводка и ручные значения сохраняются.</InfoHint>
         </div>}
         <label>Обозначение
@@ -733,18 +733,18 @@ export function E4ConnectorInspector({
             />
           )}
         </label>
-        <span className="e4ci-readonly-note">{connector.libraryBinding?.mode === "series"
+        <div className="e4ci-identity-help"><span>Артикул и контакты</span><InfoHint>{connector.libraryBinding?.mode === "series"
           ? "Артикул определяет число и типы контактов. Значения цепей сохраняются для совпавших строк."
           : connector.libraryBinding?.mode === "template"
             ? templateArticleOptions.length > 0 && onTemplateArticleSelect
               ? "Артикул выбирается из семейства. Код, число и типы контактов обновляются по выбранному варианту."
               : "Артикул, код, число и типы контактов закреплены версией шаблона. Цепи, провода, цвета и совместимые терминалы можно редактировать."
-            : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</span>
+            : "Свободный экземпляр: строки и поля можно менять независимо от библиотеки."}</InfoHint></div>
       </div>
 
       <div className="e4ci-canvas-edit-note">
-        <strong>Поля редактируются на объекте</strong>
-        <span>Изменяйте значения контактов прямо в таблице схемы Э4. Кнопки глаза в заголовках скрывают поле.</span>
+        <strong>Редактирование таблицы</strong>
+        <InfoHint>Двойной клик по таблице включает редактирование. Изменяйте значения контактов прямо в схеме Э4. Кнопки глаза в заголовках скрывают поле; вернуть его можно ниже.</InfoHint>
       </div>
 
       <details className="e4ci-column-settings" open>
@@ -784,7 +784,7 @@ export function E4ConnectorInspector({
           })}
         </div>
         <div className="e4ci-custom-columns">
-          <div className="e4ci-section-title"><strong>Справочные поля</strong><span>Дополнительные текстовые колонки</span></div>
+          <div className="e4ci-section-title"><strong>Справочные поля</strong><InfoHint>Дополнительные текстовые колонки. Их значения заполняются в таблице схемы.</InfoHint></div>
           {connector.schematic.customFields.length === 0 && <p>Дополнительных полей пока нет.</p>}
           {connector.schematic.customFields.map((field) => (
             <div className="e4ci-custom-column" key={field.id}>

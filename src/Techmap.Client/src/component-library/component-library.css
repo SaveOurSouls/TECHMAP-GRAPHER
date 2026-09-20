@@ -1,7 +1,7 @@
 .component-library { width: 100%; min-width: 0; }
 .library-heading { align-items: center; }
-.library-layout { min-width: 0; margin-top: 22px; display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 18px; align-items: start; }
-.library-catalog, .library-editor { min-width: 0; border: 1px solid #dce4ea; border-radius: 12px; background: #fff; box-shadow: 0 8px 30px rgb(40 64 81 / 6%); overflow: hidden; }
+.library-layout { min-width: 0; margin-top: 16px; display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.library-catalog, .library-editor { min-width: 0; border: 1px solid #dce4ea; border-radius: 8px; background: #fff; box-shadow: 0 2px 8px rgb(40 64 81 / 4%); overflow: hidden; }
 .library-editor { container: component-library-editor / inline-size; }
 .library-template-list { max-height: calc(100vh - 245px); overflow: auto; border-top: 1px solid #e3e9ed; }
 .library-template { width: 100%; padding: 13px 16px; display: grid; gap: 4px; border: 0; border-bottom: 1px solid #e5ebef; background: #fff; color: #30495d; text-align: left; cursor: pointer; }
@@ -9,10 +9,10 @@
 .library-template.selected { padding-left: 12px; border-left: 4px solid #227ba7; background: #edf7fb; }
 .library-template span { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .library-template small { color: #7b8893; }
-.library-metadata { padding: 15px 17px; display: grid; grid-template-columns: minmax(150px, .6fr) minmax(220px, 1fr) auto; gap: 12px; align-items: end; border-bottom: 1px solid #dfe6eb; }
+.library-metadata { padding: 15px 17px; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 12px; align-items: end; border-bottom: 1px solid #dfe6eb; }
 .library-metadata label, .library-properties label, .coordinate-grid label { display: grid; gap: 5px; color: #5b6b79; font-size: 11px; font-weight: 700; }
-.library-metadata > div { display: flex; align-items: center; gap: 12px; color: #647787; font-size: 11px; }
-.library-save-state { min-width: 70px; color: #28775d; font-weight: 750; white-space: nowrap; }
+.library-metadata > div { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #647787; font-size: 11px; }
+.library-save-state { margin-right: auto; min-width: 70px; color: #28775d; font-weight: 750; white-space: nowrap; }
 .library-save-state.error { color: #a13d3d; }
 .library-metadata .danger-action { min-height: 34px; padding: 7px 10px; border: 1px solid #d5a9a9; border-radius: 5px; background: #fff4f4; color: #963c3c; font-weight: 750; cursor: pointer; }
 .library-metadata .danger-action:disabled { opacity: .55; cursor: default; }
@@ -121,8 +121,8 @@
   .library-workarea { grid-template-columns: 1fr; }
   .library-properties { border-top: 1px solid #ccd8de; border-left: 0; }
 }
-.library-e4-preview { border: 1px solid #d5e1e8; border-radius: 8px; padding: 12px; display: grid; gap: 10px; }
-.library-e4-preset { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+.library-e4-preview { min-width: 0; border: 1px solid var(--ui-border); border-radius: 6px; padding: 10px; display: grid; gap: 8px; background: #fff; }
+.library-e4-preset { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 11px; color: var(--ui-muted); }
 .library-e4-preset label { display: inline-flex; align-items: center; gap: 4px; }
 .library-e4-preset input[type=checkbox], .e4-table-editor__columns input[type=checkbox] { width: 14px; height: 14px; flex: 0 0 14px; padding: 0; margin: 0; }
 .library-e4-preset input:not([type=checkbox]), .library-e4-preset select { max-width: 190px; height: 28px; padding: 3px 7px; line-height: 20px; }
@@ -144,9 +144,9 @@
 }
 /* M4-09: a stable, independent drawing workspace. */
 .graphic-editor-switcher { display:flex; align-items:center; gap:8px; padding:8px 12px; }
-.drawing-editor-shell { position:fixed; inset:12px; z-index:300; display:flex; flex-direction:column; gap:8px; background:#fff; padding:12px; border:1px solid #bccbd6; border-radius:10px; box-shadow:0 0 0 30px #15253670; overflow:hidden; }
+.drawing-editor-shell { position:fixed; inset:12px; z-index:300; display:flex; flex-direction:column; gap:0; background:#fff; padding:0; border:1px solid #bccbd6; border-radius:10px; box-shadow:0 0 0 30px #15253670; overflow:hidden; }
 .drawing-hidden { display:none !important; }
-.drawing-editor-shell > header { display:flex; align-items:center; gap:16px; flex-shrink:0; }
+.drawing-editor-shell > header { display:flex; flex-wrap:wrap; align-items:center; gap:10px; flex-shrink:0; min-height:52px; padding:10px 12px; border-bottom:1px solid var(--ui-border); background:var(--ui-soft); }
 .drawing-editor-shell > header .primary-action { margin-left:auto; }
 .drawing-editor-shell label { font-size:12px; }
 .drawing-editor-shell select,.drawing-editor-shell input { border:1px solid #bdcbd5; border-radius:5px; padding:4px; max-width:230px; }
@@ -160,11 +160,11 @@
 .array-layout-toolbar input { width:65px; }
 .library-e4-companion { min-width:0; border:1px solid #dce3e8; padding:8px; border-radius:8px; grid-column:2; }
 .library-e4-companion > header { display:flex; align-items:center; gap:8px; }
-.library-e4-companion svg { height:260px; }
+.library-e4-companion svg { height:220px; min-height:220px; }
 @media(max-width:900px) { .library-e4-companion { grid-column:auto; } .drawing-editor-shell { inset:0; border-radius:0; } }
 
 .drawing-editor-shell .library-workarea { grid-template-columns:minmax(240px,1fr) 240px 230px; }
-.drawing-snaps { display:flex; align-items:center; gap:7px; }
+.drawing-snaps { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
 .drawing-snaps label { display:flex; align-items:center; gap:3px; }
 .drawing-articles { overflow:auto; padding:10px; background:#fff; border-left:1px solid #ccd8de; display:flex; flex-direction:column; gap:7px; }
 .drawing-articles > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px; }
@@ -172,23 +172,64 @@
 .drawing-articles .active { outline:1px solid #147ca8; border-radius:4px; }
 .drawing-articles [role="status"] { font-size:11px; color:#35774d; }
 .template-rotation-handle { cursor:grab; }
-@media(max-width:1000px) { .drawing-editor-shell .library-workarea { grid-template-columns:minmax(220px,1fr) 200px 180px; overflow:auto; } }
+@media(max-width:1000px) { .drawing-editor-shell .library-workarea { grid-template-columns:minmax(220px,1fr) 200px 220px; overflow:auto; } }
 
 .drawing-array-settings { flex-shrink:0; max-height:28vh; overflow:auto; }
 .drawing-array-settings > summary { font-size:12px; cursor:pointer; padding:3px; }
-.drawing-editor-shell .library-tools { gap:5px; }
+.drawing-editor-shell .library-tools { gap:5px; flex-wrap:wrap; padding:8px 12px; }
 .drawing-editor-shell .library-tools button { padding:5px 7px; font-size:11px; }
 .drawing-editor-shell .library-tools .drawing-snaps { text-transform:none; }
 
 /* M4-17: one article selection controls both representations. */
 .library-series-workspace { display:block; }
-.series-v3-article-workspace { display:grid; grid-template-columns:minmax(190px,.75fr) minmax(260px,1.25fr); gap:12px; border:1px solid #dce3e8; border-radius:8px; padding:8px; }
+.series-v3-article-workspace { display:grid; grid-template-columns:minmax(230px,.9fr) minmax(290px,1.1fr); gap:10px; border:1px solid var(--ui-border); border-radius:8px; padding:10px; background:var(--ui-soft); }
 .series-v3-article-preview { min-width:0; display:flex; flex-direction:column; gap:8px; }
 .library-series-workspace .library-e4-preview { position:static; }
 .series-v3-article-preview .library-e4-companion { grid-column:auto; }
-@container component-library-editor (max-width:500px) { .series-v3-article-workspace { grid-template-columns:1fr; } }
+@container component-library-editor (max-width:600px) { .series-v3-article-workspace { grid-template-columns:1fr; } }
 
 .series-v3-article-workspace { grid-column:1 / -1; min-width:0; }
 
 .series-v3-article-workspace .series-v3-variants { padding:6px; }
 .series-v3-article-workspace .series-v3-add-variant { grid-template-columns:minmax(0,1fr); }
+
+/* M4-19: shared panel rhythm, compact form controls and stable narrow layouts. */
+.library-metadata :is(input, button) { min-height: 30px; height: 30px; font-size: 11px; padding: 5px 8px; border-radius: var(--ui-radius); }
+:is(.graphic-editor-switcher, .library-e4-companion > header, .library-e4-preset, .drawing-articles, .drawing-editor-shell > header, .array-layout-toolbar) button:not(.primary-action) { min-height: 28px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; color: var(--ui-ink); font: 600 11px/1.3 Inter, "Segoe UI", Arial, sans-serif; cursor: pointer; }
+:is(.graphic-editor-switcher, .library-e4-companion > header, .library-e4-preset, .drawing-articles, .array-layout-toolbar) button:hover:not(:disabled) { border-color: #8fb9ca; background: var(--ui-accent-soft); }
+.graphic-editor-switcher { background: var(--ui-soft); border-bottom: 1px solid var(--ui-border); }
+.graphic-editor-switcher button.active { border-color: #93bbcf; background: var(--ui-accent-soft); color: var(--ui-accent); }
+:is(.library-e4-preview, .library-e4-companion) > header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 28px; color: var(--ui-ink); font-size: 11px; }
+:is(.library-e4-preview, .library-e4-companion) > header > strong { margin-right: auto; }
+.library-e4-preset :is(input:not([type=checkbox]), select) { min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; font: inherit; color: var(--ui-ink); }
+.library-e4-preview-scroll { border: 1px solid var(--ui-border); border-radius: 4px; }
+.series-v3-article-workspace .series-v3-variants { padding: 0; border: 0; background: transparent; }
+.series-v3-article-workspace .series-v3-article-table th:first-child, .series-v3-article-workspace .series-v3-article-key { min-width: 100px; }
+.series-v3-article-workspace .series-v3-count-cell { min-width: 60px; width: 64px; }
+.series-v3-article-workspace .series-v3-article-key { text-align: left; }
+.drawing-editor-shell :is(.library-properties, .drawing-articles) { padding: 12px; gap: 10px; font-size: 11px; }
+.drawing-editor-shell .drawing-snaps input[type=checkbox] { width: 14px; height: 14px; min-height: 14px; padding: 0; margin: 0; accent-color: var(--ui-accent); }
+.drawing-snaps label { white-space: nowrap; }
+.drawing-articles > div { padding: 4px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
+.drawing-articles > div.active { outline: none; border-color: #93bbcf; background: var(--ui-accent-soft); }
+.drawing-array-settings { border-bottom: 1px solid var(--ui-border); }
+.drawing-array-settings > summary { padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--ui-ink); }
+.array-layout-toolbar { padding: 8px 12px; gap: 8px; }
+.drawing-editor-shell .library-tools > button { min-height: 28px; }
+@container component-library-editor (max-width: 600px) {
+  .library-metadata { padding: 12px; gap: 8px; }
+  .series-v3-article-workspace { padding: 8px; }
+}
+@media (max-width: 760px) {
+  .drawing-editor-shell .library-workarea { grid-template-columns: minmax(220px, 1fr) 190px; }
+  .drawing-editor-shell .drawing-articles { grid-column: 1 / -1; max-height: 150px; border-top: 1px solid var(--ui-border); }
+}
+
+.drawing-editor-shell .library-properties > button:not(.danger-action), .drawing-editor-shell .library-properties .layer-order button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; color: var(--ui-ink); font: inherit; cursor: pointer; }
+.drawing-editor-shell > header .primary-action { min-height: 32px; padding: 6px 12px; border-radius: var(--ui-radius); font-size: 11px; box-shadow: none; }
+.drawing-editor-shell .drawing-settings > summary { min-height: 32px; padding: 8px 12px; color: var(--ui-ink); font-size: 11px; font-weight: 600; }
+.drawing-editor-shell :is(.angle-snap-control, header) select { height: 30px; }
+.drawing-editor-shell .library-tools .drawing-snaps { padding: 4px 8px; border-left: 1px solid var(--ui-border); font-weight: 500; }
+.drawing-editor-shell .library-tools .undo-tool { margin-left: 0; }
+
+.drawing-editor-shell .library-properties .property-order button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; color: var(--ui-ink); font: inherit; }

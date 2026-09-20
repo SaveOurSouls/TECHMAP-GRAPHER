@@ -5,7 +5,7 @@
 .series-v3-guide { grid-column: 1 / -1; min-width: 0; padding: 8px 10px; border: 1px solid #d8e5eb; border-radius: 7px; background: #f8fbfc; color: #567080; font-size: 11px; }
 .series-v3-series-terminals { grid-column: 1 / -1; min-width: 0; padding: 10px; display: grid; gap: 8px; border: 1px solid #cbdfe8; border-radius: 8px; background: #fff; }
 .series-v3-series-terminals > header { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
-.series-v3-series-terminals > header > div { display: grid; gap: 2px; }
+.series-v3-series-terminals > header > div { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ui-ink); }
 .series-v3-series-terminals > header small, .series-v3-series-terminals > small { color: #71808d; font-size: 11px; line-height: 1.4; }
 .series-v3-terminal-table-wrap { min-width: 0; overflow-x: auto; border: 1px solid #dbe5ea; border-radius: 6px; }
 .series-v3-terminal-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
@@ -35,7 +35,7 @@
 .series-v3-preview-rows span, .series-v3-preview-rows strong { min-width: 0; padding: 3px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #496274; font-size: 11px; }
 .series-v3-preview-rows small { padding: 4px 5px; color: #71808d; font-size: 11px; }
 .series-v3-groups, .series-v3-variants { min-width: 0; padding: 10px; display: grid; align-content: start; gap: 8px; border: 1px solid #dbe5ea; border-radius: 8px; background: #fff; }
-.series-v3-groups > header, .series-v3-variants > header { display: grid; gap: 2px; }
+.series-v3-groups > header, .series-v3-variants > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ui-ink); }
 .series-v3-groups header small, .series-v3-variants header small, .series-v3-contact-group small, .series-v3-variant p, .series-v3-groups p, .series-v3-variants > p { margin: 0; color: #71808d; font-size: 11px; line-height: 1.4; }
 .series-v3-groups form { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
 .series-v3-add-contact-type label { min-width: 0; display: grid; gap: 3px; color: #5b6b79; font-size: 11px; font-weight: 700; }
