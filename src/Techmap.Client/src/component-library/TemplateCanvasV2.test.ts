@@ -258,7 +258,7 @@ describe("TemplateCanvasV2", () => {
 
     expect(markup).toContain('fill="transparent" stroke="transparent" stroke-width="12"');
     expect(markup).toContain('data-selection-kind="box"');
-    expect(markup.match(/data-resize-handle=/g)).toHaveLength(8);
+    expect(markup.match(/data-resize-handle=/g)).toHaveLength(4);
     expect(markup).toContain('data-resize-handle="nw"');
     expect(markup).toContain('data-resize-handle="se"');
   });

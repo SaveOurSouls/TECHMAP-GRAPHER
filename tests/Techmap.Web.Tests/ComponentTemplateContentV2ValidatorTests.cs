@@ -21,6 +21,12 @@ public sealed class ComponentTemplateContentV2ValidatorTests
         fill["color"] = "#123456";
         fill["hatch"] = new JsonObject { ["kind"] = kind, ["spacing"] = 8, ["angle"] = 45 };
         ComponentTemplateContentV2Validator.Validate(Element(content));
+        fill["hatch"]!["backgroundColor"] = "#ffffff";
+        ComponentTemplateContentV2Validator.Validate(Element(content));
+        fill["hatch"]!["backgroundColor"] = "invalid";
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV2Validator.Validate(Element(content)));
+        fill["hatch"]!["backgroundColor"] = null;
+        ComponentTemplateContentV2Validator.Validate(Element(content));
         fill["hatch"]!["spacing"] = 0;
         Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV2Validator.Validate(Element(content)));
         fill["hatch"]!["spacing"] = 8;

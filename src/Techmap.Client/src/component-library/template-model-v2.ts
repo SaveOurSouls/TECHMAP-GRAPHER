@@ -167,7 +167,8 @@ function validateNode(value: unknown, path: string, layerId: string, context: Ex
     if (value.fill.color !== null && (typeof value.fill.color !== "string" || !COLOR.test(value.fill.color))) context.diagnostics.push({ code: "invalid_color", path: `${path}.fill.color`, message: "Нужен цвет #RRGGBB, #RRGGBBAA или null." });
     if (hasOwn(value.fill, "hatch")) {
       const hatch = value.fill.hatch;
-      if (exact(hatch, ["kind", "spacing", "angle"], `${path}.fill.hatch`, context.diagnostics) &&
+      if (isRecord(hatch) && hatch.backgroundColor !== undefined && hatch.backgroundColor !== null && (typeof hatch.backgroundColor !== "string" || !COLOR.test(hatch.backgroundColor))) context.diagnostics.push({code:"invalid_color",path:`${path}.fill.hatch.backgroundColor`,message:"Некорректный цвет фона штриховки."});
+      if (exact(hatch, isRecord(hatch) && hasOwn(hatch, "backgroundColor") ? ["kind", "spacing", "angle", "backgroundColor"] : ["kind", "spacing", "angle"], `${path}.fill.hatch`, context.diagnostics) &&
           (!hatchKinds.includes(hatch.kind as DrawingHatch["kind"]) || typeof hatch.spacing !== "number" || !Number.isFinite(hatch.spacing) || hatch.spacing < 2 || hatch.spacing > 100 || typeof hatch.angle !== "number" || !Number.isFinite(hatch.angle) || Math.abs(hatch.angle) > 360))
         context.diagnostics.push({ code: "invalid_hatch", path: `${path}.fill.hatch`, message: "Некорректный вид, шаг (2–100) или угол штриховки (−360…360)." });
     }

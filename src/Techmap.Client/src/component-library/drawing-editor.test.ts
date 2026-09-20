@@ -70,7 +70,7 @@ describe("M4-15 drawing editor", () => {
     [core,ellipse]=addBasicNodeV3(core,view.id,layer.id,"ellipse");
     [core,pointId]=addContactPointV3(core,view.id,{number:"9",name:"Old",contactTypeGroupId:group});
     core=editContactPointV3(core,view.id,pointId,{x:c(123),y:c(234)});
-    core.views[1]!.layers[0]!.nodes[0]!.fill={color:"#123456",hatch:{kind:"cross",spacing:7,angle:30}};
+    core.views[1]!.layers[0]!.nodes[0]!.fill={color:"#123456",hatch:{kind:"cross",spacing:7,angle:30,backgroundColor:"#ffffff"}};
     const binding={logicalContactId:core.logicalContacts[0]!.id,seriesRowId:table.articles[0]!.rows[1]!.seriesRowId};
     table.seriesDefaults[1]!.values.number="A2"; table.seriesDefaults[1]!.values.name="DATA";
     const drawings=[drawingSelection(core.views[1]!,[rectangle,pointId],core.articleVariants[0]!.id),drawingSelection(core.views[1]!,[ellipse],core.articleVariants[1]!.id)];
@@ -88,7 +88,7 @@ describe("M4-15 drawing editor", () => {
     const b=projectComponentTemplateView({content,objectId:"X1",articleVariantId:core.articleVariants[1]!.id,snapshotId:"test"},"drawing",{x:0,y:0});
     expect(a?.commands.map(command=>command.kind)).toEqual(["rectangle"]);
     expect(b?.commands.map(command=>command.kind)).toEqual(["ellipse"]);
-    expect(a?.commands[0]?.hatch).toEqual({kind:"cross",spacing:7,angle:30});
+    expect(a?.commands[0]?.hatch).toEqual({kind:"cross",spacing:7,angle:30,backgroundColor:"#ffffff"});
     content.articleDrawings[0].nodeIds.push("missing");
     expect(validateTemplateContentV5(content).valid).toBe(false);
   });

@@ -961,7 +961,9 @@ internal static partial class ComponentTemplateContentV2Validator
         ValidateColor(fill.GetProperty("color"), path + ".color", allowNull: true);
         if (hasHatch) {
             var hatch = fill.GetProperty("hatch");
-            RequireExactProperties(hatch, path + ".hatch", "kind", "spacing", "angle");
+            var hasBackground = hatch.ValueKind == JsonValueKind.Object && hatch.TryGetProperty("backgroundColor", out _);
+            RequireExactProperties(hatch, path + ".hatch", hasBackground ? ["kind", "spacing", "angle", "backgroundColor"] : ["kind", "spacing", "angle"]);
+            if (hasBackground) ValidateColor(hatch.GetProperty("backgroundColor"), path + ".hatch.backgroundColor", allowNull: true);
             if (hatch.GetProperty("kind").ValueKind != JsonValueKind.String ||
                 hatch.GetProperty("kind").GetString() is not ("parallel" or "cross" or "double" or "dots" or "brick"))
                 Throw("Unsupported hatch kind.", path + ".hatch.kind");

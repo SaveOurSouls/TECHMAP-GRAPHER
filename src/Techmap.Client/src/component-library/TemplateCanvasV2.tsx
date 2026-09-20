@@ -1,3 +1,4 @@
+import { spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
 import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
 import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { rootNodeRotationCenterV3 } from "./template-commands-v3";
@@ -581,7 +582,27 @@ export function TemplateCanvasV2({
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const snapTolerance = () => { const rect = svgRef.current?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? 7 / Math.min(rect.width / width,rect.height / height) : 7; };
+  const [camera,setCamera]=useState({x:0,y:0,zoom:1});
+  const [viewportSize,setViewportSize]=useState({width,height});
+  const screenScale=Math.max(.0001,Math.min(viewportSize.width/width,viewportSize.height/height)*camera.zoom);
+  useEffect(()=>{setCamera({x:0,y:0,zoom:1});},[viewId]);
+  useEffect(()=>{
+    const svg=svgRef.current;if(!svg)return;
+    const observer=new ResizeObserver(()=>{const r=svg.getBoundingClientRect();setViewportSize({width:r.width,height:r.height});});
+    observer.observe(svg);
+    const wheel=(event:WheelEvent)=>{
+      if(!event.ctrlKey || !onNodeMove)return;
+      event.preventDefault();event.stopPropagation();
+      setCamera(previous=>{
+        const point=clientPointToTemplateCoordinatesV2(svg.getBoundingClientRect(),event.clientX,event.clientY,width/previous.zoom,height/previous.zoom);
+        return point?zoomDrawingCamera(previous,{x:point.x+previous.x,y:point.y+previous.y},event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?height:1)):previous;
+      });
+    };
+    svg.addEventListener("wheel",wheel,{passive:false});
+    return()=>{observer.disconnect();svg.removeEventListener("wheel",wheel);};
+  },[width,height,onNodeMove]);
+
+  const snapTolerance = () => { const rect = svgRef.current?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? 7 / screenScale : 7; };
   const outlines = view?.layers.filter(layer => layer.visible).flatMap(layer => drawingLayerOutlines(layer.nodes,evaluate)) ?? [];
   const targets = (id: string) => outlines.filter(outline => outline.id !== id && !selectedIdSet.has(outline.id));
   const snapDelta = (id: string, start: SvgPoint, point: SvgPoint): SvgPoint => {
@@ -642,8 +663,8 @@ export function TemplateCanvasV2({
     const svg = event.currentTarget.ownerSVGElement ??
       (event.currentTarget.tagName.toLowerCase() === "svg" ? event.currentTarget as SVGSVGElement : null);
     if (!svg) return null;
-    const point = clientPointToTemplateCoordinatesV2(svg.getBoundingClientRect(), event.clientX, event.clientY, width, height);
-    return point ? [point.x, point.y] : null;
+    const point = clientPointToTemplateCoordinatesV2(svg.getBoundingClientRect(), event.clientX, event.clientY, width/camera.zoom, height/camera.zoom);
+    return point ? [point.x+camera.x, point.y+camera.y] : null;
   };
 
   const beginNodeGesture = (event: ReactPointerEvent<SVGElement>, id: string, selectable: boolean, movable: boolean) => {
@@ -1028,7 +1049,6 @@ export function TemplateCanvasV2({
         return (
           <g {...common} data-underlay={node.geometry.underlay ? "true" : "false"}>
             <svg
-      ref={svgRef}
               data-template-image-frame={node.id}
               x={x}
               y={y}
@@ -1360,23 +1380,28 @@ export function TemplateCanvasV2({
     }
     if (x === null || y === null || boxWidth === null || boxHeight === null) return null;
     const left = moveX(x, "w"), top = moveY(y, "n"), right = moveX(x + boxWidth, "e"), bottom = moveY(y + boxHeight, "s");
+    const pixelsX=screenScale*Math.abs(evaluate(node.transform.scaleX) ?? 1),pixelsY=screenScale*Math.abs(evaluate(node.transform.scaleY) ?? 1);
+    const control=spacedHandleBounds(left,top,right,bottom,pixelsX,pixelsY);
     const handles: readonly [NodeResizeHandleV2, number, number][] = [
       ["nw", left, top], ["n", (left + right) / 2, top], ["ne", right, top], ["e", right, (top + bottom) / 2],
       ["se", right, bottom], ["s", (left + right) / 2, bottom], ["sw", left, bottom], ["w", left, (top + bottom) / 2],
     ];
     return <g className="template-selection" transform={transform} data-selection-kind="box">
       <rect x={Math.min(left, right)} y={Math.min(top, bottom)} width={Math.abs(right - left)} height={Math.abs(bottom - top)} />
-      {handles.map(([candidate, handleX, handleY]) => <circle key={candidate} cx={handleX} cy={handleY} r="5.5"
+      {handles.filter(([candidate])=>!control.compact||candidate.length===2).map(([candidate, handleX, handleY]) => <ellipse key={candidate} cx={candidate.includes("w")?control.left:candidate.includes("e")?control.right:handleX} cy={candidate.includes("n")?control.top:candidate.includes("s")?control.bottom:handleY} rx={5.5/Math.max(.0001,pixelsX)} ry={5.5/Math.max(.0001,pixelsY)}
         data-resize-handle={candidate} onPointerDown={event => beginResizeGesture(event, node.id, candidate)} />)}
     </g>;
   }
 
   return (
     <svg
+      ref={svgRef}
+      onKeyDown={e=>{if(e.key==="Home" && onNodeMove){e.preventDefault();setCamera({x:0,y:0,zoom:1});}}}
       tabIndex={0}
       onPointerDownCapture={e=>e.currentTarget.focus()}
       className="template-canvas-v2"
-      viewBox={`0 0 ${formatNumber(width)} ${formatNumber(height)}`}
+      viewBox={`${formatNumber(camera.x)} ${formatNumber(camera.y)} ${formatNumber(width/camera.zoom)} ${formatNumber(height/camera.zoom)}`}
+      data-drawing-zoom={camera.zoom}
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={view ? `Редактор вида ${view.name}` : "Вид шаблона не найден"}
@@ -1396,10 +1421,11 @@ export function TemplateCanvasV2({
       onPointerUp={endNodeGesture}
       onPointerCancel={clearNodeGesture}
     >
-      <rect width={width} height={height} fill="#fff" />
+      <rect x={camera.x} y={camera.y} width={width/camera.zoom} height={height/camera.zoom} fill="#fff" />
       <defs>{view?.layers.flatMap(layer => layer.nodes).filter(node => node.fill.hatch && node.fill.color).map(node => {
         const hatch = node.fill.hatch!, tile = hatchTile(hatch);
         return <pattern key={node.id} id={`${hatchPrefix}-${node.id}`} patternUnits="userSpaceOnUse" width={hatch.spacing} height={hatch.spacing} patternTransform={`rotate(${hatch.angle})`}>
+          {hatch.backgroundColor && <rect width={hatch.spacing} height={hatch.spacing} fill={hatch.backgroundColor}/>}
           {tile.lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={node.fill.color!} strokeWidth="1" />)}
           {tile.dots.map(([cx, cy, r], i) => <circle key={i} cx={cx} cy={cy} r={r} fill={node.fill.color!} />)}
         </pattern>;
@@ -1412,8 +1438,8 @@ export function TemplateCanvasV2({
       {renderSelectionOverlay()}
       {(() => {
         if(!onSelectionStretch || !view || !(selectedIdSet.size>1 || view.layers.some(l=>l.nodes.some(n=>selectedIdSet.has(n.id)&&n.kind==="group"))))return null;
-        const bounds=selectionBounds(view,[...selectedIdSet],evaluate);if(!bounds)return null;
-        return <g className="template-selection">{([[bounds.left,bounds.top,bounds.right,bounds.bottom],[bounds.right,bounds.top,bounds.left,bounds.bottom],[bounds.right,bounds.bottom,bounds.left,bounds.top],[bounds.left,bounds.bottom,bounds.right,bounds.top]] as const).map(([x,y,ax,ay],i)=><circle key={i} cx={x} cy={y} r="6" data-selection-stretch-handle={i} aria-label="Растянуть выделение" onPointerDown={event=>{event.preventDefault();event.stopPropagation();try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} stretchRef.current={pointerId:event.pointerId,anchor:[ax,ay],start:[x,y],factor:1};}}/>)}{stretchPreview&&<rect pointerEvents="none" x={bounds.left} y={bounds.top} width={bounds.right-bounds.left} height={bounds.bottom-bounds.top} transform={`translate(${stretchPreview.anchor.join(' ')}) scale(${stretchPreview.factor}) translate(${-stretchPreview.anchor[0]} ${-stretchPreview.anchor[1]})`}/>}</g>;
+        const actual=selectionBounds(view,[...selectedIdSet],evaluate);if(!actual)return null;const bounds=spacedHandleBounds(actual.left,actual.top,actual.right,actual.bottom,screenScale);
+        return <g className="template-selection">{([[bounds.left,bounds.top,bounds.right,bounds.bottom],[bounds.right,bounds.top,bounds.left,bounds.bottom],[bounds.right,bounds.bottom,bounds.left,bounds.top],[bounds.left,bounds.bottom,bounds.right,bounds.top]] as const).map(([x,y,ax,ay],i)=><circle key={i} cx={x} cy={y} r={6/screenScale} data-selection-stretch-handle={i} aria-label="Растянуть выделение" onPointerDown={event=>{event.preventDefault();event.stopPropagation();try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} stretchRef.current={pointerId:event.pointerId,anchor:[ax,ay],start:[x,y],factor:1};}}/>)}{stretchPreview&&<rect pointerEvents="none" x={bounds.left} y={bounds.top} width={bounds.right-bounds.left} height={bounds.bottom-bounds.top} transform={`translate(${stretchPreview.anchor.join(' ')}) scale(${stretchPreview.factor}) translate(${-stretchPreview.anchor[0]} ${-stretchPreview.anchor[1]})`}/>}</g>;
       })()}
       {marquee && <rect data-selection-marquee="true" x={marquee.left} y={marquee.top} width={marquee.right-marquee.left} height={marquee.bottom-marquee.top} fill="#1685d11a" stroke="#1685d1" strokeDasharray="4 3" pointerEvents="none" />}
       {(() => {
@@ -1421,8 +1447,8 @@ export function TemplateCanvasV2({
         const nodes=view.layers.flatMap(layer=>layer.nodes.filter(node=>selectedIdSet.has(node.id)).map(node=>({node,layer})));
         if(nodes.some(({node,layer})=>node.locked || layer.locked || Object.values(node.transform).some(value=>value.kind!=="constant"))) return null;
         const bounds=selectionBounds(view,[...selectedIdSet],evaluate); if(!bounds) return null;
-        const center={x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2},y=bounds.top-25;
-        return <g className="template-rotation-handle"><line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" /><circle data-selection-rotation-handle="true" cx={center.x} cy={y} r="7" fill="#fff" stroke="#147ca8" strokeWidth="2" aria-label="Повернуть выделение вокруг центра" role="button" onPointerDown={event=>{event.preventDefault();event.stopPropagation();const point=pointFromEvent(event);if(!point)return;try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} rotationRef.current={id:"selection",pointerId:event.pointerId,center:[center.x,center.y],startAngle:Math.atan2(point[1]-center.y,point[0]-center.x),rotation:0,latest:0};}} /></g>;
+        const center={x:(bounds.left+bounds.right)/2,y:(bounds.top+bounds.bottom)/2},y=bounds.top-28/screenScale;
+        return <g className="template-rotation-handle"><line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" /><circle data-selection-rotation-handle="true" cx={center.x} cy={y} r={7/screenScale} fill="#fff" stroke="#147ca8" strokeWidth="2" aria-label="Повернуть выделение вокруг центра" role="button" onPointerDown={event=>{event.preventDefault();event.stopPropagation();const point=pointFromEvent(event);if(!point)return;try{event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);}catch{} rotationRef.current={id:"selection",pointerId:event.pointerId,center:[center.x,center.y],startAngle:Math.atan2(point[1]-center.y,point[0]-center.x),rotation:0,latest:0};}} /></g>;
       })()}
       {(() => {
         if (!onNodeRotate || selectedIdSet.size !== 1) return null;
@@ -1431,10 +1457,10 @@ export function TemplateCanvasV2({
         if (located.layer.nodes.some(node => node.kind === "group" && node.geometry.childIds.includes(located.node.id)) || view?.repeatPlacements.some(p => p.prototypeGroupId === located.node.id)) return null;
         let center; try { center = rootNodeRotationCenterV3(located.node, located.layer.nodes); } catch { return null; }
         const outline = outlines.find(item => item.id === selectedId);
-        const y = (outline ? Math.min(...outline.points.map(p => p.y)) : center.y - 35) - 25;
+        const y = (outline ? Math.min(...outline.points.map(p => p.y)) : center.y - 35) - 28/screenScale;
         return <g className="template-rotation-handle">
           <line x1={center.x} y1={center.y} x2={center.x} y2={y} stroke="#147ca8" strokeDasharray="3 3" pointerEvents="none" />
-          <circle cx={center.x} cy={y} r="7" fill="#fff" stroke="#147ca8" strokeWidth="2" role="button" aria-label="Повернуть вокруг центра" data-rotation-handle="true"
+          <circle cx={center.x} cy={y} r={7/screenScale} fill="#fff" stroke="#147ca8" strokeWidth="2" role="button" aria-label="Повернуть вокруг центра" data-rotation-handle="true"
             onPointerDown={event => { event.stopPropagation(); event.preventDefault(); const point = pointFromEvent(event); if (!point) return;
               const rotation = evaluate(located.node.transform.rotationDegrees) ?? 0;
               try { event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId); } catch { /* Pointer may already be released. */ }

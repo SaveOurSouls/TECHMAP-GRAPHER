@@ -239,3 +239,5 @@
 .drawing-editor-shell .library-tools .undo-tool { margin-left: 0; }
 
 .drawing-editor-shell .library-properties .property-order button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; color: var(--ui-ink); font: inherit; }
+
+.library-tools .drawing-primitive { width:32px; height:32px; min-width:32px; padding:5px; display:inline-grid; place-items:center; flex:0 0 32px; }

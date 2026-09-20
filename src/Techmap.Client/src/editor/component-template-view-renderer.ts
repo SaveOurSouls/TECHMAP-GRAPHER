@@ -506,6 +506,7 @@ function applyCommandTransform(context: CanvasRenderingContext2D, command: Proje
     const brush = canvas.getContext("2d");
     if (brush) {
       brush.scale(canvas.width / hatch.spacing, canvas.height / hatch.spacing);
+      if (hatch.backgroundColor) { brush.fillStyle = hatch.backgroundColor; brush.fillRect(0,0,hatch.spacing,hatch.spacing); }
       brush.strokeStyle = brush.fillStyle = command.fill; brush.lineWidth = 1;
       for (const [x1, y1, x2, y2] of tile.lines) { brush.beginPath(); brush.moveTo(x1!, y1!); brush.lineTo(x2!, y2!); brush.stroke(); }
       for (const [x, y, r] of tile.dots) { brush.beginPath(); brush.arc(x!, y!, r!, 0, 2 * Math.PI); brush.fill(); }

@@ -1,5 +1,5 @@
 export const hatchKinds = ["parallel", "cross", "double", "dots", "brick"] as const;
-export interface DrawingHatch { kind: typeof hatchKinds[number]; spacing: number; angle: number }
+export interface DrawingHatch { kind: typeof hatchKinds[number]; spacing: number; angle: number; backgroundColor?: string | null }
 export const hatchLabels = { parallel: "Наклонные линии", cross: "Перекрёстная", double: "Парные линии", dots: "Точки", brick: "Кладка" };
 /** Generic drafting presets; material meaning is selected by the author. */
 export function hatchTile(hatch: DrawingHatch) {
