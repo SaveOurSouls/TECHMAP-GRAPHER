@@ -8,7 +8,7 @@ internal static class HarnessDrawingDimensionsValidator
 {
     private static HarnessDesignDocumentException Invalid() => new("invalid_drawing_dimensions", "Invalid bound drawing dimensions or measured wire length.", "content.drawingDocuments.dimensions");
     private static string Text(JsonElement e,string key,int max=128) => e.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.String&&v.GetString() is {} s&&!string.IsNullOrWhiteSpace(s)&&s.Length<=max?s:throw Invalid();
-    private static int Integer(JsonElement e,string key) => e.TryGetProperty(key,out var v)&&v.TryGetInt32(out var n)?n:throw Invalid();
+    private static int Integer(JsonElement e,string key) => e.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetInt32(out var n)?n:throw Invalid();
     private static decimal? Length(JsonElement e,string key)
     {
         if(!e.TryGetProperty(key,out var v))throw Invalid();

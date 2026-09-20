@@ -532,6 +532,27 @@ try {
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
   }
+  if(process.argv.includes('--check-common-drawing')) {
+    const {projectTemplateContentV5ToV3,projectTemplateContentV5TableToV1,createTemplateContentV5FromEditor}=await module('component-library/template-model-v5.ts');
+    const {addBundlePortV3}=await module('component-library/template-commands-v3.ts');
+    const {materializedContactWorldRepresentation}=await module('editor/materialized-contact-representation.ts');
+    let core=projectTemplateContentV5ToV3(content),port;
+    const view=core.views.find(v=>v.kind==='drawing');
+    [core,port]=addBundlePortV3(core,view.id);
+    const drawing={articleVariantId:core.articleVariants[0].id,target:'drawing',viewId:view.id,nodeIds:core.views.find(v=>v.id===view.id).layers.flatMap(l=>l.nodes.map(n=>n.id)),contactPointIds:[],bundlePortIds:[port]};
+    const shared=createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[drawing],content.drawingContactBindings).content;
+    const commonTemplate=await templates.create({code:'COMMON-DRAWING',name:'Common drawing point test',articleBindings:[article],content:shared});
+    await assert.rejects(()=>templates.create({code:'INVALID-COMMON',name:'Invalid target',articleBindings:[article],content:{...shared,articleDrawings:[{...drawing,target:'e4'}]}}));
+    await assert.rejects(()=>templates.create({code:'INVALID-COUNT',name:'Missing contacts',articleBindings:[article],content:{...shared,articleDrawings:[{...drawing,bundlePortIds:[]}]}}));
+    project=(await projects.addHarness(project.projectId,{commandId:crypto.randomUUID(),expectedRevision:project.revision},{designation:'COMMON-DRAWING',quantity:1})).project;
+    const hid=project.harnesses.find(h=>h.designation==='COMMON-DRAWING').harnessId;
+    const c=createConnectorInstanceFromComponentTemplateV3(commonTemplate,{id:crypto.randomUUID(),designation:'XC',e4Position:{x:100,y:80}});
+    const coords=c.contacts.map(p=>materializedContactWorldRepresentation(c,p.id,'drawing').position);
+    assert.equal(new Set(c.contacts.map(p=>p.id)).size,c.contacts.length);assert.ok(coords.every(p=>p.x===coords[0].x&&p.y===coords[0].y));
+    await placements.place(project.projectId,hid,componentPlacementRequest(c,0,crypto.randomUUID()));
+    const read=await designs.get(project.projectId,hid);assert.equal(read.content.connectors[0].contacts.length,c.contacts.length);
+    assert.deepEqual(read.content.connectors[0].libraryBinding.snapshot,c.libraryBinding.snapshot);
+  }
   let drawingWorkspaceChecked=false,drawingWorkspaceHarnessId,drawingWorkspaceExpected;
   if(process.argv.includes('--check-drawing-workspace')) {
     const {createEmptyHarnessDesign,parseHarnessDesignDocument}=await module('editor/model.ts');
@@ -649,7 +670,7 @@ try {
     log = firstLog + '\n--- RESTART ---\n' + log;
     restartChecked = true;
   }
-  const report = { status: 'ok', drawingWorkspaceChecked,drawingWorkspaceHarnessId, screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
+  const report = { status: 'ok', drawingWorkspaceChecked,drawingWorkspaceHarnessId,commonDrawingChecked:process.argv.includes('--check-common-drawing'), screenSpansChecked:Boolean(screenSpansExpected),screenSpansHarnessId, drawingArrayChecked:process.argv.includes('--check-drawing-array'), drawingScaleChecked:process.argv.includes('--check-drawing-scale'), appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
     revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, documentsChecked:process.argv.includes('--check-documents') && physicalTopologyChecked, cutDiagramChecked:process.argv.includes('--check-cut-diagram') && physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };

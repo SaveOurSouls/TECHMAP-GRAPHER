@@ -358,3 +358,10 @@
 
 .he-dimension-targets {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
 .he-dimension-help {position:absolute;top:8px;left:12px;background:white;border:1px solid #bdcdd7;padding:6px 10px;border-radius:6px;font-size:12px;pointer-events:none;}
+
+.he-table-window>header select {flex:0 1 132px;width:132px;min-height:28px;padding:3px 6px;}
+.he-table-window input,.he-table-window select {height:28px;min-height:28px;padding:3px 6px;font-size:12px;line-height:18px;}
+.he-table-window .ui-control {min-height:26px;padding:3px 7px;font-size:11px;}
+.he-table-window th,.he-table-window td {vertical-align:top;}
+.he-table-window-body>.he-relations>details>.ui-section-heading {display:none;}
+.he-table-window-body .he-relations-actions {margin:3px 0;}

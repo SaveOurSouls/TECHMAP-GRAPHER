@@ -51,8 +51,8 @@ export function EditorToolbar({
             className={activeTool === tool.id ? "he-tool active" : "he-tool"}
             type="button"
             key={tool.id}
-            title={`${tool.label} · ${tool.shortcut}`}
-            aria-label={`${tool.label}, клавиша ${tool.shortcut}`}
+            title={tool.shortcut?`${tool.label} · ${tool.shortcut}`:tool.label}
+            aria-label={tool.shortcut?`${tool.label}, клавиша ${tool.shortcut}`:tool.label}
             aria-pressed={activeTool === tool.id}
             onClick={() => onToolChange(tool.id)}
           >
