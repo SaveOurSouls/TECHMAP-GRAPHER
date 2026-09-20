@@ -11,6 +11,31 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
     [Fact]
+    public void Drawing_rejects_missing_contacts_and_allows_one_common_point_only_for_drawing()
+    {
+        var content=ValidContent();
+        var view=content["views"]!.AsArray().First(v=>v!["kind"]!.GetValue<string>()=="drawing")!;
+        var portId=Guid.NewGuid().ToString();
+        view["bundlePorts"]=new JsonArray(new JsonObject { ["id"]=portId,["name"]="Bundle",["direction"]="right",["x"]=new JsonObject{["kind"]="constant",["value"]=10},["y"]=new JsonObject{["kind"]="constant",["value"]=20} });
+        var drawing=new JsonObject {
+            ["articleVariantId"]=content["articleVariants"]![0]!["id"]!.DeepClone(),["target"]="drawing",["viewId"]=view["id"]!.DeepClone(),
+            ["nodeIds"]=new JsonArray(view["layers"]![0]!["nodes"]!.AsArray().Select(n=>n!["id"]!.DeepClone()).ToArray()),
+            ["contactPointIds"]=new JsonArray(),["bundlePortIds"]=new JsonArray(portId)
+        };
+        content["articleDrawings"]=new JsonArray(drawing);
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        drawing["target"]="e4";
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        drawing["target"]="drawing";drawing["bundlePortIds"]=new JsonArray();drawing["contactPointIds"]=new JsonArray(view["contactPoints"]![0]!["id"]!.DeepClone());
+        content["articleVariants"]![0]!["contactGroups"]![0]!["contactCount"]=2;
+        content["e4ConnectorTable"]!["articles"]![0]!["contactGroups"]![0]!["contactCount"]=2;
+        var row=content["e4ConnectorTable"]!["seriesDefaults"]![0]!.DeepClone();row["rowId"]="second";row["values"]!["number"]="2";
+        content["e4ConnectorTable"]!["seriesDefaults"]!.AsArray().Add(row);
+        content["e4ConnectorTable"]!["articles"]![0]!["rows"]!.AsArray().Add(new JsonObject{["seriesRowId"]="second",["overrides"]=new JsonObject()});
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
+    [Fact]
     public void Contact_presets_accept_wire_colors_and_custom_values_but_reject_invalid_types()
     {
         var content = ValidContent();

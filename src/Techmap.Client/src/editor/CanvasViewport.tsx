@@ -1362,7 +1362,7 @@ export function getMaterializedConnectorContactPoints(
       status: record.status as MaterializedConnectorContactPoint["status"],
     });
   }
-  return result.some(Boolean) ? result : null;
+  return result;
 }
 
 function connectorCanvasContactPoints(
@@ -1381,6 +1381,7 @@ function connectorCanvasContactPoints(
       crossOffset: 12,
       crossSize: 3,
     };
+    if(view==="drawing"&&materialized)return null;
     const fallback = legacy[index];
     if (!fallback) return null;
     if (e4Layout) return {
@@ -1996,7 +1997,7 @@ export function drawEditorSceneObject(
     const materializedPoints = getMaterializedConnectorContactPoints(object);
     const points = legacyConnectorContactPoints(object);
     for (let index = 0; index < points.length; index += 1) {
-      if (materializedPoints?.[index]) continue;
+      if (view==="drawing"&&materializedPoints || materializedPoints?.[index]) continue;
       const point = points[index]!;
       context.beginPath();
       context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);

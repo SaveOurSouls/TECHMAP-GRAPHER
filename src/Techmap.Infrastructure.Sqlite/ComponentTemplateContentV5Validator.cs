@@ -76,7 +76,7 @@ internal static class ComponentTemplateContentV5Validator
             foreach (var drawing in drawings.EnumerateArray())
             {
                 const string path = "content.articleDrawings";
-                RequireExactPropertiesWithOptional(drawing, path, ["articleVariantId", "nodeIds", "contactPointIds"], "target", "viewId");
+                RequireExactPropertiesWithOptional(drawing, path, ["articleVariantId", "nodeIds", "contactPointIds"], "target", "viewId", "bundlePortIds");
                 var target = drawing.TryGetProperty("target", out var targetValue) ? RequiredText(targetValue, 16, path + ".target") : null;
                 if (target is not null && target is not ("e4" or "drawing" or "route")) Throw("Unknown drawing target.", path);
                 if (target is null && drawing.TryGetProperty("viewId", out _)) Throw("Drawing target required.", path);
@@ -90,6 +90,14 @@ internal static class ComponentTemplateContentV5Validator
                     var ownPoints=view.GetProperty("contactPoints").EnumerateArray().Select(p=>p.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
                     ValidateDrawingIds(drawing.GetProperty("nodeIds"),ownNodes,path);
                     ValidateDrawingIds(drawing.GetProperty("contactPointIds"),ownPoints,path);
+                    var ports=drawing.TryGetProperty("bundlePortIds",out var bundle)?bundle:default;
+                    if(ports.ValueKind!=JsonValueKind.Undefined)
+                    {
+                        var ownPorts=view.GetProperty("bundlePorts").EnumerateArray().Select(p=>p.GetProperty("id").GetString()!).ToHashSet(StringComparer.Ordinal);
+                        ValidateDrawingIds(ports,ownPorts,path);
+                        if(ports.GetArrayLength()>1 || ports.GetArrayLength()>0&&(target!="drawing"||drawing.GetProperty("contactPointIds").GetArrayLength()>0))Throw("A single bundle contact is allowed only for Drawing without individual contacts.",path);
+                    }
+                    if(ports.ValueKind!=JsonValueKind.Array||ports.GetArrayLength()==0)ValidateDrawingContactCount(content,drawing,view,path);
                 }
                 var id = RequiredText(drawing.GetProperty("articleVariantId"), 128, path);
                 if (!articles.Contains(id) || !seen.Add(id + ":" + (target ?? "legacy"))) Throw("Unknown or duplicate drawing article.", path);
@@ -112,6 +120,30 @@ internal static class ComponentTemplateContentV5Validator
                     Throw("Unknown or duplicate drawing contact binding.", path);
             }
         }
+    }
+
+    private static void ValidateDrawingContactCount(JsonElement content,JsonElement drawing,JsonElement view,string path)
+    {
+        var selected=drawing.GetProperty("contactPointIds").EnumerateArray().Select(p=>p.GetString()!).ToHashSet(StringComparer.Ordinal);
+        if(selected.Count==0&&drawing.GetProperty("nodeIds").GetArrayLength()==0)return;
+        var article=content.GetProperty("articleVariants").EnumerateArray().FirstOrDefault(a=>a.GetProperty("id").GetString()==drawing.GetProperty("articleVariantId").GetString());
+        if(article.ValueKind!=JsonValueKind.Object)Throw("Unknown drawing article.",path);
+        var expected=article.GetProperty("contactGroups").EnumerateArray().Sum(g=>g.GetProperty("contactCount").GetInt32());
+        var represented=selected.Count;
+        foreach(var repeat in view.GetProperty("repeatPlacements").EnumerateArray())
+        {
+            var prototype=repeat.GetProperty("contactPointIds").EnumerateArray().Select(p=>p.GetString()!).ToArray();
+            var used=prototype.Count(selected.Contains);if(used==0)continue;
+            if(used!=prototype.Length)Throw("Select all contacts of the drawing array.",path);
+            var domain=content.GetProperty("repeaters").EnumerateArray().First(d=>d.GetProperty("id").GetString()==repeat.GetProperty("repeatDomainId").GetString());
+            var parameterId=domain.GetProperty("countParameterId").GetString();
+            var countValue=article.GetProperty("parameterValues").EnumerateArray().FirstOrDefault(p=>p.GetProperty("parameterId").GetString()==parameterId);
+            var parameter=content.GetProperty("parameters").EnumerateArray().First(p=>p.GetProperty("id").GetString()==parameterId);
+            var count=countValue.ValueKind==JsonValueKind.Object?countValue.GetProperty("value").GetInt32():parameter.GetProperty("defaultValue").GetInt32();
+            var articleCount=repeat.TryGetProperty("arrayLayout",out var layout)&&layout.TryGetProperty("countSource",out var source)&&source.GetString()=="article";
+            represented+=articleCount?expected-used:(count-1)*used;
+        }
+        if(represented!=expected)Throw($"Drawing must contain {expected} article contacts; found {represented}.",path);
     }
 
     private static void ValidateDrawingIds(JsonElement values, HashSet<string> allowed, string path)

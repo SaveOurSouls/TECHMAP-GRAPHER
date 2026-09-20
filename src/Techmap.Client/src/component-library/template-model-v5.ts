@@ -306,10 +306,14 @@ function validateDrawingBindings(value: Record<string, unknown>, diagnostics: Te
     items.forEach((item, index) => {
       const path = `$.${key}[${index}]`;
       if (key === "articleDrawings") {
-        if (!exactWithOptional(item, ["articleVariantId", "nodeIds", "contactPointIds"], ["target","viewId"], path, diagnostics)) return;
+        if (!exactWithOptional(item, ["articleVariantId", "nodeIds", "contactPointIds"], ["target","viewId","bundlePortIds"], path, diagnostics)) return;
         if(item.target !== undefined && !["e4","drawing","route"].includes(String(item.target))) diagnostics.push(error("invalid_drawing_target",path,"Неизвестный раздел рисунка."));
         const view=item.viewId===undefined ? undefined : views.find(v=>v.id===item.viewId);
         if((item.target!==undefined || item.viewId!==undefined) && (!view || item.target===undefined)) diagnostics.push(error("invalid_drawing_view",path,"Вид рисунка отсутствует."));
+        if(item.bundlePortIds!==undefined) {
+          const ports=view && Array.isArray(view.bundlePorts)?view.bundlePorts.filter(isRecord):[];
+          if(!Array.isArray(item.bundlePortIds)||item.bundlePortIds.length>1||item.bundlePortIds.some(id=>!ports.some(p=>p.id===id))||item.bundlePortIds.length>0&&(item.target!=="drawing"||!Array.isArray(item.contactPointIds)||item.contactPointIds.length>0))diagnostics.push(error("invalid_bundle_drawing",path,"Один общий контакт допустим только в чертеже, без отдельных контактов."));
+        }
         const identity=`${item.articleVariantId}:${item.target ?? "legacy"}`;
         if (!articles.has(item.articleVariantId) || seen.has(identity)) diagnostics.push(error("invalid_drawing_article", path, "Артикул рисунка отсутствует или повторяется."));
         seen.add(identity);

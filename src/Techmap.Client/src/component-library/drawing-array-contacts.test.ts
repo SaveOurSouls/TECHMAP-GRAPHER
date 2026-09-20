@@ -1,3 +1,5 @@
+import { validateArticleDrawingContacts } from "./drawing-contact-validation";
+import { addBundlePortV3 } from "./template-commands-v3";
 import {materializedContactWorldRepresentation} from "../editor/materialized-contact-representation";
 import {applyEditorCommand} from "../editor/commands";
 import {createEmptyHarnessDesign,parseHarnessDesignDocument} from "../editor/model";
@@ -17,7 +19,7 @@ describe("drawing arrays with table-bound contacts",()=>{
   core=addArticleVariantsV3(core,[{sourceId:"test",entityType:"connector",articleKey:"A2"},{sourceId:"test",entityType:"connector",articleKey:"A5"}]);
   core=setArticleVariantContactGroupV3(core,core.articleVariants[0]!.id,group,2,[]);
   core=setArticleVariantContactGroupV3(core,core.articleVariants[1]!.id,group,5,[]);
-  const table=createE4ConnectorSeriesTableFromV3(core,true),bindings=[],selection:string[]=[];
+  const table=createE4ConnectorSeriesTableFromV3(core,true),bindings:{logicalContactId:string;seriesRowId:string}[]=[],selection:string[]=[];
   let id:string;[core,id]=addBasicNodeV3(core,view.id,layer.id,"rectangle");selection.push(id);
   for(let i=0;i<2;i++){[core,id]=addContactPointV3(core,view.id,{number:String(i+1),name:"Pin",contactTypeGroupId:group});selection.push(id);bindings.push({logicalContactId:core.views[1]!.contactPoints.at(-1)!.logicalContactId,seriesRowId:table.seriesDefaults[i]!.rowId});}
   core=setDrawingArray(core,view.id,layer.id,selection,{rows:2,direction:"short-side",numbering:"snake",countSource:"article",count:2,pitchX:20,pitchY:30});
@@ -27,6 +29,8 @@ describe("drawing arrays with table-bound contacts",()=>{
   expect(labels.filter(p=>p.row).map(p=>p.row!.number)).toEqual(["1","2","3","4","5"]);
   expect(labels.filter(p=>!p.row)).toHaveLength(1);
   const drawing={...drawingSelection(core.views[1]!,[core.views[1]!.repeatPlacements[0]!.prototypeGroupId],article.id),target:"drawing" as const,viewId:view.id};
+  expect(()=>validateArticleDrawingContacts(core,table,bindings,drawing)).not.toThrow();
+  expect(()=>validateArticleDrawingContacts(core,table,bindings,{...drawing,contactPointIds:[]})).toThrow();
   const content=createTemplateContentV5FromEditor(core,table,[],[],undefined,[drawing],bindings).content;
   expect(validateTemplateContentV5(content).valid).toBe(true);
   const placed=createConnectorInstanceFromComponentTemplateV3({templateId:"t",version:1,versionSha256:"a".repeat(64),code:"S",name:"Series",assets:[],articleBindings:[],content},{id:"x",designation:"X1",articleVariantId:article.id,e4Position:{x:0,y:0}});
@@ -44,5 +48,14 @@ describe("drawing arrays with table-bound contacts",()=>{
   expect(restored.connectors[0]!.contacts.map(c=>c.id)).toEqual(placed.contacts.map(c=>c.id));
   expect(undoEditorCommand(executeEditorCommand(createEditorHistory(document),command)).present).toEqual(document);
 
+  let portId:string;[core,portId]=addBundlePortV3(core,view.id);
+  const common={...drawing,contactPointIds:[],bundlePortIds:[portId]};
+  expect(()=>validateArticleDrawingContacts(core,table,bindings,common)).not.toThrow();
+  expect(()=>validateArticleDrawingContacts(core,table,bindings,{...common,target:"e4"})).toThrow();
+  const bundled=createTemplateContentV5FromEditor(core,table,[],[],undefined,[common],bindings).content;
+  const b=createConnectorInstanceFromComponentTemplateV3({templateId:"t",version:2,versionSha256:"b".repeat(64),code:"S",name:"Series",assets:[],articleBindings:[],content:bundled},{id:"y",designation:"X2",articleVariantId:article.id,e4Position:{x:50,y:60}});
+  expect(new Set(b.contacts.map(c=>c.id)).size).toBe(5);
+  const coordinates=b.contacts.map(c=>materializedContactWorldRepresentation(b,c.id,"drawing")!.position);
+  expect(coordinates.every(p=>p.x===coordinates[0]!.x&&p.y===coordinates[0]!.y)).toBe(true);
  });
 });

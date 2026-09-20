@@ -832,7 +832,7 @@ describe("harness editor workspace", () => {
     expect(strokes.some(stroke => stroke.color === "#0077bb")).toBe(false);
   });
 
-  it("mixes nullable materialized contacts with indexed fallback anchors and hits an external X", () => {
+  it("does not invent fallback contacts beside a drawing and hits its external X", () => {
     const connector: EditorSceneObject = {
       id: "library", layerId: "top", kind: "connector", label: "XS1",
       x: 100, y: 200, width: 60, height: 90, color: "#334455",
@@ -850,9 +850,7 @@ describe("harness editor workspace", () => {
       { x: 70, y: 220, direction: "left", status: "not-connected" },
       { x: 130, y: 240, direction: "right", status: "available" },
     ]);
-    expect(hitTestConnectorContact([connector], layers, { x: 160, y: 228 }, 1, "drawing")).toEqual({
-      connectorId: "library", contactIndex: 0,
-    });
+    expect(hitTestConnectorContact([connector], layers, { x: 160, y: 228 }, 1, "drawing")).toBeNull();
     expect(hitTestConnectorContact([connector], layers, { x: 70, y: 220 }, 1, "drawing")).toBeNull();
     expect(hitTestConnectorContact([connector], layers, { x: 130, y: 240 }, 1, "drawing")).toEqual({
       connectorId: "library", contactIndex: 2,
@@ -873,8 +871,6 @@ describe("harness editor workspace", () => {
     } as unknown as CanvasRenderingContext2D;
     drawEditorSceneObject(context, connector, false, "drawing");
     expect(arcs).toEqual([
-      { x: 160, y: 228 },
-      { x: 100, y: 228 },
       { x: 130, y: 240 },
     ]);
     expect(path).toContainEqual({ x: 70, y: 220 });

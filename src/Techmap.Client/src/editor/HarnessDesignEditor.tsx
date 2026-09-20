@@ -1,3 +1,5 @@
+import { projectComponentTemplateView } from "./component-template-view-renderer";
+import { materializePlacementRows } from "./component-template-placement";
 import { DrawingTableWindows } from "./DrawingTableWindows";
 import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
@@ -268,6 +270,7 @@ function contactPointForWire(
   otherEndpoint: WireEndpoint,
   view: HarnessEditorView,
   materializedConnectorIds?: ReadonlySet<string>,
+  drawingConnectorIds?: ReadonlySet<string>,
 ) {
   // Routing, screen ports and painting must share the exact same endpoints,
   // including when the graphical snapshot has not loaded yet.
@@ -287,6 +290,7 @@ function contactPointForWire(
     ? materializedContactWorldRepresentation(connector, contactId, view)
     : null;
   if (materialized) return materialized.position;
+  if(view==="drawing"&&useMaterialized&&drawingConnectorIds?.has(connector.id))return null;
   const fallbackConnector = connector.libraryBinding?.mode === "template"
     ? { ...connector, libraryBinding: { mode: "free" as const } }
     : connector;
@@ -320,6 +324,7 @@ export function designToScene(
   diagnosticObjectIds: ReadonlySet<string> = new Set(),
   materializedConnectorIds?: ReadonlySet<string>,
   quantity=1,
+  drawingConnectorIds?: ReadonlySet<string>,
 ): readonly EditorSceneObject[] {
   const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
     const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
@@ -336,7 +341,7 @@ export function designToScene(
           status: contact.connectionStatus,
         } : null;
       });
-      if (materializedContactPoints.some((point) => point !== null)) {
+      if (view==="drawing" && drawingConnectorIds?.has(connector.id) || materializedContactPoints.some((point) => point !== null)) {
         metadata.materializedContactPoints = JSON.stringify(materializedContactPoints);
       }
     }
@@ -385,8 +390,8 @@ export function designToScene(
     };
   });
   const wires: EditorSceneObject[] = document.wires.flatMap((wire, index) => {
-    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds);
-    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds);
+    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds,drawingConnectorIds);
+    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds,drawingConnectorIds);
     if (!start || !end) return [];
     const physicalPoints = view === "drawing" ? physicalWirePoints(document, wire.id, start, end) : null;
     const points = view === "drawing" ? physicalPoints ?? [start, ...wire.drawingRoute, end] : [start, ...wire.e4Route, end];
@@ -433,8 +438,8 @@ export function designToScene(
     }];
   });
   const dimensions: EditorSceneObject[] = view === "drawing" ? document.wires.flatMap((wire) => {
-    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds);
-    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds);
+    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds,drawingConnectorIds);
+    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds,drawingConnectorIds);
     if (!start || !end) return [];
     const y = Math.max(start.y, end.y) + 70;
     const cutLength = calculateWireCutLength(wire);
@@ -1040,12 +1045,20 @@ export function HarnessDesignEditor({
   const componentGraphIntegrityMessage = componentGraphMessage || (hasComponentGraphIntegrityMismatch
     ? "Закреплённые контактные данные компонента не совпадают со снимком проекта. Используется резервное отображение."
     : "");
+  const sourceDocument=previewResult.document??history.present;
+  const drawingDocument=view!=="drawing"?sourceDocument:{...sourceDocument,connectors:sourceDocument.connectors.map(connector=>{
+    const instance=componentTemplateViewInstances.find(i=>i.objectId===connector.id),binding=connector.libraryBinding;
+    if(!instance||binding?.mode!=="template")return connector;
+    const rows=materializePlacementRows(instance.content,instance.articleVariantId);
+    return {...connector,libraryBinding:{...binding,snapshot:{...binding.snapshot,contacts:binding.snapshot.contacts.map(contact=>({...contact,representations:rows.find(r=>r.key===contact.logicalContactId)?.representations??[]}))}}};
+  })};
   const scene = designToScene(
-    previewResult.document ?? history.present,
+    drawingDocument,
     view,
     diagnosticObjectIds,
     materializedConnectorIds,
     harnessQuantity,
+    new Set(componentTemplateViewInstances.filter(i=>projectComponentTemplateView(i,"drawing",{x:0,y:0})?.commands.length).map(i=>i.objectId)),
   );
   const layers = toUiLayers(history.present, view);
   const selectedDrawingConnector = view === "drawing"
@@ -1484,6 +1497,7 @@ export function HarnessDesignEditor({
           setMessage("");
         }}>Оставить серверную версию</button>
       </div>}
+      {view==="drawing" && drawingDocument.connectors.some(c=>c.libraryBinding?.mode==="template"&&materializedConnectorIds.has(c.id)&&c.libraryBinding.snapshot.contacts.some(p=>!p.representations.some(r=>r.viewKind==="drawing"))) && <div className="he-save-message" role="alert">В рисунке не заданы точки части контактов. Откройте рисунок артикула в библиотеке, свяжите контакты с колонкой № либо задайте общий выход для чертежа и обновите компонент.</div>}
       {componentGraphIntegrityMessage && <ComponentGraphErrorAlert
         message={componentGraphIntegrityMessage}
         onRetry={() => void refreshComponentGraph(loadGeneration.current)}

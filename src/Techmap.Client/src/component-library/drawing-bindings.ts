@@ -3,7 +3,7 @@ import type { TemplateViewV2 } from "./template-model-v2";
 import { materializeE4ConnectorArticle, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 
 export type DrawingTarget = "e4" | "drawing" | "route";
-export interface ArticleDrawing { articleVariantId: string; nodeIds: string[]; contactPointIds: string[]; target?: DrawingTarget; viewId?: string }
+export interface ArticleDrawing { articleVariantId: string; nodeIds: string[]; contactPointIds: string[]; bundlePortIds?:string[]; target?: DrawingTarget; viewId?: string }
 export function findArticleDrawing(drawings:readonly ArticleDrawing[]|undefined,articleId:string|null,target:DrawingTarget) {
   return drawings?.find(d=>d.articleVariantId===articleId && d.target===target)
     ?? drawings?.find(d=>d.articleVariantId===articleId && !d.target && target!=="route");
@@ -21,7 +21,7 @@ export function separateLegacyDrawings(content:TemplateContentV3,drawings:readon
   for(const repeat of clone.repeatPlacements){repeat.prototypeGroupId=ids.get(repeat.prototypeGroupId)!;repeat.contactPointIds=repeat.contactPointIds.map(id=>ids.get(id)!);}
   return {content:{...content,views:[...content.views,clone]},drawings:[...(drawings??[]).filter(d=>d.target),...legacy.flatMap(d=>[
     {...d,target:"drawing" as const,viewId:source.id},
-    {...d,target:"e4" as const,viewId:clone.id,nodeIds:d.nodeIds.map(id=>ids.get(id)!),contactPointIds:d.contactPointIds.map(id=>ids.get(id)!)},
+    {...d,target:"e4" as const,viewId:clone.id,nodeIds:d.nodeIds.map(id=>ids.get(id)!),contactPointIds:d.contactPointIds.map(id=>ids.get(id)!),bundlePortIds:[]},
   ]).filter((d,index,all)=>!(drawings??[]).some(old=>old.articleVariantId===d.articleVariantId&&old.target===d.target))]};
 }
 export interface DrawingContactBinding { logicalContactId: string; seriesRowId: string }
@@ -39,15 +39,17 @@ export function drawingSelection(view: TemplateViewV2, selectedIds: readonly str
   }
   for (const placement of view.repeatPlacements) if (selected.has(placement.prototypeGroupId)) placement.contactPointIds.forEach(id => selected.add(id));
   return { articleVariantId, nodeIds: nodes.filter(node => selected.has(node.id)).map(node => node.id),
-    contactPointIds: view.contactPoints.filter(point => selected.has(point.id)).map(point => point.id) };
+    contactPointIds: view.contactPoints.filter(point => selected.has(point.id)).map(point => point.id),
+    bundlePortIds:view.bundlePorts.filter(point=>selected.has(point.id)).map(point=>point.id) };
 }
 
 export function articleDrawingView(view: TemplateViewV2, drawings: readonly ArticleDrawing[] | undefined, articleId: string | null, target:DrawingTarget="drawing"): TemplateViewV2 {
   const drawing = findArticleDrawing(drawings,articleId,target);
-  if (!drawing) return drawings?.some(d=>d.articleVariantId===articleId && d.target) ? {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],repeatPlacements:[]} : view;
-  if(drawing.viewId && drawing.viewId!==view.id) return {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],repeatPlacements:[]};
+  if (!drawing) return drawings?.some(d=>d.articleVariantId===articleId && d.target) ? {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]} : view;
+  if(drawing.viewId && drawing.viewId!==view.id) return {...view,layers:view.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]};
   const nodes = new Set(drawing.nodeIds), points = new Set(drawing.contactPointIds);
   return { ...view, layers: view.layers.map(layer => ({ ...layer, nodes: layer.nodes.map(node => ({ ...node, visible: node.visible && nodes.has(node.id) })) })),
+    bundlePorts:view.bundlePorts.filter(point=>drawing.bundlePortIds?.includes(point.id)),
     contactPoints: view.contactPoints.filter(point => points.has(point.id)),
     repeatPlacements: view.repeatPlacements.filter(placement => nodes.has(placement.prototypeGroupId)) };
 }

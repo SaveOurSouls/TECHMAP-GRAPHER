@@ -1,3 +1,4 @@
+import { validateArticleDrawingContacts } from "./drawing-contact-validation";
 import { drawingArrayContactRows } from "./drawing-array-contacts";
 import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
 import { copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection, stretchDrawingSelection, rotateDrawingSelection, styleDrawingSelection, drawingKeyboardAction, type DrawingClipboard } from "./drawing-selection";
@@ -724,6 +725,7 @@ export function ComponentLibrary({ config, session }: Props) {
     catch (caught) { setError(errorText(caught)); return null; }
     let v5Content;
     try {
+      for(const drawing of working.articleDrawings??[])validateArticleDrawingContacts(working.content,working.e4ConnectorTable,working.drawingContactBindings??[],drawing);
       v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings).content;
     } catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: working.code.trim(), name: working.name.trim(), articleBindings: articleBindingsFromTemplateV3(working.content), content: v5Content };
@@ -793,19 +795,19 @@ export function ComponentLibrary({ config, session }: Props) {
     let view=content.views.find(v=>binding?.viewId ? v.id===binding.viewId : target==="drawing" || binding && !binding.target ? v.kind==="drawing" : v.name===name);
     if(!view){const [next,id]=addAdditionalViewV3(content,name);content=next;view=content.views.find(v=>v.id===id)!;changeContent(content);}
     setDrawingTarget(target);setViewId(view.id);setGraphicEditorMode("drawing");setSelectedArticleVariantId(articleId);
-    setSelectedIds(binding?[...binding.nodeIds,...binding.contactPointIds]:[]);
+    setSelectedIds(binding?[...binding.nodeIds,...binding.contactPointIds,...binding.bundlePortIds??[]]:[]);
   }
   function clearTargetDrawings() {
     if(!activeView)return;
     const empty={...draft.content,views:draft.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)};
     changeContent(empty,null);
-    setDraft(current=>({...current,articleDrawings:current.articleDrawings?.map(d=>d.target===drawingTarget || !d.target&&drawingTarget==="drawing"?{...d,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[]}:d)}));
+    setDraft(current=>({...current,articleDrawings:current.articleDrawings?.map(d=>d.target===drawingTarget || !d.target&&drawingTarget==="drawing"?{...d,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[],bundlePortIds:[]}:d)}));
     setRemoveDrawingPrompt(false);
   }
   async function saveArticleDrawing(articleVariantId: string,all=false) {
     if (!activeView) return;
     const drawing = {...drawingSelection(activeView, selectedIds, articleVariantId),target:drawingTarget,viewId:activeView.id};
-    if (!drawing.nodeIds.length && !drawing.contactPointIds.length) return;
+    if (!drawing.nodeIds.length && !drawing.contactPointIds.length && !drawing.bundlePortIds?.length) return;
     const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
     const working = { ...draft, articleDrawings: [...(draft.articleDrawings ?? []).filter(item => !(articleIds.includes(item.articleVariantId)&&item.target===drawingTarget)), ...articleIds.map(id=>({...drawing,articleVariantId:id}))] };
     const body = validatedBody(working); if (!body) return;
@@ -909,6 +911,7 @@ export function ComponentLibrary({ config, session }: Props) {
     try { const [content, id] = linkLogicalContactPointV2(draft.content, activeView.id, logicalContactId); changeContent(content, id); setPendingLogicalContactId(null); } catch (caught) { setError(errorText(caught)); }
   }
   function appendBundlePort() {
+    if(drawingTarget!=="drawing"){setError("Общий контакт разрешён только для раздела Чертёж.");return;}
     if (!activeView) return;
     try { const [content, id] = addBundlePortV2(draft.content, activeView.id); changeContent(content, id); } catch (caught) { setError(errorText(caught)); }
   }
