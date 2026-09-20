@@ -22,7 +22,7 @@
 
 ## Пакет
 
-`artifacts/m4-54/TECHMAP-GRAPHER-win-x64.zip` — 53.49 MiB, 39 записей.
+`artifacts/m4-54/TECHMAP-GRAPHER-win-x64.zip` — 53.49 MiB, 39 файлов (40 записей ZIP с каталогом).
 `verify-package.ps1` прошёл, sqlite/db/log/user-data/node_modules в ZIP отсутствуют.
 SHA-256: `A327D883A918C222731C42A14CC5E5DAFDA2F86B610A92E82DDF629DBC2F4B75`.
 
