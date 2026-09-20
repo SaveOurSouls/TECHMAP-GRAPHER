@@ -527,7 +527,7 @@ try {
     }
 
 
-    expectedTopology=d.physicalTopology;
+    expectedTopology=JSON.parse(JSON.stringify(d.physicalTopology));
     expectedDrawingDocuments=d.drawingDocuments;
     assert.deepEqual((await designs.get(project.projectId,physicalHarnessId)).content.physicalTopology,expectedTopology);
     physicalTopologyChecked=true;
@@ -551,7 +551,7 @@ try {
     assert.equal(new Set(c.contacts.map(p=>p.id)).size,c.contacts.length);assert.ok(coords.every(p=>p.x===coords[0].x&&p.y===coords[0].y));
     await placements.place(project.projectId,hid,componentPlacementRequest(c,0,crypto.randomUUID()));
     const read=await designs.get(project.projectId,hid);assert.equal(read.content.connectors[0].contacts.length,c.contacts.length);
-    assert.deepEqual(read.content.connectors[0].libraryBinding.snapshot,c.libraryBinding.snapshot);
+    assert.deepEqual(JSON.parse(JSON.stringify(read.content.connectors[0].libraryBinding.snapshot)),JSON.parse(JSON.stringify(c.libraryBinding.snapshot)));
   }
   let drawingWorkspaceChecked=false,drawingWorkspaceHarnessId,drawingWorkspaceExpected;
   if(process.argv.includes('--check-drawing-workspace')) {
