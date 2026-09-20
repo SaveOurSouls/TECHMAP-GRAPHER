@@ -14,6 +14,8 @@ internal static class HarnessPhysicalTopologyValidator
         foreach (var axis in new[] { "x", "y" })
             if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty(axis, out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetDouble(out var n) || !double.IsFinite(n) || Math.Abs(n) > 1e7) throw Invalid();
     }
+    private static string LongText(JsonElement e,string key,int maximum) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.String && v.GetString() is {} s && !string.IsNullOrWhiteSpace(s) && s.Length<=maximum ? s : throw Invalid();
+    private static decimal Number(JsonElement e,string key) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.Number && v.TryGetDecimal(out var n) ? n : throw Invalid();
     public static void Validate(JsonElement root)
     {
         if (!root.TryGetProperty("physicalTopology", out var t)) return;
@@ -40,6 +42,36 @@ internal static class HarnessPhysicalTopologyValidator
             if (!ids.Add(id) || from == to || !nodes.ContainsKey(from) || !nodes.ContainsKey(to)) throw Invalid();
             foreach (var p in Array(segment, "bends", 1000).EnumerateArray()) Point(p);
             segments.Add(id, (from, to));
+        }
+        if (t.TryGetProperty("coverings", out _))
+        {
+            foreach (var covering in Array(t, "coverings", 10000).EnumerateArray())
+            {
+                if (!ids.Add(Text(covering, "id"))) throw Invalid();
+                _ = LongText(covering, "name", 256);
+                var color = LongText(covering, "color", 7);
+                if (color.Length != 7 || color[0] != '#' || color[1..].Any(c => !Uri.IsHexDigit(c))) throw Invalid();
+                var width = Number(covering,"width"); if (width < 1 || width > 200) throw Invalid();
+                if (!covering.TryGetProperty("lengthMm",out var length)) throw Invalid();
+                if (length.ValueKind != JsonValueKind.Null)
+                {
+                    var mm=Number(covering,"lengthMm"); if(mm<0 || mm>1000000000m || decimal.Round(mm,3)!=mm) throw Invalid();
+                }
+                var spans=Array(covering,"spans",20000); if(spans.GetArrayLength()==0) throw Invalid();
+                var members=new HashSet<string>(StringComparer.Ordinal);
+                foreach(var span in spans.EnumerateArray())
+                {
+                    var id=Text(span,"segmentId"); if(!segments.ContainsKey(id) || !members.Add(id)) throw Invalid();
+                    var from=Number(span,"from"); var to=Number(span,"to"); if(from<0 || to>1 || from>=to) throw Invalid();
+                }
+                if(covering.TryGetProperty("material",out var material))
+                {
+                    if(Text(material,"entityType")!="protective-covering") throw Invalid();
+                    _=LongText(material,"sourceId",512); _=LongText(material,"sourceKey",512); _=LongText(material,"displayName",512);
+                    if(!Guid.TryParseExact(Text(material,"snapshotId"),"D",out var guid) || guid==Guid.Empty) throw Invalid();
+                    foreach(var key in new[]{"snapshotSha256","recordId"}) {var hash=Text(material,key); if(hash.Length!=64 || hash.Any(c=>!Uri.IsHexDigit(c))) throw Invalid();}
+                }
+            }
         }
         var assigned = new HashSet<string>(StringComparer.Ordinal);
         foreach (var route in Array(t, "routes", 20000).EnumerateArray())

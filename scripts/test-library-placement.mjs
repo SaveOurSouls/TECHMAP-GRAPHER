@@ -394,6 +394,22 @@ try {
     for(const [id,a,an,b,bn] of [['W1','A',1,'B',1],['W2','A',2,'C',1],['W3','B',2,'C',2]]) d=applyEditorCommand(d,{type:'add-wire',wire:createWire(id,end(a,an),end(b,bn),100)});
     const topology={snap:true,nodes:[{id:'NA',connectorId:'A',position:{x:170,y:60}},{id:'NB',connectorId:'B',position:{x:170,y:60}},{id:'NC',connectorId:'C',position:{x:170,y:60}},{id:'J',position:{x:500,y:260}}],segments:[{id:'S0',from:'NA',to:'J',bends:[{x:300,y:60}]},{id:'S1',from:'J',to:'NB',bends:[]},{id:'S2',from:'J',to:'NC',bends:[]}],routes:[{wireId:'W1',steps:[{segmentId:'S0',reverse:false},{segmentId:'S1',reverse:false}]},{wireId:'W2',steps:[{segmentId:'S0',reverse:false},{segmentId:'S2',reverse:false}]},{wireId:'W3',steps:[{segmentId:'S1',reverse:true},{segmentId:'S2',reverse:false}]}]};
     d=applyEditorCommand(d,{type:'set-physical-topology',topology});
+    if(process.argv.includes('--check-coverings')) {
+      const {createReferenceCatalogApi}=await module('reference-catalog-api.ts');
+      const {coveringPaths,pathLength}=await module('editor/physical-coverings.ts');
+      const api=createReferenceCatalogApi(config,session,fetcher);
+      const publication=await api.publishEditableTable('technology-database',{expectedActiveSnapshotId:null,sourceKind:'manual',sourceUri:null,records:[{entityType:'protective-covering',sourceKey:'TEST-BRAID',payload:{name:'Test braid'}}]});
+      const snapshot=publication.snapshot,record=snapshot.records[0];
+      const material={sourceId:'technology-database',snapshotId:snapshot.snapshotId,snapshotSha256:snapshot.sha256,recordId:record.recordId,entityType:'protective-covering',sourceKey:record.sourceKey,displayName:'Test braid'};
+      d=applyEditorCommand(d,{type:'set-physical-topology',topology:{...d.physicalTopology,coverings:[{id:'COVER',name:'Test braid',material,width:30,color:'#748895',lengthMm:120,spans:[{segmentId:'S0',from:.1,to:.9}]}]}});
+      const before=coveringPaths(d,d.physicalTopology.coverings[0]).reduce((sum,p)=>sum+pathLength(p),0);
+      const split=splitPhysicalSegment(d,'S0',1,'BEND','S3');
+      const after=coveringPaths({...d,physicalTopology:split},split.coverings[0]).reduce((sum,p)=>sum+pathLength(p),0);
+      assert.ok(Math.abs(before-after)<1e-6);
+      assert.deepEqual(resolveHarnessSelection(buildHarnessSelectionIndex(d),['COVER']).wireIds,['W1','W2']);
+      assert.equal(d.cables.length,0);
+    }
+
     d=applyEditorCommand(d,{type:'set-physical-topology',topology:splitPhysicalSegment(d,'S0',1,'BEND','S3')});
     d=applyEditorCommand(d,{type:'move-connector',connectorId:'A',view:'drawing',position:{x:30,y:50}});
     assert.deepEqual(physicalSegmentPoints(d,d.physicalTopology.segments[0])[0],{x:200,y:110});
@@ -484,7 +500,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, coveringsChecked:process.argv.includes('--check-coverings') && physicalTopologyChecked, physicalTopologyChecked, physicalHarnessId, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

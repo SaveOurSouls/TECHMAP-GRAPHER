@@ -10,7 +10,7 @@ export type EditorTool =
   | "text"
   | "dimension";
 
-export type EditorObjectKind = "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment";
+export type EditorObjectKind = "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering";
 
 export interface EditorPoint {
   readonly x: number;
@@ -28,6 +28,7 @@ export interface EditorSceneObject {
   readonly height: number;
   readonly color: string;
   readonly points?: readonly EditorPoint[];
+  readonly paths?: readonly (readonly EditorPoint[])[];
   /** End-treatment presentation shares the wire identity and drawing layer. */
   readonly stripProfiles?: WireEndStripProfiles;
   readonly metadata?: Readonly<Record<string, string>>;

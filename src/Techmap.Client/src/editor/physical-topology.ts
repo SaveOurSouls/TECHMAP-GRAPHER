@@ -1,3 +1,4 @@
+import { validateCoverings, splitCoveringSpans, pathLength, type PhysicalCovering } from "./physical-coverings";
 import type { HarnessDesignDocument, Point } from "./model";
 
 export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string }
@@ -5,6 +6,7 @@ export interface PhysicalSegment { readonly id: string; readonly from: string; r
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
 export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[] }
 export interface PhysicalTopology {
+  readonly coverings?: readonly PhysicalCovering[];
   readonly nodes: readonly PhysicalNode[];
   readonly segments: readonly PhysicalSegment[];
   readonly routes: readonly PhysicalRoute[];
@@ -96,6 +98,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     const w = document.wires.find(w => w.id === r.wireId)!;
     if (from.connectorId && from.connectorId !== w.from.connectorId || to.connectorId && to.connectorId !== w.to.connectorId) return fail();
   }
+  validateCoverings(t.coverings, new Set(t.segments.map(s => s.id)), ids);
   return t;
 }
 
@@ -105,7 +108,7 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   const s = t.segments.find(s => s.id === segmentId)!;
   const points = physicalSegmentPoints(document, s);
   if (bendIndex < 1 || bendIndex >= points.length - 1) throw new Error("Выберите существующий перегиб участка.");
-  return { ...t, nodes: [...t.nodes, { id: nodeId, position: points[bendIndex]! }],
+  return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: points[bendIndex]! }],
     segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, bends: points.slice(1, bendIndex) } : item),
       { id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1) }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse
@@ -126,5 +129,5 @@ export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessD
     const b = nodes.find(n => n.id === (r.steps.at(-1)!.reverse ? last.from : last.to))?.connectorId;
     return (!a || a === wire.from.connectorId) && (!b || b === wire.to.connectorId);
   });
-  return { ...document, physicalTopology: { ...t, nodes, segments, routes } };
+  return { ...document, physicalTopology: { ...t, nodes, segments, routes, coverings: t.coverings?.map(c=>({...c,spans:c.spans.filter(s=>segments.some(segment=>segment.id===s.segmentId))})).filter(c=>c.spans.length) } };
 }

@@ -16,6 +16,34 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("missing")]
+    [InlineData("bounds")]
+    [InlineData("material")]
+    public async Task Coverings_follow_explicit_segments_and_reject_invalid_content(string mutation)
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient(); var csrf = await StartSessionAsync(client); var ids = await CreateHarnessAsync(client,csrf);
+        var content = JsonNode.Parse("""
+          {"schemaVersion":1,"connectors":[],"wires":[],"physicalTopology":{"snap":true,
+           "nodes":[{"id":"A","position":{"x":0,"y":0}},{"id":"B","position":{"x":200,"y":100}}],
+           "segments":[{"id":"S","from":"A","to":"B","bends":[]}],"routes":[],
+           "coverings":[{"id":"C","name":"Sleeve","width":18,"color":"#778899","lengthMm":120,
+             "spans":[{"segmentId":"S","from":0.1,"to":0.9}]}]}}
+          """)!;
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var covering=content["physicalTopology"]!["coverings"]![0]!;
+        if(mutation=="missing") covering["spans"]![0]!["segmentId"]="absent";
+        if(mutation=="bounds") covering["spans"]![0]!["from"]=1;
+        if(mutation=="material") covering["material"]=new JsonObject();
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision); Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("missing-node")]
     [InlineData("duplicate-node")]
     [InlineData("disconnected-route")]

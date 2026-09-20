@@ -1,3 +1,5 @@
+import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
+import { coveringPaths, coveringMaterial } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { physicalNodePoint, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
@@ -442,7 +444,8 @@ export function designToScene(
     ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: 0, height: 0, color: "#85a2b3", points: physicalSegmentPoints(document, segment) })),
     ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => { const p = physicalNodePoint(document, node); return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac" }; }),
   ] : [];
-  return [...connectors, ...physical, ...wires, ...dimensions];
+  const coverings: EditorSceneObject[] = view === "drawing" ? (document.physicalTopology?.coverings ?? []).map(c => { const paths=coveringPaths(document,c); return {id:c.id,kind:"physical-covering" as const,layerId:"wires",x:0,y:0,width:c.width,height:0,color:c.color,label:c.name,points:paths.flat(),paths}; }) : [];
+  return [...connectors, ...coverings, ...physical, ...wires, ...dimensions];
 }
 
 type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
@@ -847,6 +850,7 @@ export function HarnessDesignEditor({
     const availableObjectIds = new Set([
       ...history.present.connectors.map((item) => item.id),
       ...history.present.wires.map((item) => item.id),
+      ...history.present.physicalTopology?.coverings?.map(c => c.id) ?? [],
       ...history.present.physicalTopology?.nodes.map(n => n.id) ?? [],
       ...history.present.physicalTopology?.segments.map(n => n.id) ?? [],
     ]);
@@ -1111,6 +1115,18 @@ export function HarnessDesignEditor({
     ...customWireColorHexes.map((hex) => createCustomWireColor(hex)),
   ];
   const placeCatalogItem = async (item: EditorCatalogItem, point?: { readonly x: number; readonly y: number }) => {
+    if (item.entityType === "protective-covering") {
+      const t = history.present.physicalTopology;
+      if (view !== "drawing" || !t) { setMessage("Сначала создайте и выберите физические участки на Чертеже."); return; }
+      try {
+        const material = coveringMaterial(item);
+        const existing = t.coverings?.find(c => selectedObjectIds.includes(c.id));
+        const spans = t.segments.filter(s => selectedObjectIds.includes(s.id)).map(s => ({segmentId:s.id,from:0,to:1}));
+        if (!existing && !spans.length) throw new Error("Выберите участки или оболочку для назначения защиты.");
+        run({type:"set-physical-topology",topology:{...t,coverings:existing ? t.coverings?.map(c=>c.id===existing.id?{...c,material,name:material.displayName}:c) : [...t.coverings ?? [],{id:crypto.randomUUID(),name:material.displayName,material,spans,width:18,color:"#687e8a",lengthMm:null}]}});
+      } catch(error) { setMessage(error instanceof Error ? error.message : "Не удалось назначить защиту."); }
+      return;
+    }
     if (item.placement === "reference-only" && item.entityType === "coax-termination") {
       if (view !== "drawing") {
         setMessage("Профиль разделки назначается проводу только в режиме «Чертёж».");
@@ -1482,7 +1498,7 @@ export function HarnessDesignEditor({
         selectedObjectIds={selectedObjectIds}
         highlightedObjectIds={related.wireIds}
         revealRequest={revealRequest}
-        relationPanel={<>{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={id => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds([id]); }} />}<HarnessRelationsPanel document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
+        relationPanel={<>{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}<HarnessRelationsPanel document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
           onReveal={id => {
             const found = id && selectionIndex ? resolveHarnessSelection(selectionIndex, [id], wholeNet) : related;
@@ -1502,7 +1518,7 @@ export function HarnessDesignEditor({
         saveState={saveState}
         onSaveRequest={() => void flushSave()}
         onDrawingMove={(connectorId,drawingId,offset)=>run({type:"set-drawing-placement",connectorId,drawingId,offset})}
-        propertyInspector={selectedObjectId && (history.present.physicalTopology?.nodes.some(n=>n.id===selectedObjectId) || history.present.physicalTopology?.segments.some(s=>s.id===selectedObjectId)) ? <></> : selectedConnector ? (<>
+        propertyInspector={selectedObjectId && (history.present.physicalTopology?.coverings?.some(c=>c.id===selectedObjectId) || history.present.physicalTopology?.nodes.some(n=>n.id===selectedObjectId) || history.present.physicalTopology?.segments.some(s=>s.id===selectedObjectId)) ? <></> : selectedConnector ? (<>
           {view==="e4" && (()=>{
             const instance=componentTemplateViewInstances.find(i=>i.objectId===selectedConnector.id);
             const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];

@@ -21,6 +21,7 @@ import type {
 } from "./editor-types";
 
 interface RemoteCatalogSource extends EditorCatalogSource {
+  readonly catalogSourceId?: string;
   readonly entityTypes: readonly string[];
   readonly accent: string;
 }
@@ -38,6 +39,7 @@ const componentLibrarySource: EditorCatalogSource = {
 };
 
 export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
+  { id:"technology-protection", catalogSourceId:"technology-database", label:"Защита", description:"Защитные покрытия из опубликованного справочника: тип protective-covering", entityTypes:["protective-covering"], accent:"#758087" },
   {
     id: "technology-database",
     label: "Провода",
@@ -480,7 +482,7 @@ export function useEditorReferenceCatalog(
     setNextCursor(null);
     setLoadState("loading");
     setMessage(null);
-    void api.searchCatalog(source.id, {
+    void api.searchCatalog(source.catalogSourceId ?? source.id, {
       text: debouncedQuery.trim() || null,
       exactSourceKey: null,
       entityTypes: source.entityTypes,
@@ -491,7 +493,7 @@ export function useEditorReferenceCatalog(
       cursor: null,
     }, controller.signal).then((page) => {
       if (requestGeneration.current !== generation) return;
-      setRemoteItems(page.items.map((record) => referenceRecordToEditorCatalogItem(source, record, page)));
+      setRemoteItems(page.items.map((record) => referenceRecordToEditorCatalogItem({...source,id:source.catalogSourceId ?? source.id}, record, page)));
       setNextCursor(page.nextCursor);
       setLoadState("ready");
     }).catch((error: unknown) => {
@@ -512,7 +514,7 @@ export function useEditorReferenceCatalog(
     const generation = ++requestGeneration.current;
     setLoadState("loading-more");
     setMessage(null);
-    void api.searchCatalog(source.id, {
+    void api.searchCatalog(source.catalogSourceId ?? source.id, {
       text: debouncedQuery.trim() || null,
       exactSourceKey: null,
       entityTypes: source.entityTypes,
@@ -526,7 +528,7 @@ export function useEditorReferenceCatalog(
       setRemoteItems((current) => {
         const existing = new Set(current.map((item) => item.id));
         return [...current, ...page.items
-          .map((record) => referenceRecordToEditorCatalogItem(source, record, page))
+          .map((record) => referenceRecordToEditorCatalogItem({...source,id:source.catalogSourceId ?? source.id}, record, page))
           .filter((item) => !existing.has(item.id))];
       });
       setNextCursor(page.nextCursor);

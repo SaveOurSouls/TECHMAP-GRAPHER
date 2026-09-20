@@ -1106,6 +1106,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if (object.kind === "physical-covering") return (object.paths ?? [object.points ?? []]).some(path => path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance+object.width/2));
   if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
     if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
       geometry.primitives.some((primitive) => polygonContainsPoint(primitive.polygon, point, tolerance)))) return true;
@@ -1975,6 +1976,16 @@ export function drawEditorSceneObject(
   componentTemplateImageCache = new ComponentTemplateImageCache(),
 ) {
   context.save();
+  if (object.kind === "physical-covering") {
+    for (const points of object.paths ?? [object.points ?? []]) {
+    context.globalAlpha = selected ? .65 : .3; context.lineJoin = "miter"; context.miterLimit = 4; context.lineCap = "butt";
+    context.lineWidth = object.width; context.strokeStyle = selected ? "#1179ac" : object.color;
+    context.beginPath(); points.forEach((p,i)=>i===0?context.moveTo(p.x,p.y):context.lineTo(p.x,p.y)); context.stroke();
+    context.globalAlpha = 1; context.lineWidth = 1; context.strokeStyle = object.color;
+    for (const [a,b] of [[points[0],points[1]],[points.at(-1),points.at(-2)]]) if(a&&b) {const l=Math.hypot(b.x-a.x,b.y-a.y);if(l){const x=-(b.y-a.y)/l*object.width/2,y=(b.x-a.x)/l*object.width/2;context.beginPath();context.moveTo(a.x-x,a.y-y);context.lineTo(a.x+x,a.y+y);context.stroke();}}
+    }
+    context.restore(); return;
+  }
   if (object.kind === "physical-node") {
     context.beginPath(); context.arc(object.x + 5, object.y + 5, 5, 0, Math.PI * 2);
     context.fillStyle = selected ? "#1179ac" : "#ffffff"; context.fill(); context.strokeStyle = "#1179ac"; context.stroke();
@@ -2372,7 +2383,7 @@ export function getEditorSceneBounds(
   const visibleObjects = objectsInPaintOrder(objects, layers);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of visibleObjects) {
-    if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
+    if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment" || object.kind === "physical-covering") {
       const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
       for (const point of points) {
         bounds = expandSceneBounds(bounds, point.x, point.y, point.x, point.y);

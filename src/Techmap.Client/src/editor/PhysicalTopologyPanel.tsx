@@ -5,7 +5,7 @@ import { emptyPhysicalTopology, physicalSegmentPoints, splitPhysicalSegment, typ
 
 export function PhysicalTopologyPanel({ document, selectedIds, selectedId, onChange, onSelect }: {
   document: HarnessDesignDocument; selectedIds: readonly string[]; selectedId: string | null;
-  onChange: (topology: PhysicalTopology) => boolean; onSelect: (id: string) => void;
+  onChange: (topology: PhysicalTopology) => boolean; onSelect: (id: string, additive?: boolean) => void;
 }) {
   const t = document.physicalTopology ?? emptyPhysicalTopology();
   const [from, setFrom] = useState("");
@@ -32,11 +32,11 @@ export function PhysicalTopologyPanel({ document, selectedIds, selectedId, onCha
       <button className="ui-control" type="button" disabled={t.segments.some(s => s.from === node.id || s.to === node.id)} onClick={() => onChange({ ...t, nodes: t.nodes.filter(n => n.id !== node.id) })}>Удалить узел</button></div>}
     <details open={!!selected}><summary>Участки и маршрут</summary>
       <div className="he-physical-list">{t.segments.map((s, i) => <div key={s.id} className="he-relations-actions">
-        <button className="ui-control" type="button" aria-pressed={s.id === selectedId} onClick={() => onSelect(s.id)}>S{i + 1} · {label(s.from)} → {label(s.to)}</button>
+        <button className="ui-control" type="button" aria-pressed={selectedIds.includes(s.id)} onClick={e => onSelect(s.id,e.ctrlKey || e.shiftKey)}>S{i + 1} · {label(s.from)} → {label(s.to)}</button>
         <button className="ui-control" type="button" aria-label={`Добавить S${i + 1} вперёд`} onClick={() => setSteps([...steps, { segmentId: s.id, reverse: false }])}>→</button>
         <button className="ui-control" type="button" aria-label={`Добавить S${i + 1} обратно`} onClick={() => setSteps([...steps, { segmentId: s.id, reverse: true }])}>←</button>
       </div>)}</div>
-      {selected && <><div className="he-relations-actions"><button className="ui-control" type="button" onClick={() => onChange({ ...t, segments: t.segments.filter(s => s.id !== selected.id), routes: t.routes.filter(r => !r.steps.some(step => step.segmentId === selected.id)) })}>Удалить участок</button></div>
+      {selected && <><div className="he-relations-actions"><button className="ui-control" type="button" onClick={() => onChange({ ...t, coverings: t.coverings?.map(c=>({...c,spans:c.spans.filter(s=>s.segmentId!==selected.id)})).filter(c=>c.spans.length), segments: t.segments.filter(s => s.id !== selected.id), routes: t.routes.filter(r => !r.steps.some(step => step.segmentId === selected.id)) })}>Удалить участок</button></div>
         {physicalSegmentPoints(document, selected).slice(1, -1).map((p, i) => <div className="he-relations-actions" key={i}><span>Перегиб {i + 1} · {Math.round(p.x)}, {Math.round(p.y)}</span><button className="ui-control" type="button" onClick={() => { const id = crypto.randomUUID(); if (onChange(splitPhysicalSegment(document, selected.id, i + 1, id, crypto.randomUUID()))) onSelect(id); }}>Разветвить</button></div>)}</>}
       <small>{steps.map(s => `${s.reverse ? "←" : "→"}S${t.segments.findIndex(segment => segment.id === s.segmentId) + 1}`).join(" · ") || "Маршрут не набран"}</small>
       <div className="he-relations-actions"><button className="ui-control" type="button" disabled={!wires.length || !steps.length} onClick={() => { if (onChange({ ...t, routes: [...t.routes.filter(r => !wires.includes(r.wireId)), ...wires.map(wireId => ({ wireId, steps }))] })) setSteps([]); }}>Назначить ({wires.length})</button><button className="ui-control" type="button" onClick={() => setSteps([])}>Очистить набор</button>
