@@ -54,6 +54,7 @@ import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEdito
 import {
   connectorContactPosition,
   connectorE4TableGeometry,
+  connectorContactName,
   calculateWireCutLength,
   createJunctionEndpoint,
   createScreenEndpoint,
@@ -344,9 +345,7 @@ export function designToScene(
             contactType: contact.contactType,
             circuit: contact.circuit,
             terminal: terminalArticleLabel(contact.terminalArticle),
-            name: connector.libraryBinding?.mode === "template"
-              ? connector.libraryBinding.snapshot.contacts.find(item => item.logicalContactId === contact.logicalContactId)?.name ?? ""
-              : "",
+            name: connectorContactName(connector, contact),
             wire: contact.wire,
             color: contact.color,
             secondaryColor: contact.secondaryColor ?? "",

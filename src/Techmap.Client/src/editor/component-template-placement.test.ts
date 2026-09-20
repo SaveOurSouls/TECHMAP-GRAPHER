@@ -17,7 +17,7 @@ import {
   rematerializeComponentTemplateConnectorArticle,
   type ComponentTemplatePlacementEnvelopeV3,
 } from "./component-template-placement";
-import { parseHarnessDesignDocument } from "./model";
+import { connectorE4TableGeometry, connectorContactName, createEmptyHarnessDesign, parseHarnessDesignDocument } from "./model";
 import { componentPlacementRequest } from "./component-placement-api";
 import { loadComponentTemplateForPlacement } from "./HarnessDesignEditor";
 
@@ -415,5 +415,40 @@ describe("component template placement", () => {
     expect(() => createConnectorInstanceFromComponentTemplateV3(damagedPayload as unknown as typeof damaged, {
       id: "J2", designation: "X2", articleVariantId: damaged.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
     })).toThrow(/Ресурсы шаблона не совпадают/);
+  });
+});
+
+
+describe("editable template contact purpose", () => {
+  it.each([true, false])("uses the series name visibility %s in placement geometry", visible => {
+    const template = fixture(2);
+    const v5 = upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(template.content as TemplateContentV3).content).content;
+    const content = { ...v5, e4ConnectorTable: { ...v5.e4ConnectorTable,
+      columns: v5.e4ConnectorTable.columns.map(column => column.id === "name" ? { ...column, visible } : column) } };
+    const connector = createConnectorInstanceFromComponentTemplateV3({ ...template, content }, {
+      id: "J1", designation: "X1", articleVariantId: content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    });
+    expect(connector.schematic.showName).toBe(visible);
+    expect(connectorE4TableGeometry(connector).columns.some(column => column.kind === "custom" && column.id === "template-name")).toBe(visible);
+  });
+
+  it("retains explicit text and empty overrides through serialization and article rematerialization", () => {
+    const template = fixture(2);
+    const alternative = { ...template.content.articleVariants.at(-1)!, id: crypto.randomUUID(), articleKey: "XH-2-ALT" };
+    (template.content as TemplateContentV3).articleVariants.unshift(alternative as ArticleVariantV3);
+    const placed = createConnectorInstanceFromComponentTemplateV3(template, {
+      id: "J1", designation: "X1", articleVariantId: template.content.articleVariants.at(-1)!.id, e4Position: { x: 0, y: 0 },
+    });
+    for (const nameOverride of ["Мой сигнал", ""]) {
+      const edited = { ...placed, schematic: { ...placed.schematic, showName: false }, contacts: placed.contacts.map(contact => ({ ...contact, nameOverride })) };
+      const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify({ ...createEmptyHarnessDesign(), connectors: [edited] }))).connectors[0]!;
+      const changed = rematerializeComponentTemplateConnectorArticle(restored, template, alternative.id);
+      expect(connectorContactName(changed, changed.contacts[0]!)).toBe(nameOverride);
+      expect(changed.schematic.showName).toBe(false);
+      expect(changed.partNumber).toBe("XH-2-ALT");
+      expect(changed.libraryBinding).toMatchObject({ mode: "template", templateId: template.templateId, templateVersion: template.version, versionSha256: template.versionSha256 });
+      expect(placed.partNumber).toBe("XH-2");
+    }
+    expect(connectorContactName(placed, placed.contacts[0]!)).toBe("Сигнал");
   });
 });

@@ -119,6 +119,10 @@ try {
     const selection = drawingSelection(core.views.find(view => view.id === drawing.id),[nodeId,pointId],core.articleVariants[0].id);
     content = createTemplateContentV5FromEditor(core,projectTemplateContentV5TableToV1(content),content.compatibleTerminalArticleKeys,content.terminalContactTypeBindings,content.e4Presentation,[selection],[{logicalContactId:core.logicalContacts[0].id,seriesRowId:content.e4ConnectorTable.seriesDefaults[0].rowId}]).content;
   }
+  if (process.argv.includes('--check-purpose')) {
+    content = { ...content, e4ConnectorTable: { ...content.e4ConnectorTable,
+      columns: content.e4ConnectorTable.columns.map(column => column.id === 'name' ? { ...column, visible: false } : column) } };
+  }
   const initial = await templates.create({ code: 'API-SMOKE', name: 'Test series', articleBindings: [article], content });
   const draft = await templates.saveDraft(initial.templateId, { expectedVersion: initial.version, expectedDraftRevision: 0,
     code: initial.code, name: 'Published newer draft', articleBindings: [article], content });
@@ -147,7 +151,7 @@ try {
   }
   if (process.argv.includes('--independent-e4')) {
     assert.equal(saved.content.connectors[0].contacts.length, 12);
-    assert.deepEqual(saved.content.connectors[0].schematic, content.e4Presentation);
+    assert.deepEqual(saved.content.connectors[0].schematic, { ...content.e4Presentation, showName: content.e4ConnectorTable.columns.find(column => column.id === "name")?.visible ?? true });
     assert.deepEqual((await templates.get(initial.templateId)).content.e4Presentation, content.e4Presentation);
   }
   if (process.argv.includes('--check-drawing-editor')) {
@@ -207,6 +211,30 @@ try {
     assert.deepEqual(reread.content.connectors[0].libraryBinding,current.content.connectors[0].libraryBinding);
     const graphAgain = await placements.list(project.projectId,harnessId);
     assert.deepEqual(graphAgain.placements[0].instance.drawingPlacements,drawingPlacementExpected);
+  }
+  let purposeExpected = null;
+  if (process.argv.includes('--check-purpose')) {
+    const { applyEditorCommand } = await module('editor/commands.ts');
+    const { connectorContactName, connectorE4TableGeometry } = await module('editor/model.ts');
+    assert.equal(preview.schematic.showName, false);
+    assert.ok(!connectorE4TableGeometry(preview).columns.some(column => column.id === 'template-name'));
+    let current = await designs.get(project.projectId, harnessId);
+    for (const nameOverride of ['Ручное назначение', '']) {
+      let updated = applyEditorCommand(current.content, { type: 'update-contact', connectorId: preview.id,
+        contactId: preview.contacts[0].id, nameOverride });
+      updated = applyEditorCommand(updated, { type: 'set-name-column-visibility', connectorId: preview.id, visible: true, scope: 'document' });
+      await designs.save(project.projectId, harnessId, current.revision, updated);
+      current = await designs.get(project.projectId, harnessId);
+      assert.equal(connectorContactName(current.content.connectors[0], current.content.connectors[0].contacts[0]), nameOverride);
+      assert.deepEqual(JSON.parse(JSON.stringify(current.content.connectors[0].libraryBinding)), JSON.parse(JSON.stringify(preview.libraryBinding)));
+      assert.equal(current.content.connectors[0].schematic.showName, true);
+    }
+    const hidden = applyEditorCommand(current.content, { type: 'set-name-column-visibility', connectorId: preview.id, visible: false });
+    await designs.save(project.projectId, harnessId, current.revision, hidden);
+    purposeExpected = { nameOverride: '', showName: false };
+    const graphAgain = await placements.list(project.projectId, harnessId);
+    assert.equal(graphAgain.placements[0].instance.contacts[0].nameOverride, '');
+    assert.equal(graphAgain.placements[0].instance.schematic.showName, false);
   }
   let stripProfilesChecked = false;
   if (process.argv.includes('--check-strip-profiles')) {
@@ -376,6 +404,13 @@ try {
     const reloadedTemplate = await restartedTemplate.json();
     assert.equal(reloadedTemplate.version, latestTemplateVersion);
     if (process.argv.includes('--check-drawing-editor')) { assert.deepEqual(reloadedTemplate.content.articleDrawings, content.articleDrawings); assert.deepEqual(reloadedTemplate.content.drawingContactBindings, content.drawingContactBindings); }
+    if (purposeExpected && !deleted) {
+      const response = await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`, restartedUrl), { headers: { Cookie: restartedCookie } });
+      assert.equal(response.status, 200);
+      const connector = (await response.json()).content.connectors[0];
+      assert.equal(connector.contacts[0].nameOverride, purposeExpected.nameOverride);
+      assert.equal(connector.schematic.showName, purposeExpected.showName);
+    }
     if(drawingPlacementExpected && !deleted) {
       const response=await fetch(new URL(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`,restartedUrl),{headers:{Cookie:restartedCookie}});
       assert.equal(response.status,200);
@@ -403,7 +438,7 @@ try {
   const report = { status: 'ok', appVersion: config.appVersion, projectId: project.projectId, harnessId,
     templateId: snapshot.sourceTemplateId, catalogVersion: initial.version, placedVersion: snapshot.sourceVersion,
     versionSha256: snapshot.sourceVersionSha256, article, contentSchema: snapshot.schemaVersion,
-    revision: saved.revision, drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
+    revision: saved.revision, purposeChecked: Boolean(purposeExpected), drawingPlacementChecked: Boolean(drawingPlacementExpected), drawingEditorChecked: process.argv.includes('--check-drawing-editor'), stripProfilesChecked, cableStripChecked, routingChecked, terminalRefreshChecked, terminalLabelsChecked: checkTerminalLabels, deleted, restartChecked, dataRoot };
   await writeFile(join(dataRoot, 'smoke-result.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

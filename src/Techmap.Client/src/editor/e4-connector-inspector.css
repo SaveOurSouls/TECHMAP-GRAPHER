@@ -157,3 +157,7 @@
 .he-companion-list { display:flex; flex-direction:column; gap:5px; padding:8px; border-bottom:1px solid #dce3e8; font-size:12px; }
 .he-companion-list label { display:flex; align-items:center; gap:6px; }
 .he-companion-list input[type="checkbox"] { width:14px; height:14px; min-width:14px; padding:0; margin:0; flex:0 0 14px; }
+
+.e4ci-name-global { grid-column: 1 / -1; display: flex; gap: 5px; }
+.e4ci-name-global button { flex: 1; min-width: 0; min-height: 26px; padding: 3px 5px; border: 1px solid #e0e7ea; border-radius: 5px; background: #f5f7f8; color: #315c70; font: inherit; font-size: 9px; cursor: pointer; }
+.e4ci-name-global button:hover:not(:disabled) { border-color: #8fb9ca; }

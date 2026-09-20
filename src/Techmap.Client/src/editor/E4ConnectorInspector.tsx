@@ -7,6 +7,7 @@ import {
 } from "./connector-series";
 import {
   connectorBaseColumnKeys,
+  connectorContactName,
   connectorE4TableGeometry,
   type ConnectorBaseColumnKey,
   type ConnectorContact,
@@ -240,11 +241,11 @@ function nextContactId(connector: ConnectorInstance, number: number): string {
   return `${prefix}:${suffix}`;
 }
 
-function TemplateNameCell({ value, label, disabled, onCommit }: { value: string; label: string; disabled: boolean; onCommit: (value: string) => void }) {
+function TemplateNameCell({ value, label, disabled, allowEmpty = false, onCommit }: { value: string; label: string; disabled: boolean; allowEmpty?: boolean; onCommit: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return <input aria-label={label} value={draft} disabled={disabled} onChange={event => setDraft(event.target.value)}
-    onBlur={() => { if (draft.trim()) onCommit(draft.trim()); else setDraft(value); }}
+    onBlur={() => { if (allowEmpty || draft.trim()) { if (draft.trim() !== value) onCommit(draft.trim()); } else setDraft(value); }}
     onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
 }
 
@@ -355,6 +356,7 @@ export function E4ConnectorInspector({
       connectorId: connector.id,
       contactId: contact.id,
       number: patch.number,
+      nameOverride: patch.nameOverride,
       contactType: patch.contactType,
       circuit: patch.circuit,
       terminalArticle: patch.terminalArticle,
@@ -458,7 +460,10 @@ export function E4ConnectorInspector({
                     type="button"
                     aria-label={`Скрыть поле ${column.label}`}
                     disabled={disabled || !canvasEditing}
-                    onClick={() => column.id === "custom:template-name" && templateAuthoring ? templateAuthoring.onNameVisibilityChange() : column.id.startsWith("custom:")
+                    onClick={() => column.id === `custom:${templateNameColumnId}`
+                      ? templateAuthoring ? templateAuthoring.onNameVisibilityChange()
+                        : onCommand({ type: "set-name-column-visibility", connectorId: connector.id, visible: false })
+                      : column.id.startsWith("custom:")
                       ? onCommand({ type: "toggle-custom-field-visibility", connectorId: connector.id, fieldId: column.id.slice(7) })
                       : onCommand({ type: "toggle-base-column-visibility", connectorId: connector.id, key: column.id as ConnectorBaseColumnKey })}
                   >◉</button>
@@ -478,7 +483,7 @@ export function E4ConnectorInspector({
                         : column.id === "terminal" ? contact.terminalArticle
                           : column.id === "wire" ? contact.wire
                             : column.id === "color" ? contact.color
-                              : column.id === `custom:${templateNameColumnId}` ? templateContact?.name ?? ""
+                              : column.id === `custom:${templateNameColumnId}` ? connectorContactName(connector, contact)
                               : contact.customValues[column.id.slice(7)] ?? "";
                   const terminalOptions = contact.libraryContact && article
                     ? article.allowedTerminalArticles[contact.libraryContact.kind]
@@ -493,9 +498,9 @@ export function E4ConnectorInspector({
                   const input = templateAuthoring && column.id === "number" ? <TemplateNameCell
                     label={`Номер, контакт ${contact.number}`} value={templateAuthoring.numbers[contact.id] ?? ""} disabled={disabled}
                     onCommit={value => templateAuthoring.onNumberChange(contact.id, value)} />
-                    : templateAuthoring && column.id === `custom:${templateNameColumnId}` ? <TemplateNameCell
-                    label={`Назначение, контакт ${contact.number}`} value={templateAuthoring.names[contact.id] ?? ""} disabled={disabled}
-                    onCommit={value => templateAuthoring.onNameChange(contact.id, value)} />
+                    : column.id === `custom:${templateNameColumnId}` ? <TemplateNameCell
+                    allowEmpty={!templateAuthoring} label={`Назначение, контакт ${contact.number}`} value={templateAuthoring ? templateAuthoring.names[contact.id] ?? "" : value} disabled={disabled || !canvasEditing}
+                    onCommit={name => templateAuthoring ? templateAuthoring.onNameChange(contact.id, name) : updateContact(contact, { nameOverride: name })} />
                     : templateAuthoring && column.id === "contactType" ? <select aria-label={`Тип, контакт ${contact.number}`} value={contact.contactType} disabled={disabled}
                       onChange={event => updateContact(contact, { contactType: event.target.value })}>
                       <option value="">Не назначен</option>{templateAuthoring.groups.map(group => <option key={group.id} value={group.name}>{group.name}</option>)}
@@ -587,9 +592,7 @@ export function E4ConnectorInspector({
                       }
                     }}
                   />;
-                  const cell = column.id === `custom:${templateNameColumnId}` && !templateAuthoring
-                    ? <span className="e4cce-readonly-value" title={value}>{value || " "}</span>
-                    : column.id === "color" ? input
+                  const cell = column.id === "color" ? input
                     : canvasEditing ? input : <span className="e4cce-readonly-value">{(column.id === "terminal" ? terminalArticleLabel(value) : value) || " "}</span>;
                   return <td key={column.id} className={column.id === "number" && !templateAuthoring ? "e4cce-number" : undefined}>{cell}{column.id === "number" && canvasEditing && !templateAuthoring && <span className="e4cce-row-actions">
                     <button
@@ -747,6 +750,20 @@ export function E4ConnectorInspector({
       <details className="e4ci-column-settings" open>
         <summary>Поля таблицы · скрыть / показать</summary>
         <div className="e4ci-base-columns">
+          {connector.libraryBinding?.mode === "template" && <>
+            <button type="button" className={connector.schematic.showName !== false ? "e4ci-column-toggle active" : "e4ci-column-toggle"}
+              disabled={disabled} aria-pressed={connector.schematic.showName !== false}
+              title={connector.schematic.showName !== false ? "Скрыть поле «Назначение»" : "Показать поле «Назначение»"}
+              onClick={() => onCommand({ type: "set-name-column-visibility", connectorId: connector.id, visible: connector.schematic.showName === false })}>
+              <span aria-hidden="true">{connector.schematic.showName !== false ? "◉" : "○"}</span><span>Назначение</span>
+              <small>{connector.schematic.showName !== false ? "видимо" : "скрыто"}</small>
+            </button>
+            <InfoHint>Назначение меняется прямо в таблице. Скрытие сохраняет значения; общая настройка действует на все размещённые библиотечные компоненты этой схемы. Для новых размещений задайте видимость в библиотеке серии.</InfoHint>
+            <div className="e4ci-name-global">
+              <button type="button" disabled={disabled} aria-label="Скрыть назначение во всей схеме" onClick={() => onCommand({ type: "set-name-column-visibility", connectorId: connector.id, visible: false, scope: "document" })}>Скрыть у всех</button>
+              <button type="button" disabled={disabled} aria-label="Показать во всей схеме" onClick={() => onCommand({ type: "set-name-column-visibility", connectorId: connector.id, visible: true, scope: "document" })}>Показать у всех</button>
+            </div>
+          </>}
           {connectorBaseColumnKeys.map((key) => {
             const visible = connector.schematic.baseColumns.find((item) => item.key === key)?.visible ?? true;
             return (

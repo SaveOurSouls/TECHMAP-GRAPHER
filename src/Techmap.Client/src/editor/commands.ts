@@ -52,10 +52,11 @@ export type EditorCommand =
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
-  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
+  | { readonly type: "set-name-column-visibility"; readonly connectorId: string; readonly visible: boolean; readonly scope?: "document" }
   | { readonly type: "toggle-base-column-visibility"; readonly connectorId: string; readonly key: ConnectorBaseColumnKey }
   | { readonly type: "add-custom-field"; readonly connectorId: string; readonly field: ConnectorCustomField }
   | { readonly type: "remove-custom-field"; readonly connectorId: string; readonly fieldId: string }
@@ -356,6 +357,7 @@ export function applyEditorCommand(
           : normalizeCustomValues(command.customValues, connector.schematic.customFields);
         const contacts = replaceRequired(connector.contacts, command.contactId, (contact) => ({
           ...contact,
+          ...(command.nameOverride === undefined ? {} : { nameOverride: normalizeValue(command.nameOverride, "Назначение контакта") }),
           number: command.number ?? contact.number,
           contactType: command.contactType === undefined ? contact.contactType : normalizeValue(command.contactType, "Тип контакта"),
           circuit: command.circuit === undefined ? contact.circuit : normalizeValue(command.circuit, "Цепь контакта"),
@@ -414,6 +416,14 @@ export function applyEditorCommand(
         ...connector,
         contacts: removeRequired(connector.contacts, command.contactId, "Контакт не найден."),
       }));
+    }
+    case "set-name-column-visibility": {
+      const targets = command.scope === "document"
+        ? document.connectors.filter(connector => connector.libraryBinding?.mode === "template").map(connector => connector.id)
+        : [command.connectorId];
+      return targets.reduce((current, id) => updateConnectorE4Geometry(current, id, connector => ({
+        ...connector, schematic: { ...connector.schematic, showName: command.visible },
+      })), document);
     }
     case "toggle-base-column-visibility":
       if (!connectorBaseColumnKeys.includes(command.key)) throw new Error("Базовая колонка не найдена.");

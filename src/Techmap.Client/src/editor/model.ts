@@ -113,6 +113,7 @@ export interface ConnectorCustomField {
 }
 
 export interface ConnectorSchematicPresentation {
+  readonly showName?: boolean;
   readonly orientation: ConnectorSchematicOrientation;
   readonly baseColumns: readonly ConnectorBaseColumn[];
   readonly customFields: readonly ConnectorCustomField[];
@@ -123,6 +124,12 @@ export type ConnectorE4TableColumn =
   | { readonly kind: "custom"; readonly id: string; readonly label: string; readonly x: number; readonly width: number };
 
 export const templateNameColumnId = "template-name";
+
+export function connectorContactName(connector: ConnectorInstance, contact: ConnectorContact): string {
+  return contact.nameOverride ?? (connector.libraryBinding?.mode === "template"
+    ? connector.libraryBinding.snapshot.contacts.find(row => row.logicalContactId === contact.logicalContactId)?.name ?? ""
+    : "");
+}
 
 export interface ConnectorE4TableGeometry {
   readonly width: number;
@@ -200,6 +207,8 @@ export function connectorE4TableColumnWidth(
 }
 
 export interface ConnectorContact {
+  /** Undefined inherits the library name; an empty string is an intentional override. */
+  readonly nameOverride?: string;
   readonly id: string;
   /** Stable template logical ID, or a repeat occurrence key for a materialized row. */
   readonly logicalContactId?: string;
@@ -570,11 +579,10 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
         connector.contacts.map((contact) => contact.customValues[field.id] ?? ""),
       ),
     }));
-  if (connector.libraryBinding?.mode === "template") {
-    const names = new Map(connector.libraryBinding.snapshot.contacts.map(contact => [contact.logicalContactId, contact.name]));
+  if (connector.libraryBinding?.mode === "template" && connector.schematic.showName !== false) {
     const templateName: ConnectorE4TableColumn = {
       kind: "custom", id: templateNameColumnId, label: "Назначение", x: 0,
-      width: connectorE4TableColumnWidth(null, "Назначение", connector.contacts.map(contact => names.get(contact.logicalContactId ?? "") ?? "")),
+      width: connectorE4TableColumnWidth(null, "Назначение", connector.contacts.map(contact => connectorContactName(connector, contact))),
     };
     const numberIndex = baseColumns.findIndex(column => column.kind === "base" && column.key === "number");
     baseColumns.splice(numberIndex < 0 ? baseColumns.length : numberIndex + 1, 0, templateName);
@@ -1172,6 +1180,7 @@ function parseConnector(value: unknown): ConnectorInstance {
     const contact = requireRecord(contactValue, "Контакт соединителя задан неверно.");
     return {
       id: requireText(contact.id, "ID контакта"),
+      ...(contact.nameOverride === undefined ? {} : { nameOverride: requireString(contact.nameOverride, "Назначение контакта") }),
       logicalContactId: contact.logicalContactId === undefined
         ? undefined
         : requireText(contact.logicalContactId, "Логический ID контакта"),
@@ -1534,7 +1543,8 @@ export function parseConnectorSchematic(value: unknown): ConnectorSchematicPrese
   const customFields = record.customFields === undefined
     ? []
     : parseCustomFields(record.customFields);
-  return { orientation, baseColumns, customFields };
+  if (record.showName !== undefined && typeof record.showName !== "boolean") throw new Error("Видимость назначения задана неверно.");
+  return { orientation, baseColumns, customFields, ...(record.showName === undefined ? {} : { showName: record.showName as boolean }) };
 }
 
 function parseBaseColumns(value: unknown): readonly ConnectorBaseColumn[] {

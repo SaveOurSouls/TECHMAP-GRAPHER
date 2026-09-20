@@ -29,7 +29,7 @@ describe("independent article table workflow", () => {
       articleBindings: core.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })),
     }, { id: "placed", designation: "XS1", e4Position: { x: 0, y: 0 }, articleVariantId: core.articleVariants[1]!.id });
     expect(instance.contacts).toHaveLength(12);
-    expect(instance.schematic).toEqual(preset);
+    expect(instance.schematic).toEqual({ ...preset, showName: true });
     const request = componentPlacementRequest(instance, 0, "command");
     expect(request).toMatchObject({ sourceVersion: 3, sourceId: "бд.соед", entityType: "connector", articleKey: "A-12" });
     expect(request.instance.libraryBinding).toMatchObject({ versionSha256: "a".repeat(64), templateVersion: 3 });

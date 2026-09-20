@@ -1,3 +1,6 @@
+import { applyEditorCommand } from "./commands";
+import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
+import { parseHarnessDesignDocument, connectorContactName } from "./model";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -328,5 +331,48 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('class="e4cce-color-popover" hidden=""');
     expect(markup).toContain("e4cce-wire-picker");
+  });
+});
+
+
+describe("purpose column in E4", () => {
+  const hasName = (connector: ConnectorInstance) => connectorE4TableGeometry(connector).columns.some(column => column.kind === "custom" && column.id === "template-name");
+  it("allows editing a placed name and provides local and document visibility controls", () => {
+    const connector = templateConnector();
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector, disabled: false, onCommand: vi.fn(), mode: "canvas", editing: true }));
+    expect(openingTag(markup, "Назначение, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Скрыть поле Назначение")).not.toContain("disabled");
+    const panel = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector, disabled: false, onCommand: vi.fn() }));
+    expect(panel).toContain("Скрыть назначение во всей схеме");
+    expect(panel).toContain("Скрыть поле «Назначение»");
+  });
+
+  it("edits and clears names without changing the library snapshot, and updates the scene", () => {
+    const connector = templateConnector();
+    let document: ReturnType<typeof createEmptyHarnessDesign> = { ...createEmptyHarnessDesign(), connectors: [connector] };
+    for (const nameOverride of ["Питание устройства", ""]) {
+      document = applyEditorCommand(document, { type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id, nameOverride });
+      const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+      expect(connectorContactName(restored.connectors[0]!, restored.connectors[0]!.contacts[0]!)).toBe(nameOverride);
+      expect(restored.connectors[0]!.libraryBinding).toEqual(connector.libraryBinding);
+      const scene = designToScene(document, "e4");
+      expect(JSON.parse(scene[0]!.metadata!.rows as string)[0].name).toBe(nameOverride);
+    }
+  });
+
+  it("hides locally or across the document, preserves values, and undoes the whole operation", () => {
+    const first = templateConnector();
+    const second = { ...templateConnector(), id: "other" };
+    const document = { ...createEmptyHarnessDesign(), connectors: [first, second] };
+    const local = applyEditorCommand(document, { type: "set-name-column-visibility", connectorId: first.id, visible: false });
+    expect(local.connectors.map(hasName)).toEqual([false, true]);
+    const hiddenMarkup = renderToStaticMarkup(createElement(E4ConnectorInspector, { connector: local.connectors[0]!, disabled: false, onCommand: vi.fn(), mode: "canvas" }));
+    expect(hiddenMarkup).not.toContain("Назначение");
+    const hidden = executeEditorCommand(createEditorHistory(document), { type: "set-name-column-visibility", connectorId: first.id, visible: false, scope: "document" });
+    expect(hidden.present.connectors.map(hasName)).toEqual([false, false]);
+    expect(undoEditorCommand(hidden).present).toEqual(document);
+    const shown = applyEditorCommand(hidden.present, { type: "set-name-column-visibility", connectorId: first.id, visible: true, scope: "document" });
+    expect(shown.connectors.map(hasName)).toEqual([true, true]);
+    expect(shown.connectors[0]!.contacts).toEqual(first.contacts);
   });
 });

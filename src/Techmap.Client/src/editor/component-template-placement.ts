@@ -1,5 +1,4 @@
 import {
-  createDefaultConnectorBaseColumns,
   parseConnectorSchematic,
   defaultLayerIds,
   validateConnectorLibraryMetadata,
@@ -123,10 +122,11 @@ export function createConnectorInstanceFromComponentTemplateV3(
     libraryCode: code,
     partNumber: article.articleKey,
     contacts,
-    schematic: content.schemaVersion === 5 && content.e4Presentation ? parseConnectorSchematic(content.e4Presentation) : {
-      orientation: "contacts-right",
-      baseColumns: createDefaultConnectorBaseColumns(),
-      customFields: [],
+    schematic: {
+      ...parseConnectorSchematic(content.schemaVersion === 5 ? content.e4Presentation : undefined),
+      ...(content.schemaVersion === 3 ? {} : {
+        showName: content.e4ConnectorTable.columns.find(column => column.id === "name")?.visible ?? true,
+      }),
     },
     positions: {
       e4: copyPosition(options.e4Position),
@@ -199,6 +199,7 @@ export function rematerializeComponentTemplateConnectorArticle(
           ?.allowedTerminalArticleKeys.some(item => item.articleKey === old.terminalArticle);
       return {
         ...contact,
+        ...(old.nameOverride === undefined ? {} : { nameOverride: old.nameOverride }),
         circuit: old.circuit,
         terminalArticle: terminalAllowed ? old.terminalArticle : contact.terminalArticle,
         wire: old.wire,
