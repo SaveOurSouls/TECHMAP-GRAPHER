@@ -71,6 +71,9 @@ import {
   type WireStripProfileBinding,
 } from "./model";
 
+import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
+import { HarnessRelationsPanel } from "./HarnessRelationsPanel";
+
 export interface HarnessDesignEditorProps {
   readonly config: RuntimeConfig;
   readonly session: LocalSession;
@@ -78,6 +81,8 @@ export interface HarnessDesignEditorProps {
   readonly harnessId: string;
   readonly harnessDesignation: string;
   readonly initialView: HarnessEditorView;
+  readonly harnessQuantity?: number;
+  readonly initialReveal?: { readonly projectId: string; readonly harnessId: string; readonly objectId: string };
   readonly apiOverride?: HarnessDesignApi;
   readonly componentPlacementApiOverride?: ReturnType<typeof createComponentPlacementApi>;
   readonly onClose?: () => void;
@@ -611,7 +616,7 @@ export function HarnessDesignEditor({
   projectId,
   harnessId,
   harnessDesignation,
-  initialView,
+  initialView, harnessQuantity = 1, initialReveal,
   apiOverride,
   componentPlacementApiOverride,
   onClose,
@@ -630,6 +635,11 @@ export function HarnessDesignEditor({
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
+  const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
+  const [wholeNet, setWholeNet] = useState(false);
+  const [revealRequest, setRevealRequest] = useState<{token: number; objectIds: readonly string[]} | undefined>();
+  const selectionIndex = useMemo(() => history ? buildHarnessSelectionIndex(history.present) : null, [history?.present]);
+  const related = useMemo(() => selectionIndex ? resolveHarnessSelection(selectionIndex, relatedSourceIds.length ? relatedSourceIds : selectedObjectIds, wholeNet) : {wireIds: [], componentIds: [], rowIds: [], unresolvedIds: []}, [selectionIndex, relatedSourceIds, selectedObjectIds, wholeNet]);
   const [activeWireStripEnd, setActiveWireStripEnd] = useState<"from" | "to">("from");
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
@@ -703,6 +713,7 @@ export function HarnessDesignEditor({
     setHistory(null);
     setSelectedObjectId(null);
     setSelectedObjectIds([]);
+    setRelatedSourceIds([]); setWholeNet(false); setRevealRequest(undefined);
     setE4Detached(false);
     setEditingObjectId(null);
     setMovePreview(null);
@@ -713,6 +724,11 @@ export function HarnessDesignEditor({
     setSaveState("saved");
     const designRequest = api.get(projectId, harnessId).then((loaded) => {
       if (generation !== loadGeneration.current) return;
+      if (initialReveal?.projectId === projectId && initialReveal.harnessId === harnessId) {
+        const found = resolveHarnessSelection(buildHarnessSelectionIndex(loaded.content), [initialReveal.objectId]);
+        setRelatedSourceIds([initialReveal.objectId]);
+        setRevealRequest({token: Date.now(), objectIds: [...found.wireIds, ...found.componentIds]});
+      }
       const savedJson = JSON.stringify(loaded.content);
       let recoveryMessage = loaded.recoveryWarning ?? "";
       const draft = readHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
@@ -948,6 +964,7 @@ export function HarnessDesignEditor({
         return;
       }
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key === "Escape") { setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]); return; }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectIds.length > 0) {
         const current = historyRef.current?.present;
         if (!current) return;
@@ -1443,6 +1460,16 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
+        highlightedObjectIds={related.wireIds}
+        revealRequest={revealRequest}
+        relationPanel={<HarnessRelationsPanel document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
+          onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
+          onReveal={id => {
+            const found = id && selectionIndex ? resolveHarnessSelection(selectionIndex, [id], wholeNet) : related;
+            if (id) { setRelatedSourceIds([id]); setSelectedObjectId(null); setSelectedObjectIds([]); }
+            setEditingObjectId(null); setView("drawing"); onViewChange?.("drawing");
+            setRevealRequest({token: Date.now(), objectIds: [...found.wireIds, ...found.componentIds]});
+          }} />}
         cables={(previewResult.document ?? history.present).cables}
         e4Overlays={view === "e4" ? {
           crossingStyle: history.present.views.e4.wireCrossingStyle,
@@ -1523,6 +1550,7 @@ export function HarnessDesignEditor({
           onViewChange?.(nextView);
         }}
         onSelectedObjectChange={(objectId) => {
+          setRelatedSourceIds([]);
           setSelectedObjectId(objectId);
           setEditingObjectId((current) => current === objectId ? current : null);
         }}

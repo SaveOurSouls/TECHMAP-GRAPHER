@@ -348,6 +348,21 @@ try {
     assert.equal(cut.items.length, 1);
     assert.equal(cut.items[0].cutLengthMm, 101);
     assert.equal(cut.items[0].totalMetres, 0.202);
+    if (process.argv.includes('--check-selection')) {
+      const { buildLiveCutList } = await module('editor/live-cut-list.ts');
+      const { buildHarnessSelectionIndex, resolveHarnessSelection } = await module('editor/harness-selection.ts');
+      const live = buildLiveCutList(reread.content, project.projectId, cableHarnessId, 2);
+      assert.equal(live.status, cut.status);
+      for (const key of ['wireId', 'sourceLengthMm', 'endCorrectionFromMm', 'endCorrectionToMm', 'roundingStepMm', 'cutLengthMm', 'pieces', 'totalMetres', 'status', 'warnings']) {
+        assert.deepEqual(live.items[0][key], cut.items[0][key], `Live cut list mismatch: ${key}`);
+      }
+      const before = JSON.stringify(reread.content);
+      const index = buildHarnessSelectionIndex(reread.content);
+      assert.deepEqual(resolveHarnessSelection(index, [cut.items[0].wireId]).wireIds, ['cw1', 'cw2']);
+      assert.deepEqual(resolveHarnessSelection(index, ['a']).wireIds, ['cw1', 'cw2']);
+      assert.deepEqual(resolveHarnessSelection(index, ['cw1'], true).wireIds, ['cw1']);
+      assert.equal(JSON.stringify(reread.content), before);
+    }
     const invalid = JSON.parse(JSON.stringify(reread.content));
     invalid.cables[0].sheathStrip.toMm = 100;
     const rejected = await fetcher(`/api/v1/projects/${project.projectId}/harnesses/${cableHarnessId}/design`, {

@@ -200,6 +200,7 @@ export function App({ config, session }: AppProps) {
   const [editHarnessQuantity, setEditHarnessQuantity] = useState("1");
   const [activeHarnessTabs, setActiveHarnessTabs] = useState<Readonly<Record<string, HarnessTab>>>({});
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorReveal, setEditorReveal] = useState<{projectId: string; harnessId: string; objectId: string} | undefined>();
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
   const [navigationPending, setNavigationPending] = useState(false);
@@ -644,7 +645,9 @@ export function App({ config, session }: AppProps) {
         harnessId={selectedHarness.harnessId}
         harnessDesignation={selectedHarness.designation}
         initialView={activeHarnessTab}
-        onClose={() => setEditorOpen(false)}
+        harnessQuantity={selectedHarness.quantity}
+        initialReveal={editorReveal}
+        onClose={() => {setEditorOpen(false); setEditorReveal(undefined);}}
         onViewChange={(view) => setActiveHarnessTabs((current) => rememberHarnessTab(
           current,
           selectedHarness.harnessId,
@@ -922,6 +925,11 @@ export function App({ config, session }: AppProps) {
                           }}
                         />
                         <HarnessCutListPanel
+                          onReveal={objectId => {
+                            setEditorReveal({projectId: selectedProject.projectId, harnessId: selectedHarness.harnessId, objectId});
+                            setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, "drawing"));
+                            setEditorOpen(true);
+                          }}
                           api={cutListApi}
                           projectId={selectedProject.projectId}
                           harnessId={selectedHarness.harnessId}

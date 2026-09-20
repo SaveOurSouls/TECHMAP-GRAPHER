@@ -5,6 +5,7 @@ export interface HarnessCutListPanelProps {
   readonly api: HarnessCutListApi;
   readonly projectId: string;
   readonly harnessId: string;
+  readonly onReveal?: (id: string) => void;
 }
 
 function errorText(error: unknown): string {
@@ -20,7 +21,7 @@ function formatCorrection(item: HarnessCutListItem): string {
   return `${format(item.endCorrectionFromMm)} / ${format(item.endCorrectionToMm)} мм`;
 }
 
-export function HarnessCutListTable({ cutList }: { readonly cutList: HarnessCutList }) {
+export function HarnessCutListTable({ cutList, onReveal, highlightedIds = [] }: { readonly cutList: HarnessCutList; readonly onReveal?: (id: string) => void; readonly highlightedIds?: readonly string[] }) {
   return <>
     {cutList.warning && <p className="cut-list-warning" role="note">{cutList.warning}</p>}
     {cutList.items.length === 0 ? <p className="cut-list-empty">В жгуте пока нет проводов.</p> : (
@@ -35,8 +36,8 @@ export function HarnessCutListTable({ cutList }: { readonly cutList: HarnessCutL
             <th>Общий метраж</th>
             <th>Статус</th>
           </tr></thead>
-          <tbody>{cutList.items.map(item => <tr key={item.wireId}>
-            <td><strong>{item.circuit || "Без цепи"}</strong><span>{item.wireId}</span><small>{item.materialDisplayName ?? (item.material === "not-pinned" ? "Материал не закреплён" : item.material)}{item.materialSourceKey && item.materialSourceKey !== item.materialDisplayName ? ` · ${item.materialSourceKey}` : ""}</small></td>
+          <tbody>{cutList.items.map(item => <tr key={item.wireId} aria-selected={highlightedIds.includes(item.wireId)} className={highlightedIds.includes(item.wireId) ? "is-related" : ""}>
+            <td>{onReveal ? <button type="button" className="ui-control" onClick={() => onReveal(item.wireId)} aria-label={`Показать на чертеже ${item.circuit || item.wireId}`}>{item.circuit || "Без цепи"} ↗</button> : <strong>{item.circuit || "Без цепи"}</strong>}<span>{item.wireId}</span><small>{item.materialDisplayName ?? (item.material === "not-pinned" ? "Материал не закреплён" : item.material)}{item.materialSourceKey && item.materialSourceKey !== item.materialDisplayName ? ` · ${item.materialSourceKey}` : ""}</small></td>
             <td>{formatMillimetres(item.sourceLengthMm)}</td>
             <td>{formatCorrection(item)}<small>шаг {formatMillimetres(item.roundingStepMm)}</small></td>
             <td>{formatMillimetres(item.cutLengthMm)}</td>
@@ -50,7 +51,7 @@ export function HarnessCutListTable({ cutList }: { readonly cutList: HarnessCutL
   </>;
 }
 
-export function HarnessCutListPanel({ api, projectId, harnessId }: HarnessCutListPanelProps) {
+export function HarnessCutListPanel({ api, projectId, harnessId, onReveal }: HarnessCutListPanelProps) {
   const [refresh, setRefresh] = useState(0);
   const [cutList, setCutList] = useState<HarnessCutList | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +84,7 @@ export function HarnessCutListPanel({ api, projectId, harnessId }: HarnessCutLis
         </button>
       </div>
       {error && <p className="cut-list-error" role="alert">{error}</p>}
-      {current ? <HarnessCutListTable cutList={current} />
+      {current ? <HarnessCutListTable cutList={current} onReveal={onReveal} />
         : loading ? <p className="cut-list-loading" role="status">Загружаем карту резки…</p>
           : !error && <p className="cut-list-empty">Карта резки пока недоступна.</p>}
     </div>

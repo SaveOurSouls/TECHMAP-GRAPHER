@@ -54,6 +54,7 @@ export interface CanvasViewportProps {
   readonly layers: readonly EditorLayer[];
   readonly selectedObjectId: string | null;
   readonly selectedObjectIds?: readonly string[];
+  readonly highlightedObjectIds?: readonly string[];
   readonly cables?: readonly CableInstance[];
   readonly e4Overlays?: E4SceneOverlays;
   /** Exact project snapshots keyed to connector scene-object ids. */
@@ -2530,6 +2531,7 @@ function redrawCanvas(
   componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
   resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
   componentTemplateImageCache = new ComponentTemplateImageCache(),
+  highlightedObjectIds: readonly string[] = [],
 ) {
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -2556,7 +2558,15 @@ function redrawCanvas(
     );
   }
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
+  const highlighted = new Set(highlightedObjectIds);
   for (const object of objectsInPaintOrder(objects, layers)) {
+    if (highlighted.has(object.id) && object.kind === "wire") {
+      const points = view === "e4" ? getE4WireRoute(object) : object.points ?? [];
+      context.save(); context.strokeStyle = "#f2af28"; context.globalAlpha = .65;
+      context.lineWidth = 9 / Math.max(.5, camera.zoom); context.lineJoin = "round"; context.beginPath();
+      points.forEach((point, i) => i ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+      context.stroke(); context.restore();
+    }
     drawEditorSceneObject(
       context,
       object,
@@ -2653,6 +2663,7 @@ export function CanvasViewport({
   layers,
   selectedObjectId,
   selectedObjectIds,
+  highlightedObjectIds = [],
   cables = [],
   e4Overlays,
   componentTemplateViewInstances = [],
@@ -2777,6 +2788,7 @@ export function CanvasViewport({
         displayInstances,
         resolveComponentTemplateAssetUrl,
         componentTemplateImageCacheRef.current!,
+        highlightedObjectIds,
       );
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
@@ -2791,7 +2803,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
+  }, [highlightedObjectIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
 
   useEffect(() => {
     const frame = frameRef.current;

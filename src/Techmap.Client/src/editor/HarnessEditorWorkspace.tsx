@@ -94,6 +94,9 @@ export interface HarnessEditorWorkspaceProps {
   readonly catalogHasMore?: boolean;
   readonly selectedObjectId?: string | null;
   readonly selectedObjectIds?: readonly string[];
+  readonly highlightedObjectIds?: readonly string[];
+  readonly relationPanel?: ReactNode;
+  readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
   readonly cables?: readonly CableInstance[];
   readonly saveState?: EditorSaveState;
   readonly onSaveRequest?: () => void;
@@ -212,6 +215,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
+  highlightedObjectIds = [], relationPanel, revealRequest,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -451,6 +455,12 @@ export function HarnessEditorWorkspace({
       : `кабелей ${incompatibleCableIds.join(", ")}`}: у жил нет однозначного общего участка.`
     : null;
 
+  useEffect(() => {
+    if (!revealRequest) return;
+    const bounds = getEditorSceneBounds(objects.filter(object => revealRequest.objectIds.includes(object.id)), layers, view);
+    if (bounds) setCamera(current => fitEditorCameraToBounds(current, bounds, viewportSize));
+  }, [revealRequest]);
+
   return (
     <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`}>
       <header className="he-header">
@@ -506,6 +516,7 @@ export function HarnessEditorWorkspace({
           layers={layers}
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
+          highlightedObjectIds={highlightedObjectIds}
           cables={cables}
           e4Overlays={e4Overlays}
           componentTemplateViewInstances={componentTemplateViewInstances}
@@ -545,6 +556,7 @@ export function HarnessEditorWorkspace({
             <button type="button" role="tab" aria-selected={inspectorTab === "layers"} className={inspectorTab === "layers" ? "active" : ""} onClick={() => setInspectorTab("layers")}>Слои <span>{layers.length}</span></button>
           </div>
           <div className="he-inspector-content">
+            {relationPanel}
             {inspectorTab === "properties" ? (
               propertyInspector ?? (
                 <ObjectInspector

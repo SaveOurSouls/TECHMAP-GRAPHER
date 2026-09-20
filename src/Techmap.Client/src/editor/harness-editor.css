@@ -309,3 +309,12 @@
   .he-catalog-content { height: 110px; grid-template-columns: 120px minmax(0, 1fr); }
   .he-catalog-results { grid-template-rows: 52px; }
 }
+.he-relations { padding: 10px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--ui-border); color: var(--ui-ink); font-size: 11px; }
+.he-relations-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.he-relations-actions label { display: inline-flex; align-items: center; gap: 4px; }
+.he-relations-actions input { width: 14px; height: 14px; margin: 0; }
+.he-relations summary { cursor: pointer; padding-block: 6px; font-weight: 600; }
+.he-relations .cut-list-scroll { max-height: 260px; overflow: auto; }
+.cut-list-table tr.is-related { background: #fff4d8; box-shadow: inset 3px 0 #da9c22; }
+.he-relations .cut-list-table { font-size: 10px; }
+.he-relations small { color: var(--ui-muted); }
