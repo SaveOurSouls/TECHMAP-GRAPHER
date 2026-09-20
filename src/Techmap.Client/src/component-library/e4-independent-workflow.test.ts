@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addArticleVariantsV3, addContactTypeGroupV3, newTemplateContentV3, setArticleVariantContactGroupV3 } from "./template-commands-v3";
-import { createE4ConnectorSeriesTableFromV3 } from "./e4-connector-series-table";
+import { applyE4ConnectorRowEdit, createE4ConnectorSeriesTableFromV3 } from "./e4-connector-series-table";
 import { createTemplateContentV5FromEditor, projectTemplateContentV5ToV3, validateTemplateContentV5 } from "./template-model-v5";
 import { createConnectorInstanceFromComponentTemplateV3 } from "../editor/component-template-placement";
 import { componentPlacementRequest } from "../editor/component-placement-api";
@@ -14,7 +14,10 @@ describe("independent article table workflow", () => {
     core = addArticleVariantsV3(core, ["A-2", "A-12"].map(articleKey => ({ sourceId: "БД.СОЕД", entityType: "Connector", articleKey })));
     core = setArticleVariantContactGroupV3(core, core.articleVariants[0]!.id, group, 2, []);
     core = setArticleVariantContactGroupV3(core, core.articleVariants[1]!.id, group, 12, []);
-    const table = createE4ConnectorSeriesTableFromV3(core, true);
+    let table = createE4ConnectorSeriesTableFromV3(core, true);
+    table = applyE4ConnectorRowEdit(table, {articleVariantId:core.articleVariants[1]!.id,
+      seriesRowId:table.articles[1]!.rows[0]!.seriesRowId,scope:"article",
+      changes:{wire:"ПВ-3",color:"Красный",secondaryColor:"Белый",customValues:{note:"Преднастройка"}}});
     expect(table.articles.map(article => article.rows.length)).toEqual([2, 12]);
     const defaults = parseConnectorSchematic(undefined);
     const preset = { ...defaults, orientation: "contacts-left" as const,
@@ -29,6 +32,8 @@ describe("independent article table workflow", () => {
       articleBindings: core.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })),
     }, { id: "placed", designation: "XS1", e4Position: { x: 0, y: 0 }, articleVariantId: core.articleVariants[1]!.id });
     expect(instance.contacts).toHaveLength(12);
+    expect(instance.contacts[0]).toMatchObject({wire:"ПВ-3",color:"Красный",secondaryColor:"Белый",colorMode:"manual",customValues:{note:"Преднастройка"}});
+    expect(instance.contacts[1]).toMatchObject({wire:"",color:"",customValues:{}});
     expect(instance.schematic).toEqual({ ...preset, showName: true });
     const request = componentPlacementRequest(instance, 0, "command");
     expect(request).toMatchObject({ sourceVersion: 3, sourceId: "бд.соед", entityType: "connector", articleKey: "A-12" });

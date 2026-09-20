@@ -491,7 +491,7 @@ export function E4ConnectorInspector({
                       ? templateTerminalChoices(connector, contact.logicalContactId)
                       : templateContact?.allowedTerminalArticleKeys.map((candidate) => candidate.articleKey) ?? [];
                   const lockedByLibrary = !templateAuthoring && isLibrary && (column.id === "number" || column.id === "contactType");
-                  const cellDisabled = disabled || Boolean(templateAuthoring && (column.id === "wire" || column.id === "color" || column.id.startsWith("custom:")));
+                  const cellDisabled = disabled;
                   const lockedByLibraryTitle = isTemplate
                     ? "Номер и тип заданы закреплённым шаблоном"
                     : "Номер и тип заданы артикулом серии";

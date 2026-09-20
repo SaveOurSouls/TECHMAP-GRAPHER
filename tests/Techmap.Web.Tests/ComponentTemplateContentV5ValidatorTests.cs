@@ -11,6 +11,20 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     internal static string ValidContentJson => ValidContent().ToJsonString();
 
     [Fact]
+    public void Contact_presets_accept_wire_colors_and_custom_values_but_reject_invalid_types()
+    {
+        var content = ValidContent();
+        var values = content["e4ConnectorTable"]!["seriesDefaults"]![0]!["values"]!;
+        values["wire"] = "ПВ-3";
+        values["color"] = "Красный";
+        values["secondaryColor"] = "Белый";
+        values["customValues"] = new JsonObject { ["note"] = "Преднастройка" };
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        values["color"] = 123;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+    }
+
+    [Fact]
     public void Drawing_selection_and_contact_identity_survive_validation_and_reject_dangling_references()
     {
         var content = ValidContent();

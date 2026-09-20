@@ -299,13 +299,23 @@ internal static class ComponentTemplateContentV4Validator
     private static RowValues ValidateRowValues(JsonElement value, string path, IReadOnlySet<string> groupIds, bool partial)
     {
         string[] all = ["number", "name", "circuitText", "contactTypeGroupId", "standardTerminalArticleKey"];
+        string[] optional = ["wire", "color", "secondaryColor", "customValues"];
         if (value.ValueKind != JsonValueKind.Object) Throw("An object is required.", path);
         var actual = value.EnumerateObject().Select(property => property.Name).ToArray();
-        if (actual.Distinct(StringComparer.Ordinal).Count() != actual.Length || actual.Any(name => !all.Contains(name, StringComparer.Ordinal)) ||
-            !partial && actual.Length != all.Length)
+        if (actual.Distinct(StringComparer.Ordinal).Count() != actual.Length || actual.Any(name => !all.Contains(name, StringComparer.Ordinal) && !optional.Contains(name, StringComparer.Ordinal)) ||
+            !partial && all.Any(name => !actual.Contains(name, StringComparer.Ordinal)))
             Throw("Object has missing, extra, or duplicate properties.", path);
         if (!partial && all.Any(name => !value.TryGetProperty(name, out _))) Throw("Object has missing, extra, or duplicate properties.", path);
 
+        foreach (var key in new[] { "wire", "color", "secondaryColor" })
+            if (value.TryGetProperty(key, out var text) && (text.ValueKind != JsonValueKind.String || text.GetString()!.Length > 512 || text.GetString()!.Any(char.IsControl))) Throw("Invalid contact preset.", path + "." + key);
+        if (value.TryGetProperty("customValues", out var custom))
+        {
+            if (custom.ValueKind != JsonValueKind.Object) Throw("Object required.", path + ".customValues");
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var field in custom.EnumerateObject())
+                if (!keys.Add(field.Name) || string.IsNullOrWhiteSpace(field.Name) || field.Name.Length > 128 || field.Name.Any(char.IsControl) || field.Value.ValueKind != JsonValueKind.String || field.Value.GetString()!.Length > 4096 || field.Value.GetString()!.Any(char.IsControl)) Throw("Invalid custom preset.", path + ".customValues");
+        }
         string? number = null, name = null, circuit = null, groupId = null, terminal = null;
         if (value.TryGetProperty("number", out var numberValue)) number = RequiredText(numberValue, 128, path + ".number");
         if (value.TryGetProperty("name", out var nameValue)) name = RequiredText(nameValue, 256, path + ".name");

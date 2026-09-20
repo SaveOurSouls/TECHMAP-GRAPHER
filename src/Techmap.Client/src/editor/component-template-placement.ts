@@ -213,6 +213,10 @@ export function rematerializeComponentTemplateConnectorArticle(
 }
 
 interface PlacementContactRow extends MaterializedArticleContactRowV3 {
+  wire?: string;
+  color?: string;
+  secondaryColor?: string;
+  customValues?: Record<string, string>;
   readonly standardTerminalArticleKey: ArticleKeyV3 | null;
 }
 
@@ -262,6 +266,10 @@ function materializePlacementRows(
       : tableRow.contactTypeGroupId === null ? [] : allowedByGroup.get(tableRow.contactTypeGroupId) ?? [];
     return {
       key: tableRow.seriesRowId,
+      wire: tableRow.wire,
+      color: tableRow.color,
+      secondaryColor: tableRow.secondaryColor,
+      customValues: tableRow.customValues,
       prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
       representations: (core?.representations ?? []).filter(representation => {
         const drawing = content.schemaVersion === 5 ? content.articleDrawings?.find(item => item.articleVariantId === articleVariantId) : undefined;
@@ -334,11 +342,12 @@ function createContact(
     contactType: group?.name ?? "",
     circuit: row.circuitText ?? "",
     terminalArticle: row.standardTerminalArticleKey?.articleKey ?? "",
-    wire: "",
-    color: "",
-    secondaryColor: "",
+    wire: row.wire ?? "",
+    color: row.color ?? "",
+    secondaryColor: row.secondaryColor ?? "",
+    colorMode: row.color || row.secondaryColor ? "manual" : "auto",
     connectionStatus: "available",
-    customValues: {},
+    customValues: { ...row.customValues },
     libraryContact: null,
   };
 }

@@ -124,6 +124,10 @@
 .e4cce-color-editor.is-open .e4cce-color-summary { outline: 1px solid #1685b2; background: #f7fcfe; }
 .e4cce-color-popover { position: absolute; z-index: 25; right: 0; top: 25px; width: 210px; padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; overflow: hidden; border: 1px solid #9eb6c1; border-radius: 6px; background: #fff; box-shadow: 0 8px 22px rgb(24 64 82 / 22%); }
 .e4cce-color-popover[hidden] { display: none; }
+.e4-connector-canvas-editor .e4cce-color-popover { box-sizing: border-box; width: 230px; white-space: normal; }
+.e4-connector-canvas-editor .e4cce-color-popover label { height: auto; min-height: 0; margin: 0; padding: 0; display: grid; }
+.e4-connector-canvas-editor .e4cce-color-popover select { box-sizing: border-box; height: 30px; min-height: 30px; padding: 3px 24px 3px 6px; line-height: normal; font-size: 11px; }
+.e4-connector-canvas-editor .e4cce-color-popover input[type="color"] { min-width: 30px; min-height: 26px; padding: 1px; }
 .e4cce-color-popover label { display: grid; gap: 3px; color: #607985; font-size: 8px; font-weight: 750; text-align: left; }
 .e4cce-color-popover select { width: 100%; min-width: 0; height: 26px; border: 1px solid #c7d6dc; border-radius: 4px; background: #fff; color: #284957; font: 500 10px Inter, Arial, sans-serif; }
 .e4cce-color-popover .e4cce-palette { grid-template-columns: minmax(0, 1fr) 62px; align-items: center; gap: 8px; }

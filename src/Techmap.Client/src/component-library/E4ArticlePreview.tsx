@@ -41,6 +41,13 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
   const toggleName = () => onTableChange({ ...table, columns: table.columns.map(column => column.id === "name" ? { ...column, visible: !showName } : column) });
   const command = (value: EditorCommand) => {
     if (!preview.connector || disabled) return;
+    if (value.type === "reset-contact-color-auto") {
+      const contact = preview.connector.contacts.find(item => item.id === value.contactId);
+      if (contact?.logicalContactId) onTableChange(applyE4ConnectorRowEdit(table, {
+        articleVariantId: articleId!, seriesRowId: contact.logicalContactId, scope, changes: { color: "", secondaryColor: "" },
+      }));
+      return;
+    }
     if (value.type === "update-contact") {
       const contact = preview.connector.contacts.find(item => item.id === value.contactId);
       if (!contact) return;
@@ -50,6 +57,10 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
       const groupId = value.contactType === undefined ? undefined
         : table.contactTypeGroups.find(group => group.name === value.contactType)?.id ?? null;
       onTableChange(applyE4ConnectorRowEdit(table, { articleVariantId: articleId!, seriesRowId: row.seriesRowId, scope, changes: {
+        ...(value.wire === undefined ? {} : { wire: value.wire }),
+        ...(value.color === undefined ? {} : { color: value.color }),
+        ...(value.secondaryColor === undefined ? {} : { secondaryColor: value.secondaryColor }),
+        ...(value.customValues === undefined ? {} : { customValues: value.customValues }),
         ...(value.number === undefined ? {} : { number: String(value.number) }),
         ...(value.circuit === undefined ? {} : { circuitText: value.circuit || null }),
         ...(value.contactType === undefined ? {} : { contactTypeGroupId: groupId, standardTerminalArticleKey: content.terminalContactTypeBindings?.find(binding => binding.standard && binding.contactTypeGroupId === groupId)?.terminalArticleKey ?? null }),
@@ -68,7 +79,7 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
     }
   };
   return <section className="library-e4-preview" aria-label="Предпросмотр артикула Э4">
-    <header><strong>На схеме Э4</strong><InfoHint>Так выбранный артикул будет выглядеть после размещения. Настройки колонок и стороны контактов применяются к серии; уже размещённые компоненты не меняются. Редактируйте строки прямо в графическом окне. Стандарт серии сохраняет ручные правки строк. Провод, цвет и значения дополнительных полей заполняются в схеме проекта.</InfoHint></header>
+    <header><strong>На схеме Э4</strong><InfoHint>Так выбранный артикул будет выглядеть после размещения. Настройки колонок и стороны контактов применяются к серии; уже размещённые компоненты не меняются. Редактируйте строки прямо в графическом окне. Стандарт серии сохраняет ручные правки строк. Провод, цвет и дополнительные поля сохраняются как начальные значения и могут быть изменены в схеме проекта.</InfoHint></header>
     <div className="library-e4-preset">
       <label>Изменять<select aria-label="Область применения правки" value={scope} onChange={event => setScope(event.target.value as "article" | "series")}><option value="article">этот артикул</option><option value="series">всю серию</option></select></label>
       <label>Контакты<select aria-label="Сторона контактов Э4" value={presentation.orientation} disabled={disabled}
