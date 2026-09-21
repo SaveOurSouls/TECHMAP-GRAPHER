@@ -1939,6 +1939,11 @@ export function drawEditorSceneObject(
     for(const [point,sign] of [[p,1],[q,-1]] as const){context.beginPath();context.moveTo(point.x,point.y);context.lineTo(point.x+sign*dx*8-dy*3,point.y+sign*dy*8+dx*3);context.lineTo(point.x+sign*dx*8+dy*3,point.y+sign*dy*8-dx*3);context.closePath();context.fill();}
     context.translate((p.x+q.x)/2,(p.y+q.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
   }
+  if (object.kind === "specification-item") {
+    context.save();context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle="#fff";context.lineWidth=selected?3:1.5;
+    context.fillRect(object.x,object.y,object.width,object.height);context.strokeRect(object.x,object.y,object.width,object.height);
+    context.font="12px Arial";context.fillStyle=object.color;context.fillText(object.label,object.x+6,object.y+24,object.width-12);context.restore();return;
+  }
   if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
@@ -3040,7 +3045,7 @@ export function CanvasViewport({
       if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || event.shiftKey);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
-      if (object && (object.kind === "connector" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",

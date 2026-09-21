@@ -41,7 +41,7 @@ describe("drawing tables and position leaders",()=>{
   it("retains unknown length and never counts graphics as additional material",()=>{
     const d=physicalFixture();
     const rows=buildDrawingBom({...d,wires:d.wires.map(w=>({...w,lengthMm:null})),physicalTopology:{...d.physicalTopology!,coverings:[{id:"cover",name:"shell",width:14,color:"#123456",lengthMm:100,spans:[{segmentId:"S0",from:0,to:1}]}]}});
-    expect(rows.filter(r=>r.unit==="м").every(r=>r.amount===null)).toBe(true);expect(rows.some(r=>r.objectIds.includes("cover"))).toBe(false);
+    expect(rows.filter(r=>r.unit==="м"&&!r.objectIds.includes("cover")).every(r=>r.amount===null)).toBe(true);expect(rows.find(r=>r.objectIds.includes("cover"))).toMatchObject({amount:.1,name:"shell"});
   });
   it("moves circle and anchor independently, follows object moves and renumbers from BOM",()=>{
     const d=physicalFixture(),rows=buildDrawingBom(d),key=rows.find(r=>r.objectIds.includes("A"))!.key;
@@ -93,4 +93,18 @@ describe("drawing tables and position leaders",()=>{
     expect(()=>validateDrawingDimensions([{id:"a",wireId:wire.id,from:0,to:3,pointCount:4,routeKey:"stale",mode:"aligned",offset:20,lengthMm:350}],d)).toThrow();
   });
 
+});
+
+it("counts abstract and off-drawing specification items once, retains identity on assignment and supports Undo",()=>{
+ const d=physicalFixture(),item={id:"glue",kind:"manual" as const,type:"Клей",designation:"",name:"Клей",amount:2.5,unit:"г" as const,note:""};
+ const documents={...emptyDrawingDocuments(),specificationItems:[item,{...item,id:"clamp",kind:"abstract" as const,type:"Хомут",name:"Хомут",unit:"шт." as const,amount:2,position:{x:40,y:60}}]};
+ const h=executeEditorCommand(createEditorHistory(d),{type:"set-drawing-documents",documents});
+ expect(buildDrawingBom(h.present,3).find(r=>r.objectIds.includes("glue"))).toMatchObject({amount:7.5,unit:"г"});
+ expect(drawingDocumentScene(h.present).filter(o=>o.kind==="specification-item").map(o=>o.id)).toEqual(["clamp"]);
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(documents);
+ const before=buildDrawingBom(h.present).find(r=>r.objectIds.includes("glue"))!;
+ const changed={...h.present,drawingDocuments:{...documents,specificationItems:[{...item,designation:"GL-1",sourceIdentity:"versioned-record"},documents.specificationItems[1]!]}};
+ expect(buildDrawingBom(changed).find(r=>r.objectIds.includes("glue"))!.key).toBe(before.key);
+ expect(undoEditorCommand(h).present).toEqual(d);
+ expect(()=>parseHarnessDesignDocument({...d,drawingDocuments:{...documents,specificationItems:[item,item]}})).toThrow();
 });

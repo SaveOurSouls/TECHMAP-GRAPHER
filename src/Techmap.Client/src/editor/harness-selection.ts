@@ -29,7 +29,7 @@ export function buildHarnessSelectionIndex(document: HarnessDesignDocument) {
     components.set(l.id,new Set(ids));components.set(`${l.id}:anchor`,new Set(ids));
   }
   const known = new Set([...components.keys(), ...wires.keys(), ...document.connectors.map(c => c.id),
-    ...document.junctions.map(j => j.id), ...document.screens.map(s => s.id), ...document.cables.map(c => c.id)]);
+    ...document.drawingDocuments?.specificationItems?.map(i=>i.id)??[], ...document.junctions.map(j => j.id), ...document.screens.map(s => s.id), ...document.cables.map(c => c.id)]);
   const cables = new Map(document.cables.map(cable => [cable.id, cable.memberWireIds]));
   return { wires, components, endpoints, known, cables };
 }

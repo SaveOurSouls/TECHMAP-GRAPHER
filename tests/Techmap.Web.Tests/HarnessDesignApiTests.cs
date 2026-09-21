@@ -16,6 +16,34 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("amount")]
+    [InlineData("unit")]
+    [InlineData("position")]
+    [InlineData("duplicate")]
+    public async Task Specification_items_round_trip_and_invalid_edits_preserve_revision(string mutation)
+    {
+        await using var factory=new TechmapWebApplicationFactory();using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=JsonNode.Parse("""
+        {"schemaVersion":1,"connectors":[],"wires":[],"drawingDocuments":{"tables":[],"leaders":[],"bomOrder":[],"specificationItems":[
+        {"id":"glue","kind":"manual","type":"Glue","designation":"","name":"Glue","amount":2.5,"unit":"г","note":""},
+        {"id":"clamp","kind":"abstract","type":"Clamp","designation":"","name":"Clamp","amount":1,"unit":"шт.","note":"","position":{"x":20,"y":40}}]}}
+        """)!;
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var item=content["drawingDocuments"]!["specificationItems"]![1]!;
+        if(mutation=="amount")item["amount"]=-1;
+        if(mutation=="unit")item["unit"]="bad";
+        if(mutation=="position")item["position"]!["x"]="bad";
+        if(mutation=="duplicate")item["id"]="glue";
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("[\"c1\",\"c1\"]")]
     [InlineData("[\"missing\"]")]
     [InlineData("[1]")]

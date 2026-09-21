@@ -6,11 +6,24 @@ import { physicalNodePoint, physicalSegmentPoints } from "./physical-topology";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
 export interface PositionLeader { readonly id: string; readonly objectId: string; readonly rowKey: string; readonly anchorOffset: Point; readonly circle: Point }
-export interface DrawingDocuments { readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {designation?:string;name?:string;note?:string}> }
-export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [] });
+export interface DrawingSpecificationItem {
+  readonly id: string;
+  readonly kind: "abstract" | "manual";
+  readonly type: string;
+  readonly designation: string;
+  readonly name: string;
+  readonly amount: number | null;
+  readonly unit: "шт." | "м" | "г" | "кг" | "л";
+  readonly note: string;
+  readonly objectId?: string;
+  readonly sourceIdentity?: string;
+  readonly position?: Point;
+}
+export interface DrawingDocuments { readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly designation: string; readonly name: string;
-  readonly amount: number | null; readonly unit: "шт." | "м"; readonly note: string;
+  readonly amount: number | null; readonly unit: "шт." | "м" | "г" | "кг" | "л"; readonly note: string;
   readonly objectIds: readonly string[]; readonly sourceIdentity: string;
 }
 const keyOf = (...values: unknown[]) => JSON.stringify(values);
@@ -18,8 +31,8 @@ const materialKey = (kind: string, binding: {sourceId:string;snapshotId:string;s
 
 /** Aggregation never merges textual articles across source snapshots. */
 export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): BomRow[] {
-  const rows = new Map<string, {designation:string[];name:string;amountMicros:bigint;unknown:boolean;unit:"шт."|"м";note:string;objectIds:Set<string>}>();
-  const add = (key:string,id:string,designation:string,name:string,amount:number|null,unit:"шт."|"м",note:string) => {
+  const rows = new Map<string, {designation:string[];name:string;amountMicros:bigint;unknown:boolean;unit:"шт."|"м"|"г"|"кг"|"л";note:string;objectIds:Set<string>}>();
+  const add = (key:string,id:string,designation:string,name:string,amount:number|null,unit:"шт."|"м"|"г"|"кг"|"л",note:string) => {
     const row=rows.get(key) ?? {designation:[],name,amountMicros:0n,unknown:false,unit,note,objectIds:new Set<string>()};
     row.objectIds.add(id); if(designation && !row.designation.includes(designation)) row.designation.push(designation);
     row.unknown ||= amount===null;
@@ -41,7 +54,11 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     const cut=calculateWireCutLength(blank).cutLengthMm;
     add(key,blank.id,"circuit" in blank?blank.circuit || blank.id:blank.id,b?.displayName ?? "Материал не назначен",cut===null?null:cut/1000,"м",b?"По длине заготовки":"Нет закреплённого материала");
   }
-  for(const c of document.physicalTopology?.coverings ?? []) if(c.material) add(materialKey("protection",c.material),c.id,c.name,c.material.displayName,c.lengthMm===null?null:c.lengthMm/1000,"м","Защитное покрытие");
+  for(const c of document.physicalTopology?.coverings ?? []) add(c.material?materialKey("protection",c.material):keyOf("protection-unpinned",c.id),c.id,c.name,c.material?.displayName ?? c.name,c.lengthMm===null?null:c.lengthMm/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен");
+  for(const item of document.drawingDocuments?.specificationItems ?? []) {
+    const key=keyOf("specification",item.id);
+    add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || (item.kind === "abstract" ? "Абстрактная позиция" : "Дополнительная позиция"));
+  }
   const order=document.drawingDocuments?.bomOrder ?? [];
   const keys=[...rows.keys()].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?Number.MAX_SAFE_INTEGER:ai)-(bi<0?Number.MAX_SAFE_INTEGER:bi);});
   return keys.map((key,i)=>{const r=rows.get(key)!,edit=document.drawingDocuments?.bomText?.[key];return {key,sourceIdentity:key,position:i+1,designation:edit?.designation??r.designation.join(", "),name:edit?.name??r.name,amount:r.unknown?null:Number(r.amountMicros*BigInt(quantity))/1e6,unit:r.unit,note:edit?.note??r.note+(r.unknown?" · длина не задана":""),objectIds:[...r.objectIds]};});
@@ -54,6 +71,7 @@ export function connectionEndLabel(document: HarnessDesignDocument,end:WireEndpo
   return `${c?.designation ?? end.connectorId}:${contact?.number ?? end.contactId}`;
 }
 export function drawingObjectOrigin(document:HarnessDesignDocument,id:string):Point|null {
+  const extra=document.drawingDocuments?.specificationItems?.find(i=>i.id===id);if(extra)return extra.position ?? null;
   const connector=document.connectors.find(c=>c.id===id);if(connector)return connector.positions.drawing;
   const t=document.physicalTopology;
   const node=t?.nodes.find(n=>n.id===id);if(node)return physicalNodePoint(document,node);
@@ -80,6 +98,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle))return fail();
   if(new Set(d.bomOrder).size!==d.bomOrder.length||d.bomOrder.some(k=>!text(k,4096)))return fail();
   if(d.bomText!==undefined){if(!d.bomText||typeof d.bomText!=="object"||Array.isArray(d.bomText)||Object.keys(d.bomText).length>50000)return fail();for(const [key,edit] of Object.entries(d.bomText)){if(!text(key,4096)||!edit||typeof edit!=="object"||Array.isArray(edit)||Object.entries(edit).some(([k,v])=>!["designation","name","note"].includes(k)||typeof v!=="string"||v.length>4096))return fail();}}
+  if(d.specificationItems!==undefined){if(!Array.isArray(d.specificationItems)||d.specificationItems.length>50000)return fail();const itemIds=new Set<string>();for(const item of d.specificationItems){if(!item||!text(item.id)||itemIds.has(item.id)||!((item.kind==="abstract")||(item.kind==="manual"))||!text(item.type,256)||typeof item.designation!=="string"||item.designation.length>4096||!text(item.name,4096)||(!Number.isFinite(item.amount)&&item.amount!==null)||item.amount!==null&&(item.amount<0||item.amount>1e9)||!["шт.","м","г","кг","л"].includes(item.unit)||typeof item.note!=="string"||item.note.length>4096||item.position!==undefined&&!point(item.position)||item.objectId!==undefined&&!text(item.objectId)||item.sourceIdentity!==undefined&&!text(item.sourceIdentity,4096))return fail();itemIds.add(item.id);if(ids.has(item.id))return fail();ids.add(item.id);}}
   const dimensions=validateDrawingDimensions(d.dimensions,document);
   for(const item of dimensions??[]){if(ids.has(item.id))return fail();ids.add(item.id);}
   // Missing targets are intentionally retained and visibly diagnosed, never reassigned by proximity.
@@ -101,10 +120,11 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1):
     return [{id:l.id,kind:"position-leader",layerId:"dimensions",label:origin&&row?String(row.position):"?",x:l.circle.x-12,y:l.circle.y-12,width:24,height:24,color:origin&&row?"#365568":"#c23535",points:[anchor,l.circle]},
       {id:`${l.id}:anchor`,kind:"leader-anchor",layerId:"dimensions",label:"",x:anchor.x-4,y:anchor.y-4,width:8,height:8,color:origin&&row?"#365568":"#c23535"}];
   });
-  return [...tables,...leaders];
+  return [...tables,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
 }
 export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,point:Point):DrawingDocuments|null {
   const d=document.drawingDocuments;if(!d)return null;
+  if(d.specificationItems?.some(i=>i.id===id&&i.position))return {...d,specificationItems:d.specificationItems.map(i=>i.id===id?{...i,position:point}:i)};
   if(d.tables.some(t=>t.id===id)) return {...d,tables:d.tables.map(t=>t.id===id?{...t,position:point}:t)};
   const leader=d.leaders.find(l=>l.id===id||`${l.id}:anchor`===id);if(!leader)return null;
   if(leader.id===id)return {...d,leaders:d.leaders.map(l=>l.id===id?{...l,circle:{x:point.x+12,y:point.y+12}}:l)};

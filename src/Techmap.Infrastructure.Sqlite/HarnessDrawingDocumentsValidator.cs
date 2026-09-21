@@ -41,6 +41,17 @@ internal static class HarnessDrawingDocumentsValidator
                 foreach(var field in entry.Value.EnumerateObject())if(field.Name is not ("designation" or "name" or "note")||field.Value.ValueKind!=JsonValueKind.String||field.Value.GetString()!.Length>4096)throw Invalid();
             }
         }
+        if(d.TryGetProperty("specificationItems",out var items))
+        {
+            if(items.ValueKind!=JsonValueKind.Array||items.GetArrayLength()>50000)throw Invalid();
+            var itemIds=new HashSet<string>(StringComparer.Ordinal);
+            foreach(var item in items.EnumerateArray()){
+                var id=Text(item,"id");if(!itemIds.Add(id)||!ids.Add(id)||Text(item,"kind") is not ("abstract" or "manual")||Text(item,"type",256).Length>256||!item.TryGetProperty("designation",out var designation)||designation.ValueKind!=JsonValueKind.String||designation.GetString()!.Length>4096||!Text(item,"name",4096).Any()||!item.TryGetProperty("amount",out var amount)||amount.ValueKind is not (JsonValueKind.Null or JsonValueKind.Number)||amount.ValueKind==JsonValueKind.Number&&(!amount.TryGetDecimal(out var number)||number<0||number>1000000000)||Text(item,"unit") is not ("шт." or "м" or "г" or "кг" or "л")||!item.TryGetProperty("note",out var note)||note.ValueKind!=JsonValueKind.String||note.GetString()!.Length>4096)throw Invalid();
+                if(item.TryGetProperty("position",out _))Point(item,"position");
+                if(item.TryGetProperty("objectId",out _))_=Text(item,"objectId");
+                if(item.TryGetProperty("sourceIdentity",out _))_=Text(item,"sourceIdentity",4096);
+            }
+        }
         HarnessDrawingDimensionsValidator.Validate(root,d,ids);
         var keys=new HashSet<string>(StringComparer.Ordinal);
         foreach(var key in Array(d,"bomOrder",50000).EnumerateArray())if(key.ValueKind!=JsonValueKind.String || key.GetString() is not {} s || string.IsNullOrWhiteSpace(s)||s.Length>4096||!keys.Add(s))throw Invalid();

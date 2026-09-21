@@ -19,6 +19,7 @@ export interface ObjectInspectorProps {
 }
 
 const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
+  "specification-item":"Позиция спецификации",
   "drawing-table": "Таблица",
   "position-leader": "Выноска",
   "leader-anchor": "Якорь выноски",
