@@ -99,6 +99,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly highlightedObjectIds?: readonly string[];
   readonly relationPanel?: ReactNode | ((tool:EditorTool,onToolChange:(tool:EditorTool)=>void)=>ReactNode);
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
+  readonly documentActions?: ReactNode;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
   readonly cables?: readonly CableInstance[];
@@ -223,7 +224,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest, drawingWindows,onDimensionCreate,
+  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -507,6 +508,7 @@ export function HarnessEditorWorkspace({
       </header>
 
       <div className="he-workspace">
+        <nav className="he-document-nav" aria-label="Документы жгута">{documentActions}</nav>
         <EditorToolbar
           view={view}
           activeTool={tool}

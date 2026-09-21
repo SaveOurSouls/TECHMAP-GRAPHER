@@ -369,3 +369,52 @@
 .he-table-window th,.he-table-window td {vertical-align:top;}
 .he-table-window-body>.he-relations>details>.ui-section-heading {display:none;}
 .he-table-window-body .he-relations-actions {margin:3px 0;}
+
+/* M4-67 reference tables: compact S1 visual language with explicit selection. */
+.he-document-table { border:1px solid #cbd9df; border-radius:6px; background:#fff; box-shadow:0 2px 8px rgb(39 75 91 / 8%); }
+.he-document-table table { min-width:100%; border-collapse:separate; border-spacing:0; font-size:10px; color:#294959; }
+.he-document-table th { position:sticky; top:0; z-index:1; padding:6px 7px; border-right:1px solid #d6e1e6; border-bottom:1px solid #afc1ca; background:#edf4f6; color:#526e7c; text-align:center; font-weight:800; white-space:nowrap; }
+.he-document-table td { height:28px; padding:3px 6px; border-right:1px solid #e2eaed; border-bottom:1px solid #e2eaed; vertical-align:middle; white-space:nowrap; }
+.he-document-table tbody tr:nth-child(even) { background:#fbfdfe; }
+.he-document-table tbody tr:hover { background:#f1f8fa; }
+.he-document-table tbody tr.is-related { background:#bdeff7; box-shadow:inset 3px 0 #0796b5; }
+.he-document-table td:first-child { font-weight:750; }
+.he-document-table input,.he-document-table select { height:24px; min-width:62px; padding:2px 5px; border:1px solid transparent; border-radius:3px; background:transparent; color:inherit; font-size:10px; }
+.he-document-table input:focus,.he-document-table select:focus { border-color:#70b6c7; outline:2px solid #c8edf3; background:#fff; }
+.he-wire-row { display:inline-flex; align-items:center; gap:5px; min-width:54px; padding:2px 4px; border:0; border-radius:3px; background:transparent; color:#27556a; font:700 10px Inter,Arial,sans-serif; cursor:pointer; }
+.he-wire-row:hover { background:#e3f5f8; }
+.he-wire-row i { width:9px; height:9px; display:inline-block; border:1px solid #55727f; border-radius:50%; }
+.he-bom-note { display:grid; gap:2px; }
+.he-bom-note .he-relations-actions { margin:0; }
+.he-table-window { border-color:#9fb9c4; box-shadow:0 8px 26px rgb(35 73 90 / 18%); }
+.he-table-window>header { min-height:34px; padding:6px 9px; background:#153d50; color:#fff; }
+.he-table-window>header strong { color:#fff; letter-spacing:.02em; }
+.he-table-window>header select { border-color:#477184; background:#234e61; color:#fff; }
+.he-table-window>header button { color:#d9eef3; }
+.he-document-nav { grid-column:2; grid-row:2; z-index:6; display:flex; align-items:center; gap:6px; padding:5px 8px; border-top:1px solid #cad9df; background:#fff; }
+.he-document-nav .ui-control { min-height:25px; padding:3px 9px; border-color:#a9c8d3; background:#f3fafb; color:#21657d; font-size:10px; }
+
+.harness-editor .he-header { background:#193d50; border-color:#2a5367; box-shadow:none; }
+.harness-editor .he-header-identity strong { color:#fff; }
+.harness-editor .he-header-identity span { color:#9fc2d0; }
+.harness-editor .he-view-tabs { border:0; border-radius:4px; background:#254d61; }
+.harness-editor .he-view-tabs button { color:#b9d0da; }
+.harness-editor .he-view-tabs button.active { background:#00a0b7; color:#fff; box-shadow:none; }
+.harness-editor .he-save-state { color:#d5e9ef; }
+.harness-editor .he-save-state:not(:disabled) { background:#008fa8; color:#fff; }
+.harness-editor .he-back { background:#284f61; color:#d5e9ef; border-color:#527485; }
+.harness-editor .he-tool.active { background:#cef4f8; color:#008da8; border-color:#8ed2df; }
+.he-workspace { grid-template-rows:minmax(0,1fr) auto auto; }
+.he-toolbar,.he-right-panel { grid-row:1 / 4; }
+.he-catalog { grid-row:3; }
+
+.he-document-tools { display:flex; align-items:center; gap:12px; margin:0 0 8px; flex-wrap:wrap; }
+.he-document-tools>input { flex:1; width:240px; max-width:none; min-width:120px; }
+.he-document-tools>label { display:flex; gap:5px; align-items:center; white-space:nowrap; font-size:11px; }
+.he-document-tools input[type="checkbox"] { width:14px; height:14px; min-width:0; min-height:0; margin:0; }
+.he-document-table thead tr:nth-child(2) th { top:27px; }
+.he-table-window .he-document-table td { padding:2px 6px; vertical-align:middle; }
+.he-table-window .he-document-table th { padding:5px 7px; }
+.he-table-window .he-document-table input { height:24px; min-height:24px; }
+.he-table-window .he-document-table input[aria-label^="Наименование"] { width:180px; }
+.he-table-window .he-document-table input[aria-label^="Примечание"] { width:170px; }

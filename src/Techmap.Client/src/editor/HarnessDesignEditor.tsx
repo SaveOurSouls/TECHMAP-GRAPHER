@@ -1543,6 +1543,7 @@ export function HarnessDesignEditor({
         selectedObjectIds={selectedObjectIds}
         highlightedObjectIds={[...related.wireIds,...related.componentIds,...relatedSourceIds]}
         revealRequest={revealRequest}
+        documentActions={(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}
         drawingWindows={camera=><DrawingTableWindows view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
         onDimensionCreate={(wireId,from,to,pointCount,mode)=>{
           const wire=history.present.wires.find(w=>w.id===wireId);if(!wire)return;
