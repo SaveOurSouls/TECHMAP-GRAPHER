@@ -1915,7 +1915,9 @@ export function drawEditorSceneObject(
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
     context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
     context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=object.width+2;context.stroke();
-    context.strokeStyle="#f8fafb";context.lineWidth=object.width;context.stroke();context.restore();return;
+    context.strokeStyle="#f8fafb";context.lineWidth=object.width;context.stroke();
+    if(selected){context.fillStyle="#fff";context.strokeStyle="#1179ac";context.lineWidth=1.5;for(const p of points){context.beginPath();context.arc(p.x,p.y,4.5,0,Math.PI*2);context.fill();context.stroke();}}
+    context.restore();return;
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";context.lineWidth=selected?4:2;

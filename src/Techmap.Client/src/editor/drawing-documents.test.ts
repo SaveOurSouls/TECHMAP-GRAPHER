@@ -33,10 +33,10 @@ describe("drawing tables and position leaders",()=>{
   it("keeps source versions separate, sums exactly and excludes material cable members",()=>{
     const d=physicalFixture();
     const doc={...d,wires:d.wires.map((w,i)=>({...w,lengthMm:100.1,cutRoundingStepMm:.001,materialBinding:i===2?{...material,snapshotSha256:"c".repeat(64)}:material}))};
-    const rows=buildDrawingBom(doc,3).filter(r=>r.unit==="м");
+    const rows=buildDrawingBom(doc,3).filter(r=>r.unit==="м"&&!r.key.includes("physical-channel"));
     expect(rows).toHaveLength(2);expect(rows[0]).toMatchObject({amount:.6006,objectIds:["W1","W2"]});expect(rows[1]!.amount).toBe(.3003);
     const cable={id:"K",memberWireIds:["W1","W2"],materialBinding:{...material,entityType:"cable" as const},lengthMm:200,endCorrectionFromMm:0,endCorrectionToMm:0,cutRoundingStepMm:1};
-    expect(buildDrawingBom({...doc,cables:[cable]},2).filter(r=>r.unit==="м").map(r=>r.objectIds)).toEqual([["W3"],["K"]]);
+    expect(buildDrawingBom({...doc,cables:[cable]},2).filter(r=>r.unit==="м"&&!r.key.includes("physical-channel")).map(r=>r.objectIds)).toEqual([["W3"],["K"]]);
   });
   it("retains unknown length and never counts graphics as additional material",()=>{
     const d=physicalFixture();

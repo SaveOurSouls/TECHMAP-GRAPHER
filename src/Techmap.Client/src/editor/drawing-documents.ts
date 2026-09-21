@@ -53,12 +53,18 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     const b=blank.materialBinding, key=b?materialKey("material",b):keyOf("material-unpinned",blank.id);
     const cut=calculateWireCutLength(blank).cutLengthMm;
     add(key,blank.id,"circuit" in blank?blank.circuit || blank.id:blank.id,b?.displayName ?? "Материал не назначен",cut===null?null:cut/1000,"м",b?"По длине заготовки":"Нет закреплённого материала");
+    for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===blank.id)??[])rows.get(key)!.objectIds.add(segment.id);
   }
   for(const c of document.physicalTopology?.coverings ?? []) add(c.material?materialKey("protection",c.material):keyOf("protection-unpinned",c.id),c.id,c.name,c.material?.displayName ?? c.name,c.lengthMm===null?null:c.lengthMm/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен");
   for(const item of document.drawingDocuments?.specificationItems ?? []) {
     const key=keyOf("specification",item.id);
     add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || (item.kind === "abstract" ? "Абстрактная позиция" : "Дополнительная позиция"));
     for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===item.id)??[])rows.get(key)!.objectIds.add(segment.id);
+  }
+  for(const [index,segment] of (document.physicalTopology?.segments??[]).entries()){
+    const assigned=segment.specificationItemId;
+    if(assigned&&(document.drawingDocuments?.specificationItems?.some(i=>i.id===assigned)||document.cables.some(c=>c.id===assigned)))continue;
+    add(keyOf("physical-channel",segment.id),segment.id,"S"+(index+1),"Канал",null,"м",assigned?"Позиция спецификации отсутствует":"Абстрактный канал · материал не назначен");
   }
   const order=document.drawingDocuments?.bomOrder ?? [];
   const keys=[...rows.keys()].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?Number.MAX_SAFE_INTEGER:ai)-(bi<0?Number.MAX_SAFE_INTEGER:bi);});
