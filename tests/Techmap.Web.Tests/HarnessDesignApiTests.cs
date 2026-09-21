@@ -16,6 +16,34 @@ public sealed class HarnessDesignApiTests
     private const string Origin = "http://127.0.0.1:18762";
 
     [Theory]
+    [InlineData("width")]
+    [InlineData("color")]
+    [InlineData("showWires")]
+    [InlineData("exit")]
+    public async Task Channels_and_multiple_connector_exits_round_trip(string mutation)
+    {
+        await using var factory=new TechmapWebApplicationFactory();using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=JsonNode.Parse("""
+        {"schemaVersion":1,"connectors":[{"id":"A"},{"id":"B"}],"wires":[{"id":"W","from":{"connectorId":"A"},"to":{"connectorId":"B"}}],"physicalTopology":{
+          "snap":false,"nodes":[{"id":"A1","connectorId":"A","wireIds":[],"position":{"x":0,"y":0}},{"id":"A2","connectorId":"A","wireIds":["W"],"position":{"x":0,"y":80}},{"id":"B1","connectorId":"B","position":{"x":200,"y":80}}],
+          "segments":[{"id":"S","from":"A2","to":"B1","bends":[],"width":24,"color":"#112233","showWires":true}],"routes":[{"wireId":"W","automatic":true,"steps":[{"segmentId":"S","reverse":false}]}]}}
+        """)!;
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var t=content["physicalTopology"]!;var segment=t["segments"]![0]!;
+        if(mutation=="width")segment["width"]=0;
+        if(mutation=="color")segment["color"]="red";
+        if(mutation=="showWires")segment["showWires"]="false";
+        if(mutation=="exit")t["nodes"]![1]!["wireIds"]=new JsonArray();
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
+
+    [Theory]
     [InlineData("amount")]
     [InlineData("unit")]
     [InlineData("position")]

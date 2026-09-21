@@ -1,4 +1,4 @@
-import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
+import {type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -163,6 +163,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
+  readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
@@ -267,7 +268,7 @@ export function HarnessEditorWorkspace({
   onWireRoutePointRemove,
   drawingSnapEnabled = true,
   onDrawingSnapChange,
-  onCanvasDoubleClick, onPhysicalContextAction,
+  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect,
   propertyInspector,
   canvasEditor,
   diagnostics = [],
@@ -556,6 +557,7 @@ export function HarnessEditorWorkspace({
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}
           onPhysicalContextAction={onPhysicalContextAction}
+          onPhysicalNodesConnect={onPhysicalNodesConnect}
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />

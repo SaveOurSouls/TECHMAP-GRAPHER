@@ -25,14 +25,22 @@ internal static class HarnessPhysicalTopologyValidator
         foreach (var w in Array(root, "wires", 100000).EnumerateArray()) if (!wires.TryAdd(Text(w, "id"), w)) throw Invalid();
         var ids = new HashSet<string>(connectors.Concat(wires.Keys), StringComparer.Ordinal);
         var nodes = new Dictionary<string, string?>(StringComparer.Ordinal);
-        var anchored = new HashSet<string>(StringComparer.Ordinal);
+        var exitWires=new Dictionary<string,HashSet<string>>(StringComparer.Ordinal);
+
         foreach (var node in Array(t, "nodes", 10000).EnumerateArray())
         {
             var id = Text(node, "id");
             if (!ids.Add(id) || !node.TryGetProperty("position", out var p)) throw Invalid();
             Point(p);
             string? connector = node.TryGetProperty("connectorId", out _) ? Text(node, "connectorId") : null;
-            if (connector is not null && (!connectors.Contains(connector) || !anchored.Add(connector))) throw Invalid();
+            if (connector is not null && !connectors.Contains(connector)) throw Invalid();
+            if(node.TryGetProperty("wireIds",out _)){
+                var allowed=new HashSet<string>(StringComparer.Ordinal);exitWires[id]=allowed;
+                foreach(var item in Array(node,"wireIds",100000).EnumerateArray()){
+                    if(connector is null||item.ValueKind!=JsonValueKind.String||item.GetString() is not {} wireId||!allowed.Add(wireId)||!wires.TryGetValue(wireId,out var wire))throw Invalid();
+                    if(!new[]{"from","to"}.Any(end=>wire.TryGetProperty(end,out var e)&&e.TryGetProperty("connectorId",out var c)&&c.GetString()==connector))throw Invalid();
+                }
+            }
             nodes.Add(id, connector);
         }
         var segments = new Dictionary<string, (string From, string To)>(StringComparer.Ordinal);
@@ -80,6 +88,7 @@ internal static class HarnessPhysicalTopologyValidator
         var assigned = new HashSet<string>(StringComparer.Ordinal);
         foreach (var route in Array(t, "routes", 20000).EnumerateArray())
         {
+            if(route.TryGetProperty("automatic",out _))_=Boolean(route,"automatic");
             var wireId = Text(route, "wireId");
             if (!wires.TryGetValue(wireId, out var wire) || !assigned.Add(wireId)) throw Invalid();
             var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -95,6 +104,7 @@ internal static class HarnessPhysicalTopologyValidator
                 if (previous is not null && from != previous) throw Invalid();
                 first ??= from; previous = to;
             }
+            foreach(var node in new[]{first!,previous!})if(exitWires.TryGetValue(node,out var allowed)&&!allowed.Contains(wireId))throw Invalid();
             foreach (var (node, end) in new[] { (first!, "from"), (previous!, "to") })
                 if (nodes[node] is { } connector && (!wire.TryGetProperty(end, out var endpoint) || Text(endpoint, "connectorId") != connector)) throw Invalid();
         }

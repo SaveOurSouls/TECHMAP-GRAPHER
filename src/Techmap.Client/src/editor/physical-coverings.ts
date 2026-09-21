@@ -80,5 +80,5 @@ export function projectOntoPolyline(points:readonly Point[],point:Point){
 export function standardCovering(document:HarnessDesignDocument,segmentId:string,point:Point,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
  const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
  const at=projectOntoPolyline(physicalSegmentPoints(document,segment),point).fraction;
- return {id,name,width:(segment.width??16)+8,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+ return {id,name,width:Math.min(200,(segment.width??16)+8),color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
 }

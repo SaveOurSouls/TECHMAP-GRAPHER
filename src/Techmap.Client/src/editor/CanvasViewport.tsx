@@ -110,6 +110,7 @@ export interface CanvasViewportProps {
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
+  readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
@@ -1580,6 +1581,7 @@ export function hitTestEditorScene(
       : null;
     if (projection && point.x >= projection.bounds.minX - tolerance && point.x <= projection.bounds.maxX + tolerance &&
         point.y >= projection.bounds.minY - tolerance && point.y <= projection.bounds.maxY + tolerance) return object!.id;
+    if(view==="drawing"&&object?.kind==="wire"&&object.metadata?.physicalRoute==="true"&&paintOrder.some(o=>o.kind==="physical-segment"&&containsPoint(o,point,tolerance,view)))continue;
     if (object && !(projection && view === "drawing") && containsPoint(object, point, tolerance, view)) return object.id;
   }
   return null;
@@ -2536,7 +2538,7 @@ function redrawCanvas(
     }
     if(highlighted.has(object.id)&&object.kind!=="wire") {
       context.save();context.strokeStyle="#f2af28";context.globalAlpha=.7;context.lineWidth=6/Math.max(.5,camera.zoom);
-      if(object.kind==="physical-covering") {for(const path of object.paths??[]){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();}}
+      if(object.kind==="physical-covering"||object.kind==="physical-segment") {for(const path of object.paths??[object.points??[]]){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();}}
       else {
         const instance=componentViews.get(object.id);
         const projection=instance&&view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
@@ -2669,7 +2671,7 @@ export function CanvasViewport({
   onWireRoutePointMove,
   onWireRoutePointRemove,
   onObjectEditRequest,
-  onCanvasDoubleClick, onPhysicalContextAction,
+  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -2805,6 +2807,8 @@ export function CanvasViewport({
     return () => frame.removeEventListener("wheel", wheel, true);
   }, [camera, onCameraChange]);
 
+  const [physicalStart,setPhysicalStart]=useState<string|null>(null);
+  useEffect(()=>{setPhysicalStart(null);},[tool,view]);
   const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number}|null>(null);
   const localPoint = (clientX: number, clientY: number): EditorPoint => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -2838,6 +2842,11 @@ export function CanvasViewport({
 
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if(event.button===2)return;setPhysicalMenu(null);
+    if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const node=objects.find(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      if(node){if(physicalStart&&physicalStart!==node.id){onPhysicalNodesConnect(physicalStart,node.id);setPhysicalStart(null);}else setPhysicalStart(node.id);return;}
+    }
     const shouldPan = tool === "pan" || event.button === 1;
     if (shouldPan) {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -3385,7 +3394,7 @@ export function CanvasViewport({
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
         <span>{tool === "wire"
-          ? wireReconnect ? "Выберите новый контакт для конца провода"
+          ? physicalStart ? "Выберите узел или общий выход для завершения канала" : wireReconnect ? "Выберите новый контакт для конца провода"
             : wireStart ? "Выберите второй контакт"
               : "Выберите два контакта; конец выбранного провода можно переподключить"
           : tool === "pan" ? "Тяните поле мышью"
@@ -3396,7 +3405,7 @@ export function CanvasViewport({
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите первую точку провода"}</div></>}
-      {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{standardCoveringKinds.map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
+      {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{(["branch",...standardCoveringKinds] as const).map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
       {drawingWindows}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}

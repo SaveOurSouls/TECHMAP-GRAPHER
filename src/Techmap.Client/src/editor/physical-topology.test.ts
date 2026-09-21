@@ -1,7 +1,7 @@
 import { physicalFixture } from "./physical-topology-fixture";
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand } from "./commands";
-import { createEmptyHarnessDesign, parseHarnessDesignDocument } from "./model";
+import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
 import { constrainedPolyline, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
@@ -78,4 +78,31 @@ it("displays E4 conductors as separate channel lanes and hides them without chan
  expect(physicalWireDisplayPaths(h.present,"W1",start,end)).toHaveLength(2);
  expect(h.present.wires).toEqual(d.wires);expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).physicalTopology).toEqual(t);
  expect(undoEditorCommand(h).present).toEqual(d);
+});
+
+it("makes a T at an interior click without losing reverse routes, protection spans or channel style",async()=>{
+ const {branchPhysicalSegment}=await import("./physical-topology");
+ const d=physicalFixture(),segment={...d.physicalTopology!.segments[0]!,width:28,color:"#112233",showWires:false};
+ const doc={...d,physicalTopology:{...d.physicalTopology!,snap:false,segments:[segment,...d.physicalTopology!.segments.slice(1)],coverings:[{id:"cover",name:"Tape",width:32,color:"#222222",lengthMm:50,spans:[{segmentId:"S0",from:0,to:1}]}]}};
+ const points=physicalSegmentPoints(doc,segment),point={x:(points[0]!.x+points[1]!.x)/2,y:(points[0]!.y+points[1]!.y)/2};
+ const t=branchPhysicalSegment(doc,"S0",point,{junction:"T",continuation:"tail",tip:"tip",branch:"branch"});
+ expect(t.segments.filter(s=>s.from==="T"||s.to==="T")).toHaveLength(3);
+ expect(t.segments.find(s=>s.id==="tail")).toMatchObject({width:28,color:"#112233",showWires:false});
+ expect(t.coverings![0]!.spans.map(s=>s.segmentId)).toEqual(["S0","tail"]);
+ expect(t.routes[0]!.steps.map(s=>s.segmentId)).toEqual(["S0","tail","S1"]);
+ expect(parseHarnessDesignDocument({...doc,physicalTopology:t}).physicalTopology).toEqual(t);
+ expect(doc.wires).toBe(d.wires);
+});
+it("distributes wires to shortest channels, preserves pinned routes and supports separate exits for double crimp",async()=>{
+ const {routePhysicalWires}=await import("./physical-topology");const base=physicalFixture();const d={...base,wires:base.wires.map(w=>w.id==="W2"?{...w,from:base.wires[0]!.from,e4Route:createOrthogonalE4Route(wireEndpointE4Anchor(base,base.wires[0]!.from)!,wireEndpointE4Anchor(base,w.to)!)}:w)};
+ let t={...d.physicalTopology!,nodes:[...d.physicalTopology!.nodes,{id:"NA2",connectorId:"A",position:{x:160,y:70},wireIds:["W2"]}],segments:[...d.physicalTopology!.segments,{id:"direct",from:"NA2",to:"NC",bends:[]}],routes:[]};
+ t={...t,nodes:t.nodes.map(n=>n.id==="NA"?{...n,wireIds:["W1"]}:n)};
+ const routed=routePhysicalWires(d,t);
+ expect(routed.routes.find(r=>r.wireId==="W2")!.steps).toEqual([{segmentId:"direct",reverse:false}]);
+ expect(routed.routes.find(r=>r.wireId==="W1")!.steps.map(s=>s.segmentId)).toEqual(["S0","S1"]);
+ expect(parseHarnessDesignDocument({...d,physicalTopology:routed}).physicalTopology).toEqual(routed);
+ expect(routePhysicalWires(d,d.physicalTopology!).routes).toEqual(d.physicalTopology!.routes);
+ expect(d.wires[0]!.from.contactId).toEqual(d.wires[1]!.from.contactId);
+ const noExit={...t,nodes:t.nodes.map(n=>n.connectorId==="A"?{...n,wireIds:[]}:n)};
+ expect(routePhysicalWires(d,noExit).routes.some(r=>r.wireId==="W1"||r.wireId==="W2")).toBe(false);
 });

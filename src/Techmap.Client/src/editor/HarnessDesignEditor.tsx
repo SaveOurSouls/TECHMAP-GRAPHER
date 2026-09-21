@@ -12,7 +12,7 @@ import { drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
 import { coveringPaths, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
-import { physicalNodePoint, physicalNodeLocalPoint, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
+import { physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -1666,8 +1666,14 @@ export function HarnessDesignEditor({
           if (topology && node) { run({type:"set-physical-topology",topology:{...topology,nodes:topology.nodes.map(n=> n.id===node.id ? {...n,position:physicalNodeLocalPoint(history.present,node,{x:point.x+5,y:point.y+5})} : n)}}); }
           else run({type:"move-connector",connectorId:objectId,view,position:point});
         }}
+        onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to)run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id:crypto.randomUUID(),from,to,bends:[]}]})});}}
         onPhysicalContextAction={(segmentId,point,action)=>{
-          const t=history.present.physicalTopology;if(!t||action==="branch")return;
+          const t=history.present.physicalTopology;if(!t)return;
+          if(action==="branch"){
+            try{const ids={junction:crypto.randomUUID(),continuation:crypto.randomUUID(),tip:crypto.randomUUID(),branch:crypto.randomUUID()};
+            if(run({type:"set-physical-topology",topology:branchPhysicalSegment(history.present,segmentId,point,ids)})){setSelectedObjectId(ids.tip);setSelectedObjectIds([ids.tip]);}}
+            catch(error){setMessage(error instanceof Error?error.message:"Не удалось создать ответвление.");}return;
+          }
           const covering=standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
           if(run({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],covering]}})){setSelectedObjectId(covering.id);setSelectedObjectIds([covering.id]);}
         }}

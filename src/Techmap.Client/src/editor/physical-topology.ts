@@ -1,11 +1,11 @@
 import { drawingLocalPoint, drawingPointToLocal } from "./drawing-scale";
-import { validateCoverings, splitCoveringSpans, pathLength, type PhysicalCovering } from "./physical-coverings";
+import { validateCoverings, splitCoveringSpans, pathLength, projectOntoPolyline, type PhysicalCovering } from "./physical-coverings";
 import type { HarnessDesignDocument, Point } from "./model";
 
-export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string }
+export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string; readonly wireIds?: readonly string[] }
 export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[]; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly specificationItemId?:string }
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
-export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[] }
+export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[]; readonly automatic?:boolean }
 export interface PhysicalTopology {
   readonly coverings?: readonly PhysicalCovering[];
   readonly nodes: readonly PhysicalNode[];
@@ -77,10 +77,10 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
   const unique = (id: unknown) => { if (!text(id) || ids.has(id)) fail(); ids.add(id as string); };
   for (const n of t.nodes) {
     if (!n) return fail(); unique(n.id);
+    if(n.wireIds!==undefined&&(!n.connectorId||!Array.isArray(n.wireIds)||new Set(n.wireIds).size!==n.wireIds.length||n.wireIds.some((id:string)=>!document.wires.some(w=>w.id===id&&(w.from.connectorId===n.connectorId||w.to.connectorId===n.connectorId)))))return fail();
     if (!point(n.position) || n.connectorId !== undefined && !document.connectors.some(c => c.id === n.connectorId)) return fail();
   }
-  const anchored = t.nodes.filter(n => n.connectorId).map(n => n.connectorId);
-  if (new Set(anchored).size !== anchored.length) return fail();
+
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
     if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
@@ -89,6 +89,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
   const wireIds = new Set<string>();
   for (const r of t.routes) {
     if (!r || wireIds.has(r.wireId) || !document.wires.some(w => w.id === r.wireId) || !Array.isArray(r.steps) || !r.steps.length || r.steps.length > 20000) return fail();
+    if(r.automatic!==undefined&&typeof r.automatic!=="boolean")return fail();
     wireIds.add(r.wireId);
     let previous: string | undefined;
     const visited = new Set<string>();
@@ -105,6 +106,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     const from = t.nodes.find(n => n.id === (r.steps[0]!.reverse ? first.to : first.from))!;
     const to = t.nodes.find(n => n.id === (r.steps.at(-1)!.reverse ? last.from : last.to))!;
     const w = document.wires.find(w => w.id === r.wireId)!;
+    if(from.wireIds&&!from.wireIds.includes(r.wireId)||to.wireIds&&!to.wireIds.includes(r.wireId))return fail();
     if (from.connectorId && from.connectorId !== w.from.connectorId || to.connectorId && to.connectorId !== w.to.connectorId) return fail();
   }
   validateCoverings(t.coverings, new Set(t.segments.map(s => s.id)), ids);
@@ -119,7 +121,7 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   if (bendIndex < 1 || bendIndex >= points.length - 1) throw new Error("Выберите существующий перегиб участка.");
   return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: points[bendIndex]! }],
     segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, bends: points.slice(1, bendIndex) } : item),
-      { id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1) }],
+      { ...s, id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1) }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse
       ? [{ segmentId: nextId, reverse: true }, step] : [step, { segmentId: nextId, reverse: false }]) })) };
 }
@@ -127,7 +129,7 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
 export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessDesignDocument {
   const t = document.physicalTopology;
   if (!t) return document;
-  const nodes = t.nodes.filter(n => !n.connectorId || document.connectors.some(c => c.id === n.connectorId));
+  const nodes = t.nodes.filter(n => !n.connectorId || document.connectors.some(c => c.id === n.connectorId)).map(n=>n.wireIds?{...n,wireIds:n.wireIds.filter(id=>document.wires.some(w=>w.id===id&&(w.from.connectorId===n.connectorId||w.to.connectorId===n.connectorId)))}:n);
   const segments = t.segments.filter(s => nodes.some(n => n.id === s.from) && nodes.some(n => n.id === s.to));
   const routes = t.routes.filter(r => {
     const wire = document.wires.find(w => w.id === r.wireId);
@@ -152,11 +154,53 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
   const offset=(members.indexOf(wireId)-(members.length-1)/2)*Math.min(4,Math.max(1,((segment.width??16)-6)/Math.max(1,members.length)));
   const points=physicalSegmentPoints(document,segment);
   const lane=points.map((p,i)=>{const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!,l=Math.hypot(b.x-a.x,b.y-a.y)||1;return {x:p.x-(b.y-a.y)/l*offset,y:p.y+(b.x-a.x)/l*offset};});
-  if(step.reverse)lane.reverse();paths.push(lane);
+  lane.unshift(points[0]!);lane.push(points.at(-1)!);if(step.reverse)lane.reverse();paths.push(lane);
  }
  const first=route.steps[0]!,last=route.steps.at(-1)!;
  const a=physicalSegmentPoints(document,t.segments.find(s=>s.id===first.segmentId)!);
  const b=physicalSegmentPoints(document,t.segments.find(s=>s.id===last.segmentId)!);
  const from=first.reverse?a.at(-1)!:a[0]!,to=last.reverse?b[0]!:b.at(-1)!;
  return [[start,from],...paths,[to,end]];
+}
+
+/** Split the exact clicked span, preserve existing legs, then add a perpendicular branch handle. */
+export function branchPhysicalSegment(document:HarnessDesignDocument,segmentId:string,point:Point,ids:{junction:string;continuation:string;tip:string;branch:string}):PhysicalTopology {
+ const t=document.physicalTopology!,segment=t.segments.find(s=>s.id===segmentId);if(!segment)throw new Error("Участок не найден.");
+ const points=physicalSegmentPoints(document,segment),hit=projectOntoPolyline(points,point);
+ if(hit.fraction<1e-6||hit.fraction>1-1e-6)throw new Error("Для Т-ответвления выберите внутреннюю точку канала.");
+ let index=hit.index;
+ if(Math.hypot(points[index]!.x-hit.point.x,points[index]!.y-hit.point.y)>1e-7)points.splice(index,0,hit.point);
+ const prepared={...document,physicalTopology:{...t,segments:t.segments.map(s=>s.id===segmentId?{...s,bends:points.slice(1,-1)}:s)}};
+ // The prepared polyline already respects the current snap; splitting does not straighten it.
+ const split=splitPhysicalSegment(prepared,segmentId,index,ids.junction,ids.continuation);
+ const a=points[index-1]!,b=points[index+1]!,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
+ const reachable=new Set<string>([segment.from,segment.to]);let changed=true;
+ while(changed){changed=false;for(const s of t.segments)if(reachable.has(s.from)||reachable.has(s.to)){if(!reachable.has(s.from)||!reachable.has(s.to))changed=true;reachable.add(s.from);reachable.add(s.to);}}
+ const connected=new Set(t.nodes.filter(n=>reachable.has(n.id)&&n.connectorId).map(n=>n.connectorId!));
+ const targets=new Set(document.wires.flatMap(w=>connected.has(w.from.connectorId)&&!connected.has(w.to.connectorId)?[w.to.connectorId]:connected.has(w.to.connectorId)&&!connected.has(w.from.connectorId)?[w.from.connectorId]:[]));
+ const target=document.connectors.filter(c=>targets.has(c.id)).sort((x,y)=>Math.hypot(x.positions.drawing.x-hit.point.x,x.positions.drawing.y-hit.point.y)-Math.hypot(y.positions.drawing.x-hit.point.x,y.positions.drawing.y-hit.point.y))[0];
+ const sign=target&&(-dy*(target.positions.drawing.x-hit.point.x)+dx*(target.positions.drawing.y-hit.point.y))<0?-1:1;
+ const tip={x:hit.point.x-sign*dy/length*80,y:hit.point.y+sign*dx/length*80};
+ return {...split,nodes:[...split.nodes,{id:ids.tip,position:tip}],segments:[...split.segments,{id:ids.branch,from:ids.junction,to:ids.tip,bends:[],width:segment.width,color:segment.color,showWires:segment.showWires}]};
+}
+
+/** Explicit automatic assignment uses geometric lengths only to choose a path, never as manufacturing millimetres. */
+export function routePhysicalWires(document:HarnessDesignDocument,topology:PhysicalTopology):PhysicalTopology {
+ const accepts=(r:PhysicalRoute)=>{const first=r.steps[0],last=r.steps.at(-1);if(!first||!last)return false;const a=topology.segments.find(s=>s.id===first.segmentId),b=topology.segments.find(s=>s.id===last.segmentId);if(!a||!b)return false;return [first.reverse?a.to:a.from,last.reverse?b.from:b.to].every(id=>{const n=topology.nodes.find(n=>n.id===id);return n&&(!n.wireIds||n.wireIds.includes(r.wireId));});};
+ const routes=topology.routes.filter(r=>!r.automatic&&accepts(r)),pinned=new Set(routes.map(r=>r.wireId));
+ const graph=new Map<string,{node:string;step:PhysicalStep;cost:number}[]>();
+ for(const s of topology.segments){const cost=Math.max(.001,pathLength(physicalSegmentPoints({...document,physicalTopology:topology},s)));
+  for(const [from,to,reverse] of [[s.from,s.to,false],[s.to,s.from,true]] as const){if(!graph.has(from))graph.set(from,[]);graph.get(from)!.push({node:to,step:{segmentId:s.id,reverse},cost});}}
+ for(const wire of document.wires){if(pinned.has(wire.id)||!wire.from.connectorId||!wire.to.connectorId)continue;
+  const eligible=(connectorId:string)=>topology.nodes.filter(n=>n.connectorId===connectorId&&(!n.wireIds||n.wireIds.includes(wire.id))).map(n=>n.id);
+  const sources=eligible(wire.from.connectorId),targets=new Set(eligible(wire.to.connectorId));
+  const distance=new Map(sources.map(id=>[id,0])),previous=new Map<string,{node:string;step:PhysicalStep}>(),queue=new Set(sources);let found:string|undefined;
+  while(queue.size){const id=[...queue].sort((a,b)=>distance.get(a)!-distance.get(b)!||a.localeCompare(b))[0]!;queue.delete(id);
+   if(targets.has(id)){found=id;break;}
+   const n=topology.nodes.find(n=>n.id===id)!;if(n.connectorId&&!sources.includes(id))continue;
+   for(const edge of graph.get(id)??[]){const cost=distance.get(id)!+edge.cost;if(cost<(distance.get(edge.node)??Infinity)-1e-8){distance.set(edge.node,cost);previous.set(edge.node,{node:id,step:edge.step});queue.add(edge.node);}}
+  }
+  if(found){const steps:PhysicalStep[]=[];let current=found;while(previous.has(current)){const p=previous.get(current)!;steps.unshift(p.step);current=p.node;}if(steps.length)routes.push({wireId:wire.id,steps,automatic:true});}
+ }
+ return {...topology,routes};
 }
