@@ -221,3 +221,17 @@ describe("materialized contact representations", () => {
     )).toBeNull();
   });
 });
+
+it("rotates drawing endpoints and scene contact markers by the same angle, leaving E4 unchanged",()=>{
+ const original=connector(),id=original.contacts[0]!.id;
+ const before=materializedContactWorldRepresentation(original,id,"drawing")!;
+ const rotated={...original,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},scale:2,rotationDegrees:90}]};
+ const after=materializedContactWorldRepresentation(rotated,id,"drawing")!;
+ expect(after.position.x).toBeCloseTo(original.positions.drawing.x-2*(before.position.y-original.positions.drawing.y));
+ expect(after.position.y).toBeCloseTo(original.positions.drawing.y+2*(before.position.x-original.positions.drawing.x));
+ expect(materializedContactWorldRepresentation(rotated,id,"e4")).toEqual(materializedContactWorldRepresentation(original,id,"e4"));
+ const scene=designToScene({...createEmptyHarnessDesign(),connectors:[rotated]},"drawing");
+ const marker=JSON.parse(scene[0]!.metadata!.materializedContactPoints!)[0];
+ expect(marker.x+rotated.positions.drawing.x).toBeCloseTo(after.position.x);
+ expect(marker.y+rotated.positions.drawing.y).toBeCloseTo(after.position.y);
+});

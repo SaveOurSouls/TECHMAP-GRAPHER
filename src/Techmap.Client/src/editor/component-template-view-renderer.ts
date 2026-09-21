@@ -1,6 +1,6 @@
 import { materializeE4ConnectorArticle } from "../component-library/e4-connector-series-table";
 import { contactShapeLabel, contactLabelColor } from "../component-library/contact-shape";
-import { drawingScale } from "./drawing-scale";
+import { drawingScale, drawingRotation } from "./drawing-scale";
 import { materializeGenerator } from "../component-library/drawing-generator";
 import { projectTemplateContentV5TableToV1 } from "../component-library/template-model-v5";
 import type { ConnectorDrawingPlacement } from "./model";
@@ -354,7 +354,8 @@ export function projectComponentTemplateView(
     const assetIds = new Set(instance.content.assets.map(asset => asset.assetId));
     const commands: ProjectedComponentTemplateCommand[] = [];
     const scale=drawingTarget==="drawing" ? drawingScale(instance.drawingPlacements) : 1;
-    const worldOrigin = {...translation(origin.x, origin.y),a:scale,d:scale};
+    const angle=drawingTarget==="drawing"?drawingRotation(instance.drawingPlacements)*Math.PI/180:0;
+    const worldOrigin = {...translation(origin.x, origin.y),a:scale*Math.cos(angle),b:scale*Math.sin(angle),c:-scale*Math.sin(angle),d:scale*Math.cos(angle)};
 
     for (const layer of view.layers) {
       if (!layer.visible) continue;

@@ -1,8 +1,9 @@
+import type {EditorTool} from "./editor-types";
 import { useEffect, useRef, useState } from "react";
 import { InfoHint } from "../InfoHint";
 import type { HarnessDesignDocument } from "./model";
 import type { DrawingDocuments } from "./drawing-documents";
-export function DrawingDimensionsPanel({document,selectedId,onChange}:{document:HarnessDesignDocument;selectedId:string|null;onChange:(documents:DrawingDocuments)=>boolean}) {
+export function DrawingDimensionsPanel({document,selectedId,onChange,activeTool,onToolChange}:{activeTool?:EditorTool;onToolChange?:(tool:EditorTool)=>void;document:HarnessDesignDocument;selectedId:string|null;onChange:(documents:DrawingDocuments)=>boolean}) {
   const d=document.drawingDocuments,selected=d?.dimensions?.find(d=>d.id===selectedId);
   const dirty=useRef(false);
   const [value,setValue]=useState(""),[invalid,setInvalid]=useState(false);
@@ -10,6 +11,7 @@ export function DrawingDimensionsPanel({document,selectedId,onChange}:{document:
   const edit=(patch:Partial<NonNullable<typeof selected>>)=>!!d&&!!selected&&onChange({...d,dimensions:d.dimensions?.map(item=>item.id===selected.id?{...item,...patch}:item)});
   const commit=()=>{if(!dirty.current)return;const number=value.trim()===""?null:Number(value.replace(",","."));if(number!==null&&!Number.isFinite(number)){setInvalid(true);return;}const accepted=edit({lengthMm:number});setInvalid(!accepted);if(accepted)dirty.current=false;};
   return <section className="he-relations" aria-label="Размеры чертежа"><header className="ui-section-heading"><strong>Размеры</strong><InfoHint>Выберите горизонтальный, вертикальный или свободный размер, затем две точки одного провода: конец или перегиб. Размер задаёт физическую длину выбранного участка; ориентация меняет вынос линии. Общий размер между концами задаёт всю длину. Без общего размера суммируются только полностью покрывающие провод непересекающиеся участки. Пропуски оставляют длину неизвестной. Изменение числа перегибов снимает прежние привязки; доступна отмена Ctrl+Z. Миллиметры не вычисляются из пикселей.</InfoHint></header>
+    <div role="group" aria-label="Создать размер" style={{display:"flex",gap:6}}>{([ ["dimension-horizontal","Горизонтальный размер","↔"],["dimension-vertical","Вертикальный размер","↕"],["dimension","Свободный размер","⤢"] ] as const).map(([tool,label,glyph])=><button type="button" className="ui-control" key={tool} aria-label={label} title={label} aria-pressed={activeTool===tool} onClick={()=>onToolChange?.(tool)} style={{minWidth:36,minHeight:32}}>{glyph}</button>)}</div>
     {selected?<><label>Длина, мм<input autoFocus aria-label="Размер, мм" inputMode="decimal" value={value} aria-invalid={invalid} onChange={e=>{dirty.current=true;setValue(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/></label>{invalid&&<small role="alert">Проверьте длину и перекрытие участков.</small>}
       <label>Вынос<input type="number" aria-label="Вынос размера" value={selected.offset} onChange={e=>edit({offset:Number(e.target.value)})}/></label>
       <button type="button" className="ui-control" onClick={()=>d&&onChange({...d,dimensions:d.dimensions?.filter(item=>item.id!==selected.id)})}>Удалить размер</button>

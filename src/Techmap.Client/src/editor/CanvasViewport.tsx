@@ -1577,7 +1577,7 @@ export function hitTestEditorScene(
       : null;
     if (projection && point.x >= projection.bounds.minX - tolerance && point.x <= projection.bounds.maxX + tolerance &&
         point.y >= projection.bounds.minY - tolerance && point.y <= projection.bounds.maxY + tolerance) return object!.id;
-    if (object && containsPoint(object, point, tolerance, view)) return object.id;
+    if (object && !(projection && view === "drawing") && containsPoint(object, point, tolerance, view)) return object.id;
   }
   return null;
 }
@@ -2518,7 +2518,13 @@ function redrawCanvas(
     if(highlighted.has(object.id)&&object.kind!=="wire") {
       context.save();context.strokeStyle="#f2af28";context.globalAlpha=.7;context.lineWidth=6/Math.max(.5,camera.zoom);
       if(object.kind==="physical-covering") {for(const path of object.paths??[]){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();}}
-      else context.strokeRect(object.x-4,object.y-4,object.width+8,object.height+8);
+      else {
+        const instance=componentViews.get(object.id);
+        const projection=instance&&view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
+        const bounds=projection?.bounds;
+        if(bounds)context.strokeRect(bounds.minX-4,bounds.minY-4,bounds.maxX-bounds.minX+8,bounds.maxY-bounds.minY+8);
+        else context.strokeRect(object.x-4,object.y-4,object.width+8,object.height+8);
+      }
       context.restore();
     }
     drawEditorSceneObject(

@@ -92,7 +92,10 @@ try {
   const graph=await placements.list(project.projectId,harnessId);
   for(const snapshot of graph.snapshots){assert.equal(snapshot.sourceTemplateId,initial.templateId);assert.equal(snapshot.sourceVersion,initial.version);assert.equal(snapshot.sourceVersionSha256,initial.versionSha256);}
   const current=await designs.get(project.projectId,harnessId),connector=current.content.connectors[0];
-  const moved=applyEditorCommand(current.content,{type:'set-drawing-placement',connectorId:connector.id,drawingId:generators[1].id,offset:{x:150,y:50},scale:1.5});
+  let moved=applyEditorCommand(current.content,{type:'set-drawing-placement',connectorId:connector.id,drawingId:generators[1].id,offset:{x:150,y:50},scale:1.5});
+  moved=applyEditorCommand(moved,{type:'set-drawing-placement',connectorId:connector.id,drawingId:'view:drawing',rotationDegrees:22.5,rotationCenter:{x:300,y:400}});
+  assert.deepEqual(moved.connectors[0].contacts,connector.contacts);
+  assert.deepEqual(moved.connectors[0].positions.e4,connector.positions.e4);
   await designs.save(project.projectId,harnessId,current.revision,moved);
   // Publishing source changes does not mutate pinned instances or local additions.
   const changed=structuredClone(content);changed.drawingGenerators.forEach(g=>{g.pitch=60;g.numbering='snake';});
@@ -105,7 +108,7 @@ try {
   assert.deepEqual(after.content,moved);
   const templateAfter=await createComponentTemplateApi(env.config,env.session,env.fetcher).get(initial.templateId);
   assert.deepEqual(templateAfter.content.drawingGenerators,changed.drawingGenerators);
-  const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,templateId:initial.templateId,version:published.version,targets:['e4','drawing','route'],counts:[2,10],pinnedBindingChecked:true,additionsChecked:true,restartChecked:true};
+  const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,templateId:initial.templateId,version:published.version,targets:['e4','drawing','route'],counts:[2,10],pinnedBindingChecked:true,additionsChecked:true,restartChecked:true,rotationChecked:true};
   await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
   if(process.argv.includes('--keep-server')){console.log(`GENERATOR_SMOKE_URL=${baseUrl}`);server.unref();server.stdout.unref();server.stderr.unref();server=null;}
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

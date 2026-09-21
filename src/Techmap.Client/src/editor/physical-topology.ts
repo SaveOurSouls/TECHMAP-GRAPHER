@@ -1,3 +1,4 @@
+import { drawingLocalPoint, drawingPointToLocal } from "./drawing-scale";
 import { validateCoverings, splitCoveringSpans, pathLength, type PhysicalCovering } from "./physical-coverings";
 import type { HarnessDesignDocument, Point } from "./model";
 
@@ -15,8 +16,15 @@ export interface PhysicalTopology {
 export const emptyPhysicalTopology = (): PhysicalTopology => ({ nodes: [], segments: [], routes: [], snap: true });
 
 export function physicalNodePoint(document: HarnessDesignDocument, node: PhysicalNode): Point {
-  const origin = document.connectors.find(c => c.id === node.connectorId)?.positions.drawing;
-  return origin ? { x: origin.x + node.position.x, y: origin.y + node.position.y } : node.position;
+  const connector = document.connectors.find(c => c.id === node.connectorId);
+  if(!connector)return node.position;
+  const point=drawingLocalPoint(node.position,connector.drawingPlacements),origin=connector.positions.drawing;
+  return {x:origin.x+point.x,y:origin.y+point.y};
+}
+
+export function physicalNodeLocalPoint(document:HarnessDesignDocument,node:PhysicalNode,world:Point):Point {
+ const connector=document.connectors.find(c=>c.id===node.connectorId);
+ return connector?drawingPointToLocal({x:world.x-connector.positions.drawing.x,y:world.y-connector.positions.drawing.y},connector.drawingPlacements):world;
 }
 
 /** Preserve both anchors. A short horizontal/vertical completion makes every leg a multiple of 15°. */

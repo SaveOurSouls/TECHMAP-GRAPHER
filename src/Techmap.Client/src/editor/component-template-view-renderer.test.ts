@@ -456,3 +456,15 @@ describe("independent E4 companion drawings",()=>{
     const [a,b]=shortestDrawingLink(table,{minX:20,minY:10,maxX:40,maxY:20});expect(a).toEqual(b);
   });
 });
+
+it("rotates drawing bounds, hit testing and geometry together",()=>{
+ const {content,instance}=fixture(),view=content.views[1]!;view.layers[0]!.nodes.push(rectangle(view.layers[0]!.id));
+ const rotated={...instance,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},rotationDegrees:90}]};
+ const projection=projectComponentTemplateView(rotated,"drawing",{x:100,y:200})!;
+ expect(projection.bounds.minX).toBeCloseTo(87);expect(projection.bounds.maxX).toBeCloseTo(97);
+ expect(projection.bounds.minY).toBeCloseTo(202);expect(projection.bounds.maxY).toBeCloseTo(216);
+ const object:EditorSceneObject={id:instance.objectId,kind:"connector",x:100,y:200,width:118,height:80,layerId:"connectors",label:"X1",color:"#000"};
+ const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
+ expect(hitTestEditorScene([object],layers,{x:92,y:209},1,"drawing",[rotated])).toBe(instance.objectId);
+ expect(hitTestEditorScene([object],layers,{x:200,y:270},1,"drawing",[rotated])).toBeNull();
+});

@@ -96,7 +96,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly selectedObjectId?: string | null;
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
-  readonly relationPanel?: ReactNode;
+  readonly relationPanel?: ReactNode | ((tool:EditorTool,onToolChange:(tool:EditorTool)=>void)=>ReactNode);
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
@@ -566,7 +566,7 @@ export function HarnessEditorWorkspace({
             <button type="button" role="tab" aria-selected={inspectorTab === "layers"} className={inspectorTab === "layers" ? "active" : ""} onClick={() => setInspectorTab("layers")}>Слои <span>{layers.length}</span></button>
           </div>
           <div className="he-inspector-content">
-            {relationPanel}
+            {typeof relationPanel==="function"?relationPanel(tool,setTool):relationPanel}
             {inspectorTab === "properties" ? (
               propertyInspector ?? (
                 <ObjectInspector

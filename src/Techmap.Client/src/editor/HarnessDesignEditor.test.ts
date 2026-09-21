@@ -488,7 +488,7 @@ describe("harness design scene adapter", () => {
       cutLengthMm: "",
       materialStatus: "excluded",
     });
-    expect(scene.find((item) => item.id === `dimension:${wire.id}`)?.label).toBe("Длина не задана");
+    expect(scene.filter(item=>item.kind==="dimension")).toEqual([]);
   });
 
   it("translates known, unknown and corrected inspector values without losing null semantics", () => {

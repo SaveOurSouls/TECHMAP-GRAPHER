@@ -234,6 +234,7 @@ export interface ConnectorContact {
 }
 
 export interface ConnectorDrawingPlacement {
+  readonly rotationDegrees?:number;
   readonly scale?:number;
   readonly drawingId: string;
   readonly visible: boolean;
@@ -1180,8 +1181,9 @@ export function parseDrawingPlacements(value:unknown):ConnectorDrawingPlacement[
   const result=value.map(item=>{
     const record=requireRecord(item,"Некорректный рисунок.");
     if(typeof record.visible!=="boolean") throw new Error("Некорректная видимость рисунка.");
+    if(record.rotationDegrees!==undefined && (typeof record.rotationDegrees!=="number" || !Number.isFinite(record.rotationDegrees)||Math.abs(record.rotationDegrees)>360))throw new Error("Некорректный угол рисунка.");
     if(record.scale!==undefined && (typeof record.scale!=="number" || !validDrawingScale(record.scale))) throw new Error("Масштаб рисунка: 5–2000%.");
-    return {drawingId:requireText(record.drawingId,"ID рисунка"),visible:record.visible,offset:parsePoint(record.offset),...(record.scale===undefined?{}:{scale:record.scale as number})};
+    return {drawingId:requireText(record.drawingId,"ID рисунка"),visible:record.visible,offset:parsePoint(record.offset),...(record.scale===undefined?{}:{scale:record.scale as number}),...(record.rotationDegrees===undefined?{}:{rotationDegrees:record.rotationDegrees as number})};
   });
   if(new Set(result.map(p=>p.drawingId)).size!==result.length) throw new Error("Повторный ID рисунка.");
   return result;

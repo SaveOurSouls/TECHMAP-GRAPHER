@@ -1666,3 +1666,31 @@ describe("E4 drawing placement history",()=>{
     expect(()=>parseHarnessDesignDocument({...document,connectors:[{...connector,drawingPlacements:[{drawingId:"a",visible:true,offset:{x:NaN,y:0}}]}]})).toThrow();
   });
 });
+
+it("C1 reroutes an automatic neighbour to admit the second pin without moving tables",()=>{
+ const left=createConnector("l","XS1",2,{x:25,y:20});
+ const rightBase=createConnector("r","XS2",4,{x:700,y:44});
+ const right={...rightBase,schematic:{...rightBase.schematic,orientation:"contacts-left" as const}};
+ let doc: ReturnType<typeof createEmptyHarnessDesign>={...createEmptyHarnessDesign(),connectors:[left,right]};
+ const first=createWire("w1",{connectorId:left.id,contactId:left.contacts[0]!.id},{connectorId:right.id,contactId:right.contacts[0]!.id},null);
+ doc=applyEditorCommand(doc,{type:"add-wire",wire:first});
+ const before=doc.wires[0]!.e4Route;
+ const second=createWire("w2",{connectorId:left.id,contactId:left.contacts[1]!.id},{connectorId:right.id,contactId:right.contacts[1]!.id},null);
+ doc=applyEditorCommand(doc,{type:"add-wire",wire:second});
+ expect(doc.wires).toHaveLength(2);expect(e4RoutingIssues(doc)).toEqual([]);
+ expect(doc.connectors).toEqual([left,right]);expect(doc.wires[0]!.e4Route).not.toEqual(before);
+});
+
+it.each([15,90,22.5,-180])("preserves the drawing centre, IDs and other views at %s degrees and supports undo",angle=>{
+ const connector=templateConnector(),doc={...createEmptyHarnessDesign(),connectors:[connector]};
+ const origin=connector.positions.drawing,center={x:origin.x+30,y:origin.y+20};
+ const history=createEditorHistory(doc);
+ const rotated=executeEditorCommand(history,{type:"set-drawing-placement",connectorId:connector.id,drawingId:"view:drawing",rotationDegrees:angle,rotationCenter:center});
+ const result=rotated.present.connectors[0]!,a=angle*Math.PI/180;
+ expect(result.positions.drawing.x+30*Math.cos(a)-20*Math.sin(a)).toBeCloseTo(center.x);
+ expect(result.positions.drawing.y+30*Math.sin(a)+20*Math.cos(a)).toBeCloseTo(center.y);
+ expect(result.positions.e4).toEqual(connector.positions.e4);
+ expect(result.contacts).toEqual(connector.contacts);expect(result.libraryBinding).toEqual(connector.libraryBinding);
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(rotated.present)))).toEqual(rotated.present);
+ expect(undoEditorCommand(rotated).present).toEqual(doc);
+});

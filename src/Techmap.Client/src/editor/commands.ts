@@ -51,7 +51,7 @@ export type EditorCommand =
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
-  | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly visible?:boolean; readonly offset?:Point }
+  | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
   | { readonly type: "refresh-template-terminals"; readonly connectorId: string; readonly catalog: NonNullable<ConnectorInstance["terminalCatalog"]> }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
@@ -208,9 +208,18 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       return updateConnector(document,command.connectorId,connector=>{
         if(connector.libraryBinding?.mode!=="template") throw new Error("Рисунок доступен библиотечному компоненту.");
         if(!command.drawingId.trim() || command.offset && (!Number.isFinite(command.offset.x) || !Number.isFinite(command.offset.y))) throw new Error("Некорректное положение рисунка.");
+        if(command.rotationDegrees!==undefined && (!Number.isFinite(command.rotationDegrees)||Math.abs(command.rotationDegrees)>360))throw new Error("Угол рисунка: от −360 до 360°.");
         if(command.scale!==undefined&&!validDrawingScale(command.scale)) throw new Error("Масштаб рисунка: 5–2000%.");
         const previous=connector.drawingPlacements?.find(p=>p.drawingId===command.drawingId) ?? {drawingId:command.drawingId,visible:true,offset:{x:0,y:0}};
-        return {...connector,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {}),...(command.scale===undefined?{}:{scale:command.scale})}]};
+        let positions=connector.positions;
+        if(command.rotationDegrees!==undefined && command.rotationCenter) {
+          const center=command.rotationCenter;
+          if(!Number.isFinite(center.x)||!Number.isFinite(center.y))throw new Error("Некорректный центр поворота.");
+          const angle=(command.rotationDegrees-(previous.rotationDegrees??0))*Math.PI/180;
+          const x=connector.positions.drawing.x-center.x,y=connector.positions.drawing.y-center.y;
+          positions={...positions,drawing:{x:center.x+x*Math.cos(angle)-y*Math.sin(angle),y:center.y+x*Math.sin(angle)+y*Math.cos(angle)}};
+        }
+        return {...connector,positions,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {}),...(command.scale===undefined?{}:{scale:command.scale}),...(command.rotationDegrees===undefined?{}:{rotationDegrees:command.rotationDegrees})}]};
       });
     case "move-connector":
       {
@@ -567,7 +576,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         if (!junctionEndpoint) throw new Error("Новая ветвь должна завершаться в узле целевого провода.");
         added = addTargetWireToJunction(added, junctionEndpoint.junctionId, command.targetWireId);
       }
-      const addedAndRouted = rerouteWireE4(added, command.wire.id);
+      let addedAndRouted: HarnessDesignDocument;
+      try { addedAndRouted = rerouteWireE4(added, command.wire.id); }
+      catch { addedAndRouted = rerouteE4WireBatch(added, added.wires.filter(w=>w.id===command.wire.id || w.e4RouteMode!=="manual").map(w=>w.id)); }
       validateWireGroups(addedAndRouted);
       const normalized = normalizeJunctionCircuits(addedAndRouted);
       return command.wire.colorSource

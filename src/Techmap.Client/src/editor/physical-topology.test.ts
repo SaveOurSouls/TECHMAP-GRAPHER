@@ -56,3 +56,14 @@ describe("physical topology", () => {
     expect(() => parseHarnessDesignDocument(d)).not.toThrow();
   });
 });
+
+it("keeps connector exits and drag coordinates consistent with a rotated scaled drawing",async()=>{
+ const {physicalNodeLocalPoint,physicalNodePoint}=await import("./physical-topology");
+ const {createConnector}=await import("./commands");
+ const {createEmptyHarnessDesign}=await import("./model");
+ const c={...createConnector("c","X1",1,{x:0,y:0}),drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:2,rotationDegrees:90}]};
+ const doc={...createEmptyHarnessDesign(),connectors:[c]},node={id:"exit",connectorId:c.id,position:{x:30,y:20}};
+ const point=physicalNodePoint(doc,node);
+ expect(point.x).toBeCloseTo(c.positions.drawing.x-40);expect(point.y).toBeCloseTo(c.positions.drawing.y+60);
+ const local=physicalNodeLocalPoint(doc,node,point);expect(local.x).toBeCloseTo(30);expect(local.y).toBeCloseTo(20);
+});

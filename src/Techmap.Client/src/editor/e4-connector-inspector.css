@@ -183,3 +183,8 @@
 .drawing-scale-control input[type="number"] { width:70px; min-width:0; height:28px; padding:3px 5px; }
 
 .he-drawing-resize { position:absolute; z-index:4; width:12px; height:12px; min-height:0; padding:0; border:2px solid #1685d1; border-radius:50%; background:white; cursor:nesw-resize; touch-action:none; }
+
+.drawing-rotation-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:6px; }
+.drawing-rotation-control label { display:flex; align-items:center; gap:4px; margin:0; }
+.drawing-rotation-control input[type="text"] { width:64px; min-width:0; height:28px; padding:3px 5px; }
+.drawing-rotation-control input[type="checkbox"] { width:auto; }
