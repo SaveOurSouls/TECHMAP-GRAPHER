@@ -444,15 +444,16 @@ public sealed class SqliteStorageBackupService : IStorageBackupService, IDisposa
 
     private static void ValidateProjectComponentSnapshots(SqliteConnection connection)
     {
+        // Snapshots belong to the project and are immutable until the project is deleted.
+        // Deleting a harness or the last copied placement may leave a valid retained
+        // snapshot. Only placements in a different project violate ownership.
         using (var closure = connection.CreateCommand())
         {
             closure.CommandText =
                 """
                 SELECT COUNT(*)
                 FROM project_component_snapshots s
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM harness_component_placements p WHERE p.snapshot_id = s.snapshot_id)
-                   OR EXISTS (
+                WHERE EXISTS (
                     SELECT 1 FROM harness_component_placements p
                     JOIN harnesses h ON h.harness_id = p.harness_id
                     WHERE p.snapshot_id = s.snapshot_id AND h.project_id <> s.project_id);

@@ -112,6 +112,100 @@ public sealed class ProjectComponentPlacementPortabilityTests
         Assert.Empty(copiedDesign.RootElement.GetProperty("cables").EnumerateArray());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Retained_snapshot_without_placements_survives_startup_backup_and_restore(bool deleteHarness)
+    {
+        using var fixture = Fixture.Create();
+        ProjectIdentity projectId;
+        ProjectComponentSnapshot snapshot;
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.SourceDataRoot))
+        {
+            var source = CreateSourceGraph(storage);
+            var catalog = new SqliteProjectCatalog(storage);
+            // Copies have no placement-command journal; removing their last component
+            // removes the placement rows while keeping the immutable project snapshot.
+            var project = deleteHarness ? catalog.GetProject(source.ProjectId) : catalog.CopyProject(source.ProjectId);
+            projectId = project.ProjectId;
+            var harness = Assert.Single(project.Harnesses);
+            snapshot = Assert.Single(new SqliteProjectComponentSnapshotStore(storage, TimeProvider.System).ListSnapshots(projectId));
+            if (deleteHarness)
+                catalog.DeleteHarness(projectId, harness.HarnessId);
+            else
+            {
+                var designs = new SqliteHarnessDesignDocumentStore(storage, TimeProvider.System);
+                var design = designs.Get(projectId, harness.HarnessId);
+                var content = JsonNode.Parse(design.ContentJson)!.AsObject();
+                content["connectors"] = new JsonArray();
+                content["wires"] = new JsonArray();
+                content["cables"] = new JsonArray();
+                designs.Put(projectId, harness.HarnessId, design.Revision,
+                    SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString());
+            }
+            var placements = storage.ExecuteRead(unit =>
+            {
+                using var command = unit.CreateCommand("SELECT COUNT(*) FROM harness_component_placements WHERE snapshot_id = $id;");
+                command.Parameters.AddWithValue("$id", snapshot.SnapshotId.ToString("D"));
+                return Convert.ToInt32(command.ExecuteScalar());
+            });
+            Assert.Equal(0, placements);
+            databasePath = storage.Layout.DatabasePath;
+        }
+
+        var before = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(databasePath));
+        await using (var lease = DataRootLease.Acquire(fixture.SourceDataRoot))
+        {
+            var migration = new SqliteStorageMigrationService(lease);
+            var result = await migration.MigrateIfRequiredAsync(new StorageMigrationRequest(
+                Path.Combine(fixture.Root, "backups"), "0.45.1-m4-65", SqliteStorage.CurrentSchemaVersion),
+                TestContext.Current.CancellationToken);
+            Assert.False(result.Migrated);
+            migration.CompleteSuccessfulStartup(result);
+        }
+        Assert.Equal(before, System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(databasePath)));
+        using var backups = new SqliteStorageBackupService(fixture.SourceDataRoot, databasePath);
+        var backup = await backups.CreateAsync(new StorageBackupRequest(
+            Path.Combine(fixture.Root, "backups"), "0.45.1-m4-65"), TestContext.Current.CancellationToken);
+        using var restore = new SqliteStorageRestoreService(fixture.SourceDataRoot, backups);
+        await restore.DryRunAsync(new StorageDryRunRestoreRequest(backup.BackupPath, fixture.DestinationDataRoot),
+            TestContext.Current.CancellationToken);
+        using var restored = SqliteStorage.Open(fixture.DestinationDataRoot);
+        var restoredSnapshot = Assert.Single(new SqliteProjectComponentSnapshotStore(restored, TimeProvider.System).ListSnapshots(projectId));
+        Assert.Equal(JsonSerializer.Serialize(snapshot), JsonSerializer.Serialize(restoredSnapshot));
+        Assert.Equal(before, System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(databasePath)));
+    }
+
+    [Fact]
+    public async Task Startup_and_backup_still_reject_cross_project_component_ownership()
+    {
+        using var fixture = Fixture.Create();
+        string databasePath;
+        using (var storage = SqliteStorage.Open(fixture.SourceDataRoot))
+        {
+            var source = CreateSourceGraph(storage);
+            var copy = new SqliteProjectCatalog(storage).CopyProject(source.ProjectId);
+            storage.ExecuteInTransaction(unit =>
+            {
+                using var command = unit.CreateCommand("UPDATE harness_component_placements SET harness_id = $harness WHERE placement_id = $placement;");
+                command.Parameters.AddWithValue("$harness", Assert.Single(copy.Harnesses).HarnessId.Value.ToString("D"));
+                command.Parameters.AddWithValue("$placement", source.PlacementIds[0].ToString("D"));
+                command.ExecuteNonQuery();
+            });
+            databasePath = storage.Layout.DatabasePath;
+        }
+        await using var lease = DataRootLease.Acquire(fixture.SourceDataRoot);
+        var error = await Assert.ThrowsAsync<StorageMigrationException>(() =>
+            new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(new StorageMigrationRequest(
+                Path.Combine(fixture.Root, "backups"), "0.45.1-m4-65", SqliteStorage.CurrentSchemaVersion),
+                TestContext.Current.CancellationToken));
+        Assert.Contains("ownership graph", error.InnerException!.Message);
+        using var backups = new SqliteStorageBackupService(fixture.SourceDataRoot, databasePath);
+        await Assert.ThrowsAsync<StorageBackupException>(() => backups.CreateAsync(new StorageBackupRequest(
+            Path.Combine(fixture.Root, "backups"), "0.45.1-m4-65"), TestContext.Current.CancellationToken));
+    }
+
     private static SourceGraph CreateSourceGraph(SqliteStorage storage, int schemaVersion = 3)
     {
         var projects = new SqliteProjectCatalog(storage);

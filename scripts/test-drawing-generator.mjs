@@ -108,7 +108,28 @@ try {
   assert.deepEqual(after.content,moved);
   const templateAfter=await createComponentTemplateApi(env.config,env.session,env.fetcher).get(initial.templateId);
   assert.deepEqual(templateAfter.content.drawingGenerators,changed.drawingGenerators);
-  const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,templateId:initial.templateId,version:published.version,targets:['e4','drawing','route'],counts:[2,10],pinnedBindingChecked:true,additionsChecked:true,restartChecked:true,rotationChecked:true};
+  // Removing a copied component or its harness retains a project-owned snapshot.
+  // Exercise the actual packaged startup against that state, without user data.
+  const retainedProjects=createProjectApi(env.config,env.session,env.fetcher);
+  const retainedDesigns=createHarnessDesignApi(env.config,env.session,env.fetcher);
+  const retainedPlacements=createComponentPlacementApi(env.config,env.session,env.fetcher);
+  const emptyCopy=await retainedProjects.copyProject(project.projectId);
+  const emptyHarness=emptyCopy.harnesses[0].harnessId;
+  const copyDesign=await retainedDesigns.get(emptyCopy.projectId,emptyHarness);
+  await retainedDesigns.save(emptyCopy.projectId,emptyHarness,copyDesign.revision,
+    {...copyDesign.content,connectors:[],wires:[],cables:[]});
+  const retainedGraph=await retainedPlacements.list(emptyCopy.projectId,emptyHarness);
+  assert.equal(retainedGraph.placements.length,0);
+  const deletedCopy=await retainedProjects.copyProject(project.projectId);
+  await retainedProjects.deleteHarness(deletedCopy.projectId,deletedCopy.harnesses[0].harnessId,
+    {commandId:crypto.randomUUID(),expectedRevision:deletedCopy.revision});
+  await stop();env=await start();
+  const restoredGraph=await createComponentPlacementApi(env.config,env.session,env.fetcher).list(emptyCopy.projectId,emptyHarness);
+  assert.deepEqual(restoredGraph.snapshots,retainedGraph.snapshots);
+  assert.equal(restoredGraph.placements.length,0);
+  assert.equal((await createProjectApi(env.config,env.session,env.fetcher).getProject(deletedCopy.projectId)).harnesses.length,0);
+  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,moved);
+  const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,templateId:initial.templateId,version:published.version,targets:['e4','drawing','route'],counts:[2,10],pinnedBindingChecked:true,additionsChecked:true,restartChecked:true,rotationChecked:true,retainedSnapshotsRestartChecked:true};
   await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
   if(process.argv.includes('--keep-server')){console.log(`GENERATOR_SMOKE_URL=${baseUrl}`);server.unref();server.stdout.unref();server.stderr.unref();server=null;}
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}
