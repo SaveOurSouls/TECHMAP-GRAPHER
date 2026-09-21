@@ -37,6 +37,15 @@ public sealed class ComponentTemplateContentV5ValidatorTests
             ["articles"]=new JsonArray(new JsonObject{["articleId"]=content["articleVariants"]![0]!["id"]!.DeepClone(),["nodeIds"]=new JsonArray()})
         };
         content["drawingGenerators"]=new JsonArray(g);
+        var shapePoint=view["contactPoints"]![0]!;
+        shapePoint["shape"]=new JsonObject { ["nodeId"]="90000000-0000-4000-8000-000000000001", ["fillFromWire"]=true };
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+        shapePoint["shape"]!["nodeId"]=Guid.NewGuid().ToString();
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        shapePoint["shape"]!["nodeId"]="90000000-0000-4000-8000-000000000001";
+        shapePoint["shape"]!["fillFromWire"]="yes";
+        Assert.Throws<ComponentTemplateException>(()=>ComponentTemplateContentV5Validator.Validate(Element(content)));
+        shapePoint["shape"]!["fillFromWire"]=true;
         ComponentTemplateContentV5Validator.Validate(Element(content));
         ComponentTemplateContentV5Validator.Validate(Element(JsonNode.Parse(content.ToJsonString())!));
         g["rows"]=2;

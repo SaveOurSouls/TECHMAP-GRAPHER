@@ -615,7 +615,7 @@ export function deleteLayerV2(content: TemplateContentV2, viewId: string, layerI
   const nodeIds = new Set(layer.nodes.map(node => node.id));
   if (view.repeatPlacements.some(placement => nodeIds.has(placement.prototypeGroupId)))
     throw new TemplateCommandV2Error("layer_referenced", "Слой содержит группу-прототип повтора.");
-  return replaceView(content, viewId, { ...view, layers: view.layers.filter(item => item.id !== layerId) });
+  return replaceView(content, viewId, { ...view, layers: view.layers.filter(item => item.id !== layerId), contactPoints:view.contactPoints.filter(p=>!p.shape || !nodeIds.has(p.shape.nodeId)) });
 }
 
 export function addNodeV2(content: TemplateContentV2, viewId: string, layerId: string, node: TemplateNodeV2, atIndex?: number): TemplateContentV2 {
@@ -825,7 +825,7 @@ export function deleteNodeV2(content: TemplateContentV2, viewId: string, layerId
   if (view.layers.some(item => item.nodes.some(candidate => candidate.kind === "group" && candidate.geometry.childIds.includes(nodeId))) ||
       view.repeatPlacements.some(placement => placement.prototypeGroupId === nodeId))
     throw new TemplateCommandV2Error("node_referenced", "Объект используется группой или повтором.");
-  return replaceLayer(content, view, layerId, { ...layer, nodes: layer.nodes.filter(item => item.id !== nodeId) });
+  return replaceLayer(content, {...view,contactPoints:view.contactPoints.filter(p=>p.shape?.nodeId!==nodeId)}, layerId, { ...layer, nodes: layer.nodes.filter(item => item.id !== nodeId) });
 }
 
 export function reorderNodeV2(content: TemplateContentV2, viewId: string, layerId: string, nodeId: string, toIndex: number): TemplateContentV2 {

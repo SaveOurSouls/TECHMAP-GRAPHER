@@ -163,7 +163,7 @@ export function deleteDrawingSelection(content:TemplateContentV3,viewId:string,i
   const chosen=selection(content,viewId,ids),next=structuredClone(content),view=next.views.find(view=>view.id===viewId)!;
   const removedPlacements=view.repeatPlacements.filter(p=>chosen.ids.has(p.prototypeGroupId));
   const pointIds=new Set(chosen.points.map(p=>p.id));
-  view.contactPoints=view.contactPoints.filter(p=>!pointIds.has(p.id));
+  view.contactPoints=view.contactPoints.filter(p=>!pointIds.has(p.id) && !(p.shape && chosen.ids.has(p.shape.nodeId)));
   view.bundlePorts=view.bundlePorts.filter(p=>!pointIds.has(p.id));
   view.layers.forEach(layer=>{layer.nodes=layer.nodes.filter(node=>!chosen.ids.has(node.id));});
   view.repeatPlacements=view.repeatPlacements.filter(p=>!chosen.ids.has(p.prototypeGroupId));

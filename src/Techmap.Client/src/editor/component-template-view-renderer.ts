@@ -1,3 +1,5 @@
+import { materializeE4ConnectorArticle } from "../component-library/e4-connector-series-table";
+import { contactShapeLabel, contactLabelColor } from "../component-library/contact-shape";
 import { drawingScale } from "./drawing-scale";
 import { materializeGenerator } from "../component-library/drawing-generator";
 import { projectTemplateContentV5TableToV1 } from "../component-library/template-model-v5";
@@ -22,6 +24,7 @@ import type { HarnessEditorView } from "./editor-types";
 import { roundedPolylineCommandsV2 } from "../component-library/rounded-polyline-v2";
 
 export interface ComponentTemplateViewInstance {
+  readonly contactWireColors?: Readonly<Record<string,string>>;
   readonly drawingPlacements?: readonly ConnectorDrawingPlacement[];
   /** Placement id; for editor connectors this is the EditorSceneObject id. */
   readonly objectId: string;
@@ -54,6 +57,7 @@ export interface ComponentTemplateTransform {
 }
 
 interface ProjectedCommandBase {
+  readonly contactLabel?: {text:string;x:number;y:number;fontSize:number;color:string};
   readonly nodeId: string;
   readonly layerId: string;
   readonly transform: ComponentTemplateTransform;
@@ -368,9 +372,20 @@ export function projectComponentTemplateView(
         const transform = multiply(parentTransform, nodeTransform(node, evaluate));
         const opacity = parentOpacity * node.opacity;
         if (node.kind !== "group") {
-          const command = commandForNode(
+          let command = commandForNode(
             node, layer.id, transform, opacity, evaluate, assetIds, instance.snapshotId, resolveAssetUrl,
           );
+          const point = drawingTarget==="e4" ? view.contactPoints.find(p=>p.shape?.nodeId===node.id) : undefined;
+          if(command && point && (command.kind==="rectangle" || command.kind==="ellipse")) {
+            const content=instance.content;
+            const rowId=point.logicalContactId.startsWith("generator-row:") ? point.logicalContactId.slice("generator-row:".length)
+              : content.schemaVersion===5 ? content.drawingContactBindings?.find(b=>b.logicalContactId===point.logicalContactId)?.seriesRowId : undefined;
+            const number=(content.schemaVersion===5 && rowId ? materializeE4ConnectorArticle(projectTemplateContentV5TableToV1(content),instance.articleVariantId).rows.find(r=>r.seriesRowId===rowId)?.number : undefined) ?? content.logicalContacts.find(c=>c.id===point.logicalContactId)?.number ?? "";
+            const fill=point.shape?.fillFromWire && rowId ? instance.contactWireColors?.[point.logicalContactId] ?? instance.contactWireColors?.[rowId] ?? command.fill : command.fill;
+            const label=command.kind==="rectangle" ? contactShapeLabel(number,command.x+command.width/2,command.y+command.height/2,command.width,command.height,command.strokeWidth)
+              : contactShapeLabel(number,command.centerX,command.centerY,command.radiusX*2,command.radiusY*2,command.strokeWidth,true);
+            command={...command,fill,...(fill!==command.fill?{hatch:undefined}:{}),contactLabel:{...label,color:contactLabelColor(fill)}};
+          }
           if (command) commands.push(command.kind === "text" && occurrenceNumber !== undefined ? {...command,text:command.text.replaceAll("{{n}}",String(occurrenceNumber))} : command);
           return;
         }
@@ -654,6 +669,10 @@ export function drawProjectedComponentTemplateView(
       }
     } else {
       drawImagePlaceholder(context, command);
+    }
+    if(command.contactLabel && command.contactLabel.fontSize>0) {
+      const label=command.contactLabel; context.fillStyle=label.color; context.font=label.fontSize+"px Arial";
+      context.textAlign="center";context.textBaseline="middle";context.fillText(label.text,label.x,label.y);
     }
     context.restore();
   }

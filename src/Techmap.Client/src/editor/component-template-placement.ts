@@ -287,6 +287,7 @@ export function materializePlacementRows(
       customValues: tableRow.customValues,
       prototypeLogicalContactId: core?.prototypeLogicalContactId ?? tableRow.seriesRowId,
       representations: [...generated.flatMap(g=>g.points.filter(p=>p.row.seriesRowId===tableRow.seriesRowId).map(({point})=>({viewId:g.view.id,viewName:g.view.name,viewKind:"drawing" as const,pointId:point.id,x:point.x.kind==="constant"?point.x.value:0,y:point.y.kind==="constant"?point.y.value:0,direction:point.direction}))),...(common?[common]:[]),...(core?.representations ?? []).filter(r=>!arrayPoints.has(`${r.viewId}:${r.pointId}`)),...arrayContacts.filter(item=>item.row?.seriesRowId===tableRow.seriesRowId).map(item=>({viewId:item.viewId,viewName:item.viewName,viewKind:item.viewKind,pointId:item.point.prototypeContactPointId,occurrenceKey:item.point.key,x:item.point.x,y:item.point.y,direction:item.point.direction}))].filter(representation => {
+        if(content.views.some(v=>v.contactPoints.some(p=>p.id===representation.pointId && p.shape)))return false;
         if (generated.length && representation.viewKind === "drawing") return generated.some(g=>g.points.some(p=>p.point.id===representation.pointId));
         const drawing = content.schemaVersion === 5 ? findArticleDrawing(content.articleDrawings,articleVariantId,"drawing") : undefined;
         return representation.viewKind !== "drawing" || (common ? representation.pointId===common.pointId : !drawing || drawing.contactPointIds.includes(representation.pointId));

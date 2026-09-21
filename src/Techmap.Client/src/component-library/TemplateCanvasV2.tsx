@@ -1,3 +1,4 @@
+import { contactShapeLabel, contactLabelColor } from "./contact-shape";
 import { drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
 import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
 import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
@@ -950,6 +951,13 @@ export function TemplateCanvasV2({
         "data-draggable": topLevel && !locked && onNodeMove && rootMovable ? "true" : undefined,
         onPointerDown: (event: ReactPointerEvent<SVGElement>) => beginNodeGesture(event, rootNodeId, !layer.locked, !locked && rootMovable),
       };
+      const shapePoint=view?.contactPoints.find(p=>p.shape?.nodeId===node.id);
+      const contactNumber=shapePoint?logicalContacts.get(shapePoint.logicalContactId)?.number:undefined;
+      const contactLabel=(x:number,y:number,w:number,h:number,ellipse=false)=>{
+        if(!contactNumber)return null;
+        const label=contactShapeLabel(contactNumber,x,y,w,h,strokeWidth,ellipse);
+        return label.fontSize>0?<text data-contact-shape-number={contactNumber} x={x} y={y} fontFamily="Arial" fontSize={label.fontSize} textAnchor="middle" dominantBaseline="central" fill={contactLabelColor(node.fill.color)} pointerEvents="none">{contactNumber}</text>:null;
+      };
       const shape = {
         fill: node.fill.color && node.fill.hatch ? `url(#${hatchPrefix}-${node.id})` : node.fill.color ?? "none",
         stroke: node.stroke.color,
@@ -993,6 +1001,7 @@ export function TemplateCanvasV2({
           ? <g {...common}>
             <path d={path} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
             <path {...shape} pointerEvents="none" d={path} />
+            {contactLabel(x+rectangleWidth/2,y+rectangleHeight/2,rectangleWidth,rectangleHeight)}
           </g>
           : placeholder(node, width, height, "Размер прямоугольника должен быть положительным.");
       }
@@ -1006,6 +1015,7 @@ export function TemplateCanvasV2({
         return <g {...common}>
           <ellipse cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
           <ellipse {...shape} pointerEvents="none" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} />
+          {contactLabel(centerX,centerY,radiusX*2,radiusY*2,true)}
         </g>;
       }
       if (node.kind === "bezier") {
@@ -1126,6 +1136,7 @@ export function TemplateCanvasV2({
     point: TemplateViewV2["contactPoints"][number] | TemplateViewV2["bundlePorts"][number],
     kind: "contact" | "bundle",
   ): ReactNode {
+    if("shape" in point && point.shape)return null;
     const x = evaluate(point.x);
     const y = evaluate(point.y);
     if (x === null || y === null) {

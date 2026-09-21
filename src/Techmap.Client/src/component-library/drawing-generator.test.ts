@@ -1,3 +1,6 @@
+import {contactShapeLabel} from "./contact-shape";
+import {deleteDrawingSelection} from "./drawing-selection";
+import {assignGeneratorRole} from "./drawing-generator";
 import { setDrawingArray } from "./drawing-array-commands";
 import { describe, expect, it } from "vitest";
 import { newTemplateContentV3, addBasicNodeV3, addContactPointV3, addArticleVariantsV3, addContactTypeGroupV3, setArticleVariantContactGroupV3, moveNodeV3, deleteNodeV3 } from "./template-commands-v3";
@@ -119,4 +122,49 @@ describe("series drawing generator",()=>{
     expect(createTemplateContentV5FromEditor(core,f.table,[],[],undefined,[],bindings,[g]).content.drawingGenerators).toHaveLength(1);
   });
 
+});
+
+describe("E4 contact shape recovery",()=>{
+  it("recovers after deleting and replacing the period contact",()=>{
+    const f=generatorFixture([2]);
+    const deleted=deleteDrawingSelection(f.core,f.viewId,f.g.periodPointIds);
+    expect(()=>materializeGenerator(deleted,f.table,f.bindings,f.g,f.core.articleVariants[0]!.id)).toThrow(/Контакт исходника удалён/);
+    const [g]=reconcileDrawingGenerators(f.core,deleted,[f.g]);
+    expect(g!.periodPointIds).toEqual([]);
+    expect(()=>validateDrawingGenerators(deleted,f.table,[g],true)).not.toThrow();
+    expect(()=>validateDrawingGenerators(deleted,f.table,[g])).toThrow(/Назначьте/);
+    const [replaced,id]=addContactPointV3(deleted,f.viewId,{name:"replacement"});
+    const repaired=assignGeneratorRole(replaced,g!,"period",[id]);
+    expect(materializeGenerator(replaced,f.table,f.bindings,repaired,replaced.articleVariants[0]!.id).points).toHaveLength(2);
+    expect(materializeGenerator(f.core,f.table,f.bindings,f.g,f.core.articleVariants[0]!.id).points).toHaveLength(2);
+  });
+  it("repeats shape contacts with stable row colours and centred fitted Arial labels",()=>{
+    const f=generatorFixture([10]);f.g.target="e4";f.g.numbering="snake";f.g.rows=2;
+    const point=f.core.views[1]!.contactPoints[0]!;
+    point.shape={nodeId:f.g.roles.period[0]!,fillFromWire:true};
+    const assigned=assignGeneratorRole(f.core,{...f.g,periodPointIds:[]},"period",f.g.roles.period);
+    expect(assigned.periodPointIds).toEqual([point.id]);
+    const content=createTemplateContentV5FromEditor(f.core,f.table,[],[],undefined,[],f.bindings,[assigned]).content;
+    expect(validateTemplateContentV5(JSON.parse(JSON.stringify(content))).valid).toBe(true);
+    const second=f.table.seriesDefaults[1]!.rowId;
+    const instance={content,articleVariantId:f.core.articleVariants[0]!.id,objectId:"x",snapshotId:"s",contactWireColors:{[second]:"#ff0000"}};
+    const drawings=projectE4DrawingCompanions(instance,{x:0,y:0},300);
+    expect(drawings).toHaveLength(1);
+    const shapes=drawings[0]!.commands.filter(c=>c.contactLabel);
+    expect(shapes).toHaveLength(10);
+    expect(shapes.map(c=>c.contactLabel!.text).sort()).toEqual(["1","10","2","3","4","5","6","7","8","9"]);
+    expect(shapes.filter(c=>c.fill==="#ff0000").map(c=>c.contactLabel!.text)).toEqual(["2"]);
+    expect(projectE4DrawingCompanions({...instance,contactWireColors:{}},{x:0,y:0},300)[0]!.commands.some(c=>c.fill==="#ff0000")).toBe(false);
+    const deleted=deleteDrawingSelection(f.core,f.viewId,f.g.roles.period);
+    expect(deleted.views[1]!.contactPoints).toEqual([]);
+    expect(reconcileDrawingGenerators(f.core,deleted,[f.g])[0]!.periodPointIds).toEqual([]);
+  });
+  it.each([1,5,40,400])("keeps an inset at size %s and for multiple digits",size=>{
+    for(const ellipse of [false,true]){
+      const label=contactShapeLabel("100",0,0,size,size,size*.05,ellipse);
+      expect(label.fontSize).toBeGreaterThan(0);
+      expect(label.fontSize*3).toBeLessThan(size*.7);
+      expect(label.fontSize).toBeLessThan(size*.7);
+    }
+  });
 });

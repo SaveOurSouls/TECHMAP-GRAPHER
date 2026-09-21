@@ -49,6 +49,7 @@ try {
     const layer=core.views.find(v=>v.id===viewId).layers[0],g=newDrawingGenerator(viewId,target);
     for(const role of ['start','period','end','static']){let id;[core,id]=addBasicNodeV3(core,viewId,layer.id,'rectangle');g.roles[role]=[id];}
     let point;[core,point]=addContactPointV3(core,viewId,{name:'Pin',contactTypeGroupId:group});g.periodPointIds=[point];
+    if(target==='e4')core.views.find(v=>v.id===viewId).contactPoints.find(p=>p.id===point).shape={nodeId:g.roles.period[0],fillFromWire:true};
     g.articles=core.articleVariants.map(a=>({articleId:a.id,nodeIds:[]}));
     generators.push(g);
   }
@@ -76,6 +77,9 @@ try {
     assert.equal(connector.contacts.length,index===0?2:10);
     const instance={content:initial.content,objectId:preview.id,snapshotId:'smoke',articleVariantId:article.id};
     const e4=projectE4DrawingCompanions(instance,{x:0,y:0},300);assert.equal(e4.length,1);assert.equal(e4[0].commands.length,connector.contacts.length+3);
+    assert.equal(e4[0].commands.filter(c=>c.contactLabel).length,connector.contacts.length);
+    const colored=projectE4DrawingCompanions({...instance,contactWireColors:{[table.seriesDefaults[1].rowId]:'#ff0000'}},{x:0,y:0},300);
+    assert.deepEqual(colored[0].commands.filter(c=>c.fill==='#ff0000').map(c=>c.contactLabel.text),['2']);
     for(const target of ['drawing','route']){
       const projected=projectComponentTemplateView(instance,'drawing',{x:0,y:0},undefined,target);
       const generator=generators.find(g=>g.target===target),computed=materializeGenerator(core,table,bindings,generator,article.id);

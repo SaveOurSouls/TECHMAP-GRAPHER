@@ -176,11 +176,20 @@ export function buildComponentTemplateViewInstances(
     } catch {
       return [];
     }
+    const contactWireColors: Record<string,string> = {};
+    for (const wire of document.wires) for (const endpoint of [wire.from, wire.to]) if (endpoint.connectorId === connector.id) {
+      const contact = connector.contacts.find(item => item.id === endpoint.contactId);
+      if (contact?.logicalContactId && wire.color && !contactWireColors[contact.logicalContactId]) {
+        contactWireColors[contact.logicalContactId] = wire.color;
+        if (snapshot.content.schemaVersion === 5) { const rowId = snapshot.content.drawingContactBindings?.find(binding => binding.logicalContactId === contact.logicalContactId)?.seriesRowId; if (rowId) contactWireColors[rowId] = wire.color; }
+      }
+    }
     return [{
       objectId: connector.id,
       snapshotId: snapshot.snapshotId,
       articleVariantId: binding.articleVariantId,
       content: snapshot.content,
+      ...(Object.keys(contactWireColors).length ? {contactWireColors} : {}),
       ...(connector.drawingPlacements ? {drawingPlacements:connector.drawingPlacements} : {}),
     }];
   });

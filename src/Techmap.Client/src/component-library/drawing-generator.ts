@@ -30,7 +30,8 @@ export function generatorFromLegacyArray(content: TemplateContentV3, viewId: str
   for(const id of [view.id,...view.layers.flatMap(l=>[l.id,...l.nodes.map(n=>n.id)]),...view.contactPoints.map(p=>p.id),...view.bundlePorts.map(p=>p.id)])ids.set(id,crypto.randomUUID());
   view.id=ids.get(view.id)!;view.kind="additional";view.name=`Генератор · ${source.name}`;view.repeatPlacements=[];
   for(const layer of view.layers){layer.id=ids.get(layer.id)!;for(const node of layer.nodes){node.id=ids.get(node.id)!;node.layerId=layer.id;if(node.kind==="group")node.geometry.childIds=node.geometry.childIds.map(id=>ids.get(id)!);}}
-  for(const point of [...view.contactPoints,...view.bundlePorts])point.id=ids.get(point.id)!;
+  for(const point of view.contactPoints){point.id=ids.get(point.id)!;if(point.shape)point.shape.nodeId=ids.get(point.shape.nodeId)!;}
+  for(const point of view.bundlePorts)point.id=ids.get(point.id)!;
   const g=newDrawingGenerator(view.id,target),periodId=ids.get(repeat.prototypeGroupId)!;
   g.roles.period=[periodId];g.periodPointIds=repeat.contactPointIds.map(id=>ids.get(id)!);
   const owned=new Set(view.layers.flatMap(l=>l.nodes.flatMap(n=>n.kind==="group"?n.geometry.childIds:[])));
@@ -72,7 +73,8 @@ export function assignGeneratorRole(content: TemplateContentV3, g: DrawingGenera
   const view = content.views.find(v => v.id === g.viewId)!;
   const nodes = view.layers.flatMap(l => l.nodes), owned = new Set(nodes.flatMap(n => n.kind === "group" ? n.geometry.childIds : []));
   const roots = nodes.filter(n => selectedIds.includes(n.id) && !owned.has(n.id)).map(n => n.id);
-  const points = view.contactPoints.filter(p => selectedIds.includes(p.id)).map(p => p.id);
+  const descendants = generatorDescendants(content,g,roots);
+  const points = view.contactPoints.filter(p => selectedIds.includes(p.id) || p.shape && descendants.has(p.shape.nodeId)).map(p => p.id);
   if (!roots.length && !points.length) throw new Error("Выделите корневые фигуры и точки контактов исходника.");
   const next = structuredClone(g);
   for (const key of generatorRoles) next.roles[key] = next.roles[key].filter(id => !roots.includes(id));
@@ -111,6 +113,12 @@ export function reconcileDrawingGenerators(before: TemplateContentV3, after: Tem
     next.periodPointIds = g.periodPointIds.filter(id => points.has(id));
     next.fixedPointIds = g.fixedPointIds.filter(id => points.has(id));
     next.endPointIds = g.endPointIds.filter(id => points.has(id));
+    for(const point of view.contactPoints) if(point.shape) {
+      const role=generatorRoles.find(role=>generatorDescendants(after,next,next.roles[role]).has(point.shape!.nodeId));
+      if(!role)continue;
+      next.periodPointIds=next.periodPointIds.filter(id=>id!==point.id);next.fixedPointIds=next.fixedPointIds.filter(id=>id!==point.id);next.endPointIds=next.endPointIds.filter(id=>id!==point.id);
+      (role==="period"?next.periodPointIds:next.fixedPointIds).push(point.id); if(role==="end")next.endPointIds.push(point.id);
+    }
     return next;
   });
 }
@@ -124,7 +132,7 @@ function idList(value: unknown, allowed: Set<string>): asserts value is string[]
     throw new Error("Объекты генератора отсутствуют или повторяются.");
 }
 /** Same contract is checked by the server; incomplete recipes may have no assigned articles. */
-export function validateDrawingGenerators(content: TemplateContentV3, table: E4ConnectorSeriesTable, value: unknown): asserts value is DrawingGenerator[] {
+export function validateDrawingGenerators(content: TemplateContentV3, table: E4ConnectorSeriesTable, value: unknown, authoring = false): asserts value is DrawingGenerator[] {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.length > 32) throw new Error("Ожидается не более 32 генераторов.");
   const ids = new Set<string>(), views = new Set<string>(), targets = new Set<string>();
@@ -161,6 +169,7 @@ export function validateDrawingGenerators(content: TemplateContentV3, table: E4C
       idList(article.nodeIds, nodeIds);
       for (const id of article.nodeIds) { if (claimed.has(id)) throw new Error("Дополнение артикула не может быть общей фигурой."); claimed.add(id); }
       const g = raw as unknown as DrawingGenerator;
+      if (authoring) continue;
       if (!g.roles.period.length || !g.periodPointIds.length) throw new Error("Назначьте фигуры и контакты периода.");
       const layout = generatorLayout(g, materializeE4ConnectorArticle(table, article.articleId).rows.length);
       if (generatorDescendants(content, g, g.roles.period).size * layout.repeats + nodes.length > 5000) throw new Error("Вариант генератора превышает 5000 объектов.");
@@ -177,7 +186,10 @@ export function validateDrawingGenerators(content: TemplateContentV3, table: E4C
 /** IDs are derived from immutable source identity and cell position, never numbering. */
 function generatedId(g: DrawingGenerator, role: string, cell: string, id: string) { return `generator:${g.id}:${role}:${cell}:${id}`; }
 export function materializeGenerator(content: TemplateContentV3, table: E4ConnectorSeriesTable, bindings: readonly DrawingContactBinding[], g: DrawingGenerator, articleId: string, previewPeriods?: number) {
-  const source = content.views.find(v => v.id === g.viewId)!;
+  const source = content.views.find(v => v.id === g.viewId);
+  if (!source) throw new Error("Исходный вид удалён. Создайте новый генератор.");
+  const pointById = (id: string) => { const point=source.contactPoints.find(p=>p.id===id); if(!point) throw new Error("Контакт исходника удалён. Добавьте контакт и назначьте его периоду заново."); return point; };
+  if(!g.periodPointIds.length) throw new Error("Добавьте контакт исходника и назначьте его периоду.");
   let rows = materializeE4ConnectorArticle(table, articleId).rows;
   if (previewPeriods !== undefined) {
     if (!Number.isInteger(previewPeriods) || previewPeriods < 1 || previewPeriods > 1000 || previewPeriods % g.rows !== 0) throw new Error("Проверочное N должно образовать целые ряды, 1…1000 периодов.");
@@ -190,7 +202,7 @@ export function materializeGenerator(content: TemplateContentV3, table: E4Connec
   const evaluate = (v: Parameters<typeof evaluateNumericExpressionV3>[0]) => evaluateNumericExpressionV3(v, values);
   const offset = (along: number, cross = 0) => g.axis === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
   const fixedRows = g.fixedPointIds.map(id => {
-    const point = source.contactPoints.find(p => p.id === id)!;
+    const point = pointById(id);
     const row = rows.find(r => r.seriesRowId === bindings.find(b => b.logicalContactId === point.logicalContactId)?.seriesRowId);
     if (!row) throw new Error("Неповторяемый контакт не связан со строкой артикула."); return row;
   });
@@ -222,8 +234,10 @@ export function materializeGenerator(content: TemplateContentV3, table: E4Connec
   for (const node of allNodes) layers.find(l => l.id === node.layerId)!.nodes.push(...(emitted.get(node.id) ?? (selectedExtras.has(node.id) ? [structuredClone(node)] : [])));
   const points: { point: typeof source.contactPoints[number]; row: typeof rows[number] }[] = [];
   const placePoint = (id: string, key: string, along: number, cross: number, row: typeof rows[number]) => {
-    const p = source.contactPoints.find(p => p.id === id)!; const shift = offset(along, cross);
-    points.push({ row, point: { ...p, id: generatedId(g, "point", key, id), logicalContactId: `generator-row:${row.seriesRowId}`, x: c(evaluate(p.x) + shift.x), y: c(evaluate(p.y) + shift.y) } });
+    const p = pointById(id); const shift = offset(along, cross);
+    const role = generatorRoles.find(role=>generatorDescendants(content,g,g.roles[role]).has(p.shape?.nodeId ?? ""));
+    if(p.shape && !role) throw new Error("Назначьте контактную фигуру роли генератора.");
+    points.push({ row, point: { ...p, ...(p.shape ? {shape:{...p.shape,nodeId:generatedId(g,role!,key,p.shape.nodeId)}} : {}), id: generatedId(g, "point", key, id), logicalContactId: `generator-row:${row.seriesRowId}`, x: c(evaluate(p.x) + shift.x), y: c(evaluate(p.y) + shift.y) } });
   };
   g.fixedPointIds.forEach((id, i) => placePoint(id, "fixed", g.endPointIds.includes(id) ? layout.endOffset : 0, 0, fixedRows[i]!));
   layout.cells.forEach((cell, i) => g.periodPointIds.forEach((id, slot) => placePoint(id, `${cell.column},${cell.row}`, cell.column * g.pitch, cell.row * g.rowPitch, repeatedRows[i * g.periodPointIds.length + slot]!)));

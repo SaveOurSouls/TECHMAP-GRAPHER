@@ -283,6 +283,12 @@ internal static partial class ComponentTemplateContentV2Validator
             var viewContactPoints = new List<ViewContactPointInfo>();
             var contactPointIds = ValidateViewContactPoints(
                 view.GetProperty("contactPoints"), path + ".contactPoints", state, pointLogicalIds, viewContactPoints);
+            var shapeIds = new HashSet<string>();
+            var shapeNodes = layers.EnumerateArray().SelectMany(l => l.GetProperty("nodes").EnumerateArray()).ToDictionary(n => n.GetProperty("id").GetString()!);
+            foreach(var point in view.GetProperty("contactPoints").EnumerateArray()) if(point.TryGetProperty("shape", out var shape)) {
+                var nodeId = shape.GetProperty("nodeId").GetString()!;
+                if(!shapeIds.Add(nodeId) || !shapeNodes.TryGetValue(nodeId, out var shapeNode) || shapeNode.GetProperty("kind").GetString() is not ("rectangle" or "ellipse")) Throw("A contact shape must reference a unique rectangle or ellipse in its view.", path + ".contactPoints");
+            }
             ValidateBundlePorts(view.GetProperty("bundlePorts"), path + ".bundlePorts", state);
             var repeatPlacements = ValidateRepeatPlacements(view.GetProperty("repeatPlacements"), path + ".repeatPlacements",
                 state, viewNodeIds, contactPointIds, pointLogicalIds);
@@ -435,7 +441,12 @@ internal static partial class ComponentTemplateContentV2Validator
         foreach (var point in points.EnumerateArray())
         {
             var pointPath = $"{path}[{index++}]";
-            RequireExactProperties(point, pointPath, "id", "logicalContactId", "x", "y", "direction");
+            if (point.TryGetProperty("shape", out var shape)) {
+                RequireExactProperties(point, pointPath, "id", "logicalContactId", "x", "y", "direction", "shape");
+                RequireExactProperties(shape, pointPath + ".shape", "nodeId", "fillFromWire");
+                _ = RequiredId(shape, "nodeId", pointPath + ".shape.nodeId");
+                RequireBoolean(shape, "fillFromWire", pointPath + ".shape.fillFromWire");
+            } else RequireExactProperties(point, pointPath, "id", "logicalContactId", "x", "y", "direction");
             var id = RequiredUniqueId(point, "id", pointPath + ".id", state.AllIds);
             result.Add(id);
             var logicalId = RequiredId(point, "logicalContactId", pointPath + ".logicalContactId");

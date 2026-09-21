@@ -17,7 +17,8 @@ export function separateLegacyDrawings(content:TemplateContentV3,drawings:readon
   for(const id of [clone.id,...clone.layers.flatMap(l=>[l.id,...l.nodes.map(n=>n.id)]),...clone.contactPoints.map(p=>p.id),...clone.bundlePorts.map(p=>p.id)])ids.set(id,crypto.randomUUID());
   clone.id=ids.get(clone.id)!;clone.name="Рисунки · Схема Э4";clone.kind="additional";
   for(const layer of clone.layers){layer.id=ids.get(layer.id)!;for(const node of layer.nodes){node.id=ids.get(node.id)!;node.layerId=layer.id;if(node.kind==="group")node.geometry.childIds=node.geometry.childIds.map(id=>ids.get(id)!);}}
-  for(const point of [...clone.contactPoints,...clone.bundlePorts])point.id=ids.get(point.id)!;
+  for(const point of clone.contactPoints){point.id=ids.get(point.id)!;if(point.shape)point.shape.nodeId=ids.get(point.shape.nodeId)!;}
+  for(const point of clone.bundlePorts)point.id=ids.get(point.id)!;
   for(const repeat of clone.repeatPlacements){repeat.prototypeGroupId=ids.get(repeat.prototypeGroupId)!;repeat.contactPointIds=repeat.contactPointIds.map(id=>ids.get(id)!);}
   return {content:{...content,views:[...content.views,clone]},drawings:[...(drawings??[]).filter(d=>d.target),...legacy.flatMap(d=>[
     {...d,target:"drawing" as const,viewId:source.id},
@@ -37,6 +38,7 @@ export function drawingSelection(view: TemplateViewV2, selectedIds: readonly str
       for (const id of [node.id, ...node.geometry.childIds]) if (!selected.has(id)) { selected.add(id); changed = true; }
     }
   }
+  for(const point of view.contactPoints) if(point.shape && selected.has(point.shape.nodeId)) selected.add(point.id);
   for (const placement of view.repeatPlacements) if (selected.has(placement.prototypeGroupId)) placement.contactPointIds.forEach(id => selected.add(id));
   return { articleVariantId, nodeIds: nodes.filter(node => selected.has(node.id)).map(node => node.id),
     contactPointIds: view.contactPoints.filter(point => selected.has(point.id)).map(point => point.id),
