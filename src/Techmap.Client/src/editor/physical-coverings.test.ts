@@ -45,3 +45,11 @@ describe("branch coverings", () => {
     expect(physicalSegmentPoints(d, d.physicalTopology!.segments[0]!).length).toBeGreaterThan(2);
   });
 });
+
+it("adds standard protection at the clicked span and lists it before material assignment",async()=>{
+ const {standardCovering,standardCoveringKinds}=await import("./physical-coverings"),{buildDrawingBom}=await import("./drawing-documents");
+ const doc=physicalFixture(),cover=standardCovering(doc,"S0",{x:180,y:100},standardCoveringKinds[0],"heat");
+ expect(cover.spans[0]!.to-cover.spans[0]!.from).toBeCloseTo(.2);
+ const d={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[cover]}};
+ expect(buildDrawingBom(d).find(r=>r.objectIds.includes("heat"))).toMatchObject({name:"Термоусадка",amount:null});
+});

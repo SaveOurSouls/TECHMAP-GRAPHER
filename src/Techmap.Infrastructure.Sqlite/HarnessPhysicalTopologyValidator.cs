@@ -41,6 +41,10 @@ internal static class HarnessPhysicalTopologyValidator
             var id = Text(segment, "id"); var from = Text(segment, "from"); var to = Text(segment, "to");
             if (!ids.Add(id) || from == to || !nodes.ContainsKey(from) || !nodes.ContainsKey(to)) throw Invalid();
             foreach (var p in Array(segment, "bends", 1000).EnumerateArray()) Point(p);
+            if(segment.TryGetProperty("width",out _)){var width=Number(segment,"width");if(width<4||width>200)throw Invalid();}
+            if(segment.TryGetProperty("color",out _)){var color=Text(segment,"color");if(color.Length!=7||color[0]!='#'||color[1..].Any(c=>!Uri.IsHexDigit(c)))throw Invalid();}
+            if(segment.TryGetProperty("showWires",out _))_=Boolean(segment,"showWires");
+            if(segment.TryGetProperty("specificationItemId",out _))_=Text(segment,"specificationItemId");
             segments.Add(id, (from, to));
         }
         if (t.TryGetProperty("coverings", out _))

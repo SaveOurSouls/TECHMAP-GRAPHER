@@ -1,3 +1,4 @@
+import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
 import { screenCrossSections } from "./e4-screen-spans";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
@@ -109,6 +110,7 @@ export interface CanvasViewportProps {
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
+  readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
@@ -1013,8 +1015,9 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
-  if (object.kind === "physical-covering") return (object.paths ?? [object.points ?? []]).some(path => path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance+object.width/2));
-  if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
+  if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance));
+  if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance+object.width/2));
+  if (object.kind === "wire" || object.kind === "dimension") {
     if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
       geometry.primitives.some((primitive) => polygonContainsPoint(primitive.polygon, point, tolerance)))) return true;
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
@@ -1906,6 +1909,17 @@ export function drawEditorSceneObject(
     }
     context.restore(); return;
   }
+  if(object.kind==="physical-segment"){
+    const points=object.points??[];context.lineJoin="round";context.lineCap="round";
+    context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+    context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=object.width+2;context.stroke();
+    context.strokeStyle="#f8fafb";context.lineWidth=object.width;context.stroke();context.restore();return;
+  }
+  if(view==="drawing"&&object.kind==="wire"&&object.paths){
+    context.lineJoin="round";context.lineCap="round";context.lineWidth=selected?4:2;
+    for(const path of object.paths){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));strokeE4Wire(context,selected?"#1179ac":object.color);}
+    context.restore();return;
+  }
   if (object.kind === "physical-node") {
     context.beginPath(); context.arc(object.x + 5, object.y + 5, 5, 0, Math.PI * 2);
     context.fillStyle = selected ? "#1179ac" : "#ffffff"; context.fill(); context.strokeStyle = "#1179ac"; context.stroke();
@@ -1940,18 +1954,18 @@ export function drawEditorSceneObject(
     context.translate((p.x+q.x)/2,(p.y+q.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
   }
   if (object.kind === "specification-item") {
-    context.save();context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle="#fff";context.lineWidth=selected?3:1.5;
+    context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle="#fff";context.lineWidth=selected?3:1.5;
     context.fillRect(object.x,object.y,object.width,object.height);context.strokeRect(object.x,object.y,object.width,object.height);
     context.font="12px Arial";context.fillStyle=object.color;context.fillText(object.label,object.x+6,object.y+24,object.width-12);context.restore();return;
   }
-  if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment") {
+  if (object.kind === "wire" || object.kind === "dimension") {
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
       context.beginPath();
       points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
       context.strokeStyle = selected ? "#1179ac" : object.color;
       context.lineWidth = selected ? 4 : object.kind === "wire" ? 3 : 1.5;
-      if (object.kind === "dimension" || object.kind === "physical-segment" || object.metadata?.routeMissing === "true") context.setLineDash([7, 5]);
+      if (object.kind === "dimension" || object.metadata?.routeMissing === "true") context.setLineDash([7, 5]);
       if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
       else context.stroke();
       context.setLineDash([]);
@@ -2655,7 +2669,7 @@ export function CanvasViewport({
   onWireRoutePointMove,
   onWireRoutePointRemove,
   onObjectEditRequest,
-  onCanvasDoubleClick,
+  onCanvasDoubleClick, onPhysicalContextAction,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -2791,6 +2805,7 @@ export function CanvasViewport({
     return () => frame.removeEventListener("wheel", wheel, true);
   }, [camera, onCameraChange]);
 
+  const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number}|null>(null);
   const localPoint = (clientX: number, clientY: number): EditorPoint => {
     const bounds = canvasRef.current?.getBoundingClientRect();
     return { x: clientX - (bounds?.left ?? 0), y: clientY - (bounds?.top ?? 0) };
@@ -2822,6 +2837,7 @@ export function CanvasViewport({
   };
 
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(event.button===2)return;setPhysicalMenu(null);
     const shouldPan = tool === "pan" || event.button === 1;
     if (shouldPan) {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -3357,6 +3373,7 @@ export function CanvasViewport({
         onDragOver={allowDrop}
         onDrop={drop}
         onDoubleClick={doubleClick}
+        onContextMenu={event=>{if(view!=="drawing"||!onPhysicalContextAction)return;event.preventDefault();const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);const segment=[...objects].reverse().find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));setPhysicalMenu(segment?{id:segment.id,point,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-220)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-220))}:null);}}
       />
       {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{
         const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
@@ -3379,6 +3396,7 @@ export function CanvasViewport({
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите первую точку провода"}</div></>}
+      {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{standardCoveringKinds.map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
       {drawingWindows}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}

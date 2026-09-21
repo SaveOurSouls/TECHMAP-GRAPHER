@@ -10,9 +10,9 @@ import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
-import { coveringPaths, coveringMaterial } from "./physical-coverings";
+import { coveringPaths, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
-import { physicalNodePoint, physicalNodeLocalPoint, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
+import { physicalNodePoint, physicalNodeLocalPoint, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -427,6 +427,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
+      ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
         physicalRoute: String(!!physicalPoints),
@@ -458,7 +459,7 @@ export function designToScene(
     const y=Math.max(start.y,end.y)+70;return [{id:"dimension:"+wire.id,layerId:"dimensions",kind:"dimension" as const,label:String(cut.sourceLengthMm)+" мм",x:0,y:0,width:0,height:0,color:"#55798e",points:[{x:start.x,y},{x:end.x,y}]}];
   })) : [];
   const physical: EditorSceneObject[] = view === "drawing" && document.physicalTopology ? [
-    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: 0, height: 0, color: "#85a2b3", points: physicalSegmentPoints(document, segment) })),
+    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: segment.width??16, height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment) })),
     ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => { const p = physicalNodePoint(document, node); return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac" }; }),
   ] : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? (document.physicalTopology?.coverings ?? []).map(c => { const paths=coveringPaths(document,c); return {id:c.id,kind:"physical-covering" as const,layerId:"wires",x:0,y:0,width:c.width,height:0,color:c.color,label:c.name,points:paths.flat(),paths}; }) : [];
@@ -1664,6 +1665,11 @@ export function HarnessDesignEditor({
           const node = topology?.nodes.find(n => n.id === objectId);
           if (topology && node) { run({type:"set-physical-topology",topology:{...topology,nodes:topology.nodes.map(n=> n.id===node.id ? {...n,position:physicalNodeLocalPoint(history.present,node,{x:point.x+5,y:point.y+5})} : n)}}); }
           else run({type:"move-connector",connectorId:objectId,view,position:point});
+        }}
+        onPhysicalContextAction={(segmentId,point,action)=>{
+          const t=history.present.physicalTopology;if(!t||action==="branch")return;
+          const covering=standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
+          if(run({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],covering]}})){setSelectedObjectId(covering.id);setSelectedObjectIds([covering.id]);}
         }}
         onObjectMovePreview={previewObjectMove}
         onObjectEditRequest={(objectId) => {

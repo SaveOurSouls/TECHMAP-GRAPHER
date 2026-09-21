@@ -3,7 +3,7 @@ import { validateCoverings, splitCoveringSpans, pathLength, type PhysicalCoverin
 import type { HarnessDesignDocument, Point } from "./model";
 
 export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string }
-export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[] }
+export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[]; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly specificationItemId?:string }
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
 export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[] }
 export interface PhysicalTopology {
@@ -83,6 +83,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
   if (new Set(anchored).size !== anchored.length) return fail();
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
+    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
     if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to) || !Array.isArray(s.bends) || s.bends.length > 1000 || !s.bends.every(point)) return fail();
   }
   const wireIds = new Set<string>();
@@ -138,4 +139,24 @@ export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessD
     return (!a || a === wire.from.connectorId) && (!b || b === wire.to.connectorId);
   });
   return { ...document, physicalTopology: { ...t, nodes, segments, routes, coverings: t.coverings?.map(c=>({...c,spans:c.spans.filter(s=>segments.some(segment=>segment.id===s.segmentId))})).filter(c=>c.spans.length) } };
+}
+
+/** Display lanes never alter measured centreline geometry or electrical endpoints. */
+export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
+ const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
+ const paths:Point[][]=[];
+ for(const step of route.steps){
+  const segment=t.segments.find(s=>s.id===step.segmentId)!;
+  if(segment.showWires===false)continue;
+  const members=t.routes.filter(r=>r.steps.some(s=>s.segmentId===segment.id)).map(r=>r.wireId).sort();
+  const offset=(members.indexOf(wireId)-(members.length-1)/2)*Math.min(4,Math.max(1,((segment.width??16)-6)/Math.max(1,members.length)));
+  const points=physicalSegmentPoints(document,segment);
+  const lane=points.map((p,i)=>{const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!,l=Math.hypot(b.x-a.x,b.y-a.y)||1;return {x:p.x-(b.y-a.y)/l*offset,y:p.y+(b.x-a.x)/l*offset};});
+  if(step.reverse)lane.reverse();paths.push(lane);
+ }
+ const first=route.steps[0]!,last=route.steps.at(-1)!;
+ const a=physicalSegmentPoints(document,t.segments.find(s=>s.id===first.segmentId)!);
+ const b=physicalSegmentPoints(document,t.segments.find(s=>s.id===last.segmentId)!);
+ const from=first.reverse?a.at(-1)!:a[0]!,to=last.reverse?b[0]!:b.at(-1)!;
+ return [[start,from],...paths,[to,end]];
 }

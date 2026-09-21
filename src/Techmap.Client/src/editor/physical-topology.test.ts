@@ -67,3 +67,15 @@ it("keeps connector exits and drag coordinates consistent with a rotated scaled 
  expect(point.x).toBeCloseTo(c.positions.drawing.x-40);expect(point.y).toBeCloseTo(c.positions.drawing.y+60);
  const local=physicalNodeLocalPoint(doc,node,point);expect(local.x).toBeCloseTo(30);expect(local.y).toBeCloseTo(20);
 });
+
+it("displays E4 conductors as separate channel lanes and hides them without changing the route",async()=>{
+ const {physicalWireDisplayPaths}=await import("./physical-topology");
+ const d=physicalFixture(),start={x:0,y:0},end={x:1000,y:500};
+ const first=physicalWireDisplayPaths(d,"W1",start,end)!,second=physicalWireDisplayPaths(d,"W2",start,end)!;
+ expect(first[1]).not.toEqual(second[1]);
+ const t={...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>({...s,showWires:false,width:24,color:"#112233"}))};
+ const h=executeEditorCommand(createEditorHistory(d),{type:"set-physical-topology",topology:t});
+ expect(physicalWireDisplayPaths(h.present,"W1",start,end)).toHaveLength(2);
+ expect(h.present.wires).toEqual(d.wires);expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).physicalTopology).toEqual(t);
+ expect(undoEditorCommand(h).present).toEqual(d);
+});

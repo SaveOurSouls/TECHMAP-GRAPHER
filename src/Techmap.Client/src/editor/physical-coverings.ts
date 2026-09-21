@@ -67,3 +67,18 @@ export function splitCoveringSpans(coverings: readonly PhysicalCovering[] | unde
     ...(s.to > fraction ? [{ segmentId: nextId, from: Math.max(0, (s.from - fraction) / (1 - fraction)), to: (s.to - fraction) / (1 - fraction) }] : []),
   ]) }));
 }
+
+export const standardCoveringKinds=["Термоусадка","Оплётка","Нитевый бандаж","Обмотка","Металлическая плетёнка"] as const;
+export type PhysicalContextAction=typeof standardCoveringKinds[number]|"branch";
+export function projectOntoPolyline(points:readonly Point[],point:Point){
+ let best={point:points[0]??point,index:1,fraction:0,distance:Infinity},travelled=0;const total=pathLength(points);
+ for(let i=1;i<points.length;i++){const a=points[i-1]!,b=points[i]!,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy),t=length?Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/(length*length))):0;
+ const q={x:a.x+t*dx,y:a.y+t*dy},distance=Math.hypot(point.x-q.x,point.y-q.y);
+ if(distance<best.distance)best={point:q,index:i,fraction:total?(travelled+t*length)/total:0,distance};travelled+=length;}
+ return best;
+}
+export function standardCovering(document:HarnessDesignDocument,segmentId:string,point:Point,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
+ const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
+ const at=projectOntoPolyline(physicalSegmentPoints(document,segment),point).fraction;
+ return {id,name,width:(segment.width??16)+8,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+}

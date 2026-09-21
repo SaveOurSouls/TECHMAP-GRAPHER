@@ -58,6 +58,7 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
   for(const item of document.drawingDocuments?.specificationItems ?? []) {
     const key=keyOf("specification",item.id);
     add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || (item.kind === "abstract" ? "Абстрактная позиция" : "Дополнительная позиция"));
+    for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===item.id)??[])rows.get(key)!.objectIds.add(segment.id);
   }
   const order=document.drawingDocuments?.bomOrder ?? [];
   const keys=[...rows.keys()].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?Number.MAX_SAFE_INTEGER:ai)-(bi<0?Number.MAX_SAFE_INTEGER:bi);});
