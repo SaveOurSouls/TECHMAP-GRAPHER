@@ -1,3 +1,4 @@
+import { getE4ConnectorLayout } from "./CanvasViewport";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -551,6 +552,10 @@ describe("harness design scene adapter", () => {
     const geometry = connectorE4TableGeometry(connector);
     const scene = designToScene(document, "e4");
     const object = scene.find((item) => item.id === "x1")!;
+    const canvasLayout = getE4ConnectorLayout(object)!;
+    expect(canvasLayout.width).toBe(geometry.width);
+    expect(canvasLayout.columns.map(column => column.width)).toEqual(geometry.columns.map(column => column.width));
+    expect(canvasLayout.contactPoints).toEqual(connector.contacts.map(contact => ({x: connector.positions.e4.x + geometry.contactPoints[contact.id]!.x,y: connector.positions.e4.y + geometry.contactPoints[contact.id]!.y})));
     const rows = JSON.parse(object.metadata!.rows!) as Array<Record<string, unknown>>;
 
     expect(object).toMatchObject({ x: 10, y: 20, width: geometry.width, height: geometry.height });

@@ -183,7 +183,10 @@ export function buildComponentTemplateViewInstances(
       const contact = connector.contacts.find(item => item.id === endpoint.contactId);
       if (contact?.logicalContactId && wire.color && !contactWireColors[contact.logicalContactId]) {
         contactWireColors[contact.logicalContactId] = wire.color;
-        if (snapshot.content.schemaVersion === 5) { const rowId = snapshot.content.drawingContactBindings?.find(binding => binding.logicalContactId === contact.logicalContactId)?.seriesRowId; if (rowId) contactWireColors[rowId] = wire.color; }
+        if (snapshot.content.schemaVersion === 5) {
+          const logicalId = snapshot.content.drawingContactBindings?.find(binding => binding.seriesRowId === contact.logicalContactId)?.logicalContactId;
+          if (logicalId) contactWireColors[logicalId] = wire.color;
+        }
       }
     }
     return [{
@@ -375,6 +378,7 @@ export function designToScene(
           : connector.libraryCode ?? "FREE",
         partNumber: connector.partNumber,
         columns: JSON.stringify(columnIds),
+        columnWidths: JSON.stringify(geometry.columns.map(column => column.width)),
         columnLabels: JSON.stringify(customLabels),
         rows: JSON.stringify(displayedContacts.map((contact) => ({
             number: contact.number,

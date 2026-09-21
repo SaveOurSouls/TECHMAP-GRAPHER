@@ -1,3 +1,7 @@
+import { buildComponentTemplateViewInstances } from "../editor/HarnessDesignEditor";
+
+import { createEmptyHarnessDesign } from "../editor/model";
+import { createWire } from "../editor/commands";
 import {contactShapeLabel} from "./contact-shape";
 import {deleteDrawingSelection} from "./drawing-selection";
 import {assignGeneratorRole} from "./drawing-generator";
@@ -148,6 +152,14 @@ describe("E4 contact shape recovery",()=>{
     expect(validateTemplateContentV5(JSON.parse(JSON.stringify(content))).valid).toBe(true);
     const second=f.table.seriesDefaults[1]!.rowId;
     const instance={content,articleVariantId:f.core.articleVariants[0]!.id,objectId:"x",snapshotId:"s",contactWireColors:{[second]:"#ff0000"}};
+    const template={templateId:crypto.randomUUID(),version:1,versionSha256:"a".repeat(64),code:"T",name:"Test",articleBindings:content.articleVariants.map(a=>({sourceId:a.sourceId.toLowerCase(),entityType:a.entityType,articleKey:a.articleKey})),assets:[],content};
+    const connector=createConnectorInstanceFromComponentTemplateV3(template,{id:crypto.randomUUID(),designation:"X1",articleVariantId:instance.articleVariantId,e4Position:{x:0,y:0}});
+    const endpoint={connectorId:connector.id,contactId:connector.contacts[1]!.id};
+    const wire={...createWire("W1",endpoint,endpoint,null),color:"#ff0000"};
+    const snapshot={snapshotId:"s",projectId:"p",sourceTemplateId:template.templateId,sourceVersion:1,sourceVersionSha256:template.versionSha256,code:template.code,name:template.name,articleBindings:template.articleBindings,assets:[],schemaVersion:5,content,createdUtc:"",updatedUtc:""};
+    const actual=buildComponentTemplateViewInstances({...createEmptyHarnessDesign(),connectors:[connector],wires:[wire]},new Map([[connector.id,snapshot]]))[0]!;
+    expect(actual).toBeDefined();
+    expect(projectE4DrawingCompanions(actual,{x:0,y:0},300)[0]!.commands.filter(c=>c.fill==="#ff0000").map(c=>c.contactLabel?.text)).toEqual(["2"]);
     const drawings=projectE4DrawingCompanions(instance,{x:0,y:0},300);
     expect(drawings).toHaveLength(1);
     const shapes=drawings[0]!.commands.filter(c=>c.contactLabel);

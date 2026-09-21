@@ -1267,16 +1267,19 @@ export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayo
   const designation = object.metadata.designation?.trim() || object.label;
   const libraryCode = object.metadata.libraryCode?.trim() || "FREE";
   const partNumber = object.metadata.partNumber?.trim() ?? "";
-  const widths = new Map<E4ColumnId, number>(columnIds.map((column) => {
+  const suppliedWidths = parseJson(object.metadata.columnWidths);
+  const authoritativeWidths = Array.isArray(suppliedWidths) && suppliedWidths.length === columnIds.length &&
+    suppliedWidths.every(value => typeof value === "number" && Number.isFinite(value) && value > 0) ? suppliedWidths as number[] : null;
+  const widths = new Map<E4ColumnId, number>(columnIds.map((column, index) => {
     const label = columnLabels[column] ?? (isCustomE4ColumnId(column) ? column.slice("custom:".length) : e4ColumnLabels[column]);
     const values = rows.map((row) => e4CellText(row, column));
     return [
       column,
-      connectorE4TableColumnWidth(isCustomE4ColumnId(column) ? null : column, label, values),
+      authoritativeWidths?.[index] ?? connectorE4TableColumnWidth(isCustomE4ColumnId(column) ? null : column, label, column === "color" ? [] : values),
     ];
   }));
   const columnWidth = columnIds.reduce((total, column) => total + (widths.get(column) ?? 0), 0);
-  const width = Math.max(118, columnWidth, connectorE4FooterWidth(libraryCode, partNumber));
+  const width = authoritativeWidths ? object.width : Math.max(118, columnWidth, connectorE4FooterWidth(libraryCode, partNumber));
   const titleHeight = 24;
   const headerHeight = 28;
   const rowHeight = 24;

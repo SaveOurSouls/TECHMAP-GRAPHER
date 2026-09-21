@@ -382,7 +382,7 @@ export function projectComponentTemplateView(
             const rowId=point.logicalContactId.startsWith("generator-row:") ? point.logicalContactId.slice("generator-row:".length)
               : content.schemaVersion===5 ? content.drawingContactBindings?.find(b=>b.logicalContactId===point.logicalContactId)?.seriesRowId : undefined;
             const number=(content.schemaVersion===5 && rowId ? materializeE4ConnectorArticle(projectTemplateContentV5TableToV1(content),instance.articleVariantId).rows.find(r=>r.seriesRowId===rowId)?.number : undefined) ?? content.logicalContacts.find(c=>c.id===point.logicalContactId)?.number ?? "";
-            const fill=point.shape?.fillFromWire && rowId ? instance.contactWireColors?.[point.logicalContactId] ?? instance.contactWireColors?.[rowId] ?? command.fill : command.fill;
+            const fill=point.shape?.fillFromWire ? instance.contactWireColors?.[point.logicalContactId] ?? (rowId ? instance.contactWireColors?.[rowId] : undefined) ?? command.fill : command.fill;
             const label=command.kind==="rectangle" ? contactShapeLabel(number,command.x+command.width/2,command.y+command.height/2,command.width,command.height,command.strokeWidth)
               : contactShapeLabel(number,command.centerX,command.centerY,command.radiusX*2,command.radiusY*2,command.strokeWidth,true);
             command={...command,fill,...(fill!==command.fill?{hatch:undefined}:{}),contactLabel:{...label,color:contactLabelColor(fill)}};

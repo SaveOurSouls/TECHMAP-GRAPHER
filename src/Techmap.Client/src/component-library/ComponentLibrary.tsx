@@ -994,7 +994,7 @@ export function ComponentLibrary({ config, session }: Props) {
       const [content, id] = existing ? linkLogicalContactPointV2(draft.content, activeView.id, existing.id)
         : addContactPointV2(draft.content, activeView.id, {number: draft.content.logicalContacts.some(contact => contact.number === row.number) ? undefined : row.number, name:row.name || `Контакт ${row.number}`, circuitText:row.circuitText, contactTypeGroupId:row.contactTypeGroupId});
       const logicalContactId = content.views.find(view => view.id === activeView.id)!.contactPoints.find(point => point.id === id)!.logicalContactId;
-      if(shapeNodeId) content.views.find(v=>v.id===activeView.id)!.contactPoints.find(p=>p.id===id)!.shape={nodeId:shapeNodeId,fillFromWire:false};
+      if(shapeNodeId) content.views.find(v=>v.id===activeView.id)!.contactPoints.find(p=>p.id===id)!.shape={nodeId:shapeNodeId,fillFromWire:true};
       changeContent(content, shapeNodeId ?? id);
       if(activeGenerator && !activeGenerator.periodPointIds.length && activeGenerator.roles.period.length && !shapeNodeId) setDraft(current=>({...current,drawingGenerators:current.drawingGenerators?.map(g=>g.id===activeGenerator.id?{...g,periodPointIds:[id]}:g)}));
       setDraft(current => ({ ...current, drawingContactBindings: [...(current.drawingContactBindings ?? []).filter(binding => binding.logicalContactId !== logicalContactId && binding.seriesRowId !== row.seriesRowId), {logicalContactId,seriesRowId:row.seriesRowId}] }));
