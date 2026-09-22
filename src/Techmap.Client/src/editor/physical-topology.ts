@@ -15,6 +15,37 @@ export interface PhysicalTopology {
 }
 export const emptyPhysicalTopology = (): PhysicalTopology => ({ nodes: [], segments: [], routes: [], snap: true });
 
+/** One persistent exit per connector; existing exits and routes are never replaced. */
+export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalTopology {
+  const topology = document.physicalTopology ?? emptyPhysicalTopology();
+  const missing = document.connectors.filter(c => !topology.nodes.some(n => n.connectorId === c.id));
+  if (!missing.length) return topology;
+  return { ...topology, nodes: [...topology.nodes, ...missing.map(c => ({
+    id: crypto.randomUUID(), connectorId: c.id, position: { x: 170, y: 60 },
+  }))] };
+}
+
+/** Editing uses only authored vertices, not the auxiliary vertices of the 15° presentation. */
+export function physicalSegmentControls(document: HarnessDesignDocument, segment: PhysicalSegment): Point[] {
+  const t = document.physicalTopology!;
+  return [physicalNodePoint(document, t.nodes.find(n => n.id === segment.from)!), ...segment.bends,
+    physicalNodePoint(document, t.nodes.find(n => n.id === segment.to)!)];
+}
+
+export function insertPhysicalBend(document: HarnessDesignDocument, segment: PhysicalSegment, point: Point): PhysicalSegment {
+  const controls = physicalSegmentControls(document, segment);
+  let best = Infinity, index = 0;
+  for (let i = 0; i < controls.length - 1; i++) {
+    const path = constrainedPolyline([controls[i]!, controls[i + 1]!], document.physicalTopology!.snap);
+    const projected = projectOntoPolyline(path, point).point;
+    const distance = Math.hypot(projected.x - point.x, projected.y - point.y);
+    if (distance < best) { best = distance; index = i; }
+  }
+  if (controls.some(p => Math.hypot(p.x - point.x, p.y - point.y) < 1e-6)) return segment;
+  const bends = [...segment.bends]; bends.splice(index, 0, point);
+  return { ...segment, bends };
+}
+
 export function physicalNodePoint(document: HarnessDesignDocument, node: PhysicalNode): Point {
   const connector = document.connectors.find(c => c.id === node.connectorId);
   if(!connector)return node.position;

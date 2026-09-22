@@ -12,7 +12,7 @@ import { drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
 import { coveringPaths, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
-import { physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
+import { ensureConnectorExits, physicalSegmentControls, insertPhysicalBend, physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -463,7 +463,7 @@ export function designToScene(
     const y=Math.max(start.y,end.y)+70;return [{id:"dimension:"+wire.id,layerId:"dimensions",kind:"dimension" as const,label:String(cut.sourceLengthMm)+" мм",x:0,y:0,width:0,height:0,color:"#55798e",points:[{x:start.x,y},{x:end.x,y}]}];
   })) : [];
   const physical: EditorSceneObject[] = view === "drawing" && document.physicalTopology ? [
-    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: segment.width??16, height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment) })),
+    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: segment.width??16, height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment), metadata: { controls: JSON.stringify(physicalSegmentControls(document,segment)), wireIds: JSON.stringify(document.physicalTopology!.routes.filter(r=>r.steps.some(step=>step.segmentId===segment.id)).map(r=>r.wireId)) } })),
     ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => { const p = physicalNodePoint(document, node); return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac", metadata:{arms:JSON.stringify(document.physicalTopology!.segments.filter(s=>s.from===node.id||s.to===node.id).map(s=>{const points=physicalSegmentPoints(document,s),q=s.from===node.id?points[1]:points.at(-2);if(!q)return {x:0,y:0};const length=Math.hypot(q.x-p.x,q.y-p.y)||1;return {x:(q.x-p.x)/length*10,y:(q.y-p.y)/length*10};}))} }; }),
   ] : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? (document.physicalTopology?.coverings ?? []).map(c => { const paths=coveringPaths(document,c); return {id:c.id,kind:"physical-covering" as const,layerId:"wires",x:0,y:0,width:c.width,height:0,color:c.color,label:c.name,points:paths.flat(),paths}; }) : [];
@@ -894,8 +894,13 @@ export function HarnessDesignEditor({
 
   useEffect(() => setActiveWireStripEnd("from"), [selectedObjectId]);
 
+  const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number}}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
+    if(pipePreview&&history.present.physicalTopology) {
+      const t=history.present.physicalTopology;
+      return {document:{...history.present,physicalTopology:{...t,segments:t.segments.map(s=>s.id===pipePreview.id?{...s,bends:s.bends.map((p,i)=>i===pipePreview.index?pipePreview.point:p)}:s)}},error:null};
+    }
     if (!movePreview) return { document: history.present, error: null };
     try {
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point);
@@ -927,7 +932,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view]);
+  }, [history, movePreview, view, pipePreview]);
 
   const routingIssues = useMemo(() => view === "e4" && previewResult.document
     ? e4RoutingIssues(previewResult.document) : [], [previewResult.document, view]);
@@ -947,6 +952,16 @@ export function HarnessDesignEditor({
       return false;
     }
   }, []);
+
+  const initializedExits = useRef(new Set<string>());
+  useEffect(() => {
+    if (view !== "drawing" || !history || placementBusy || placementPending) return;
+    const pending = history.present.connectors.filter(c=>!initializedExits.current.has(c.id));
+    if(!pending.length)return;
+    const topology = ensureConnectorExits(history.present);
+    if (topology === history.present.physicalTopology || run({ type: "set-physical-topology", topology }))
+      history.present.connectors.forEach(c=>initializedExits.current.add(c.id));
+  }, [view, history, placementBusy, placementPending, run]);
 
   const previewObjectMove = useCallback((objectId: string, point: { readonly x: number; readonly y: number } | null) => {
     pendingMovePreviewRef.current = point ? { objectId, point } : null;
@@ -1396,7 +1411,7 @@ export function HarnessDesignEditor({
     if (view !== "drawing" || !selectedObjectId) return;
     const topology = history.present.physicalTopology;
     const segment = topology?.segments.find(s => s.id === selectedObjectId);
-    if (topology && segment) { run({ type: "set-physical-topology", topology: { ...topology, segments: topology.segments.map(s => s.id === segment.id ? { ...s, bends: [...physicalSegmentPoints(history.present, s).slice(1, -1), point] } : s) } }); return; }
+    if (topology && segment) { run({ type: "set-physical-topology", topology: { ...topology, segments: topology.segments.map(s => s.id === segment.id ? { ...s, bends: insertPhysicalBend(history.present,s,point).bends } : s) } }); return; }
     const wire = history.present.wires.find((item) => item.id === selectedObjectId);
     if (!wire || topology?.routes.some(r => r.wireId === wire.id)) return;
     const renderedWire = scene.find((item) => item.id === wire.id);
@@ -1550,7 +1565,7 @@ export function HarnessDesignEditor({
           const id=crypto.randomUUID(),documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
           if(run({type:"set-drawing-documents",documents:{...documents,dimensions:[...documents.dimensions??[],{id,wireId,from:Math.min(from,to),to:Math.max(from,to),pointCount,routeKey:dimensionRouteKey(history.present,wire),mode,offset:40,lengthMm:null}]}})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
         }}
-        relationPanel={(activeTool,onToolChange)=><>{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel activeTool={activeTool} onToolChange={onToolChange} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
+        relationPanel={(activeTool,onToolChange)=><>{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel activeTool={activeTool} onToolChange={onToolChange} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
           onReveal={id => {
             const found = id && selectionIndex ? resolveHarnessSelection(selectionIndex, [id], wholeNet) : related;
@@ -1671,7 +1686,7 @@ export function HarnessDesignEditor({
           if (topology && node) { run({type:"set-physical-topology",topology:{...topology,nodes:topology.nodes.map(n=> n.id===node.id ? {...n,position:physicalNodeLocalPoint(history.present,node,{x:point.x+5,y:point.y+5})} : n)}}); }
           else run({type:"move-connector",connectorId:objectId,view,position:point});
         }}
-        onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to)run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id:crypto.randomUUID(),from,to,bends:[]}]})});}}
+        onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,bends:[]}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
         onPhysicalContextAction={(segmentId,point,action)=>{
           const t=history.present.physicalTopology;if(!t)return;
           if(action==="branch"){
@@ -1824,10 +1839,11 @@ export function HarnessDesignEditor({
             run({ type: "remove-screen", screenId: screen.id });
           }
         }}
+        onWireRoutePointPreview={(id,index,point)=>setPipePreview(point&&history.present.physicalTopology?.segments.some(s=>s.id===id)?{id,index,point}:null)}
         onWireRoutePointMove={(wireId, routeIndex, point) => {
           const topology = history.present.physicalTopology;
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { run({type:"set-physical-topology",topology:{...topology,segments:topology.segments.map(s => s.id===wireId ? {...s,bends:physicalSegmentPoints(history.present,s).slice(1,-1).map((p,i)=>i===routeIndex?point:p)} : s)}}); return; }
+          if (topology && segment) { run({type:"set-physical-topology",topology:{...topology,segments:topology.segments.map(s => s.id===wireId ? {...s,bends:s.bends.map((p,i)=>i===routeIndex?point:p)} : s)}}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);
@@ -1836,7 +1852,7 @@ export function HarnessDesignEditor({
         onWireRoutePointRemove={(wireId, routeIndex) => {
           const topology = history.present.physicalTopology;
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { run({type:"set-physical-topology",topology:{...topology,segments:topology.segments.map(s => s.id===wireId ? {...s,bends:physicalSegmentPoints(history.present,s).slice(1,-1).filter((_,i)=>i!==routeIndex)} : s)}}); return; }
+          if (topology && segment) { run({type:"set-physical-topology",topology:{...topology,segments:topology.segments.map(s => s.id===wireId ? {...s,bends:s.bends.filter((_,i)=>i!==routeIndex)} : s)}}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           run({ type: "set-wire-route", wireId, route: wire.drawingRoute.filter((_, index) => index !== routeIndex) });

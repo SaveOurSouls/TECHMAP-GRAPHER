@@ -427,3 +427,20 @@
 .he-table-window .he-bom-note-cell>input { width:130px; }
 .he-table-window .he-bom-note-cell>.he-relations-actions { display:inline-flex; margin:0 2px; vertical-align:middle; }
 .he-table-window .he-bom-note-cell>select { display:inline-block; width:90px; height:24px; min-height:24px; padding:0 3px; border-color:transparent; font-size:10px; }
+
+/* M4-70: physical pipes are selectable rows; advanced route assembly stays folded. */
+.he-pipe-table { overflow:auto; margin:8px 0; border:1px solid #cadbe2; border-radius:5px; }
+.he-pipe-table table,.he-pipe-wires { width:100%; border-collapse:collapse; font-size:11px; }
+.he-pipe-table th,.he-pipe-wires th { padding:5px; background:#edf5f7; color:#466675; text-align:left; }
+.he-pipe-table td,.he-pipe-wires td { padding:5px; border-top:1px solid #dfe9ed; }
+.he-pipe-table tbody tr { cursor:pointer; }
+.he-pipe-table tbody tr:hover { background:#ecf8fb; }
+.he-pipe-table tr.is-selected { background:#bdeff7; box-shadow:inset 3px 0 #008fa8; }
+.he-pipe-select { border:0; background:transparent; color:#17617b; font:700 11px Arial; cursor:pointer; }
+.he-pipe-wires { max-width:340px; }
+.he-pipe-wires tbody tr { background:#e2f6fa; }
+.he-relations[aria-label="Физические ветви"] .he-physical-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; align-items:end; margin:8px 0; }
+.he-relations[aria-label="Физические ветви"] .he-physical-fields label { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:11px; }
+.he-relations[aria-label="Физические ветви"] .he-physical-fields input:not([type="checkbox"]),.he-relations[aria-label="Физические ветви"] .he-physical-fields select { width:100%; min-width:0; min-height:28px; height:28px; box-sizing:border-box; }
+.he-relations[aria-label="Физические ветви"] .he-physical-fields label:has(input[type="checkbox"]) { flex-direction:row; align-items:center; }
+.he-relations[aria-label="Физические ветви"] input[type="checkbox"] { width:14px; height:14px; min-width:14px; min-height:14px; margin:0; }

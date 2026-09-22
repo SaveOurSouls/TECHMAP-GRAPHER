@@ -160,6 +160,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly e4Detached?: boolean;
   readonly onE4DetachedChange?: (detached: boolean) => void;
   readonly onE4Reroute?: () => void;
+  readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null)=>void;
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
@@ -265,7 +266,7 @@ export function HarnessEditorWorkspace({
   e4Detached,
   onE4DetachedChange,
   onE4Reroute,
-  onWireRoutePointMove,
+  onWireRoutePointMove, onWireRoutePointPreview,
   onWireRoutePointRemove,
   drawingSnapEnabled = true,
   onDrawingSnapChange,
@@ -555,6 +556,7 @@ export function HarnessEditorWorkspace({
           onE4WireLabelPositionChange={onE4WireLabelPositionChange}
           onE4ScreenPositionChange={onE4ScreenPositionChange}
           onWireToolRequest={() => setTool("wire")}
+          onWireRoutePointPreview={onWireRoutePointPreview}
           onWireRoutePointMove={onWireRoutePointMove}
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}

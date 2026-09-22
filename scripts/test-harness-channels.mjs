@@ -31,7 +31,7 @@ try {
  const {createProjectApi}=await module('project-api.ts'),{createHarnessDesignApi}=await module('editor/design-api.ts');
  const {createConnector,createWire}=await module('editor/commands.ts');
  const {createEmptyHarnessDesign,parseHarnessDesignDocument,createOrthogonalE4Route,wireEndpointE4Anchor}=await module('editor/model.ts');
- const {branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths}=await module('editor/physical-topology.ts');
+ const {ensureConnectorExits,insertPhysicalBend,physicalSegmentControls,branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths}=await module('editor/physical-topology.ts');
  const {standardCovering}=await module('editor/physical-coverings.ts');
  const {buildDrawingBom,emptyDrawingDocuments}=await module('editor/drawing-documents.ts');
  let env=await start();const projects=createProjectApi(env.config,env.session,env.fetcher),designs=createHarnessDesignApi(env.config,env.session,env.fetcher);
@@ -60,10 +60,18 @@ try {
  assert.deepEqual(doc.wires,before);assert.equal(buildDrawingBom(doc,2).find(r=>r.objectIds.includes('glue')).amount,5);
  const sheath=buildDrawingBom(doc,2).find(r=>r.objectIds.includes('sheath'));assert.equal(sheath.amount,2.4);assert.deepEqual(sheath.objectIds,['sheath','main','tail']);
  assert.notDeepEqual(physicalWireDisplayPaths(doc,'W1',{x:0,y:0},{x:1,y:1})[1],physicalWireDisplayPaths(doc,'W2',{x:0,y:0},{x:1,y:1})[1]);
+ const exits=ensureConnectorExits({...doc,physicalTopology:undefined});
+ assert.equal(exits.nodes.length,connectors.length);assert.equal(ensureConnectorExits({...doc,physicalTopology:exits}),exits);
+ const pipe=doc.physicalTopology.segments.find(s=>s.id==='second-exit');
+ const controls=physicalSegmentControls(doc,pipe),mid={x:(controls[0].x+controls[1].x)/2,y:(controls[0].y+controls[1].y)/2};
+ const edited=insertPhysicalBend(doc,pipe,mid);assert.deepEqual(edited.bends,[mid,...pipe.bends]);
+ const originalWires=structuredClone(doc.wires),originalRoutes=structuredClone(doc.physicalTopology.routes);
+ doc={...doc,physicalTopology:{...doc.physicalTopology,segments:doc.physicalTopology.segments.map(s=>s.id===pipe.id?{...edited,bends:edited.bends.map((p,i)=>i===0?{x:p.x+40,y:p.y-20}:p)}:s)}};
+ assert.deepEqual(doc.wires,originalWires);assert.deepEqual(doc.physicalTopology.routes,originalRoutes);
  const parsed=parseHarnessDesignDocument(JSON.parse(JSON.stringify(doc))),initial=await designs.get(project.projectId,harnessId);
  await designs.save(project.projectId,harnessId,initial.revision,parsed);
  assert.deepEqual((await designs.get(project.projectId,harnessId)).content,parsed);
  await stop();env=await start();assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,parsed);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}
