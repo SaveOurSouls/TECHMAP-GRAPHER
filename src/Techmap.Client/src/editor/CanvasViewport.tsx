@@ -1060,13 +1060,15 @@ export function hitTestWireRoutePoint(
 ): number | null {
   if (object?.kind !== "wire" && object?.kind !== "physical-segment") return null;
   if (object.metadata?.physicalRoute === "true") return null;
-  const points: readonly EditorPoint[] = object.kind === "physical-segment" ? JSON.parse(object.metadata?.controls ?? JSON.stringify(object.points ?? [])) : object.points ?? [];
+  const points: readonly EditorPoint[] = object.kind === "physical-segment" ? [object.points![0]!, ...physicalSceneHandles(object), object.points!.at(-1)!] : object.points ?? [];
   const tolerance = 10 / zoom;
+  let nearest: number | null = null, distance = tolerance;
   for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
     const candidate = points[pointIndex]!;
-    if (Math.hypot(point.x - candidate.x, point.y - candidate.y) <= tolerance) return pointIndex - 1;
+    const delta = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+    if (delta <= distance) { nearest = pointIndex - 1; distance = delta; }
   }
-  return null;
+  return nearest;
 }
 
 export function hitTestWireEnd(
@@ -1427,6 +1429,22 @@ function contactCrossCenter(point: ConnectorCanvasContactPoint): EditorPoint {
     x: point.x + outward.x * point.crossOffset,
     y: point.y + outward.y * point.crossOffset,
   };
+}
+
+export function drawSelectedConnectorContacts(context: CanvasRenderingContext2D, object: EditorSceneObject, view: HarnessEditorView, zoom: number): void {
+  context.save();context.lineWidth=2/zoom;context.strokeStyle="#007da8";context.fillStyle="#e1faff";
+  for (const contact of connectorCanvasContactPoints(object,view)) {
+    if (!contact) continue;
+    for (const point of [contact, ...(contact.secondaryPoint?[contact.secondaryPoint]:[])]) {
+      context.beginPath();context.arc(point.x,point.y,6/zoom,0,Math.PI*2);context.fill();context.stroke();
+      context.beginPath();context.arc(point.x,point.y,2/zoom,0,Math.PI*2);context.fillStyle="#007da8";context.fill();context.fillStyle="#e1faff";
+    }
+  }
+  context.restore();
+}
+
+function physicalSceneHandles(object: EditorSceneObject): EditorPoint[] {
+  return object.metadata?.handles ? JSON.parse(object.metadata.handles) : (JSON.parse(object.metadata?.controls??JSON.stringify(object.points??[])) as EditorPoint[]).slice(1,-1);
 }
 
 function drawConnectorContactOverrides(
@@ -1934,13 +1952,10 @@ export function drawEditorSceneObject(
     context.restore();return;
   }
   if (object.kind === "physical-node") {
-    const x=object.x+5,y=object.y+5,arms=JSON.parse(object.metadata?.arms??"[]") as EditorPoint[];
-    context.strokeStyle=selected?"#008fa8":"#7a8e99";context.lineWidth=12;context.lineCap="round";
-    for(const arm of arms){context.beginPath();context.moveTo(x,y);context.lineTo(x+arm.x,y+arm.y);context.stroke();}
-    context.fillStyle=selected?"#00a0b7":"#bbc8ce";context.beginPath();context.arc(x,y,6,0,Math.PI*2);context.fill();
-    context.strokeStyle="#bbc8ce";context.lineWidth=9;
-    for(const arm of arms){context.beginPath();context.moveTo(x,y);context.lineTo(x+arm.x,y+arm.y);context.stroke();}
-    if(selected){context.fillStyle="#fff";context.beginPath();context.arc(x,y,2.5,0,Math.PI*2);context.fill();}
+    const x=object.x+5,y=object.y+5;
+    // A movable exit point, without an uneditable decorative fitting.
+    context.fillStyle=selected?"#00a0b7":"#bbc8ce";
+    context.beginPath();context.arc(x,y,5,0,Math.PI*2);context.fill();
     context.restore(); return;
   }
   if (object.kind === "connector" && componentTemplateViewInstance) {
@@ -2573,10 +2588,13 @@ function redrawCanvas(
       componentTemplateImageCache,
     );
   }
+  for (const object of objectsInPaintOrder(objects,layers)) {
+    if (object.kind === "connector" && selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context,object,view,camera.zoom);
+  }
   if (view === "drawing") {
     for (const object of objectsInPaintOrder(objects,layers)) {
-      if (object.kind !== "physical-node" && !(object.kind === "physical-segment" && selectedObjectIds.has(object.id))) continue;
-      const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : JSON.parse(object.metadata?.controls ?? JSON.stringify(object.points ?? []));
+      if (object.kind !== "physical-node" && object.kind !== "physical-segment") continue;
+      const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : [object.points![0]!,...physicalSceneHandles(object),object.points!.at(-1)!];
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
       points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?"#b9edf6":"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
       context.restore();
@@ -3064,7 +3082,7 @@ export function CanvasViewport({
         const routeIndex = selectedLayer?.locked === true || selectedWire?.kind==="wire"&&objects.some(o=>o.kind==="physical-segment"&&containsPoint(o,worldPoint,7/camera.zoom,view))
           ? null
           : hitTestWireRoutePoint(selectedWire, worldPoint, camera.zoom);
-        const routePoint = routeIndex === null ? null : (selectedWire?.kind==="physical-segment"?JSON.parse(selectedWire.metadata?.controls??"[]"):selectedWire?.points)?.[routeIndex + 1];
+        const routePoint = routeIndex === null ? null : (selectedWire?.kind==="physical-segment"?[selectedWire.points![0]!,...physicalSceneHandles(selectedWire)]:selectedWire?.points)?.[routeIndex + 1];
         if (selectedWire && routeIndex !== null && routePoint) {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = {

@@ -508,7 +508,7 @@ export function HarnessEditorWorkspace({
         </button>
       </header>
 
-      <div className="he-workspace">
+      <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""}`}>
         <nav className="he-document-nav" aria-label="Документы жгута">{documentActions}</nav>
         <EditorToolbar
           view={view}
@@ -601,7 +601,7 @@ export function HarnessEditorWorkspace({
           </div>
         </aside>
 
-        <CatalogDock
+        {view !== "drawing" && <CatalogDock
           items={catalogItems}
           sources={catalogSources}
           selectedSourceId={selectedCatalogSourceId}
@@ -616,7 +616,7 @@ export function HarnessEditorWorkspace({
           onQueryChange={onCatalogQueryChange}
           onLoadMore={onCatalogLoadMore}
           onRetry={onCatalogRetry}
-        />
+        />}
       </div>
     </section>
   );

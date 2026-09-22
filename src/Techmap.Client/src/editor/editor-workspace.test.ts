@@ -31,6 +31,7 @@ import {
   drawE4DifferentialPairs,
   drawCableSheaths,
   drawEditorSceneObject,
+  drawSelectedConnectorContacts,
   getVisibleCableSheathScene,
   hitTestCableSheath,
   inlineObjectDragDestination,
@@ -1036,4 +1037,23 @@ describe("harness editor workspace", () => {
     expect(locked[1]).toMatchObject({ id: "bottom", locked: true });
     expect(moveLayer(layers, "missing", 0)).toBe(layers);
   });
+});
+
+it("releases drawing catalogue space while retaining document actions and E4 catalogue",()=>{
+ const props={harnessId:"test",harnessDesignation:"TEST",documentActions:createElement("button",null,"Соединения")};
+ const drawing=renderToStaticMarkup(createElement(HarnessEditorWorkspace,{...props,view:"drawing"}));
+ expect(drawing).toContain("Соединения");expect(drawing).not.toContain('class="he-catalog');
+ const e4=renderToStaticMarkup(createElement(HarnessEditorWorkspace,{...props,view:"e4"}));
+ expect(e4).toContain('class="he-catalog');
+});
+it("marks the actual drawing contact coordinates at a constant screen size and skips absent contacts",()=>{
+ const arc=vi.fn(),context={save:vi.fn(),restore:vi.fn(),beginPath:vi.fn(),arc,fill:vi.fn(),stroke:vi.fn()} as unknown as CanvasRenderingContext2D;
+ const connector:EditorSceneObject={id:"A",kind:"connector",layerId:"top",label:"A",x:100,y:200,width:60,height:90,color:"#123456",metadata:{contactCount:"3",materializedContactPoints:JSON.stringify([null,{x:-20,y:30,direction:"left",status:"available"},{x:40,y:50,direction:"right",status:"available"}])}};
+ drawSelectedConnectorContacts(context,connector,"drawing",2);
+ expect(arc.mock.calls.map(a=>a.slice(0,3))).toEqual([[80,230,3],[80,230,1],[140,250,3],[140,250,1]]);
+});
+it("renders an exit as a neutral point without a spurious directional sleeve",()=>{
+ const lineTo=vi.fn(),arc=vi.fn(),context={save:vi.fn(),restore:vi.fn(),beginPath:vi.fn(),arc,lineTo,fill:vi.fn(),stroke:vi.fn()} as unknown as CanvasRenderingContext2D;
+ drawEditorSceneObject(context,{id:"exit",kind:"physical-node",layerId:"top",label:"Выход",x:95,y:195,width:10,height:10,color:"#123456",metadata:{arms:'[{"x":0,"y":10}]'}},true,"drawing");
+ expect(lineTo).not.toHaveBeenCalled();expect(arc.mock.calls[0]!.slice(0,3)).toEqual([100,200,5]);
 });

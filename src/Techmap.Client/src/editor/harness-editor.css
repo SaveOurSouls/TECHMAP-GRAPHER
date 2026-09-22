@@ -444,3 +444,21 @@
 .he-relations[aria-label="Физические ветви"] .he-physical-fields input:not([type="checkbox"]),.he-relations[aria-label="Физические ветви"] .he-physical-fields select { width:100%; min-width:0; min-height:28px; height:28px; box-sizing:border-box; }
 .he-relations[aria-label="Физические ветви"] .he-physical-fields label:has(input[type="checkbox"]) { flex-direction:row; align-items:center; }
 .he-relations[aria-label="Физические ветви"] input[type="checkbox"] { width:14px; height:14px; min-width:14px; min-height:14px; margin:0; }
+
+/* M4-77: documents occupy the space released by the drawing catalogue. */
+.he-workspace-drawing { grid-template-rows:minmax(0,1fr) auto; }
+.he-workspace-drawing .he-toolbar,.he-workspace-drawing .he-right-panel { grid-row:1 / 3; }
+.he-relations[aria-label="Физические ветви"] .he-pipe-create { grid-template-columns:minmax(0,1fr); }
+.he-relations[aria-label="Физические ветви"] .he-physical-fields select { max-width:none; padding:2px 6px; line-height:normal; }
+.he-pipe-create .ui-control { justify-self:start; }
+.he-table-window-document { display:flex; overflow:hidden; }
+.he-table-window-document>.he-relations { flex:1; min-width:0; min-height:0; display:flex; }
+.he-table-window-document .he-document-content { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.he-table-window .he-document-table { flex:1; min-height:0; overflow:auto; }
+.he-document-table table { table-layout:auto; border-collapse:separate; border-spacing:0; width:max-content; min-width:100%; }
+.he-document-table thead { position:sticky; top:0; z-index:2; }
+.he-document-table th,.he-document-table thead tr:nth-child(2) th { position:static; }
+.he-document-table th,.he-document-table td { box-sizing:border-box; line-height:18px; }
+.he-table-window .he-document-table input { box-sizing:border-box; width:110px; min-width:70px; max-width:none; }
+
+.he-table-window-document .he-document-content>.ui-section-heading { display:none; }

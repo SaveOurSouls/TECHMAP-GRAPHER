@@ -31,7 +31,7 @@ try {
  const {createProjectApi}=await module('project-api.ts'),{createHarnessDesignApi}=await module('editor/design-api.ts');
  const {createConnector,createWire}=await module('editor/commands.ts');
  const {createEmptyHarnessDesign,parseHarnessDesignDocument,createOrthogonalE4Route,wireEndpointE4Anchor}=await module('editor/model.ts');
- const {ensureConnectorExits,insertPhysicalBend,physicalSegmentControls,branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths}=await module('editor/physical-topology.ts');
+ const {ensureConnectorExits,physicalSegmentHandles,movePhysicalHandle,insertPhysicalBend,physicalSegmentControls,branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths}=await module('editor/physical-topology.ts');
  const {standardCovering}=await module('editor/physical-coverings.ts');
  const {buildDrawingBom,emptyDrawingDocuments}=await module('editor/drawing-documents.ts');
  let env=await start();const projects=createProjectApi(env.config,env.session,env.fetcher),designs=createHarnessDesignApi(env.config,env.session,env.fetcher);
@@ -65,8 +65,17 @@ try {
  const pipe=doc.physicalTopology.segments.find(s=>s.id==='second-exit');
  const controls=physicalSegmentControls(doc,pipe),mid={x:(controls[0].x+controls[1].x)/2,y:(controls[0].y+controls[1].y)/2};
  const edited=insertPhysicalBend(doc,pipe,mid);assert.deepEqual(edited.bends,[mid,...pipe.bends]);
+ // Automatic 15-degree corners become saved authored points when dragged (M4-77).
+ const snapped={...doc,physicalTopology:{...doc.physicalTopology,snap:true}};
+ const helperIndex=physicalSegmentHandles(snapped,pipe).findIndex(h=>h.bendIndex===null);
+ assert.ok(helperIndex>=0);
+ const preferred={x:367,y:443};
+ const promoted=movePhysicalHandle(snapped,pipe,helperIndex,preferred);
+ doc={...snapped,physicalTopology:{...snapped.physicalTopology,segments:snapped.physicalTopology.segments.map(s=>s.id===pipe.id?promoted:s)}};
+ doc={...doc,connectors:doc.connectors.map(c=>c.id==='A'?{...c,positions:{...c.positions,drawing:{x:c.positions.drawing.x+3,y:c.positions.drawing.y+2}}}:c)};
+ assert.ok(doc.physicalTopology.segments.find(s=>s.id===pipe.id).bends.some(p=>p.x===preferred.x&&p.y===preferred.y));
  const originalWires=structuredClone(doc.wires),originalRoutes=structuredClone(doc.physicalTopology.routes);
- doc={...doc,physicalTopology:{...doc.physicalTopology,segments:doc.physicalTopology.segments.map(s=>s.id===pipe.id?{...edited,bends:edited.bends.map((p,i)=>i===0?{x:p.x+40,y:p.y-20}:p)}:s)}};
+ doc={...doc,physicalTopology:{...doc.physicalTopology,segments:doc.physicalTopology.segments.map(s=>s.id===pipe.id?{...s,bends:[...s.bends,{x:450,y:520}]}:s)}};
  assert.deepEqual(doc.wires,originalWires);assert.deepEqual(doc.physicalTopology.routes,originalRoutes);
  const {segmentDimensionKey}=await module('editor/drawing-dimensions.ts');
  const {applyEditorCommand}=await module('editor/commands.ts');

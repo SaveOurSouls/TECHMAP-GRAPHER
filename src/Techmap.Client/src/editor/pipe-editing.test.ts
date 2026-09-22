@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { physicalFixture } from './physical-topology-fixture';
-import { ensureConnectorExits, insertPhysicalBend, physicalSegmentControls, physicalSegmentPoints, physicalWirePoints } from './physical-topology';
+import { ensureConnectorExits, insertPhysicalBend, physicalSegmentControls, physicalSegmentPoints, physicalWirePoints, physicalSegmentHandles, movePhysicalHandle } from './physical-topology';
 import { hitTestEditorScene, hitTestWireRoutePoint } from './CanvasViewport';
 import { designToScene } from './HarnessDesignEditor';
 import { applyEditorCommand } from './commands';
 import { parseHarnessDesignDocument } from './model';
+import {createEditorHistory,executeEditorCommand,undoEditorCommand} from './history';
 
 const layers=[{id:'wires',label:'Провода',visible:true,locked:false},{id:'connectors',label:'Компоненты',visible:true,locked:false}];
 describe('pipe editing regressions M4-70',()=>{
@@ -21,13 +22,13 @@ describe('pipe editing regressions M4-70',()=>{
   const updated=insertPhysicalBend(doc,s,{x:40,y:0});expect(updated.bends).toEqual([{x:40,y:0},...s.bends]);
   expect(insertPhysicalBend(doc,s,{x:100,y:0})).toBe(s);
  });
- it('keeps snap helper vertices out of editable handles and wires follow a changed authored bend',()=>{
+ it('exposes automatic corners and wires follow a changed authored bend',()=>{
   const d=physicalFixture(),s=d.physicalTopology!.segments[0]!;
   expect(physicalSegmentPoints(d,s).length).toBeGreaterThan(physicalSegmentControls(d,s).length);
   const scene=designToScene(d,'drawing');const pipe=scene.find(o=>o.id==='S0')!;
-  expect(hitTestWireRoutePoint(pipe,s.bends[0]!,1)).toBe(0);
+  expect(hitTestWireRoutePoint(pipe,s.bends[0]!,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.bendIndex===0));
   const helper=physicalSegmentPoints(d,s).find(p=>!physicalSegmentControls(d,s).some(q=>p.x===q.x&&p.y===q.y))!;
-  expect(hitTestWireRoutePoint(pipe,helper,100)).toBeNull();
+  expect(hitTestWireRoutePoint(pipe,helper,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.point.x===helper.x&&h.point.y===helper.y));
   const next=applyEditorCommand(d,{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(x=>x.id===s.id?{...x,bends:[{x:250,y:90}]}:x)}});
   expect(next.wires).toEqual(d.wires);expect(next.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
   expect(physicalWirePoints(next,'W1',{x:0,y:0},{x:1,y:1})).not.toEqual(physicalWirePoints(d,'W1',{x:0,y:0},{x:1,y:1}));
@@ -40,4 +41,21 @@ describe('pipe editing regressions M4-70',()=>{
   const wire={...scene.find(o=>o.id==='W1')!,metadata:{},points:pipe.points};
   expect(hitTestEditorScene([pipe,wire],layers,p,10,'drawing')).toBe('S0');
  });
+});
+
+it('saves a moved automatic bend across anchor moves, serialization and undo without changing electrical connections',()=>{
+ const d=physicalFixture(),segment=d.physicalTopology!.segments[0]!;
+ const handles=physicalSegmentHandles(d,segment),index=handles.findIndex(h=>h.bendIndex===null);
+ expect(index).toBeGreaterThanOrEqual(0);
+ const point={x:handles[index]!.point.x+85,y:handles[index]!.point.y-40};
+ const updated=movePhysicalHandle(d,segment,index,point);
+ expect(updated.bends).toHaveLength(segment.bends.length+1);
+ const history=executeEditorCommand(createEditorHistory(d),{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>s.id===segment.id?updated:s)}});
+ const moved=applyEditorCommand(history.present,{type:'move-connector',connectorId:'A',view:'drawing',position:{x:3,y:2}});
+ const reopened=parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved)));
+ const saved=reopened.physicalTopology!.segments.find(s=>s.id===segment.id)!;
+ expect(saved.bends).toContainEqual(point);
+ expect(physicalSegmentPoints(reopened,saved)).toContainEqual(point);
+ expect(reopened.wires).toEqual(parseHarnessDesignDocument(JSON.parse(JSON.stringify(d))).wires);expect(reopened.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
+ expect(undoEditorCommand(history).present).toEqual(d);
 });

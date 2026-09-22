@@ -32,6 +32,34 @@ export function physicalSegmentControls(document: HarnessDesignDocument, segment
     physicalNodePoint(document, t.nodes.find(n => n.id === segment.to)!)];
 }
 
+/** Every displayed corner has a handle. Helpers remember their authored leg, not a transient path index. */
+export function physicalSegmentHandles(document: HarnessDesignDocument, segment: PhysicalSegment) {
+  const controls = physicalSegmentControls(document, segment);
+  return controls.slice(1).flatMap((end, leg) => {
+    const path = constrainedPolyline([controls[leg]!, end], document.physicalTopology!.snap);
+    return [
+      ...path.slice(1, -1).map(point => ({ point, insertAt: leg, bendIndex: null as number | null })),
+      ...(leg < segment.bends.length ? [{ point: end, insertAt: leg, bendIndex: leg as number | null }] : []),
+    ];
+  });
+}
+
+/** Moving an automatic corner promotes only that corner to a saved preference. */
+export function movePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number, point: Point): PhysicalSegment {
+  const handle = physicalSegmentHandles(document, segment)[index];
+  if (!handle) return segment;
+  const bends = [...segment.bends];
+  if (handle.bendIndex === null) bends.splice(handle.insertAt, 0, point);
+  else bends[handle.bendIndex] = point;
+  return { ...segment, bends };
+}
+
+export function removePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number): PhysicalSegment {
+  const handle = physicalSegmentHandles(document, segment)[index];
+  if (!handle || handle.bendIndex === null) return segment;
+  return { ...segment, bends: segment.bends.filter((_, i) => i !== handle.bendIndex) };
+}
+
 export function insertPhysicalBend(document: HarnessDesignDocument, segment: PhysicalSegment, point: Point): PhysicalSegment {
   const controls = physicalSegmentControls(document, segment);
   let best = Infinity, index = 0;
