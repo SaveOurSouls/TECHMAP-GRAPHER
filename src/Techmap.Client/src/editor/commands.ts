@@ -1,4 +1,4 @@
-import { reconcileDrawingDimensions } from "./drawing-dimensions";
+import { reconcileDrawingDimensions, pipeMeasuredWireLength } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology, prunePhysicalTopology, type PhysicalTopology } from "./physical-topology";
@@ -183,7 +183,7 @@ export function applyEditorCommand(
   document: HarnessDesignDocument,
   command: EditorCommand,
 ): HarnessDesignDocument {
-  if(command.type==="update-wire"&&command.lengthMm!==undefined&&document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
+  if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
   return reconcileDrawingDimensions(document,prunePhysicalTopology(applyCommand(document, command)));
 }
 

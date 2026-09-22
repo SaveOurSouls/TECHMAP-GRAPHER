@@ -40,4 +40,22 @@ public sealed class HarnessDrawingDimensionsValidatorTests
         var total=dims[0]!.DeepClone();total["id"]="TOTAL";total["to"]=3;total["lengthMm"]=450.125m;dims.Add(total);root["wires"]![0]!["lengthMm"]=450.125m;Validate(root);
         var duplicate=total.DeepClone();duplicate["id"]="TOTAL2";dims.Add(duplicate);Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
     }
+
+    [Fact]
+    public void Shared_pipe_lengths_apply_to_all_routes_and_reject_missing_or_forged_totals()
+    {
+        var root=Fixture();var wire=root["wires"]![0]!.AsObject();wire["lengthMm"]=300.25m;
+        var second=wire.DeepClone();second["id"]="W2";root["wires"]!.AsArray().Add(second);
+        JsonObject Segment(string id,string from,string to)=>new(){["id"]=id,["from"]=from,["to"]=to,["bends"]=new JsonArray()};
+        JsonObject Route(string id)=>new(){["wireId"]=id,["steps"]=new JsonArray(new JsonObject{["segmentId"]="S1",["reverse"]=false},new JsonObject{["segmentId"]="S2",["reverse"]=false})};
+        root["physicalTopology"]=new JsonObject{["segments"]=new JsonArray(Segment("S1","A","J"),Segment("S2","J","B")),["routes"]=new JsonArray(Route("W"),Route("W2"))};
+        JsonObject Dimension(string id,string from,string to,decimal length)=>new(){["id"]="D"+id,["segmentId"]=id,["from"]=0,["to"]=1,["pointCount"]=2,["routeKey"]=JsonSerializer.Serialize(new object[]{id,from,to,0}),["mode"]="aligned",["offset"]=40,["lengthMm"]=length};
+        var dims=new JsonArray(Dimension("S1","A","J",100.125m),Dimension("S2","J","B",200.125m));root["drawingDocuments"]!["dimensions"]=dims;
+        Validate(root);
+        root["wires"]![1]!["lengthMm"]=300;Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+        root["wires"]![1]!["lengthMm"]=300.25m;
+        dims.RemoveAt(1);Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+        foreach(var w in root["wires"]!.AsArray())w!["lengthMm"]=null;Validate(root);
+        dims[0]!["pointCount"]=3;Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
 }

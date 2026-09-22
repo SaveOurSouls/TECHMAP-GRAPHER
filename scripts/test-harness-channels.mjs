@@ -68,10 +68,16 @@ try {
  const originalWires=structuredClone(doc.wires),originalRoutes=structuredClone(doc.physicalTopology.routes);
  doc={...doc,physicalTopology:{...doc.physicalTopology,segments:doc.physicalTopology.segments.map(s=>s.id===pipe.id?{...edited,bends:edited.bends.map((p,i)=>i===0?{x:p.x+40,y:p.y-20}:p)}:s)}};
  assert.deepEqual(doc.wires,originalWires);assert.deepEqual(doc.physicalTopology.routes,originalRoutes);
+ const {segmentDimensionKey}=await module('editor/drawing-dimensions.ts');
+ const {applyEditorCommand}=await module('editor/commands.ts');
+ const dimensions=doc.physicalTopology.segments.map((s,i)=>({id:'shared-'+s.id,segmentId:s.id,from:0,to:s.bends.length+1,pointCount:s.bends.length+2,routeKey:segmentDimensionKey(doc,s.id),mode:'aligned',offset:40,lengthMm:100+i*25}));
+ doc=applyEditorCommand(doc,{type:'set-drawing-documents',documents:{...doc.drawingDocuments,dimensions}});
+ for(const w of doc.wires){const route=doc.physicalTopology.routes.find(r=>r.wireId===w.id);assert.equal(w.lengthMm,route.steps.reduce((sum,step)=>sum+dimensions.find(d=>d.segmentId===step.segmentId).lengthMm,0));}
+ doc=applyEditorCommand(doc,{type:'update-wire',wireId:'W1',endCorrectionFromMm:12.5});
  const parsed=parseHarnessDesignDocument(JSON.parse(JSON.stringify(doc))),initial=await designs.get(project.projectId,harnessId);
  await designs.save(project.projectId,harnessId,initial.revision,parsed);
  assert.deepEqual((await designs.get(project.projectId,harnessId)).content,parsed);
  await stop();env=await start();assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,parsed);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

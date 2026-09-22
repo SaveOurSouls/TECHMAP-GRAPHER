@@ -1,10 +1,10 @@
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireInstance } from "./model";
-import { physicalWirePoints } from "./physical-topology";
+import { physicalWirePoints, physicalSegmentControls } from "./physical-topology";
 import type { EditorSceneObject } from "./editor-types";
 
 export type DimensionMode="horizontal"|"vertical"|"aligned";
 export interface DrawingDimension {
-  readonly id:string; readonly wireId:string; readonly from:number; readonly to:number;
+  readonly id:string; readonly wireId?:string; readonly segmentId?:string; readonly from:number; readonly to:number;
   readonly pointCount:number; readonly routeKey:string; readonly mode:DimensionMode;
   readonly offset:number; readonly lengthMm:number|null;
 }
@@ -35,28 +35,55 @@ export function measuredWireLength(dimensions:readonly DrawingDimension[]):numbe
   }
   return complete&&next===end?micros/1000:null;
 }
+export function segmentDimensionKey(document:HarnessDesignDocument,segmentId:string):string {
+  const s=document.physicalTopology?.segments.find(s=>s.id===segmentId);
+  return JSON.stringify(s?[s.id,s.from,s.to,s.bends.length]:null);
+}
+export function dimensionTargetKey(document:HarnessDesignDocument,d:DrawingDimension):string|null {
+  if(d.segmentId)return document.physicalTopology?.segments.some(s=>s.id===d.segmentId)?segmentDimensionKey(document,d.segmentId):null;
+  const wire=document.wires.find(w=>w.id===d.wireId);return wire?dimensionRouteKey(document,wire):null;
+}
+export function pipeMeasuredWireLength(document:HarnessDesignDocument,wireId:string):{managed:boolean;lengthMm:number|null} {
+  const route=document.physicalTopology?.routes.find(r=>r.wireId===wireId);
+  const dims=document.drawingDocuments?.dimensions??[];
+  const managed=!!route?.steps.some(s=>dims.some(d=>d.segmentId===s.segmentId));
+  if(!managed||!route?.steps.length)return {managed:false,lengthMm:null};
+  let micros=0;
+  for(const step of route.steps){const length=measuredWireLength(dims.filter(d=>d.segmentId===step.segmentId));if(length===null)return {managed:true,lengthMm:null};micros+=Math.round(length*1000);}
+  return {managed:true,lengthMm:micros/1000};
+}
 export function validateDrawingDimensions(value:unknown,document:HarnessDesignDocument):readonly DrawingDimension[]|undefined {
   if(value===undefined)return undefined;
   const fail=():never=>{throw new Error("Некорректные размеры чертежа.");};
   if(!Array.isArray(value)||value.length>10000)return fail();
   const ids=new Set<string>();
   for(const d of value as DrawingDimension[]){
-    if(!d||typeof d.id!=="string"||!d.id.trim()||d.id.length>128||ids.has(d.id)||typeof d.wireId!=="string"||!document.wires.some(w=>w.id===d.wireId)||typeof d.routeKey!=="string"||d.routeKey.length>65536||!["horizontal","vertical","aligned"].includes(d.mode)||!Number.isFinite(d.offset)||Math.abs(d.offset)>1e7||!Number.isInteger(d.pointCount)||d.pointCount<2||d.pointCount>50000||!Number.isInteger(d.from)||!Number.isInteger(d.to)||d.from<0||d.to<=d.from||d.to>=d.pointCount||d.lengthMm!==null&&(!Number.isFinite(d.lengthMm)||d.lengthMm<0||d.lengthMm>1e7||Math.abs(d.lengthMm*1000-Math.round(d.lengthMm*1000))>1e-5))return fail();
+    if(!d)return fail();
+    const pipe=d.segmentId!==undefined;
+    if(!d||typeof d.id!=="string"||!d.id.trim()||d.id.length>128||ids.has(d.id)||pipe&&(typeof d.segmentId!=="string"||d.wireId!==undefined)||!pipe&&typeof d.wireId!=="string"||typeof d.routeKey!=="string"||d.routeKey.length>65536||!["horizontal","vertical","aligned"].includes(d.mode)||!Number.isFinite(d.offset)||Math.abs(d.offset)>1e7||!Number.isInteger(d.pointCount)||d.pointCount<2||d.pointCount>50000||!Number.isInteger(d.from)||!Number.isInteger(d.to)||d.from<0||d.to<=d.from||d.to>=d.pointCount||d.lengthMm!==null&&(!Number.isFinite(d.lengthMm)||d.lengthMm<0||d.lengthMm>1e7||Math.abs(d.lengthMm*1000-Math.round(d.lengthMm*1000))>1e-5))return fail();
     ids.add(d.id);
-    if(d.routeKey!==dimensionRouteKey(document,document.wires.find(w=>w.id===d.wireId)!))return fail();
+    if(d.routeKey!==dimensionTargetKey(document,d))return fail();
+    if(pipe&&d.pointCount!==document.physicalTopology!.segments.find(s=>s.id===d.segmentId)!.bends.length+2)return fail();
   }
-  for(const wireId of new Set((value as DrawingDimension[]).map(d=>d.wireId))){const group=(value as DrawingDimension[]).filter(d=>d.wireId===wireId);if(group.some(d=>d.pointCount!==group[0]!.pointCount))return fail();measuredWireLength(group);}
+  for(const target of new Set((value as DrawingDimension[]).map(d=>d.segmentId??d.wireId))){const group=(value as DrawingDimension[]).filter(d=>(d.segmentId??d.wireId)===target);if(group.some(d=>d.pointCount!==group[0]!.pointCount))return fail();measuredWireLength(group);}
   return value as DrawingDimension[];
 }
-/** Update model lengths in the same undo step; incomplete or invalidated measurements stay unknown. */
+/** Pipe measurements own shared route lengths; legacy wire dimensions remain individual overrides. */
 export function reconcileDrawingDimensions(before:HarnessDesignDocument,after:HarnessDesignDocument):HarnessDesignDocument {
   const old=before.drawingDocuments?.dimensions??[],current=after.drawingDocuments?.dimensions??[];
   if(!old.length&&!current.length)return after;
-  const dimensions=current.filter(d=>{const wire=after.wires.find(w=>w.id===d.wireId);const previous=before.wires.find(w=>w.id===d.wireId);return wire&&dimensionRouteKey(after,wire)===d.routeKey&&(!previous||dimensionWirePoints(before,previous).length===dimensionWirePoints(after,wire).length);});
-  const affected=new Set([...old,...current].map(d=>d.wireId));
-  return {...after,drawingDocuments:{...after.drawingDocuments!,dimensions},wires:after.wires.map(w=>{
-    if(!affected.has(w.id))return w;
-    const lengthMm=measuredWireLength(dimensions.filter(d=>d.wireId===w.id));
+  const dimensions=current.filter(d=>{
+    if(dimensionTargetKey(after,d)!==d.routeKey)return false;
+    if(d.segmentId)return after.physicalTopology!.segments.find(s=>s.id===d.segmentId)!.bends.length+2===d.pointCount;
+    const wire=after.wires.find(w=>w.id===d.wireId),previous=before.wires.find(w=>w.id===d.wireId);
+    return wire&&(!previous||dimensionWirePoints(before,previous).length===dimensionWirePoints(after,wire).length);
+  });
+  const measured={...after,drawingDocuments:{...after.drawingDocuments!,dimensions}};
+  return {...measured,wires:after.wires.map(w=>{
+    const own=dimensions.filter(d=>d.wireId===w.id),shared=pipeMeasuredWireLength(measured,w.id);
+    const affected=own.length||shared.managed||old.some(d=>d.wireId===w.id)||pipeMeasuredWireLength(before,w.id).managed;
+    if(!affected)return w;
+    const lengthMm=own.length?measuredWireLength(own):shared.lengthMm;
     calculateWireCutLength({...w,lengthMm});return {...w,lengthMm};
   })};
 }
@@ -68,7 +95,8 @@ export function dimensionGeometry(a:Point,b:Point,mode:DimensionMode,offset:numb
 }
 export function drawingDimensionScene(document:HarnessDesignDocument,wires:readonly EditorSceneObject[]):EditorSceneObject[] {
   return (document.drawingDocuments?.dimensions??[]).flatMap(d=>{
-    const points=wires.find(w=>w.id===d.wireId)?.points,a=points?.[d.from],b=points?.[d.to];
+    const segment=document.physicalTopology?.segments.find(s=>s.id===d.segmentId);
+    const points=segment?physicalSegmentControls(document,segment):wires.find(w=>w.id===d.wireId)?.points,a=points?.[d.from],b=points?.[d.to];
     if(!a||!b)return [];
     const valid=points?.length===d.pointCount;
     return [{id:d.id,kind:"dimension" as const,layerId:"dimensions",label:valid?(d.lengthMm===null?"— мм":`${d.lengthMm} мм`):"Обновите привязку",x:0,y:0,width:0,height:0,color:valid?"#55798e":"#bb3333",points:dimensionGeometry(a,b,d.mode,d.offset),metadata:{boundDimension:"true"}}];

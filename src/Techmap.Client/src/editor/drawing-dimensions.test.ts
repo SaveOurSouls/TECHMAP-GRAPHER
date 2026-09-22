@@ -1,6 +1,7 @@
+import {buildHarnessSelectionIndex,resolveHarnessSelection} from "./harness-selection";
 import { describe,it,expect } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { dimensionGeometry,dimensionRouteKey,dimensionWirePoints,validateDrawingDimensions } from "./drawing-dimensions";
+import { dimensionGeometry,dimensionRouteKey,dimensionWirePoints,segmentDimensionKey,pipeMeasuredWireLength,validateDrawingDimensions } from "./drawing-dimensions";
 import { applyEditorCommand } from "./commands";
 import { createEditorHistory,executeEditorCommand,undoEditorCommand } from "./history";
 import { calculateWireCutLength,parseHarnessDesignDocument } from "./model";
@@ -35,5 +36,25 @@ describe("bound dimensions",()=>{
   const topology={...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>s.id==="S0"?{...s,id:"replacement"}:s),routes:d.physicalTopology!.routes.map(r=>({...r,steps:r.steps.map(s=>s.segmentId==="S0"?{...s,segmentId:"replacement"}:s)}))};
   expect(applyEditorCommand(measured,{type:"set-physical-topology",topology}).wires[0]!.lengthMm).toBeNull();
   expect(()=>validateDrawingDimensions([{...dimension,from:"bad"}],d)).toThrow();
+
+ });
+ it("shares measured pipes, sums per route, preserves individual corrections and invalidates missing lengths",()=>{
+  const d=physicalFixture();
+  const dimensions=d.physicalTopology!.segments.map((segment,i)=>({id:`P${i}`,segmentId:segment.id,from:0,to:segment.bends.length+1,pointCount:segment.bends.length+2,routeKey:segmentDimensionKey(d,segment.id),mode:"aligned" as const,offset:30,lengthMm:[125.5,200,50][i]!}));
+  const measured=applyEditorCommand(d,{type:"set-drawing-documents",documents:{...emptyDrawingDocuments(),dimensions}});
+  expect(measured.wires.map(w=>w.lengthMm)).toEqual([325.5,175.5,250]);
+  expect(resolveHarnessSelection(buildHarnessSelectionIndex(measured),["P0"]).wireIds).toEqual(["W1","W2"]);
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(measured))).drawingDocuments?.dimensions).toEqual(dimensions);
+  const corrected=applyEditorCommand(measured,{type:"update-wire",wireId:"W1",endCorrectionFromMm:10,endCorrectionToMm:2.5});
+  expect(calculateWireCutLength(corrected.wires[0]!).cutLengthMm).toBe(338);
+  expect(corrected.wires[1]!.lengthMm).toBe(175.5);
+  const partial=applyEditorCommand(corrected,{type:"set-drawing-documents",documents:{...corrected.drawingDocuments!,dimensions:dimensions.slice(0,2)}});
+  expect(partial.wires.map(w=>w.lengthMm)).toEqual([325.5,null,null]);
+  const moved=applyEditorCommand(measured,{type:"set-physical-topology",topology:{...measured.physicalTopology!,snap:false,segments:measured.physicalTopology!.segments.map(s=>({...s,bends:s.bends.map(p=>({x:p.x+20,y:p.y+10}))}))}});
+  expect(moved.wires.map(w=>w.lengthMm)).toEqual([325.5,175.5,250]);
+  const changed=applyEditorCommand(moved,{type:"set-physical-topology",topology:{...moved.physicalTopology!,segments:moved.physicalTopology!.segments.map(s=>s.id==="S0"?{...s,bends:[]}:s)}});
+  expect(changed.wires.map(w=>w.lengthMm)).toEqual([null,null,250]);
+  expect(()=>applyEditorCommand(measured,{type:"update-wire",wireId:"W1",lengthMm:1})).toThrow(/размерами/);
+  expect(pipeMeasuredWireLength(measured,"W1").managed).toBe(true);
  });
 });
