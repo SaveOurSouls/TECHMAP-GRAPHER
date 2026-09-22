@@ -1398,10 +1398,28 @@ function NumericField({ label, value, disabled, min, max, step, immediate = fals
 
 function nodeLabel(node: TemplateNodeV2) { return ({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Кривая Безье", closedContour: "Контур", text: "Текст", image: "Изображение", group: "Группа" })[node.kind]; }
 function nodePosition(node: EditableNode) { const tx = constantValue(node.transform.translateX)!, ty = constantValue(node.transform.translateY)!; if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour") return { x: constantValue(node.geometry.points[0]!.x)! + tx, y: constantValue(node.geometry.points[0]!.y)! + ty }; if (node.kind === "ellipse") return { x: constantValue(node.geometry.centerX)! - constantValue(node.geometry.radiusX)! + tx, y: constantValue(node.geometry.centerY)! - constantValue(node.geometry.radiusY)! + ty }; return { x: constantValue(node.geometry.x)! + tx, y: constantValue(node.geometry.y)! + ty }; }
-function nodeDimensions(node: EditableNode): { width: number; height: number } | null { if (node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour" || node.kind === "text") return null; if (node.kind === "ellipse") return { width: constantValue(node.geometry.radiusX)! * 2, height: constantValue(node.geometry.radiusY)! * 2 }; return { width: constantValue(node.geometry.width)!, height: constantValue(node.geometry.height)! }; }
+/** Side lengths in drawing units, independent of rotation and camera zoom. */
+export function nodeDimensions(node: EditableNode): { width: number; height: number } | null {
+  if (node.kind !== "rectangle" && node.kind !== "ellipse" && node.kind !== "image") return null;
+  const sx = constantValue(node.transform.scaleX), sy = constantValue(node.transform.scaleY);
+  const width = node.kind === "ellipse" ? constantValue(node.geometry.radiusX) : constantValue(node.geometry.width);
+  const height = node.kind === "ellipse" ? constantValue(node.geometry.radiusY) : constantValue(node.geometry.height);
+  if (sx === null || sy === null || width === null || height === null) return null;
+  const diameter = node.kind === "ellipse" ? 2 : 1;
+  return { width: width * diameter * Math.abs(sx), height: height * diameter * Math.abs(sy) };
+}
 
 function setNodePosition(content: TemplateContentV2, viewId: string, layerId: string, node: EditableNode, x: number, y: number): TemplateContentV2 {
   const current = nodePosition(node);
   return moveNodeV2(content, viewId, layerId, node.id, x - current.x, y - current.y);
 }
-function editDimension(node: EditableNode, key: "width" | "height", value: number, edit: (changes: NodeEditV2) => void) { if (value <= 0 || node.kind === "line" || node.kind === "polyline" || node.kind === "bezier" || node.kind === "closedContour" || node.kind === "text") return; const c = constantExpressionV2; if (node.kind === "ellipse") edit({ geometry: { ...node.geometry, [key === "width" ? "radiusX" : "radiusY"]: c(value / 2) } }); else edit({ geometry: { ...node.geometry, [key]: c(value) } }); }
+export function editDimension(node: EditableNode, key: "width" | "height", value: number, edit: (changes: NodeEditV2) => void) {
+  if (!Number.isFinite(value) || value <= 0 || (node.kind !== "rectangle" && node.kind !== "ellipse" && node.kind !== "image")) return;
+  const scale = constantValue(node.transform[key === "width" ? "scaleX" : "scaleY"]);
+  if (scale === null || !Number.isFinite(scale) || scale === 0) return;
+  const localSize = value / Math.abs(scale);
+  if (!Number.isFinite(localSize)) return;
+  const c = constantExpressionV2;
+  if (node.kind === "ellipse") edit({ geometry: { ...node.geometry, [key === "width" ? "radiusX" : "radiusY"]: c(localSize / 2) } });
+  else edit({ geometry: { ...node.geometry, [key]: c(localSize) } });
+}
