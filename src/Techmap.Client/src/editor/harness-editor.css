@@ -418,3 +418,12 @@
 .he-table-window .he-document-table input { height:24px; min-height:24px; }
 .he-table-window .he-document-table input[aria-label^="Наименование"] { width:180px; }
 .he-table-window .he-document-table input[aria-label^="Примечание"] { width:170px; }
+
+.he-table-window>header { background:#f5fafb; color:#193d50; border-bottom:1px solid #cedce3; }
+.he-table-window>header strong { color:#193d50; }
+.he-table-window>header select { border-color:#c3d4dd; background:#fff; color:#294959; }
+.he-table-window>header button { color:#275c72; }
+.he-table-window .he-bom-note-cell { white-space:nowrap; }
+.he-table-window .he-bom-note-cell>input { width:130px; }
+.he-table-window .he-bom-note-cell>.he-relations-actions { display:inline-flex; margin:0 2px; vertical-align:middle; }
+.he-table-window .he-bom-note-cell>select { display:inline-block; width:90px; height:24px; min-height:24px; padding:0 3px; border-color:transparent; font-size:10px; }
