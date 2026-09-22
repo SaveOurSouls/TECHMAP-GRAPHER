@@ -1,3 +1,4 @@
+import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
 import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
 import { screenCrossSections } from "./e4-screen-spans";
@@ -1016,12 +1017,12 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
-  if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance));
-  if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => path.slice(1).some((p,i)=>pointToSegmentDistance(point,path[i]!,p)<=tolerance+object.width/2));
+  if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>{const curve=drawingRouteHitPoints(path);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance);});
+  if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => {const curve=drawingRouteHitPoints(path);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance+object.width/2);});
   if (object.kind === "wire" || object.kind === "dimension") {
     if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
       geometry.primitives.some((primitive) => polygonContainsPoint(primitive.polygon, point, tolerance)))) return true;
-    const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
+    const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : view === "drawing" && object.kind === "wire" ? drawingRouteHitPoints(object.points ?? []) : object.points ?? [];
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
@@ -1908,7 +1909,7 @@ export function drawEditorSceneObject(
     for (const points of object.paths ?? [object.points ?? []]) {
     context.globalAlpha = selected ? .65 : .3; context.lineJoin = "miter"; context.miterLimit = 4; context.lineCap = "butt";
     context.lineWidth = object.width; context.strokeStyle = selected ? "#1179ac" : object.color;
-    context.beginPath(); points.forEach((p,i)=>i===0?context.moveTo(p.x,p.y):context.lineTo(p.x,p.y)); context.stroke();
+    traceDrawingRoute(context,points); context.stroke();
     context.globalAlpha = 1; context.lineWidth = 1; context.strokeStyle = object.color;
     for (const [a,b] of [[points[0],points[1]],[points.at(-1),points.at(-2)]]) if(a&&b) {const l=Math.hypot(b.x-a.x,b.y-a.y);if(l){const x=-(b.y-a.y)/l*object.width/2,y=(b.x-a.x)/l*object.width/2;context.beginPath();context.moveTo(a.x-x,a.y-y);context.lineTo(a.x+x,a.y+y);context.stroke();}}
     }
@@ -1916,21 +1917,25 @@ export function drawEditorSceneObject(
   }
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
-    context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+    traceDrawingRoute(context,points);
     context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=object.width+2;context.stroke();
-    context.strokeStyle="#f8fafb";context.lineWidth=object.width;context.stroke();
+    context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
     if(selected){context.fillStyle="#fff";context.strokeStyle="#1179ac";context.lineWidth=1.5;for(const p of points){context.beginPath();context.arc(p.x,p.y,4.5,0,Math.PI*2);context.fill();context.stroke();}}
     context.restore();return;
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";context.lineWidth=selected?4:2;
-    for(const path of object.paths){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));strokeE4Wire(context,selected?"#1179ac":object.color);}
+    for(const path of object.paths){traceDrawingRoute(context,path);strokeE4Wire(context,object.color,selected?4:2);}
     context.restore();return;
   }
   if (object.kind === "physical-node") {
-    context.beginPath(); context.arc(object.x + 5, object.y + 5, 5, 0, Math.PI * 2);
-    context.fillStyle = selected ? "#1179ac" : "#ffffff"; context.fill(); context.strokeStyle = "#1179ac"; context.stroke();
-    context.font = "11px Arial"; context.fillStyle = "#34566a"; context.fillText(object.label, object.x + 12, object.y);
+    const x=object.x+5,y=object.y+5,arms=JSON.parse(object.metadata?.arms??"[]") as EditorPoint[];
+    context.strokeStyle=selected?"#008fa8":"#7a8e99";context.lineWidth=12;context.lineCap="round";
+    for(const arm of arms){context.beginPath();context.moveTo(x,y);context.lineTo(x+arm.x,y+arm.y);context.stroke();}
+    context.fillStyle=selected?"#00a0b7":"#bbc8ce";context.beginPath();context.arc(x,y,6,0,Math.PI*2);context.fill();
+    context.strokeStyle="#bbc8ce";context.lineWidth=9;
+    for(const arm of arms){context.beginPath();context.moveTo(x,y);context.lineTo(x+arm.x,y+arm.y);context.stroke();}
+    if(selected){context.fillStyle="#fff";context.beginPath();context.arc(x,y,2.5,0,Math.PI*2);context.fill();}
     context.restore(); return;
   }
   if (object.kind === "connector" && componentTemplateViewInstance) {
@@ -1969,7 +1974,8 @@ export function drawEditorSceneObject(
     const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
     if (points.length >= 2) {
       context.beginPath();
-      points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+      if(view==="drawing"&&object.kind==="wire")traceDrawingRoute(context,points);
+      else points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
       context.strokeStyle = selected ? "#1179ac" : object.color;
       context.lineWidth = selected ? 4 : object.kind === "wire" ? 3 : 1.5;
       if (object.kind === "dimension" || object.metadata?.routeMissing === "true") context.setLineDash([7, 5]);
@@ -2538,12 +2544,11 @@ function redrawCanvas(
       const points = view === "e4" ? getE4WireRoute(object) : object.points ?? [];
       context.save(); context.strokeStyle = "#f2af28"; context.globalAlpha = .65;
       context.lineWidth = 9 / Math.max(.5, camera.zoom); context.lineJoin = "round"; context.beginPath();
-      points.forEach((point, i) => i ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
-      context.stroke(); context.restore();
+      for(const path of view==="drawing"?object.paths??[points]:[points]) {if(view==="drawing")traceDrawingRoute(context,path);else {context.beginPath();path.forEach((point,i)=>i?context.lineTo(point.x,point.y):context.moveTo(point.x,point.y));}context.stroke();} context.restore();
     }
     if(highlighted.has(object.id)&&object.kind!=="wire") {
       context.save();context.strokeStyle="#f2af28";context.globalAlpha=.7;context.lineWidth=6/Math.max(.5,camera.zoom);
-      if(object.kind==="physical-covering"||object.kind==="physical-segment") {for(const path of object.paths??[object.points??[]]){context.beginPath();path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();}}
+      if(object.kind==="physical-covering"||object.kind==="physical-segment") {for(const path of object.paths??[object.points??[]]){traceDrawingRoute(context,path);context.stroke();}}
       else {
         const instance=componentViews.get(object.id);
         const projection=instance&&view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
