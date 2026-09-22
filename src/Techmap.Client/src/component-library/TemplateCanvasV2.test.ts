@@ -256,7 +256,8 @@ describe("TemplateCanvasV2", () => {
     });
     const markup = render(content([rectangle]), { selectedId: ids.rectangle, onNodeResize: () => undefined });
 
-    expect(markup).toContain('fill="transparent" stroke="transparent" stroke-width="12"');
+    expect(markup).toContain('data-shape-hit-region="true"');
+    expect(markup).toContain('fill="transparent" stroke="transparent" stroke-width="2"');
     expect(markup).toContain('data-selection-kind="box"');
     expect(markup.match(/data-resize-handle=/g)).toHaveLength(4);
     expect(markup).toContain('data-resize-handle="nw"');

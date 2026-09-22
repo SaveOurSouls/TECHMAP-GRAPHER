@@ -1,5 +1,5 @@
 import { contactShapeLabel, contactLabelColor } from "./contact-shape";
-import { drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
+import { boxHandleRadius, drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
 import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
 import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { rootNodeRotationCenterV3 } from "./template-commands-v3";
@@ -999,7 +999,7 @@ export function TemplateCanvasV2({
         const path = rectanglePath(x, y, rectangleWidth, rectangleHeight, radii as number[]);
         return path
           ? <g {...common}>
-            <path d={path} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+            <path data-shape-hit-region="true" d={path} fill="transparent" stroke="transparent" strokeWidth={strokeWidth} />
             <path {...shape} pointerEvents="none" d={path} />
             {contactLabel(x+rectangleWidth/2,y+rectangleHeight/2,rectangleWidth,rectangleHeight)}
           </g>
@@ -1013,7 +1013,7 @@ export function TemplateCanvasV2({
         if (centerX === null || centerY === null || radiusX === null || radiusY === null || radiusX <= 0 || radiusY <= 0)
           return placeholder(node, width, height, "Радиусы эллипса не вычисляются или не являются положительными.");
         return <g {...common}>
-          <ellipse cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} fill="transparent" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
+          <ellipse data-shape-hit-region="true" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} fill="transparent" stroke="transparent" strokeWidth={strokeWidth} />
           <ellipse {...shape} pointerEvents="none" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} />
           {contactLabel(centerX,centerY,radiusX*2,radiusY*2,true)}
         </g>;
@@ -1408,13 +1408,14 @@ export function TemplateCanvasV2({
     const left = moveX(x, "w"), top = moveY(y, "n"), right = moveX(x + boxWidth, "e"), bottom = moveY(y + boxHeight, "s");
     const pixelsX=screenScale*Math.abs(evaluate(node.transform.scaleX) ?? 1),pixelsY=screenScale*Math.abs(evaluate(node.transform.scaleY) ?? 1);
     const control=spacedHandleBounds(left,top,right,bottom,pixelsX,pixelsY);
+    const gripRadius=boxHandleRadius((right-left)*pixelsX,(bottom-top)*pixelsY);
     const handles: readonly [NodeResizeHandleV2, number, number][] = [
       ["nw", left, top], ["n", (left + right) / 2, top], ["ne", right, top], ["e", right, (top + bottom) / 2],
       ["se", right, bottom], ["s", (left + right) / 2, bottom], ["sw", left, bottom], ["w", left, (top + bottom) / 2],
     ];
     return <g className="template-selection" transform={transform} data-selection-kind="box">
       <rect x={Math.min(left, right)} y={Math.min(top, bottom)} width={Math.abs(right - left)} height={Math.abs(bottom - top)} />
-      {handles.filter(([candidate])=>!control.compact||candidate.length===2).map(([candidate, handleX, handleY]) => <ellipse key={candidate} cx={candidate.includes("w")?control.left:candidate.includes("e")?control.right:handleX} cy={candidate.includes("n")?control.top:candidate.includes("s")?control.bottom:handleY} rx={5.5/Math.max(.0001,pixelsX)} ry={5.5/Math.max(.0001,pixelsY)}
+      {handles.filter(([candidate])=>!control.compact||candidate.length===2).map(([candidate, handleX, handleY]) => <ellipse key={candidate} cx={handleX} cy={handleY} rx={gripRadius/Math.max(.0001,pixelsX)} ry={gripRadius/Math.max(.0001,pixelsY)} style={{strokeWidth:Math.min(2,gripRadius/2)}}
         data-resize-handle={candidate} onPointerDown={event => beginResizeGesture(event, node.id, candidate)} />)}
     </g>;
   }

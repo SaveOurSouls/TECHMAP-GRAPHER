@@ -14,6 +14,22 @@ const evaluate = (value: {kind:string;value?:number}) => value.kind === "constan
 const off = {corners:false,contours:false,tangents:false};
 
 describe("M4-15 drawing editor", () => {
+  it.each(["rectangle","ellipse"] as const)("matches the %s pick contour and grips to tiny rotated/scaled geometry", kind=>{
+    let core=newTemplateContentV3(); const view=core.views[1]!,layer=view.layers[0]!;
+    let id:string; [core,id]=addBasicNodeV3(core,view.id,layer.id,kind);
+    const node=core.views[1]!.layers[0]!.nodes[0]!;
+    node.stroke.width=c(.5);
+    node.transform={translateX:c(20),translateY:c(30),rotationDegrees:c(15),scaleX:c(.1),scaleY:c(.1)};
+    if(node.kind==="rectangle")node.geometry={x:c(0),y:c(0),width:c(8),height:c(8),cornerRadii:[c(0),c(0),c(0),c(0)]};
+    if(node.kind==="ellipse")node.geometry={centerX:c(4),centerY:c(4),radiusX:c(4),radiusY:c(4)};
+    const html=renderToStaticMarkup(createElement(TemplateCanvasV2,{content:projectTemplateContentV3CoreToV2(core),viewId:view.id,selectedId:id,onSelect:()=>{},onNodeResize:()=>{},resolveAssetUrl:()=>""}));
+    const pick=html.match(/<(?:path|ellipse) data-shape-hit-region="true"[^>]*>/)![0];
+    expect(pick).toContain('stroke-width="0.5"');
+    const overlay=html.slice(html.indexOf('data-selection-kind="box"'));
+    expect(overlay).toContain('<rect x="0" y="0" width="8" height="8"');
+    expect(overlay).toMatch(/cx="0" cy="0"[^>]+data-resize-handle="nw"/);
+    expect(overlay).toMatch(/cx="8" cy="8"[^>]+data-resize-handle="se"/);
+  });
   it("aligns a long moving edge to a shorter target segment and honors disabled contours",()=>{
     const moving={id:"long",closed:false,points:[{x:0,y:0},{x:100,y:0}]};
     const target={id:"short",closed:false,points:[{x:40,y:12},{x:60,y:12}]};

@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {drawingHandleRadii,spacedHandleBounds,zoomDrawingCamera} from "./drawing-viewport";
+import {boxHandleRadius,drawingHandleRadii,spacedHandleBounds,zoomDrawingCamera} from "./drawing-viewport";
 describe("drawing viewport and compact handles",()=>{
   it.each([.1,1,8,32])("keeps grips small at camera scale %s and compensates stretched geometry",zoom=>{
     const radii=drawingHandleRadii(zoom,20,.25,1000);
@@ -15,10 +15,11 @@ describe("drawing viewport and compact handles",()=>{
     expect((point.y-next.y)*next.zoom).toBeCloseTo((point.y-camera.y)*camera.zoom);
     expect(zoomDrawingCamera({...camera,zoom:32},point,-100).zoom).toBe(32);
   });
-  it("separates corner targets at tiny scales while leaving large bounds unchanged",()=>{
+  it("keeps compact grips on the real contour and shrinks their screen footprint",()=>{
     const compact=spacedHandleBounds(10,10,12,12,.2,.1);
-    expect((compact.right-compact.left)*.2).toBeCloseTo(28);
-    expect((compact.bottom-compact.top)*.1).toBeCloseTo(28);
+    expect(compact).toMatchObject({left:10,right:12,top:10,bottom:12});
+    expect(boxHandleRadius(8,8)).toBe(2);
+    expect(boxHandleRadius(100,100)).toBe(5.5);
     expect(compact.compact).toBe(true);
     expect(spacedHandleBounds(0,0,100,90,1)).toEqual({left:0,top:0,right:100,bottom:90,compact:false});
   });

@@ -9,12 +9,12 @@ export function DrawingSelectionProperties({nodes,allNodes=nodes,disabled,change
   const leaves=drawingStyleLeaves(nodes,allNodes);
   const common=<T,>(read:(node:TemplateNodeV2)=>T,source:readonly TemplateNodeV2[]=leaves):T|undefined => { if(!source.length)return undefined; const first=read(source[0]!);return source.every(node=>JSON.stringify(read(node))===JSON.stringify(first)) ? first : undefined; };
   const opacity=common(node=>node.opacity,nodes),stroke=common(node=>node.stroke.color),fill=common(node=>node.fill.color),dash=common(node=>node.stroke.dash ?? "solid"),width=common(node=>node.stroke.width.kind==="constant" ? node.stroke.width.value : undefined);
-  const numeric=(label:string,value:number|undefined,min:number,max:number,apply:(value:number)=>void,step=1)=><DraftNumber label={label} value={value} min={min} max={max} step={step} disabled={disabled} apply={apply}/>;
+  const numeric=(label:string,value:number|undefined,min:number,max:number,apply:(value:number)=>void,step=1,immediate=false)=><DraftNumber label={label} value={value} min={min} max={max} step={step} disabled={disabled} apply={apply} immediate={immediate}/>;
   return <section className="node-style-panel" aria-label="Общие свойства выделения"><strong>Общие свойства · {nodes.length}</strong><InfoHint>Пустое поле означает разные значения. Меняется только выбранное свойство. Стиль группы применяется к её фигурам, прозрачность — к группе целиком. Ctrl+C / Ctrl+V копируют фигуры со смещением на 12 единиц влево и вверх; Delete удаляет выделение.</InfoHint>
     {numeric("Прозрачность, %",opacity===undefined ? undefined : Math.round((1-opacity)*100),0,100,value=>change({opacity:1-value/100}))}
     <label>Цвет линии<input type="color" value={stroke ?? "#111827"} disabled={disabled} onChange={e=>change({stroke:{color:e.target.value}})} /></label>
     <div className="style-swatches">{colors.map(color=><button type="button" key={color} aria-label={`Общий цвет линии ${color}`} style={{background:color}} disabled={disabled} onClick={()=>change({stroke:{color}})} />)}</div>
-    {numeric("Толщина линии",width,0,24,value=>change({stroke:{width:{kind:"constant",value}}}),0.5)}
+    {numeric("Толщина линии",width,0,24,value=>change({stroke:{width:{kind:"constant",value}}}),0.5,true)}
     <label>Штрих линии<select value={dash ?? "mixed"} disabled={disabled} onChange={e=>change({stroke:{dash:e.target.value as "solid"|"dash"|"dot"|"dash-dot"}})}><option value="mixed" disabled>Разные</option><option value="solid">Сплошная</option><option value="dash">Штрих</option><option value="dot">Точки</option><option value="dash-dot">Штрих-точка</option></select></label>
     <label>Цвет заливки<input type="color" value={fill ?? "#ffffff"} disabled={disabled} onChange={e=>change({fill:{color:e.target.value}})} /></label>
     <div className="style-swatches">{colors.map(color=><button type="button" key={color} aria-label={`Общий цвет заливки ${color}`} style={{background:color}} disabled={disabled} onClick={()=>change({fill:{color}})} />)}</div>
@@ -23,6 +23,6 @@ export function DrawingSelectionProperties({nodes,allNodes=nodes,disabled,change
   </section>;
 }
 
-function DraftNumber({label,value,min,max,step,disabled,apply}:{label:string;value:number|undefined;min:number;max:number;step:number;disabled:boolean;apply:(value:number)=>void}) {
-  return <label>{label}<DraftNumberInput value={value ?? ""} placeholder="Разные" min={min} max={max} step={step} disabled={disabled} onValueChange={apply}/></label>;
+function DraftNumber({label,value,min,max,step,disabled,apply,immediate=false}:{label:string;value:number|undefined;min:number;max:number;step:number;disabled:boolean;apply:(value:number)=>void;immediate?:boolean}) {
+  return <label>{label}<DraftNumberInput value={value ?? ""} placeholder="Разные" min={min} max={max} step={step} disabled={disabled} immediate={immediate} onValueChange={apply}/></label>;
 }

@@ -1372,7 +1372,7 @@ const colors = ["#27445a", "#000000", "#111827", "#6b7280", "#ffffff", "#dc2626"
       {section === "stroke" && <div className="style-section">
         <label>Цвет линии<input type="color" value={node.stroke.color} disabled={disabled} onChange={event => updateStroke({ color: event.target.value })} /></label>
         <div className="style-swatches" aria-label="Быстрый выбор цвета линии">{colors.map(color => <button key={color} type="button" title={color} aria-label={`Цвет линии ${color}`} style={{ background: color }} className={node.stroke.color.toLowerCase() === color ? "active" : ""} disabled={disabled} onClick={() => updateStroke({ color })} />)}</div>
-        <div className="style-row"><NumericField label="Толщина" value={strokeWidth} min={0} max={24} step={0.5} disabled={disabled || node.stroke.width.kind !== "constant"} change={value => { if (value >= 0 && value <= 24) updateStroke({ width: constantExpressionV2(value) }); }} />
+        <div className="style-row"><NumericField label="Толщина" value={strokeWidth} min={0} max={24} step={0.5} immediate disabled={disabled || node.stroke.width.kind !== "constant"} change={value => { if (value >= 0 && value <= 24) updateStroke({ width: constantExpressionV2(value) }); }} />
           <label>Штрих<select value={node.stroke.dash ?? "solid"} disabled={disabled} onChange={event => updateStroke({ dash: event.target.value as NonNullable<typeof node.stroke.dash> })}><option value="solid">Сплошная</option><option value="dash">Штрих</option><option value="dot">Точки</option><option value="dash-dot">Штрих-точка</option></select></label></div>
       </div>}
     </section>}
@@ -1392,8 +1392,8 @@ function ImageProperties({ node, disabled, edit }: { node: ImageNodeV2; disabled
   return <><label className="check-field"><input type="checkbox" checked={node.geometry.underlay} disabled={disabled} onChange={event => edit({ geometry: { ...node.geometry, underlay: event.target.checked } })} />Подложка</label><div className="coordinate-grid"><NumericField label="Crop X" value={node.geometry.cropX} disabled={disabled} change={value => crop("cropX", value)} /><NumericField label="Crop Y" value={node.geometry.cropY} disabled={disabled} change={value => crop("cropY", value)} /><NumericField label="Crop ширина" value={node.geometry.cropWidth} disabled={disabled} change={value => crop("cropWidth", value)} /><NumericField label="Crop высота" value={node.geometry.cropHeight} disabled={disabled} change={value => crop("cropHeight", value)} /></div></>;
 }
 
-function NumericField({ label, value, disabled, min, max, step, change }: { label: string; value: number; disabled?: boolean; min?: number; max?: number; step?: number; change: (value: number) => void }) {
-  return <label>{label}<DraftNumberInput value={value} min={min} max={max} step={step} disabled={disabled} onValueChange={change} /></label>;
+function NumericField({ label, value, disabled, min, max, step, immediate = false, change }: { label: string; value: number; disabled?: boolean; min?: number; max?: number; step?: number; immediate?: boolean; change: (value: number) => void }) {
+  return <label>{label}<DraftNumberInput value={value} min={min} max={max} step={step} disabled={disabled} immediate={immediate} onValueChange={change} /></label>;
 }
 
 function nodeLabel(node: TemplateNodeV2) { return ({ line: "Линия", polyline: "Ломаная", rectangle: "Прямоугольник", ellipse: "Эллипс", bezier: "Кривая Безье", closedContour: "Контур", text: "Текст", image: "Изображение", group: "Группа" })[node.kind]; }

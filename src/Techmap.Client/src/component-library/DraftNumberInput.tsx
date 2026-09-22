@@ -4,6 +4,8 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | 
   value: number | "";
   onValueChange: (value: number) => void;
   onEmpty?: () => void;
+  /** Apply valid numeric edits as they are typed while retaining partial input locally. */
+  immediate?: boolean;
 };
 
 export function parseDraftNumber(text: string, min?: number, max?: number): number | null {
@@ -12,11 +14,15 @@ export function parseDraftNumber(text: string, min?: number, max?: number): numb
   return Number.isFinite(value) && (min === undefined || value >= min) && (max === undefined || value <= max) ? value : null;
 }
 
-/** Keep partial input local; model validation runs only at the editing boundary. */
-export function DraftNumberInput({ value, onValueChange, onEmpty, onBlur, onKeyDown, ...props }: Props) {
+/** Keep partial input local; optionally publish valid edits before blur/Enter. */
+export function DraftNumberInput({ value, onValueChange, onEmpty, onBlur, onKeyDown, immediate = false, ...props }: Props) {
   const [draft, setDraft] = useState(String(value));
   const pending = useRef(false);
-  useEffect(() => { setDraft(String(value)); pending.current = false; }, [value]);
+  const emitted = useRef<number | null>(null);
+  useEffect(() => {
+    if (immediate && emitted.current === value) { emitted.current = null; return; }
+    setDraft(String(value)); pending.current = false;
+  }, [value, immediate]);
   const commit = () => {
     if (!pending.current) return;
     pending.current = false;
@@ -25,7 +31,15 @@ export function DraftNumberInput({ value, onValueChange, onEmpty, onBlur, onKeyD
     else if (parsed !== null) { setDraft(String(parsed)); if (parsed !== value) onValueChange(parsed); }
     else setDraft(String(value));
   };
-  return <input {...props} type="number" value={draft} onChange={event => { pending.current = true; setDraft(event.target.value); }}
+  return <input {...props} type="number" value={draft} onChange={event => {
+    pending.current = true;
+    const next = event.target.value;
+    setDraft(next);
+    if (immediate) {
+      const parsed = parseDraftNumber(next, props.min === undefined ? undefined : Number(props.min), props.max === undefined ? undefined : Number(props.max));
+      if (parsed !== null && parsed !== value) { emitted.current = parsed; onValueChange(parsed); }
+    }
+  }}
     onBlur={event => { commit(); onBlur?.(event); }} onKeyDown={event => {
       if (event.key === "Enter") { event.preventDefault(); commit(); }
       if (event.key === "Escape") { pending.current = false; setDraft(String(value)); }
