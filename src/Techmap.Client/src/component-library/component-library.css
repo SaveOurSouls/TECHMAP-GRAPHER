@@ -135,19 +135,10 @@
 .library-e4-preset > span { display: inline-flex; align-items: center; gap: 4px; }
 .library-e4-preview-scroll { overflow: auto; max-height: 420px; padding: 8px; background: #f3f7fa; }
 .library-e4-preview-scroll > div { max-width: none; margin: auto; }
-.library-series-workspace { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(330px, 1fr); gap: 12px; align-items: start; padding: 12px; }
-.library-series-workspace .template-series-v3-body { grid-template-columns: minmax(0, 1fr); padding: 0; }
-.library-series-workspace .library-e4-preview { position: sticky; top: 12px; min-width: 0; }
-.library-series-workspace .series-v3-groups ul { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.library-series-workspace .series-v3-row-actions { width: 32px; }
-.library-series-workspace .series-v3-terminal-table th:nth-child(2) { width: 30%; }
-.library-series-workspace .series-v3-terminal-table th:nth-child(3) { width: 85px; }
-.library-series-workspace .series-v3-terminal-table td:nth-child(3) { text-align: center; }
+.library-series-workspace { padding: 8px; }
+.library-series-workspace .template-series-v3-body { padding: 0; }
+.library-series-workspace .library-e4-preview { min-width: 0; }
 .library-metadata input[aria-label="Серия соединителя"] { font-weight: 750; }
-@container component-library-editor (max-width: 820px) {
-  .library-series-workspace { grid-template-columns: minmax(0, 1fr); }
-  .library-series-workspace .library-e4-preview { position: static; }
-}
 /* M4-09: a stable, independent drawing workspace. */
 .graphic-editor-switcher { display:flex; align-items:center; gap:8px; padding:8px 12px; }
 .drawing-editor-shell { position:fixed; inset:12px; z-index:300; display:flex; flex-direction:column; gap:0; background:#fff; padding:0; border:1px solid #bccbd6; border-radius:10px; box-shadow:0 0 0 30px #15253670; overflow:hidden; }
@@ -187,17 +178,11 @@
 .drawing-editor-shell .library-tools .drawing-snaps { text-transform:none; }
 
 /* M4-17: one article selection controls both representations. */
-.library-series-workspace { display:block; }
-.series-v3-article-workspace { display:grid; grid-template-columns:minmax(230px,.9fr) minmax(290px,1.1fr); gap:10px; border:1px solid var(--ui-border); border-radius:8px; padding:10px; background:var(--ui-soft); }
+.series-v3-article-workspace { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: minmax(250px, .9fr) minmax(290px, 1.1fr); align-items: start; gap: 8px; border-top: 1px solid var(--ui-border); padding-top: 8px; background: #fff; overflow-x: auto; }
+.series-v3-article-workspace:not(:has(.series-v3-article-preview)) { grid-template-columns: minmax(0, 1fr); }
 .series-v3-article-preview { min-width:0; display:flex; flex-direction:column; gap:8px; }
 .library-series-workspace .library-e4-preview { position:static; }
 .series-v3-article-preview .library-e4-companion { grid-column:auto; }
-@container component-library-editor (max-width:600px) { .series-v3-article-workspace { grid-template-columns:1fr; } }
-
-.series-v3-article-workspace { grid-column:1 / -1; min-width:0; }
-
-.series-v3-article-workspace .series-v3-variants { padding:6px; }
-.series-v3-article-workspace .series-v3-add-variant { grid-template-columns:minmax(0,1fr); }
 
 /* M4-19: shared panel rhythm, compact form controls and stable narrow layouts. */
 .library-metadata :is(input, button) { min-height: 30px; height: 30px; font-size: 11px; padding: 5px 8px; border-radius: var(--ui-radius); }
@@ -210,9 +195,6 @@
 .library-e4-preset :is(input:not([type=checkbox]), select) { min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #fff; font: inherit; color: var(--ui-ink); }
 .library-e4-preview-scroll { border: 1px solid var(--ui-border); border-radius: 4px; }
 .series-v3-article-workspace .series-v3-variants { padding: 0; border: 0; background: transparent; }
-.series-v3-article-workspace .series-v3-article-table th:first-child, .series-v3-article-workspace .series-v3-article-key { min-width: 100px; }
-.series-v3-article-workspace .series-v3-count-cell { min-width: 60px; width: 64px; }
-.series-v3-article-workspace .series-v3-article-key { text-align: left; }
 .drawing-editor-shell :is(.library-properties, .drawing-articles) { padding: 12px; gap: 10px; font-size: 11px; }
 .drawing-editor-shell .drawing-snaps input[type=checkbox] { width: 14px; height: 14px; min-height: 14px; padding: 0; margin: 0; accent-color: var(--ui-accent); }
 .drawing-snaps label { white-space: nowrap; }
@@ -224,7 +206,6 @@
 .drawing-editor-shell .library-tools > button { min-height: 28px; }
 @container component-library-editor (max-width: 600px) {
   .library-metadata { padding: 12px; gap: 8px; }
-  .series-v3-article-workspace { padding: 8px; }
 }
 @media (max-width: 760px) {
   .drawing-editor-shell .library-workarea { grid-template-columns: minmax(220px, 1fr) 190px; }
