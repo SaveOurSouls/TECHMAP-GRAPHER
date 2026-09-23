@@ -517,9 +517,9 @@ export function HarnessEditorWorkspace({
               className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
               type="button"
               aria-pressed={drawingSnapEnabled}
-              title="Фиксировать направление нового участка с шагом 15 градусов"
+              title="Автоматический пайп: прямые выходы и приоритет 45°. Ручные перегибы сохраняются. Для свободных проводов — шаг 15°."
               onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
-            >15°</button>
+            >Авто 45°</button>
           )}
         </div>
         <button

@@ -16,7 +16,7 @@ import { addDrawingPositions, drawingDocumentScene, moveDrawingAnnotation } from
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
 import { type PhysicalCovering, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
-import { ensureConnectorExits, physicalSegmentHandles, movePhysicalHandle, removePhysicalHandle, physicalSegmentControls, insertPhysicalBend, physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
+import { ensureConnectorExits, physicalSegmentHandles, movePhysicalHandle, removePhysicalHandle, physicalSegmentControls, insertPhysicalBend, physicalNodePoint, physicalNodeLocalPoint, physicalNodeDirection, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -468,7 +468,11 @@ export function designToScene(
   const dimensions: EditorSceneObject[] = view === "drawing" ? drawingDimensionScene(document,wires,perimeters) : [];
   const physical: EditorSceneObject[] = view === "drawing" && document.physicalTopology ? [
     ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: drawingPipeWidth(document,segment), height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment), metadata: { controls: JSON.stringify(physicalSegmentControls(document,segment)), handles: JSON.stringify(physicalSegmentHandles(document,segment).map(h=>h.point)), wireIds: JSON.stringify(document.physicalTopology!.routes.filter(r=>r.steps.some(step=>step.segmentId===segment.id)).map(r=>r.wireId)) } })),
-    ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => { const p = physicalNodePoint(document, node); return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac", metadata:{connectorId:node.connectorId??""} }; }),
+    ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => {
+      const p = physicalNodePoint(document, node);
+      return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac",
+        metadata: { connectorId: node.connectorId ?? "", directionVector: JSON.stringify(physicalNodeDirection(document,node)) } };
+    }),
   ] : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
   return [...connectors, ...physical, ...wires, ...coverings, ...dimensions, ...(view==="drawing"?drawingDocumentScene(document,quantity,perimeters):[])];

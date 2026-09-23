@@ -2605,6 +2605,7 @@ function redrawCanvas(
       const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : [object.points![0]!,...physicalSceneHandles(object),object.points!.at(-1)!];
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
       points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?"#b9edf6":"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
+      if(object.kind==="physical-node"){const vector = JSON.parse(object.metadata?.directionVector ?? "null") as EditorPoint | null;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
       context.restore();
     }
   }

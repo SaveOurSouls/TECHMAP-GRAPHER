@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { physicalFixture } from './physical-topology-fixture';
-import { ensureConnectorExits, insertPhysicalBend, physicalSegmentControls, physicalSegmentPoints, physicalWirePoints, physicalSegmentHandles, movePhysicalHandle } from './physical-topology';
+import { ensureConnectorExits, insertPhysicalBend, physicalSegmentControls, physicalSegmentPoints, physicalWirePoints, physicalSegmentHandles, movePhysicalHandle, removePhysicalHandle } from './physical-topology';
 import { hitTestEditorScene, hitTestWireRoutePoint } from './CanvasViewport';
 import { designToScene } from './HarnessDesignEditor';
 import { applyEditorCommand } from './commands';
@@ -22,13 +22,14 @@ describe('pipe editing regressions M4-70',()=>{
   const updated=insertPhysicalBend(doc,s,{x:40,y:0});expect(updated.bends).toEqual([{x:40,y:0},...s.bends]);
   expect(insertPhysicalBend(doc,s,{x:100,y:0})).toBe(s);
  });
- it('exposes automatic corners and wires follow a changed authored bend',()=>{
+ it('keeps automatic corners out of the editing handles',()=>{
   const d=physicalFixture(),s=d.physicalTopology!.segments[0]!;
-  expect(physicalSegmentPoints(d,s).length).toBeGreaterThan(physicalSegmentControls(d,s).length);
+  expect(physicalSegmentPoints(d,s)).toEqual(physicalSegmentControls(d,s));
   const scene=designToScene(d,'drawing');const pipe=scene.find(o=>o.id==='S0')!;
   expect(hitTestWireRoutePoint(pipe,s.bends[0]!,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.bendIndex===0));
-  const helper=physicalSegmentPoints(d,s).find(p=>!physicalSegmentControls(d,s).some(q=>p.x===q.x&&p.y===q.y))!;
-  expect(hitTestWireRoutePoint(pipe,helper,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.point.x===helper.x&&h.point.y===helper.y));
+  const automatic = {...s,bends:[]};
+  const autoScene = designToScene({...d,physicalTopology:{...d.physicalTopology!,segments:[automatic,...d.physicalTopology!.segments.slice(1)]}},'drawing').find(o=>o.id===s.id)!;
+  for(const corner of autoScene.points!.slice(1,-1))expect(hitTestWireRoutePoint(autoScene,corner,100)).toBeNull();
   const next=applyEditorCommand(d,{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(x=>x.id===s.id?{...x,bends:[{x:250,y:90}]}:x)}});
   expect(next.wires).toEqual(d.wires);expect(next.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
   expect(physicalWirePoints(next,'W1',{x:0,y:0},{x:1,y:1})).not.toEqual(physicalWirePoints(d,'W1',{x:0,y:0},{x:1,y:1}));
@@ -43,19 +44,38 @@ describe('pipe editing regressions M4-70',()=>{
  });
 });
 
-it('saves a moved automatic bend across anchor moves, serialization and undo without changing electrical connections',()=>{
+it('moves an authored bend in place without creating another bend',()=>{
  const d=physicalFixture(),segment=d.physicalTopology!.segments[0]!;
- const handles=physicalSegmentHandles(d,segment),index=handles.findIndex(h=>h.bendIndex===null);
- expect(index).toBeGreaterThanOrEqual(0);
+ const handles=physicalSegmentHandles(d,segment),index=handles.findIndex(h=>h.bendIndex===0);
+ expect(index).toBe(0);
  const point={x:handles[index]!.point.x+85,y:handles[index]!.point.y-40};
  const updated=movePhysicalHandle(d,segment,index,point);
- expect(updated.bends).toHaveLength(segment.bends.length+1);
+ expect(updated.bends).toHaveLength(segment.bends.length);
  const history=executeEditorCommand(createEditorHistory(d),{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>s.id===segment.id?updated:s)}});
  const moved=applyEditorCommand(history.present,{type:'move-connector',connectorId:'A',view:'drawing',position:{x:3,y:2}});
  const reopened=parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved)));
  const saved=reopened.physicalTopology!.segments.find(s=>s.id===segment.id)!;
- expect(saved.bends).toContainEqual(point);
+ expect(saved.bends).toEqual([point]);
  expect(physicalSegmentPoints(reopened,saved)).toContainEqual(point);
  expect(reopened.wires).toEqual(parseHarnessDesignDocument(JSON.parse(JSON.stringify(d))).wires);expect(reopened.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
  expect(undoEditorCommand(history).present).toEqual(d);
+});
+
+it('keeps both visible and saved corner counts stable through repeated drags (C1)',()=>{
+ const d=physicalFixture(),original=d.physicalTopology!.segments[0]!;
+ let segment=insertPhysicalBend(d,original,{x:170,y:65});
+ const otherBend=segment.bends[1]!;
+ for(let i=0;i<60;i++){
+  const point={x:80+i*7.3,y:220-i*4.8};
+  segment=movePhysicalHandle(d,segment,0,point);
+  expect(segment.bends).toEqual([point,otherBend]);
+  expect(physicalSegmentPoints(d,segment)).toEqual([physicalSegmentControls(d,segment)[0],point,otherBend,physicalSegmentControls(d,segment).at(-1)]);
+  expect(physicalSegmentHandles(d,segment)).toHaveLength(2);
+ }
+ expect(d.physicalTopology!.segments[0]).toBe(original);
+ segment=removePhysicalHandle(d,segment,1);
+ segment=removePhysicalHandle(d,segment,0);
+ expect(segment.bends).toEqual([]);
+ expect(physicalSegmentHandles(d,segment)).toEqual([]);
+ expect(physicalSegmentPoints(d,segment)).toEqual(physicalSegmentPoints(d,{...original,bends:[]}));
 });

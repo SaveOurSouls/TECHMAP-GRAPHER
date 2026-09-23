@@ -1,11 +1,12 @@
 import { segmentWireLanes } from "./drawing-thickness";
-import { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints } from "./physical-geometry";
-export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints } from "./physical-geometry";
+import { physicalSegmentControls, physicalSegmentPoints, physicalContactTail } from "./physical-geometry";
+export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints, physicalNodeDirection, physicalNodeContactDirection, automaticPipeRoute } from "./physical-geometry";
 import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, validateCoverings, splitCoveringSpans, pathLength, projectOntoPolyline, type PhysicalCovering } from "./physical-coverings";
 import type { HarnessDesignDocument, Point } from "./model";
 
-export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string; readonly wireIds?: readonly string[] }
-export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[]; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly specificationItemId?:string }
+export type PhysicalDirection = "left" | "right" | "up" | "down";
+export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string; readonly wireIds?: readonly string[]; readonly direction?: PhysicalDirection; readonly contactDirections?: Readonly<Record<string, PhysicalDirection>> }
+export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[]; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly specificationItemId?:string; readonly routing?: "auto" | "fixed" }
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
 export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[]; readonly automatic?:boolean }
 export interface PhysicalTopology {
@@ -27,33 +28,23 @@ export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalT
   }))] };
 }
 
-/** Editing uses only authored vertices, not the auxiliary vertices of the 15° presentation. */
-
-/** Every displayed corner has a handle. Helpers remember their authored leg, not a transient path index. */
-export function physicalSegmentHandles(document: HarnessDesignDocument, segment: PhysicalSegment) {
-  const controls = physicalSegmentControls(document, segment);
-  return controls.slice(1).flatMap((end, leg) => {
-    const path = constrainedPolyline([controls[leg]!, end], document.physicalTopology!.snap);
-    return [
-      ...path.slice(1, -1).map(point => ({ point, insertAt: leg, bendIndex: null as number | null })),
-      ...(leg < segment.bends.length ? [{ point: end, insertAt: leg, bendIndex: leg as number | null }] : []),
-    ];
-  });
+/** Editing uses only authored vertices, never automatic presentation vertices. */
+export function physicalSegmentHandles(_document: HarnessDesignDocument, segment: PhysicalSegment) {
+  return segment.bends.map((point, bendIndex) => ({ point, insertAt: bendIndex, bendIndex }));
 }
 
-/** Moving an automatic corner promotes only that corner to a saved preference. */
+/** Moving a bend changes that authored bend in place; it never creates another bend. */
 export function movePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number, point: Point): PhysicalSegment {
   const handle = physicalSegmentHandles(document, segment)[index];
   if (!handle) return segment;
   const bends = [...segment.bends];
-  if (handle.bendIndex === null) bends.splice(handle.insertAt, 0, point);
-  else bends[handle.bendIndex] = point;
+  bends[handle.bendIndex] = point;
   return { ...segment, bends };
 }
 
 export function removePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number): PhysicalSegment {
   const handle = physicalSegmentHandles(document, segment)[index];
-  if (!handle || handle.bendIndex === null) return segment;
+  if (!handle) return segment;
   return { ...segment, bends: segment.bends.filter((_, i) => i !== handle.bendIndex) };
 }
 
@@ -61,7 +52,7 @@ export function insertPhysicalBend(document: HarnessDesignDocument, segment: Phy
   const controls = physicalSegmentControls(document, segment);
   let best = Infinity, index = 0;
   for (let i = 0; i < controls.length - 1; i++) {
-    const path = constrainedPolyline([controls[i]!, controls[i + 1]!], document.physicalTopology!.snap);
+    const path = [controls[i]!, controls[i + 1]!];
     const projected = projectOntoPolyline(path, point).point;
     const distance = Math.hypot(projected.x - point.x, projected.y - point.y);
     if (distance < best) { best = distance; index = i; }
@@ -73,9 +64,7 @@ export function insertPhysicalBend(document: HarnessDesignDocument, segment: Phy
 
 
 
-/** Preserve both anchors. A short horizontal/vertical completion makes every leg a multiple of 15°. */
-
-
+/** Conductors follow the pipe centreline exactly; do not apply another angle snap. */
 export function physicalWirePoints(document: HarnessDesignDocument, wireId: string, start: Point, end: Point): Point[] | null {
   const topology = document.physicalTopology;
   const route = topology?.routes.find(r => r.wireId === wireId);
@@ -85,7 +74,15 @@ export function physicalWirePoints(document: HarnessDesignDocument, wireId: stri
     const path = physicalSegmentPoints(document, segment);
     return step.reverse ? path.reverse() : path;
   });
-  return constrainedPolyline([start, ...points, end], topology.snap);
+  const first = route.steps[0]!, last = route.steps.at(-1)!;
+  const a = topology.segments.find(s => s.id === first.segmentId)!;
+  const b = topology.segments.find(s => s.id === last.segmentId)!;
+  const from = topology.nodes.find(n => n.id === (first.reverse ? a.to : a.from))!;
+  const to = topology.nodes.find(n => n.id === (last.reverse ? b.from : b.to))!;
+  const wire = document.wires.find(w => w.id === wireId)!;
+  const fromTail = physicalContactTail(document, from, wire.from.contactId, start, points[0]!);
+  const toTail = physicalContactTail(document, to, wire.to.contactId, end, points.at(-1)!).reverse();
+  return [...fromTail.slice(0,-1), ...points, ...toTail.slice(1)].filter((p,i,all) => !i || Math.hypot(p.x-all[i-1]!.x,p.y-all[i-1]!.y)>1e-7);
 }
 
 export function parsePhysicalTopology(value: unknown, document: HarnessDesignDocument): PhysicalTopology | undefined {
@@ -96,18 +93,21 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
   if (!Array.isArray(t.nodes) || !Array.isArray(t.segments) || !Array.isArray(t.routes) || typeof t.snap !== "boolean" ||
       t.nodes.length > 10000 || t.segments.length > 20000 || t.routes.length > 20000) return fail();
   const text = (s: unknown): s is string => typeof s === "string" && s.trim().length > 0 && s.length <= 128;
+  const direction = (value: unknown): value is PhysicalDirection => value === "left" || value === "right" || value === "up" || value === "down";
   const point = (p: Point) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x) <= 1e7 && Math.abs(p.y) <= 1e7;
   const ids = new Set([...document.connectors.map(c => c.id), ...document.wires.map(w => w.id)]);
   const unique = (id: unknown) => { if (!text(id) || ids.has(id)) fail(); ids.add(id as string); };
   for (const n of t.nodes) {
     if (!n) return fail(); unique(n.id);
     if(n.wireIds!==undefined&&(!n.connectorId||!Array.isArray(n.wireIds)||new Set(n.wireIds).size!==n.wireIds.length||n.wireIds.some((id:string)=>!document.wires.some(w=>w.id===id&&(w.from.connectorId===n.connectorId||w.to.connectorId===n.connectorId)))))return fail();
+    if(n.direction!==undefined&&!direction(n.direction))return fail();
+    if(n.contactDirections!==undefined&&(!n.connectorId||!n.contactDirections||typeof n.contactDirections!=="object"||Array.isArray(n.contactDirections)||Object.entries(n.contactDirections).some(([id,value])=>!document.connectors.find(c=>c.id===n.connectorId)?.contacts.some(c=>c.id===id)||!direction(value))))return fail();
     if (!point(n.position) || n.connectorId !== undefined && !document.connectors.some(c => c.id === n.connectorId)) return fail();
   }
 
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
-    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
+    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId)||s.routing!==undefined&&s.routing!=="auto"&&s.routing!=="fixed")return fail();
     if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to) || !Array.isArray(s.bends) || s.bends.length > 1000 || !s.bends.every(point)) return fail();
   }
   const wireIds = new Set<string>();
@@ -145,9 +145,11 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   const s = t.segments.find(s => s.id === segmentId)!;
   const points = physicalSegmentPoints(document, s);
   if (bendIndex < 1 || bendIndex >= points.length - 1) throw new Error("Выберите существующий перегиб участка.");
-  return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: points[bendIndex]! }],
-    segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, bends: points.slice(1, bendIndex) } : item),
-      { ...s, id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1) }],
+  const at = points[bendIndex]!, next = points[bendIndex + 1]!, vector = { x: next.x - at.x, y: next.y - at.y };
+  const direction: PhysicalDirection = Math.abs(vector.x) >= Math.abs(vector.y) ? (vector.x >= 0 ? "right" : "left") : (vector.y >= 0 ? "down" : "up");
+  return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: at, direction }],
+      segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, bends: points.slice(1, bendIndex), routing: "fixed" as const } : item),
+      { ...s, id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1), routing: "fixed" as const }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse
       ? [{ segmentId: nextId, reverse: true }, step] : [step, { segmentId: nextId, reverse: false }]) })) };
 }
@@ -186,17 +188,23 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const a=physicalSegmentPoints(document,t.segments.find(s=>s.id===first.segmentId)!);
  const b=physicalSegmentPoints(document,t.segments.find(s=>s.id===last.segmentId)!);
  const from=first.reverse?a.at(-1)!:a[0]!,to=last.reverse?b[0]!:b.at(-1)!;
- const wireExitPath=(document:HarnessDesignDocument,segmentId:string,nodeSide:"from"|"to",wireId:string,contact:Point):Point[]|null=>{
+ const wireExitPath=(document:HarnessDesignDocument,segmentId:string,nodeSide:"from"|"to",wireId:string,contactId:string,contact:Point):Point[]|null=>{
   const route=coveringRoute(document,segmentId);if(!route)return null;
   const spans=(document.physicalTopology?.coverings??[]).filter(c=>coveringKind(c)==="heat-shrink").flatMap(c=>c.spans.filter(s=>s.segmentId===segmentId).map(s=>resolvedCoveringSpan(document,s)));
   const edge=nodeSide==="from"?Math.max(route.min,Math.min(0,...spans.filter(s=>s.from<0&&s.to>=0).map(s=>s.from))):Math.min(route.max,Math.max(1,...spans.filter(s=>s.to>1&&s.from<=1).map(s=>s.to)));
   if(nodeSide==="from"?edge===0:edge===1)return null;const a=Math.min(nodeSide==="from"?0:1,edge),b=Math.max(nodeSide==="from"?0:1,edge);
   const path=trimPolyline(route.points,(route.before+a*route.length)/route.total,(route.before+b*route.length)/route.total),offset=segmentWireLanes(document,segmentId).find(l=>l.id===wireId)?.offset??0,lane=offsetPolyline(path,path.map(()=>offset));
-  return nodeSide==="from"?[contact,...lane]:[...lane,contact];
+  const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!,nodeId=nodeSide==="from"?segment.from:segment.to,node=document.physicalTopology!.nodes.find(n=>n.id===nodeId)!;
+  if(!lane.length)return null;
+  const tail=physicalContactTail(document,node,contactId,contact,nodeSide==="from"?lane[0]!:lane.at(-1)!);
+  return nodeSide==="from"?[...tail.slice(0,-1),...lane]:[...lane,...tail.reverse().slice(1)];
  };
- const fromTail=wireExitPath(document,first.segmentId,first.reverse?"to":"from",wireId,start);
- const toTail=wireExitPath(document,last.segmentId,last.reverse?"from":"to",wireId,end);
- return [fromTail?(first.reverse?fromTail.reverse():fromTail):[start,from],...paths,toTail?(last.reverse?toTail.reverse():toTail):[to,end]];
+ const wire=document.wires.find(w=>w.id===wireId)!;
+ const fromNode=t.nodes.find(n=>n.id===(first.reverse?t.segments.find(s=>s.id===first.segmentId)!.to:t.segments.find(s=>s.id===first.segmentId)!.from))!;
+ const toNode=t.nodes.find(n=>n.id===(last.reverse?t.segments.find(s=>s.id===last.segmentId)!.from:t.segments.find(s=>s.id===last.segmentId)!.to))!;
+ const fromTail=wireExitPath(document,first.segmentId,first.reverse?"to":"from",wireId,wire.from.contactId,start);
+ const toTail=wireExitPath(document,last.segmentId,last.reverse?"from":"to",wireId,wire.to.contactId,end);
+ return [fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from),...paths,toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse()];
 }
 
 /** Split the exact clicked span, preserve existing legs, then add a perpendicular branch handle. */

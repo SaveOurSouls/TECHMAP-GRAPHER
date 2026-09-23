@@ -2,12 +2,60 @@ import { physicalFixture } from "./physical-topology-fixture";
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand } from "./commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
-import { constrainedPolyline, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment } from "./physical-topology";
+import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, type PhysicalTopology } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
 
 describe("physical topology", () => {
+  it("prefers a 45 degree middle leg while keeping directed straight exits", () => {
+    const points = automaticPipeRoute({ x: 0, y: 0 }, { x: 200, y: 100 }, { x: 1, y: 0 }, { x: -1, y: 0 });
+    expect(points[1]!.y).toBeCloseTo(0);
+    expect(points.at(-2)!.y).toBeCloseTo(100);
+    expect(points).toHaveLength(4);
+    expect(points.some((point, index) => index > 0 && Math.abs(Math.abs(point.x - points[index - 1]!.x) - Math.abs(point.y - points[index - 1]!.y)) < 1e-6)).toBe(true);
+  });
+  it("uses a single straight leg for aligned exits and keeps every chosen outward direction",()=>{
+    expect(automaticPipeRoute({x:0,y:0},{x:200,y:0},{x:1,y:0},{x:-1,y:0})).toEqual([{x:0,y:0},{x:200,y:0}]);
+    const directions=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+    for(const a of directions)for(const b of directions)for(const end of [{x:200,y:100},{x:-120,y:75},{x:0,y:200},{x:3,y:-2}]){
+      const route=automaticPipeRoute({x:0,y:0},end,a,b),first=route[1]!,last=route.at(-2)!;
+      expect(first.x*a.y-first.y*a.x).toBeCloseTo(0,6);
+      expect(first.x*a.x+first.y*a.y).toBeGreaterThan(0);
+      expect((last.x-end.x)*b.y-(last.y-end.y)*b.x).toBeCloseTo(0,6);
+      expect((last.x-end.x)*b.x+(last.y-end.y)*b.y).toBeGreaterThan(0);
+      expect(route.length).toBeLessThanOrEqual(5);
+      expect(route.flatMap(p=>[p.x,p.y]).every(Number.isFinite)).toBe(true);
+    }
+  });
+  it("applies contact directions at both wire ends, including reverse routes and shrink-covered exits",()=>{
+    const base=physicalFixture();
+    const topology:PhysicalTopology={...base.physicalTopology!,nodes:base.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,direction:"right",contactDirections:{"A:contact:1":"up"}}:n.id==="NB"?{...n,direction:"left",contactDirections:{"B:contact:1":"down"}}:n)};
+    const check=(t:PhysicalTopology)=>{
+      const d={...base,physicalTopology:t},start={x:118,y:28},end={x:768,y:528};
+      const rendered=physicalWireDisplayPaths(d,"W1",start,end)!,paths=[rendered[0]!,rendered.at(-1)!,physicalWirePoints(d,"W1",start,end)!];
+      for(const p of [paths[0]!,paths[2]!]){expect(p[0]).toEqual(start);expect(p[1]!.x).toBeCloseTo(start.x);expect(p[1]!.y).toBeLessThan(start.y);}
+      for(const p of [paths[1]!,paths[2]!]){expect(p.at(-1)).toEqual(end);expect(p.at(-2)!.x).toBeCloseTo(end.x);expect(p.at(-2)!.y).toBeGreaterThan(end.y);}
+    };
+    check(topology);
+    const reversed:PhysicalTopology={...topology,segments:topology.segments.map(s=>({...s,from:s.to,to:s.from,bends:[...s.bends].reverse()})),routes:topology.routes.map(r=>({...r,steps:r.steps.map(s=>({...s,reverse:!s.reverse}))}))};
+    check(reversed);
+    check({...topology,coverings:[{id:"shrink",name:"Термоусадка",kind:"heat-shrink",width:20,color:"#123456",lengthMm:null,spans:[{segmentId:"S0",from:-.01,to:.2},{segmentId:"S1",from:.8,to:1.01}]}]});
+  });
+  it("persists directions, rotates vectors with the connector and rejects invalid direction records",()=>{
+    const base=physicalFixture(),node={...base.physicalTopology!.nodes[0]!,direction:"right" as const,contactDirections:{"A:contact:1":"up" as const}};
+    const topology={...base.physicalTopology!,nodes:[node,...base.physicalTopology!.nodes.slice(1)]};
+    const h=executeEditorCommand(createEditorHistory(base),{type:"set-physical-topology",topology});
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).physicalTopology).toEqual(topology);
+    expect(undoEditorCommand(h).present).toEqual(base);
+    const d={...h.present,connectors:base.connectors.map(c=>c.id==="A"?{...c,drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:2,rotationDegrees:90}]}:c)};
+    expect(physicalNodeDirection(d,node)!.x).toBeCloseTo(0);expect(physicalNodeDirection(d,node)!.y).toBeCloseTo(1);
+    expect(physicalNodeContactDirection(d,node,"A:contact:1")!.x).toBeCloseTo(1);expect(physicalNodeContactDirection(d,node,"A:contact:1")!.y).toBeCloseTo(0);
+    const points=physicalSegmentPoints(d,{...topology.segments[0]!,bends:[]}),start=physicalNodePoint(d,node);
+    expect(points[1]!.x).toBeCloseTo(start.x);expect(points[1]!.y).toBeGreaterThan(start.y);
+    for(const patch of [{direction:"diagonal"},{contactDirections:null},{contactDirections:[]},{contactDirections:{missing:"up"}}])
+      expect(()=>parseHarnessDesignDocument({...base,physicalTopology:{...topology,nodes:[{...node,...patch},...topology.nodes.slice(1)]}})).toThrow();
+  });
   it("resolves explicit branch membership independently of electrical connectivity", () => {
     const d = physicalFixture(), index = buildHarnessSelectionIndex(d);
     expect(resolveHarnessSelection(index, ["S1"]).wireIds.sort()).toEqual(["W1", "W3"]);
