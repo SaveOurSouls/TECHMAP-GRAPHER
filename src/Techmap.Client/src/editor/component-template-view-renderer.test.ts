@@ -1,3 +1,8 @@
+import { addDrawingPositions, buildDrawingBom, drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
+import { buildDrawingPerimeters, drawingObjectPerimeter } from "./drawing-object-perimeter";
+import { drawingLocalPoint } from "./drawing-scale";
+import { createConnectorInstanceFromComponentTemplate } from "./component-template-placement";
+import { createEmptyHarnessDesign } from "./model";
 import { createTemplateContentV5FromEditor } from "../component-library/template-model-v5";
 import { createE4ConnectorSeriesTableFromV3 } from "../component-library/e4-connector-series-table";
 import { projectE4DrawingCompanions, shortestDrawingLink } from "./component-template-view-renderer";
@@ -5,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { newTemplateContentV3 } from "../component-library/template-commands-v3";
 import type { TemplateContentV3, TemplateNodeV3 } from "../component-library/template-model-v3";
 import {
+  detailStrokeWidth,
   ComponentTemplateImageCache,
   drawProjectedComponentTemplateView,
   projectComponentTemplateView,
@@ -467,4 +473,34 @@ it("rotates drawing bounds, hit testing and geometry together",()=>{
  const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
  expect(hitTestEditorScene([object],layers,{x:92,y:209},1,"drawing",[rotated])).toBe(instance.objectId);
  expect(hitTestEditorScene([object],layers,{x:200,y:270},1,"drawing",[rotated])).toBeNull();
+});
+
+
+it("anchors to the actual rotated connector perimeter, not its bounding box or internal strokes",()=>{
+ const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+ const outer={...rectangle(layer.id),kind:"ellipse" as const,geometry:{centerX:constant(60),centerY:constant(40),radiusX:constant(50),radiusY:constant(30)}};
+ layer.nodes.push(outer,{...base("rectangle",layer.id),kind:"rectangle",geometry:{x:constant(50),y:constant(35),width:constant(12),height:constant(8),cornerRadii:[constant(0),constant(0),constant(0),constant(0)]}});
+ content.logicalContacts.push({id:id(),number:"1",name:"Контакт",circuitText:null,contactTypeGroupId:null});
+ const connector=createConnectorInstanceFromComponentTemplate({templateId:"t",version:1,versionSha256:"a".repeat(64),code:"SERIES",name:"Розетка тестовая",articleBindings:content.articleVariants,assets:[],content}, {id:instance.objectId,designation:"XS1",e4Position:{x:100,y:200}});
+ const d={...createEmptyHarnessDesign(),connectors:[{...connector,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},scale:2,rotationDegrees:90}]}]};
+ const perimeters=buildDrawingPerimeters([instance]);
+ const topLocal={x:60,y:10},offset=drawingLocalPoint(topLocal,d.connectors[0]!.drawingPlacements);
+ const point=drawingObjectPerimeter(d,connector.id,{x:100,y:320},perimeters)!;
+ expect(point.x).toBeCloseTo(100+offset.x);expect(point.y).toBeCloseTo(200+offset.y);
+ const documents=addDrawingPositions(d,perimeters);
+ const moving={...d,drawingDocuments:documents};
+ const anchor=moveDrawingAnnotation(moving,documents.leaders[0]!.id+":anchor",{x:96,y:316},perimeters)!;
+ const scaled={...moving,drawingDocuments:anchor,connectors:[{...d.connectors[0]!,positions:{...connector.positions,drawing:{x:500,y:300}},drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},scale:3,rotationDegrees:180}]}]};
+ const p=drawingDocumentScene(scaled,1,perimeters).find(o=>o.kind==="position-leader")!.points![0]!;
+ expect(p.x).toBeCloseTo(320);expect(p.y).toBeCloseTo(270);
+ const bom=buildDrawingBom(d)[0]!;
+ expect(bom).toMatchObject({index:"XS1",designation:"A-1",name:`${connector.contacts.length} конт. — Розетка тестовая`});
+});
+
+it("keeps fine vector strokes readable at 45%, including rotated nonuniform transforms",()=>{
+ expect(detailStrokeWidth(1,{a:.45,b:0,c:0,d:.45},.9)).toBeCloseTo(2);
+ expect(detailStrokeWidth(1,{a:0,b:.45,c:-.225,d:0},.9)).toBeCloseTo(4);
+ expect(detailStrokeWidth(2,{a:2,b:0,c:0,d:2},.9)).toBe(2);
+ expect(detailStrokeWidth(0,{a:.1,b:0,c:0,d:.1},.9)).toBe(0);
+ expect(detailStrokeWidth(1,{a:.9,b:0,c:0,d:.9},1.8)).toBe(2);
 });

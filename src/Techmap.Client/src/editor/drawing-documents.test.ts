@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation } from "./drawing-documents";
+import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation } from "./drawing-documents";
 import { applyEditorCommand } from "./commands";
 import { parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
@@ -51,9 +51,9 @@ describe("drawing tables and position leaders",()=>{
     expect(moved.leaders[0]!.anchorOffset).toEqual({x:10,y:20});expect(moved.leaders[0]!.circle).toEqual({x:412,y:212});
     doc={...doc,drawingDocuments:moved};
     const anchor=moveDrawingAnnotation(doc,"L:anchor",{x:36,y:46})!;
-    expect(anchor.leaders[0]!.circle).toEqual({x:412,y:212});expect(anchor.leaders[0]!.anchorOffset).toEqual({x:40,y:50});
+    expect(anchor.leaders[0]!.circle).toEqual({x:412,y:212});expect(anchor.leaders[0]!.anchorOffset.x).toBeCloseTo(0);expect(anchor.leaders[0]!.anchorOffset.y).toBeCloseTo(75.2631578947);
     doc=applyEditorCommand({...doc,drawingDocuments:anchor},{type:"move-connector",connectorId:"A",view:"drawing",position:{x:100,y:150}});
-    expect(drawingDocumentScene(doc).find(o=>o.id==="L")!.points![0]).toEqual({x:140,y:200});
+    expect(drawingDocumentScene(doc).find(o=>o.id==="L")!.points![0]!.x).toBeCloseTo(100);expect(drawingDocumentScene(doc).find(o=>o.id==="L")!.points![0]!.y).toBeCloseTo(225.2631578947);
     const reverse={...doc,drawingDocuments:{...anchor,bomOrder:rows.map(r=>r.key).reverse()}};
     expect(drawingDocumentScene(reverse).find(o=>o.id==="L")!.label).toBe(String(rows.length));
   });
@@ -63,7 +63,7 @@ describe("drawing tables and position leaders",()=>{
     const h=executeEditorCommand(createEditorHistory(d),{type:"set-drawing-documents",documents});
     expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(documents);
     expect(undoEditorCommand(h).present).toBe(d);
-    expect(JSON.parse(drawingDocumentScene(h.present)[0]!.metadata!.headers!)).toEqual(["Поз.","Обозначение","Наименование","Кол-во","Примечание"]);
+    expect(JSON.parse(drawingDocumentScene(h.present)[0]!.metadata!.headers!)).toEqual(["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]);
     expect(drawingDocumentScene({...h.present,connectors:[]}).find(o=>o.id==="L")!.label).toBe("?");
     expect(()=>parseHarnessDesignDocument({...h.present,drawingDocuments:{...documents,tables:[{...documents.tables[0],position:{x:NaN,y:0}}]}})).toThrow();
   });
@@ -107,4 +107,44 @@ it("counts abstract and off-drawing specification items once, retains identity o
  expect(buildDrawingBom(changed).find(r=>r.objectIds.includes("glue"))!.key).toBe(before.key);
  expect(undoEditorCommand(h).present).toEqual(d);
  expect(()=>parseHarnessDesignDocument({...d,drawingDocuments:{...documents,specificationItems:[item,item]}})).toThrow();
+});
+
+
+it("adds all positions in one undo, is idempotent and places additional numbers horizontally tangent",()=>{
+ const base=physicalFixture();const doc={...base,connectors:base.connectors.map(c=>({...c,partNumber:"PART",contacts:c.contacts.map(p=>({...p,terminalArticle:"PIN"}))}))};
+ const added=addDrawingPositions(doc);const h=executeEditorCommand(createEditorHistory(doc),{type:"set-drawing-documents",documents:added});
+ expect(added.leaders.filter(l=>l.objectId==="A")).toHaveLength(3);
+ const [a,b,c]=added.leaders.filter(l=>l.objectId==="A");
+ expect(b!.circle).toEqual({x:a!.circle.x+24,y:a!.circle.y});expect(c!.circle).toEqual({x:a!.circle.x+48,y:a!.circle.y});
+ expect(addDrawingPositions(h.present)).toEqual(added);
+ const rearranged={...added,leaders:added.leaders.filter(l=>l.id!==c!.id).map(l=>l.id===a!.id?{...l,circle:{x:800,y:900}}:l)};
+ const extra=addDrawingPositions({...doc,drawingDocuments:rearranged}).leaders.filter(l=>l.objectId==="A").at(-1)!;
+ expect(extra.circle).toEqual({x:824,y:900});
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(added);
+ expect(undoEditorCommand(h).present).toBe(doc);
+ const firstOnly=addDrawingPositions(doc,undefined,[buildDrawingBom(doc)[0]!.key]);
+ const moved={...firstOnly,leaders:firstOnly.leaders.map(l=>({...l,circle:{x:900,y:250}}))};
+ const complete=addDrawingPositions({...doc,drawingDocuments:moved});
+ expect(complete.leaders.filter(l=>l.objectId==="A").map(l=>l.circle)).toEqual([{x:900,y:250},{x:924,y:250},{x:948,y:250}]);
+});
+
+it("shows and hides every designation of a shared position together without losing layout",()=>{
+ const base=physicalFixture();
+ const binding={mode:"series" as const,seriesId:"xs-demo-series",partNumber:"XS-04"};
+ const doc={...base,connectors:base.connectors.map(c=>({...c,partNumber:"XS-04",libraryBinding:binding}))};
+ const row=buildDrawingBom(doc)[0]!;
+ expect(row.index).toBe("A, B, C");expect(row.designation).toBe("XS-04");
+ const visible=setDrawingPositionVisibility(doc,row.key,true);
+ expect(visible.leaders).toHaveLength(3);
+ const hidden=setDrawingPositionVisibility({...doc,drawingDocuments:visible},row.key,false);
+ expect(hidden.leaders.every(l=>l.hidden)).toBe(true);
+ expect(drawingDocumentScene({...doc,drawingDocuments:hidden}).filter(o=>o.kind==="position-leader")).toHaveLength(0);
+ const again=setDrawingPositionVisibility({...doc,drawingDocuments:hidden},row.key,true);
+ expect(again.leaders.map(l=>l.circle)).toEqual(visible.leaders.map(l=>l.circle));
+ expect(again.leaders.every(l=>!l.hidden)).toBe(true);
+});
+
+it.each([{hidden:"yes"},{anchorLocal:{x:null,y:1}},{anchorLocal:{x:1e8,y:0}}])("rejects invalid persisted leader attachment %j",patch=>{
+ const doc=physicalFixture(),docs=addDrawingPositions(doc);
+ expect(()=>parseHarnessDesignDocument({...doc,drawingDocuments:{...docs,leaders:[{...docs.leaders[0],...patch}]}})).toThrow();
 });

@@ -1916,6 +1916,7 @@ export function drawEditorSceneObject(
   componentTemplateViewInstance?: ComponentTemplateViewInstance,
   resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
   componentTemplateImageCache = new ComponentTemplateImageCache(),
+  minimumStrokePixels = 0,
 ) {
   context.save();
   if(object.kind==="drawing-table") {
@@ -1973,7 +1974,7 @@ export function drawEditorSceneObject(
       componentTemplateViewInstance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl,
     );
     if (projection) {
-      drawProjectedComponentTemplateView(context, projection, componentTemplateImageCache, selected);
+      drawProjectedComponentTemplateView(context, projection, componentTemplateImageCache, selected, minimumStrokePixels);
       drawConnectorContactOverrides(context, object, view, true);
       context.restore();
       return;
@@ -2588,6 +2589,7 @@ function redrawCanvas(
       object.kind === "connector" ? componentViews.get(object.id) : undefined,
       resolveComponentTemplateAssetUrl,
       componentTemplateImageCache,
+      view === "drawing" ? ratio * .9 : 0,
     );
   }
   for (const object of objectsInPaintOrder(objects,layers)) {

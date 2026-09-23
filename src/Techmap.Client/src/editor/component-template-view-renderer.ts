@@ -528,12 +528,21 @@ export class ComponentTemplateImageCache {
 
 const hatchPatterns = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasPattern>>();
 
-function applyCommandTransform(context: CanvasRenderingContext2D, command: ProjectedComponentTemplateCommand): void {
+/** Preserve fine strokes in device pixels without rasterizing the vector drawing. */
+export function detailStrokeWidth(width:number, transform:Pick<ComponentTemplateTransform,"a"|"b"|"c"|"d">, minimumPixels:number):number {
+  if(width<=0||minimumPixels<=0)return width;
+  const {a,b,c,d}=transform, sum=a*a+b*b+c*c+d*d, determinant=a*d-b*c;
+  const largest=Math.sqrt((sum+Math.sqrt(Math.max(0,sum*sum-4*determinant*determinant)))/2);
+  const smallest=largest>0?Math.abs(determinant)/largest:0;
+  return smallest>1e-8?Math.max(width,minimumPixels/smallest):width;
+}
+
+function applyCommandTransform(context: CanvasRenderingContext2D, command: ProjectedComponentTemplateCommand, minimumPixels:number): void {
   const { a, b, c, d, e, f } = command.transform;
   context.transform(a, b, c, d, e, f);
   context.globalAlpha *= Math.min(1, Math.max(0, command.opacity));
   context.strokeStyle = command.stroke;
-  context.lineWidth = command.strokeWidth;
+  context.lineWidth = minimumPixels>0 && context.getTransform ? detailStrokeWidth(command.strokeWidth,context.getTransform(),minimumPixels) : command.strokeWidth;
   const unit = Math.max(command.strokeWidth, 1);
   context.setLineDash(command.strokeDash === "dash" ? [6 * unit, 4 * unit]
     : command.strokeDash === "dot" ? [unit, 3 * unit]
@@ -615,10 +624,11 @@ export function drawProjectedComponentTemplateView(
   projection: ProjectedComponentTemplateView,
   imageCache: ComponentTemplateImageCache,
   selected = false,
+  minimumStrokePixels = 0,
 ): void {
   for (const command of projection.commands) {
     context.save();
-    applyCommandTransform(context, command);
+    applyCommandTransform(context, command, minimumStrokePixels);
     if (command.kind === "polyline") {
       context.beginPath();
       const rounded = !command.closed && command.bendRadius > 0
@@ -664,6 +674,8 @@ export function drawProjectedComponentTemplateView(
         const sourceY = command.cropY * entry.image.naturalHeight;
         const sourceWidth = command.cropWidth * entry.image.naturalWidth;
         const sourceHeight = command.cropHeight * entry.image.naturalHeight;
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
         context.drawImage(entry.image, sourceX, sourceY, sourceWidth, sourceHeight, command.x, command.y, command.width, command.height);
       } else {
         drawImagePlaceholder(context, command);

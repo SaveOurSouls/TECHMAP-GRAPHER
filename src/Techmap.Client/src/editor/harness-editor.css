@@ -465,3 +465,8 @@
 .he-table-window .he-document-table input { box-sizing:border-box; width:110px; min-width:70px; max-width:none; }
 
 .he-table-window-document .he-document-content>.ui-section-heading { display:none; }
+
+.he-position-toggle { display:inline-flex; align-items:center; justify-content:center; width:24px; min-height:24px; padding:2px; margin-left:3px; vertical-align:middle; }
+.he-position-toggle[aria-pressed="false"] { color:#7b8b93; }
+.he-table-window .he-document-table input[aria-label^="Наименование"] { width:220px; }
+.he-table-window .he-document-table input[aria-label^="Индекс"] { width:100px; }

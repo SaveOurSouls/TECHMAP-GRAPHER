@@ -31,6 +31,8 @@ internal static class HarnessDrawingDocumentsValidator
         {
             var id=Text(leader,"id");if(!ids.Add(id)||!ids.Add(id+":anchor"))throw Invalid();
             _=Text(leader,"objectId");_=Text(leader,"rowKey",4096);Point(leader,"anchorOffset");Point(leader,"circle");
+            if(leader.TryGetProperty("anchorLocal",out _))Point(leader,"anchorLocal");
+            if(leader.TryGetProperty("hidden",out var hidden)&&hidden.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
         }
         if(d.TryGetProperty("bomText",out var edits))
         {
@@ -38,7 +40,7 @@ internal static class HarnessDrawingDocumentsValidator
             foreach(var entry in edits.EnumerateObject())
             {
                 if(string.IsNullOrWhiteSpace(entry.Name)||entry.Name.Length>4096||entry.Value.ValueKind!=JsonValueKind.Object)throw Invalid();
-                foreach(var field in entry.Value.EnumerateObject())if(field.Name is not ("designation" or "name" or "note")||field.Value.ValueKind!=JsonValueKind.String||field.Value.GetString()!.Length>4096)throw Invalid();
+                foreach(var field in entry.Value.EnumerateObject())if(field.Name is not ("index" or "designation" or "name" or "note")||field.Value.ValueKind!=JsonValueKind.String||field.Value.GetString()!.Length>4096)throw Invalid();
             }
         }
         if(d.TryGetProperty("specificationItems",out var items))
