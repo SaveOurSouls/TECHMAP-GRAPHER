@@ -1,8 +1,11 @@
+import { drawingConnectorCorner, type DrawingPerimeters } from "./drawing-object-perimeter";
+import { offsetPolyline } from "./covering-layout";
+import type { DrawingDocuments } from "./drawing-documents";
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireInstance } from "./model";
 import { physicalWirePoints, physicalSegmentControls } from "./physical-topology";
 import type { EditorSceneObject } from "./editor-types";
 
-export type DimensionMode="horizontal"|"vertical"|"aligned";
+export type DimensionMode="horizontal"|"vertical"|"aligned"|"path";
 export interface DrawingDimension {
   readonly id:string; readonly wireId?:string; readonly segmentId?:string; readonly from:number; readonly to:number;
   readonly pointCount:number; readonly routeKey:string; readonly mode:DimensionMode;
@@ -60,7 +63,7 @@ export function validateDrawingDimensions(value:unknown,document:HarnessDesignDo
   for(const d of value as DrawingDimension[]){
     if(!d)return fail();
     const pipe=d.segmentId!==undefined;
-    if(!d||typeof d.id!=="string"||!d.id.trim()||d.id.length>128||ids.has(d.id)||pipe&&(typeof d.segmentId!=="string"||d.wireId!==undefined)||!pipe&&typeof d.wireId!=="string"||typeof d.routeKey!=="string"||d.routeKey.length>65536||!["horizontal","vertical","aligned"].includes(d.mode)||!Number.isFinite(d.offset)||Math.abs(d.offset)>1e7||!Number.isInteger(d.pointCount)||d.pointCount<2||d.pointCount>50000||!Number.isInteger(d.from)||!Number.isInteger(d.to)||d.from<0||d.to<=d.from||d.to>=d.pointCount||d.lengthMm!==null&&(!Number.isFinite(d.lengthMm)||d.lengthMm<0||d.lengthMm>1e7||Math.abs(d.lengthMm*1000-Math.round(d.lengthMm*1000))>1e-5))return fail();
+    if(!d||typeof d.id!=="string"||!d.id.trim()||d.id.length>128||ids.has(d.id)||pipe&&(typeof d.segmentId!=="string"||d.wireId!==undefined)||!pipe&&typeof d.wireId!=="string"||typeof d.routeKey!=="string"||d.routeKey.length>65536||!["horizontal","vertical","aligned","path"].includes(d.mode)||!Number.isFinite(d.offset)||Math.abs(d.offset)>1e7||!Number.isInteger(d.pointCount)||d.pointCount<2||d.pointCount>50000||!Number.isInteger(d.from)||!Number.isInteger(d.to)||d.from<0||d.to<=d.from||d.to>=d.pointCount||d.lengthMm!==null&&(!Number.isFinite(d.lengthMm)||d.lengthMm<0||d.lengthMm>1e7||Math.abs(d.lengthMm*1000-Math.round(d.lengthMm*1000))>1e-5))return fail();
     ids.add(d.id);
     if(d.routeKey!==dimensionTargetKey(document,d))return fail();
     if(pipe&&d.pointCount!==document.physicalTopology!.segments.find(s=>s.id===d.segmentId)!.bends.length+2)return fail();
@@ -93,12 +96,72 @@ export function dimensionGeometry(a:Point,b:Point,mode:DimensionMode,offset:numb
   const length=Math.hypot(b.x-a.x,b.y-a.y)||1,dx=-(b.y-a.y)/length*offset,dy=(b.x-a.x)/length*offset;
   return [a,{x:a.x+dx,y:a.y+dy},{x:b.x+dx,y:b.y+dy},b];
 }
-export function drawingDimensionScene(document:HarnessDesignDocument,wires:readonly EditorSceneObject[]):EditorSceneObject[] {
-  return (document.drawingDocuments?.dimensions??[]).flatMap(d=>{
-    const segment=document.physicalTopology?.segments.find(s=>s.id===d.segmentId);
-    const points=segment?physicalSegmentControls(document,segment):wires.find(w=>w.id===d.wireId)?.points,a=points?.[d.from],b=points?.[d.to];
-    if(!a||!b)return [];
-    const valid=points?.length===d.pointCount;
-    return [{id:d.id,kind:"dimension" as const,layerId:"dimensions",label:valid?(d.lengthMm===null?"— мм":`${d.lengthMm} мм`):"Обновите привязку",x:0,y:0,width:0,height:0,color:valid?"#55798e":"#bb3333",points:dimensionGeometry(a,b,d.mode,d.offset),metadata:{boundDimension:"true"}}];
-  });
+export function dimensionTargetPoints(document:HarnessDesignDocument,d:DrawingDimension,perimeters?:DrawingPerimeters):Point[] {
+ const segment=document.physicalTopology?.segments.find(s=>s.id===d.segmentId),wire=document.wires.find(w=>w.id===d.wireId);
+ const controls=segment?physicalSegmentControls(document,segment):wire?dimensionWirePoints(document,wire):[];
+ const points=controls.slice(d.from,d.to+1).map(p=>({...p}));if(points.length<2)return [];
+ const ends=segment?[document.physicalTopology?.nodes.find(n=>n.id===segment.from)?.connectorId,document.physicalTopology?.nodes.find(n=>n.id===segment.to)?.connectorId]:[wire?.from.connectorId,wire?.to.connectorId];
+ if(d.from===0&&ends[0])points[0]=drawingConnectorCorner(document,ends[0],points[0]!,perimeters)??points[0]!;
+ if(d.to===controls.length-1&&ends[1])points[points.length-1]=drawingConnectorCorner(document,ends[1],points.at(-1)!,perimeters)??points.at(-1)!;
+ return points;
+}
+export function dimensionDisplayPoints(document:HarnessDesignDocument,d:DrawingDimension,perimeters?:DrawingPerimeters):Point[] {
+ const points=dimensionTargetPoints(document,d,perimeters);if(points.length<2)return [];
+ return d.mode==="path"?[points[0]!,...offsetPolyline(points,points.map(()=>d.offset)),points.at(-1)!]:[...dimensionGeometry(points[0]!,points.at(-1)!,d.mode,d.offset)];
+}
+export function drawingDimensionScene(document:HarnessDesignDocument,_wires:readonly EditorSceneObject[]=[],perimeters?:DrawingPerimeters):EditorSceneObject[] {
+ if(document.drawingDocuments?.showDimensions===false)return [];
+ const explicit=document.drawingDocuments?.dimensions??[];
+ const legacy=document.wires.filter(w=>document.drawingDocuments===undefined&&w.lengthMm!==null&&!explicit.some(d=>d.wireId===w.id)).flatMap(w=>{
+  const points=dimensionWirePoints(document,w);if(points.length<2)return [];
+  const geometry=dimensionGeometry(points[0]!,points.at(-1)!,"aligned",40);
+  return [{id:`dimension:${w.id}`,kind:"dimension" as const,layerId:"dimensions",label:`${w.lengthMm} мм`,x:(geometry[1]!.x+geometry[2]!.x)/2,y:(geometry[1]!.y+geometry[2]!.y)/2,width:0,height:0,color:"#55798e",points:geometry,metadata:{boundDimension:"true",legacyDimension:"true",dimensionMode:"aligned"}}];
+ });
+ const scene:EditorSceneObject[]=[...legacy,...explicit.flatMap(d=>{
+  const points=dimensionDisplayPoints(document,d,perimeters);if(points.length<4)return [];
+  const p=points[1]!,q=points.at(-2)!;
+  return [{id:d.id,kind:"dimension" as const,layerId:"dimensions",label:d.lengthMm===null?"— мм":`${d.lengthMm} мм`,x:(p.x+q.x)/2,y:(p.y+q.y)/2,width:0,height:0,color:"#55798e",points,metadata:{boundDimension:"true",dimensionMode:d.mode}}];
+ })];
+ return scene.map(item=>{
+  const ends=[item.points![1]!,item.points!.at(-2)!],line={x:ends[1]!.x-ends[0]!.x,y:ends[1]!.y-ends[0]!.y};
+  const dots=ends.map(p=>scene.some(other=>{
+   if(other.id===item.id)return false;const a=other.points![1]!,b=other.points!.at(-2)!,dx=b.x-a.x,dy=b.y-a.y;
+   return Math.abs(dx*line.y-dy*line.x)<1e-5*Math.max(1,Math.hypot(dx,dy)*Math.hypot(line.x,line.y))&&[a,b].some(q=>Math.hypot(p.x-q.x,p.y-q.y)<.01);
+  }));
+  return {...item,metadata:{...item.metadata,dotStart:String(dots[0]),dotEnd:String(dots[1])}};
+ });
+}
+export function moveDrawingDimension(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters):DrawingDocuments|null {
+ const docs=document.drawingDocuments,d=docs?.dimensions?.find(d=>d.id===id);if(!docs||!d)return null;
+ const points=dimensionDisplayPoints(document,d,perimeters);if(points.length<4)return null;
+ const a=points[0]!,b=points.at(-1)!,p=points[1]!,q=points.at(-2)!,length=Math.hypot(b.x-a.x,b.y-a.y)||1;
+ const n=d.mode==="horizontal"?{x:0,y:1}:d.mode==="vertical"?{x:1,y:0}:{x:-(b.y-a.y)/length,y:(b.x-a.x)/length};
+ let offset=d.offset+(point.x-(p.x+q.x)/2)*n.x+(point.y-(p.y+q.y)/2)*n.y;
+ const next=()=>dimensionDisplayPoints(document,{...d,offset},perimeters)[1]!;
+ for(const other of docs.dimensions??[]){if(other.id===id||other.mode!==d.mode||d.mode==="path")continue;
+  const op=dimensionDisplayPoints(document,other,perimeters);if(op.length<4)continue;const oa=op[0]!,ob=op.at(-1)!;
+  if(d.mode==="aligned"&&Math.abs((ob.x-oa.x)*n.x+(ob.y-oa.y)*n.y)>1e-5)continue;
+  const target=op[1]!,current=next(),delta=(target.x-current.x)*n.x+(target.y-current.y)*n.y;
+  if(Math.abs(delta)<=10){offset+=delta;break;}
+ }
+ return {...docs,dimensions:docs.dimensions!.map(item=>item.id===id?{...item,offset}:item)};
+}
+export function setPipeIntervalLength(document:HarnessDesignDocument,segmentId:string,from:number,to:number,lengthMm:number|null):DrawingDocuments {
+ const s=document.physicalTopology!.segments.find(s=>s.id===segmentId)!,docs=document.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
+ const dimensions=docs.dimensions??[],existing=dimensions.find(d=>d.segmentId===segmentId&&d.from===from&&d.to===to);
+ const value:DrawingDimension={id:existing?.id??crypto.randomUUID(),segmentId,from,to,pointCount:s.bends.length+2,routeKey:segmentDimensionKey(document,segmentId),mode:existing?.mode??"aligned",offset:existing?.offset??40,lengthMm};
+ return {...docs,showDimensions:docs.showDimensions??false,dimensions:[...dimensions.filter(d=>d.segmentId!==segmentId||d.to<=from||d.from>=to),value]};
+}
+export function toggleDrawingDimensions(document:HarnessDesignDocument):DrawingDocuments {
+ let docs=document.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
+ const show=!(docs.showDimensions??!!docs.dimensions?.length);
+ if(show)for(const s of document.physicalTopology?.segments??[]){if(docs.dimensions?.some(d=>d.segmentId===s.id))continue;
+  for(let i=0;i<s.bends.length+1;i++)docs=setPipeIntervalLength({...document,drawingDocuments:docs},s.id,i,i+1,null);
+ }
+ if(show)for(const wire of document.wires){
+  if(docs.dimensions?.some(d=>d.wireId===wire.id)||document.physicalTopology?.routes.some(r=>r.wireId===wire.id))continue;
+  const points=dimensionWirePoints(document,wire);if(points.length<2)continue;
+  docs={...docs,dimensions:[...docs.dimensions??[],{id:crypto.randomUUID(),wireId:wire.id,from:0,to:points.length-1,pointCount:points.length,routeKey:dimensionRouteKey(document,wire),mode:"aligned",offset:40,lengthMm:wire.lengthMm}]};
+ }
+ return {...docs,showDimensions:show};
 }

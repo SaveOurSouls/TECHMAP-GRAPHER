@@ -95,3 +95,15 @@ export function drawingObjectPerimeter(document:HarnessDesignDocument,id:string,
   const angle=Math.atan2(target.y-point.y,target.x-point.x);
   return {x:point.x+radius*Math.cos(angle),y:point.y+radius*Math.sin(angle)};
 }
+
+
+/** Connector dimension witness starts at the nearest outer corner of its pinned picture. */
+export function drawingConnectorCorner(document:HarnessDesignDocument,id:string,target:Point,perimeters?:DrawingPerimeters):Point|null {
+ const c=document.connectors.find(c=>c.id===id);if(!c)return null;
+ const points=(perimeters?.get(id)?.flat()??rectangle(0,0,118,Math.max(72,44+c.contacts.length*16))).map(p=>{const q=drawingLocalPoint(p,c.drawingPlacements);return {x:c.positions.drawing.x+q.x,y:c.positions.drawing.y+q.y};});
+ const sorted=[...new Map(points.map(p=>[`${p.x},${p.y}`,p])).values()].sort((a,b)=>a.x-b.x||a.y-b.y);
+ const cross=(a:Point,b:Point,c:Point)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+ const half=(list:Point[])=>{const result:Point[]=[];for(const p of list){while(result.length>=2&&cross(result.at(-2)!,result.at(-1)!,p)<=1e-7)result.pop();result.push(p);}return result;};
+ const hull=[...half(sorted),...half([...sorted].reverse())];
+ return hull.reduce<Point|null>((best,p)=>!best||Math.hypot(p.x-target.x,p.y-target.y)<Math.hypot(best.x-target.x,best.y-target.y)?p:best,null);
+}

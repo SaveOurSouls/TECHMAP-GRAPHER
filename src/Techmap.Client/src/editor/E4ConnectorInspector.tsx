@@ -556,7 +556,7 @@ export function E4ConnectorInspector({
                           key={wire.id}
                           onPointerDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            updateContact(contact, { wire: wire.mark, wireSection: wire.section });
+                            updateContact(contact, { wire: wire.mark, wireSection: wire.section, wireDiameterMm:wire.diameterMm });
                             setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
                           title={wire.detail}

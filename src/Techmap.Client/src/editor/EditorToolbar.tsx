@@ -15,14 +15,13 @@ const tools: readonly ToolDefinition[] = [
   { id: "connector", label: "Соединитель", shortcut: "C", glyph: "▣", views: ["e4", "drawing"] },
   { id: "wire", label: "Провод", shortcut: "W", glyph: "╱", views: ["e4", "drawing"] },
   { id: "text", label: "Текст", shortcut: "T", glyph: "T", views: ["e4", "drawing"] },
-  { id: "dimension-horizontal", label: "Горизонтальный размер", shortcut: "", glyph: "↔", views: ["drawing"] },
-  { id: "dimension-vertical", label: "Вертикальный размер", shortcut: "", glyph: "↕", views: ["drawing"] },
-  { id: "dimension", label: "Свободный размер", shortcut: "D", glyph: "⤢", views: ["drawing"] },
 ];
 
 export function editorToolShortcut(event: Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "altKey" | "metaKey" | "isComposing">, view: HarnessEditorView): EditorTool | null {
   if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return null;
   const shortcut = event.code.startsWith("Key") ? event.code.slice(3) : event.key.toUpperCase();
+  // Keep existing keyboard workflows available without a separate dimensions menu.
+  if(shortcut==="D"&&view==="drawing")return "dimension";
   return tools.find(tool => tool.shortcut && tool.shortcut === shortcut && tool.views.includes(view))?.id ?? null;
 }
 

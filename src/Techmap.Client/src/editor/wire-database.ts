@@ -1,8 +1,10 @@
+import { catalogOuterDiameter } from "./drawing-thickness";
 import type { ReferenceCatalogSearchRecord } from "../reference-catalog-api";
 import { builtInWireReferences } from "./wire-reference-catalog";
 
 export interface WireDatabaseOption {
   readonly id: string;
+  readonly diameterMm?:number;
   readonly mark: string;
   readonly section: string;
   readonly label: string;
@@ -41,7 +43,7 @@ export function formatWireSection(payload: Readonly<Record<string, unknown>>): s
 export function wireDatabaseOption(record: ReferenceCatalogSearchRecord): WireDatabaseOption {
   const mark = field(record.payload, "Марка", "mark", "name", "Название", "series", "Серия") || record.sourceKey;
   const section = formatWireSection(record.payload);
-  return { id: record.recordId, mark, section, label: [mark, section].filter(Boolean).join(" · "),
+  return { id: record.recordId, diameterMm:catalogOuterDiameter(record.payload), mark, section, label: [mark, section].filter(Boolean).join(" · "),
     detail: ["Артикул провода", "Артикул", "Цвет", "Производитель", "Категория"]
       .map(key => text(record.payload[key]) ? `${key}: ${text(record.payload[key])}` : "").filter(Boolean).join(" · "),
     searchText: Object.values(record.payload).map(text).join(" ") };

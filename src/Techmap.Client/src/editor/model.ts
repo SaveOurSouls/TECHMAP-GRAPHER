@@ -227,6 +227,7 @@ export interface ConnectorContact {
   readonly terminalArticle: string;
   readonly wire: string;
   readonly wireSection?: string;
+  readonly wireDiameterMm?: number;
   readonly color: string;
   /** Empty or missing means that the wire has one insulation color. */
   readonly secondaryColor?: string;
@@ -361,6 +362,7 @@ export interface WireColorSource {
  * changing the material selected for an existing harness.
  */
 export interface WireMaterialBinding {
+  readonly outerDiameterMm?: number;
   readonly sourceId: string;
   readonly snapshotId: string;
   readonly snapshotSha256: string;
@@ -1127,6 +1129,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       circuit: requireString(contact.circuit, "Цепь контакта"),
       terminalArticle: optionalString(contact.terminalArticle, "Артикул терминала"),
       wire: optionalString(contact.wire, "Провод контакта"),
+      ...(contact.wireDiameterMm === undefined ? {} : {wireDiameterMm:parseOuterDiameter(contact.wireDiameterMm)}),
       ...(contact.wireSection === undefined ? {} : { wireSection: optionalString(contact.wireSection, "Сечение провода") }),
       color: optionalString(contact.color, "Цвет провода контакта"),
       secondaryColor: optionalString(contact.secondaryColor, "Второй цвет провода контакта"),
@@ -1675,12 +1678,18 @@ function validateCables(cables: readonly CableInstance[], wireIds: ReadonlySet<s
   }
 }
 
+export function parseOuterDiameter(value:unknown):number {
+  if(typeof value!=="number"||!Number.isFinite(value)||value<=0||value>1000)throw new Error("Диаметр изоляции должен быть больше 0 и не больше 1000 мм.");
+  return value;
+}
+
 function parseWireMaterialBinding(value: unknown): WireMaterialBinding {
   const record = requireRecord(value, "Привязка материала провода задана неверно.");
   if (record.entityType !== "wire" && record.entityType !== "cable") {
     throw new Error("Тип материала провода задан неверно.");
   }
   return Object.freeze({
+    ...(record.outerDiameterMm===undefined?{}:{outerDiameterMm:parseOuterDiameter(record.outerDiameterMm)}),
     sourceId: requireBoundedText(record.sourceId, "Источник материала провода", 128),
     snapshotId: parseNonEmptyGuid(record.snapshotId, "ID снимка материала провода"),
     snapshotSha256: parseSha256(record.snapshotSha256, "Хэш снимка материала провода"),

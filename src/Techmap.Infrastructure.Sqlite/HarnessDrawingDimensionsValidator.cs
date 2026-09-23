@@ -31,7 +31,7 @@ internal static class HarnessDrawingDimensionsValidator
             JsonElement wire=default;
             if(wireId is not null&&!wires.TryGetValue(wireId,out wire))throw Invalid();
             var from=Integer(d,"from");var to=Integer(d,"to");var count=Integer(d,"pointCount");
-            if(count<2||count>50000||from<0||to<=from||to>=count||Text(d,"mode") is not ("horizontal" or "vertical" or "aligned"))throw Invalid();
+            if(count<2||count>50000||from<0||to<=from||to>=count||Text(d,"mode") is not ("horizontal" or "vertical" or "aligned" or "path"))throw Invalid();
             if(!d.TryGetProperty("offset",out var offset)||offset.ValueKind!=JsonValueKind.Number||!offset.TryGetDouble(out var n)||!double.IsFinite(n)||Math.Abs(n)>1e7)throw Invalid();
             var key=Text(d,"routeKey",65536);
             JsonNode? actual;try{actual=JsonNode.Parse(key);}catch(JsonException){throw Invalid();}

@@ -1,3 +1,4 @@
+import { catalogOuterDiameter } from "./drawing-thickness";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSession } from "../local-session";
 import {
@@ -304,6 +305,7 @@ export function referenceRecordToEditorCatalogItem(
       ? source.id === "technology-wires" ? wireDatabaseOption(record).label
         : firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
       : undefined,
+    outerDiameterMm:catalogOuterDiameter(payload),
     coaxTerminationCandidate,
   };
 }

@@ -1,9 +1,9 @@
 import { drawingObjectPerimeter, type DrawingPerimeters } from "./drawing-object-perimeter";
 import { drawingLocalPoint, drawingPointToLocal } from "./drawing-scale";
-import { validateDrawingDimensions, type DrawingDimension } from "./drawing-dimensions";
+import { moveDrawingDimension, validateDrawingDimensions, type DrawingDimension } from "./drawing-dimensions";
 import type { EditorSceneObject } from "./editor-types";
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireEndpoint } from "./model";
-import { coveringPaths } from "./physical-coverings";
+import { coveringPaths, coveringMeasuredLength } from "./physical-coverings";
 import { physicalNodePoint, physicalSegmentPoints } from "./physical-topology";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
@@ -21,7 +21,7 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly physicalScale?:number; readonly showDimensions?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -58,7 +58,7 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     add(key,blank.id,b?.sourceKey ?? ("circuit" in blank?blank.circuit || blank.id:blank.id),b?.displayName ?? "Материал не назначен",cut===null?null:cut/1000,"м",b?"По длине заготовки":"Нет закреплённого материала","circuit" in blank?blank.circuit || blank.id:blank.id);
     for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===blank.id)??[])rows.get(key)!.objectIds.add(segment.id);
   }
-  for(const c of document.physicalTopology?.coverings ?? []) add(c.material?materialKey("protection",c.material):keyOf("protection-unpinned",c.id),c.id,c.material?.sourceKey ?? c.name,c.material?.displayName ?? c.name,c.lengthMm===null?null:c.lengthMm/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен",c.name);
+  for(const c of document.physicalTopology?.coverings ?? []) add(c.material?materialKey("protection",c.material):keyOf("protection-unpinned",c.id),c.id,c.material?.sourceKey ?? c.name,c.material?.displayName ?? c.name,coveringMeasuredLength(document,c)===null?null:coveringMeasuredLength(document,c)!/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен",c.name);
   for(const item of document.drawingDocuments?.specificationItems ?? []) {
     const key=keyOf("specification",item.id);
     add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || (item.kind === "abstract" ? "Абстрактная позиция" : "Дополнительная позиция"));
@@ -97,6 +97,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   const fail=():never=>{throw new Error("Некорректные таблицы или позиционные выноски чертежа.");};
   if(!value||typeof value!=="object")return fail();
   const d=value as DrawingDocuments;
+  if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean")return fail();
   if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;
@@ -137,6 +138,7 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
 }
 export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters):DrawingDocuments|null {
   const d=document.drawingDocuments;if(!d)return null;
+  const dimension=moveDrawingDimension(document,id,point,perimeters);if(dimension)return dimension;
   if(d.specificationItems?.some(i=>i.id===id&&i.position))return {...d,specificationItems:d.specificationItems.map(i=>i.id===id?{...i,position:point}:i)};
   if(d.tables.some(t=>t.id===id)) return {...d,tables:d.tables.map(t=>t.id===id?{...t,position:point}:t)};
   const leader=d.leaders.find(l=>l.id===id||`${l.id}:anchor`===id);if(!leader)return null;

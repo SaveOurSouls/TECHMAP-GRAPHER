@@ -61,6 +61,8 @@ internal static class HarnessPhysicalTopologyValidator
             {
                 if (!ids.Add(Text(covering, "id"))) throw Invalid();
                 _ = LongText(covering, "name", 256);
+                if(covering.TryGetProperty("kind",out _)&&Text(covering,"kind") is not ("heat-shrink" or "nylon" or "braid" or "metal-braid" or "tape" or "band"))throw Invalid();
+                if(covering.TryGetProperty("lengthMode",out _)&&Text(covering,"lengthMode") is not ("auto" or "manual"))throw Invalid();
                 var color = LongText(covering, "color", 7);
                 if (color.Length != 7 || color[0] != '#' || color[1..].Any(c => !Uri.IsHexDigit(c))) throw Invalid();
                 var width = Number(covering,"width"); if (width < 1 || width > 200) throw Invalid();
@@ -74,7 +76,14 @@ internal static class HarnessPhysicalTopologyValidator
                 foreach(var span in spans.EnumerateArray())
                 {
                     var id=Text(span,"segmentId"); if(!segments.ContainsKey(id) || !members.Add(id)) throw Invalid();
-                    var from=Number(span,"from"); var to=Number(span,"to"); if(from<0 || to>1 || from>=to) throw Invalid();
+                    var from=Number(span,"from"); var to=Number(span,"to"); if(from < -10000 || to > 10001 || from>=to) throw Invalid();
+                    var count=t.GetProperty("segments").EnumerateArray().First(s=>Text(s,"id")==id).GetProperty("bends").GetArrayLength()+2;
+                    int? startAnchor=null,endAnchor=null;
+                    foreach(var key in new[]{"fromAnchor","toAnchor"})if(span.TryGetProperty(key,out var anchor)){
+                        if(anchor.ValueKind!=JsonValueKind.Number||!anchor.TryGetInt32(out var index)||index<0||index>=count)throw Invalid();
+                        if(key=="fromAnchor")startAnchor=index;else endAnchor=index;
+                    }
+                    if(startAnchor.HasValue&&endAnchor.HasValue&&startAnchor>=endAnchor)throw Invalid();
                 }
                 if(covering.TryGetProperty("material",out var material))
                 {

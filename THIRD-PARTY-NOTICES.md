@@ -105,3 +105,10 @@ MPL-2.0: <https://spdx.org/licenses/MPL-2.0.html>
 The links identify standard license texts; no network access is required to
 generate or use the package. Complete .NET distribution notices are shipped as
 a local file as described above.
+
+## Covering textures (ambientCG)
+
+Rubber002, Fabric061 and Metal049A color maps © ambientCG contributors,
+dedicated to the public domain under CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/ .
+Sources and modifications: `wwwroot/textures/coverings/SOURCES.md`.

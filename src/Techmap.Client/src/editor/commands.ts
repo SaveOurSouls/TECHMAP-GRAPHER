@@ -1,3 +1,4 @@
+import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
@@ -59,7 +60,7 @@ export type EditorCommand =
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
-  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly wireSection?: string; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
@@ -397,6 +398,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
               contact,
               normalizeValue(command.terminalArticle, "Артикул терминала"),
             ),
+          ...((command.wire!==undefined||command.wireSection!==undefined||command.wireDiameterMm!==undefined)?{wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:{}),
           wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
           ...(command.wireSection === undefined ? {} : { wireSection: normalizeValue(command.wireSection, "Сечение провода") }),
           color: command.color === undefined ? contact.color : normalizeValue(command.color, "Цвет провода контакта"),
@@ -413,7 +415,10 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const synchronized = command.color === undefined && command.secondaryColor === undefined
         ? updated
         : syncDirectWireColors(updated, command.connectorId, command.contactId);
-      return rememberCustomWireColors(synchronized, [command.color ?? "", command.secondaryColor ?? ""]);
+      const diameterChanged=command.wireDiameterMm!==undefined||command.wire!==undefined||command.wireSection!==undefined;
+      const endpoints=document.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId&&e.contactId===command.contactId)).flatMap(w=>[w.from,w.to]);
+      const sized=diameterChanged?{...synchronized,connectors:synchronized.connectors.map(c=>({...c,contacts:c.contacts.map(p=>endpoints.some(e=>e.connectorId===c.id&&e.contactId===p.id)?{...p,wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:p)}))}:synchronized;
+      return rememberCustomWireColors(sized, [command.color ?? "", command.secondaryColor ?? ""]);
     }
     case "reset-contact-color-auto":
       return resetContactColorToAutomatic(document, command.connectorId, command.contactId);

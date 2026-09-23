@@ -1,3 +1,4 @@
+import type { CoveringDragPart } from "./covering-layout";
 import {type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -98,6 +99,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
   readonly relationPanel?: ReactNode | ((tool:EditorTool,onToolChange:(tool:EditorTool)=>void)=>ReactNode);
+  readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
+  readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly documentActions?: ReactNode;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
@@ -225,7 +228,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,
+  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPipeIntervalSelect,onCoveringDrag,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -548,6 +551,7 @@ export function HarnessEditorWorkspace({
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}
           diagnosticOverlay={diagnosticOverlay}
+          onPipeIntervalSelect={onPipeIntervalSelect} onCoveringDrag={onCoveringDrag}
           onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}

@@ -15,7 +15,19 @@ internal static class HarnessDrawingDocumentsValidator
     }
     public static void Validate(JsonElement root)
     {
+        static void Diameter(JsonElement owner,string key){
+            if(owner.ValueKind==JsonValueKind.Object&&owner.TryGetProperty(key,out var value)&&
+                (value.ValueKind!=JsonValueKind.Number||!value.TryGetDouble(out var number)||!double.IsFinite(number)||number<=0||number>1000))throw Invalid();
+        }
+        if(root.TryGetProperty("connectors",out var connectors)&&connectors.ValueKind==JsonValueKind.Array)
+            foreach(var connector in connectors.EnumerateArray())if(connector.TryGetProperty("contacts",out var contacts)&&contacts.ValueKind==JsonValueKind.Array)
+                foreach(var contact in contacts.EnumerateArray())Diameter(contact,"wireDiameterMm");
+        if(root.TryGetProperty("wires",out var wires)&&wires.ValueKind==JsonValueKind.Array)
+            foreach(var wire in wires.EnumerateArray())if(wire.TryGetProperty("materialBinding",out var material))Diameter(material,"outerDiameterMm");
         if(!root.TryGetProperty("drawingDocuments",out var d))return;
+        if(d.ValueKind!=JsonValueKind.Object)throw Invalid();
+        if(d.TryGetProperty("physicalScale",out var scale)&&(scale.ValueKind!=JsonValueKind.Number||!scale.TryGetDouble(out var factor)||!double.IsFinite(factor)||factor<.2||factor>8))throw Invalid();
+        if(d.TryGetProperty("showDimensions",out var visible)&&visible.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
         var ids=new HashSet<string>(StringComparer.Ordinal);
         foreach(var key in new[]{"connectors","wires","cables"}) if(root.TryGetProperty(key,out var list)&&list.ValueKind==JsonValueKind.Array) foreach(var e in list.EnumerateArray())ids.Add(Text(e,"id"));
         if(root.TryGetProperty("physicalTopology",out var t)&&t.ValueKind==JsonValueKind.Object) foreach(var key in new[]{"nodes","segments","coverings"})if(t.TryGetProperty(key,out var list)&&list.ValueKind==JsonValueKind.Array)foreach(var e in list.EnumerateArray())ids.Add(Text(e,"id"));

@@ -470,3 +470,14 @@
 .he-position-toggle[aria-pressed="false"] { color:#7b8b93; }
 .he-table-window .he-document-table input[aria-label^="Наименование"] { width:220px; }
 .he-table-window .he-document-table input[aria-label^="Индекс"] { width:100px; }
+.he-thickness-control {display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;}
+.he-thickness-control input {width:110px;accent-color:#1179ac;}
+.he-thickness-control output {min-width:38px;font-variant-numeric:tabular-nums;}
+.he-covering-grip {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;align-items:end;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields label {display:flex;flex-direction:column;gap:3px;min-width:0;font-size:11px;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields input:not([type="checkbox"]),.he-relations[aria-label="Оболочки и защита"] .he-physical-fields select {width:100%;max-width:none;min-width:0;min-height:27px;height:27px;padding:2px 5px;box-sizing:border-box;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields label:has(input[type="checkbox"]) {flex-direction:row;align-items:center;grid-column:1/-1;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields input[type="checkbox"] {width:14px;height:14px;min-height:14px;}
+.he-relations[aria-label="Оболочки и защита"] .he-physical-fields small,.he-relations[aria-label="Оболочки и защита"] .he-physical-fields .he-physical-fields {grid-column:1/-1;}
+.he-document-nav {flex-wrap:wrap;}

@@ -100,6 +100,7 @@ export interface EditorCatalogItem {
   readonly sourceKey?: string;
   readonly entityType?: string;
   readonly referenceDisplayName?: string;
+  readonly outerDiameterMm?:number;
   readonly coaxTerminationCandidate?: CoaxTerminationCatalogCandidate;
   /** Library template metadata used when placing connector instances. */
   readonly templateKind?: "series" | "free";

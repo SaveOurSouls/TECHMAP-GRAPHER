@@ -1,0 +1,25 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Techmap.Application;
+using Techmap.Infrastructure.Sqlite;
+using Xunit;
+
+namespace Techmap.Web.Tests;
+public sealed class HarnessDrawingAppearanceTests
+{
+    private static JsonObject Fixture()=>JsonNode.Parse("""
+      {"connectors":[{"id":"A","contacts":[{"wireDiameterMm":1.2}]}],"wires":[],"drawingDocuments":{"tables":[],"leaders":[],"bomOrder":[],"physicalScale":1.5,"showDimensions":true,
+       "dimensions":[{"id":"D","segmentId":"S","from":0,"to":1,"pointCount":2,"routeKey":"[\"S\",\"N1\",\"N2\",0]","mode":"path","offset":40,"lengthMm":150}]},
+       "physicalTopology":{"snap":false,"nodes":[{"id":"N1","position":{"x":0,"y":0}},{"id":"N2","position":{"x":200,"y":0}}],"segments":[{"id":"S","from":"N1","to":"N2","bends":[]}],"routes":[],
+       "coverings":[{"id":"C","name":"Heat shrink","kind":"heat-shrink","lengthMode":"auto","width":20,"color":"#334455","lengthMm":null,"spans":[{"segmentId":"S","from":-0.2,"to":1,"toAnchor":1}]}]}}
+      """)!.AsObject();
+    private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
+    [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
+    [Theory]
+    [InlineData("scale")][InlineData("visible")][InlineData("diameter")][InlineData("kind")][InlineData("mode")][InlineData("anchor")][InlineData("fraction")]
+    public void Rejects_invalid_appearance_fields(string mutation){
+        var root=Fixture();var docs=root["drawingDocuments"]!;var cover=root["physicalTopology"]!["coverings"]![0]!;
+        switch(mutation){case "scale":docs["physicalScale"]=0;break;case "visible":docs["showDimensions"]="yes";break;case "diameter":root["connectors"]![0]!["contacts"]![0]!["wireDiameterMm"]=-1;break;case "kind":cover["kind"]="unknown";break;case "mode":cover["lengthMode"]="pixels";break;case "anchor":cover["spans"]![0]!["toAnchor"]=2;break;case "fraction":cover["spans"]![0]!["from"]=-10001;break;}
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+}

@@ -1,14 +1,17 @@
 import type { EditorCatalogItem } from "./editor-types";
-import type { HarnessDesignDocument, Point } from "./model";
-import { physicalSegmentPoints } from "./physical-topology";
+import { findWireEndpoint, type HarnessDesignDocument, type Point } from "./model";
+import { physicalSegmentPoints, physicalSegmentControls, physicalNodePoint } from "./physical-geometry";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
   readonly recordId: string; readonly entityType: "protective-covering";
   readonly sourceKey: string; readonly displayName: string;
 }
-export interface CoveringSpan { readonly segmentId: string; readonly from: number; readonly to: number }
+export interface CoveringSpan { readonly segmentId: string; readonly from: number; readonly to: number; readonly fromAnchor?:number; readonly toAnchor?:number }
+export type CoveringKind="heat-shrink"|"nylon"|"braid"|"metal-braid"|"tape"|"band";
 export interface PhysicalCovering {
+  readonly kind?:CoveringKind;
+  readonly lengthMode?:"auto"|"manual";
   readonly id: string; readonly name: string; readonly spans: readonly CoveringSpan[];
   /** Drawing width, independent of manufacturing length. */
   readonly width: number; readonly color: string; readonly lengthMm: number | null;
@@ -36,8 +39,9 @@ export function trimPolyline(points: readonly Point[], from: number, to: number)
 }
 export function coveringPaths(document: HarnessDesignDocument, covering: PhysicalCovering): Point[][] {
   return covering.spans.flatMap(span => {
-    const segment = document.physicalTopology?.segments.find(s => s.id === span.segmentId);
-    return segment ? [trimPolyline(physicalSegmentPoints(document, segment), span.from, span.to)] : [];
+    const route=coveringRoute(document,span.segmentId);if(!route)return [];
+    const bounds=resolvedCoveringSpan(document,span);
+    return [trimPolyline(route.points,(route.before+bounds.from*route.length)/route.total,(route.before+bounds.to*route.length)/route.total)];
   });
 }
 export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string>, existingIds: Set<string>): readonly PhysicalCovering[] | undefined {
@@ -48,9 +52,10 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
     if (!c || typeof c.id !== "string" || !c.id.trim() || c.id.length > 128 || existingIds.has(c.id)) return fail();
     existingIds.add(c.id);
     if (typeof c.name !== "string" || !c.name.trim() || c.name.length > 256 || !/^#[0-9a-f]{6}$/i.test(c.color) || !Number.isFinite(c.width) || c.width < 1 || c.width > 200) return fail();
+    if(c.kind!==undefined&&!["heat-shrink","nylon","braid","metal-braid","tape","band"].includes(c.kind)||c.lengthMode!==undefined&&!["auto","manual"].includes(c.lengthMode))return fail();
     if (c.lengthMm !== null && (!Number.isFinite(c.lengthMm) || c.lengthMm < 0 || c.lengthMm > 1e9 || Math.abs(c.lengthMm * 1000 - Math.round(c.lengthMm * 1000)) > 1e-4)) return fail();
     if (!Array.isArray(c.spans) || !c.spans.length || c.spans.length > 20000 || new Set(c.spans.map(s => s?.segmentId)).size !== c.spans.length) return fail();
-    for (const s of c.spans) if (!s || !segmentIds.has(s.segmentId) || !Number.isFinite(s.from) || !Number.isFinite(s.to) || s.from < 0 || s.to > 1 || s.from >= s.to) return fail();
+    for (const s of c.spans) if (!s || !segmentIds.has(s.segmentId) || !Number.isFinite(s.from) || !Number.isFinite(s.to) || s.from < -10000 || s.to > 10001 || s.from >= s.to || [s.fromAnchor,s.toAnchor].some(i=>i!==undefined&&(!Number.isInteger(i)||i<0||i>1001))) return fail();
     if (c.material !== undefined) {
       if (!c.material || typeof c.material !== "object") return fail();
       const m = c.material;
@@ -68,7 +73,7 @@ export function splitCoveringSpans(coverings: readonly PhysicalCovering[] | unde
   ]) }));
 }
 
-export const standardCoveringKinds=["Термоусадка","Оплётка","Нитевый бандаж","Обмотка","Металлическая плетёнка"] as const;
+export const standardCoveringKinds=["Термоусадка","Нейлонка","Оплётка","Нитевый бандаж","Обмотка","Металлическая плетёнка"] as const;
 export type PhysicalContextAction=typeof standardCoveringKinds[number]|"branch";
 export function projectOntoPolyline(points:readonly Point[],point:Point){
  let best={point:points[0]??point,index:1,fraction:0,distance:Infinity},travelled=0;const total=pathLength(points);
@@ -80,5 +85,49 @@ export function projectOntoPolyline(points:readonly Point[],point:Point){
 export function standardCovering(document:HarnessDesignDocument,segmentId:string,point:Point,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
  const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
  const at=projectOntoPolyline(physicalSegmentPoints(document,segment),point).fraction;
- return {id,name,width:Math.min(200,(segment.width??16)+8),color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+ return {id,name,kind:coveringKind({name}),lengthMode:"auto",width:Math.min(200,(segment.width??16)+8),color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+}
+
+export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {
+ return c.kind??(/термо/i.test(c.name)?"heat-shrink":/нейлон/i.test(c.name)?"nylon":/метал/i.test(c.name)?"metal-braid":/бандаж/i.test(c.name)?"band":/обмот|лент/i.test(c.name)?"tape":"braid");
+}
+
+/** The tails extend the same pipe parameter space towards the connector contacts. */
+export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
+ const t=document.physicalTopology,s=t?.segments.find(s=>s.id===segmentId);if(!t||!s)return null;
+ const core=physicalSegmentPoints(document,s),length=pathLength(core);if(length<1e-7)return null;
+ const tail=(nodeId:string)=>{
+  const node=t.nodes.find(n=>n.id===nodeId)!;if(!node.connectorId)return null;
+  const ids=t.routes.filter(r=>r.steps.some(p=>p.segmentId===s.id)).map(r=>r.wireId);
+  const points=document.wires.filter(w=>ids.includes(w.id)).flatMap(w=>[w.from,w.to].filter(e=>e.connectorId===node.connectorId).flatMap(e=>{const p=findWireEndpoint(document,e,"drawing");return p?[p]:[]}));
+  return points.length?{x:points.reduce((n,p)=>n+p.x,0)/points.length,y:points.reduce((n,p)=>n+p.y,0)/points.length}:physicalNodePoint(document,node);
+ };
+ const a=tail(s.from),b=tail(s.to),before=a?Math.hypot(a.x-core[0]!.x,a.y-core[0]!.y):0,after=b?Math.hypot(b.x-core.at(-1)!.x,b.y-core.at(-1)!.y):0;
+ return {points:[...(a?[a]:[]),...core,...(b?[b]:[])],core,length,before,after,total:before+length+after,min:-before/length,max:1+after/length};
+}
+
+export function coveringControlFractions(document:HarnessDesignDocument,segmentId:string):number[] {
+ const s=document.physicalTopology?.segments.find(s=>s.id===segmentId);if(!s)return [];
+ const points=physicalSegmentPoints(document,s);
+ return physicalSegmentControls(document,s).map(p=>projectOntoPolyline(points,p).fraction);
+}
+export function resolvedCoveringSpan(document:HarnessDesignDocument,s:CoveringSpan):CoveringSpan {
+ const fractions=coveringControlFractions(document,s.segmentId);
+ return {...s,from:s.fromAnchor===undefined?s.from:fractions[s.fromAnchor]??s.from,to:s.toAnchor===undefined?s.to:fractions[s.toAnchor]??s.to};
+}
+/** Only explicitly bound endpoints use measured pipe intervals; pixels never become millimetres. */
+export function coveringMeasuredLength(document:HarnessDesignDocument,c:PhysicalCovering):number|null {
+ if(c.lengthMode==="manual"||c.lengthMode===undefined&&c.lengthMm!==null)return c.lengthMm;
+ let sum=0;
+ for(const s of c.spans){
+  if(s.fromAnchor===undefined||s.toAnchor===undefined)return null;
+  const dims=document.drawingDocuments?.dimensions?.filter(d=>d.segmentId===s.segmentId)??[];
+  const exact=dims.find(d=>d.from===s.fromAnchor&&d.to===s.toAnchor);
+  if(exact){if(exact.lengthMm===null)return null;sum+=Math.round(exact.lengthMm*1000);continue;}
+  const parts=dims.filter(d=>d.from>=s.fromAnchor!&&d.to<=s.toAnchor!).sort((a,b)=>a.from-b.from);
+  let next=s.fromAnchor;
+  for(const d of parts){if(d.from!==next||d.lengthMm===null)return null;sum+=Math.round(d.lengthMm*1000);next=d.to;}
+  if(next!==s.toAnchor)return null;
+ }
+ return sum/1000;
 }

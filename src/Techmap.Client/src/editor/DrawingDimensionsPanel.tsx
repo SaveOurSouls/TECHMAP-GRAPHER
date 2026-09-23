@@ -1,21 +1,39 @@
-import type {EditorTool} from "./editor-types";
 import { useEffect, useRef, useState } from "react";
-import { InfoHint } from "../InfoHint";
 import type { HarnessDesignDocument } from "./model";
 import type { DrawingDocuments } from "./drawing-documents";
-export function DrawingDimensionsPanel({document,selectedId,onChange,activeTool,onToolChange}:{activeTool?:EditorTool;onToolChange?:(tool:EditorTool)=>void;document:HarnessDesignDocument;selectedId:string|null;onChange:(documents:DrawingDocuments)=>boolean}) {
-  const d=document.drawingDocuments,selected=d?.dimensions?.find(d=>d.id===selectedId);
+import { setPipeIntervalLength, type DimensionMode } from "./drawing-dimensions";
+
+/** Contextual properties only: dimensions are authored by clicking a pipe. */
+export function DrawingDimensionsPanel({document,selectedId,pipeInterval,onChange}:{
+  document:HarnessDesignDocument; selectedId:string|null;
+  pipeInterval?:{id:string;from:number;to:number}|null;
+  onChange:(documents:DrawingDocuments)=>boolean;
+}) {
+  const docs=document.drawingDocuments,dimension=docs?.dimensions?.find(d=>d.id===selectedId);
+  const segment=document.physicalTopology?.segments.find(s=>s.id===selectedId);
+  const from=pipeInterval?.id===selectedId?pipeInterval.from:0;
+  const to=pipeInterval?.id===selectedId?pipeInterval.to:(segment?.bends.length??0)+1;
+  const selected=dimension??docs?.dimensions?.find(d=>d.segmentId===segment?.id&&d.from===from&&d.to===to);
   const dirty=useRef(false);
   const [value,setValue]=useState(""),[invalid,setInvalid]=useState(false);
-  useEffect(()=>{setValue(selected?.lengthMm===null||selected?.lengthMm===undefined?"":String(selected.lengthMm));setInvalid(false);dirty.current=false;},[selected?.id,selected?.lengthMm]);
-  const edit=(patch:Partial<NonNullable<typeof selected>>)=>!!d&&!!selected&&onChange({...d,dimensions:d.dimensions?.map(item=>item.id===selected.id?{...item,...patch}:item)});
-  const commit=()=>{if(!dirty.current)return;const number=value.trim()===""?null:Number(value.replace(",","."));if(number!==null&&!Number.isFinite(number)){setInvalid(true);return;}const accepted=edit({lengthMm:number});setInvalid(!accepted);if(accepted)dirty.current=false;};
-  return <section className="he-relations" aria-label="Размеры чертежа"><header className="ui-section-heading"><strong>Размеры</strong><InfoHint>Выберите горизонтальный, вертикальный или свободный размер, затем два узла или перегиба одного пайпа. Его длина учитывается у всех проходящих проводов; размеры отдельных участков суммируются. Все пайпы маршрута должны быть измерены. Длина считается между общими выходами соединителей; индивидуальные добавки задаются поправками начала/конца провода. Для провода без пайпа можно выбрать его точки. Размер задаёт физическую длину выбранного участка; ориентация меняет вынос линии. Общий размер между концами задаёт всю длину. Без общего размера суммируются только полностью покрывающие провод непересекающиеся участки. Пропуски оставляют длину неизвестной. Изменение числа перегибов снимает прежние привязки; доступна отмена Ctrl+Z. Миллиметры не вычисляются из пикселей.</InfoHint></header>
-    <div role="group" aria-label="Создать размер" style={{display:"flex",gap:6}}>{([ ["dimension-horizontal","Горизонтальный размер","↔"],["dimension-vertical","Вертикальный размер","↕"],["dimension","Свободный размер","⤢"] ] as const).map(([tool,label,glyph])=><button type="button" className="ui-control" key={tool} aria-label={label} title={label} aria-pressed={activeTool===tool} onClick={()=>onToolChange?.(tool)} style={{minWidth:36,minHeight:32}}>{glyph}</button>)}</div>
-    {selected?<><label>Длина, мм<input autoFocus aria-label="Размер, мм" inputMode="decimal" value={value} aria-invalid={invalid} onChange={e=>{dirty.current=true;setValue(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/></label>{invalid&&<small role="alert">Проверьте длину и перекрытие участков.</small>}
-      <label>Вынос<input type="number" aria-label="Вынос размера" value={selected.offset} onChange={e=>edit({offset:Number(e.target.value)})}/></label>
-      <button type="button" className="ui-control" onClick={()=>d&&onChange({...d,dimensions:d.dimensions?.filter(item=>item.id!==selected.id)})}>Удалить размер</button>
-      <small>{selected.from===0&&selected.to===selected.pointCount-1?"Общая длина":"Участок"} · {selected.segmentId?`Пайп S${(document.physicalTopology?.segments.findIndex(s=>s.id===selected.segmentId)??-1)+1}`:document.wires.find(w=>w.id===selected.wireId)?.circuit||selected.wireId}</small>
-    </>:<small>↔ · ↕ · ⤢ — выберите узлы или перегибы пайпа</small>}
+  useEffect(()=>{setValue(selected?.lengthMm==null?"":String(selected.lengthMm));setInvalid(false);dirty.current=false;},[selectedId,from,to,selected?.lengthMm]);
+  const edit=(patch:Partial<NonNullable<typeof selected>>)=>!!docs&&!!selected&&onChange({...docs,dimensions:docs.dimensions?.map(d=>d.id===selected.id?{...d,...patch}:d)});
+  const commit=()=>{
+    if(!dirty.current)return;
+    const number=value.trim()===""?null:Number(value.replace(",","."));
+    if(number!==null&&(!Number.isFinite(number)||number<0||number>1e7||Math.abs(number*1000-Math.round(number*1000))>1e-5)){setInvalid(true);return;}
+    const accepted=segment?onChange(setPipeIntervalLength(document,segment.id,from,to,number)):edit({lengthMm:number});
+    setInvalid(!accepted);if(accepted)dirty.current=false;
+  };
+  if(!segment&&!dimension)return null;
+  return <section className="he-relations" aria-label="Длина выбранного участка">
+    <strong>{segment?`Пайп · точки ${from+1}–${to+1}`:"Размер"}</strong>
+    <label>Длина, мм<input key={`${selectedId}:${from}:${to}`} aria-label="Размер, мм" inputMode="decimal" value={value} aria-invalid={invalid} onChange={e=>{dirty.current=true;setValue(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/></label>
+    {invalid&&<small role="alert">Введите длину от 0 до 10 000 000 мм с точностью до 0,001 мм.</small>}
+    {selected&&<label>Отображение<select aria-label="Направление размера" value={selected.mode} onChange={e=>edit({mode:e.target.value as DimensionMode})}>
+      <option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option><option value="aligned">Вдоль между точками</option>
+    </select></label>}
+    <small>Размеры включаются общей кнопкой. Перетащите размерную линию для выноса; соседние линии притягиваются друг к другу.</small>
+    {selected&&<button type="button" className="ui-control" onClick={()=>docs&&onChange({...docs,dimensions:docs.dimensions?.filter(d=>d.id!==selected.id)})}>Удалить размер</button>}
   </section>;
 }

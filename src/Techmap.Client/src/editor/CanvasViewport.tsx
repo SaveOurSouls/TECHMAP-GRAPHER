@@ -1,3 +1,6 @@
+import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
+import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
+import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
 import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
@@ -68,6 +71,8 @@ export interface CanvasViewportProps {
   /** Resolves an asset inside the exact project snapshot. */
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly overlay?: ReactNode;
+  readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
+  readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
@@ -178,6 +183,7 @@ interface PointerDrag {
   readonly camera: EditorCamera;
 }
 
+interface CoveringPointerDrag {readonly kind:"covering";readonly pointerId:number;readonly clientX:number;readonly clientY:number;readonly objectId:string;readonly spanIndex:number;readonly part:CoveringDragPart;readonly start:EditorPoint}
 interface DrawingPointerDrag { readonly kind:"companion"; readonly pointerId:number; readonly clientX:number; readonly clientY:number; readonly objectId:string; readonly drawingId:string; readonly offset:EditorPoint; }
 
 interface ObjectPointerDrag {
@@ -1017,7 +1023,9 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
   if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>{const curve=drawingRouteHitPoints(path);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance);});
+  if (object.kind === "physical-covering" && object.metadata?.surfaces) return coveringHit(object,point,tolerance)!==null;
   if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => {const curve=drawingRouteHitPoints(path);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance+object.width/2);});
   if (object.kind === "wire" || object.kind === "dimension") {
     if (getDrawingWireStripProfileGeometries(object, view).some((geometry) =>
@@ -1597,6 +1605,8 @@ export function hitTestEditorScene(
   const node = paintOrder.find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
   if (node) return node.id;
   if (view === "drawing") {
+    const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
+    if(annotation)return annotation.id;
     const pipe = [...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
     if (pipe) return pipe.id;
   }
@@ -1931,16 +1941,7 @@ export function drawEditorSceneObject(
     context.restore();return;
   }
   if(object.kind==="leader-anchor") {context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+4,object.y+4,4,0,Math.PI*2);context.fill();context.restore();return;}
-  if (object.kind === "physical-covering") {
-    for (const points of object.paths ?? [object.points ?? []]) {
-    context.globalAlpha = selected ? .65 : .3; context.lineJoin = "miter"; context.miterLimit = 4; context.lineCap = "butt";
-    context.lineWidth = object.width; context.strokeStyle = selected ? "#1179ac" : object.color;
-    traceDrawingRoute(context,points); context.stroke();
-    context.globalAlpha = 1; context.lineWidth = 1; context.strokeStyle = object.color;
-    for (const [a,b] of [[points[0],points[1]],[points.at(-1),points.at(-2)]]) if(a&&b) {const l=Math.hypot(b.x-a.x,b.y-a.y);if(l){const x=-(b.y-a.y)/l*object.width/2,y=(b.x-a.x)/l*object.width/2;context.beginPath();context.moveTo(a.x-x,a.y-y);context.lineTo(a.x+x,a.y+y);context.stroke();}}
-    }
-    context.restore(); return;
-  }
+  if(object.kind==="physical-covering") {drawCoveringSurface(context,object,selected);context.restore();return;}
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
     traceDrawingRoute(context,points);
@@ -1950,8 +1951,8 @@ export function drawEditorSceneObject(
     context.restore();return;
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
-    context.lineJoin="round";context.lineCap="round";context.lineWidth=selected?4:2;
-    for(const path of object.paths){traceDrawingRoute(context,path);strokeE4Wire(context,object.color,selected?4:2);}
+    context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
+    for(const path of object.paths){traceDrawingRoute(context,path);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);}
     context.restore();return;
   }
   if (object.kind === "physical-node") {
@@ -1980,13 +1981,16 @@ export function drawEditorSceneObject(
       return;
     }
   }
-  if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&object.points?.length===4){
-    const [a,p,q,b]=object.points as readonly [EditorPoint,EditorPoint,EditorPoint,EditorPoint];
+  if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&object.points&&object.points.length>=4){
+    const points=object.points,p=points[1]!,q=points.at(-2)!,line=points.slice(1,-1);
     context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?2:1;
-    context.setLineDash([]);context.beginPath();context.moveTo(a.x,a.y);context.lineTo(p.x,p.y);context.moveTo(p.x,p.y);context.lineTo(q.x,q.y);context.lineTo(b.x,b.y);context.stroke();
-    const angle=Math.atan2(q.y-p.y,q.x-p.x),dx=Math.cos(angle),dy=Math.sin(angle);
-    for(const [point,sign] of [[p,1],[q,-1]] as const){context.beginPath();context.moveTo(point.x,point.y);context.lineTo(point.x+sign*dx*8-dy*3,point.y+sign*dy*8+dx*3);context.lineTo(point.x+sign*dx*8+dy*3,point.y+sign*dy*8-dx*3);context.closePath();context.fill();}
-    context.translate((p.x+q.x)/2,(p.y+q.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
+    context.setLineDash([]);context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();
+    for(const [point,next,dot] of [[p,line[1]!,object.metadata.dotStart],[q,line.at(-2)!,object.metadata.dotEnd]] as const){
+      context.beginPath();if(dot==="true")context.arc(point.x,point.y,2.5,0,Math.PI*2);
+      else {const len=Math.hypot(next.x-point.x,next.y-point.y)||1,dx=(next.x-point.x)/len,dy=(next.y-point.y)/len;context.moveTo(point.x,point.y);context.lineTo(point.x+dx*8-dy*3,point.y+dy*8+dx*3);context.lineTo(point.x+dx*8+dy*3,point.y+dy*8-dx*3);context.closePath();}context.fill();
+    }
+    const mid=Math.floor((line.length-1)/2),a=line[mid]!,b=line[mid+1]!,angle=Math.atan2(b.y-a.y,b.x-a.x);
+    context.translate((a.x+b.x)/2,(a.y+b.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
   }
   if (object.kind === "specification-item") {
     context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle="#fff";context.lineWidth=selected?3:1.5;
@@ -2000,7 +2004,7 @@ export function drawEditorSceneObject(
       if(view==="drawing"&&object.kind==="wire")traceDrawingRoute(context,points);
       else points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
       context.strokeStyle = selected ? "#1179ac" : object.color;
-      context.lineWidth = selected ? 4 : object.kind === "wire" ? 3 : 1.5;
+      context.lineWidth = view==="drawing"&&object.kind==="wire"?Number(object.metadata?.drawingWidth??3)+(selected?1:0):selected?4:object.kind==="wire"?3:1.5;
       if (object.kind === "dimension" || object.metadata?.routeMissing === "true") context.setLineDash([7, 5]);
       if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
       else context.stroke();
@@ -2704,7 +2708,7 @@ export function CanvasViewport({
   onObjectSelect,
   onObjectGroupSelect,
   onRelatedObjectsSelect, onObjectMove, onDrawingMove, onDrawingScale,
-  onObjectMovePreview,
+  onObjectMovePreview, onPipeIntervalSelect, onCoveringDrag,
   onWireConnect,
   onWireReconnect,
   onWireConnectToWire,
@@ -2726,7 +2730,7 @@ export function CanvasViewport({
   if (!componentTemplateImageCacheRef.current) {
     componentTemplateImageCacheRef.current = new ComponentTemplateImageCache();
   }
-  const dragRef = useRef<PointerDrag | ObjectPointerDrag | DrawingPointerDrag | WireRoutePointerDrag |
+  const dragRef = useRef<CoveringPointerDrag | PointerDrag | ObjectPointerDrag | DrawingPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | null>(null);
   const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
   const inlineDragActivatedRef = useRef(false);
@@ -2832,11 +2836,13 @@ export function CanvasViewport({
         height: Math.max(1, Math.round(canvas.clientHeight)),
       });
     };
+    const stopTextures=warmCoveringTextures(redraw);
     componentTemplateImageCacheRef.current!.setInvalidate(redraw);
     redraw();
     const observer = new ResizeObserver(redraw);
     observer.observe(canvas);
     return () => {
+      stopTextures();
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
@@ -2897,6 +2903,12 @@ export function CanvasViewport({
       const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);
       const id=hitTestEditorScene(objects,layers,point,camera.zoom,view);
       if(objects.some(o=>o.id===id&&o.kind==="physical-segment")) {onObjectSelect(id,false);setPhysicalMenu({id:id!,point,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-240)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-240)),wires:true});return;}
+    }
+    if(event.button===0&&view==="drawing"&&tool==="select"&&!event.ctrlKey&&!event.shiftKey&&onCoveringDrag){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),grip=gripAt(point);
+      const cover=[...objects].reverse().find(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&coveringHit(o,point,4/camera.zoom)!==null);
+      if(grip||cover){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
+        onObjectSelect(objectId,false);event.currentTarget.setPointerCapture(event.pointerId);dragRef.current={kind:"covering",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId,spanIndex,part:grip?.part??"body",start:point};return;}
     }
     const shouldPan = tool === "pan" || event.button === 1;
     if (shouldPan) {
@@ -3121,7 +3133,8 @@ export function CanvasViewport({
       if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || event.shiftKey);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
-      if (object && (object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
+      if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=JSON.parse(object.metadata?.controls??"[]") as EditorPoint[];const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
+      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",
@@ -3136,9 +3149,13 @@ export function CanvasViewport({
     }
   };
 
+  const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
+  const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>pointToSegmentDistance(point,{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth})<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag) {const hit=view==="drawing"&&tool==="select"?gripAt(screenToWorld(camera,localPoint(event.clientX,event.clientY))):null;setHoverGrip(hit);event.currentTarget.style.cursor=hit?"ew-resize":"";return;}
+    if(drag.pointerId !== event.pointerId)return;
+    if(drag.kind==="covering"){onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),"preview");return;}
     if(drag.kind==="companion") { setDrawingPreview({objectId:drag.objectId,drawingId:drag.drawingId,offset:{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom}});
     } else if (drag.kind === "pan") {
       onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
@@ -3177,7 +3194,8 @@ export function CanvasViewport({
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    if(dragRef.current?.kind==="companion") {
+    if(dragRef.current?.kind==="covering") {const drag=dragRef.current;onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)?"commit":"cancel");
+    } else if(dragRef.current?.kind==="companion") {
       const drag=dragRef.current;
       if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) onDrawingMove?.(drag.objectId,drag.drawingId,{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom});
       setDrawingPreview(null);
@@ -3244,6 +3262,7 @@ export function CanvasViewport({
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
+    if(dragRef.current.kind==="covering"){const d=dragRef.current;onCoveringDrag?.(d.objectId,d.spanIndex,d.part,d.start,d.start,"cancel");}
     if(dragRef.current.kind==="companion") setDrawingPreview(null);
     if (dragRef.current.kind === "object") {
       onObjectMovePreview?.(dragRef.current.objectId, null);
@@ -3461,6 +3480,7 @@ export function CanvasViewport({
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?JSON.parse(w.metadata?.controls??"[]") as EditorPoint[]:w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите узел или перегиб пайпа"}</div></>}
+      {hoverGrip&&view==="drawing"&&<svg className="he-covering-grip" aria-hidden="true"><line x1={(hoverGrip.point.x-hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y1={(hoverGrip.point.y-hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} x2={(hoverGrip.point.x+hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y2={(hoverGrip.point.y+hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} stroke="#00a9db" strokeWidth="6"/><circle cx={hoverGrip.point.x*camera.zoom+camera.offsetX} cy={hoverGrip.point.y*camera.zoom+camera.offsetY} r="5" fill="white" stroke="#007ca8" strokeWidth="2"/></svg>}
       {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{physicalMenu.wires ? <><strong>Провода пайпа</strong><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{(JSON.parse(objects.find(o=>o.id===physicalMenu.id)?.metadata?.wireIds??"[]") as string[]).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{JSON.parse(objects.find(o=>o.id===physicalMenu.id)?.metadata?.wireIds??"[]").length===0&&<span>Нет назначенных проводов</span>}</> : physicalMenu.node ? <button role="menuitem" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : (["branch",...standardCoveringKinds] as const).map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}

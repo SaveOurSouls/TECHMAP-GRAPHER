@@ -1,9 +1,11 @@
+import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
+import { drawingPipeWidth, drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
 import {SpecificationItemsPanel} from "./SpecificationItemsPanel";
 import { previewE4ConnectorMove } from "./move-preview";
 import {DrawingRotationControl} from "./DrawingRotationControl";
 import { DrawingDimensionsPanel } from "./DrawingDimensionsPanel";
-import { drawingDimensionScene, dimensionRouteKey, segmentDimensionKey } from "./drawing-dimensions";
+import { drawingDimensionScene, dimensionRouteKey, segmentDimensionKey, toggleDrawingDimensions } from "./drawing-dimensions";
 import { projectComponentTemplateView } from "./component-template-view-renderer";
 import { materializePlacementRows } from "./component-template-placement";
 import { DrawingTableWindows } from "./DrawingTableWindows";
@@ -12,7 +14,7 @@ import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
-import { coveringPaths, coveringMaterial, standardCovering } from "./physical-coverings";
+import { type PhysicalCovering, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { ensureConnectorExits, physicalSegmentHandles, movePhysicalHandle, removePhysicalHandle, physicalSegmentControls, insertPhysicalBend, physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
@@ -439,6 +441,7 @@ export function designToScene(
       ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
+        drawingWidth:String(drawingWireWidth(document,wire)),
         physicalRoute: String(!!physicalPoints),
         routeMissing: String(view === "drawing" && !physicalPoints && wire.drawingRoute.length === 0),
         lengthKnown: String(cutLength.isComplete),
@@ -462,17 +465,13 @@ export function designToScene(
       },
     }];
   });
-  const dimensions: EditorSceneObject[] = view === "drawing" ? (document.drawingDocuments?.dimensions?.length ? drawingDimensionScene(document,wires) : document.wires.flatMap(wire=>{
-    const start=contactPointForWire(document,wire.from,wire.to,view,materializedConnectorIds,drawingConnectorIds),end=contactPointForWire(document,wire.to,wire.from,view,materializedConnectorIds,drawingConnectorIds);if(!start||!end)return [];
-    const cut=calculateWireCutLength(wire);if(cut.sourceLengthMm===null)return [];
-    const y=Math.max(start.y,end.y)+70;return [{id:"dimension:"+wire.id,layerId:"dimensions",kind:"dimension" as const,label:String(cut.sourceLengthMm)+" мм",x:0,y:0,width:0,height:0,color:"#55798e",points:[{x:start.x,y},{x:end.x,y}]}];
-  })) : [];
+  const dimensions: EditorSceneObject[] = view === "drawing" ? drawingDimensionScene(document,wires,perimeters) : [];
   const physical: EditorSceneObject[] = view === "drawing" && document.physicalTopology ? [
-    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: segment.width??16, height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment), metadata: { controls: JSON.stringify(physicalSegmentControls(document,segment)), handles: JSON.stringify(physicalSegmentHandles(document,segment).map(h=>h.point)), wireIds: JSON.stringify(document.physicalTopology!.routes.filter(r=>r.steps.some(step=>step.segmentId===segment.id)).map(r=>r.wireId)) } })),
+    ...document.physicalTopology.segments.map((segment, i): EditorSceneObject => ({ id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires", x: 0, y: 0, width: drawingPipeWidth(document,segment), height: 0, color: segment.color??"#aebfc9", points: physicalSegmentPoints(document, segment), metadata: { controls: JSON.stringify(physicalSegmentControls(document,segment)), handles: JSON.stringify(physicalSegmentHandles(document,segment).map(h=>h.point)), wireIds: JSON.stringify(document.physicalTopology!.routes.filter(r=>r.steps.some(step=>step.segmentId===segment.id)).map(r=>r.wireId)) } })),
     ...document.physicalTopology.nodes.map((node, i): EditorSceneObject => { const p = physicalNodePoint(document, node); return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`, layerId: "wires", x: p.x - 5, y: p.y - 5, width: 10, height: 10, color: "#1179ac", metadata:{connectorId:node.connectorId??""} }; }),
   ] : [];
-  const coverings: EditorSceneObject[] = view === "drawing" ? (document.physicalTopology?.coverings ?? []).map(c => { const paths=coveringPaths(document,c); return {id:c.id,kind:"physical-covering" as const,layerId:"wires",x:0,y:0,width:c.width,height:0,color:c.color,label:c.name,points:paths.flat(),paths}; }) : [];
-  return [...connectors, ...coverings, ...physical, ...wires, ...dimensions, ...(view==="drawing"?drawingDocumentScene(document,quantity,perimeters):[])];
+  const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
+  return [...connectors, ...physical, ...wires, ...coverings, ...dimensions, ...(view==="drawing"?drawingDocumentScene(document,quantity,perimeters):[])];
 }
 
 type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
@@ -508,6 +507,7 @@ export function wireMaterialUpdateFromCatalogItem(
         entityType: item.entityType,
         sourceKey: item.sourceKey,
         displayName: item.referenceDisplayName || item.sourceKey,
+    ...(item.outerDiameterMm===undefined?{}:{outerDiameterMm:item.outerDiameterMm}),
       },
     },
   };
@@ -539,6 +539,7 @@ export function cableMaterialUpdateFromCatalogItem(
     sourceId: item.sourceId, snapshotId: item.snapshotId, snapshotSha256: item.snapshotSha256,
     recordId: item.recordId, entityType: "cable", sourceKey: item.sourceKey,
     displayName: item.referenceDisplayName || item.sourceKey,
+    ...(item.outerDiameterMm===undefined?{}:{outerDiameterMm:item.outerDiameterMm}),
   } } };
 }
 
@@ -905,9 +906,14 @@ export function HarnessDesignEditor({
     [history?.present, componentSnapshotsByPlacement]);
   const drawingPerimeters=useMemo(()=>buildDrawingPerimeters(componentTemplateViewInstances),[componentTemplateViewInstances]);
 
+  const [selectedPipeInterval,setSelectedPipeInterval]=useState<{id:string;from:number;to:number}|null>(null);
+  const [coveringPreview,setCoveringPreview]=useState<PhysicalCovering|null>(null);
+  const [thicknessPreview,setThicknessPreview]=useState<number|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number}}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
+    if(coveringPreview&&history.present.physicalTopology)return {document:{...history.present,physicalTopology:{...history.present.physicalTopology,coverings:history.present.physicalTopology.coverings?.map(c=>c.id===coveringPreview.id?coveringPreview:c)}},error:null};
+    if(thicknessPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:thicknessPreview}},error:null};
     if(pipePreview&&history.present.physicalTopology) {
       const t=history.present.physicalTopology;
       return {document:{...history.present,physicalTopology:{...t,segments:t.segments.map(s=>s.id===pipePreview.id?movePhysicalHandle(history.present,s,pipePreview.index,pipePreview.point):s)}},error:null};
@@ -944,7 +950,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters]);
+  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1570,14 +1576,17 @@ export function HarnessDesignEditor({
         selectedObjectIds={selectedObjectIds}
         highlightedObjectIds={[...related.wireIds,...related.componentIds,...relatedSourceIds]}
         revealRequest={revealRequest}
-        documentActions={<>{view==="drawing"&&<button type="button" className="ui-control" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}>Добавить позиции</button>}{(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}</>}
+        documentActions={<>{view==="drawing"&&<>
+          <label className="he-thickness-control" title={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}>Толщина<input aria-label="Масштаб толщины проводов" type="range" min="0.2" max="8" step="0.05" value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onChange={e=>setThicknessPreview(Number(e.target.value))} onPointerUp={e=>{run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:Number(e.currentTarget.value)}});setThicknessPreview(null);}} onKeyUp={e=>{run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:Number(e.currentTarget.value)}});setThicknessPreview(null);}}/><output>{(thicknessPreview??history.present.drawingDocuments?.physicalScale??1).toFixed(2)}×</output></label>
+          <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}>Отобразить размеры</button>
+        </>}{view==="drawing"&&<button type="button" className="ui-control" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}>Добавить позиции</button>}{(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}</>}
         drawingWindows={camera=><DrawingTableWindows perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
         onDimensionCreate={(wireId,from,to,pointCount,mode)=>{
           const wire=history.present.wires.find(w=>w.id===wireId),segment=history.present.physicalTopology?.segments.find(s=>s.id===wireId);if(!wire&&!segment)return;
           const id=crypto.randomUUID(),documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
           if(run({type:"set-drawing-documents",documents:{...documents,dimensions:[...documents.dimensions??[],{id,...(segment?{segmentId:segment.id}:{wireId}),from:Math.min(from,to),to:Math.max(from,to),pointCount,routeKey:segment?segmentDimensionKey(history.present,segment.id):dimensionRouteKey(history.present,wire!),mode,offset:40,lengthMm:null}]}})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
         }}
-        relationPanel={(activeTool,onToolChange)=><>{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel activeTool={activeTool} onToolChange={onToolChange} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
+        relationPanel={()=><>{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel pipeInterval={selectedPipeInterval} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel document={history.present} topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
           onReveal={id => {
             const found = id && selectionIndex ? resolveHarnessSelection(selectionIndex, [id], wholeNet) : related;
@@ -1699,6 +1708,13 @@ export function HarnessDesignEditor({
           const node = topology?.nodes.find(n => n.id === objectId);
           if (topology && node) { run({type:"set-physical-topology",topology:{...topology,nodes:topology.nodes.map(n=> n.id===node.id ? {...n,position:physicalNodeLocalPoint(history.present,node,{x:point.x+5,y:point.y+5})} : n)}}); }
           else run({type:"move-connector",connectorId:objectId,view,position:point});
+        }}
+        onPipeIntervalSelect={(id,from,to)=>setSelectedPipeInterval({id,from,to})}
+        onCoveringDrag={(id,spanIndex,part,start,point,phase)=>{
+          if(phase==="cancel"){setCoveringPreview(null);return;}
+          const covering=moveCovering(history.present,id,spanIndex,part,start,point);if(!covering)return;
+          if(phase==="preview")setCoveringPreview(covering);
+          else {setCoveringPreview(null);const t=history.present.physicalTopology!;run({type:"set-physical-topology",topology:{...t,coverings:t.coverings?.map(c=>c.id===id?covering:c)}});}
         }}
         onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,bends:[]}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
         onPhysicalContextAction={(segmentId,point,action)=>{
