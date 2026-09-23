@@ -1,7 +1,7 @@
 import { contactShapeLabel, contactLabelColor } from "./contact-shape";
-import { boxHandleRadius, drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera } from "./drawing-viewport";
+import { boxHandleRadius, drawingHandleRadii, spacedHandleBounds, zoomDrawingCamera, fitDrawingCamera, panDrawingCamera, type DrawingCamera } from "./drawing-viewport";
 import { nodesInsideSelectionBox, selectionBounds, type SelectionBox } from "./drawing-selection";
-import { useId, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useId, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { rootNodeRotationCenterV3 } from "./template-commands-v3";
 import { hatchTile } from "./drawing-hatch";
 import type {
@@ -27,6 +27,9 @@ export type TemplateParameterDefaultsV2 =
   | ReadonlyMap<string, ParameterValueV2>;
 
 export interface TemplateCanvasV2Props {
+  /** Read-only navigation: fit the whole drawing, Ctrl+wheel zoom and left-button pan. */
+  preview?: boolean;
+  previewKey?: string | null;
   content: TemplateContentV2;
   viewId: string;
   selectedId: string | null;
@@ -545,6 +548,8 @@ function placeholder(
 }
 
 export function TemplateCanvasV2({
+  preview = false,
+  previewKey,
   content,
   viewId,
   selectedId,
@@ -566,8 +571,8 @@ export function TemplateCanvasV2({
   resolveAssetUrl,
   parameterDefaults,
   repeatedContactLabels,
-  width = TEMPLATE_CANVAS_V2_WIDTH,
-  height = TEMPLATE_CANVAS_V2_HEIGHT,
+  width: defaultWidth = TEMPLATE_CANVAS_V2_WIDTH,
+  height: defaultHeight = TEMPLATE_CANVAS_V2_HEIGHT,
 }: TemplateCanvasV2Props) {
   const stretchRef=useRef<{pointerId:number;anchor:SvgPoint;start:SvgPoint;factor:number}|null>(null);
   const [stretchPreview,setStretchPreview]=useState<{factor:number;anchor:SvgPoint}|null>(null);
@@ -587,25 +592,41 @@ export function TemplateCanvasV2({
   const evaluate = createTemplateNumericEvaluatorV2(content, parameterDefaults);
   const assetIds = new Set(content.assets.map(asset => asset.assetId));
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const artworkRef = useRef<SVGGElement | null>(null);
+  const fittedCameraRef = useRef<DrawingCamera>({x:0,y:0,zoom:1});
+  const fittedGeometryRef = useRef("");
+  const panRef = useRef<{pointerId:number;clientX:number;clientY:number;camera:DrawingCamera;screenScale:number}|null>(null);
+  const [panning,setPanning] = useState(false);
   const [camera,setCamera]=useState({x:0,y:0,zoom:1});
-  const [viewportSize,setViewportSize]=useState({width,height});
+  const [viewportSize,setViewportSize]=useState({width:defaultWidth,height:defaultHeight});
+  const width=preview?viewportSize.width:defaultWidth, height=preview?viewportSize.height:defaultHeight;
   const screenScale=Math.max(.0001,Math.min(viewportSize.width/width,viewportSize.height/height)*camera.zoom);
-  useEffect(()=>{setCamera({x:0,y:0,zoom:1});},[viewId]);
+  useEffect(()=>{if(!preview)setCamera({x:0,y:0,zoom:1});},[viewId,preview]);
+  useLayoutEffect(()=>{
+    if(!preview || !artworkRef.current)return;
+    const bounds=artworkRef.current.getBBox();
+    const geometryKey=JSON.stringify([previewKey,viewId,bounds.x,bounds.y,bounds.width,bounds.height,width,height]);
+    if(fittedGeometryRef.current===geometryKey)return;
+    fittedGeometryRef.current=geometryKey;
+    const fitted=fitDrawingCamera(bounds,{width,height});
+    fittedCameraRef.current=fitted;
+    panRef.current=null;setPanning(false);setCamera(fitted);
+  },[preview,previewKey,viewId,content,parameterDefaults,repeatedContactLabels,width,height]);
   useEffect(()=>{
     const svg=svgRef.current;if(!svg)return;
-    const observer=new ResizeObserver(()=>{const r=svg.getBoundingClientRect();setViewportSize({width:r.width,height:r.height});});
+    const observer=new ResizeObserver(()=>{const r=svg.getBoundingClientRect();if(r.width>0&&r.height>0)setViewportSize(previous=>previous.width===r.width&&previous.height===r.height?previous:{width:r.width,height:r.height});});
     observer.observe(svg);
     const wheel=(event:WheelEvent)=>{
-      if(!event.ctrlKey || !onNodeMove)return;
+      if(!event.ctrlKey || (!onNodeMove && !preview))return;
       event.preventDefault();event.stopPropagation();
       setCamera(previous=>{
         const point=clientPointToTemplateCoordinatesV2(svg.getBoundingClientRect(),event.clientX,event.clientY,width/previous.zoom,height/previous.zoom);
-        return point?zoomDrawingCamera(previous,{x:point.x+previous.x,y:point.y+previous.y},event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?height:1)):previous;
+        return point?zoomDrawingCamera(previous,{x:point.x+previous.x,y:point.y+previous.y},event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?height:1),preview?{min:fittedCameraRef.current.zoom/20,max:fittedCameraRef.current.zoom*40}:undefined):previous;
       });
     };
     svg.addEventListener("wheel",wheel,{passive:false});
     return()=>{observer.disconnect();svg.removeEventListener("wheel",wheel);};
-  },[width,height,onNodeMove]);
+  },[width,height,onNodeMove,preview]);
 
   const snapTolerance = () => { const rect = svgRef.current?.getBoundingClientRect(); return rect && rect.width > 0 && rect.height > 0 ? 7 / screenScale : 7; };
   const outlines = view?.layers.filter(layer => layer.visible).flatMap(layer => drawingLayerOutlines(layer.nodes,evaluate)) ?? [];
@@ -940,7 +961,6 @@ export function TemplateCanvasV2({
         return placeholder(node, width, height, "Преобразование или толщина линии не вычисляется из параметров.");
 
       const common = {
-        key: node.id,
         "data-template-node-id": node.id,
         "data-template-node-kind": node.kind,
         "data-selected": selectedIdSet.has(rootNodeId) ? "true" : undefined,
@@ -973,7 +993,7 @@ export function TemplateCanvasV2({
         if (bendRadius === null || bendRadius < 0)
           return placeholder(node, width, height, "Радиус изгиба линии не вычисляется или является отрицательным.");
         if (node.kind === "line" && points.length === 2) {
-          return <g {...common}>
+          return <g key={node.id} {...common}>
             <line x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} fill="none" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
             <line {...shape} pointerEvents="none" x1={points[0]![0]} y1={points[0]![1]} x2={points[1]![0]} y2={points[1]![1]} />
           </g>;
@@ -981,12 +1001,12 @@ export function TemplateCanvasV2({
         if (bendRadius > 0) {
           const path = roundedPolylinePathV2(points, bendRadius);
           if (!path) return placeholder(node, width, height, "Скруглённую линию не удалось построить.");
-          return <g {...common}>
+          return <g key={node.id} {...common}>
             <path d={path} fill="none" stroke="transparent" strokeWidth={Math.max(strokeWidth, 12)} />
             <path {...shape} fill="none" pointerEvents="none" d={path} />
           </g>;
         }
-        return <polyline {...common} {...shape} points={pointsAttribute(points)} />;
+        return <polyline key={node.id} {...common} {...shape} points={pointsAttribute(points)} />;
       }
       if (node.kind === "rectangle") {
         const x = evaluate(node.geometry.x);
@@ -998,7 +1018,7 @@ export function TemplateCanvasV2({
           return placeholder(node, width, height, "Размер прямоугольника не вычисляется из параметров.");
         const path = rectanglePath(x, y, rectangleWidth, rectangleHeight, radii as number[]);
         return path
-          ? <g {...common}>
+          ? <g key={node.id} {...common}>
             <path data-shape-hit-region="true" d={path} fill="transparent" stroke="transparent" strokeWidth={strokeWidth} />
             <path {...shape} pointerEvents="none" d={path} />
             {contactLabel(x+rectangleWidth/2,y+rectangleHeight/2,rectangleWidth,rectangleHeight)}
@@ -1012,7 +1032,7 @@ export function TemplateCanvasV2({
         const radiusY = evaluate(node.geometry.radiusY);
         if (centerX === null || centerY === null || radiusX === null || radiusY === null || radiusX <= 0 || radiusY <= 0)
           return placeholder(node, width, height, "Радиусы эллипса не вычисляются или не являются положительными.");
-        return <g {...common}>
+        return <g key={node.id} {...common}>
           <ellipse data-shape-hit-region="true" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} fill="transparent" stroke="transparent" strokeWidth={strokeWidth} />
           <ellipse {...shape} pointerEvents="none" cx={centerX} cy={centerY} rx={radiusX} ry={radiusY} />
           {contactLabel(centerX,centerY,radiusX*2,radiusY*2,true)}
@@ -1023,14 +1043,14 @@ export function TemplateCanvasV2({
         const points = evaluatedPoints && previewPoints(node.id, evaluatedPoints);
         const path = points && bezierPath(points, node.geometry.closed);
         return path
-          ? <path {...common} {...shape} d={path} />
+          ? <path key={node.id} {...common} {...shape} d={path} />
           : placeholder(node, width, height, "Контрольные точки кривой не вычисляются из параметров.");
       }
       if (node.kind === "closedContour") {
         const evaluatedPoints = evaluatePoints(node.geometry.points, evaluate);
         const points = evaluatedPoints && previewPoints(node.id, evaluatedPoints);
         return points && points.length >= 3
-          ? <polygon {...common} {...shape} points={pointsAttribute(points)} />
+          ? <polygon key={node.id} {...common} {...shape} points={pointsAttribute(points)} />
           : placeholder(node, width, height, "Точки контура не вычисляются из параметров.");
       }
       if (node.kind === "text") {
@@ -1041,7 +1061,7 @@ export function TemplateCanvasV2({
           return placeholder(node, width, height, "Положение или размер текста не вычисляется из параметров.");
         return (
           <text
-            {...common}
+            key={node.id} {...common}
             onDoubleClick={event => { event.stopPropagation(); onEditText?.(rootNodeId); }}
             x={x}
             y={y}
@@ -1070,7 +1090,7 @@ export function TemplateCanvasV2({
         if (!href) return placeholder(node, width, height, "URL изображения пуст.");
         const crop = `${formatNumber(node.geometry.cropX)} ${formatNumber(node.geometry.cropY)} ${formatNumber(node.geometry.cropWidth)} ${formatNumber(node.geometry.cropHeight)}`;
         return (
-          <g {...common} data-underlay={node.geometry.underlay ? "true" : "false"}>
+          <g key={node.id} {...common} data-underlay={node.geometry.underlay ? "true" : "false"}>
             <svg
               data-template-image-frame={node.id}
               x={x}
@@ -1094,7 +1114,7 @@ export function TemplateCanvasV2({
       const missingChild = node.geometry.childIds.some(childId => !nodesById.has(childId));
       if (missingChild) return placeholder(node, width, height, "Группа ссылается на отсутствующий узел.");
       return (
-        <g {...common} data-template-group="true">
+        <g key={node.id} {...common} data-template-group="true">
           {layer.nodes.map(child => childIds.has(child.id) ? renderNode(child, locked, nextAncestors, rootNodeId, false, rootMovable, occurrenceNumber) : null)}
         </g>
       );
@@ -1171,10 +1191,10 @@ export function TemplateCanvasV2({
         onPointerDown={event => beginNodeGesture(event, point.id, true, point.x.kind === "constant" && point.y.kind === "constant")}
         onKeyDown={event => selectFromKeyboard(event, point.id)}
         role="button"
-        tabIndex={0}
+        tabIndex={preview ? -1 : 0}
         aria-label={label}
       >
-        <g transform={`scale(${Math.min(1,1/screenScale)})`}>{kind === "contact"
+        <g transform={`scale(${preview ? 1 : Math.min(1,1/screenScale)})`}>{kind === "contact"
           ? <circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
           : <path d="M 0 -8 L 8 0 L 0 8 L -8 0 Z" fill="#edf7fb" stroke="#36708e" strokeWidth="2" />}
         <path d={stem} fill="none" stroke={kind === "contact" ? "#c54848" : "#36708e"} strokeWidth="2" />
@@ -1196,10 +1216,10 @@ export function TemplateCanvasV2({
         onPointerDown={event => { const prototype = view?.contactPoints.find(p => p.id === point.prototypeContactPointId); beginNodeGesture(event, point.prototypeContactPointId, true, prototype?.x.kind === "constant" && prototype?.y.kind === "constant"); }}
         onKeyDown={event => selectFromKeyboard(event, point.prototypeContactPointId)}
         role="button"
-        tabIndex={0}
+        tabIndex={preview ? -1 : 0}
         aria-label={`Контакт ${point.number}: ${point.name}; направление ${point.direction}; повтор ${occurrence.index + 1}`}
       >
-        <g transform={`scale(${Math.min(1,1/screenScale)})`}><circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
+        <g transform={`scale(${preview ? 1 : Math.min(1,1/screenScale)})`}><circle r="5" fill="#fff" stroke="#c54848" strokeWidth="2" />
         <path d={point.direction === "left" ? "M -13 0 H -5" : point.direction === "right" ? "M 5 0 H 13" : point.direction === "up" ? "M 0 -13 V -5" : "M 0 5 V 13"} fill="none" stroke="#c54848" strokeWidth="2" />
         <text x="12" y="-9" fill="#8f3434" fontSize="13" fontWeight="700">{point.number}</text>
         <title>{`${point.name} · ${point.direction}`}</title></g>
@@ -1439,31 +1459,44 @@ export function TemplateCanvasV2({
           }
         }
       }}
-      onKeyDown={e=>{if(e.key==="Home" && onNodeMove){e.preventDefault();setCamera({x:0,y:0,zoom:1});}}}
+      onKeyDown={e=>{if(e.key==="Home" && (onNodeMove || preview)){e.preventDefault();setCamera(preview?fittedCameraRef.current:{x:0,y:0,zoom:1});}}}
       tabIndex={0}
       onPointerDownCapture={e=>e.currentTarget.focus()}
-      className="template-canvas-v2"
+      className={`template-canvas-v2${preview?" template-canvas-preview":""}${panning?" is-panning":""}`}
       viewBox={`${formatNumber(camera.x)} ${formatNumber(camera.y)} ${formatNumber(width/camera.zoom)} ${formatNumber(height/camera.zoom)}`}
       data-drawing-zoom={camera.zoom}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={view ? `Редактор вида ${view.name}` : "Вид шаблона не найден"}
+      aria-label={view ? `${preview?"Просмотр":"Редактор"} вида ${view.name}` : "Вид шаблона не найден"}
       data-template-view-id={view?.id}
       width="100%"
       height="100%"
       style={{ display: "block", touchAction: "none" }}
       onPointerDown={event => {
         if(event.button !== 0) return;
+        if(preview) {
+          event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);
+          panRef.current={pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,camera,screenScale};setPanning(true);return;
+        }
         if(!onBoxSelection) { onSelectionChange ? onSelectionChange(null,false) : onSelect(null); return; }
         const point=pointFromEvent(event); if(!point) return;
         event.preventDefault(); try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Released pointer. */ }
         marqueeRef.current={pointerId:event.pointerId,start:point,client:[event.clientX,event.clientY],latest:point};
         setMarquee(null);
       }}
-      onPointerMove={moveNodeGesture}
-      onPointerUp={endNodeGesture}
-      onPointerCancel={clearNodeGesture}
+      onPointerMove={event=>{
+        if(!preview){moveNodeGesture(event);return;}
+        const pan=panRef.current;if(pan?.pointerId!==event.pointerId)return;
+        setCamera(panDrawingCamera(pan.camera,{x:event.clientX-pan.clientX,y:event.clientY-pan.clientY},pan.screenScale));
+      }}
+      onPointerUp={event=>{
+        if(!preview){endNodeGesture(event);return;}
+        if(panRef.current?.pointerId===event.pointerId){panRef.current=null;setPanning(false);event.currentTarget.releasePointerCapture(event.pointerId);}
+      }}
+      onPointerCancel={event=>{if(preview){panRef.current=null;setPanning(false);}else clearNodeGesture(event);}}
+      onLostPointerCapture={()=>{if(preview){panRef.current=null;setPanning(false);}}}
     >
+      {preview && <title>Ctrl + колёсико — масштаб у курсора; левая кнопка — перемещение; Home — вписать рисунок.</title>}
       <rect x={camera.x} y={camera.y} width={width/camera.zoom} height={height/camera.zoom} fill="#fff" />
       <defs>{view?.layers.flatMap(layer => layer.nodes).filter(node => node.fill.hatch && node.fill.color).map(node => {
         const hatch = node.fill.hatch!, tile = hatchTile(hatch);
@@ -1473,10 +1506,12 @@ export function TemplateCanvasV2({
           {tile.dots.map(([cx, cy, r], i) => <circle key={i} cx={cx} cy={cy} r={r} fill={node.fill.color!} />)}
         </pattern>;
       })}</defs>
+      <g ref={artworkRef} pointerEvents={preview?"none":undefined}>
       {view ? view.layers.map(renderLayer) : <text x="24" y="36" fill="#7b4c16" fontSize="14">Вид шаблона не найден</text>}
       {view?.contactPoints.map(point => repeatedPointIds.has(point.id) ? null : renderPoint(point, "contact"))}
       {view && renderRepeatedPoints()}
       {view?.bundlePorts.map(point => renderPoint(point, "bundle"))}
+      </g>
       {renderMultiSelectionOverlay()}
       {renderSelectionOverlay()}
       {(() => {

@@ -1,4 +1,5 @@
 import {SpecificationItemsPanel} from "./SpecificationItemsPanel";
+import { previewE4ConnectorMove } from "./move-preview";
 import {DrawingRotationControl} from "./DrawingRotationControl";
 import { DrawingDimensionsPanel } from "./DrawingDimensionsPanel";
 import { drawingDimensionScene, dimensionRouteKey, segmentDimensionKey } from "./drawing-dimensions";
@@ -902,6 +903,7 @@ export function HarnessDesignEditor({
       return {document:{...history.present,physicalTopology:{...t,segments:t.segments.map(s=>s.id===pipePreview.id?movePhysicalHandle(history.present,s,pipePreview.index,pipePreview.point):s)}},error:null};
     }
     if (!movePreview) return { document: history.present, error: null };
+    if (view === "e4") return { document: previewE4ConnectorMove(history.present, movePreview.objectId, movePreview.point), error: null };
     try {
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point);
       if(annotation)return {document:{...history.present,drawingDocuments:annotation},error:null};
@@ -934,8 +936,15 @@ export function HarnessDesignEditor({
     }
   }, [history, movePreview, view, pipePreview]);
 
-  const routingIssues = useMemo(() => view === "e4" && previewResult.document
-    ? e4RoutingIssues(previewResult.document) : [], [previewResult.document, view]);
+  const routingIssues = useMemo(() => view === "e4" && history
+    ? e4RoutingIssues(history.present) : [], [history?.present, view]);
+  const diagnostics = useMemo(() => view === "e4" && history ? collectE4Diagnostics(history.present) : [], [history?.present, view]);
+  const componentTemplateViewInstances = useMemo(() => history
+    ? buildComponentTemplateViewInstances(history.present, componentSnapshotsByPlacement) : [],
+    [history?.present, componentSnapshotsByPlacement]);
+  const drawingTemplateIds = useMemo(() => new Set(view === "drawing" ? componentTemplateViewInstances
+    .filter(i => projectComponentTemplateView(i, "drawing", {x:0,y:0})?.commands.length).map(i => i.objectId) : []),
+    [view, componentTemplateViewInstances]);
 
   const run = useCallback((command: EditorCommand): boolean => {
     if (placementBusyRef.current || pendingPlacementRef.current) return false;
@@ -1058,12 +1067,7 @@ export function HarnessDesignEditor({
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
   }
 
-  const diagnostics = view === "e4" ? collectE4Diagnostics(history.present) : [];
   const diagnosticObjectIds = new Set(diagnostics.map((diagnostic) => diagnostic.target.objectId));
-  const componentTemplateViewInstances = buildComponentTemplateViewInstances(
-    previewResult.document ?? history.present,
-    componentSnapshotsByPlacement,
-  );
   const materializedConnectorIds = new Set(componentTemplateViewInstances.map((instance) => instance.objectId));
   const hasComponentGraphIntegrityMismatch = history.present.connectors.some((connector) =>
     connector.libraryBinding?.mode === "template" && componentSnapshotsByPlacement.has(connector.id) &&
@@ -1084,7 +1088,7 @@ export function HarnessDesignEditor({
     diagnosticObjectIds,
     materializedConnectorIds,
     harnessQuantity,
-    new Set(componentTemplateViewInstances.filter(i=>projectComponentTemplateView(i,"drawing",{x:0,y:0})?.commands.length).map(i=>i.objectId)),
+    drawingTemplateIds,
   );
   const layers = toUiLayers(history.present, view);
   const selectedDrawingConnector = view === "drawing"

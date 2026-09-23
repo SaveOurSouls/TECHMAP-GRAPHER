@@ -25,7 +25,7 @@ import type {
   EditorTool,
   HarnessEditorView,
 } from "./editor-types";
-import { EditorToolbar } from "./EditorToolbar";
+import { EditorToolbar, editorToolShortcut } from "./EditorToolbar";
 import { E4WireSelectionMenu } from "./E4WireSelectionMenu";
 import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection-state";
 import { LayersPanel } from "./LayersPanel";
@@ -289,6 +289,19 @@ export function HarnessEditorWorkspace({
   const [catalogExpanded, setCatalogExpanded] = useState(true);
 
   const view = controlledView ?? localView;
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (document.querySelector('dialog[open], [popover]:popover-open')) return;
+      if (event.target instanceof Element && event.target !== document.body && !event.target.closest('.harness-editor')) return;
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest(
+        'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="dialog"],[popover]:popover-open',
+      ))) return;
+      const next = editorToolShortcut(event, view);
+      if (next) { event.preventDefault(); setTool(next); }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [view]);
   const objects = controlledObjects ?? localObjects;
   const layers = controlledLayers ?? localLayers;
   const selectedObjectId = controlledSelectedObjectId === undefined
@@ -534,7 +547,6 @@ export function HarnessEditorWorkspace({
           componentTemplateViewInstances={componentTemplateViewInstances}
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}
-          drawingWindows={drawingWindows?.(camera)}
           diagnosticOverlay={diagnosticOverlay}
           onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
           onCameraChange={setCamera}
@@ -565,6 +577,7 @@ export function HarnessEditorWorkspace({
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />
+        {drawingWindows && <div className="he-table-window-layer">{drawingWindows(camera)}</div>}
         {(previewMessage || cableSheathWarning) && <div className="he-routing-preview-error" role="status">
           {previewMessage || cableSheathWarning}
         </div>}

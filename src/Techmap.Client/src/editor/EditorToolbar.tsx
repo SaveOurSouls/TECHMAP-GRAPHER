@@ -20,6 +20,12 @@ const tools: readonly ToolDefinition[] = [
   { id: "dimension", label: "Свободный размер", shortcut: "D", glyph: "⤢", views: ["drawing"] },
 ];
 
+export function editorToolShortcut(event: Pick<KeyboardEvent, "code" | "key" | "ctrlKey" | "altKey" | "metaKey" | "isComposing">, view: HarnessEditorView): EditorTool | null {
+  if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return null;
+  const shortcut = event.code.startsWith("Key") ? event.code.slice(3) : event.key.toUpperCase();
+  return tools.find(tool => tool.shortcut && tool.shortcut === shortcut && tool.views.includes(view))?.id ?? null;
+}
+
 export interface EditorToolbarProps {
   readonly view: HarnessEditorView;
   readonly activeTool: EditorTool;
@@ -54,6 +60,7 @@ export function EditorToolbar({
             title={tool.shortcut?`${tool.label} · ${tool.shortcut}`:tool.label}
             aria-label={tool.shortcut?`${tool.label}, клавиша ${tool.shortcut}`:tool.label}
             aria-pressed={activeTool === tool.id}
+            aria-keyshortcuts={tool.shortcut || undefined}
             onClick={() => onToolChange(tool.id)}
           >
             <span aria-hidden="true">{tool.glyph}</span>

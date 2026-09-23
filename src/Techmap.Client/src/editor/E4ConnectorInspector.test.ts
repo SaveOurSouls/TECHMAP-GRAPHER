@@ -359,7 +359,7 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("Автоматический цвет");
     expect(markup).toContain("Новый цвет");
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain('class="e4cce-color-popover" hidden=""');
+    expect(markup).toContain('popover="manual" class="anchored-popover e4cce-color-popover"');
     expect(markup).toContain("e4cce-wire-picker");
   });
 });

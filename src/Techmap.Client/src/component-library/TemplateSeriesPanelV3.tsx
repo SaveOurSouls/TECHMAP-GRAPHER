@@ -5,6 +5,7 @@ import { articleContactCountIssueV3, articleContactCountRuleV3, TEMPLATE_V3_LIMI
 import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
 import "./TemplateSeriesPanelV3.css";
 import { InfoHint } from "../InfoHint";
+import { AnchoredPopover } from "../AnchoredPopover";
 
 export interface NewArticleVariantV3Input {
   readonly sourceId: string;
@@ -358,7 +359,7 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
       {terminalSearchState === "loading" && <small role="status">Ищем терминалы…</small>}
       {terminalSearchMessage && <small className="series-v3-reference-error" role="alert">{terminalSearchMessage}</small>}
       {terminalSearchState === "ready" && terminalQuery.trim() && terminalSuggestions.length === 0 && <small>Подходящие терминалы не найдены.</small>}
-      {terminalSuggestions.length > 0 && <div className="series-v3-terminal-reference-options" role="listbox" aria-label="Терминалы из справочника для серии">
+      {terminalSuggestions.length > 0 && <AnchoredPopover className="series-v3-terminal-reference-options" role="listbox" label="Терминалы из справочника для серии" open onClose={() => onTerminalQueryChange?.("")}>
         {terminalSuggestions.filter(terminal => !terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal))).map(terminal => {
           const exists = terminals.some(candidate => terminalIdentity(candidate) === terminalIdentity(terminal));
           return <button type="button" key={terminalIdentity(terminal)} disabled={exists}
@@ -366,7 +367,7 @@ function SeriesTerminalEditor({ terminals, groups, terminalContactTypeGroupIds, 
             <strong>{readableTerminalArticleV3(terminal.articleKey)}</strong><span>{exists ? "добавлен" : "+ допустимый"}</span>
           </button>;
         })}
-      </div>}
+      </AnchoredPopover>}
     </div>
     {terminals.length === 0 ? <small>Совместимые терминалы пока не заданы.</small> : <div className="series-v3-terminal-table-wrap"><table className="series-v3-terminal-table">
       <thead><tr><th>Артикул</th><th>Тип контакта</th><th>Стандартный</th><th aria-label="Удалить" /></tr></thead>

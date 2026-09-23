@@ -68,7 +68,6 @@ export interface CanvasViewportProps {
   /** Resolves an asset inside the exact project snapshot. */
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
   readonly overlay?: ReactNode;
-  readonly drawingWindows?:ReactNode;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
@@ -2692,7 +2691,7 @@ export function CanvasViewport({
   e4Overlays,
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
-  overlay, drawingWindows,onDimensionCreate,
+  overlay,onDimensionCreate,
   diagnosticOverlay,
   inlineEditor,
   onCameraChange,
@@ -3458,7 +3457,6 @@ export function CanvasViewport({
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?JSON.parse(w.metadata?.controls??"[]") as EditorPoint[]:w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите узел или перегиб пайпа"}</div></>}
       {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{physicalMenu.wires ? <><strong>Провода пайпа</strong><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{(JSON.parse(objects.find(o=>o.id===physicalMenu.id)?.metadata?.wireIds??"[]") as string[]).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{JSON.parse(objects.find(o=>o.id===physicalMenu.id)?.metadata?.wireIds??"[]").length===0&&<span>Нет назначенных проводов</span>}</> : physicalMenu.node ? <button role="menuitem" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : (["branch",...standardCoveringKinds] as const).map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
-      {drawingWindows}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}
       {inlineEditor && inlineObject && inlineLayout && (

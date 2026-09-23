@@ -25,6 +25,7 @@ import {
 import "./e4-connector-inspector.css";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { InfoHint } from "../InfoHint";
+import { AnchoredPopover } from "../AnchoredPopover";
 
 export interface E4ConnectorInspectorProps {
   readonly templateAuthoring?: {
@@ -156,7 +157,7 @@ function ColorCellEditor({
         <i className="e4cce-color-swatch" style={swatchStyle} aria-hidden="true" />
         <span>{[primary, secondary].filter(Boolean).join(" / ") || "—"}</span>
       </button>
-      <div className="e4cce-color-popover" hidden={!open}>
+      <AnchoredPopover className="e4cce-color-popover" open={open} onClose={() => onOpenChange(false)} label={`Цвета провода, контакт ${contact.number}`}>
         <label>Основной цвет
           <select
             aria-label={`Основной цвет, контакт ${contact.number}`}
@@ -210,7 +211,7 @@ function ColorCellEditor({
             onOpenChange(false);
           }}
         >Автоматический цвет</button>
-      </div>
+      </AnchoredPopover>
     </div>
   );
 }
@@ -286,19 +287,6 @@ export function E4ConnectorInspector({
   useEffect(() => setDesignation(connector.designation), [connector.id, connector.designation]);
   useEffect(() => setLibraryCode(connector.libraryCode ?? "FREE"), [connector.id, connector.libraryCode]);
   useEffect(() => setPartNumber(connector.partNumber), [connector.id, connector.partNumber]);
-  useEffect(() => {
-    if (!openColorContactId) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && canvasEditorRef.current?.contains(target) &&
-          (target as Element).closest?.(".e4cce-color-editor")) return;
-      // Dismiss during capture, then let the same click reach the next cell or
-      // the empty canvas. This keeps editing a one-click operation.
-      setOpenColorContactId(null);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
-  }, [openColorContactId]);
 
   const commitIdentity = () => {
     if (cancelIdentityBlurRef.current) {
@@ -554,10 +542,8 @@ export function E4ConnectorInspector({
                         const query = event.currentTarget.value;
                         setWireQueries((current) => updateWireQueryState(current, contact.id, query));
                       }}
-                      onBlur={() => setTimeout(() => setWireQueries((current) =>
-                        updateWireQueryState(current, contact.id, null)), 120)}
                     />
-                    {wireQueries[contact.id] !== undefined && <div className="e4cce-wire-suggestions" role="listbox" aria-label={`Подсказки проводов, контакт ${contact.number}`}>
+                    {wireQueries[contact.id] !== undefined && <AnchoredPopover className="e4cce-wire-suggestions" role="listbox" label={`Подсказки проводов, контакт ${contact.number}`} open onClose={() => setWireQueries(current => updateWireQueryState(current, contact.id, null))}>
                       {filterWireSuggestions(wireQueries[contact.id] ?? "")
                         .filter((wire) => wireArticles.includes(wire.designation))
                         .map((wire) => <button
@@ -569,7 +555,7 @@ export function E4ConnectorInspector({
                             setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
                         >{wire.designation}</button>)}
-                    </div>}
+                    </AnchoredPopover>}
                   </div> : <input
                     type={column.id === "number" ? "number" : "text"}
                     min={column.id === "number" ? 1 : undefined}

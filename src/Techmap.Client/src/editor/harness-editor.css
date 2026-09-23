@@ -140,6 +140,9 @@
 .he-zoom-select:focus-visible { border-color: #4e9dbc; box-shadow: 0 0 0 2px rgb(58 147 188 / 14%); }
 
 .he-canvas-frame { position: relative; min-width: 0; min-height: 0; grid-column: 2; grid-row: 1; overflow: hidden; background: #f8fafb; }
+.he-table-window-layer { position:relative; z-index:20; grid-column:2; grid-row:1 / -1; min-width:0; min-height:0; pointer-events:none; }
+.he-table-window-layer > .he-table-window { pointer-events:auto; }
+.he-table-window:focus-within { z-index:9; }
 .he-canvas { width: 100%; height: 100%; display: block; outline: 0; touch-action: none; }
 .he-canvas-frame.tool-pan .he-canvas { cursor: grab; }
 .he-canvas-frame.tool-pan .he-canvas:active { cursor: grabbing; }
