@@ -38,7 +38,7 @@ describe('pipe editing regressions M4-70',()=>{
   const d=physicalFixture(),scene=designToScene(d,'drawing'),pipe=scene.find(o=>o.id==='S0')!;
   const points=pipe.points!,p={x:(points[0]!.x+points[1]!.x)/2,y:(points[0]!.y+points[1]!.y)/2};
   expect(hitTestEditorScene(scene,layers,p,10,'drawing')).toBe('S0');
-  expect(JSON.parse(pipe.metadata!.wireIds!)).toEqual(['W1','W2']);
+  expect(pipe.pipe!.wireIds).toEqual(['W1','W2']);
   const wire={...scene.find(o=>o.id==='W1')!,metadata:{},points:pipe.points};
   expect(hitTestEditorScene([pipe,wire],layers,p,10,'drawing')).toBe('S0');
  });

@@ -65,9 +65,9 @@ try {
  const pipe=doc.physicalTopology.segments.find(s=>s.id==='second-exit');
  const controls=physicalSegmentControls(doc,pipe),mid={x:(controls[0].x+controls[1].x)/2,y:(controls[0].y+controls[1].y)/2};
  const edited=insertPhysicalBend(doc,pipe,mid);assert.deepEqual(edited.bends,[mid,...pipe.bends]);
- // Automatic 15-degree corners become saved authored points when dragged (M4-77).
+ // M4-87 separates automatic presentation from authored handles; edit only stored bends.
  const snapped={...doc,physicalTopology:{...doc.physicalTopology,snap:true}};
- const helperIndex=physicalSegmentHandles(snapped,pipe).findIndex(h=>h.bendIndex===null);
+ const helperIndex=physicalSegmentHandles(snapped,pipe).findIndex(h=>h.bendIndex===0);
  assert.ok(helperIndex>=0);
  const preferred={x:367,y:443};
  const promoted=movePhysicalHandle(snapped,pipe,helperIndex,preferred);

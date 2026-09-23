@@ -17,6 +17,17 @@ export interface EditorPoint {
   readonly y: number;
 }
 
+/** Computed scene data only; never serialized into a harness document. */
+export interface PhysicalPipeSceneData {
+  readonly controls: readonly EditorPoint[];
+  readonly handles: readonly EditorPoint[];
+  readonly wireIds: readonly string[];
+}
+export interface PhysicalPortSceneData {
+  readonly connectorId?: string;
+  readonly direction: EditorPoint | null;
+}
+
 export interface EditorSceneObject {
   readonly id: string;
   readonly layerId: string;
@@ -31,6 +42,8 @@ export interface EditorSceneObject {
   readonly paths?: readonly (readonly EditorPoint[])[];
   /** End-treatment presentation shares the wire identity and drawing layer. */
   readonly stripProfiles?: WireEndStripProfiles;
+  readonly pipe?: PhysicalPipeSceneData;
+  readonly port?: PhysicalPortSceneData;
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
