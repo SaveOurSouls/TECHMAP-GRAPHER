@@ -1,16 +1,112 @@
 import type { DrawingPerimeters } from "./drawing-object-perimeter";
 import { pipeMeasuredWireLength } from "./drawing-dimensions";
-import { resolveWireColorHex } from "./wire-reference-catalog";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState, type CSSProperties } from "react";
 import { InfoHint } from "../InfoHint";
+import { AnchoredPopover } from "../AnchoredPopover";
 import type { EditorCommand } from "./commands";
 import type { HarnessDesignDocument } from "./model";
-import { addDrawingPositions, setDrawingPositionVisibility, moveDrawingAnnotation, buildDrawingBom, connectionEndLabel, drawingObjectOrigin, emptyDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
+import { addDrawingPositions, setDrawingPositionVisibility, moveDrawingAnnotation, buildDrawingBom, connectionEndLabel, connectionConnectorLabel, drawingObjectOrigin, emptyDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
+import { builtInWireOptions, filterWireOptions, type WireDatabaseOption } from "./wire-database";
 
-export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"]}: {
+function compactFieldStyle(value: string, minimum = 7, maximum = 28): CSSProperties {
+  const length = Array.from(value.trim()).length + 2;
+  return { width: `${Math.max(minimum, Math.min(maximum, length))}ch` };
+}
+
+function wireMark(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
+  const contacts = [wire.from, wire.to].flatMap(end => {
+    if (!("connectorId" in end)) return [];
+    const connector = document.connectors.find(item => item.id === end.connectorId);
+    return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
+  });
+  return contacts.find(contact => contact.wire.trim())?.wire.trim() ?? wire.materialBinding?.sourceKey ?? "";
+}
+
+function wireSection(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
+  const contacts = [wire.from, wire.to].flatMap(end => {
+    if (!("connectorId" in end)) return [];
+    const connector = document.connectors.find(item => item.id === end.connectorId);
+    return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
+  });
+  return contacts.find(contact => contact.wireSection?.trim())?.wireSection?.trim() ?? "";
+}
+
+function ConnectionWirePicker({
+  document,
+  wire,
+  options,
+  disabled,
+  onCommand,
+  onSearch,
+}: {
+  document: HarnessDesignDocument;
+  wire: HarnessDesignDocument["wires"][number];
+  options: readonly WireDatabaseOption[];
+  disabled: boolean;
+  onCommand: (command: EditorCommand) => boolean;
+  onSearch?: (query: string) => void;
+}) {
+  const mark = wireMark(document, wire);
+  const [query, setQuery] = useState(mark);
+  const [open, setOpen] = useState(false);
+  useEffect(() => setQuery(mark), [mark]);
+  const matchedOptions = filterWireOptions(options, query);
+  const marks = [...new Map(matchedOptions.map(option => [option.mark, option])).values()];
+  const apply = (option: WireDatabaseOption) => {
+    for (const end of [wire.from, wire.to]) {
+      if (!("connectorId" in end)) continue;
+      const connector = document.connectors.find(item => item.id === end.connectorId);
+      if (!connector?.contacts.some(contact => contact.id === end.contactId)) continue;
+      onCommand({ type: "update-contact", connectorId: end.connectorId, contactId: end.contactId,
+        wire: option.mark, wireSection: "", wireDiameterMm: null });
+    }
+    setQuery(option.mark);
+    setOpen(false);
+  };
+  return <div className="he-connection-wire-picker">
+    <input aria-label={`Марка провода ${wire.id}`} value={query} disabled={disabled}
+      placeholder={mark || "Выбрать марку"} autoComplete="off" style={compactFieldStyle(query || mark, 10, 18)}
+      onChange={event => { setQuery(event.currentTarget.value); setOpen(true); onSearch?.(event.currentTarget.value); }}
+      onFocus={event => { setQuery(mark); setOpen(true); onSearch?.(mark); }} />
+    {open && <AnchoredPopover className="e4cce-wire-suggestions" role="listbox" label={`Марки проводов ${wire.id}`} open onClose={() => setOpen(false)}>
+      {marks.map(option => <button type="button" key={option.mark}
+        onPointerDown={event => event.preventDefault()} onClick={() => apply(option)} title={option.detail}>
+        {option.mark}
+      </button>)}
+      {marks.length === 0 && <small role="status">Совпадений нет</small>}
+    </AnchoredPopover>}
+  </div>;
+}
+
+function ConnectionSectionPicker({ document, wire, options, disabled, onCommand }: {
+  document: HarnessDesignDocument;
+  wire: HarnessDesignDocument["wires"][number];
+  options: readonly WireDatabaseOption[];
+  disabled: boolean;
+  onCommand: (command: EditorCommand) => boolean;
+}) {
+  const mark = wireMark(document, wire);
+  const current = wireSection(document, wire);
+  const possible = options.filter(option => option.mark.trim().toLocaleLowerCase("ru-RU") === mark.trim().toLocaleLowerCase("ru-RU"));
+  const sections = [...new Set([current, ...possible.map(option => option.section)].filter(Boolean))];
+  return <select aria-label={`Сечение провода ${wire.id}`} value={current} disabled={disabled || !mark}
+    style={compactFieldStyle(current,7,18)} title={mark ? "Сечения выбранной марки" : "Сначала выберите марку"}
+    onChange={event => {
+      const section = event.currentTarget.value;
+      const option = possible.find(item => item.section === section);
+      for (const end of [wire.from, wire.to]) {
+        if (!end.connectorId || !end.contactId) continue;
+        onCommand({ type: "update-contact", connectorId: end.connectorId, contactId: end.contactId,
+          wire: mark, wireSection: section, wireDiameterMm: option?.diameterMm ?? null });
+      }
+    }}><option value="">—</option>{sections.map(section => <option key={section} value={section}>{section}</option>)}</select>;
+}
+
+export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"], wireOptions = builtInWireOptions, onWireSearch}: {
   perimeters?:DrawingPerimeters;readOnly?:boolean;availableKinds?:readonly ("bom"|"connections"|"cut")[];
   mode?:"controls"|"bom"|"connections";document:HarnessDesignDocument;quantity:number;selectedId:string|null;selectedIds:readonly string[];
   onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void;
+  wireOptions?: readonly WireDatabaseOption[]; onWireSearch?: (query: string) => void;
 }) {
   const [filter,setFilter]=useState("");
   const [onlyRelated,setOnlyRelated]=useState(false);
@@ -32,10 +128,10 @@ export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,
     {mode!=="controls" && <><div className="he-document-tools"><input aria-label="Поиск строки документа" placeholder="Поиск" value={filter} onChange={e=>setFilter(e.target.value)}/>
     <label><input type="checkbox" checked={onlyRelated} onChange={e=>setOnlyRelated(e.target.checked)}/>Только связанные</label>
     {mode==="bom" && <button className="ui-control" type="button" disabled={readOnly} onClick={()=>onChange(addDrawingPositions(document,perimeters))}>Добавить позиции</button>}{mode==="bom" && <small>Потребность на {quantity} жгут(а)</small>}</div>
-    {mode==="bom" && <div className="he-document-table"><table aria-label="Спецификация"><thead><tr>{["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.filter(r=>(!onlyRelated||r.objectIds.some(id=>selectedIds.includes(id)))&&`${r.index} ${r.designation} ${r.name}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase())).map(r=><tr key={r.key} className={r.objectIds.some(id=>selectedIds.includes(id))?"is-related":""}><td><button className="ui-control" type="button" onClick={()=>onReveal(r.objectIds)}>{r.position}</button><button className="ui-control he-position-toggle" type="button" disabled={readOnly||!r.objectIds.some(id=>drawingObjectOrigin(document,id))} aria-label={`${d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)?"Скрыть":"Показать"} позицию ${r.position} у всех обозначений`} title="Показать / скрыть у всех обозначений" aria-pressed={d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)} onClick={()=>onChange(setDrawingPositionVisibility(document,r.key,!d.leaders.some(l=>l.rowKey===r.key&&!l.hidden),perimeters))}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z" fill="none" stroke="currentColor"/><circle cx="10" cy="10" r="2.5" fill="none" stroke="currentColor"/>{!d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)&&<path d="m3 3 14 14" stroke="currentColor"/>}</svg></button></td><td><input readOnly={readOnly} aria-label={`Индекс позиции ${r.position}`} value={r.index} onChange={e=>editBom(r.key,"index",e.target.value)}/></td><td><input readOnly={readOnly} aria-label={`Обозначение позиции ${r.position}`} value={r.designation} onChange={e=>editBom(r.key,"designation",e.target.value)}/></td><td><input readOnly={readOnly} aria-label={`Наименование позиции ${r.position}`} value={r.name} onChange={e=>editBom(r.key,"name",e.target.value)}/></td><td>{r.amount ?? "—"} {r.unit}</td><td className="he-bom-note-cell"><input readOnly={readOnly} aria-label={`Примечание позиции ${r.position}`} value={r.note} onChange={e=>editBom(r.key,"note",e.target.value)}/><div className="he-relations-actions"><button className="ui-control" type="button" onClick={()=>{const i=rows.findIndex(row=>row.key===r.key),keys=rows.map(row=>row.key);if(i>0){[keys[i-1],keys[i]]=[keys[i]!,keys[i-1]!];onChange({...d,bomOrder:keys});}}}>↑</button></div>
+    {mode==="bom" && <div className="he-document-table"><table aria-label="Спецификация"><thead><tr>{["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.filter(r=>(!onlyRelated||r.objectIds.some(id=>selectedIds.includes(id)))&&`${r.index} ${r.designation} ${r.name}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase())).map(r=><tr key={r.key} className={r.objectIds.some(id=>selectedIds.includes(id))?"is-related":""}><td><button className="ui-control" type="button" onClick={()=>onReveal(r.objectIds)}>{r.position}</button><button className="ui-control he-position-toggle" type="button" disabled={readOnly||!r.objectIds.some(id=>drawingObjectOrigin(document,id))} aria-label={`${d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)?"Скрыть":"Показать"} позицию ${r.position} у всех обозначений`} title="Показать / скрыть у всех обозначений" aria-pressed={d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)} onClick={()=>onChange(setDrawingPositionVisibility(document,r.key,!d.leaders.some(l=>l.rowKey===r.key&&!l.hidden),perimeters))}><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z" fill="none" stroke="currentColor"/><circle cx="10" cy="10" r="2.5" fill="none" stroke="currentColor"/>{!d.leaders.some(l=>l.rowKey===r.key&&!l.hidden)&&<path d="m3 3 14 14" stroke="currentColor"/>}</svg></button></td><td><input style={compactFieldStyle(r.index)} readOnly={readOnly} aria-label={`Индекс позиции ${r.position}`} value={r.index} onChange={e=>editBom(r.key,"index",e.target.value)}/></td><td><input style={compactFieldStyle(r.designation)} readOnly={readOnly} aria-label={`Обозначение позиции ${r.position}`} value={r.designation} onChange={e=>editBom(r.key,"designation",e.target.value)}/></td><td><input style={compactFieldStyle(r.name,12,34)} readOnly={readOnly} aria-label={`Наименование позиции ${r.position}`} value={r.name} onChange={e=>editBom(r.key,"name",e.target.value)}/></td><td>{r.amount ?? "—"} {r.unit}</td><td className="he-bom-note-cell"><input style={compactFieldStyle(r.note,10,30)} readOnly={readOnly} aria-label={`Примечание позиции ${r.position}`} value={r.note} onChange={e=>editBom(r.key,"note",e.target.value)}/><div className="he-relations-actions"><button className="ui-control" type="button" onClick={()=>{const i=rows.findIndex(row=>row.key===r.key),keys=rows.map(row=>row.key);if(i>0){[keys[i-1],keys[i]]=[keys[i]!,keys[i-1]!];onChange({...d,bomOrder:keys});}}}>↑</button></div>
 
     </td></tr>)}</tbody></table></div>}
-    {mode==="connections" && <><div className="he-document-table"><table aria-label="Таблица соединений"><thead><tr><th rowSpan={2}>Провод</th><th colSpan={2}>Откуда</th><th colSpan={2}>Куда</th><th rowSpan={2}>Цепь</th><th rowSpan={2}>Длина, мм</th><th rowSpan={2}>Материал</th><th rowSpan={2}>Маршрут</th></tr><tr><th>Соединитель</th><th>Контакт</th><th>Соединитель</th><th>Контакт</th></tr></thead><tbody>{document.wires.filter(w=>(!onlyRelated||selectedIds.includes(w.id))&&`${w.circuit} ${connectionEndLabel(document,w.from)} ${connectionEndLabel(document,w.to)}`.toLowerCase().includes(filter.toLowerCase())).map(w=><tr key={w.id} className={selectedIds.includes(w.id)?"is-related":""}><td><button type="button" className="he-wire-row" title={w.id} onClick={()=>onReveal([w.id])}><i style={{background:resolveWireColorHex(w.color)}}/>{"W"+(document.wires.indexOf(w)+1)}</button></td>{[w.from,w.to].map((end,i)=>{const c=document.connectors.find(c=>c.id===end.connectorId),contact=c?.contacts.find(c=>c.id===end.contactId);return <Fragment key={i}><td>{c?c.designation+(c.partNumber?" ("+c.partNumber+")":""):connectionEndLabel(document,end)}</td><td>{contact?.number??"—"}</td></Fragment>;})}<td><input aria-label={`Цепь ${w.id}`} readOnly={readOnly} value={w.circuit} onChange={e=>onCommand({type:"update-wire",wireId:w.id,circuit:e.target.value})}/></td><td><input aria-label={`Длина ${w.id}`} title={pipeMeasuredWireLength(document,w.id).managed?"Длина по размерам пайпов; индивидуальные добавки — в поправках провода":undefined} readOnly={readOnly||pipeMeasuredWireLength(document,w.id).managed||document.drawingDocuments?.dimensions?.some(d=>d.wireId===w.id)} type="number" min="0" value={w.lengthMm ?? ""} onChange={e=>onCommand({type:"update-wire",wireId:w.id,lengthMm:e.target.value===""?null:Number(e.target.value)})}/></td><td>{w.materialBinding?.displayName ?? "—"}</td><td>{document.physicalTopology?.routes.find(r=>r.wireId===w.id)?.steps.length ? "Задан" : "Не задан"}</td></tr>)}</tbody></table></div></>}</>}
+    {mode==="connections" && <><div className="he-document-table"><table aria-label="Таблица соединений"><thead><tr><th rowSpan={2}>Провод</th><th rowSpan={2}>Сечение</th><th colSpan={2}>Откуда</th><th colSpan={2}>Куда</th><th rowSpan={2}>Цепь</th><th rowSpan={2}>Длина, мм</th><th rowSpan={2}>Материал</th><th rowSpan={2}>Маршрут</th></tr><tr><th>Соединитель</th><th>Контакт</th><th>Соединитель</th><th>Контакт</th></tr></thead><tbody>{document.wires.filter(w=>(!onlyRelated||selectedIds.includes(w.id))&&`${wireMark(document,w)} ${wireSection(document,w)} ${w.circuit} ${connectionEndLabel(document,w.from)} ${connectionEndLabel(document,w.to)}`.toLowerCase().includes(filter.toLowerCase())).map(w=><tr key={w.id} className={selectedIds.includes(w.id)?"is-related":""}><td><ConnectionWirePicker document={document} wire={w} options={wireOptions} disabled={readOnly} onCommand={onCommand} onSearch={onWireSearch}/></td><td><ConnectionSectionPicker document={document} wire={w} options={wireOptions} disabled={readOnly} onCommand={onCommand}/></td>{[w.from,w.to].map((end,i)=><Fragment key={i}><td>{connectionConnectorLabel(document,end)}</td><td>{("connectorId" in end ? document.connectors.find(c=>c.id===end.connectorId)?.contacts.find(c=>c.id===end.contactId)?.number : undefined) ?? "—"}</td></Fragment>)}<td><input style={compactFieldStyle(w.circuit,9,24)} aria-label={`Цепь ${w.id}`} readOnly={readOnly} value={w.circuit} onChange={e=>onCommand({type:"update-wire",wireId:w.id,circuit:e.target.value})}/></td><td><input style={compactFieldStyle(w.lengthMm === null ? "" : String(w.lengthMm),8,12)} aria-label={`Длина ${w.id}`} title={pipeMeasuredWireLength(document,w.id).managed?"Длина по размерам пайпов; индивидуальные добавки — в поправках провода":undefined} readOnly={readOnly||pipeMeasuredWireLength(document,w.id).managed||document.drawingDocuments?.dimensions?.some(d=>d.wireId===w.id)} type="number" min="0" value={w.lengthMm ?? ""} onChange={e=>onCommand({type:"update-wire",wireId:w.id,lengthMm:e.target.value===""?null:Number(e.target.value)})}/></td><td>{w.materialBinding?.displayName ?? "—"}</td><td>{document.physicalTopology?.routes.find(r=>r.wireId===w.id)?.steps.length ? "Задан" : "Не задан"}</td></tr>)}</tbody></table></div></>}</>}
     {leader && <div className="he-physical-fields"><strong>Выноска</strong>{(["anchorOffset","circle"] as const).flatMap(key=>(["x","y"] as const).map(axis=><label key={`${key}${axis}`}>{key==="circle"?"Круг":"Якорь"} {axis}<input aria-label={`${key} ${axis}`} type="number" value={leader[key][axis]} onChange={e=>updateLeader(key,axis,Number(e.target.value))}/></label>))}<button className="ui-control" type="button" onClick={()=>onChange({...d,leaders:d.leaders.filter(l=>l.id!==leader.id)})}>Удалить выноску</button></div>}
     {d.leaders.filter(l=>!drawingObjectOrigin(document,l.objectId)||!rows.some(r=>r.key===l.rowKey&&r.objectIds.includes(l.objectId))).map(l=><small role="alert" key={l.id}>Выноска: объект или позиция отсутствует · {l.objectId}</small>)}
   </Content></section>;

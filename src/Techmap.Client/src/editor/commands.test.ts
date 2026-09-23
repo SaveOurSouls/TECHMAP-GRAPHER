@@ -1047,6 +1047,20 @@ describe("shared harness editor model", () => {
     )).not.toThrow();
   });
 
+  it("keeps an unrelated automatic wire fixed while one segment is dragged", () => {
+    let document = connectionDocument();
+    document = applyEditorCommand(document, {
+      type: "set-e4-wire-route", wireId: "w1",
+      route: [{ x: 648, y: 64 }, { x: 740, y: 64 }, { x: 740, y: 120 }, { x: 900, y: 120 }, { x: 900, y: 64 }, { x: 976, y: 64 }],
+    });
+    const neighbourBefore = document.wires.find((wire) => wire.id === "w2")!;
+    const moved = applyEditorCommand(document, {
+      type: "move-e4-wire-segment", wireId: "w1", segmentIndex: 2, position: { x: 760, y: 0 },
+    });
+    expect(moved.wires.find((wire) => wire.id === "w2")?.e4Route).toEqual(neighbourBefore.e4Route);
+    expect(moved.wires.find((wire) => wire.id === "w2")?.e4RouteMode).toBe(neighbourBefore.e4RouteMode);
+  });
+
   it("detaches only geometric clearance and then optimizes the selected wire with its neighbours", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, { type: "set-e4-wire-route", wireId: "w1",

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation } from "./drawing-documents";
+import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation, connectionEndLabel } from "./drawing-documents";
 import { applyEditorCommand } from "./commands";
-import { parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
+import { createJunctionEndpoint, createScreenEndpoint, parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
 const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire",sourceKey:"SAME",displayName:"Провод"};
@@ -10,6 +10,13 @@ import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from
 import { tableWindowPosition, tableWindowStyle, resizeTableWindow } from "./DrawingTableWindows";
 
 describe("drawing tables and position leaders",()=>{
+  it("uses readable placeholders instead of internal endpoint identifiers",()=>{
+    const d=physicalFixture();
+    expect(connectionEndLabel(d,createScreenEndpoint("2c7e77f8-2dad-4d26-bfcd-e905e7bc730b","above"))).toBe("Экран");
+    expect(connectionEndLabel(d,createJunctionEndpoint("2c7e77f8-2dad-4d26-bfcd-e905e7bc730b"))).toBe("Узел");
+    expect(connectionEndLabel(d,{connectorId:"missing",contactId:"missing"})).toBe("Соединитель:Контакт");
+  });
+
   it("preserves resized windows through serialization and a single Undo",()=>{
     const table={id:"T",kind:"bom" as const,position:{x:10,y:20}};
     const d={...physicalFixture(),drawingDocuments:{...emptyDrawingDocuments(),tables:[table]}};

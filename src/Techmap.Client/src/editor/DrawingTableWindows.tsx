@@ -7,6 +7,7 @@ import { emptyDrawingDocuments, type DrawingDocuments, type DrawingTable } from 
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { CutDiagramPanel } from "./CutDiagramPanel";
 import { InfoHint } from "../InfoHint";
+import type { WireDatabaseOption } from "./wire-database";
 
 export function tableWindowPosition(table:DrawingTable,camera:EditorCamera):CSSProperties {
   if(table.dock) return table.dock==="right"?{right:8,top:8}:table.dock==="bottom"?{left:8,bottom:8}:{left:8,top:8};
@@ -18,11 +19,11 @@ export function tableWindowStyle(table:DrawingTable,camera:EditorCamera):CSSProp
 export function resizeTableWindow(size:{width:number;height:number},dx:number,dy:number,dock?:DrawingTable["dock"]){
   return {width:Math.max(280,Math.min(4000,Math.round(size.width+(dock==="right"?-dx:dx)))),height:Math.max(160,Math.min(4000,Math.round(size.height+(dock==="bottom"?-dy:dy))))};
 }
-export function DrawingTableWindows(props:{perimeters?:DrawingPerimeters;view?:"e4"|"drawing";document:HarnessDesignDocument;camera:EditorCamera;quantity:number;revision:number;unsaved:boolean;selectedIds:readonly string[];onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void}) {
+export function DrawingTableWindows(props:{perimeters?:DrawingPerimeters;view?:"e4"|"drawing";document:HarnessDesignDocument;camera:EditorCamera;quantity:number;revision:number;unsaved:boolean;selectedIds:readonly string[];onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void;wireOptions?:readonly WireDatabaseOption[];onWireSearch?:(query:string)=>void}) {
   const d=props.document.drawingDocuments??emptyDrawingDocuments();
   return <>{d.tables.filter(table=>props.view!=="e4"||table.kind==="connections").map(table=><TableWindow key={table.id} {...props} table={table}/>)}</>;
 }
-function TableWindow({table,perimeters,camera,document,quantity,revision,unsaved,selectedIds,onChange,onCommand,onReveal}:Parameters<typeof DrawingTableWindows>[0]&{table:DrawingTable}) {
+function TableWindow({table,perimeters,camera,document,quantity,revision,unsaved,selectedIds,onChange,onCommand,onReveal,wireOptions,onWireSearch}:Parameters<typeof DrawingTableWindows>[0]&{table:DrawingTable}) {
   const drag=useRef<{x:number;y:number}|null>(null);
   const windowRef=useRef<HTMLElement|null>(null);
   const resize=useRef<{x:number;y:number;width:number;height:number}|null>(null);
@@ -43,7 +44,7 @@ function TableWindow({table,perimeters,camera,document,quantity,revision,unsaved
         <option value="">На поле</option><option value="left">Слева</option><option value="right">Справа</option><option value="top">Сверху</option><option value="bottom">Снизу</option>
       </select><button type="button" className="ui-control" aria-label={`Закрыть: ${title}`} onClick={()=>onChange({...d,tables:d.tables.filter(t=>t.id!==table.id)})}>×</button>
     </header>
-    <div className={`he-table-window-body ${table.kind!=="cut"?"he-table-window-document":""}`}>{table.kind==="cut"?<CutDiagramPanel embedded document={document} quantity={quantity} revision={revision} unsaved={unsaved} relatedIds={selectedIds} onCommand={onCommand} onReveal={id=>onReveal([id])}/>:<DrawingDocumentsPanel perimeters={perimeters} mode={table.kind} document={document} quantity={quantity} selectedId={null} selectedIds={selectedIds} onChange={onChange} onCommand={onCommand} onReveal={onReveal}/>}</div>
+    <div className={`he-table-window-body ${table.kind!=="cut"?"he-table-window-document":""}`}>{table.kind==="cut"?<CutDiagramPanel embedded document={document} quantity={quantity} revision={revision} unsaved={unsaved} relatedIds={selectedIds} onCommand={onCommand} onReveal={id=>onReveal([id])}/>:<DrawingDocumentsPanel perimeters={perimeters} mode={table.kind} document={document} quantity={quantity} selectedId={null} selectedIds={selectedIds} onChange={onChange} onCommand={onCommand} onReveal={onReveal} wireOptions={wireOptions} onWireSearch={onWireSearch}/>}</div>
     <button type="button" className={`he-table-window-resize ${table.dock==="right"?"at-left":table.dock==="bottom"?"at-top":""}`} aria-label={`Изменить размер: ${title}`}
       onPointerDown={e=>{if(e.button!==0||!windowRef.current)return;e.preventDefault();e.currentTarget.focus();const rect=windowRef.current.getBoundingClientRect();resize.current={x:e.clientX,y:e.clientY,width:rect.width,height:rect.height};e.currentTarget.setPointerCapture(e.pointerId);}}
       onPointerMove={e=>{const start=resize.current;if(start)setSize(resizeTableWindow(start,e.clientX-start.x,e.clientY-start.y,table.dock));}}

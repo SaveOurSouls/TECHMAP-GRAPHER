@@ -734,10 +734,16 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           .filter((wireId) => wireId !== command.wireId),
         ...screenAttachmentWireIds(changed, [command.wireId]),
       ]);
-      const movableNeighbours = changed.wires.filter(item => item.id !== wire.id && item.e4RouteMode !== "manual").map(item => item.id);
+      // A manual segment drag owns only the selected route.  Automatic
+      // neighbours are not an implicit dependency: moving one wire must not
+      // silently rebuild an unrelated differential pair or the rest of the
+      // scheme.  Junction and screen attachments remain explicit dependencies
+      // and are handled through `otherWireIds` above.
+      const excludedWireIds = command.detached
+        ? new Set(changed.wires.map(item => item.id))
+        : new Set([command.wireId, ...otherWireIds]);
       validateE4Route([start.position, ...route, end.position], createE4RoutingRequest(
-        changed, wire, command.wireId, undefined, undefined, new Set(command.detached
-          ? changed.wires.map(item => item.id) : [command.wireId, ...otherWireIds, ...movableNeighbours]),
+        changed, wire, command.wireId, undefined, undefined, excludedWireIds,
       ));
       const pendingWireIds = [...otherWireIds];
       for (const wireId of pendingWireIds) {
@@ -749,8 +755,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       }
       validateWireGroups(changed);
       if (!command.detached) {
-        changed = rerouteE4WireBatch(changed, movableNeighbours);
-        validateAllE4Wires(changed);
+        // Validate only the selected route and explicit shared attachments.
+        // Independent automatic routes deliberately retain their geometry.
+        validateE4WireIds(changed, [...new Set([command.wireId, ...otherWireIds])]);
       }
       return changed;
     }

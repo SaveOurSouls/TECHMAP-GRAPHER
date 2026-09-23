@@ -463,6 +463,12 @@
 .he-document-table th,.he-document-table thead tr:nth-child(2) th { position:static; }
 .he-document-table th,.he-document-table td { box-sizing:border-box; line-height:18px; }
 .he-table-window .he-document-table input { box-sizing:border-box; width:110px; min-width:70px; max-width:none; }
+.he-connection-wire-picker { position:relative; display:inline-flex; align-items:center; min-width:0; }
+.he-connection-wire-picker > input { box-sizing:border-box; min-width:8ch; max-width:18ch; }
+.he-table-window .he-connection-wire-picker > input { width:auto; min-width:8ch; }
+.he-table-window .he-document-table td:nth-child(2) { min-width:64px; }
+.he-table-window .he-document-table input[aria-label^="Цепь"] { min-width:8ch; }
+.he-table-window .he-document-table input[aria-label^="Длина"] { min-width:7ch; }
 
 .he-table-window-document .he-document-content>.ui-section-heading { display:none; }
 

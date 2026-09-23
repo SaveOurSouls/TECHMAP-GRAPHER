@@ -1,7 +1,7 @@
 import type { CoveringDragPart } from "./covering-layout";
 import {type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import {
   CanvasViewport,
   getEditorSceneBounds,
@@ -212,6 +212,15 @@ const saveLabels: Readonly<Record<EditorSaveState, string>> = {
   changed: "Есть изменения",
   error: "Ошибка сохранения",
 };
+
+function selectEditorTextField(event: FocusEvent<HTMLElement>): void {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+  if (target instanceof HTMLInputElement && ["checkbox", "color", "file", "range"].includes(target.type)) return;
+  requestAnimationFrame(() => {
+    if (document.activeElement === target) target.select();
+  });
+}
 
 export function HarnessEditorWorkspace({
   harnessId,
@@ -489,7 +498,7 @@ export function HarnessEditorWorkspace({
   }, [revealRequest]);
 
   return (
-    <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`}>
+    <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`} onFocusCapture={selectEditorTextField}>
       <header className="he-header">
         <div className="he-header-identity">
           {onClose && <button className="he-back" type="button" onClick={onClose} aria-label="Вернуться к проекту">←</button>}

@@ -74,11 +74,48 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
   return keys.map((key,i)=>{const r=rows.get(key)!,edit=document.drawingDocuments?.bomText?.[key];return {key,sourceIdentity:key,position:i+1,index:edit?.index??r.index.join(", "),designation:edit?.designation??r.designation.join(", "),name:edit?.name??r.name,amount:r.unknown?null:Number(r.amountMicros*BigInt(quantity))/1e6,unit:r.unit,note:edit?.note??r.note+(r.unknown?" · длина не задана":""),objectIds:[...r.objectIds]};});
 }
 
-export function connectionEndLabel(document: HarnessDesignDocument,end:WireEndpoint):string {
-  if(end.junctionId) return `Узел ${end.junctionId}`;
-  if(end.screenId) return `Экран ${end.screenId}`;
-  const c=document.connectors.find(c=>c.id===end.connectorId), contact=c?.contacts.find(c=>c.id===end.contactId);
-  return `${c?.designation ?? end.connectorId}:${contact?.number ?? end.contactId}`;
+const systemIdentifier = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Tables show operator-facing names only. Internal UUIDs are useful for
+ * persistence and diagnostics, but make connection tables unreadable. */
+function humanTableLabel(value: string | undefined, fallback: string): string {
+  const text = value?.trim() ?? "";
+  if (!text || systemIdentifier.test(text)) return fallback;
+  const withoutIds = text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "").replace(/\\s{2,}/g, " ").trim();
+  return withoutIds || fallback;
+}
+
+export function connectionConnectorLabel(document: HarnessDesignDocument, end: WireEndpoint): string {
+  if (end.junctionId) return "Узел";
+  if (end.screenId) return "Экран";
+  const connector = document.connectors.find(item => item.id === end.connectorId);
+  return humanTableLabel(connector?.designation, "Соединитель");
+}
+
+export function connectionEndLabel(document: HarnessDesignDocument, end: WireEndpoint): string {
+  if (end.junctionId) return "Узел";
+  if (end.screenId) return "Экран";
+  const connector = connectionConnectorLabel(document, end);
+  const contact = document.connectors.find(item => item.id === end.connectorId)?.contacts.find(item => item.id === end.contactId);
+  return `${connector}:${contact?.number ?? "Контакт"}`;
+}
+
+export function connectionWireMark(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
+  const contacts = [wire.from, wire.to].flatMap(end => {
+    if (!("connectorId" in end)) return [];
+    const connector = document.connectors.find(item => item.id === end.connectorId);
+    return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
+  });
+  return contacts.find(contact => contact.wire.trim())?.wire.trim() ?? wire.materialBinding?.sourceKey ?? "";
+}
+
+export function connectionWireSection(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
+  const contacts = [wire.from, wire.to].flatMap(end => {
+    if (!("connectorId" in end)) return [];
+    const connector = document.connectors.find(item => item.id === end.connectorId);
+    return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
+  });
+  return contacts.find(contact => contact.wireSection?.trim())?.wireSection?.trim() ?? "";
 }
 export function drawingObjectOrigin(document:HarnessDesignDocument,id:string):Point|null {
   const extra=document.drawingDocuments?.specificationItems?.find(i=>i.id===id);if(extra)return extra.position ?? null;
@@ -120,9 +157,9 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
   const d=document.drawingDocuments;if(!d)return [];
   const rows=buildDrawingBom(document,quantity);
   const tables:EditorSceneObject[]=d.tables.filter(t=>t.kind!=="cut" && !t.dock).map(t=>{
-    const headers=t.kind==="bom"?["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]:["Провод","A","B","Цепь","Материал","Маршрут"];
-    const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.index,r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map(w=>[w.id,connectionEndLabel(document,w.from),connectionEndLabel(document,w.to),w.circuit,w.materialBinding?.displayName ?? "—",document.physicalTopology?.routes.some(r=>r.wireId===w.id)?"Задан":"Не задан"]);
-    const widths=t.kind==="bom"?[45,130,140,240,95,200]:[140,130,130,110,160,100];
+    const headers=t.kind==="bom"?["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]:["Провод","Сечение","A","B","Цепь","Материал","Маршрут"];
+    const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.index,r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map(w=>[connectionWireMark(document,w)||`W${document.wires.indexOf(w)+1}`,connectionWireSection(document,w)||"—",connectionEndLabel(document,w.from),connectionEndLabel(document,w.to),w.circuit,w.materialBinding?.displayName ?? "—",document.physicalTopology?.routes.some(r=>r.wireId===w.id)?"Задан":"Не задан"]);
+    const widths=t.kind==="bom"?[45,130,140,240,95,200]:[140,90,130,130,110,160,100];
     return {id:t.id,kind:"drawing-table",layerId:"dimensions",label:t.kind==="bom"?`Спецификация · ${quantity} жгут(а)`:"Таблица соединений",x:t.position.x,y:t.position.y,width:widths.reduce((a,b)=>a+b,0),height:52+values.length*32,color:"#365568",metadata:{rowObjectIds:JSON.stringify(t.kind==="bom"?rows.map(r=>r.objectIds):document.wires.map(w=>[w.id])),headers:JSON.stringify(headers),rows:JSON.stringify(values),widths:JSON.stringify(widths)}};
   });
   const leaders:EditorSceneObject[]=d.leaders.filter(l=>!l.hidden).flatMap(l=>{

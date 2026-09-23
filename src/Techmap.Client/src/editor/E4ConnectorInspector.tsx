@@ -77,6 +77,15 @@ function colorHex(value: string, choices: readonly WireColorReference[]): string
   return choices.find((choice) => normalizedColorKey(choice.name) === normalizedColorKey(value))?.hex ?? "#D9E2E7";
 }
 
+function wireSectionChoices(options: readonly WireDatabaseOption[], mark: string, current: string): readonly string[] {
+  const normalized = mark.trim().toLocaleLowerCase("ru-RU");
+  const choices = options
+    .filter(option => !normalized || option.mark.trim().toLocaleLowerCase("ru-RU") === normalized)
+    .map(option => option.section.trim())
+    .filter(Boolean);
+  return [...new Set([current.trim(), ...choices].filter(Boolean))];
+}
+
 export function wireColorSwatchBackground(
   primary: string,
   secondary: string,
@@ -343,7 +352,7 @@ export function E4ConnectorInspector({
     setNewFieldLabel("");
   };
 
-  const updateContact = (contact: ConnectorInstance["contacts"][number], patch: Partial<typeof contact>) => {
+  const updateContact = (contact: ConnectorInstance["contacts"][number], patch: Omit<Partial<typeof contact>, "wireDiameterMm"> & { wireDiameterMm?: number | null }) => {
     onCommand({
       type: "update-contact",
       connectorId: connector.id,
@@ -355,6 +364,7 @@ export function E4ConnectorInspector({
       terminalArticle: patch.terminalArticle,
       wire: patch.wire,
       wireSection: patch.wireSection,
+      wireDiameterMm: patch.wireDiameterMm,
       color: patch.color,
       secondaryColor: patch.secondaryColor,
       connectionStatus: patch.connectionStatus,
@@ -491,6 +501,7 @@ export function E4ConnectorInspector({
                   const lockedByLibraryTitle = isTemplate
                     ? "Номер и тип заданы закреплённым шаблоном"
                     : "Номер и тип заданы артикулом серии";
+                  const sectionChoices = wireSectionChoices(wireOptions, contact.wire, contact.wireSection ?? "");
                   const input = templateAuthoring && column.id === "number" ? <TemplateNameCell
                     label={`Номер, контакт ${contact.number}`} value={templateAuthoring.numbers[contact.id] ?? ""} disabled={disabled}
                     onCommit={value => templateAuthoring.onNumberChange(contact.id, value)} />
@@ -527,7 +538,16 @@ export function E4ConnectorInspector({
                       {isSeries && !terminalOptions.includes(value) && value && <option value={value}>{terminalArticleLabel(value)}</option>}
                       {terminalOptions.map((terminal) => <option key={terminal} value={terminal}>{terminalArticleLabel(terminal)}</option>)}
                     </select>
-                  ) : column.id === "wire" ? <div className="e4cce-wire-picker">
+                  ) : column.id === "wireSection" ? <select
+                    aria-label={`Сечение, контакт ${contact.number}`} value={value} disabled={cellDisabled || !canvasEditing}
+                    title={contact.wire.trim() ? "Сечения выбранной марки провода" : "Сначала выберите марку провода"}
+                    onChange={event => {
+                      const section = event.target.value;
+                      const option = wireOptions.find(item => item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
+                      updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null });
+                    }}
+                  ><option value="">—</option>{sectionChoices.map(section => <option key={section} value={section}>{section}</option>)}</select>
+                  : column.id === "wire" ? <div className="e4cce-wire-picker">
                     <input
                       type="text"
                       value={value}
@@ -536,7 +556,7 @@ export function E4ConnectorInspector({
                       autoComplete="off"
                       onChange={(event) => {
                         const query = event.currentTarget.value;
-                        updateContact(contact, { wire: query });
+                        updateContact(contact, { wire: query, wireSection: "", wireDiameterMm: null });
                         setWireQueries((current) => updateWireQueryState(current, contact.id, query));
                         onWireSearch?.(query);
                       }}

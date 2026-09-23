@@ -28,7 +28,7 @@ export function CableSelectionPanel({ selectedWireIds, cable, disabled, onCreate
   const stripping = calculateCableSheathStrip(cable);
   return <section className="he-cable-panel" aria-label="Многожильный кабель">
     <header><strong>Многожильный кабель</strong><span>{cable.memberWireIds.length} жилы</span></header>
-    <small>{cable.id}</small>
+    <small>Кабель</small>
     <div className="he-cable-members" aria-label="Жилы кабеля">
       {cable.memberWireIds.map((wireId) => <span key={wireId}>{wireId}</span>)}
     </div>
