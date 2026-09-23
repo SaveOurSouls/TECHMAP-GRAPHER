@@ -29,10 +29,11 @@ describe("harness workspace", () => {
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Маршрут");
-    expect(markup).toContain('role="tab"');
-    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('role="group"');
+    expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Геометрия, размеры и технические требования");
-    expect(markup).toContain("Открыть чертёж");
+    expect(markup).toContain("Открыть документ");
+    expect(markup).toContain('class="harness-document-button active"');
     expect(markup).not.toContain(harness.documents[1]!.documentId);
   });
 

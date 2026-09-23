@@ -139,45 +139,32 @@ export function HarnessDocumentTabs({
   onTabChange,
   onOpen,
 }: HarnessDocumentTabsProps) {
-  const activeDefinition = harnessTabs.find((tab) => tab.id === activeTab)!;
-  const document = harness.documents.find((item) => item.kind === activeTab)!;
+  const openTab = (tab: typeof harnessTabs[number]) => {
+    onTabChange(tab.id);
+    if (tab.id !== "route") onOpen?.(tab.id);
+  };
   return (
-    <>
-      <div className="harness-tabs" role="tablist" aria-label={`Документация жгута ${harness.designation}`}>
-        {harnessTabs.map((tab) => (
-          <button
-            id={`harness-tab-${harness.harnessId}-${tab.id}`}
-            className={activeTab === tab.id ? "harness-tab active" : "harness-tab"}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            aria-controls={`harness-panel-${harness.harnessId}`}
-            onClick={() => onTabChange(tab.id)}
-            key={tab.id}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        id={`harness-panel-${harness.harnessId}`}
-        className="document-empty-state"
-        role="tabpanel"
-        aria-labelledby={`harness-tab-${harness.harnessId}-${activeTab}`}
-      >
-        <span className={`document-icon ${activeTab}`} aria-hidden="true" />
-        <strong>{activeDefinition.label}</strong>
-        <p>{activeDefinition.description}</p>
-        {activeTab === "route" ? (
-          <span>{document.status === "empty" && "Маршрут пока пуст. Его редактор будет подключён после сквозного Э4 и Чертежа."}</span>
-        ) : (
-          <button className="primary-action document-open-action" type="button" onClick={() => onOpen?.(activeTab)}>
-            Открыть {activeTab === "e4" ? "схему Э4" : "чертёж"}
-          </button>
-        )}
-      </div>
-    </>
+    <div className="harness-document-buttons" role="group" aria-label={`Документация жгута ${harness.designation}`}>
+      {harnessTabs.map((tab) => {
+        const document = harness.documents.find((item) => item.kind === tab.id)!;
+        return <button
+          id={`harness-document-${harness.harnessId}-${tab.id}`}
+          className={activeTab === tab.id ? "harness-document-button active" : "harness-document-button"}
+          type="button"
+          aria-pressed={activeTab === tab.id}
+          onClick={() => openTab(tab)}
+          key={tab.id}
+        >
+          <span className={`document-icon ${tab.id}`} aria-hidden="true" />
+          <span className="harness-document-button-copy">
+            <strong>{tab.label}</strong>
+            <span>{tab.description}</span>
+            {tab.id === "route" && document.status === "empty" && <small>Маршрут пока пуст</small>}
+            {tab.id !== "route" && <small>Открыть документ</small>}
+          </span>
+        </button>;
+      })}
+    </div>
   );
 }
 
