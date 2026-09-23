@@ -1,7 +1,8 @@
 import { screenCrossSections } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
-import { parsePhysicalTopology, type PhysicalTopology } from "./physical-topology";
+import { parsePhysicalTopology } from "./physical-topology-validation";
+import type { PhysicalTopology } from "./physical-topology-model";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { clearDecorationSpans } from "./e4-decoration-spans";

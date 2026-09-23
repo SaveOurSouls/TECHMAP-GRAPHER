@@ -2,7 +2,9 @@ import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
-import { parsePhysicalTopology, prunePhysicalTopology, type PhysicalTopology } from "./physical-topology";
+import { parsePhysicalTopology } from "./physical-topology-validation";
+import { prunePhysicalTopology } from "./physical-topology";
+import { type PhysicalTopology } from "./physical-topology-model";
 import {
   connectorBaseColumnKeys,
   connectorE4Contacts,

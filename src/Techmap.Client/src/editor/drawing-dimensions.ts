@@ -2,7 +2,8 @@ import { drawingConnectorCorner, type DrawingPerimeters } from "./drawing-object
 import { offsetPolyline } from "./covering-layout";
 import type { DrawingDocuments } from "./drawing-documents";
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireInstance } from "./model";
-import { physicalWirePoints, physicalSegmentControls } from "./physical-topology";
+import { physicalWirePoints } from "./physical-wire-geometry";
+import { physicalSegmentControls } from "./physical-geometry";
 import type { EditorSceneObject } from "./editor-types";
 
 export type DimensionMode="horizontal"|"vertical"|"aligned"|"path";

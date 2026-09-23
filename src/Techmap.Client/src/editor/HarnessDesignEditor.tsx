@@ -17,7 +17,10 @@ import { addDrawingPositions, drawingDocumentScene, moveDrawingAnnotation } from
 import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
 import { type PhysicalCovering, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
-import { ensureConnectorExits, movePhysicalHandle, removePhysicalHandle, insertPhysicalBend, physicalNodePoint, physicalNodeLocalPoint, branchPhysicalSegment, routePhysicalWires, physicalWireDisplayPaths, physicalWirePoints } from "./physical-topology";
+import { routePhysicalWires } from "./physical-wire-routing";
+import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
+import { ensureConnectorExits, movePhysicalHandle, removePhysicalHandle, insertPhysicalBend, branchPhysicalSegment } from "./physical-topology";
+import { physicalNodePoint, physicalNodeLocalPoint } from "./physical-ports";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";

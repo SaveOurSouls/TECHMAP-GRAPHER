@@ -2,7 +2,10 @@ import {DraftNumberInput} from "../component-library/DraftNumberInput";
 import { useState } from "react";
 import { InfoHint } from "../InfoHint";
 import type { HarnessDesignDocument } from "./model";
-import { emptyPhysicalTopology, physicalSegmentPoints, routePhysicalWires, splitPhysicalSegment, type PhysicalDirection, type PhysicalStep, type PhysicalTopology } from "./physical-topology";
+import { routePhysicalWires } from "./physical-wire-routing";
+import { emptyPhysicalTopology, type PhysicalDirection, type PhysicalStep, type PhysicalTopology } from "./physical-topology-model";
+import { physicalSegmentPoints } from "./physical-geometry";
+import { splitPhysicalSegment } from "./physical-topology";
 
 export function PhysicalTopologyPanel({ document, selectedIds, selectedId, onChange, onSelect }: {
   document: HarnessDesignDocument; selectedIds: readonly string[]; selectedId: string | null;

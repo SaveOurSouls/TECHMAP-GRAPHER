@@ -2,7 +2,9 @@ import { projectComponentTemplateView, type ComponentTemplateViewInstance, type 
 import { drawingLocalPoint, drawingPointToLocal } from "./drawing-scale";
 import { findWireEndpoint, type HarnessDesignDocument, type Point } from "./model";
 import { coveringPaths } from "./physical-coverings";
-import { physicalNodePoint, physicalSegmentPoints, physicalWirePoints } from "./physical-topology";
+import { physicalWirePoints } from "./physical-wire-geometry";
+import { physicalNodePoint } from "./physical-ports";
+import { physicalSegmentPoints } from "./physical-geometry";
 
 /** Local contours from the pinned drawing; independent of camera, translation and placement scale. */
 export type DrawingPerimeters = ReadonlyMap<string, readonly (readonly Point[])[]>;

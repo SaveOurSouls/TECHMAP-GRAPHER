@@ -4,7 +4,8 @@ import { moveDrawingDimension, validateDrawingDimensions, type DrawingDimension 
 import type { EditorSceneObject } from "./editor-types";
 import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, type Point, type WireEndpoint } from "./model";
 import { coveringPaths, coveringMeasuredLength } from "./physical-coverings";
-import { physicalNodePoint, physicalSegmentPoints } from "./physical-topology";
+import { physicalNodePoint } from "./physical-ports";
+import { physicalSegmentPoints } from "./physical-geometry";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
 export interface PositionLeader { readonly id: string; readonly objectId: string; readonly rowKey: string; readonly anchorOffset: Point; readonly circle: Point; readonly anchorLocal?: Point; readonly hidden?: boolean }

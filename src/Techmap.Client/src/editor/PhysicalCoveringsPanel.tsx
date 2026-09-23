@@ -1,5 +1,5 @@
 import { InfoHint } from "../InfoHint";
-import type { PhysicalTopology } from "./physical-topology";
+import type { PhysicalTopology } from "./physical-topology-model";
 import type { HarnessDesignDocument } from "./model";
 import { coveringMeasuredLength, coveringControlFractions, coveringKind, resolvedCoveringSpan, type CoveringKind } from "./physical-coverings";
 

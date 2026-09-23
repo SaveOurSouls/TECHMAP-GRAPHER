@@ -1,5 +1,5 @@
 import type { HarnessDesignDocument, WireInstance } from "./model";
-import type { PhysicalSegment } from "./physical-topology";
+import type { PhysicalSegment } from "./physical-topology-model";
 
 /** Catalogue diameters are millimetres; drawing widths are deliberately relative. */
 export function catalogOuterDiameter(payload:Readonly<Record<string,unknown>>):number|undefined {
