@@ -235,9 +235,7 @@ interface E4WireLabelPointerDrag {
   readonly wireId: string;
 }
 
-export const E4_WIRE_LEAD_LENGTH = 24;
 export type E4SegmentOrientation = "horizontal" | "vertical";
-export type E4ContactSide = "left" | "right";
 
 export interface E4WireSegment {
   readonly index: number;
@@ -301,96 +299,9 @@ function samePoint(left: EditorPoint, right: EditorPoint): boolean {
   return Math.abs(left.x - right.x) < 0.000001 && Math.abs(left.y - right.y) < 0.000001;
 }
 
-function appendUnique(points: EditorPoint[], point: EditorPoint) {
-  if (!samePoint(points.at(-1) ?? point, point) || points.length === 0) points.push(point);
-}
-
-function sideDirection(side: E4ContactSide): number {
-  return side === "left" ? -1 : 1;
-}
-
-/**
- * Produces the E4 display route. Every connector endpoint starts with a
- * horizontal 24-world-unit lead. Intermediate points are joined by Manhattan
- * elbows; Drawing routes never use this helper.
- */
-export function buildE4OrthogonalRoute(
-  input: readonly EditorPoint[],
-  options: Readonly<{
-    leadLength?: number;
-    fromSide?: E4ContactSide;
-    toSide?: E4ContactSide;
-  }> = {},
-): readonly EditorPoint[] {
-  const source = input.filter(finitePoint);
-  if (source.length < 2) return source;
-  const start = source[0]!;
-  const end = source.at(-1)!;
-  const inferredFromSide: E4ContactSide = end.x >= start.x ? "right" : "left";
-  const inferredToSide: E4ContactSide = inferredFromSide === "right" ? "left" : "right";
-  const leadLength = Number.isFinite(options.leadLength) && (options.leadLength ?? 0) > 0
-    ? options.leadLength!
-    : E4_WIRE_LEAD_LENGTH;
-  const startLead = {
-    x: start.x + sideDirection(options.fromSide ?? inferredFromSide) * leadLength,
-    y: start.y,
-  };
-  const endLead = {
-    x: end.x + sideDirection(options.toSide ?? inferredToSide) * leadLength,
-    y: end.y,
-  };
-  const waypoints = [start, startLead, ...source.slice(1, -1), endLead, end];
-  const result: EditorPoint[] = [];
-  for (const target of waypoints) {
-    const current = result.at(-1);
-    if (!current) {
-      result.push(target);
-      continue;
-    }
-    if (current.x !== target.x && current.y !== target.y) {
-      appendUnique(result, { x: target.x, y: current.y });
-    }
-    appendUnique(result, target);
-  }
-  return result;
-}
-
-function metadataSide(value: string | undefined): E4ContactSide | undefined {
-  return value === "left" || value === "right" ? value : undefined;
-}
-
+/** The scene owns routing. Painting and hit testing use exactly the same supplied points. */
 export function getE4WireRoute(object: EditorSceneObject): readonly EditorPoint[] {
-  if (object.kind !== "wire") return object.points ?? [];
-  const points = object.points ?? [];
-  if (object.metadata?.view === "e4" || object.metadata?.routeComplete === "true") return points;
-  const leadLengthValue = Number(object.metadata?.leadLength);
-  const leadLength = Number.isFinite(leadLengthValue) && leadLengthValue > 0 ? leadLengthValue : E4_WIRE_LEAD_LENGTH;
-  if (points.length >= 4 && isCompleteE4Route(points, metadataSide(object.metadata?.fromSide), metadataSide(object.metadata?.toSide), leadLength)) {
-    return points;
-  }
-  return buildE4OrthogonalRoute(points, {
-    leadLength: Number.isFinite(leadLengthValue) && leadLengthValue > 0 ? leadLengthValue : undefined,
-    fromSide: metadataSide(object.metadata?.fromSide),
-    toSide: metadataSide(object.metadata?.toSide),
-  });
-}
-
-function isCompleteE4Route(
-  points: readonly EditorPoint[],
-  fromSide: E4ContactSide | undefined,
-  toSide: E4ContactSide | undefined,
-  leadLength: number,
-): boolean {
-  if (e4WireSegments(points).length !== points.length - 1) return false;
-  const start = points[0]!;
-  const startLead = points[1]!;
-  const endLead = points.at(-2)!;
-  const end = points.at(-1)!;
-  const startDistance = fromSide === "left" ? start.x - startLead.x : startLead.x - start.x;
-  const endDistance = toSide === "left" ? end.x - endLead.x : endLead.x - end.x;
-  return start.y === startLead.y && end.y === endLead.y &&
-    (fromSide === undefined || startDistance >= leadLength) &&
-    (toSide === undefined || endDistance >= leadLength);
+  return object.points ?? [];
 }
 
 export function e4WireSegments(points: readonly EditorPoint[]): readonly E4WireSegment[] {
@@ -496,28 +407,6 @@ export function hitTestWireSegment(
   return hitTestE4WireSegments(objects, layers, point, zoom, false, excludedWireId);
 }
 
-export function moveE4OrthogonalSegment(
-  points: readonly EditorPoint[],
-  segmentIndex: number,
-  coordinate: number,
-): readonly EditorPoint[] {
-  if (!Number.isFinite(coordinate)) return points;
-  const result = points.map((point) => ({ ...point }));
-  const start = result[segmentIndex];
-  const end = result[segmentIndex + 1];
-  if (!start || !end || segmentIndex <= 0 || segmentIndex >= result.length - 2) return points;
-  if (start.y === end.y) {
-    result[segmentIndex] = { ...start, y: coordinate };
-    result[segmentIndex + 1] = { ...end, y: coordinate };
-    return result;
-  }
-  if (start.x === end.x) {
-    result[segmentIndex] = { ...start, x: coordinate };
-    result[segmentIndex + 1] = { ...end, x: coordinate };
-    return result;
-  }
-  return points;
-}
 
 function parseStringArray(value: unknown): readonly string[] | null {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) return null;

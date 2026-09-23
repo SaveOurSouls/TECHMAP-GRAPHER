@@ -2,7 +2,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
-  buildE4OrthogonalRoute,
   e4ContactMarker,
   e4WireSegments,
   findE4CommonParallelSpan,
@@ -38,7 +37,6 @@ import {
   inlineObjectDragMoved,
   isInlineEditorControlTarget,
   isInlineEditorReadonlyTarget,
-  moveE4OrthogonalSegment,
   objectsInPaintOrder,
   parseE4SceneOverlays,
   projectPointToOrthogonalSegment,
@@ -659,27 +657,25 @@ describe("harness editor workspace", () => {
     ]);
   });
 
-  it("creates straight E4 leads and orthogonal elbows while preserving a complete model route", () => {
-    expect(buildE4OrthogonalRoute([{ x: 0, y: 10 }, { x: 100, y: 60 }])).toEqual([
-      { x: 0, y: 10 },
-      { x: 24, y: 10 },
-      { x: 76, y: 10 },
-      { x: 76, y: 60 },
-      { x: 100, y: 60 },
-    ]);
+  it("uses the model route without inferring leads or corners from scene metadata", () => {
     const complete: EditorSceneObject = {
       id: "complete", layerId: "top", kind: "wire", label: "W1",
       x: 0, y: 0, width: 0, height: 0, color: "#222222",
       points: [{ x: 0, y: 0 }, { x: 24, y: 0 }, { x: 24, y: 60 }, { x: 100, y: 60 }],
       metadata: { view: "e4", fromSide: "right", toSide: "left", leadLength: "24" },
     };
+    for (const metadata of [undefined, {}, { fromSide: "left", toSide: "right", leadLength: "100" }] as (Readonly<Record<string,string>> | undefined)[]) {
+      expect(getE4WireRoute({ ...complete, metadata })).toBe(complete.points);
+    }
+    const direct = { ...complete, metadata: {}, points: [{ x: 0, y: 10 }, { x: 100, y: 60 }] };
+    expect(getE4WireRoute(direct)).toBe(direct.points);
     expect(getE4WireRoute(complete)).toBe(complete.points);
     expect(e4WireSegments(complete.points!).map((segment) => segment.orientation)).toEqual([
       "horizontal", "vertical", "horizontal",
     ]);
   });
 
-  it("projects, finds and moves an internal E4 segment without moving endpoints", () => {
+  it("projects and finds an internal E4 segment without moving endpoints", () => {
     const points = [
       { x: 0, y: 0 }, { x: 24, y: 0 }, { x: 24, y: 50 },
       { x: 76, y: 50 }, { x: 76, y: 0 }, { x: 100, y: 0 },
@@ -696,10 +692,6 @@ describe("harness editor workspace", () => {
       wireId: "route", index: 2, orientation: "horizontal", point: { x: 50, y: 50 },
     });
     expect(hitTestWireSegment([wire], layers, { x: 10, y: 3 }, 1)).toMatchObject({ wireId: "route", index: 0 });
-    expect(moveE4OrthogonalSegment(points, 2, 70)).toEqual([
-      { x: 0, y: 0 }, { x: 24, y: 0 }, { x: 24, y: 70 },
-      { x: 76, y: 70 }, { x: 76, y: 0 }, { x: 100, y: 0 },
-    ]);
   });
 
   it("finds crossings, omits explicit junctions and derives a movable screen on a common span", () => {
