@@ -40,8 +40,8 @@ internal static class HarnessDrawingDimensionsValidator
             {
                 if(!root.TryGetProperty("physicalTopology",out var topology)||!topology.GetProperty("segments").EnumerateArray().Any(s=>s.GetProperty("id").GetString()==segmentId))throw Invalid();
                 var segment=topology.GetProperty("segments").EnumerateArray().First(s=>s.GetProperty("id").GetString()==segmentId);
-                expected=new JsonArray(segmentId,segment.GetProperty("from").GetString(),segment.GetProperty("to").GetString(),segment.GetProperty("bends").GetArrayLength());
-                directCount=segment.GetProperty("bends").GetArrayLength()+2;
+                expected=new JsonArray(segmentId,segment.GetProperty("from").GetString(),segment.GetProperty("to").GetString(),HarnessPhysicalTopologyValidator.AuthoredPoints(segment).GetArrayLength());
+                directCount=HarnessPhysicalTopologyValidator.AuthoredPoints(segment).GetArrayLength()+2;
             }
             else expected=RouteKey(root,wire,out directCount);
             if(!JsonNode.DeepEquals(actual,expected)||directCount.HasValue&&count!=directCount.Value)throw Invalid();
@@ -104,7 +104,7 @@ internal static class HarnessDrawingDimensionsValidator
                 foreach(var step in route.GetProperty("steps").EnumerateArray())
                 {
                     var segment=topology.GetProperty("segments").EnumerateArray().First(s=>s.GetProperty("id").GetString()==step.GetProperty("segmentId").GetString());
-                    steps.Add(new JsonArray(segment.GetProperty("id").GetString(),step.GetProperty("reverse").GetBoolean(),segment.GetProperty("from").GetString(),segment.GetProperty("to").GetString(),segment.GetProperty("bends").GetArrayLength()));
+                    steps.Add(new JsonArray(segment.GetProperty("id").GetString(),step.GetProperty("reverse").GetBoolean(),segment.GetProperty("from").GetString(),segment.GetProperty("to").GetString(),HarnessPhysicalTopologyValidator.AuthoredPoints(segment).GetArrayLength()));
                 }
                 key.Add(steps);directCount=null;return key;
             }

@@ -12,9 +12,9 @@ describe("pipe routing boundary", () => {
     expect(result).toEqual(points);expect(result).not.toBe(points);
   });
   it("preserves the persisted policy for old, manual, unsnapped and fixed straight fragments", () => {
-    const doc=physicalFixture(),segment={...doc.physicalTopology!.segments[0]!,bends:[]};
+    const doc=physicalFixture(),segment={...doc.physicalTopology!.segments[0]!,path: { kind: "routed" as const, points: [] }};
     expect(physicalSegmentRouteInput(doc,segment).kind).toBe("automatic");
-    for(const s of [{...segment,routing:"fixed" as const},{...segment,bends:[{x:13,y:27}]}]) {
+    for(const s of [{...segment,path:{kind:"polyline" as const,points:[]}},{...segment,path: { kind: "routed" as const, points: [{x:13,y:27}] }}]) {
       expect(physicalSegmentRouteInput(doc,s).kind).toBe("authored");
       const persisted={...doc,physicalTopology:{...doc.physicalTopology!,segments:doc.physicalTopology!.segments.map(p=>p.id===s.id?s:p)}};
       const reopened=parseHarnessDesignDocument(JSON.parse(JSON.stringify(persisted)));
@@ -23,10 +23,10 @@ describe("pipe routing boundary", () => {
     expect(physicalSegmentRouteInput({...doc,physicalTopology:{...doc.physicalTopology!,snap:false}},segment).kind).toBe("authored");
   });
   it("computes display vertices without writing corners or directions into persisted topology", () => {
-    const doc=physicalFixture(),s={...doc.physicalTopology!.segments[1]!,bends:[]},before=JSON.stringify(doc);
+    const doc=physicalFixture(),s={...doc.physicalTopology!.segments[1]!,path: { kind: "routed" as const, points: [] }},before=JSON.stringify(doc);
     const input=physicalSegmentRouteInput(doc,s),route=computePipeRoute(input);
     expect(input.kind).toBe("automatic");expect(route.length).toBeGreaterThan(2);
-    expect(s.bends).toEqual([]);expect(JSON.stringify(doc)).toBe(before);
+    expect(s.path.points).toEqual([]);expect(JSON.stringify(doc)).toBe(before);
   });
   it("keeps port direction independent of connector translation", () => {
     const base=physicalFixture(),node={...base.physicalTopology!.nodes[0]!,direction:"up" as const};

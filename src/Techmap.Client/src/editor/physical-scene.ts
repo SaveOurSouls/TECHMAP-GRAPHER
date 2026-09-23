@@ -14,7 +14,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     color: segment.color ?? "#aebfc9", points: physicalSegmentPoints(document, segment),
     pipe: {
       controls: physicalSegmentControls(document, segment),
-      handles: segment.bends,
+      handles: segment.path.points,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
   }));

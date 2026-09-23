@@ -1430,7 +1430,7 @@ export function HarnessDesignEditor({
     if (view !== "drawing" || !selectedObjectId) return;
     const topology = history.present.physicalTopology;
     const segment = topology?.segments.find(s => s.id === selectedObjectId);
-    if (topology && segment) { run({ type: "set-physical-topology", topology: { ...topology, segments: topology.segments.map(s => s.id === segment.id ? { ...s, bends: insertPhysicalBend(history.present,s,point).bends } : s) } }); return; }
+    if (topology && segment) { run({ type: "set-physical-topology", topology: { ...topology, segments: topology.segments.map(s => s.id === segment.id ? insertPhysicalBend(history.present,s,point) : s) } }); return; }
     const wire = history.present.wires.find((item) => item.id === selectedObjectId);
     if (!wire || topology?.routes.some(r => r.wireId === wire.id)) return;
     const renderedWire = scene.find((item) => item.id === wire.id);
@@ -1717,7 +1717,7 @@ export function HarnessDesignEditor({
           if(phase==="preview")setCoveringPreview(covering);
           else {setCoveringPreview(null);const t=history.present.physicalTopology!;run({type:"set-physical-topology",topology:{...t,coverings:t.coverings?.map(c=>c.id===id?covering:c)}});}
         }}
-        onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,bends:[]}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
+        onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,path: { kind: "routed" as const, points: [] }}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
         onPhysicalContextAction={(segmentId,point,action)=>{
           const t=history.present.physicalTopology;if(!t)return;
           if(action==="branch"){

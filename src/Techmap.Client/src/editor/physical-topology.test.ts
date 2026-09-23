@@ -38,7 +38,7 @@ describe("physical topology", () => {
       for(const p of [paths[1]!,paths[2]!]){expect(p.at(-1)).toEqual(end);expect(p.at(-2)!.x).toBeCloseTo(end.x);expect(p.at(-2)!.y).toBeGreaterThan(end.y);}
     };
     check(topology);
-    const reversed:PhysicalTopology={...topology,segments:topology.segments.map(s=>({...s,from:s.to,to:s.from,bends:[...s.bends].reverse()})),routes:topology.routes.map(r=>({...r,steps:r.steps.map(s=>({...s,reverse:!s.reverse}))}))};
+    const reversed:PhysicalTopology={...topology,segments:topology.segments.map(s=>({...s,from:s.to,to:s.from,path: { kind: "routed" as const, points: [...s.path.points].reverse() }})),routes:topology.routes.map(r=>({...r,steps:r.steps.map(s=>({...s,reverse:!s.reverse}))}))};
     check(reversed);
     check({...topology,coverings:[{id:"shrink",name:"Термоусадка",kind:"heat-shrink",width:20,color:"#123456",lengthMm:null,spans:[{segmentId:"S0",from:-.01,to:.2},{segmentId:"S1",from:.8,to:1.01}]}]});
   });
@@ -51,7 +51,7 @@ describe("physical topology", () => {
     const d={...h.present,connectors:base.connectors.map(c=>c.id==="A"?{...c,drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:2,rotationDegrees:90}]}:c)};
     expect(physicalNodeDirection(d,node)!.x).toBeCloseTo(0);expect(physicalNodeDirection(d,node)!.y).toBeCloseTo(1);
     expect(physicalNodeContactDirection(d,node,"A:contact:1")!.x).toBeCloseTo(1);expect(physicalNodeContactDirection(d,node,"A:contact:1")!.y).toBeCloseTo(0);
-    const points=physicalSegmentPoints(d,{...topology.segments[0]!,bends:[]}),start=physicalNodePoint(d,node);
+    const points=physicalSegmentPoints(d,{...topology.segments[0]!,path: { kind: "routed" as const, points: [] }}),start=physicalNodePoint(d,node);
     expect(points[1]!.x).toBeCloseTo(start.x);expect(points[1]!.y).toBeGreaterThan(start.y);
     for(const patch of [{direction:"diagonal"},{contactDirections:null},{contactDirections:[]},{contactDirections:{missing:"up"}}])
       expect(()=>parseHarnessDesignDocument({...base,physicalTopology:{...topology,nodes:[{...node,...patch},...topology.nodes.slice(1)]}})).toThrow();
@@ -61,7 +61,7 @@ describe("physical topology", () => {
     expect(resolveHarnessSelection(index, ["S1"]).wireIds.sort()).toEqual(["W1", "W3"]);
     expect(resolveHarnessSelection(index, ["A"]).wireIds.sort()).toEqual(["W1", "W2"]);
     expect(resolveHarnessSelection(index, ["W1"], true).wireIds).toEqual(["W1"]);
-    const crossed = { ...d, physicalTopology: { ...d.physicalTopology!, segments: [...d.physicalTopology!.segments, { id: "cross", from: "NA", to: "NC", bends: [] }] } };
+    const crossed = { ...d, physicalTopology: { ...d.physicalTopology!, segments: [...d.physicalTopology!.segments, { id: "cross", from: "NA", to: "NC", path: { kind: "routed" as const, points: [] }}] } };
     expect(resolveHarnessSelection(buildHarnessSelectionIndex(crossed), ["cross"]).wireIds).toEqual([]);
   });
   it("splits at existing bends, preserves reverse routes, serializes and undoes", () => {
@@ -143,7 +143,7 @@ it("makes a T at an interior click without losing reverse routes, protection spa
 });
 it("distributes wires to shortest channels, preserves pinned routes and supports separate exits for double crimp",async()=>{
  const {routePhysicalWires}=await import("./physical-topology");const base=physicalFixture();const d={...base,wires:base.wires.map(w=>w.id==="W2"?{...w,from:base.wires[0]!.from,e4Route:createOrthogonalE4Route(wireEndpointE4Anchor(base,base.wires[0]!.from)!,wireEndpointE4Anchor(base,w.to)!)}:w)};
- let t={...d.physicalTopology!,nodes:[...d.physicalTopology!.nodes,{id:"NA2",connectorId:"A",position:{x:160,y:70},wireIds:["W2"]}],segments:[...d.physicalTopology!.segments,{id:"direct",from:"NA2",to:"NC",bends:[]}],routes:[]};
+ let t={...d.physicalTopology!,nodes:[...d.physicalTopology!.nodes,{id:"NA2",connectorId:"A",position:{x:160,y:70},wireIds:["W2"]}],segments:[...d.physicalTopology!.segments,{id:"direct",from:"NA2",to:"NC",path: { kind: "routed" as const, points: [] }}],routes:[]};
  t={...t,nodes:t.nodes.map(n=>n.id==="NA"?{...n,wireIds:["W1"]}:n)};
  const routed=routePhysicalWires(d,t);
  expect(routed.routes.find(r=>r.wireId==="W2")!.steps).toEqual([{segmentId:"direct",reverse:false}]);

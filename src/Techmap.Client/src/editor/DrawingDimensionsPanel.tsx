@@ -12,7 +12,7 @@ export function DrawingDimensionsPanel({document,selectedId,pipeInterval,onChang
   const docs=document.drawingDocuments,dimension=docs?.dimensions?.find(d=>d.id===selectedId);
   const segment=document.physicalTopology?.segments.find(s=>s.id===selectedId);
   const from=pipeInterval?.id===selectedId?pipeInterval.from:0;
-  const to=pipeInterval?.id===selectedId?pipeInterval.to:(segment?.bends.length??0)+1;
+  const to=pipeInterval?.id===selectedId?pipeInterval.to:(segment?.path.points.length??0)+1;
   const selected=dimension??docs?.dimensions?.find(d=>d.segmentId===segment?.id&&d.from===from&&d.to===to);
   const dirty=useRef(false);
   const [value,setValue]=useState(""),[invalid,setInvalid]=useState(false);

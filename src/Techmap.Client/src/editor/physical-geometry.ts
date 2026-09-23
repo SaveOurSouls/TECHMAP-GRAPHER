@@ -7,17 +7,14 @@ export { automaticPipeRoute, constrainedPolyline } from "./pipe-routing";
 
 export function physicalSegmentControls(document: HarnessDesignDocument, segment: PhysicalSegment): Point[] {
   const t = document.physicalTopology!;
-  return [physicalNodePoint(document, t.nodes.find(n => n.id === segment.from)!), ...segment.bends,
+  return [physicalNodePoint(document, t.nodes.find(n => n.id === segment.from)!), ...segment.path.points,
     physicalNodePoint(document, t.nodes.find(n => n.id === segment.to)!)];
 }
 
-/** Single adapter for persisted routing policy, including split legacy segments.
- * `fixed` must survive even with no bends: splitting can create a straight fragment.
- * No generated point is written back to the document here.
- */
+/** Generated vertices are presentation only; a polyline remains authored even without corners. */
 export function physicalSegmentRouteInput(document: HarnessDesignDocument, segment: PhysicalSegment): PipeRouteInput {
   const topology = document.physicalTopology!;
-  if (segment.bends.length || segment.routing === "fixed" || !topology.snap) {
+  if (segment.path.points.length || segment.path.kind === "polyline" || !topology.snap) {
     return { kind: "authored", points: physicalSegmentControls(document, segment) };
   }
   const from = topology.nodes.find(n => n.id === segment.from)!;

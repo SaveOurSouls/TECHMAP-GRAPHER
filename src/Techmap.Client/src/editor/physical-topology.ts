@@ -22,22 +22,22 @@ export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalT
 
 /** Editing uses only authored vertices, never automatic presentation vertices. */
 export function physicalSegmentHandles(_document: HarnessDesignDocument, segment: PhysicalSegment) {
-  return segment.bends.map((point, bendIndex) => ({ point, insertAt: bendIndex, bendIndex }));
+  return segment.path.points.map((point, bendIndex) => ({ point, insertAt: bendIndex, bendIndex }));
 }
 
 /** Moving a bend changes that authored bend in place; it never creates another bend. */
 export function movePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number, point: Point): PhysicalSegment {
   const handle = physicalSegmentHandles(document, segment)[index];
   if (!handle) return segment;
-  const bends = [...segment.bends];
+  const bends = [...segment.path.points];
   bends[handle.bendIndex] = point;
-  return { ...segment, bends };
+  return { ...segment, path: { ...segment.path, points: bends } };
 }
 
 export function removePhysicalHandle(document: HarnessDesignDocument, segment: PhysicalSegment, index: number): PhysicalSegment {
   const handle = physicalSegmentHandles(document, segment)[index];
   if (!handle) return segment;
-  return { ...segment, bends: segment.bends.filter((_, i) => i !== handle.bendIndex) };
+  return { ...segment, path: { ...segment.path, points: segment.path.points.filter((_, i) => i !== handle.bendIndex) }};
 }
 
 export function insertPhysicalBend(document: HarnessDesignDocument, segment: PhysicalSegment, point: Point): PhysicalSegment {
@@ -50,8 +50,8 @@ export function insertPhysicalBend(document: HarnessDesignDocument, segment: Phy
     if (distance < best) { best = distance; index = i; }
   }
   if (controls.some(p => Math.hypot(p.x - point.x, p.y - point.y) < 1e-6)) return segment;
-  const bends = [...segment.bends]; bends.splice(index, 0, point);
-  return { ...segment, bends };
+  const bends = [...segment.path.points]; bends.splice(index, 0, point);
+  return { ...segment, path: { ...segment.path, points: bends } };
 }
 
 
@@ -65,8 +65,8 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   const at = points[bendIndex]!, next = points[bendIndex + 1]!, vector = { x: next.x - at.x, y: next.y - at.y };
   const direction: PhysicalDirection = Math.abs(vector.x) >= Math.abs(vector.y) ? (vector.x >= 0 ? "right" : "left") : (vector.y >= 0 ? "down" : "up");
   return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: at, direction }],
-      segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, bends: points.slice(1, bendIndex), routing: "fixed" as const } : item),
-      { ...s, id: nextId, from: nodeId, to: s.to, bends: points.slice(bendIndex + 1, -1), routing: "fixed" as const }],
+      segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, path: { kind: "polyline" as const, points: points.slice(1, bendIndex) },  } : item),
+      { ...s, id: nextId, from: nodeId, to: s.to, path: { kind: "polyline" as const, points: points.slice(bendIndex + 1, -1) },  }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse
       ? [{ segmentId: nextId, reverse: true }, step] : [step, { segmentId: nextId, reverse: false }]) })) };
 }
@@ -95,7 +95,7 @@ export function branchPhysicalSegment(document:HarnessDesignDocument,segmentId:s
  if(hit.fraction<1e-6||hit.fraction>1-1e-6)throw new Error("Для Т-ответвления выберите внутреннюю точку канала.");
  let index=hit.index;
  if(Math.hypot(points[index]!.x-hit.point.x,points[index]!.y-hit.point.y)>1e-7)points.splice(index,0,hit.point);
- const prepared={...document,physicalTopology:{...t,segments:t.segments.map(s=>s.id===segmentId?{...s,bends:points.slice(1,-1)}:s)}};
+ const prepared={...document,physicalTopology:{...t,segments:t.segments.map(s=>s.id===segmentId?{...s,path: { kind: "polyline" as const, points: points.slice(1,-1) }}:s)}};
  // The prepared polyline already respects the current snap; splitting does not straighten it.
  const split=splitPhysicalSegment(prepared,segmentId,index,ids.junction,ids.continuation);
  const a=points[index-1]!,b=points[index+1]!,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
@@ -106,5 +106,5 @@ export function branchPhysicalSegment(document:HarnessDesignDocument,segmentId:s
  const target=document.connectors.filter(c=>targets.has(c.id)).sort((x,y)=>Math.hypot(x.positions.drawing.x-hit.point.x,x.positions.drawing.y-hit.point.y)-Math.hypot(y.positions.drawing.x-hit.point.x,y.positions.drawing.y-hit.point.y))[0];
  const sign=target&&(-dy*(target.positions.drawing.x-hit.point.x)+dx*(target.positions.drawing.y-hit.point.y))<0?-1:1;
  const tip={x:hit.point.x-sign*dy/length*80,y:hit.point.y+sign*dx/length*80};
- return {...split,nodes:[...split.nodes,{id:ids.tip,position:tip}],segments:[...split.segments,{id:ids.branch,from:ids.junction,to:ids.tip,bends:[],width:segment.width,color:segment.color,showWires:segment.showWires}]};
+ return {...split,nodes:[...split.nodes,{id:ids.tip,position:tip}],segments:[...split.segments,{id:ids.branch,from:ids.junction,to:ids.tip,path: { kind: "routed" as const, points: [] },width:segment.width,color:segment.color,showWires:segment.showWires}]};
 }

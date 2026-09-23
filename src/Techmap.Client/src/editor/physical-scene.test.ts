@@ -11,10 +11,10 @@ it("carries author controls, rendered route and wire identity independently with
   const pipe=scene.find(o=>o.id===segment.id)!;
   expect(pipe.points).toEqual(physicalSegmentPoints(doc,segment));
   expect(pipeSceneControls(pipe)).toEqual(physicalSegmentControls(doc,segment));
-  expect(pipeSceneHandles(pipe)).toEqual(segment.bends);
+  expect(pipeSceneHandles(pipe)).toEqual(segment.path.points);
   expect(pipe.metadata).toBeUndefined();
-  for(const [i,p] of segment.bends.entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
-  if(!segment.bends.length)for(const p of pipe.points!.slice(1,-1))expect(hitTestWireRoutePoint(pipe,p,100)).toBeNull();
+  for(const [i,p] of segment.path.points.entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
+  if(!segment.path.points.length)for(const p of pipe.points!.slice(1,-1))expect(hitTestWireRoutePoint(pipe,p,100)).toBeNull();
  }
  expect(pipeSceneWireIds(scene.find(o=>o.id==="S0"))).toEqual(["W1","W2"]);
  expect(JSON.stringify(doc)).toBe(before);

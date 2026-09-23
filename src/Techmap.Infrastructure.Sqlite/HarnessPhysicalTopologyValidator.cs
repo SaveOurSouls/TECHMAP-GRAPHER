@@ -16,6 +16,20 @@ internal static class HarnessPhysicalTopologyValidator
     }
     private static string LongText(JsonElement e,string key,int maximum) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.String && v.GetString() is {} s && !string.IsNullOrWhiteSpace(s) && s.Length<=maximum ? s : throw Invalid();
     private static decimal Number(JsonElement e,string key) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.Number && v.TryGetDecimal(out var n) ? n : throw Invalid();
+    private static bool Direction(string value) => value is "left" or "right" or "up" or "down";
+
+    // Legacy fields are accepted only at the persistence boundary. New clients write path.
+    internal static JsonElement AuthoredPoints(JsonElement segment)
+    {
+        if (segment.TryGetProperty("path", out var path))
+        {
+            if (segment.TryGetProperty("bends", out _) || segment.TryGetProperty("routing", out _) ||
+                Text(path, "kind") is not ("routed" or "polyline")) throw Invalid();
+            return Array(path, "points", 1000);
+        }
+        if (segment.TryGetProperty("routing", out _) && Text(segment, "routing") is not ("auto" or "fixed")) throw Invalid();
+        return Array(segment, "bends", 1000);
+    }
     public static void Validate(JsonElement root)
     {
         if (!root.TryGetProperty("physicalTopology", out var t)) return;
@@ -34,6 +48,15 @@ internal static class HarnessPhysicalTopologyValidator
             Point(p);
             string? connector = node.TryGetProperty("connectorId", out _) ? Text(node, "connectorId") : null;
             if (connector is not null && !connectors.Contains(connector)) throw Invalid();
+            if (node.TryGetProperty("direction", out _) && !Direction(Text(node, "direction"))) throw Invalid();
+            if (node.TryGetProperty("contactDirections", out var directions))
+            {
+                if (connector is null || directions.ValueKind != JsonValueKind.Object) throw Invalid();
+                var contacts = root.GetProperty("connectors").EnumerateArray().First(c => Text(c, "id") == connector);
+                var contactIds = Array(contacts, "contacts", 100000).EnumerateArray().Select(c => Text(c, "id")).ToHashSet(StringComparer.Ordinal);
+                foreach (var direction in directions.EnumerateObject())
+                    if (!contactIds.Contains(direction.Name) || direction.Value.ValueKind != JsonValueKind.String || !Direction(direction.Value.GetString()!)) throw Invalid();
+            }
             if(node.TryGetProperty("wireIds",out _)){
                 var allowed=new HashSet<string>(StringComparer.Ordinal);exitWires[id]=allowed;
                 foreach(var item in Array(node,"wireIds",100000).EnumerateArray()){
@@ -48,7 +71,7 @@ internal static class HarnessPhysicalTopologyValidator
         {
             var id = Text(segment, "id"); var from = Text(segment, "from"); var to = Text(segment, "to");
             if (!ids.Add(id) || from == to || !nodes.ContainsKey(from) || !nodes.ContainsKey(to)) throw Invalid();
-            foreach (var p in Array(segment, "bends", 1000).EnumerateArray()) Point(p);
+            foreach (var p in AuthoredPoints(segment).EnumerateArray()) Point(p);
             if(segment.TryGetProperty("width",out _)){var width=Number(segment,"width");if(width<4||width>200)throw Invalid();}
             if(segment.TryGetProperty("color",out _)){var color=Text(segment,"color");if(color.Length!=7||color[0]!='#'||color[1..].Any(c=>!Uri.IsHexDigit(c)))throw Invalid();}
             if(segment.TryGetProperty("showWires",out _))_=Boolean(segment,"showWires");
@@ -77,7 +100,7 @@ internal static class HarnessPhysicalTopologyValidator
                 {
                     var id=Text(span,"segmentId"); if(!segments.ContainsKey(id) || !members.Add(id)) throw Invalid();
                     var from=Number(span,"from"); var to=Number(span,"to"); if(from < -10000 || to > 10001 || from>=to) throw Invalid();
-                    var count=t.GetProperty("segments").EnumerateArray().First(s=>Text(s,"id")==id).GetProperty("bends").GetArrayLength()+2;
+                    var count=AuthoredPoints(t.GetProperty("segments").EnumerateArray().First(s=>Text(s,"id")==id)).GetArrayLength()+2;
                     int? startAnchor=null,endAnchor=null;
                     foreach(var key in new[]{"fromAnchor","toAnchor"})if(span.TryGetProperty(key,out var anchor)){
                         if(anchor.ValueKind!=JsonValueKind.Number||!anchor.TryGetInt32(out var index)||index<0||index>=count)throw Invalid();

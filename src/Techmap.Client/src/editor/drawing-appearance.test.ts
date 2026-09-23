@@ -11,7 +11,7 @@ import { hitTestEditorScene, drawEditorSceneObject } from "./CanvasViewport";
 import { vi } from "vitest";
 
 function straight():HarnessDesignDocument {
- const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,snap:false,nodes:d.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,position:{x:180,y:60}}:n.id==="J"?{...n,position:{x:480,y:60}}:n),segments:d.physicalTopology!.segments.map(s=>({...s,bends:[]}))}};
+ const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,snap:false,nodes:d.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,position:{x:180,y:60}}:n.id==="J"?{...n,position:{x:480,y:60}}:n),segments:d.physicalTopology!.segments.map(s=>({...s,path: { kind: "routed" as const, points: [] }}))}};
 }
 const sleeve=(patch:Partial<PhysicalCovering>={}):PhysicalCovering=>({id:"cover",name:"Термоусадка",kind:"heat-shrink",width:20,color:"#556677",lengthMm:null,lengthMode:"auto",spans:[{segmentId:"S0",from:.1,to:.8}],...patch});
 const covered=(c:PhysicalCovering[]= [sleeve()])=>{const d=straight();return {...d,physicalTopology:{...d.physicalTopology!,coverings:c}};};
@@ -52,7 +52,7 @@ describe("pipe dimensions",()=>{
   expect(p[0]).toEqual({x:100,y:80});expect(p[1]).toEqual({x:480,y:60});
  });
  it("snaps collinear dimensions and replaces adjacent arrows with dots",()=>{
-  let d=straight();d={...d,physicalTopology:{...d.physicalTopology!,nodes:d.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,connectorId:undefined}:n),segments:d.physicalTopology!.segments.map(s=>s.id==="S0"?{...s,bends:[{x:330,y:60}]}:s)}};
+  let d=straight();d={...d,physicalTopology:{...d.physicalTopology!,nodes:d.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,connectorId:undefined}:n),segments:d.physicalTopology!.segments.map(s=>s.id==="S0"?{...s,path: { kind: "routed" as const, points: [{x:330,y:60}] }}:s)}};
   d={...d,drawingDocuments:setPipeIntervalLength(d,"S0",0,1,100)};
   d={...d,drawingDocuments:setPipeIntervalLength(d,"S0",1,2,200)};
   d={...d,drawingDocuments:{...d.drawingDocuments!,showDimensions:true}};

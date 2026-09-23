@@ -8,7 +8,7 @@ it("keeps pinned routes, covers and source data when a shorter automatic path ex
   const document = physicalFixture();
   const original = document.physicalTopology!;
   const topology = { ...original, segments: [...original.segments,
-    { id: "shortcut", from: "NA", to: "NB", bends: [], routing: "fixed" as const }],
+    { id: "shortcut", from: "NA", to: "NB", path: { kind: "polyline" as const, points: [] } }],
     coverings: [{ id: "cover", name: "Cover", width: 20, color: "#123456", lengthMm: 100,
       spans: [{ segmentId: "S0", from: 0, to: 1 }] }] };
   const before = JSON.stringify({ document, topology });
@@ -25,8 +25,8 @@ it("keeps pinned routes, covers and source data when a shorter automatic path ex
 it("does not use an unrelated connector as a through junction", () => {
   const document = physicalFixture();
   const topology = { ...document.physicalTopology!, routes: [], segments: [
-    { id: "AC", from: "NA", to: "NC", bends: [] },
-    { id: "CB", from: "NC", to: "NB", bends: [] },
+    { id: "AC", from: "NA", to: "NC", path: { kind: "routed" as const, points: [] }},
+    { id: "CB", from: "NC", to: "NB", path: { kind: "routed" as const, points: [] }},
   ] };
   const routes = routePhysicalWires(document, topology).routes;
   expect(routes.some(route => route.wireId === "W1")).toBe(false);

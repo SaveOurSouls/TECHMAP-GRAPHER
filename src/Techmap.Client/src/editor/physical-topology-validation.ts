@@ -1,14 +1,17 @@
 import type { HarnessDesignDocument, Point } from "./model";
 import type { PhysicalTopology, PhysicalDirection } from "./physical-topology-model";
 import { validateCoverings } from "./physical-coverings";
+import { readPhysicalSegmentPath } from "./physical-path-codec";
 
 export function parsePhysicalTopology(value: unknown, document: HarnessDesignDocument): PhysicalTopology | undefined {
   if (value === undefined) return undefined;
   const fail = (): never => { throw new Error("Некорректная физическая трасса: проверьте узлы, участки и порядок маршрутов."); };
   if (!value || typeof value !== "object") return fail();
-  const t = value as PhysicalTopology;
+  let t = value as PhysicalTopology;
   if (!Array.isArray(t.nodes) || !Array.isArray(t.segments) || !Array.isArray(t.routes) || typeof t.snap !== "boolean" ||
       t.nodes.length > 10000 || t.segments.length > 20000 || t.routes.length > 20000) return fail();
+  const segments = t.segments.map(segment => readPhysicalSegmentPath(segment, fail));
+  if (segments.some((segment, i) => segment !== t.segments[i])) t = { ...t, segments };
   const text = (s: unknown): s is string => typeof s === "string" && s.trim().length > 0 && s.length <= 128;
   const direction = (value: unknown): value is PhysicalDirection => value === "left" || value === "right" || value === "up" || value === "down";
   const point = (p: Point) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x) <= 1e7 && Math.abs(p.y) <= 1e7;
@@ -24,8 +27,8 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
 
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
-    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId)||s.routing!==undefined&&s.routing!=="auto"&&s.routing!=="fixed")return fail();
-    if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to) || !Array.isArray(s.bends) || s.bends.length > 1000 || !s.bends.every(point)) return fail();
+    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<4||s.width>200)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
+    if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to)) return fail();
   }
   const wireIds = new Set<string>();
   for (const r of t.routes) {
@@ -51,7 +54,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     if (from.connectorId && from.connectorId !== w.from.connectorId || to.connectorId && to.connectorId !== w.to.connectorId) return fail();
   }
   validateCoverings(t.coverings, new Set(t.segments.map(s => s.id)), ids);
-  for(const c of t.coverings??[])for(const span of c.spans){const count=t.segments.find(s=>s.id===span.segmentId)!.bends.length+2;
+  for(const c of t.coverings??[])for(const span of c.spans){const count=t.segments.find(s=>s.id===span.segmentId)!.path.points.length+2;
     if([span.fromAnchor,span.toAnchor].some(i=>i!==undefined&&i>=count)||span.fromAnchor!==undefined&&span.toAnchor!==undefined&&span.fromAnchor>=span.toAnchor)return fail();}
   return t;
 }
