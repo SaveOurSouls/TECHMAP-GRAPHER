@@ -23,6 +23,31 @@ public sealed class GoogleSheetsReferenceApiTests
         "google-sheet-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.xlsx";
 
     [Fact]
+    public async Task Selected_wire_profile_publishes_all_row_three_columns_without_syncing_other_sources()
+    {
+        var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Провода").WithHeaderRow(3)
+            .WithHeaders("Марка", "Core", "Сечение C", "Pair", "Сечение P", "Производитель")
+            .AddRow("TEST", "3C", "0,5", "2P", "0,22", "Factory").Build();
+        var downloader = new QueueDownloader(new GoogleSheetsWorkbookDownload(bytes, SafeFileName));
+        await using var factory = CreateFactory(downloader);
+        using var client = CreateLocalClient(factory);
+        var csrf = await StartSessionAsync(client);
+        using var response = await SendAsync(client, "/api/v1/reference-import/google-sheets-sync",
+            new GoogleSheetsSyncRequest(PublicUrl, "technology.wires"), csrf);
+        response.EnsureSuccessStatusCode();
+        var result = (await response.Content.ReadFromJsonAsync<GoogleSheetsSyncResponse>(TestContext.Current.CancellationToken))!;
+        var profile = Assert.Single(result.Profiles);
+        Assert.Equal("published", profile.Status);
+        Assert.Equal("technology-wires", profile.SourceId);
+        var active = await client.GetFromJsonAsync<ReferenceCatalogSnapshotResponse>(
+            "/api/v1/reference-sources/technology-wires/active", TestContext.Current.CancellationToken);
+        var row = Assert.Single(active!.Records);
+        Assert.Equal("TEST", row.Payload.GetProperty("Марка").GetString());
+        Assert.Equal("Factory", row.Payload.GetProperty("Производитель").GetString());
+        Assert.Equal(PublicUrl, Assert.Single(downloader.RequestedUrls));
+    }
+
+    [Fact]
     public async Task Bulk_sync_downloads_once_publishes_valid_profiles_and_reports_failures_independently()
     {
         var bytes = CoaxWorkbook(withWarning: true);

@@ -648,7 +648,7 @@ describe("shared harness editor model", () => {
     expect(connector.partNumber).toBe("SH-001");
     expect(connector.schematic.orientation).toBe("contacts-right");
     expect(connector.schematic.baseColumns.map((column) => column.key)).toEqual([
-      "number", "contactType", "circuit", "terminal", "wire", "color",
+      "number", "contactType", "circuit", "terminal", "wire", "wireSection", "color",
     ]);
     expect(connector.contacts[0]).toMatchObject({
       contactType: "", terminalArticle: "", wire: "", color: "", connectionStatus: "available", customValues: {},
@@ -841,7 +841,7 @@ describe("shared harness editor model", () => {
     });
     const right = connectorE4TableGeometry(document.connectors[0]!);
     expect(right.columns.map((column) => column.kind === "base" ? column.key : column.id)).toEqual([
-      "color", "wire", "terminal", "circuit", "contactType", "number",
+      "color", "wireSection", "wire", "terminal", "circuit", "contactType", "number",
     ]);
     expect(connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")).toEqual({
       x: 10 + right.width,
@@ -852,7 +852,7 @@ describe("shared harness editor model", () => {
     document = applyEditorCommand(document, { type: "flip-connector-orientation", connectorId: "x1" });
     const left = connectorE4TableGeometry(document.connectors[0]!);
     expect(left.columns.map((column) => column.kind === "base" ? column.key : column.id)).toEqual([
-      "number", "contactType", "circuit", "terminal", "wire", "color",
+      "number", "contactType", "circuit", "terminal", "wire", "wireSection", "color",
     ]);
     expect(connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")?.x).toBe(10);
     expect(left.height).toBe(left.titleHeight + left.headerHeight + 2 * left.rowHeight + left.footerHeight);
@@ -1264,11 +1264,12 @@ describe("shared harness editor model", () => {
 
   it("reroutes a screen connection when the screen or a screened manual segment moves", () => {
     let document = connectionDocument();
+    const leadX = connectorContactPosition(document.connectors[0]!, "x1:contact:1", "e4")!.x + 24;
     document = applyEditorCommand(document, {
       type: "set-e4-wire-route",
       wireId: "w1",
       route: [
-        { x: 420, y: 64 }, { x: 420, y: 16 }, { x: 800, y: 16 },
+        { x: leadX, y: 64 }, { x: leadX, y: 16 }, { x: 800, y: 16 },
         { x: 800, y: 64 }, { x: 976, y: 64 },
       ],
     });

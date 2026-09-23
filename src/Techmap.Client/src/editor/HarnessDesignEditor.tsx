@@ -53,7 +53,7 @@ import {
   selectMaterializedContactRepresentation,
 } from "./materialized-contact-representation";
 import type { ComponentTemplateViewInstance } from "./component-template-view-renderer";
-import { useEditorReferenceCatalog, useTerminalArticleLookup } from "./editor-reference-catalog";
+import { useEditorReferenceCatalog, useTerminalArticleLookup, useWireDatabaseLookup } from "./editor-reference-catalog";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { CableSelectionPanel } from "./CableSelectionPanel";
@@ -388,6 +388,7 @@ export function designToScene(
             terminal: terminalArticleLabel(contact.terminalArticle),
             name: connectorContactName(connector, contact),
             wire: contact.wire,
+            wireSection: contact.wireSection ?? "",
             color: contact.color,
             secondaryColor: contact.secondaryColor ?? "",
             status: contact.connectionStatus,
@@ -665,6 +666,7 @@ export function HarnessDesignEditor({
   );
   const catalog = useEditorReferenceCatalog(config, session);
   const terminalLookup = useTerminalArticleLookup(config, session);
+  const wireLookup = useWireDatabaseLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(initialView);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
@@ -1610,6 +1612,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
+            wireOptions={wireLookup.options} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
@@ -1638,6 +1641,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
+            wireOptions={wireLookup.options} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}

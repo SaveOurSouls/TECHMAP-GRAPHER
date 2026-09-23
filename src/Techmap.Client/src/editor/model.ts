@@ -100,6 +100,7 @@ export const connectorBaseColumnKeys = [
   "circuit",
   "terminal",
   "wire",
+  "wireSection",
   "color",
 ] as const;
 
@@ -164,6 +165,7 @@ export const connectorE4TableMetrics = {
     circuit: 64,
     terminal: 78,
     wire: 72,
+    wireSection: 80,
     color: 56,
   } satisfies Readonly<Record<ConnectorBaseColumnKey, number>>,
   maximumColumnWidth: 220,
@@ -174,7 +176,8 @@ const connectorBaseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>
   contactType: "Тип",
   circuit: "Цепь",
   terminal: "Терминал",
-  wire: "Провод",
+  wire: "Марка",
+  wireSection: "Сечение",
   color: "Цвет",
 };
 
@@ -223,6 +226,7 @@ export interface ConnectorContact {
   readonly circuit: string;
   readonly terminalArticle: string;
   readonly wire: string;
+  readonly wireSection?: string;
   readonly color: string;
   /** Empty or missing means that the wire has one insulation color. */
   readonly secondaryColor?: string;
@@ -581,6 +585,7 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
               : column.key === "circuit" ? contact.circuit
                 : column.key === "terminal" ? terminalArticleLabel(contact.terminalArticle)
                   : column.key === "wire" ? contact.wire
+                    : column.key === "wireSection" ? contact.wireSection ?? ""
                     // Colour is rendered as a swatch, so its name must not
                     // resize the table and move every connected anchor.
                     : ""),
@@ -1122,6 +1127,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       circuit: requireString(contact.circuit, "Цепь контакта"),
       terminalArticle: optionalString(contact.terminalArticle, "Артикул терминала"),
       wire: optionalString(contact.wire, "Провод контакта"),
+      ...(contact.wireSection === undefined ? {} : { wireSection: optionalString(contact.wireSection, "Сечение провода") }),
       color: optionalString(contact.color, "Цвет провода контакта"),
       secondaryColor: optionalString(contact.secondaryColor, "Второй цвет провода контакта"),
       ...(contact.colorMode === undefined ? {} : { colorMode: parseContactColorMode(contact.colorMode) }),
@@ -1173,6 +1179,18 @@ function parseConnector(value: unknown): ConnectorInstance {
     libraryBinding,
   };
   validateConnectorLibraryMetadata(connector);
+  // Expanding an older table must keep its contact anchors in place, otherwise
+  // persisted manual routes can become invalid before the editor even opens.
+  const rawSchematic = record.schematic === undefined ? null : requireRecord(record.schematic, "Настройки таблицы заданы неверно.");
+  const oldColumns = rawSchematic?.baseColumns;
+  const hasSectionColumn = Array.isArray(oldColumns) && oldColumns.some(column => column.key === "wireSection");
+  if (!hasSectionColumn && schematic.orientation === "contacts-right" &&
+      connector.contacts.every(contact => !materializedContactWorldRepresentation(connector, contact.id, "e4"))) {
+    const oldWidth = connectorE4TableGeometry({ ...connector, schematic: { ...schematic,
+      baseColumns: schematic.baseColumns.filter(column => column.key !== "wireSection") } }).width;
+    const shift = connectorE4TableGeometry(connector).width - oldWidth;
+    if (shift) return { ...connector, positions: { ...connector.positions, e4: { ...connector.positions.e4, x: connector.positions.e4.x - shift } } };
+  }
   return connector;
 }
 
@@ -1505,7 +1523,7 @@ function parseBaseColumns(value: unknown): readonly ConnectorBaseColumn[] {
     if (byKey.has(key)) throw new Error("Базовые колонки соединителя не должны повторяться.");
     byKey.set(key, { key, visible: column.visible });
   }
-  return connectorBaseColumnKeys.map((key) => byKey.get(key) ?? { key, visible: true });
+  return connectorBaseColumnKeys.map((key) => byKey.get(key) ?? { key, visible: key === "wireSection" ? byKey.get("wire")?.visible ?? true : true });
 }
 
 function parseCustomFields(value: unknown): readonly ConnectorCustomField[] {

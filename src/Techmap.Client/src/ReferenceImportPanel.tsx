@@ -276,6 +276,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [sourcesError, setSourcesError] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<ReferenceInputMode>("xlsx");
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
+  const [googleSheetsProfileId, setGoogleSheetsProfileId] = useState("");
   const [manualMode, setManualMode] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sheetOptions, setSheetOptions] = useState<readonly { readonly name: string; readonly hidden: boolean }[]>([]);
@@ -514,7 +515,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       if (inputMode === "google-sheets") {
         if (!googleSheetsUrl.trim()) throw new Error("Вставьте публичную ссылку Google Sheets.");
         setBusy("sync");
-        const sync = await api.syncGoogleSheets({ url: googleSheetsUrl.trim() }, previewController.signal);
+        const sync = await api.syncGoogleSheets({ url: googleSheetsUrl.trim(), ...(googleSheetsProfileId ? { profileId: googleSheetsProfileId } : {}) }, previewController.signal);
         if (previewAbortRef.current !== previewController) return;
         setSyncResult(sync);
         const completed = sync.profiles.filter((profile) => profile.status !== "failed");
@@ -619,7 +620,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         <div className="section-title-row reference-card-title">
           <div>
             <p className="eyebrow">ШАГ 1</p>
-            <h2>{inputMode === "google-sheets" ? "Загрузить все справочники" : "Выбор таблицы и источника"}</h2>
+            <h2>{inputMode === "google-sheets" ? "Загрузить справочники" : "Выбор таблицы и источника"}</h2>
           </div>
           <span className="selected-file" title={inputMode === "xlsx" ? file?.name : googleSheetsUrl}>
             {inputMode === "xlsx" ? fileSelectionLabel(file) : "Публичная Google Sheets"}
@@ -654,6 +655,14 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           <div className="google-sheets-guide" role="note" aria-label="Импорт из Google Sheets">
             <div><strong>Публичная Google Sheets</strong><span>ЭКСПЕРИМЕНТАЛЬНО</span></div>
             <p>Откройте доступ «Все, у кого есть ссылка», затем вставьте ссылку на таблицу. Приложение только читает источник и не изменяет данные в Google.</p>
+            <button type="button" disabled={busy !== null} onClick={() => {
+              setGoogleSheetsUrl("https://docs.google.com/spreadsheets/d/1CywbVLHdLh2wO1-N2IkDdjfSMYtofsHPz-KnniQCjGg/edit?gid=122798924#gid=122798924");
+              setGoogleSheetsProfileId("technology.wires");
+              invalidatePreview();
+            }}>Подключить базу проводов</button>
+            <label>Что загрузить<select aria-label="Профиль Google Sheets" value={googleSheetsProfileId} disabled={busy !== null} onChange={event => {
+              setGoogleSheetsProfileId(event.target.value); invalidatePreview();
+            }}><option value="">Все справочники</option>{profiles?.map(profile => <option key={profile.profileId} value={profile.profileId}>{profile.displayName}</option>)}</select></label>
             <label>
               Ссылка на Google Sheets
               <input
@@ -673,7 +682,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         )}
 
         {inputMode === "google-sheets" ? (
-          <p className="reference-state">Все {profiles?.length ?? 6} подготовленных таблиц будут проверены и сохранены за одно действие. Результат каждой таблицы появится в журнале слева.</p>
+          <p className="reference-state">{googleSheetsProfileId === "technology.wires" ? "Все колонки строки 3 базы проводов; данные со строки 4. Лист определяется по заголовкам Марка, Core, Сечение C, Pair, Сечение P." : googleSheetsProfileId ? "Выбранный справочник будет проверен и сохранён." : `Все ${profiles?.length ?? 7} подготовленных таблиц будут проверены и сохранены за одно действие.`} Результат появится в журнале слева.</p>
         ) : <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
           <div className="xlsx-profile-heading">
             <div>
@@ -791,9 +800,9 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
 
         <div className="reference-form-actions">
           <button className="primary-action" type="submit" disabled={busy !== null && busy !== "preview" && busy !== "sync"}>
-            {busy === "sync" ? "Загружаем все справочники…" : busy === "preview"
+            {busy === "sync" ? "Загружаем справочники…" : busy === "preview"
               ? inputMode === "google-sheets" ? "Читаем Google Sheets…" : "Проверяем файл…"
-              : inputMode === "google-sheets" ? "Загрузить все справочники"
+              : inputMode === "google-sheets" ? googleSheetsProfileId ? "Загрузить выбранный справочник" : "Загрузить все справочники"
                 : manualMode ? "Проверить универсальный импорт"
                   : selectedProfile ? `Проверить ${selectedProfile.displayName.split(" — ")[0]}` : "Проверить таблицу"}
           </button>

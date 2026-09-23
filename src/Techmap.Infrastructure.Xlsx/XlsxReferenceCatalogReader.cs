@@ -59,7 +59,9 @@ public sealed record XlsxCatalogMapping(
     bool AllowNonTextKey = false,
     bool PreserveDuplicateRows = false,
     XlsxLayerArrayMapping? LayerArray = null,
-    IReadOnlyList<string>? BoundaryColumns = null);
+    IReadOnlyList<string>? BoundaryColumns = null,
+    bool DetectSheetByColumns = false,
+    bool ImportAllColumns = false);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -174,6 +176,8 @@ public sealed class XlsxReferenceCatalogReader
             if (mapping.ProfileId is null) writer.WriteNull("profileId"); else writer.WriteString("profileId", mapping.ProfileId.Normalize(NormalizationForm.FormC));
             writer.WriteBoolean("allowNonTextKey", mapping.AllowNonTextKey);
             writer.WriteBoolean("preserveDuplicateRows", mapping.PreserveDuplicateRows);
+            if (mapping.DetectSheetByColumns) writer.WriteBoolean("detectSheetByColumns", true);
+            if (mapping.ImportAllColumns) writer.WriteBoolean("importAllColumns", true);
             writer.WritePropertyName("boundaryColumns");
             if (mapping.BoundaryColumns is null) writer.WriteNullValue();
             else
@@ -336,9 +340,28 @@ public sealed class XlsxReferenceCatalogReader
             throw new XlsxImportException("xlsx_duplicate_sheet", "Имена листов XLSX неоднозначны после Unicode-нормализации.");
         }
 
+        var sharedStrings = ReadSharedStrings(workbookPart.SharedStringTablePart, cancellationToken);
         var selectedIndex = mapping.SheetName is null
             ? Array.FindIndex(sheets, item => !item.Hidden)
             : Array.FindIndex(sheets, item => string.Equals(item.Name, mapping.SheetName, StringComparison.Ordinal));
+        if (mapping.DetectSheetByColumns)
+        {
+            var requiredHeaders = (mapping.CompositeKeyColumns ?? [mapping.KeyColumn]).Select(NormalizeHeader).ToArray();
+            var matches = Enumerable.Range(0, sheets.Length).Where(index =>
+            {
+                if (workbookPart.GetPartById(sheetElements[index].Id!.Value!) is not WorksheetPart part) return false;
+                var row = EnumerateRows(part, sharedStrings, sheets[index].Name, mapping.HeaderRow, mapping.HeaderRow, cancellationToken)
+                    .Select(item => item.Cells).SingleOrDefault();
+                if (row is null) return false;
+                var found = ResolveHeaders(row, sheets[index].Name, mapping.HeaderRow, []);
+                return requiredHeaders.All(found.ContainsKey);
+            }).ToArray();
+            if (matches.Length != 1)
+                throw new XlsxImportException("xlsx_profile_sheet_ambiguous", matches.Length == 0
+                    ? $"Не найден лист с заголовками {string.Join(", ", requiredHeaders)} в строке {mapping.HeaderRow}."
+                    : "Найдено несколько листов с заголовками базы проводов. Оставьте в импортируемой книге один такой лист.");
+            selectedIndex = matches[0];
+        }
         if (selectedIndex < 0)
             throw new XlsxImportException("xlsx_sheet_not_found", "Выбранный лист XLSX не найден.");
         var selectedElement = sheetElements[selectedIndex];
@@ -346,7 +369,6 @@ public sealed class XlsxReferenceCatalogReader
         if (workbookPart.GetPartById(relationshipId) is not WorksheetPart worksheetPart)
             throw new XlsxImportException("xlsx_sheet_relationship_invalid", "Связь выбранного листа повреждена.");
 
-        var sharedStrings = ReadSharedStrings(workbookPart.SharedStringTablePart, cancellationToken);
         var selectedSheetName = sheets[selectedIndex].Name;
         var headerRow = EnumerateRows(
                 worksheetPart, sharedStrings, selectedSheetName,
@@ -361,7 +383,7 @@ public sealed class XlsxReferenceCatalogReader
         }
 
         var diagnostics = new List<ReferenceCatalogDiagnosticInput>();
-        var headers = ResolveHeaders(headerRow, selectedSheetName, mapping.HeaderRow, diagnostics);
+        var headers = ResolveHeaders(headerRow, selectedSheetName, mapping.HeaderRow, diagnostics, mapping.ImportAllColumns);
         var normalizedKey = NormalizeHeader(mapping.KeyColumn);
         if (!headers.TryGetValue(normalizedKey, out var keyColumn))
         {
@@ -404,8 +426,9 @@ public sealed class XlsxReferenceCatalogReader
 
         var requestedFields = mapping.Fields is not null
             ? mapping.Fields
-            : headers.Where(item => !string.Equals(item.Key, normalizedKey, StringComparison.Ordinal))
-                .Select(item => new XlsxFieldMapping(item.Key, item.Key))
+            : headers.Where(item => mapping.ImportAllColumns || !string.Equals(item.Key, normalizedKey, StringComparison.Ordinal))
+                .Select(item => new XlsxFieldMapping(item.Key, item.Key,
+                    AllowFormulaCachedValue: mapping.ImportAllColumns, AllowBlank: mapping.ImportAllColumns))
                 .ToArray();
         var duplicateSources = requestedFields
             .Select(item => NormalizeHeader(item.SourceColumn))
@@ -434,6 +457,7 @@ public sealed class XlsxReferenceCatalogReader
         var missingFields = new Dictionary<string, (int Count, string FirstLocation)>(StringComparer.Ordinal);
         var compositeKeyOccurrences = new Dictionary<string, int>(StringComparer.Ordinal);
         var sourceRows = 0;
+        var skippedUnkeyedRows = 0;
         long candidateBytes = 0;
         foreach (var parsedRow in EnumerateRows(
                      worksheetPart, sharedStrings, selectedSheetName,
@@ -443,6 +467,7 @@ public sealed class XlsxReferenceCatalogReader
             var rowNumber = parsedRow.RowNumber;
             var cells = parsedRow.Cells;
             cancellationToken.ThrowIfCancellationRequested();
+            if (mapping.ImportAllColumns && cells.Values.All(cell => string.IsNullOrWhiteSpace(cell.Text))) continue;
             if (mapping.StopAtFirstMissingKey && keyColumn is not null &&
                 !HasBoundaryValue(cells, boundaryColumns.Count > 0 ? boundaryColumns : [keyColumn]))
                 break;
@@ -467,6 +492,7 @@ public sealed class XlsxReferenceCatalogReader
             if (!cells.TryGetValue(keyColumn.ColumnIndex, out var keyCell) ||
                 keyCell.State is ParsedCellState.Missing or ParsedCellState.Blank)
             {
+                if (mapping.ImportAllColumns) { skippedUnkeyedRows++; continue; }
                 AddDiagnostic(diagnostics, Error(
                     "xlsx_key_missing", "В строке отсутствует ключ записи.", field: mapping.KeyColumn,
                     location: keyColumn is null ? rowLocation : Location(selectedSheetName, CellReference(keyColumn.ColumnIndex, rowNumber))));
@@ -489,7 +515,7 @@ public sealed class XlsxReferenceCatalogReader
             }
 
             var sourceKey = mapping.CompositeKeyColumns is { Count: > 0 }
-                ? MaterializeCompositeKey(compositeKeyColumns, cells, selectedSheetName, rowNumber, diagnostics)
+                ? MaterializeCompositeKey(compositeKeyColumns, cells, selectedSheetName, rowNumber, diagnostics, mapping.ImportAllColumns)
                 : keyCell.Text;
             if (sourceKey is null)
                 continue;
@@ -514,6 +540,7 @@ public sealed class XlsxReferenceCatalogReader
             {
                 if (!cells.TryGetValue(field.ColumnIndex, out var cell))
                 {
+                    if (mapping.ImportAllColumns) payloadValues[field.Mapping.TargetProperty] = null;
                     if (field.Mapping.Required)
                         AddDiagnostic(diagnostics, Error(
                             "xlsx_required_value_missing", $"Не заполнено обязательное поле «{field.Mapping.SourceColumn}».",
@@ -528,6 +555,7 @@ public sealed class XlsxReferenceCatalogReader
                 {
                     if (cell.Text.Length == 0)
                     {
+                        if (mapping.ImportAllColumns) payloadValues[field.Mapping.TargetProperty] = null;
                         if (field.Mapping.Required)
                             AddDiagnostic(diagnostics, Error("xlsx_formula_cached_value_missing", "У формулы отсутствует сохранённый результат.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                         else if (field.Mapping.WarnWhenMissing)
@@ -538,8 +566,17 @@ public sealed class XlsxReferenceCatalogReader
                         ? (usage.Count + 1, usage.FirstLocation)
                         : (1, cell.Reference);
                 }
-                if (cell.State == ParsedCellState.Error)
+                if (cell.State == ParsedCellState.Error || mapping.ImportAllColumns &&
+                    cell.Text is "#REF!" or "#VALUE!" or "#DIV/0!" or "#N/A" or "#NAME?" or "#NUM!" or "#NULL!")
                 {
+                    if (mapping.ImportAllColumns)
+                    {
+                        payloadValues[field.Mapping.TargetProperty] = cell.Text;
+                        AddDiagnostic(diagnostics, Warning("xlsx_source_error_preserved",
+                            $"Ошибка источника {cell.Text} сохранена как текст.", mapping.EntityType, sourceKey,
+                            field.Mapping.TargetProperty, cell.Reference));
+                        continue;
+                    }
                     AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка содержит ошибку Excel.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                     continue;
                 }
@@ -597,6 +634,10 @@ public sealed class XlsxReferenceCatalogReader
                 previewRecords.Add(new XlsxPreviewRecord(rowNumber, sourceKey, payload, recordLocation));
         }
 
+        if (skippedUnkeyedRows > 0)
+            AddDiagnostic(diagnostics, Warning("xlsx_unkeyed_rows_skipped",
+                $"Пропущены служебные строки без марки провода: {skippedUnkeyedRows}.", mapping.EntityType,
+                field: mapping.KeyColumn, location: Location(selectedSheetName, mapping.FirstDataRow)));
         foreach (var (field, usage) in cachedFormulaFields.OrderBy(item => item.Key, StringComparer.Ordinal))
         {
             AddDiagnostic(diagnostics, Warning(
@@ -672,7 +713,8 @@ public sealed class XlsxReferenceCatalogReader
         IReadOnlyDictionary<int, ParsedCell> row,
         string sheetName,
         uint headerRow,
-        ICollection<ReferenceCatalogDiagnosticInput> diagnostics)
+        ICollection<ReferenceCatalogDiagnosticInput> diagnostics,
+        bool preserveDuplicateHeaders = false)
     {
         var result = new Dictionary<string, HeaderCell>(StringComparer.Ordinal);
         foreach (var (column, cell) in row.OrderBy(item => item.Key))
@@ -686,7 +728,19 @@ public sealed class XlsxReferenceCatalogReader
                 continue;
             var header = NormalizeHeader(cell.Text);
             if (!result.TryAdd(header, new HeaderCell(header, column)))
-                AddDiagnostic(diagnostics, Error("xlsx_duplicate_header", $"Заголовок «{header}» встречается несколько раз.", field: header, location: cell.Reference));
+            {
+                if (!preserveDuplicateHeaders)
+                    AddDiagnostic(diagnostics, Error("xlsx_duplicate_header", $"Заголовок «{header}» встречается несколько раз.", field: header, location: cell.Reference));
+                else
+                {
+                    var distinctHeader = $"{header} [{ColumnName(column)}]";
+                    while (result.ContainsKey(distinctHeader) || row.Values.Any(value => NormalizeHeader(value.Text) == distinctHeader))
+                        distinctHeader += "_";
+                    result.Add(distinctHeader, new HeaderCell(distinctHeader, column));
+                    AddDiagnostic(diagnostics, Warning("xlsx_duplicate_header_preserved",
+                        $"Повторный столбец «{header}» сохранён как «{distinctHeader}».", field: distinctHeader, location: cell.Reference));
+                }
+            }
         }
         if (result.Count == 0)
             AddDiagnostic(diagnostics, Error("xlsx_headers_missing", "В выбранной строке нет текстовых заголовков.", location: Location(sheetName, headerRow)));
@@ -768,7 +822,8 @@ public sealed class XlsxReferenceCatalogReader
         IReadOnlyDictionary<int, ParsedCell> cells,
         string sheetName,
         uint rowNumber,
-        ICollection<ReferenceCatalogDiagnosticInput> diagnostics)
+        ICollection<ReferenceCatalogDiagnosticInput> diagnostics,
+        bool allowCachedFormula = false)
     {
         var components = new List<string>(keyColumns.Count);
         foreach (var column in keyColumns)
@@ -788,7 +843,7 @@ public sealed class XlsxReferenceCatalogReader
                     location: cell.Reference));
                 return null;
             }
-            if (cell.State == ParsedCellState.Formula)
+            if (cell.State == ParsedCellState.Formula && !allowCachedFormula)
             {
                 AddDiagnostic(diagnostics, Error(
                     "xlsx_formula_not_allowed",

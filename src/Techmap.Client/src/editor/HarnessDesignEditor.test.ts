@@ -563,7 +563,7 @@ describe("harness design scene adapter", () => {
       view: "e4", orientation: "left", designation: "XS1", libraryCode: "FREE", partNumber: "PHR-7",
     });
     expect(JSON.parse(object.metadata!.columns!)).toEqual([
-      "number", "contactType", "circuit", "terminal", "wire", "color",
+      "number", "contactType", "circuit", "terminal", "wire", "wireSection", "color",
     ]);
     expect(rows[0]).toMatchObject({
       number: 1, contactType: "сигнальный", circuit: "CAN-H", terminal: "SHP-002P-0.5T",

@@ -21,7 +21,8 @@ public sealed record GoogleSheetsProfilePreviewRequest(
     string? ProfileId);
 
 public sealed record GoogleSheetsSyncRequest(
-    [property: JsonPropertyName("url")] string? Url);
+    [property: JsonPropertyName("url")] string? Url,
+    string? ProfileId = null);
 
 public sealed record GoogleSheetsSyncProfileResponse(
     string ProfileId,

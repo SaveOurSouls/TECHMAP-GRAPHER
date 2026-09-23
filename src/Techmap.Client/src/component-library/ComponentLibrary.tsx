@@ -7,6 +7,7 @@ import { drawingArrayContactRows } from "./drawing-array-contacts";
 import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
 import { useInternalDrawingClipboard, copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection, stretchDrawingSelection, rotateDrawingSelection, styleDrawingSelection, drawingKeyboardAction, type DrawingClipboard } from "./drawing-selection";
 import { E4ArticlePreview } from "./E4ArticlePreview";
+import { useWireDatabaseLookup } from "../editor/editor-reference-catalog";
 import { InfoHint } from "../InfoHint";
 import { defaultDrawingSnaps } from "./drawing-geometry";
 import { DrawingToolIcon, drawingToolLabels } from "./DrawingToolIcon";
@@ -391,6 +392,7 @@ export function nextTemplateSelectionV2(current: readonly string[], id: string |
 }
 
 export function ComponentLibrary({ config, session }: Props) {
+  const wireLookup = useWireDatabaseLookup(config, session);
   const api = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const referenceApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const [items, setItems] = useState<readonly ComponentTemplateSummary[]>([]);
@@ -1142,7 +1144,7 @@ export function ComponentLibrary({ config, session }: Props) {
         {graphicEditorMode === "e4" && <>
         <TemplateSeriesPanelV3
           articlePreview={<>
-        {e4PreviewContent && <E4ArticlePreview content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
+        {e4PreviewContent && <E4ArticlePreview wireLookup={wireLookup} content={e4PreviewContent} table={draft.e4ConnectorTable} articleId={selectedArticleVariantId} assets={draft.assets} code={draft.code} name={draft.name} disabled={busy || assetMismatch}
           onTableChange={table => { setDraft(current => ({ ...current, content: { ...current.content, articleVariants: current.content.articleVariants.map(variant => ({ ...variant, contactGroups: table.articles.find(article => article.articleVariantId === variant.id)?.contactGroups.map(group => ({ ...group, allowedTerminalArticleKeys: [...group.allowedTerminalArticleKeys] })) ?? variant.contactGroups })) }, e4ConnectorTable: table })); markDirty(); }}
           onChange={value => { setDraft(current => ({ ...current, e4Presentation: value })); markDirty(); }} />}
         {e4PreviewContent && selectedArticleVariantId && (["e4","drawing","route"] as const).map(target=>{

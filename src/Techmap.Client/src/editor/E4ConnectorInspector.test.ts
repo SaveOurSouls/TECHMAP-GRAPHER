@@ -242,12 +242,14 @@ describe("E4 connector inline editing", () => {
     expect(markup).toContain("T-2");
     expect(markup).toContain("Номер и тип заданы закреплённым шаблоном");
     expect(markup).toContain('aria-label="Цепь, контакт 1"');
-    expect(markup).toContain('aria-label="Провод, контакт 1"');
+    expect(markup).toContain('aria-label="Марка, контакт 1"');
+    expect(markup).toContain('aria-label="Сечение, контакт 1"');
     expect(openingTag(markup, "№, контакт 1")).toContain("disabled");
     expect(openingTag(markup, "Тип, контакт 1")).toContain("disabled");
     expect(openingTag(markup, "Удалить контакт 1")).toContain("disabled");
     expect(openingTag(markup, "Цепь, контакт 1")).not.toContain("disabled");
-    expect(openingTag(markup, "Провод, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Марка, контакт 1")).not.toContain("disabled");
+    expect(openingTag(markup, "Сечение, контакт 1")).not.toContain("disabled");
     expect(openingTag(markup, "Цвет, контакт 1")).not.toContain("disabled");
     expect(openingTag(markup, "Терминал, контакт 1")).not.toContain("disabled");
   });

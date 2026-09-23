@@ -50,6 +50,7 @@ export interface GoogleSheetsProfilePreviewRequest {
 
 export interface GoogleSheetsSyncRequest {
   readonly url: string;
+  readonly profileId?: string;
 }
 
 export type GoogleSheetsSyncStatus = "published" | "unchanged" | "failed";

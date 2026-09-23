@@ -113,10 +113,14 @@ public sealed class ComponentTemplateContentV5ValidatorTests
         var content = ValidContent();
         var values = content["e4ConnectorTable"]!["seriesDefaults"]![0]!["values"]!;
         values["wire"] = "ПВ-3";
+        values["wireSection"] = "3C x 0,5 / 2P x 0,22";
         values["color"] = "Красный";
         values["secondaryColor"] = "Белый";
         values["customValues"] = new JsonObject { ["note"] = "Преднастройка" };
         ComponentTemplateContentV5Validator.Validate(Element(content));
+        values["wireSection"] = 123;
+        Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        values["wireSection"] = "0,35";
         values["color"] = 123;
         Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
     }
@@ -169,7 +173,7 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     {
         var content = ValidContent();
         content["e4Presentation"] = JsonNode.Parse("""
-            {"orientation":"contacts-left","baseColumns":[{"key":"wire","visible":false}],
+            {"orientation":"contacts-left","baseColumns":[{"key":"wire","visible":false},{"key":"wireSection","visible":true}],
              "customFields":[{"id":"note","label":"Примечание","visible":true}]}
             """);
         ComponentTemplateContentV5Validator.Validate(Element(content));

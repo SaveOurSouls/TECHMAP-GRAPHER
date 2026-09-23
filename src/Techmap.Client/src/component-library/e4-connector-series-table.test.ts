@@ -41,6 +41,19 @@ function series(): { content: TemplateContentV3; signalId: string; powerId: stri
 }
 
 describe("E4 connector series table", () => {
+  it("persists separate mark and section with article and series edit scopes", () => {
+    let table = createE4ConnectorSeriesTableFromV3(series().content);
+    const first = table.articles[0]!;
+    const second = table.articles[1]!;
+    const seriesRowId = first.rows[0]!.seriesRowId;
+    table = applyE4ConnectorRowEdit(table, { articleVariantId: first.articleVariantId, seriesRowId, scope: "article", changes: { wire: "TEST", wireSection: "0,35" } });
+    expect(materializeE4ConnectorArticle(table, first.articleVariantId).rows[0]).toMatchObject({ wire: "TEST", wireSection: "0,35" });
+    expect(materializeE4ConnectorArticle(table, second.articleVariantId).rows[0]!.wireSection).toBeUndefined();
+    table = applyE4ConnectorRowEdit(table, { articleVariantId: first.articleVariantId, seriesRowId, scope: "series", changes: { wire: "CABLE", wireSection: "3C x 0,5" } });
+    table = JSON.parse(JSON.stringify(table));
+    expect(validateE4ConnectorSeriesTable(table).valid).toBe(true);
+    for (const article of table.articles) expect(materializeE4ConnectorArticle(table, article.articleVariantId).rows[0]).toMatchObject({ wire: "CABLE", wireSection: "3C x 0,5" });
+  });
   it("creates article rows and fixed base columns without changing v3", () => {
     const fixture = series();
     const before = structuredClone(fixture.content);

@@ -20,6 +20,7 @@ public static class XlsxKnownProfiles
         CreateCoaxTerminations(),
         CreateCoaxCableDimensions(),
         CreateAwgReference(),
+        CreateWires(),
     ];
 
     public static IReadOnlyList<XlsxKnownProfile> All => Profiles;
@@ -29,6 +30,18 @@ public static class XlsxKnownProfiles
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
         return Profiles.SingleOrDefault(profile => string.Equals(profile.Id, profileId, StringComparison.Ordinal))
                ?? throw new XlsxImportException("xlsx_profile_not_found", "Неизвестный профиль импорта XLSX.");
+    }
+
+    private static XlsxKnownProfile CreateWires()
+    {
+        const string id = "technology.wires";
+        return new XlsxKnownProfile(id, "Провода — все колонки строки 3", "technology-wires",
+            "Автоопределение по заголовкам", "wire", "составной ключ",
+            "Все колонки строки 3, данные со строки 4. Марки, жилы, пары и сечения сохраняются без потери вариантов.",
+            new XlsxCatalogMapping(null, 3, 4, "wire", "Марка",
+                IgnoreUnmappedFormulas: true, ProfileId: id,
+                CompositeKeyColumns: ["Марка", "Core", "Сечение C", "Pair", "Сечение P"],
+                PreserveDuplicateRows: true, DetectSheetByColumns: true, ImportAllColumns: true));
     }
 
     private static XlsxKnownProfile CreateOperations()

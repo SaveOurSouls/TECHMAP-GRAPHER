@@ -21,6 +21,7 @@ export interface E4ConnectorTableColumn {
 
 export interface E4ConnectorRowValues {
   wire?: string;
+  wireSection?: string;
   color?: string;
   secondaryColor?: string;
   customValues?: Record<string, string>;
@@ -285,7 +286,7 @@ function normalizedChanges(
   changes: E4ConnectorRowOverride,
 ): E4ConnectorRowOverride {
   const result: E4ConnectorRowOverride = {};
-  for (const key of ["wire", "color", "secondaryColor"] as const)
+  for (const key of ["wire", "wireSection", "color", "secondaryColor"] as const)
     if (hasOwn(changes, key)) result[key] = normalizedOptionalText(changes[key] ?? "", 512, key) ?? "";
   if (changes.customValues) result.customValues = Object.fromEntries(Object.entries(changes.customValues).map(([key, text]) =>
     [normalizedText(key, 128, "Поле"), normalizedOptionalText(text, 4096, "Значение") ?? ""]));
@@ -592,8 +593,8 @@ function validateRowFields(
     diagnostic(diagnostics, "invalid_row", path, "Значения строки должны быть объектом.");
     return null;
   }
-  const allowed = new Set<keyof E4ConnectorRowValues>(["number", "name", "circuitText", "contactTypeGroupId", "standardTerminalArticleKey", "wire", "color", "secondaryColor", "customValues"]);
-  for (const key of ["wire", "color", "secondaryColor"]) if (hasOwn(value, key) &&
+  const allowed = new Set<keyof E4ConnectorRowValues>(["number", "name", "circuitText", "contactTypeGroupId", "standardTerminalArticleKey", "wire", "wireSection", "color", "secondaryColor", "customValues"]);
+  for (const key of ["wire", "wireSection", "color", "secondaryColor"]) if (hasOwn(value, key) &&
     (typeof value[key] !== "string" || value[key].length > 512 || CONTROL_CHARACTERS.test(value[key])))
     diagnostic(diagnostics, "invalid_row_value", `${path}.${key}`, "Неверное значение поля.");
   if (hasOwn(value, "customValues") && (!isRecord(value.customValues) || Object.entries(value.customValues).some(([key, text]) =>

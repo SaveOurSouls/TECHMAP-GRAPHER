@@ -18,14 +18,13 @@ import {
 } from "./model";
 import {
   builtInWireColors,
-  builtInWireReferences,
-  filterWireSuggestions,
   type WireColorReference,
 } from "./wire-reference-catalog";
 import "./e4-connector-inspector.css";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { InfoHint } from "../InfoHint";
 import { AnchoredPopover } from "../AnchoredPopover";
+import { builtInWireOptions, filterWireOptions, type WireDatabaseOption } from "./wire-database";
 
 export interface E4ConnectorInspectorProps {
   readonly templateAuthoring?: {
@@ -51,7 +50,8 @@ export interface E4ConnectorInspectorProps {
   readonly onTemplateArticleSelect?: (articleVariantId: string) => void;
   readonly terminalArticles?: readonly string[];
   readonly onTerminalSearch?: (query: string) => void;
-  readonly wireArticles?: readonly string[];
+  readonly wireOptions?: readonly WireDatabaseOption[];
+  readonly wireLookupMessage?: string | null;
   readonly onWireSearch?: (query: string) => void;
   readonly wireColors?: readonly WireColorReference[];
   readonly editing?: boolean;
@@ -63,7 +63,8 @@ const baseColumnLabels: Readonly<Record<ConnectorBaseColumnKey, string>> = {
   contactType: "Тип",
   circuit: "Цепь",
   terminal: "Терминал",
-  wire: "Провод",
+  wire: "Марка",
+  wireSection: "Сечение",
   color: "Цвет",
 };
 
@@ -268,7 +269,8 @@ export function E4ConnectorInspector({
   onTemplateArticleSelect,
   terminalArticles = [],
   onTerminalSearch,
-  wireArticles = builtInWireReferences.map((wire) => wire.designation),
+  wireOptions = builtInWireOptions,
+  wireLookupMessage,
   onWireSearch,
   wireColors,
   editing,
@@ -352,6 +354,7 @@ export function E4ConnectorInspector({
       circuit: patch.circuit,
       terminalArticle: patch.terminalArticle,
       wire: patch.wire,
+      wireSection: patch.wireSection,
       color: patch.color,
       secondaryColor: patch.secondaryColor,
       connectionStatus: patch.connectionStatus,
@@ -474,6 +477,7 @@ export function E4ConnectorInspector({
                       : column.id === "circuit" ? contact.circuit
                         : column.id === "terminal" ? contact.terminalArticle
                           : column.id === "wire" ? contact.wire
+                            : column.id === "wireSection" ? contact.wireSection ?? ""
                             : column.id === "color" ? contact.color
                               : column.id === `custom:${templateNameColumnId}` ? connectorContactName(connector, contact)
                               : contact.customValues[column.id.slice(7)] ?? "";
@@ -541,20 +545,22 @@ export function E4ConnectorInspector({
                         // the value before scheduling the functional update.
                         const query = event.currentTarget.value;
                         setWireQueries((current) => updateWireQueryState(current, contact.id, query));
+                        onWireSearch?.(query);
                       }}
                     />
                     {wireQueries[contact.id] !== undefined && <AnchoredPopover className="e4cce-wire-suggestions" role="listbox" label={`Подсказки проводов, контакт ${contact.number}`} open onClose={() => setWireQueries(current => updateWireQueryState(current, contact.id, null))}>
-                      {filterWireSuggestions(wireQueries[contact.id] ?? "")
-                        .filter((wire) => wireArticles.includes(wire.designation))
+                      {wireLookupMessage && <small role="status">{wireLookupMessage}</small>}
+                      {filterWireOptions(wireOptions, wireQueries[contact.id] ?? "")
                         .map((wire) => <button
                           type="button"
                           key={wire.id}
                           onPointerDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            updateContact(contact, { wire: wire.designation });
+                            updateContact(contact, { wire: wire.mark, wireSection: wire.section });
                             setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
-                        >{wire.designation}</button>)}
+                          title={wire.detail}
+                        >{wire.label}{wire.detail && <small>{wire.detail}</small>}</button>)}
                     </AnchoredPopover>}
                   </div> : <input
                     type={column.id === "number" ? "number" : "text"}
@@ -576,6 +582,7 @@ export function E4ConnectorInspector({
                           : column.id === "circuit" ? { circuit: event.target.value }
                             : column.id === "terminal" ? { terminalArticle: event.target.value }
                               : column.id === "wire" ? { wire: event.target.value }
+                                : column.id === "wireSection" ? { wireSection: event.target.value }
                                 : { color: event.target.value };
                         updateContact(contact, patch);
                         if (column.id === "terminal") onTerminalSearch?.(event.target.value);

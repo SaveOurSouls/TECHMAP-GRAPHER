@@ -22,6 +22,14 @@ function record(entityType: string, sourceKey: string, payload: Readonly<Record<
 }
 
 describe("editor reference catalog", () => {
+  it("shows the wire database mark and section in the catalog and pinned material name", () => {
+    const item = referenceRecordToEditorCatalogItem(source("technology-wires"), record("wire", "internal-key", {
+      Марка: "TEST", Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22",
+    }));
+    expect(item.title).toBe("TEST · 3C x 0,5 / 2P x 0,22");
+    expect(item.referenceDisplayName).toBe(item.title);
+    expect(item.sourceKey).toBe("internal-key");
+  });
   it("exposes exact immutable component template versions for placement", () => {
     const template = {
       templateId: "12345678-1234-4123-8123-123456789abc",

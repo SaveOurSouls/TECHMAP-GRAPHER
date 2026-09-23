@@ -173,6 +173,18 @@ internal sealed class XlsxTestFixtureBuilder
         return this;
     }
 
+    public XlsxTestFixtureBuilder WithError(string cellReference, string value)
+    {
+        scalarCells[NormalizeCellReference(cellReference)] = new ScalarCell(ScalarCellKind.Error, value);
+        return this;
+    }
+
+    public XlsxTestFixtureBuilder WithDuplicateHeader(int index, string value)
+    {
+        headers[index] = value;
+        return this;
+    }
+
     public XlsxTestFixtureBuilder WithSharedString(string cellReference, string value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -462,6 +474,7 @@ internal sealed class XlsxTestFixtureBuilder
             scalar.Kind switch
             {
                 ScalarCellKind.Boolean => new XAttribute("t", "b"),
+                ScalarCellKind.Error => new XAttribute("t", "e"),
                 ScalarCellKind.SharedString => new XAttribute("t", "s"),
                 _ => null,
             },
@@ -568,5 +581,5 @@ internal sealed class XlsxTestFixtureBuilder
     private sealed record FormulaCell(string Expression, string CachedValue, bool CachedValueIsText);
     private sealed record ScalarCell(ScalarCellKind Kind, string Value);
     private sealed record WorksheetHyperlink(string CellReference, Uri Target, string RelationshipType);
-    private enum ScalarCellKind { Number, Boolean, SharedString }
+    private enum ScalarCellKind { Number, Boolean, SharedString, Error }
 }

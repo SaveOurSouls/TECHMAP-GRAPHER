@@ -1089,7 +1089,7 @@ function contactCount(object: EditorSceneObject): number {
   return Number.isSafeInteger(value) && value > 0 ? value : 0;
 }
 
-const e4BaseColumnIds = ["color", "wire", "terminal", "circuit", "contactType", "number"] as const;
+const e4BaseColumnIds = ["color", "wireSection", "wire", "terminal", "circuit", "contactType", "number"] as const;
 type E4BaseColumnId = typeof e4BaseColumnIds[number];
 type E4ColumnId = E4BaseColumnId | `custom:${string}`;
 type E4ConnectionSide = "left" | "right";
@@ -1100,6 +1100,7 @@ interface E4ContactRow {
   readonly circuit: string;
   readonly terminal: string;
   readonly wire: string;
+  readonly wireSection: string;
   readonly color: string;
   readonly secondaryColor: string;
   readonly name?: string;
@@ -1134,7 +1135,8 @@ export interface E4ConnectorLayout {
 
 const e4ColumnLabels: Readonly<Record<E4BaseColumnId, string>> = {
   color: "Цвет",
-  wire: "Провод",
+  wire: "Марка",
+  wireSection: "Сечение",
   terminal: "Терминал",
   circuit: "Цепь",
   contactType: "Тип",
@@ -1190,7 +1192,7 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
     const contactType = typeof item.contactType === "string" ? item.contactType : item.type;
     const secondaryColor = item.secondaryColor === undefined ? "" : item.secondaryColor;
     const name = item.name === undefined ? "" : item.name;
-    const textValues = [contactType, item.circuit, item.terminal, item.wire, item.color, secondaryColor];
+    const textValues = [contactType, item.circuit, item.terminal, item.wire, item.wireSection ?? "", item.color, secondaryColor];
     const customValues = parseStringRecord(item.customValues ?? item.values);
     if (!textValues.every((entry) => typeof entry === "string") || typeof name !== "string" || customValues === null ||
         (item.status !== "available" && item.status !== "not-connected")) return null;
@@ -1200,6 +1202,7 @@ function parseE4Rows(value: string | undefined): readonly E4ContactRow[] | null 
       circuit: item.circuit as string,
       terminal: item.terminal as string,
       wire: item.wire as string,
+      wireSection: (item.wireSection as string | undefined) ?? "",
       color: item.color as string,
       secondaryColor: secondaryColor as string,
       name,

@@ -299,7 +299,7 @@ internal static class ComponentTemplateContentV4Validator
     private static RowValues ValidateRowValues(JsonElement value, string path, IReadOnlySet<string> groupIds, bool partial)
     {
         string[] all = ["number", "name", "circuitText", "contactTypeGroupId", "standardTerminalArticleKey"];
-        string[] optional = ["wire", "color", "secondaryColor", "customValues"];
+        string[] optional = ["wire", "wireSection", "color", "secondaryColor", "customValues"];
         if (value.ValueKind != JsonValueKind.Object) Throw("An object is required.", path);
         var actual = value.EnumerateObject().Select(property => property.Name).ToArray();
         if (actual.Distinct(StringComparer.Ordinal).Count() != actual.Length || actual.Any(name => !all.Contains(name, StringComparer.Ordinal) && !optional.Contains(name, StringComparer.Ordinal)) ||
@@ -307,7 +307,7 @@ internal static class ComponentTemplateContentV4Validator
             Throw("Object has missing, extra, or duplicate properties.", path);
         if (!partial && all.Any(name => !value.TryGetProperty(name, out _))) Throw("Object has missing, extra, or duplicate properties.", path);
 
-        foreach (var key in new[] { "wire", "color", "secondaryColor" })
+        foreach (var key in new[] { "wire", "wireSection", "color", "secondaryColor" })
             if (value.TryGetProperty(key, out var text) && (text.ValueKind != JsonValueKind.String || text.GetString()!.Length > 512 || text.GetString()!.Any(char.IsControl))) Throw("Invalid contact preset.", path + "." + key);
         if (value.TryGetProperty("customValues", out var custom))
         {

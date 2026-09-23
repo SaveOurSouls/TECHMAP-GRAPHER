@@ -12,6 +12,7 @@ import {
 } from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
 import { normalizeWireStripProfileBinding } from "./model";
+import { wireDatabaseOption, formatWireSection, builtInWireOptions, type WireDatabaseOption } from "./wire-database";
 import type {
   CoaxTerminationCatalogCandidate,
   CoaxTerminationCatalogDiagnostic,
@@ -39,10 +40,11 @@ const componentLibrarySource: EditorCatalogSource = {
 };
 
 export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
+  { id: "technology-wires", label: "Провода", description: "База проводов: все колонки строки 3", entityTypes: ["wire", "cable"], accent: "#356c88" },
   { id:"technology-protection", catalogSourceId:"technology-database", label:"Защита", description:"Защитные покрытия из опубликованного справочника: тип protective-covering", entityTypes:["protective-covering"], accent:"#758087" },
   {
     id: "technology-database",
-    label: "Провода",
+    label: "Провода (универсальная база)",
     description: "Провода и кабели из универсально опубликованного справочника",
     entityTypes: ["wire", "cable", "coax-cable"],
     accent: "#356c88",
@@ -276,10 +278,10 @@ export function referenceRecordToEditorCatalogItem(
     if (conductor) details.push(`Ø жилы ${conductor} мм`);
   } else if (record.entityType === "wire" || record.entityType === "cable") {
     const name = firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия");
-    const section = firstValue(payload, "sectionMm2", "Сечение", "section", "awg", "AWG");
+    const section = formatWireSection(payload);
     const color = firstValue(payload, "color", "Цвет");
     if (name) details.push(name);
-    if (section) details.push(`${section}${/awg/i.test(section) ? "" : " мм²"}`);
+    if (section) details.push(section);
     if (color) details.push(color);
   } else {
     const name = firstValue(payload, "name", "productName", "series", "manufacturer");
@@ -287,7 +289,7 @@ export function referenceRecordToEditorCatalogItem(
   }
   return {
     id: `reference:${source.id}:${record.recordId}`,
-    title: record.sourceKey,
+    title: source.id === "technology-wires" ? wireDatabaseOption(record).label : record.sourceKey,
     subtitle: details.length > 0 ? details.join(" · ") : `${source.label} · характеристики не заполнены`,
     category: source.label,
     accent: source.accent,
@@ -299,7 +301,8 @@ export function referenceRecordToEditorCatalogItem(
     sourceKey: record.sourceKey,
     entityType: record.entityType,
     referenceDisplayName: record.entityType === "wire" || record.entityType === "cable"
-      ? firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
+      ? source.id === "technology-wires" ? wireDatabaseOption(record).label
+        : firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
       : undefined,
     coaxTerminationCandidate,
   };
@@ -423,6 +426,37 @@ export function useTerminalArticleLookup(
 }
 
 const pageSize = 30;
+
+/** Debounced lookup stays independent from the currently selected side catalog. */
+export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSession) {
+  const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
+  const [query, setQuery] = useState<string | null>(null);
+  const [options, setOptions] = useState<readonly WireDatabaseOption[]>(builtInWireOptions);
+  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (query === null) return;
+    const controller = new AbortController();
+    setOptions([]);
+    setMessage("Поиск в базе проводов…");
+    const timer = window.setTimeout(() => {
+      void api.searchCatalog("technology-wires", { text: query.trim() || null, exactSourceKey: null,
+        entityTypes: ["wire", "cable"], filters: [], filterLogic: "all", sort: query.trim() ? "relevance" : "source-key-asc",
+        pageSize: 50, cursor: null }, controller.signal).then(page => {
+        if (controller.signal.aborted) return;
+        setOptions(page.items.map(wireDatabaseOption));
+        setMessage(page.items.length === 0 ? "Совпадений в базе нет. Можно ввести марку и сечение вручную." : page.nextCursor ? "Показаны первые 50 вариантов. Уточните поиск." : null);
+      }).catch(error => {
+        if (controller.signal.aborted) return;
+        setOptions(builtInWireOptions);
+        setMessage(error instanceof ReferenceCatalogApiError && error.code === "catalog_active_snapshot_not_found"
+          ? "База проводов ещё не загружена. Доступны встроенные варианты и ручной ввод."
+          : "Не удалось прочитать базу проводов. Доступны встроенные варианты и ручной ввод.");
+      });
+    }, 220);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [api, query]);
+  return { options, message, search: setQuery };
+}
 
 export function useEditorReferenceCatalog(
   config: RuntimeConfig,

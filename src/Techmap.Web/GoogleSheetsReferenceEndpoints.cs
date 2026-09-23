@@ -26,11 +26,13 @@ public static class GoogleSheetsReferenceEndpoints
                     "Дождитесь завершения текущей синхронизации справочников.");
             }
 
+            var selectedProfiles = string.IsNullOrEmpty(request.ProfileId)
+                ? XlsxKnownProfiles.All : [XlsxKnownProfiles.Get(request.ProfileId)];
             var download = await downloader.DownloadAsync(request.Url ?? "", cancellationToken)
                 .ConfigureAwait(false);
             var sourceSha256 = Convert.ToHexStringLower(SHA256.HashData(download.Content));
-            var profiles = new List<GoogleSheetsSyncProfileResponse>(XlsxKnownProfiles.All.Count);
-            foreach (var profile in XlsxKnownProfiles.All)
+            var profiles = new List<GoogleSheetsSyncProfileResponse>(selectedProfiles.Count);
+            foreach (var profile in selectedProfiles)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 profiles.Add(await SyncProfileAsync(

@@ -248,7 +248,7 @@ internal static class ComponentTemplateContentV5Validator
         {
             RequireExactProperties(column, path + ".baseColumns", "key", "visible");
             var key = RequiredText(column.GetProperty("key"), 32, path + ".baseColumns.key");
-            if (key is not ("number" or "contactType" or "circuit" or "terminal" or "wire" or "color") || !keys.Add(key) ||
+            if (key is not ("number" or "contactType" or "circuit" or "terminal" or "wire" or "wireSection" or "color") || !keys.Add(key) ||
                 column.GetProperty("visible").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                 Throw("Invalid or duplicate base column.", path + ".baseColumns");
         }

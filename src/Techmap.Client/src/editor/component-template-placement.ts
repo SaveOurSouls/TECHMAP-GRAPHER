@@ -209,6 +209,7 @@ export function rematerializeComponentTemplateConnectorArticle(
         circuit: old.circuit,
         terminalArticle: terminalAllowed ? old.terminalArticle : contact.terminalArticle,
         wire: old.wire,
+        wireSection: old.wireSection,
         color: old.color,
         secondaryColor: old.secondaryColor,
         connectionStatus: old.connectionStatus,
@@ -220,6 +221,7 @@ export function rematerializeComponentTemplateConnectorArticle(
 
 interface PlacementContactRow extends MaterializedArticleContactRowV3 {
   wire?: string;
+  wireSection?: string;
   color?: string;
   secondaryColor?: string;
   customValues?: Record<string, string>;
@@ -282,6 +284,7 @@ export function materializePlacementRows(
     return {
       key: tableRow.seriesRowId,
       wire: tableRow.wire,
+      wireSection: tableRow.wireSection,
       color: tableRow.color,
       secondaryColor: tableRow.secondaryColor,
       customValues: tableRow.customValues,
@@ -360,6 +363,7 @@ function createContact(
     circuit: row.circuitText ?? "",
     terminalArticle: row.standardTerminalArticleKey?.articleKey ?? "",
     wire: row.wire ?? "",
+    ...(row.wireSection === undefined ? {} : { wireSection: row.wireSection }),
     color: row.color ?? "",
     secondaryColor: row.secondaryColor ?? "",
     colorMode: row.color || row.secondaryColor ? "manual" : "auto",
