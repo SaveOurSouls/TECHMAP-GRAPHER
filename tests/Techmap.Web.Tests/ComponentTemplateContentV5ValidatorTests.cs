@@ -59,6 +59,30 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     }
 
     [Fact]
+    public void Empty_drawings_and_replacement_illustrations_preserve_the_electrical_table()
+    {
+        var content = ValidContent();
+        var table = content["e4ConnectorTable"]!.ToJsonString();
+        var view = content["views"]!.AsArray().First(v => v!["kind"]!.GetValue<string>() == "drawing")!;
+        view["repeatPlacements"] = new JsonArray();
+        view["contactPoints"] = new JsonArray();
+        foreach (var target in new[] { "e4", "drawing", "route" })
+        {
+            var drawing = new JsonObject {
+                ["articleVariantId"] = content["articleVariants"]![0]!["id"]!.DeepClone(),
+                ["target"] = target, ["viewId"] = view["id"]!.DeepClone(),
+                ["nodeIds"] = new JsonArray(), ["contactPointIds"] = new JsonArray(), ["bundlePortIds"] = new JsonArray()
+            };
+            content["drawingGenerators"] = new JsonArray();
+            content["articleDrawings"] = new JsonArray(drawing);
+            ComponentTemplateContentV5Validator.Validate(Element(JsonNode.Parse(content.ToJsonString())!));
+            drawing["nodeIds"] = new JsonArray(view["layers"]![0]!["nodes"]!.AsArray().Select(n => n!["id"]!.DeepClone()).ToArray());
+            ComponentTemplateContentV5Validator.Validate(Element(JsonNode.Parse(content.ToJsonString())!));
+            Assert.Equal(table, content["e4ConnectorTable"]!.ToJsonString());
+        }
+    }
+
+    [Fact]
     public void Drawing_rejects_missing_contacts_and_allows_one_common_point_only_for_drawing()
     {
         var content=ValidContent();

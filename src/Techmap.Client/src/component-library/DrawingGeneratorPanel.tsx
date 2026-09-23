@@ -13,8 +13,8 @@ export function DrawingGeneratorPanel({ generator: g, mode, articleId, articles,
   if (!g) return <div className="array-layout-toolbar"><button onClick={create}>Создать генератор</button><InfoHint>Исходник хранится один раз. Назначьте выделению роли: начало, период, конец, статичные фигуры. Период включает фигуры и контактные точки. Прежние массивы продолжают работать в своих видах.</InfoHint></div>;
   const index = Math.max(0, articles.findIndex(a => a.id === articleId));
   const article = articles[index];
-  let summary = "Назначьте фигуры и контакты периода";
-  try { const layout = article && generatorLayout(g, article.count); if (layout) summary = `${article!.articleKey} · ${article!.count} конт. · ${layout.repeats} периодов`; } catch (e) { summary = (e as Error).message; }
+  let summary = "Исходник в работе · можно сохранить без генерации";
+  try { const layout = article && g.roles.period.length && g.periodPointIds.length && generatorLayout(g, article.count); if (layout) summary = `${article!.articleKey} · ${article!.count} конт. · ${layout.repeats} периодов`; } catch (e) { summary = (e as Error).message; }
   const disabled = mode === "article";
   return <div className="array-layout-toolbar" aria-label="Генератор рисунков">
     <label>Режим<select aria-label="Режим генератора" value={mode} onChange={e=>setMode(e.target.value as "source"|"article")}><option value="source">Исходник</option><option value="article" disabled={!g.articles.some(a=>a.articleId===articleId)}>Артикул</option></select></label>

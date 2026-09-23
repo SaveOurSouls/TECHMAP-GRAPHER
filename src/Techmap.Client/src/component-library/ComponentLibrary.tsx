@@ -1,5 +1,6 @@
 import { DraftNumberInput } from "./DraftNumberInput";
 import { DrawingGeneratorPanel } from "./DrawingGeneratorPanel";
+import { clearArticleDrawings, detachIncompleteGenerators, reconcileArticleDrawings } from "./drawing-reset";
 import { newDrawingGenerator, reconcileDrawingGenerators, generatorFromLegacyArray, assignGeneratorRole, guardGeneratorArticleEdit, materializeGenerator, validateDrawingGenerators, type DrawingGenerator, type GeneratorRole } from "./drawing-generator";
 import { validateArticleDrawingContacts } from "./drawing-contact-validation";
 import { drawingArrayContactRows } from "./drawing-array-contacts";
@@ -402,6 +403,7 @@ export function ComponentLibrary({ config, session }: Props) {
   const [busy, setBusy] = useState(false);
   const [drawingTarget,setDrawingTarget]=useState<DrawingTarget>("drawing");
   const [removeDrawingPrompt,setRemoveDrawingPrompt]=useState(false);
+  const [clearDrawingScope,setClearDrawingScope]=useState<"article"|"series">("series");
   const [dirty, setDirty] = useState(true);
   const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -455,6 +457,13 @@ export function ComponentLibrary({ config, session }: Props) {
     try{return Object.fromEntries(drawingArrayContactRows(previewDrawingCore,draft.e4ConnectorTable,draft.drawingContactBindings??[],selectedArticleVariantId).map(item=>[`${item.viewId}:${item.point.key}`,item.row?{number:item.row.number,name:item.row.name}:null]));}catch{return {};}
   },[previewDrawingCore,draft.e4ConnectorTable,draft.drawingContactBindings,selectedArticleVariantId]);
   const compatibilityContent = useMemo(() => projectTemplateContentV3CoreToV2(previewDrawingCore), [previewDrawingCore]);
+  const editorContent = useMemo(() => {
+    if (graphicEditorMode !== "drawing" || !selectedArticleVariantId || activeGenerator) return compatibilityContent;
+    const view = compatibilityContent.views.find(item => item.id === activeView?.id);
+    if (!view) return compatibilityContent;
+    const filtered = articleDrawingView(view, draft.articleDrawings, selectedArticleVariantId, drawingTarget);
+    return { ...compatibilityContent, views: compatibilityContent.views.map(item => item.id === view.id ? filtered : item) };
+  }, [activeGenerator, activeView?.id, compatibilityContent, draft.articleDrawings, drawingTarget, graphicEditorMode, selectedArticleVariantId]);
   const drawingTableRows = selectedArticleVariantId ? materializeE4ConnectorArticle(draft.e4ConnectorTable, selectedArticleVariantId).rows : draft.e4ConnectorTable.seriesDefaults.map(row => ({ ...row.values, seriesRowId: row.rowId }));
   const selectedRowBinding = draft.drawingContactBindings?.find(binding => binding.logicalContactId === selectedLogicalContact?.id);
   const selectedTableRow = drawingTableRows.find(row => row.seriesRowId === selectedRowBinding?.seriesRowId);
@@ -508,8 +517,8 @@ export function ComponentLibrary({ config, session }: Props) {
   [draft.terminalContactTypeBindings]);
 
   let generatedPreview: ReturnType<typeof materializeGenerator> | null = null;
-  let generatorPreviewError = "Выберите артикул и назначьте роли";
-  if(activeGenerator && selectedArticleVariantId) try { generatedPreview=materializeGenerator(draft.content,draft.e4ConnectorTable,draft.drawingContactBindings??[],activeGenerator,selectedArticleVariantId,generatorMode==="source"?generatorPreviewPeriods:undefined); } catch(caught){generatorPreviewError=errorText(caught);}
+  let generatorPreviewError = "Рисунок можно сохранить пустым или продолжить редактирование исходника.";
+  if(activeGenerator?.roles.period.length && activeGenerator.periodPointIds.length && selectedArticleVariantId) try { generatedPreview=materializeGenerator(draft.content,draft.e4ConnectorTable,draft.drawingContactBindings??[],activeGenerator,selectedArticleVariantId,generatorMode==="source"?generatorPreviewPeriods:undefined); } catch(caught){generatorPreviewError=errorText(caught);}
   function createGenerator() {
     if(!activeView)return;
     if(!activeView.repeatPlacements.length){changeGenerator(newDrawingGenerator(activeView.id,drawingTarget));return;}
@@ -666,8 +675,9 @@ export function ComponentLibrary({ config, session }: Props) {
     }) };
     const projected = applySeriesTerminalsToEditor(content, table, draft.compatibleTerminalArticleKeys, bindings);
     setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
-    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, drawingGenerators: generators, terminalContactTypeBindings: bindings,
-      articleDrawings: current.articleDrawings?.filter(drawing => content.articleVariants.some(a => a.id === drawing.articleVariantId) && (!drawing.viewId || content.views.some(v=>v.id===drawing.viewId))).map(drawing => ({...drawing,nodeIds:drawing.nodeIds.filter(id => content.views.some(view => view.layers.some(layer => layer.nodes.some(node => node.id === id)))),contactPointIds:drawing.contactPointIds.filter(id => content.views.some(view => view.contactPoints.some(point => point.id === id)))})),
+    const articleDrawings = reconcileArticleDrawings(draft.content, projected.content, draft.articleDrawings ?? [], graphicEditorMode === "drawing" && !activeGenerator ? activeView?.id : undefined, selectedArticleVariantId);
+    const drawings = detachIncompleteGenerators(projected.content, generators, articleDrawings);
+    setDraft(current => ({ ...current, content: projected.content, e4ConnectorTable: projected.table, ...drawings, terminalContactTypeBindings: bindings,
       drawingContactBindings: current.drawingContactBindings?.filter(binding => content.logicalContacts.some(contact => contact.id === binding.logicalContactId) && table.seriesDefaults.some(row => row.rowId === binding.seriesRowId)) }));
     if (selection !== undefined) setSelectedId(selection); markDirty(); setError(null);
   }
@@ -733,8 +743,14 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   const undo = useCallback(() => setUndoStack(stack => {
     const previous = stack.at(-1); if (!previous) return stack;
-    setDraft(current => ({ ...previous, templateId: current.templateId, version: current.version, draftRevision: current.draftRevision })); setSelectedId(null); markDirty(); return stack.slice(0, -1);
-  }), []);
+    if (graphicEditorMode === "drawing") {
+      const restoredViewId = findArticleDrawing(previous.articleDrawings, selectedArticleVariantId, drawingTarget)?.viewId
+        ?? previous.drawingGenerators?.find(generator => generator.target === drawingTarget && generator.articles.some(article => article.articleId === selectedArticleVariantId))?.viewId;
+      if (restoredViewId) setViewId(restoredViewId);
+      setGeneratorMode("source");
+    }
+    setDraft(current => ({ ...previous, templateId: current.templateId, version: current.version, draftRevision: current.draftRevision })); setSelectedId(null); markDirty(); setError(null); return stack.slice(0, -1);
+  }), [drawingTarget, graphicEditorMode, selectedArticleVariantId]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => { if (!busy && isTemplateUndoShortcut(event)) { event.preventDefault(); undo(); } };
     window.addEventListener("keydown", listener); return () => window.removeEventListener("keydown", listener);
@@ -844,7 +860,8 @@ export function ComponentLibrary({ config, session }: Props) {
   function openDrawingTarget(target:DrawingTarget,articleId=selectedArticleVariantId) {
     if (!draft.templateId || busy) return;
     setGeneratorPreviewPeriods(undefined);
-    const generator=draft.drawingGenerators?.find(g=>g.target===target && draft.content.views.some(v=>v.id===g.viewId));
+    const explicit = articleId ? findArticleDrawing(draft.articleDrawings, articleId, target) : undefined;
+    const generator=explicit ? undefined : draft.drawingGenerators?.find(g=>g.target===target && draft.content.views.some(v=>v.id===g.viewId) && (!articleId || g.articles.some(a=>a.articleId===articleId) || !g.articles.length));
     if(generator){
       // Opening a generated drawing without a prior article selection must still
       // show a concrete variant in the result pane. Prefer the current article,
@@ -864,23 +881,18 @@ export function ComponentLibrary({ config, session }: Props) {
     const name=target==="e4"?"Рисунки · Схема Э4":"Рисунки · Маршрут";
     let view=content.views.find(v=>binding?.viewId ? v.id===binding.viewId : target==="drawing" || binding && !binding.target ? v.kind==="drawing" : v.name===name);
     if(!view){const [next,id]=addAdditionalViewV3(content,name);content=next;view=content.views.find(v=>v.id===id)!;changeContent(content);}
-    setDrawingTarget(target);setViewId(view.id);setGraphicEditorMode("drawing");setSelectedArticleVariantId(articleId);
+    setDrawingTarget(target);setViewId(view.id);setGraphicEditorMode("drawing");setSelectedArticleVariantId(articleId);setGeneratorMode("source");
     setSelectedIds(binding?[...binding.nodeIds,...binding.contactPointIds,...binding.bundlePortIds??[]]:[]);
   }
   function clearTargetDrawings() {
     if(!activeView)return;
-    if(activeGenerator){
-      if(generatorArticleMode){setError("Очистка основы доступна в режиме «Исходник».");return;}
+    try {
+      const ids = clearDrawingScope === "article" && selectedArticleVariantId ? [selectedArticleVariantId] : draft.content.articleVariants.map(article => article.id);
+      const { viewId: clearedViewId, ...cleared } = clearArticleDrawings(draft, drawingTarget, ids, activeView.id);
       setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);
-      setDraft(current=>({...current,drawingGenerators:current.drawingGenerators?.filter(g=>g.id!==activeGenerator.id),
-        content:{...current.content,views:current.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)},
-        articleDrawings:[...(current.articleDrawings??[]).filter(d=>d.target!==drawingTarget),...current.content.articleVariants.map(a=>({articleVariantId:a.id,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[]}))]}));
-      markDirty();setRemoveDrawingPrompt(false);setSelectedIds([]);return;
-    }
-    const empty={...draft.content,views:draft.content.views.map(v=>v.id===activeView.id?{...v,layers:v.layers.map(l=>({...l,nodes:[]})),contactPoints:[],bundlePorts:[],repeatPlacements:[]}:v)};
-    changeContent(empty,null);
-    setDraft(current=>({...current,articleDrawings:current.articleDrawings?.map(d=>d.target===drawingTarget || !d.target&&drawingTarget==="drawing"?{...d,target:drawingTarget,viewId:activeView.id,nodeIds:[],contactPointIds:[],bundlePortIds:[]}:d)}));
-    setRemoveDrawingPrompt(false);
+      setDraft(current=>({...current,...cleared})); setViewId(clearedViewId);
+      markDirty();setRemoveDrawingPrompt(false);setSelectedIds([]);setGeneratorMode("source");setError(null);
+    } catch(caught) { setError(errorText(caught)); }
   }
   async function saveArticleDrawing(articleVariantId: string,all=false) {
     if (!activeView) return;
@@ -894,10 +906,11 @@ export function ComponentLibrary({ config, session }: Props) {
       catch(caught){setError(errorText(caught));}finally{setBusy(false);}
       return;
     }
-    const drawing = {...drawingSelection(activeView, selectedIds, articleVariantId),target:drawingTarget,viewId:activeView.id};
-    if (!drawing.nodeIds.length && !drawing.contactPointIds.length && !drawing.bundlePortIds?.length) return;
+    const visibleView = editorContent.views.find(view => view.id === activeView.id)!;
+    const ids = selectedIds.length ? selectedIds : [...visibleView.layers.flatMap(layer => layer.nodes.filter(node => node.visible).map(node => node.id)), ...visibleView.contactPoints.map(point => point.id), ...visibleView.bundlePorts.map(port => port.id)];
+    const drawing = {...drawingSelection(activeView, ids, articleVariantId),target:drawingTarget,viewId:activeView.id};
     const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
-    const working = { ...draft, articleDrawings: [...(draft.articleDrawings ?? []).filter(item => !(articleIds.includes(item.articleVariantId)&&item.target===drawingTarget)), ...articleIds.map(id=>({...drawing,articleVariantId:id}))] };
+    const working = { ...draft, drawingGenerators: draft.drawingGenerators?.map(generator => generator.target === drawingTarget ? {...generator, articles:generator.articles.filter(article=>!articleIds.includes(article.articleId))} : generator), articleDrawings: [...(draft.articleDrawings ?? []).filter(item => !(articleIds.includes(item.articleVariantId)&&item.target===drawingTarget)), ...articleIds.map(id=>({...drawing,articleVariantId:id}))] };
     const body = validatedBody(working); if (!body) return;
     setBusy(true);
     try {
@@ -958,7 +971,7 @@ export function ComponentLibrary({ config, session }: Props) {
           const core=projectTemplateContentV5ToV3(result.content),node=createTemplateImageNodeV2(asset.assetId,activeLayer.id);
           const next=addNodeV2(core,activeView.id,activeLayer.id,node,0);
           setUndoStack([{...draft, templateId:result.templateId, version:result.version, draftRevision:0, assets:[...result.assets], content:core, e4ConnectorTable:projectTemplateContentV5TableToV1(result.content)}]);
-          setDraft(current=>({...current,content:next,drawingGenerators:current.drawingGenerators?.map(g=>
+          setDraft(current=>({...current,content:next,articleDrawings:reconcileArticleDrawings(core,next,current.articleDrawings??[],!activeGenerator?activeView.id:undefined,selectedArticleVariantId),drawingGenerators:current.drawingGenerators?.map(g=>
             generatorArticleMode && g.id===activeGenerator?.id && selectedArticleVariantId
               ? guardGeneratorArticleEdit(core,next,g,selectedArticleVariantId)
               : g)}));setSelectedId(node.id);markDirty();
@@ -1269,7 +1282,25 @@ export function ComponentLibrary({ config, session }: Props) {
           onSetParameterDefault={(parameterId, value) => command(() => setTemplateParameterDefaultV2(draft.content, parameterId, value))}
         />}
           </div>}
-{drawingTab === "articles" && <div className="drawing-ribbon-page">          <aside className="drawing-articles" aria-label="Рисунки артикулов"><header className="ui-section-heading"><strong>Артикулы</strong><InfoHint>Выделите фигуры и точки контактов, затем сохраните набор для нужного артикула. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Изменение общей фигуры отражается во всех наборах, куда она включена.</InfoHint></header>{draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}><button type="button" onClick={() => openDrawingTarget(drawingTarget,article.id)} title="Открыть сохранённый рисунок">{article.articleKey}{findArticleDrawing(draft.articleDrawings,article.id,drawingTarget) ? " ✓" : ""}</button><button type="button" disabled={busy || assetMismatch || !selectedIds.length} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button></div>)}<button type="button" disabled={busy||!selectedIds.length||!draft.content.articleVariants.length} onClick={()=>void saveArticleDrawing(draft.content.articleVariants[0]!.id,true)}>Сохранить для всей серии</button><button type="button" disabled={busy} onClick={()=>setRemoveDrawingPrompt(true)}>Очистить рисунки раздела</button>{removeDrawingPrompt&&<div role="alertdialog" aria-label="Очистить рисунки раздела"><p>Удалить рисунки этого раздела для серии? Контакты таблицы сохранятся. Доступна отмена Ctrl+Z.</p><button type="button" onClick={clearTargetDrawings}>Очистить</button><button type="button" onClick={()=>setRemoveDrawingPrompt(false)}>Отмена</button></div>}<span role="status">{saved}</span></aside></div>}
+          {drawingTab === "articles" && <div className="drawing-ribbon-page">
+            <aside className="drawing-articles" aria-label="Рисунки артикулов">
+              <header className="ui-section-heading"><strong>Артикулы</strong><InfoHint>Сохраняется выделенный набор, а без выделения — весь открытый рисунок, в том числе пустой. Группа сохраняется целиком. Кнопка записывает черновик на сервер; «Сохранить и выйти» публикует версию. Общие фигуры меняются во всех наборах, куда они включены. Для независимого рисунка очистите выбранный артикул.</InfoHint></header>
+              {draft.content.articleVariants.map(article => <div key={article.id} className={selectedArticleVariantId === article.id ? "active" : ""}>
+                <button type="button" onClick={() => openDrawingTarget(drawingTarget,article.id)} title="Открыть сохранённый рисунок">{article.articleKey}{findArticleDrawing(draft.articleDrawings,article.id,drawingTarget) ? " ✓" : ""}</button>
+                <button type="button" disabled={busy || assetMismatch} onClick={() => void saveArticleDrawing(article.id)}>Сохранить</button>
+              </div>)}
+              <button type="button" disabled={busy || assetMismatch || !draft.content.articleVariants.length} onClick={()=>void saveArticleDrawing(draft.content.articleVariants[0]!.id,true)}>Сохранить для всей серии</button>
+              <button type="button" disabled={busy} onClick={()=>{setClearDrawingScope(selectedArticleVariantId ? "article" : "series");setRemoveDrawingPrompt(true);}}>Очистить рисунки раздела</button>
+              {removeDrawingPrompt && <div role="alertdialog" aria-label="Очистить рисунки раздела">
+                <p>Удалить рисунки для {clearDrawingScope === "article" && selectedArticleVariantId ? "выбранного артикула" : "всей серии"}? Контакты таблицы сохранятся. Доступна отмена Ctrl+Z.</p>
+                <label>Объём очистки<select aria-label="Объём очистки" value={clearDrawingScope} onChange={event=>setClearDrawingScope(event.target.value as "article"|"series")}>
+                  <option value="article" disabled={!selectedArticleVariantId}>Выбранный артикул</option><option value="series">Вся серия</option>
+                </select></label>
+                <button type="button" onClick={clearTargetDrawings}>Очистить</button><button type="button" onClick={()=>setRemoveDrawingPrompt(false)}>Отмена</button>
+              </div>}
+              <span role="status">{saved}</span>
+            </aside>
+          </div>}
           </div>
         <div className="drawing-body">
 <div className="drawing-properties-sidebar">          <aside className="library-properties" key={selectedIds.join(":")} data-property-tab={propertyTab}><div className="drawing-property-tabs" role="group" aria-label="Свойства объекта">{(["geometry", "stroke", "fill"] as const).map(tab=><button type="button" key={tab} aria-pressed={propertyTab===tab} onClick={()=>setPropertyTab(tab)}>{({geometry:"Геометрия",stroke:"Линия",fill:"Заливка"})[tab]}</button>)}</div><label>Объект<select aria-label="Объект рисунка" value={selectedId ?? ""} onChange={e => { const id=e.target.value; const layer=activeView?.layers.find(l=>l.nodes.some(n=>n.id===id)); if(layer && activeView) setActiveLayerIds(v=>({...v,[activeView.id]:layer.id})); setSelectedId(id || null); }}><option value="">Не выбран</option>{activeView?.layers.flatMap(l=>l.nodes.map((n,i)=><option key={n.id} value={n.id}>{l.name} · {nodeLabel(n)} {i+1}</option>))}</select></label><h3>{selected?.node ? nodeLabel(selected.node) : selectedContactPoint && selectedLogicalContact ? `Контакт №${selectedTableRow?.number ?? selectedLogicalContact.number}` : selectedBundlePort ? "Общий выход пучка" : activeLayer ? "Слой" : "Вид"}</h3>
@@ -1295,7 +1326,7 @@ export function ComponentLibrary({ config, session }: Props) {
             {selected && selectedNodeIds.length === 1 && <><div className="property-order"><button onClick={() => reorderSelection("backward")} disabled={selected.layer.locked || selected.node.locked}>На шаг назад</button><button onClick={() => reorderSelection("forward")} disabled={selected.layer.locked || selected.node.locked}>На шаг вперёд</button></div><button className="danger-action" onClick={deleteSelection} disabled={selectionLocked}>Удалить объект</button></>}
           </aside>
 </div>
-        <div className="library-workarea" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(file&&!busy)void addAsset(file,true);}} onPaste={e=>{if((e.target as HTMLElement).closest("input,textarea,select"))return; if(!busy&&clipboard.current&&useInternalDrawingClipboard(e.clipboardData.getData("text/plain"),clipboardToken.current,clipboardSynchronized.current)){e.preventDefault();pasteSelection();return;} const file=Array.from(e.clipboardData.files)[0];if(file&&!busy){e.preventDefault();void addAsset(file,true);}}} inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="region" aria-label="Поле редактирования рисунка">{activeView && <TemplateCanvasV2 content={generatorArticleMode && generatedPreview ? projectTemplateContentV3CoreToV2(generatedPreview.content) : compatibilityContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onEditText={id => { setSelectedId(id); setDrawingTab("properties"); setPropertyTab("geometry"); requestAnimationFrame(() => { textEditorRef.current?.focus(); textEditorRef.current?.select(); }); }} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} repeatedContactLabels={repeatedContactLabels} parameterDefaults={effectivePreviewParameterValues} />}
+        <div className="library-workarea" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(file&&!busy)void addAsset(file,true);}} onPaste={e=>{if((e.target as HTMLElement).closest("input,textarea,select"))return; if(!busy&&clipboard.current&&useInternalDrawingClipboard(e.clipboardData.getData("text/plain"),clipboardToken.current,clipboardSynchronized.current)){e.preventDefault();pasteSelection();return;} const file=Array.from(e.clipboardData.files)[0];if(file&&!busy){e.preventDefault();void addAsset(file,true);}}} inert={busy} id={activeView ? `template-view-panel-${activeView.id}` : undefined} role="region" aria-label="Поле редактирования рисунка">{activeView && <TemplateCanvasV2 content={generatorArticleMode && generatedPreview ? projectTemplateContentV3CoreToV2(generatedPreview.content) : editorContent} viewId={activeView.id} selectedId={selectedId} selectedIds={selectedIds} onSelect={setSelectedId} onSelectionChange={selectCanvasObject} onBoxSelection={selectBoxObjects} onSelectionStretch={(factor,anchor)=>command(()=>stretchDrawingSelection(draft.content,activeView.id,selectedIds,factor,anchor))} onSelectionRotate={(angle,center)=>command(()=>rotateDrawingSelection(draft.content,activeView.id,selectedIds,angle,center))} onEditText={id => { setSelectedId(id); setDrawingTab("properties"); setPropertyTab("geometry"); requestAnimationFrame(() => { textEditorRef.current?.focus(); textEditorRef.current?.select(); }); }} onNodeMove={moveCanvasNode} onNodeResize={resizeCanvasNode} onNodeRotate={(_id, angle) => rotateSelection(angle)} snaps={drawingSnaps} onNodePointMove={moveCanvasPoint} onNodePointInsert={insertCanvasPoint} onNodePointDelete={deleteCanvasPoint} pointAngleMode={pointAngleMode} resolveAssetUrl={resolveAssetUrl} repeatedContactLabels={repeatedContactLabels} parameterDefaults={effectivePreviewParameterValues} />}
 
         {activeGenerator && generatorMode === "source" && <aside className="generator-preview" aria-label="Результат генератора"><strong>Вариант · {draft.content.articleVariants.find(a=>a.id===selectedArticleVariantId)?.articleKey}</strong>{generatedPreview ? <TemplateCanvasV2 preview previewKey={selectedArticleVariantId} content={projectTemplateContentV3CoreToV2(generatedPreview.content)} viewId={activeGenerator.viewId} selectedId={null} onSelect={()=>{}} resolveAssetUrl={resolveAssetUrl}/> : <span role="status">{generatorPreviewError}</span>}</aside>}
         </div>

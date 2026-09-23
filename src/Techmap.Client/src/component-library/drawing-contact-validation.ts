@@ -13,6 +13,11 @@ export function validateArticleDrawingContacts(content:TemplateContentV3,table:E
     if(drawing.target!=="drawing"||ports.length!==1||drawing.contactPointIds.length||!view.bundlePorts.some(p=>p.id===ports[0]))throw new Error("Общий контакт допускается только в чертеже: одна точка для всех проводов, без отдельных контактов.");
     return;
   }
+  // Illustrations may have no electrical anchors, even when the article has
+  // contacts. Completeness is required only once contact mapping is present.
+  if (!drawing.contactPointIds.length
+      && !view.contactPoints.some(point => point.shape && drawing.nodeIds.includes(point.shape.nodeId))
+      && !view.repeatPlacements.some(repeat => repeat.contactPointIds.length && drawing.nodeIds.includes(repeat.prototypeGroupId))) return;
   const rows=materializeE4ConnectorArticle(table,drawing.articleVariantId).rows;
   const arrays=drawingArrayContactRows(content,table,bindings,drawing.articleVariantId).filter(item=>item.viewId===view.id&&drawing.contactPointIds.includes(item.point.prototypeContactPointId));
   const repeated=new Set(arrays.map(item=>item.point.prototypeContactPointId));

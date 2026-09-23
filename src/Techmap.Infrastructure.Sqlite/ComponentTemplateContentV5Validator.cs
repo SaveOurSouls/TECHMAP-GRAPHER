@@ -198,7 +198,12 @@ internal static class ComponentTemplateContentV5Validator
     private static void ValidateDrawingContactCount(JsonElement content,JsonElement drawing,JsonElement view,string path)
     {
         var selected=drawing.GetProperty("contactPointIds").EnumerateArray().Select(p=>p.GetString()!).ToHashSet(StringComparer.Ordinal);
-        if(selected.Count==0&&drawing.GetProperty("nodeIds").GetArrayLength()==0)return;
+        // An illustration without electrical anchors is valid, including a
+        // replacement image drawn after clearing an article.
+        var nodes=drawing.GetProperty("nodeIds").EnumerateArray().Select(node=>node.GetString()!).ToHashSet(StringComparer.Ordinal);
+        var contactShape=view.GetProperty("contactPoints").EnumerateArray().Any(point=>point.TryGetProperty("shape",out var shape)&&nodes.Contains(shape.GetProperty("nodeId").GetString()!));
+        var contactArray=view.GetProperty("repeatPlacements").EnumerateArray().Any(repeat=>repeat.GetProperty("contactPointIds").GetArrayLength()>0&&nodes.Contains(repeat.GetProperty("prototypeGroupId").GetString()!));
+        if(selected.Count==0&&!contactShape&&!contactArray)return;
         var article=content.GetProperty("articleVariants").EnumerateArray().FirstOrDefault(a=>a.GetProperty("id").GetString()==drawing.GetProperty("articleVariantId").GetString());
         if(article.ValueKind!=JsonValueKind.Object)Throw("Unknown drawing article.",path);
         var expected=article.GetProperty("contactGroups").EnumerateArray().Sum(g=>g.GetProperty("contactCount").GetInt32());
