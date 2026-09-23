@@ -50,7 +50,8 @@ public static class TechmapPortableNativeMethods
 $env:DOTNET_DISABLE_GUI_ERRORS = "1"
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $ArchivePath = if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
-    Join-Path $repositoryRoot "artifacts\m3-03\TECHMAP-GRAPHER-win-x64.zip"
+    $appVersion = (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") | ConvertFrom-Json).appVersion
+    Join-Path $repositoryRoot "artifacts\m3-03\TECHMAP-GRAPHER-$appVersion-win-x64.zip"
 } else {
     $ArchivePath
 }

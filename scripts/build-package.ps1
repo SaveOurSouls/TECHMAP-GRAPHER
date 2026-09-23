@@ -15,7 +15,11 @@ $clientRoot = Join-Path $repositoryRoot "src\Techmap.Client"
 $webRoot = Join-Path $repositoryRoot "src\Techmap.Web"
 $staticRoot = Join-Path $webRoot "wwwroot"
 $packageRoot = Join-Path $artifactsRoot "TECHMAP-GRAPHER"
-$archivePath = Join-Path $artifactsRoot "TECHMAP-GRAPHER-win-x64.zip"
+$appVersion = (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "package\VERSION.json") | ConvertFrom-Json).appVersion
+if ($appVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$') {
+    throw "VERSION.json appVersion must be a filename-safe version such as 0.47.4-m4-79."
+}
+$archivePath = Join-Path $artifactsRoot "TECHMAP-GRAPHER-$appVersion-win-x64.zip"
 $dotnetHome = Join-Path $artifactsRoot ".dotnet-cli-home"
 $appData = Join-Path $artifactsRoot ".appdata"
 
