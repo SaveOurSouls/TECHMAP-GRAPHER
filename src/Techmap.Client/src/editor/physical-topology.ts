@@ -1,22 +1,12 @@
 import { segmentWireLanes } from "./drawing-thickness";
 import { physicalSegmentControls, physicalSegmentPoints, physicalContactTail } from "./physical-geometry";
 export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints, physicalNodeDirection, physicalNodeContactDirection, automaticPipeRoute } from "./physical-geometry";
-import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, validateCoverings, splitCoveringSpans, pathLength, projectOntoPolyline, type PhysicalCovering } from "./physical-coverings";
+import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, validateCoverings, splitCoveringSpans, pathLength, projectOntoPolyline } from "./physical-coverings";
 import type { HarnessDesignDocument, Point } from "./model";
 
-export type PhysicalDirection = "left" | "right" | "up" | "down";
-export interface PhysicalNode { readonly id: string; readonly position: Point; readonly connectorId?: string; readonly wireIds?: readonly string[]; readonly direction?: PhysicalDirection; readonly contactDirections?: Readonly<Record<string, PhysicalDirection>> }
-export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly bends: readonly Point[]; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly specificationItemId?:string; readonly routing?: "auto" | "fixed" }
-export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
-export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[]; readonly automatic?:boolean }
-export interface PhysicalTopology {
-  readonly coverings?: readonly PhysicalCovering[];
-  readonly nodes: readonly PhysicalNode[];
-  readonly segments: readonly PhysicalSegment[];
-  readonly routes: readonly PhysicalRoute[];
-  readonly snap: boolean;
-}
-export const emptyPhysicalTopology = (): PhysicalTopology => ({ nodes: [], segments: [], routes: [], snap: true });
+import { emptyPhysicalTopology, type PhysicalDirection, type PhysicalNode, type PhysicalSegment, type PhysicalStep, type PhysicalRoute, type PhysicalTopology } from "./physical-topology-model";
+export { emptyPhysicalTopology } from "./physical-topology-model";
+export type { PhysicalDirection, PhysicalNode, PhysicalSegment, PhysicalStep, PhysicalRoute, PhysicalTopology } from "./physical-topology-model";
 
 /** One persistent exit per connector; existing exits and routes are never replaced. */
 export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalTopology {
