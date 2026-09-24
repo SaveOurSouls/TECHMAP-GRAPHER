@@ -505,3 +505,7 @@
 .he-relations[aria-label="Оболочки и защита"] .he-physical-fields input[type="checkbox"] {width:14px;height:14px;min-height:14px;}
 .he-relations[aria-label="Оболочки и защита"] .he-physical-fields small,.he-relations[aria-label="Оболочки и защита"] .he-physical-fields .he-physical-fields {grid-column:1/-1;}
 .he-document-nav {flex-wrap:wrap;}
+.he-covering-style { grid-column:1/-1; min-width:0; }
+.he-covering-style>summary { cursor:pointer; padding:6px 0; }
+.he-material-colors { display:flex; gap:2px; flex-wrap:wrap; margin-top:3px; }
+.he-material-colors button { width:13px; height:13px; min-width:13px; padding:0; border:1px solid #94a3b8; border-radius:2px; }

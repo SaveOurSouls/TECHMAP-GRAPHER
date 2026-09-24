@@ -147,6 +147,9 @@ try {
  twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
  const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
  combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0};
+ const coveringStyle={texture:'Metal049A',textureScale:2.5,textureRotation:-30,hatch:'cross',hatchColor:'#ff0000',hatchSpacing:6,hatchRotation:60,lineColor:'#0000ff'};
+ combined.physicalTopology={...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>({...c,style:coveringStyle}))};
+ assert.ok(combined.physicalTopology.coverings.length>0);
  const leaderScene=drawingDocumentScene(combined);
  assert.ok(leaderScene.some(o=>o.kind==='position-leader'&&o.width===60));
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
@@ -159,7 +162,7 @@ try {
  assert.deepEqual(savedRemoved.content.diffPairs,combined.diffPairs);
  assert.deepEqual(savedRemoved.content.physicalTopology.segments,measuredAutomatic.physicalTopology.segments);
  assert.deepEqual(savedRemoved.content.drawingDocuments.dimensions,measuredAutomatic.drawingDocuments.dimensions);
- assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(measuredAutomatic.physicalTopology.coverings)));
+ assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(combined.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);

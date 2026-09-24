@@ -2,6 +2,7 @@ import type { EditorCatalogItem } from "./editor-types";
 import { findWireEndpoint, type HarnessDesignDocument, type Point } from "./model";
 import { physicalSegmentPoints, physicalSegmentControls, physicalNodePoint } from "./physical-geometry";
 import { drawingBendRadius, projectOntoDrawingRoute } from "./drawing-route-path";
+import { validCoveringStyle, type CoveringStyle } from "./covering-style";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -11,6 +12,7 @@ export interface CoveringMaterial {
 export interface CoveringSpan { readonly segmentId: string; readonly from: number; readonly to: number; readonly fromAnchor?:number; readonly toAnchor?:number }
 export type CoveringKind="heat-shrink"|"nylon"|"braid"|"metal-braid"|"tape"|"band";
 export interface PhysicalCovering {
+  readonly style?:CoveringStyle;
   readonly kind?:CoveringKind;
   readonly lengthMode?:"auto"|"manual";
   readonly id: string; readonly name: string; readonly spans: readonly CoveringSpan[];
@@ -52,6 +54,7 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
   for (const c of value as PhysicalCovering[]) {
     if (!c || typeof c.id !== "string" || !c.id.trim() || c.id.length > 128 || existingIds.has(c.id)) return fail();
     existingIds.add(c.id);
+    if(c.style!==undefined&&!validCoveringStyle(c.style))return fail();
     if (typeof c.name !== "string" || !c.name.trim() || c.name.length > 256 || !/^#[0-9a-f]{6}$/i.test(c.color) || !Number.isFinite(c.width) || c.width < 0 || c.width > 1e7) return fail();
     if(c.kind!==undefined&&!["heat-shrink","nylon","braid","metal-braid","tape","band"].includes(c.kind)||c.lengthMode!==undefined&&!["auto","manual"].includes(c.lengthMode))return fail();
     if (c.lengthMm !== null && (!Number.isFinite(c.lengthMm) || c.lengthMm < 0 || c.lengthMm > 1e9 || Math.abs(c.lengthMm * 1000 - Math.round(c.lengthMm * 1000)) > 1e-4)) return fail();

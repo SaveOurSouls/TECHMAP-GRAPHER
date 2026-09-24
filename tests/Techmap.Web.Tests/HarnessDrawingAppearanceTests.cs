@@ -15,6 +15,23 @@ public sealed class HarnessDrawingAppearanceTests
       """)!.AsObject();
     private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
+    [Fact] public void Accepts_independent_covering_style()
+    {
+        var root=Fixture();root["physicalTopology"]!["coverings"]![0]!["style"]=JsonNode.Parse("""
+        {"texture":"Metal049A","textureScale":2.5,"textureRotation":-30,"hatch":"cross","hatchColor":"#ff0000","hatchSpacing":6,"hatchRotation":60,"lineColor":"#0000ff"}
+        """);Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("[]")][InlineData("{\"texture\":\"remote.jpg\"}")][InlineData("{\"texture\":null}")]
+    [InlineData("{\"textureScale\":0}")][InlineData("{\"textureScale\":10.01}")]
+    [InlineData("{\"textureRotation\":181}")][InlineData("{\"textureRotation\":\"45\"}")]
+    [InlineData("{\"hatch\":\"unknown\"}")][InlineData("{\"hatchColor\":\"red\"}")][InlineData("{\"lineColor\":\"#12345g\"}")]
+    [InlineData("{\"hatchSpacing\":0}")][InlineData("{\"hatchSpacing\":101}")][InlineData("{\"hatchRotation\":181}")]
+    public void Rejects_invalid_covering_style(string style)
+    {
+        var root=Fixture();root["physicalTopology"]!["coverings"]![0]!["style"]=JsonNode.Parse(style);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Theory]
     [InlineData(0)][InlineData(.25)][InlineData(24)][InlineData(200)]
     public void Accepts_bend_radius(double radius)

@@ -1,5 +1,6 @@
 import { DraftNumberInput } from "../component-library/DraftNumberInput";
 import { InfoHint } from "../InfoHint";
+import { CoveringStyleFields } from "./CoveringStyleFields";
 import type { PhysicalTopology } from "./physical-topology-model";
 import type { HarnessDesignDocument } from "./model";
 import { coveringMeasuredLength, coveringControlFractions, coveringKind, resolvedCoveringSpan, type CoveringKind } from "./physical-coverings";
@@ -25,6 +26,7 @@ export function PhysicalCoveringsPanel({ document, topology: t, selectedIds, onC
       <label>Длина, мм<DraftNumberInput aria-label="Длина защиты, мм" min={0} step="0.001" value={coveringMeasuredLength(document,selected) ?? ""} onValueChange={lengthMm=>update({lengthMode:'manual',lengthMm})} onEmpty={()=>update({lengthMode:'manual',lengthMm:null})}/></label>
       <InfoHint>Тяните поверхность вдоль пайпа, торцы — для растяжения. Зелёный торец привязан к точке. Два привязанных торца берут длину из размеров пайпа.</InfoHint>
       <small>{selected.material?.displayName ?? "Графическая оболочка · без материала"}</small>
+      <CoveringStyleFields style={selected.style} color={selected.color} onChange={style=>update({style})} onColorChange={color=>update({color})}/>
       {selected.spans.map(span => <div className="he-physical-fields" key={span.segmentId}><span>S{t.segments.findIndex(s => s.id === span.segmentId) + 1}</span>
         {(["from", "to"] as const).map(key => <label key={key}>{key === "from" ? "Начало" : "Конец"}<select aria-label={`${key === "from" ? "Привязка начала" : "Привязка конца"} покрытия ${span.segmentId}`} value={span[key==='from'?'fromAnchor':'toAnchor']??'free'} onChange={e=>update({spans:selected.spans.map(s=>s===span?{...resolvedCoveringSpan(document,s),[key==='from'?'fromAnchor':'toAnchor']:e.target.value==='free'?undefined:Number(e.target.value)}:s)})}><option value="free">Свободно</option>{coveringControlFractions(document,span.segmentId).map((f,i)=><option key={i} value={i} disabled={key==='from'?f>=resolvedCoveringSpan(document,span).to:f<=resolvedCoveringSpan(document,span).from}>Точка {i+1}</option>)}</select></label>)}
       </div>)}

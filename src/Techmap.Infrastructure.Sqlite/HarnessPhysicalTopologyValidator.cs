@@ -84,6 +84,7 @@ internal static class HarnessPhysicalTopologyValidator
             {
                 if (!ids.Add(Text(covering, "id"))) throw Invalid();
                 _ = LongText(covering, "name", 256);
+                if(covering.TryGetProperty("style",out var style))HarnessCoveringStyleValidator.Validate(style);
                 if(covering.TryGetProperty("kind",out _)&&Text(covering,"kind") is not ("heat-shrink" or "nylon" or "braid" or "metal-braid" or "tape" or "band"))throw Invalid();
                 if(covering.TryGetProperty("lengthMode",out _)&&Text(covering,"lengthMode") is not ("auto" or "manual"))throw Invalid();
                 var color = LongText(covering, "color", 7);
