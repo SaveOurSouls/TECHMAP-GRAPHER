@@ -23,7 +23,7 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly physicalScale?:number; readonly showDimensions?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly physicalScale?:number; readonly leaderScale?:number; readonly showDimensions?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -136,6 +136,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   const fail=():never=>{throw new Error("Некорректные таблицы или позиционные выноски чертежа.");};
   if(!value||typeof value!=="object")return fail();
   const d=value as DrawingDocuments;
+  if(d.leaderScale!==undefined&&(typeof d.leaderScale!=="number"||!Number.isFinite(d.leaderScale)||d.leaderScale<.25||d.leaderScale>4))return fail();
   if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean")return fail();
   if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
@@ -164,14 +165,15 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
     const widths=t.kind==="bom"?[45,130,140,240,95,200]:[140,90,130,130,110,160,100];
     return {id:t.id,kind:"drawing-table",layerId:"dimensions",label:t.kind==="bom"?`Спецификация · ${quantity} жгут(а)`:"Таблица соединений",x:t.position.x,y:t.position.y,width:widths.reduce((a,b)=>a+b,0),height:52+values.length*32,color:"#365568",metadata:{rowObjectIds:JSON.stringify(t.kind==="bom"?rows.map(r=>r.objectIds):document.wires.map(w=>[w.id])),headers:JSON.stringify(headers),rows:JSON.stringify(values),widths:JSON.stringify(widths)}};
   });
+  const scale=d.leaderScale??1,radius=12*scale,anchorRadius=4*scale;
   const leaders:EditorSceneObject[]=d.leaders.filter(l=>!l.hidden).flatMap(l=>{
     const origin=drawingObjectOrigin(document,l.objectId),row=rows.find(r=>r.key===l.rowKey&&r.objectIds.includes(l.objectId));
     const connector=document.connectors.find(c=>c.id===l.objectId);
     const offset=l.anchorLocal&&connector?drawingLocalPoint(l.anchorLocal,connector.drawingPlacements):l.anchorOffset;
     const target=origin?{x:origin.x+offset.x,y:origin.y+offset.y}:l.circle;
     const anchor=drawingObjectPerimeter(document,l.objectId,target,perimeters)??l.circle;
-    return [{id:l.id,kind:"position-leader",layerId:"dimensions",label:origin&&row?String(row.position):"?",x:l.circle.x-12,y:l.circle.y-12,width:24,height:24,color:origin&&row?"#365568":"#c23535",points:[anchor,l.circle]},
-      {id:`${l.id}:anchor`,kind:"leader-anchor",layerId:"dimensions",label:"",x:anchor.x-4,y:anchor.y-4,width:8,height:8,color:origin&&row?"#365568":"#c23535"}];
+    return [{id:l.id,kind:"position-leader",layerId:"dimensions",label:origin&&row?String(row.position):"?",x:l.circle.x-radius,y:l.circle.y-radius,width:radius*2,height:radius*2,color:origin&&row?"#365568":"#c23535",points:[anchor,l.circle]},
+      {id:`${l.id}:anchor`,kind:"leader-anchor",layerId:"dimensions",label:"",x:anchor.x-anchorRadius,y:anchor.y-anchorRadius,width:anchorRadius*2,height:anchorRadius*2,color:origin&&row?"#365568":"#c23535"}];
   });
   return [...tables,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
 }
@@ -181,9 +183,10 @@ export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,p
   if(d.specificationItems?.some(i=>i.id===id&&i.position))return {...d,specificationItems:d.specificationItems.map(i=>i.id===id?{...i,position:point}:i)};
   if(d.tables.some(t=>t.id===id)) return {...d,tables:d.tables.map(t=>t.id===id?{...t,position:point}:t)};
   const leader=d.leaders.find(l=>l.id===id||`${l.id}:anchor`===id);if(!leader)return null;
-  if(leader.id===id)return {...d,leaders:d.leaders.map(l=>l.id===id?{...l,circle:{x:point.x+12,y:point.y+12}}:l)};
+  const scale=d.leaderScale??1;
+  if(leader.id===id)return {...d,leaders:d.leaders.map(l=>l.id===id?{...l,circle:{x:point.x+12*scale,y:point.y+12*scale}}:l)};
   const origin=drawingObjectOrigin(document,leader.objectId);if(!origin)return null;
-  const anchor=drawingObjectPerimeter(document,leader.objectId,{x:point.x+4,y:point.y+4},perimeters);if(!anchor)return null;
+  const anchor=drawingObjectPerimeter(document,leader.objectId,{x:point.x+4*scale,y:point.y+4*scale},perimeters);if(!anchor)return null;
   const offset={x:anchor.x-origin.x,y:anchor.y-origin.y},connector=document.connectors.find(c=>c.id===leader.objectId);
   return {...d,leaders:d.leaders.map(l=>l.id===leader.id?{...l,anchorOffset:offset,...(connector?{anchorLocal:drawingPointToLocal(offset,connector.drawingPlacements)}:{})}:l)};
 }
@@ -203,7 +206,8 @@ export function addDrawingPositions(document:HarnessDesignDocument,perimeters?:D
     const linear=initialLinearLeader(document,objectId);
     const target=linear?{x:linear.point.x+linear.normal.x*.01,y:linear.point.y+linear.normal.y*.01}:{x:origin.x+10000,y:origin.y-10000};
     const edge=drawingObjectPerimeter(document,objectId,target,perimeters);if(!edge)continue;
-    const circle=last?{x:last.circle.x+24,y:last.circle.y}:{x:edge.x+48,y:edge.y-48};
+    const scale=d.leaderScale??1;
+    const circle=last?{x:last.circle.x+24*scale,y:last.circle.y}:{x:edge.x+48*scale,y:edge.y-48*scale};
     const anchor=linear?edge:drawingObjectPerimeter(document,objectId,circle,perimeters)!;
     const offset={x:anchor.x-origin.x,y:anchor.y-origin.y},connector=document.connectors.find(c=>c.id===objectId);
     leaders.push({id:createId(),objectId,rowKey:row.key,anchorOffset:offset,circle,...(connector?{anchorLocal:drawingPointToLocal(offset,connector.drawingPlacements)}:{})});

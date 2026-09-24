@@ -1810,10 +1810,11 @@ export function drawEditorSceneObject(
     paintRow(headers,object.y+24,28,true);rows.forEach((r,i)=>paintRow(r,object.y+52+i*32,32,false));context.restore();return;
   }
   if(object.kind==="position-leader") {
-    const a=object.points?.[0],b=object.points?.[1];if(a&&b){context.strokeStyle=object.color;context.lineWidth=selected?2:1;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();context.beginPath();context.arc(b.x,b.y,12,0,Math.PI*2);context.fillStyle="#fff";context.fill();context.stroke();context.fillStyle=object.color;context.textAlign="center";context.textBaseline="middle";context.font="12px Arial";context.fillText(object.label,b.x,b.y);}
+    const a=object.points?.[0],b=object.points?.[1],radius=object.width/2,scale=radius/12;
+    if(a&&b){context.strokeStyle=object.color;context.lineWidth=(selected?2:1)*scale;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();context.beginPath();context.arc(b.x,b.y,radius,0,Math.PI*2);context.fillStyle="#fff";context.fill();context.stroke();context.fillStyle=object.color;context.textAlign="center";context.textBaseline="middle";context.font=`${12*scale}px Arial`;context.fillText(object.label,b.x,b.y,radius*1.6);}
     context.restore();return;
   }
-  if(object.kind==="leader-anchor") {context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+4,object.y+4,4,0,Math.PI*2);context.fill();context.restore();return;}
+  if(object.kind==="leader-anchor") {const radius=object.width/2;context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+radius,object.y+radius,radius,0,Math.PI*2);context.fill();context.restore();return;}
   if(object.kind==="physical-covering") {drawCoveringSurface(context,object,selected);context.restore();return;}
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";

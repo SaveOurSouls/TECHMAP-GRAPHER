@@ -1028,13 +1028,20 @@ $inertEmbeddedUrls = @(
     "http://www.w3.org/XML/1998/namespace",
     "https://react.dev/errors/"
 )
+# ReferenceImportPanel offers this existing catalog as a user-selected preset.
+# Selecting it fills the form only; startup and offline rendering never fetch it.
+# Match the exact URL, not all Google Sheets or arbitrary external resources.
+$userSelectedSourceUrls = @(
+    "https://docs.google.com/spreadsheets/d/1CywbVLHdLh2wO1-N2IkDdjfSMYtofsHPz-KnniQCjGg/edit?gid=122798924#gid=122798924"
+)
 foreach ($asset in $webAssets) {
     $content = Get-Content -Raw -LiteralPath $asset.FullName
     $externalUrls = @([regex]::Matches($content, '(?i)https?://[^\s"''`<>]+') |
         ForEach-Object Value |
         Where-Object {
             $url = $_
-            -not ($inertEmbeddedUrls | Where-Object { $url.StartsWith($_, [StringComparison]::Ordinal) })
+            -not ($inertEmbeddedUrls | Where-Object { $url.StartsWith($_, [StringComparison]::Ordinal) }) -and
+                $url -cnotin $userSelectedSourceUrls
         })
     if ($externalUrls.Count -gt 0) {
         throw "Web asset contains an unexpected external HTTP(S) URL: $($asset.FullName): $($externalUrls[0])"
