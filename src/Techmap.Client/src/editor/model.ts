@@ -1,3 +1,4 @@
+import { commonParallelSpan } from "./e4-parallel-spans";
 import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
 import { screenCrossSections, screenSectionAt } from "./e4-screen-spans";
@@ -1978,36 +1979,11 @@ export function wireGroupHasCommonE4ParallelSpan(
   document: HarnessDesignDocument,
   wireIds: readonly string[],
 ): boolean {
-  const segmentGroups = wireIds.map((wireId) => {
-    const wire = document.wires.find((item) => item.id === wireId);
-    if (!wire) return [];
-    const start = wireEndpointE4Anchor(document, wire.from)?.position;
-    const end = wireEndpointE4Anchor(document, wire.to)?.position;
-    if (!start || !end) return [];
-    const points = [start, ...wire.e4Route, end];
-    return points.slice(1).flatMap((current, index) => {
-      const previous = points[index]!;
-      if(previous.x!==current.x&&previous.y!==current.y)return [];
-      return previous.y === current.y
-        ? { orientation: "horizontal" as const, start: Math.min(previous.x, current.x), end: Math.max(previous.x, current.x) }
-        : { orientation: "vertical" as const, start: Math.min(previous.y, current.y), end: Math.max(previous.y, current.y) };
-    });
-  });
-  if (segmentGroups.length === 0 || segmentGroups.some((segments) => segments.length === 0)) return false;
-
-  const visit = (wireIndex: number, orientation: "horizontal" | "vertical" | null, start: number, end: number): boolean => {
-    if (wireIndex === segmentGroups.length) return end > start;
-    for (const segment of segmentGroups[wireIndex]!) {
-      if (orientation !== null && segment.orientation !== orientation) continue;
-      const overlapStart = wireIndex === 0 ? segment.start : Math.max(start, segment.start);
-      const overlapEnd = wireIndex === 0 ? segment.end : Math.min(end, segment.end);
-      if (overlapEnd > overlapStart && visit(wireIndex + 1, segment.orientation, overlapStart, overlapEnd)) return true;
-    }
-    return false;
-  };
-  return visit(0, null, 0, 0);
+  return commonParallelSpan(wireIds.map(id=>{
+    const w=document.wires.find(w=>w.id===id),a=w&&wireEndpointE4Anchor(document,w.from),b=w&&wireEndpointE4Anchor(document,w.to);
+    return {id,points:w&&a&&b?[a.position,...w.e4Route,b.position]:[]};
+  }))!==null;
 }
-
 function pointOnSegment(point: Point, start: Point, end: Point): boolean { return segmentPointDistance(point,{start,end})<1e-7; }
 
 function parseDiffPairs(value: unknown): readonly DiffPairGroup[] {

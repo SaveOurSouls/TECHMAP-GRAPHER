@@ -140,11 +140,17 @@ try {
    :[{x:700,y:888},{x:800,y:988},{x:930,y:988},{x:930,y:888}]})),junctions:[{id:'shared-j',position:{x:740,y:928},wireIds:['shared-1','shared-2']}]});
  shared=applyEditorCommand(shared,{type:'move-connector',connectorId:'shared-a',view:'e4',position:{x:10,y:820},physicalDragMode:'carry'});
  for(const wire of shared.wires)assert.ok(wireE4PathContainsPoint(shared,wire,shared.junctions[0].position));
- const combined={...measuredAutomatic,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
+ let twisted=createEmptyHarnessDesign();
+ for(const [id,x,y] of [['pair-a',0,1600],['pair-b',1000,1800]])twisted=applyEditorCommand(twisted,{type:'add-connector',connector:createConnector(id,id,2,{x,y})});
+ twisted=applyEditorCommand(twisted,{type:'flip-connector-orientation',connectorId:'pair-b'});
+ twisted=parseHarnessDesignDocument({...twisted,wires:[1,2].map(n=>({...createWire('pair-'+n,{connectorId:'pair-a',contactId:'pair-a:contact:'+n},{connectorId:'pair-b',contactId:'pair-b:contact:'+n}),e4RouteMode:'manual',e4Route:[{x:700,y:1640+24*n},{x:900,y:1840+24*n}]}))});
+ twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
+ const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
  assert.deepEqual(savedRemoved.content.wires.find(w=>w.id==='e4-test').e4Route,e4Base.wires[0].e4Route);
  assert.deepEqual(savedRemoved.content.junctions,combined.junctions);
  assert.deepEqual(savedRemoved.content.screens,combined.screens);
+ assert.deepEqual(savedRemoved.content.diffPairs,combined.diffPairs);
  assert.deepEqual(savedRemoved.content.physicalTopology.segments,measuredAutomatic.physicalTopology.segments);
  assert.deepEqual(savedRemoved.content.drawingDocuments.dimensions,measuredAutomatic.drawingDocuments.dimensions);
  assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(measuredAutomatic.physicalTopology.coverings)));

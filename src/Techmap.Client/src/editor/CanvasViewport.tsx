@@ -1,3 +1,4 @@
+import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, physicalObjectSnapAnchors } from "./physical-editing";
@@ -575,76 +576,11 @@ export function getE4WireCrossings(
   return result;
 }
 
-export interface E4ParallelSpan {
-  readonly orientation: E4SegmentOrientation;
-  readonly start: number;
-  readonly end: number;
-  readonly crossMinimum: number;
-  readonly crossMaximum: number;
-  /** Direction in which the first selected wire traverses this span. */
-  readonly firstWireDirection: 1 | -1;
-  readonly segmentByWireId: Readonly<Record<string, E4WireSegment>>;
+export type E4ParallelSpan = ParallelSpan;
+
+export function findE4CommonParallelSpan(objects:readonly EditorSceneObject[],wireIds:readonly string[]):E4ParallelSpan|null {
+  return commonParallelSpan(wireIds.map(id=>({id,points:objects.find(o=>o.id===id&&o.kind==="wire")?.points??[]})));
 }
-
-export function findE4CommonParallelSpan(
-  objects: readonly EditorSceneObject[],
-  wireIds: readonly string[],
-): E4ParallelSpan | null {
-  const wires = wireIds.map((wireId) => objects.find((object) => object.id === wireId && object.kind === "wire"));
-  if (wires.some((wire) => wire === undefined) || wires.length === 0) return null;
-  let best: E4ParallelSpan | null = null;
-  for (const orientation of ["horizontal", "vertical"] as const) {
-    const segmentsByWire = wires.map((wire) => e4WireSegments(getE4WireRoute(wire!))
-      .filter((segment) => segment.orientation === orientation)
-      .map((segment) => ({
-        segment,
-        start: orientation === "horizontal"
-          ? Math.min(segment.start.x, segment.end.x)
-          : Math.min(segment.start.y, segment.end.y),
-        end: orientation === "horizontal"
-          ? Math.max(segment.start.x, segment.end.x)
-          : Math.max(segment.start.y, segment.end.y),
-      })));
-    if (segmentsByWire.some((segments) => segments.length === 0)) continue;
-
-    // In an optimal choice the common start is the start of at least one
-    // selected segment. At each such candidate, choosing the covering segment
-    // with the furthest end for every wire dominates every other choice. This
-    // turns the former Cartesian-product search into a polynomial scan.
-    const candidateStarts = [...new Set(segmentsByWire.flatMap((segments) =>
-      segments.map((item) => item.start)))].sort((left, right) => left - right);
-    for (const start of candidateStarts) {
-      const chosen: E4WireSegment[] = [];
-      let end = Number.POSITIVE_INFINITY;
-      for (const segments of segmentsByWire) {
-        let furthest: (typeof segments)[number] | null = null;
-        for (const candidate of segments) {
-          if (candidate.start > start || candidate.end <= start) continue;
-          if (!furthest || candidate.end > furthest.end) furthest = candidate;
-        }
-        if (!furthest) {
-          chosen.length = 0;
-          break;
-        }
-        chosen.push(furthest.segment);
-        end = Math.min(end, furthest.end);
-      }
-      if (chosen.length !== wires.length || end <= start || best && best.end - best.start >= end - start) continue;
-      const crosses = chosen.map((segment) => orientation === "horizontal" ? segment.start.y : segment.start.x);
-      best = {
-        orientation,
-        start,
-        end,
-        crossMinimum: Math.min(...crosses),
-        crossMaximum: Math.max(...crosses),
-        firstWireDirection: segmentAxisDirection(chosen[0]!, orientation),
-        segmentByWireId: Object.fromEntries(wireIds.map((wireId, index) => [wireId, chosen[index]!])),
-      };
-    }
-  }
-  return best;
-}
-
 export interface E4ScreenLayout {
   readonly id: string;
   readonly wireIds: readonly string[];
@@ -690,7 +626,13 @@ export function getE4DifferentialPairLayout(
 ): E4DifferentialPairLayout | null {
   const common = findE4CommonParallelSpan(objects, group.wireIds);
   if (!common) return null;
-  const span = clearDecorationSpans([common], objects.filter(object => object.kind === "connector"), 10,
+  const tables=objects.filter(object=>object.kind==="connector").map(table=>{
+    if(!common.direction)return table;
+    const corners=[{x:table.x,y:table.y},{x:table.x+table.width,y:table.y},{x:table.x,y:table.y+table.height},{x:table.x+table.width,y:table.y+table.height}].map(p=>parallelSpanLocal(common,p));
+    const x=Math.min(...corners.map(p=>p.x)),y=Math.min(...corners.map(p=>p.y));
+    return {x,y,width:Math.max(...corners.map(p=>p.x))-x,height:Math.max(...corners.map(p=>p.y))-y};
+  });
+  const span = clearDecorationSpans([common], tables, 10,
     item => Math.max(group.amplitude * 2, item.crossMaximum - item.crossMinimum))
     .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
   if (!span) return null;
@@ -803,8 +745,9 @@ export function hitTestE4DifferentialPair(
     if (layers && !isE4OverlayVisible(group.wireIds, objects, layers)) continue;
     const layout = getE4DifferentialPairLayout(group, visibleObjects);
     if (!layout) continue;
-    const along = layout.span.orientation === "horizontal" ? point.x : point.y;
-    const cross = layout.span.orientation === "horizontal" ? point.y : point.x;
+    const local=parallelSpanLocal(layout.span,point);
+    const along = local.x;
+    const cross = local.y;
     if (cross < layout.crossMinimum - tolerance || cross > layout.crossMaximum + tolerance) continue;
     if (layout.motifs.some((motif) => along >= motif.from - tolerance && along <= motif.to + tolerance)) {
       return layout;
@@ -2135,6 +2078,7 @@ export function drawE4DifferentialPairs(
       const { from, to, coloredFrom, coloredTo, center: along } = motif;
       const crossingLength = to - from;
       context.save();
+      if(span.direction){const u=span.direction;context.transform(u.x,u.y,-u.y,u.x,0,0);}
       context.lineJoin = "round";
       context.lineCap = "butt";
       context.strokeStyle = "#f8fafb";
@@ -2175,7 +2119,9 @@ export function drawE4DifferentialPairs(
       // straight spans between motifs with the colour of the physical wire
       // which currently occupies that lane, avoiding a colour splice at the
       // feet of an X.
-      const firstStartsOnMinimum = motifIndex % 2 === 0;
+      const firstSegment=span.segmentByWireId[first.id]!;
+      const firstOnMinimum=Math.abs(parallelSpanLocal(span,firstSegment.start).y-layout.crossMinimum)<1e-6;
+      const firstStartsOnMinimum = (motifIndex % 2 === 0)===firstOnMinimum;
       traceMotif(!firstStartsOnMinimum, true, true);
       // Both conductors need a halo against the scene painted below. Without
       // this first stroke, a third wire running between the pair's lanes looks
@@ -2209,7 +2155,7 @@ export function drawE4DifferentialPairs(
           context.lineCap = "butt";
           strokeE4Wire(context, color);
         };
-        const afterSwap = motifIndex % 2 === 0;
+        const afterSwap = firstStartsOnMinimum;
         drawLane(layout.crossMinimum, afterSwap ? second.color : first.color);
         drawLane(layout.crossMaximum, afterSwap ? first.color : second.color);
       }
@@ -2440,10 +2386,8 @@ export function getEditorSceneBounds(
   for (const group of visibleOverlays.diffPairs) {
     const layout = getE4DifferentialPairLayout(group, visibleObjects);
     if (!layout) continue;
-    if (layout.span.orientation === "horizontal") {
-      bounds = expandSceneBounds(bounds, layout.span.start, layout.crossMinimum, layout.span.end, layout.crossMaximum);
-    } else {
-      bounds = expandSceneBounds(bounds, layout.crossMinimum, layout.span.start, layout.crossMaximum, layout.span.end);
+    for(const along of [layout.span.start,layout.span.end])for(const cross of [layout.crossMinimum,layout.crossMaximum]){
+      const p=parallelSpanWorld(layout.span,along,cross);bounds=expandSceneBounds(bounds,p.x,p.y,p.x,p.y);
     }
   }
   for (const screen of visibleOverlays.screens) {
