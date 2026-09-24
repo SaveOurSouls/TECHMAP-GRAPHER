@@ -4,6 +4,7 @@ import { physicalSegmentControls, physicalSegmentPoints } from "./physical-geome
 import { physicalNodePoint, physicalNodeDirection } from "./physical-ports";
 import { drawingPipeWidth } from "./drawing-thickness";
 import { defaultLayerIds } from "./model";
+import { physicalEditablePoints } from "./physical-editing";
 
 /** One boundary between physical topology and presentation. */
 export function physicalTopologyScene(document: HarnessDesignDocument): EditorSceneObject[] {
@@ -15,7 +16,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     color: segment.color ?? "#aebfc9", points: physicalSegmentPoints(document, segment),
     pipe: {
       controls: physicalSegmentControls(document, segment),
-      handles: segment.path.points,
+      handles: physicalEditablePoints(document,segment).slice(1,-1),
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
   }));

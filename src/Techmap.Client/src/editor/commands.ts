@@ -5,6 +5,9 @@ import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-docum
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
+import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, type PhysicalDragMode } from "./physical-editing";
+import { physicalNodeLocalPoint } from "./physical-ports";
+import { refreshAutomaticPhysicalRoutes } from "./physical-wire-routing";
 import {
   connectorBaseColumnKeys,
   connectorE4Contacts,
@@ -51,6 +54,9 @@ import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export type EditorCommand =
+  | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
+  | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
+  | {readonly type:"move-physical-node";readonly nodeId:string;readonly position:Point;readonly mode:PhysicalDragMode}
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
@@ -58,7 +64,7 @@ export type EditorCommand =
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
   | { readonly type: "refresh-template-terminals"; readonly connectorId: string; readonly catalog: NonNullable<ConnectorInstance["terminalCatalog"]> }
-  | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point }
+  | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point; readonly physicalDragMode?:PhysicalDragMode }
   | { readonly type: "update-connector"; readonly connectorId: string; readonly designation: string; readonly partNumber?: string; readonly libraryCode?: string }
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
@@ -188,11 +194,28 @@ export function applyEditorCommand(
   command: EditorCommand,
 ): HarnessDesignDocument {
   if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
-  return reconcileDrawingDimensions(document,prunePhysicalTopology(applyCommand(document, command)));
+  return reconcileDrawingDimensions(document,refreshAutomaticPhysicalRoutes(document,prunePhysicalTopology(applyCommand(document, command))));
 }
 
 function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {
   switch (command.type) {
+    case "remove-physical-bend": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой проводов заблокирован.");
+      const changed=deletePhysicalBend(document,command.segmentId,command.index);
+      return {...changed,physicalTopology:parsePhysicalTopology(changed.physicalTopology,changed)};
+    }
+    case "edit-physical-bend": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой проводов заблокирован.");
+      const changed=editPhysicalBend(document,command.segmentId,command.index,command.position,command.mode,command.insert);
+      return {...changed,physicalTopology:parsePhysicalTopology(changed.physicalTopology,changed)};
+    }
+    case "move-physical-node": {
+      if(document.views.drawing.layers.some(l=>(l.id==="wires"||l.id===defaultLayerIds.connectionPoints)&&l.locked))throw new Error("Слой трассы заблокирован.");
+      const t=document.physicalTopology,node=t?.nodes.find(n=>n.id===command.nodeId);if(!t||!node)return document;
+      const changed={...document,physicalTopology:{...t,nodes:t.nodes.map(n=>n.id===node.id?{...n,position:physicalNodeLocalPoint(document,n,command.position)}:n)}};
+      const result=carryPhysicalExits(document,changed,new Set([node.id]),command.mode);
+      return {...result,physicalTopology:parsePhysicalTopology(result.physicalTopology,result)};
+    }
     case "set-drawing-documents":
       if(document.views.drawing.layers.some(l=>l.id==="dimensions"&&l.locked)) throw new Error("Слой размеров заблокирован.");
       return {...document,drawingDocuments:validateDrawingDocuments(command.documents,document)};
@@ -240,7 +263,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           positions: { ...connector.positions, [command.view]: command.position },
         }), "Соединитель не найден."),
       };
-      if (command.view !== "e4") return moved;
+      if (command.view !== "e4") return command.physicalDragMode
+        ? carryPhysicalExits(document,moved,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
+        : moved;
       try {
         return rebuildConnectorE4Wires(
           moved,

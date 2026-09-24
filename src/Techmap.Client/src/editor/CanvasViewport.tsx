@@ -1,3 +1,5 @@
+import type { PhysicalDragMode } from "./physical-editing";
+import { snapPhysicalPoint, physicalObjectSnapAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -57,6 +59,7 @@ import {
 import type { CableInstance } from "./model";
 
 export interface CanvasViewportProps {
+  readonly drawingSnapEnabled?:boolean;
   readonly view: HarnessEditorView;
   readonly tool: EditorTool;
   readonly camera: EditorCamera;
@@ -85,9 +88,9 @@ export interface CanvasViewportProps {
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
-  readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onObjectMove?: (objectId: string, point: EditorPoint, mode?: PhysicalDragMode) => void;
   /** Shows a transient move without adding an undo entry. Passing null clears it. */
-  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
+  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null, mode?: PhysicalDragMode) => void;
   readonly onWireConnect?: (
     from: E4ConnectableEndpoint,
     to: E4ConnectableEndpoint,
@@ -113,8 +116,8 @@ export interface CanvasViewportProps {
   readonly onE4WireLabelPositionChange?: (wireId: string, position: number) => void;
   readonly onE4ScreenPositionChange?: (screenId: string, position: number) => void;
   readonly onWireToolRequest?: () => void;
-  readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null)=>void;
-  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
+  readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null, mode?:PhysicalDragMode, insert?:boolean)=>void;
+  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint, mode?:PhysicalDragMode, insert?:boolean) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
@@ -196,6 +199,8 @@ interface ObjectPointerDrag {
   readonly objectId: string;
   readonly objectX: number;
   readonly objectY: number;
+  readonly mode?:PhysicalDragMode;
+  readonly anchors?:readonly EditorPoint[];
 }
 
 interface WireRoutePointerDrag {
@@ -206,6 +211,9 @@ interface WireRoutePointerDrag {
   readonly wireId: string;
   readonly routeIndex: number;
   readonly point: EditorPoint;
+  readonly mode?:PhysicalDragMode;
+  readonly insert?:boolean;
+  readonly anchors?:readonly EditorPoint[];
 }
 
 interface E4WireSegmentPointerDrag {
@@ -976,6 +984,12 @@ export function hitTestWireRoutePoint(
     if (delta <= distance) { nearest = pointIndex - 1; distance = delta; }
   }
   return nearest;
+}
+
+export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
+  if(object.kind!=="physical-segment")return [];
+  const points=[object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
+  return points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+points[i]!.x)/2,y:(p.y+points[i]!.y)/2}}));
 }
 
 export function hitTestWireEnd(
@@ -2519,6 +2533,9 @@ function redrawCanvas(
     for (const object of objectsInPaintOrder(objects,layers)) {
       if (object.kind !== "physical-node" && object.kind !== "physical-segment") continue;
       const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : [object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
+      if(object.kind==="physical-segment")for(const {point:p} of pipeMidpoints(object)){
+        context.save();context.globalAlpha=.35;context.fillStyle="#1179ac";context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fill();context.restore();
+      }
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
       points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
@@ -2639,7 +2656,7 @@ export function CanvasViewport({
   onWireRoutePointRemove,
   onObjectEditRequest,
   onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
-  onCatalogDrop,
+  onCatalogDrop, drawingSnapEnabled=true,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2669,6 +2686,7 @@ export function CanvasViewport({
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
   const [screenPositionPreview, setScreenPositionPreview] = useState<{ readonly screenId: string; readonly position: number } | null>(null);
   const [connectorAlignmentGuides, setConnectorAlignmentGuides] = useState<E4ConnectorSnapGuides>({});
+  const [physicalGuide,setPhysicalGuide]=useState<readonly EditorPoint[]|undefined>();
   const displayObjects = wireLabelPreview
     ? objects.map((object) => object.id === wireLabelPreview.wireId ? {
       ...object,
@@ -2721,15 +2739,13 @@ export function CanvasViewport({
   }, [tool]);
 
   useEffect(() => {
-    const activeObjectId = inlineDragRef.current?.objectId ??
-      (dragRef.current?.kind === "object" ? dragRef.current.objectId : null);
+    const activeObjectId = inlineDragRef.current?.objectId;
     if (activeObjectId) onObjectMovePreview?.(activeObjectId, null);
     inlineDragRef.current = null;
-    if (dragRef.current?.kind === "object") dragRef.current = null;
     inlineDragActivatedRef.current = false;
     setInlineDragOffset(null);
     setConnectorAlignmentGuides({});
-  }, [inlineObject?.id, onObjectMovePreview, tool, view]);
+  }, [inlineObject?.id, tool, view]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2782,13 +2798,16 @@ export function CanvasViewport({
   useEffect(() => {
     const cancelConnection = () => {
       const drag = dragRef.current;
-      if (drag?.kind === "physical-node-connect") {
+      if (drag?.kind === "physical-node-connect"||drag?.kind==="wire-route"||drag?.kind==="object") {
+        if(drag.kind==="wire-route")onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,null);
+        if(drag.kind==="object")onObjectMovePreview?.(drag.objectId,null);
         dragRef.current = null;
         const canvas = canvasRef.current;
         if (canvas?.hasPointerCapture(drag.pointerId)) canvas.releasePointerCapture(drag.pointerId);
       }
       setPhysicalStart(null);
       setPhysicalNodePreview(null);
+      setPhysicalGuide(undefined);
     };
     cancelConnection();
     const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") cancelConnection(); };
@@ -2804,7 +2823,10 @@ export function CanvasViewport({
   const snappedObjectDestination = (objectId: string, destination: EditorPoint): EditorPoint => {
     if (view !== "e4") {
       setConnectorAlignmentGuides({});
-      return destination;
+      const drag=dragRef.current;
+      const result=snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],drawingSnapEnabled,7/camera.zoom);
+      setPhysicalGuide(result.guide);
+      return result.point;
     }
     const movingObject = objects.find((object) => object.id === objectId);
     const moving = movingObject ? e4ConnectorSnapTarget(movingObject) : null;
@@ -2841,12 +2863,15 @@ export function CanvasViewport({
     if(event.button===0&&event.shiftKey&&view==="drawing"&&tool==="select") {
       const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);
       const id=hitTestEditorScene(objects,layers,point,camera.zoom,view);
-      if(objects.some(o=>o.id===id&&o.kind==="physical-segment")) {onObjectSelect(id,false);setPhysicalMenu({id:id!,point,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-240)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-240)),wires:true});return;}
+      const pipe=objects.find(o=>o.id===id&&o.kind==="physical-segment");
+      const grip=pipe&&(hitTestWireRoutePoint(pipe,point,camera.zoom)!==null||pipeMidpoints(pipe).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom));
+      if(pipe&&!grip) {onObjectSelect(id,false);setPhysicalMenu({id:id!,point,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-240)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-240)),wires:true});return;}
     }
     if(event.button===0&&view==="drawing"&&tool==="select"&&!event.ctrlKey&&!event.shiftKey&&onCoveringDrag){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),grip=gripAt(point);
+      const pipeGrip=objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
       const cover=[...objects].reverse().find(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&coveringHit(o,point,4/camera.zoom)!==null);
-      if(grip||cover){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
+      if(!pipeGrip&&(grip||cover)){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
         onObjectSelect(objectId,false);event.currentTarget.setPointerCapture(event.pointerId);dragRef.current={kind:"covering",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId,spanIndex,part:grip?.part??"body",start:point};return;}
     }
     const shouldPan = tool === "pan" || event.button === 1;
@@ -3027,6 +3052,19 @@ export function CanvasViewport({
         }
       }
       if (view === "drawing") {
+        const pipes=objects.filter(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked));
+        const nodeHit=objects.some(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible)&&containsPoint(o,worldPoint,7/camera.zoom,view));
+        const corner=nodeHit?undefined:pipes.map(o=>({o,index:hitTestWireRoutePoint(o,worldPoint,camera.zoom)})).find(h=>h.index!==null);
+        const middle=corner||nodeHit?undefined:pipes.flatMap(o=>pipeMidpoints(o).map(h=>({...h,o}))).find(h=>Math.hypot(h.point.x-worldPoint.x,h.point.y-worldPoint.y)<=7/camera.zoom);
+        const pipe=corner?.o??middle?.o,index=corner?.index??middle?.index;
+        if(pipe&&index!==null&&index!==undefined){
+          const points=[pipe.points![0]!,...pipeSceneHandles(pipe),pipe.points!.at(-1)!];
+          const point=middle?.point??points[index+1]!;
+          onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:middle?[points[index]!,points[index+1]!]:[points[index]!,points[index+2]!]};
+          return;
+        }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
         if (cableSheath && !objects.some(o=>o.kind==="physical-segment"&&containsPoint(o,worldPoint,7/camera.zoom,view))) {
           selectLinkedE4Group(cableSheath.memberWireIds);
@@ -3069,7 +3107,7 @@ export function CanvasViewport({
       const selectedObject = objects.find((item) => item.id === selectedObjectId);
       const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
         (selectedObject?.kind === "wire" || selectedObject?.kind === "physical-segment") && onCanvasDoubleClick !== undefined;
-      if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || event.shiftKey);
+      if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || view!=="drawing"&&event.shiftKey);
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
@@ -3083,6 +3121,8 @@ export function CanvasViewport({
           objectId: object.id,
           objectX: object.x,
           objectY: object.y,
+          mode:event.shiftKey?"adjacent":"carry",
+          anchors:view==="drawing"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
         };
       }
     }
@@ -3115,13 +3155,16 @@ export function CanvasViewport({
         event.clientY - drag.clientY,
         camera.zoom,
       ));
-      if (onObjectMovePreview) onObjectMovePreview(drag.objectId, destination);
+      if (onObjectMovePreview) onObjectMovePreview(drag.objectId, destination,drag.mode);
       else setInlineDragOffset({
         x: (destination.x - drag.objectX) * camera.zoom,
         y: (destination.y - drag.objectY) * camera.zoom,
       });
     } else if (drag.kind === "wire-route") {
-      onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,{x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom});
+      if(!inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY))return;
+      const result=snapPhysicalPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],drawingSnapEnabled,7/camera.zoom);
+      setPhysicalGuide(result.guide);
+      onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,result.point,drag.mode,drag.insert);
     } else if (drag.kind === "e4-wire-label") {
       const wire = objects.find((item) => item.id === drag.wireId);
       const position = wire
@@ -3173,17 +3216,20 @@ export function CanvasViewport({
         onObjectMove?.(drag.objectId, snappedObjectDestination(
           drag.objectId,
           inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
-        ));
+        ),drag.mode);
       }
       onObjectMovePreview?.(drag.objectId, null);
       setConnectorAlignmentGuides({});
+      setPhysicalGuide(undefined);
     } else if (dragRef.current?.kind === "wire-route") {
       const drag = dragRef.current;
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,null);
-      if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, {
+      const moved=inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY);
+      if(drag.insert||moved) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, moved?snapPhysicalPoint({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
-      });
+      },drag.anchors??[],drawingSnapEnabled,7/camera.zoom).point:drag.point,drag.mode,drag.insert);
+      setPhysicalGuide(undefined);
     } else if (dragRef.current?.kind === "e4-wire-segment") {
       const drag = dragRef.current;
       const pixelDelta = drag.orientation === "horizontal"
@@ -3227,6 +3273,7 @@ export function CanvasViewport({
   };
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    setPhysicalGuide(undefined);
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current.kind==="covering"){const d=dragRef.current;onCoveringDrag?.(d.objectId,d.spanIndex,d.part,d.start,d.start,"cancel");}
     if(dragRef.current.kind==="companion") setDrawingPreview(null);
@@ -3426,6 +3473,7 @@ export function CanvasViewport({
         onDoubleClick={doubleClick}
         onContextMenu={event=>{if(view!=="drawing"||!onPhysicalContextAction)return;event.preventDefault();const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);const node=objects.find(o=>o.kind==="physical-node"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));const segment=node??[...objects].reverse().find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));setPhysicalMenu(segment?{id:segment.id,point,node:!!node,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-220)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-220))}:null);}}
       />
+      {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><line x1={physicalGuide[0]!.x*camera.zoom+camera.offsetX} y1={physicalGuide[0]!.y*camera.zoom+camera.offsetY} x2={physicalGuide[1]!.x*camera.zoom+camera.offsetX} y2={physicalGuide[1]!.y*camera.zoom+camera.offsetY} stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
       {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{
         const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
         const drawings=view==="e4"?projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width??object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible):[];

@@ -1,3 +1,4 @@
+import type { PhysicalDragMode } from "./physical-editing";
 import type { CoveringDragPart } from "./covering-layout";
 import {type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
@@ -124,10 +125,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
   readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
-  readonly onObjectMove?: (objectId: string, point: EditorPoint) => void;
+  readonly onObjectMove?: (objectId: string, point: EditorPoint, mode?: PhysicalDragMode) => void;
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
-  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null) => void;
+  readonly onObjectMovePreview?: (objectId: string, point: EditorPoint | null, mode?: PhysicalDragMode) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onWireConnect?: (
     from: E4ConnectableEndpoint,
@@ -163,8 +164,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly e4Detached?: boolean;
   readonly onE4DetachedChange?: (detached: boolean) => void;
   readonly onE4Reroute?: () => void;
-  readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null)=>void;
-  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint) => void;
+  readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null, mode?:PhysicalDragMode, insert?:boolean)=>void;
+  readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint, mode?:PhysicalDragMode, insert?:boolean) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly drawingSnapEnabled?: boolean;
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
@@ -583,6 +584,7 @@ export function HarnessEditorWorkspace({
           onE4ScreenPositionChange={onE4ScreenPositionChange}
           onWireToolRequest={() => setTool("wire")}
           onWireRoutePointPreview={onWireRoutePointPreview}
+          drawingSnapEnabled={drawingSnapEnabled}
           onWireRoutePointMove={onWireRoutePointMove}
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}

@@ -22,14 +22,14 @@ describe('pipe editing regressions M4-70',()=>{
   const updated=insertPhysicalBend(doc,s,{x:40,y:0});expect(updated.path.points).toEqual([{x:40,y:0},...s.path.points]);
   expect(insertPhysicalBend(doc,s,{x:100,y:0})).toBe(s);
  });
- it('keeps automatic corners out of the editing handles',()=>{
+ it('exposes automatic corners as editing handles without persisting them',()=>{
   const d=physicalFixture(),s=d.physicalTopology!.segments[0]!;
   expect(physicalSegmentPoints(d,s)).toEqual(physicalSegmentControls(d,s));
   const scene=designToScene(d,'drawing');const pipe=scene.find(o=>o.id==='S0')!;
   expect(hitTestWireRoutePoint(pipe,s.path.points[0]!,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.bendIndex===0));
   const automatic = {...s,path: { kind: "routed" as const, points: [] }};
   const autoScene = designToScene({...d,physicalTopology:{...d.physicalTopology!,segments:[automatic,...d.physicalTopology!.segments.slice(1)]}},'drawing').find(o=>o.id===s.id)!;
-  for(const corner of autoScene.points!.slice(1,-1))expect(hitTestWireRoutePoint(autoScene,corner,100)).toBeNull();
+  for(const [i,corner] of autoScene.points!.slice(1,-1).entries())expect(hitTestWireRoutePoint(autoScene,corner,100)).toBe(i);
   const next=applyEditorCommand(d,{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(x=>x.id===s.id?{...x,path: { kind: "routed" as const, points: [{x:250,y:90}] }}:x)}});
   expect(next.wires).toEqual(d.wires);expect(next.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
   expect(physicalWirePoints(next,'W1',{x:0,y:0},{x:1,y:1})).not.toEqual(physicalWirePoints(d,'W1',{x:0,y:0},{x:1,y:1}));

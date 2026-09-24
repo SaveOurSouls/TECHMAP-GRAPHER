@@ -105,12 +105,17 @@ try {
  const compact={...removed,physicalTopology:{...removed.physicalTopology,
    segments:removed.physicalTopology.segments.map((s,i)=>({...s,width:i===0?0:.125})),
    coverings:removed.physicalTopology.coverings?.map((c,i)=>({...c,width:i===0?0:250.25}))}};
- const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,compact);
- assert.deepEqual(savedRemoved.content.physicalTopology.segments,compact.physicalTopology.segments);
- assert.deepEqual(savedRemoved.content.physicalTopology.coverings,compact.physicalTopology.coverings);
+ const editable=compact.physicalTopology.segments[0];
+ const editControls=physicalSegmentControls(compact,editable);
+ const editMid={x:(editControls[0].x+editControls[1].x)/2,y:(editControls[0].y+editControls[1].y)/2};
+ const midpointEdited=applyEditorCommand(compact,{type:'edit-physical-bend',segmentId:editable.id,index:0,position:editMid,mode:'adjacent',insert:true});
+ const dragged=applyEditorCommand(midpointEdited,{type:'edit-physical-bend',segmentId:editable.id,index:0,position:{x:editMid.x+7,y:editMid.y+13},mode:'carry'});
+ const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,dragged);
+ assert.deepEqual(savedRemoved.content.physicalTopology.segments,dragged.physicalTopology.segments);
+ assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(dragged.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

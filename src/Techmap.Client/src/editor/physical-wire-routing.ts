@@ -14,8 +14,24 @@ type RouteGraph = ReadonlyMap<string, readonly RouteEdge[]>;
 function buildRouteGraph(document: HarnessDesignDocument, topology: PhysicalTopology): RouteGraph {
   const graph = new Map<string, RouteEdge[]>();
   const routedDocument = { ...document, physicalTopology: topology };
+  const measuredLengths=new Map<string,number>();
+  const geometricLengths=new Map(topology.segments.map(s=>[s.id,pathLength(physicalSegmentPoints(routedDocument,s))]));
   for (const segment of topology.segments) {
-    const cost = Math.max(.001, pathLength(physicalSegmentPoints(routedDocument, segment)));
+    const routeKey=JSON.stringify([segment.id,segment.from,segment.to,segment.path.points.length]);
+    const dimensions=document.drawingDocuments?.dimensions?.filter(d=>d.segmentId===segment.id&&d.routeKey===routeKey)??[];
+    const total=dimensions.find(d=>d.from===0&&d.to===segment.path.points.length+1);
+    const ordered=[...dimensions].sort((a,b)=>a.from-b.from);
+    let next=0,measured=0,complete=ordered.length>0;
+    for(const d of ordered){if(d.from!==next||d.lengthMm===null)complete=false;next=d.to;measured+=d.lengthMm??0;}
+    const length=total?.lengthMm??(complete&&next===segment.path.points.length+1?measured:null);
+    if(length!==null)measuredLengths.set(segment.id,length);
+  }
+  // Unknown lengths use a drawing estimate in the same scale, never raw pixels
+  // competing against measured millimetres. This estimate is not stored as length.
+  const references=[...measuredLengths].filter(([id,n])=>n>0&&geometricLengths.get(id)!>1e-7);
+  const scale=references.length?references.reduce((sum,[,n])=>sum+n,0)/references.reduce((sum,[id])=>sum+geometricLengths.get(id)!,0):1;
+  for (const segment of topology.segments) {
+    const cost = Math.max(.001, measuredLengths.get(segment.id)??geometricLengths.get(segment.id)!*scale);
     for (const [from, to, reverse] of [[segment.from, segment.to, false], [segment.to, segment.from, true]] as const) {
       if (!graph.has(from)) graph.set(from, []);
       graph.get(from)!.push({ node: to, step: { segmentId: segment.id, reverse }, cost });
@@ -83,4 +99,15 @@ export function routePhysicalWires(document: HarnessDesignDocument, topology: Ph
     if (steps?.length) routes.push({ wireId: wire.id, steps, automatic: true });
   }
   return { ...topology, routes };
+}
+
+/** Refresh on graph/placement changes, never on selection or style-only edits. */
+export function refreshAutomaticPhysicalRoutes(before:HarnessDesignDocument,after:HarnessDesignDocument):HarnessDesignDocument {
+  const t=after.physicalTopology;if(!t||!before.physicalTopology)return after;
+  const key=(d:HarnessDesignDocument)=>JSON.stringify([d.physicalTopology?.snap,d.physicalTopology?.nodes,
+    d.physicalTopology?.segments.map(s=>[s.id,s.from,s.to,s.path]),
+    d.connectors.map(c=>[c.id,c.positions.drawing,c.drawingPlacements]),
+    d.drawingDocuments?.dimensions?.filter(d=>d.segmentId).map(d=>[d.segmentId,d.from,d.to,d.lengthMm])]);
+  if(key(before)===key(after))return after;
+  return {...after,physicalTopology:routePhysicalWires(after,t)};
 }
