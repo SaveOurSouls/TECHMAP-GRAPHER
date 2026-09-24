@@ -1,6 +1,6 @@
 import {expect,it} from "vitest";
 import {physicalFixture} from "./physical-topology-fixture";
-import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors} from "./physical-editing";
+import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors,carryPhysicalExits} from "./physical-editing";
 import {applyEditorCommand} from "./commands";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
 import {parseHarnessDesignDocument} from "./model";
@@ -29,6 +29,11 @@ it("moves a node with its nearest shoulder, preserving all distant corners",()=>
  const carry=applyEditorCommand(d,{...command,mode:"carry"}),shift=applyEditorCommand(d,{...command,mode:"adjacent"});
  expect(carry.physicalTopology!.segments[0]!.path.points).toEqual([{x:100,y:30},{x:150,y:70},{x:220,y:70}]);
  expect(shift.physicalTopology!.segments[0]!.path.points).toEqual(d.physicalTopology.segments[0]!.path.points);
+});
+it("moves a pipe's shared shoulder once for two translated exits",()=>{
+ const base=fixture(),d={...base,physicalTopology:{...base.physicalTopology,segments:[{...base.physicalTopology.segments[0]!,path:{kind:"polyline" as const,points:[{x:150,y:150}]}}]}};
+ const after={...d,physicalTopology:{...d.physicalTopology,nodes:d.physicalTopology.nodes.map(n=>({...n,position:{x:n.position.x+20,y:n.position.y+30}}))}};
+ expect(carryPhysicalExits(d,after,new Set(["a","b"]),"carry").physicalTopology!.segments[0]!.path.points).toEqual([{x:170,y:180}]);
 });
 it("carries the exit of an initially straight pipe and keeps its original direction",()=>{
  const d=fixture(),straight={...d,physicalTopology:{...d.physicalTopology,segments:[{...d.physicalTopology.segments[0]!,path:{kind:"polyline" as const,points:[]}}]}};

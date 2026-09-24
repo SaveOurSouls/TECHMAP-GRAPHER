@@ -52,7 +52,7 @@ import type { ConnectorLibraryBinding } from "./model";
 import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
-import { editedE4Points, preserveE4Leads, moveE4Ends } from "./e4-editing";
+import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions } from "./e4-editing";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -207,9 +207,18 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(document.views.e4.layers.some(l=>l.id===wire.layerIds.e4&&l.locked))throw new Error("Слой проводов заблокирован.");
       if(screenJunctionEnds(wire))throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
       const request=createE4RoutingRequest(document,wire,wire.id);
-      const points=editedE4Points([request.start.position,...wire.e4Route,request.end.position],command.index,command.position,command.mode,command.insert);
+      const original=[request.start.position,...wire.e4Route,request.end.position];
+      const raw=editedE4Points(original,command.index,command.position,command.mode,command.insert,false);
+      const baseline=[...original];
+      if(command.insert){const a=baseline[command.index]!,b=baseline[command.index+1]!;baseline.splice(command.index+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
+      const positions=movedE4Junctions(document,wire.id,baseline,raw);
+      const points=editedE4Points(original,command.index,command.position,command.mode,command.insert);
       const route=preserveE4Leads(points,request.start,request.end).slice(1,-1);
-      return setE4WireRoute(document,wire.id,route);
+      let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),command.mode);
+      const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>id!==wire.id));
+      if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
+      for(const id of branches)changed=rerouteWireE4ThroughJunctions(changed,id,new Set([...branches].filter(other=>other!==id)));
+      return setE4WireRoute(changed,wire.id,route);
     }
     case "add-visible-pipe-dimension": {
       if(document.views.drawing.layers.some(l=>(l.id==="wires"||l.id==="dimensions")&&l.locked))throw new Error("Слой трассы или размеров заблокирован.");
@@ -291,15 +300,31 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         ? carryPhysicalExits(document,moved,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
         : moved;
       if(command.physicalDragMode){
+        const connector=document.connectors.find(c=>c.id===command.connectorId)!;
+        if(document.views.e4.layers.some(l=>l.locked&&(l.id===connector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===connector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
         let changed=moved;
+        const positions=new Map<string,Point>(),owners=new Set<string>();
         for(const wire of document.wires){
           if(![wire.from,wire.to].some(e=>e.connectorId===command.connectorId)||screenJunctionEnds(wire))continue;
           const a=wireEndpointE4Anchor(document,wire.from),b=wireEndpointE4Anchor(document,wire.to);
           const start=wireEndpointE4Anchor(moved,wire.from),end=wireEndpointE4Anchor(moved,wire.to);
           if(!a||!b||!start||!end)continue;
-          const points=preserveE4Leads(moveE4Ends([a.position,...wire.e4Route,b.position],start.position,end.position,command.physicalDragMode),start,end);
+          const original=[a.position,...wire.e4Route,b.position];
+          const raw=moveE4Ends(original,start.position,end.position,command.physicalDragMode);
+          const baseline=moveE4Ends(original,a.position,b.position,command.physicalDragMode);
+          for(const [id,p] of movedE4Junctions(document,wire.id,baseline,raw)){
+            const previous=positions.get(id);
+            if(previous&&Math.hypot(previous.x-p.x,previous.y-p.y)>1e-6)throw new Error("Общий узел получил несовместимые положения. Переместите его отдельно.");
+            positions.set(id,p);
+          }
+          owners.add(wire.id);
+          const points=preserveE4Leads(raw,start,end);
           changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),e4RouteMode:"manual"}:w)};
         }
+        changed=followE4Junctions(document,changed,positions,owners,command.physicalDragMode);
+        const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>!owners.has(id)));
+        if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
+        for(const id of branches)changed=rerouteWireE4ThroughJunctions(changed,id,new Set([...branches].filter(other=>other!==id)));
         for(const id of screenAttachmentWireIds(changed,changed.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId)).map(w=>w.id)))changed=rerouteWireE4ThroughJunctions(changed,id);
         for(const junction of changed.junctions)validateJunctionAgainstWires(changed,junction);
         validateWireGroups(changed);
@@ -1520,9 +1545,11 @@ function routeStraightScreenBranch(document: HarnessDesignDocument, wire: WireIn
       const a = points[index - 1]!;
       const b = points[index]!;
       const vertical = anchor.leadDirection === "up" || anchor.leadDirection === "down";
-      if (vertical ? a.y !== b.y : a.x !== b.x) continue;
-      const point = vertical ? { x: anchor.position.x, y: a.y } : { x: a.x, y: anchor.position.y };
-      if (!pointOnOrthogonalSegment(point, a, b)) continue;
+      const divisor=vertical?b.x-a.x:b.y-a.y;
+      if(Math.abs(divisor)<1e-8)continue;
+      const t=vertical?(anchor.position.x-a.x)/divisor:(anchor.position.y-a.y)/divisor;
+      if(t<0||t>1)continue;
+      const point=vertical?{x:anchor.position.x,y:a.y+(b.y-a.y)*t}:{x:a.x+(b.x-a.x)*t,y:anchor.position.y};
       const outward = anchor.leadDirection === "up" ? point.y < anchor.position.y
         : anchor.leadDirection === "down" ? point.y > anchor.position.y
           : anchor.leadDirection === "left" ? point.x < anchor.position.x : point.x > anchor.position.x;

@@ -3083,6 +3083,8 @@ export function CanvasViewport({
           const togglingOff = additive && selectedSet.has(segment.wireId);
           onObjectSelect(segment.wireId, additive);
           if (togglingOff) return;
+          // The body selects; authoring now belongs to corner/midpoint handles.
+          if(onWireRoutePointMove)return;
           event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = {
             kind: "e4-wire-segment",

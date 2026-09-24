@@ -242,6 +242,7 @@ describe("shared harness editor model", () => {
     expect(e4RoutingIssues(moved)).toEqual([]);
     expect(() => applyEditorCommand(moved, { type: "set-e4-wire-route", wireId: "branch",
       route: [{ x: movedPort.x, y: 40 }, { x: 850, y: 40 }] })).toThrow(/прямым/);
+    expect(()=>applyEditorCommand(moved,{type:"edit-e4-bend",wireId:"branch",index:0,position:{x:movedPort.x,y:40},insert:true,mode:"adjacent"})).toThrow(/прямым/);
   });
 
   it("keeps E4 and drawing positions separate while sharing one connector", () => {
@@ -1146,6 +1147,17 @@ describe("shared harness editor model", () => {
     expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).wires[0]!.e4Route).toEqual(h.present.wires[0]!.e4Route);
     expect(undoEditorCommand(h).present).toBe(d);
   });
+
+  it("preserves a screened pair and follows the screen lead after editing a carrier midpoint",()=>{
+    let d=applyEditorCommand(connectionDocument(),{type:"create-screen",screen:{id:"edit-screen",wireIds:["w1","w2"],position:.5,width:46,label:"SH"}});
+    d=applyEditorCommand(d,{type:"add-wire",wire:createWire("edit-lead",{connectorId:"x1",contactId:"x1:contact:3"},createScreenEndpoint("edit-screen"),100,"SHIELD")});
+    const w=d.wires.find(w=>w.id==="w1")!,points=[wireEndpointE4Anchor(d,w.from)!.position,...w.e4Route,wireEndpointE4Anchor(d,w.to)!.position];
+    const index=points.slice(1).map((p,i)=>({i,length:Math.hypot(p.x-points[i]!.x,p.y-points[i]!.y)})).sort((a,b)=>b.length-a.length)[0]!.i,a=points[index]!,b=points[index+1]!;
+    const next=applyEditorCommand(d,{type:"edit-e4-bend",wireId:w.id,index,position:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},mode:"adjacent",insert:true});
+    expect(next.screens).toEqual(d.screens);
+    expect(wireScreenConnectionGeometry(next,"edit-screen")).not.toBeNull();
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(next))).screens).toEqual(d.screens);
+  });
   it("keeps a collinear editing handle inside the required contact lead",()=>{
     const base=singleWireConnectionDocument();
     const d=applyEditorCommand(base,{type:"set-e4-wire-route",wireId:"w1",route:[{x:648,y:64},{x:648,y:200},{x:976,y:200},{x:976,y:64}]});
@@ -1211,6 +1223,19 @@ describe("shared harness editor model", () => {
     expect(document.junctions[0]?.position).toEqual({ x: 800, y: 160 });
     expect(wireE4PathContainsPoint(document, document.wires.find((wire) => wire.id === "w1")!, { x: 800, y: 160 })).toBe(true);
     expect(wireE4PathContainsPoint(document, document.wires.find((wire) => wire.id === "w3")!, { x: 800, y: 160 })).toBe(true);
+  });
+
+  it("keeps an electrical branch attached while a free E4 shoulder moves, saves and undoes",()=>{
+    let d=applyEditorCommand(connectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:648,y:64},{x:740,y:64},{x:740,y:180},{x:900,y:180},{x:900,y:64},{x:976,y:64}]});
+    d=applyEditorCommand(d,{type:"create-junction",junction:{id:"j",position:{x:800,y:180},wireIds:["w1","branch"]},branchWire:{...createWire("branch",{connectorId:"x1",contactId:"x1:contact:3"},createJunctionEndpoint("j"),100,"NET-A"),e4Route:[{x:648,y:112},{x:800,y:112}]}});
+    const original=d.wires.find(w=>w.id==="w1")!,index=original.e4Route.findIndex(p=>p.x===740&&p.y===180);
+    const h=executeEditorCommand(createEditorHistory(d),{type:"edit-e4-bend",wireId:"w1",index,position:{x:760,y:220},mode:"adjacent"});
+    const moved=h.present,j=moved.junctions[0]!;
+    expect(j.position).toEqual({x:812.5,y:205});
+    for(const id of j.wireIds)expect(wireE4PathContainsPoint(moved,moved.wires.find(w=>w.id===id)!,j.position)).toBe(true);
+    expect(moved.wires.map(w=>[w.id,w.from,w.to])).toEqual(d.wires.map(w=>[w.id,w.from,w.to]));
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved))).junctions).toEqual(moved.junctions);
+    expect(undoEditorCommand(h).present).toBe(d);
   });
 
   it("rebuilds connected E4 wires after flipping a connector", () => {

@@ -119,7 +119,7 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
       const [a,b]=original as readonly [Point,Point];
       original=[a,{x:a.x+(b.x-a.x)/3,y:a.y+(b.y-a.y)/3},{x:a.x+2*(b.x-a.x)/3,y:a.y+2*(b.y-a.y)/3},b];
     }
-    const points=[...original],map=anchorMap(before,segment,original);
+    const points=[...original],map=anchorMap(before,segment,original),shifts=new Map<number,Point[]>();
     for(const side of ["from","to"] as const){
       if(!nodeIds.has(segment[side]))continue;
       const at=side==="from"?0:points.length-1;
@@ -127,8 +127,9 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
       const p=physicalNodePoint(after,node),delta={x:p.x-original[at]!.x,y:p.y-original[at]!.y};
       points[at]=p;
       const shoulder=side==="from"?1:points.length-2;
-      if(mode==="carry"&&points.length>2)points[shoulder]=shifted(original[shoulder]!,delta);
+      if(mode==="carry"&&points.length>2&&(delta.x||delta.y))shifts.set(shoulder,[...shifts.get(shoulder)??[],delta]);
     }
+    for(const [i,deltas] of shifts)points[i]=shifted(original[i]!,{x:deltas.reduce((n,d)=>n+d.x,0)/deltas.length,y:deltas.reduce((n,d)=>n+d.y,0)/deltas.length});
     if(mode==="carry")mergeStraight(points,map);
     result=replacePath(result,segment,points,map);
   }
