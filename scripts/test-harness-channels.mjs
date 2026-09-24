@@ -110,12 +110,20 @@ try {
  const editMid={x:(editControls[0].x+editControls[1].x)/2,y:(editControls[0].y+editControls[1].y)/2};
  const midpointEdited=applyEditorCommand(compact,{type:'edit-physical-bend',segmentId:editable.id,index:0,position:editMid,mode:'adjacent',insert:true});
  const dragged=applyEditorCommand(midpointEdited,{type:'edit-physical-bend',segmentId:editable.id,index:0,position:{x:editMid.x+7,y:editMid.y+13},mode:'carry'});
- const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,dragged);
- assert.deepEqual(savedRemoved.content.physicalTopology.segments,dragged.physicalTopology.segments);
- assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(dragged.physicalTopology.coverings)));
+ const automatic={...dragged,physicalTopology:{...dragged.physicalTopology,snap:true,
+   nodes:[...dragged.physicalTopology.nodes,{id:'dim-a',position:{x:1000,y:1000},direction:'right'},{id:'dim-b',position:{x:1360,y:1200},direction:'left'}],
+   segments:[...dragged.physicalTopology.segments,{id:'dim-pipe',from:'dim-a',to:'dim-b',path:{kind:'routed',points:[]}}]}};
+ const {physicalEditablePoints}=await module('editor/physical-editing.ts');
+ const visible=physicalEditablePoints(automatic,automatic.physicalTopology.segments.at(-1));
+ assert.ok(visible.length>2);
+ const measuredAutomatic=applyEditorCommand(automatic,{type:'add-visible-pipe-dimension',id:'visible-dimension',segmentId:'dim-pipe',from:1,to:2,pointCount:visible.length,mode:'aligned'});
+ const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,measuredAutomatic);
+ assert.deepEqual(savedRemoved.content.physicalTopology.segments,measuredAutomatic.physicalTopology.segments);
+ assert.deepEqual(savedRemoved.content.drawingDocuments.dimensions,measuredAutomatic.drawingDocuments.dimensions);
+ assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(measuredAutomatic.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true,automaticCornerDimensionChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

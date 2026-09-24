@@ -1,11 +1,11 @@
 import { parseOuterDiameter } from "./model";
-import { reconcileDrawingDimensions, pipeMeasuredWireLength } from "./drawing-dimensions";
+import { reconcileDrawingDimensions, pipeMeasuredWireLength, segmentDimensionKey, type DimensionMode } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
-import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, type PhysicalDragMode } from "./physical-editing";
+import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, materializePhysicalPath, type PhysicalDragMode } from "./physical-editing";
 import { physicalNodeLocalPoint } from "./physical-ports";
 import { refreshAutomaticPhysicalRoutes } from "./physical-wire-routing";
 import {
@@ -54,6 +54,7 @@ import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 
 export type EditorCommand =
+  | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode}
   | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
   | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"move-physical-node";readonly nodeId:string;readonly position:Point;readonly mode:PhysicalDragMode}
@@ -199,6 +200,18 @@ export function applyEditorCommand(
 
 function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {
   switch (command.type) {
+    case "add-visible-pipe-dimension": {
+      if(document.views.drawing.layers.some(l=>(l.id==="wires"||l.id==="dimensions")&&l.locked))throw new Error("Слой трассы или размеров заблокирован.");
+      const changed=materializePhysicalPath(document,command.segmentId);
+      const segment=changed.physicalTopology?.segments.find(s=>s.id===command.segmentId);
+      if(!segment||segment.path.points.length+2!==command.pointCount)throw new Error("Трасса изменилась. Выберите точки размера заново.");
+      const docs=changed.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
+      const dimensions=[...docs.dimensions??[],{id:command.id,segmentId:segment.id,
+        from:Math.min(command.from,command.to),to:Math.max(command.from,command.to),
+        pointCount:command.pointCount,routeKey:segmentDimensionKey(changed,segment.id),
+        mode:command.mode,offset:40,lengthMm:null}];
+      return {...changed,drawingDocuments:validateDrawingDocuments({...docs,showDimensions:true,dimensions},changed)};
+    }
     case "remove-physical-bend": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой проводов заблокирован.");
       const changed=deletePhysicalBend(document,command.segmentId,command.index);

@@ -37,6 +37,9 @@ export function pipeSceneControls(object: EditorSceneObject): readonly EditorPoi
 export function pipeSceneHandles(object: EditorSceneObject): readonly EditorPoint[] {
   return object.pipe?.handles ?? [];
 }
+export function pipeSceneEditablePoints(object: EditorSceneObject): readonly EditorPoint[] {
+  return object.points?.length ? [object.points[0]!,...pipeSceneHandles(object),object.points.at(-1)!] : [];
+}
 export function pipeSceneWireIds(object: EditorSceneObject | undefined): readonly string[] {
   return object?.pipe?.wireIds ?? [];
 }

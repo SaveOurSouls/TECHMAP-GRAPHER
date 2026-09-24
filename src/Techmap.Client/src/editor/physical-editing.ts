@@ -14,6 +14,14 @@ export function physicalEditablePoints(document:HarnessDesignDocument,segment:Ph
     ? physicalSegmentPoints(document,segment) : physicalSegmentControls(document,segment);
 }
 
+/** A dimension owns its visible corners; freeze them in the same undo transaction. */
+export function materializePhysicalPath(document:HarnessDesignDocument,id:string):HarnessDesignDocument {
+  const segment=document.physicalTopology?.segments.find(s=>s.id===id);
+  if(!segment||segment.path.kind==="polyline")return document;
+  const points=physicalEditablePoints(document,segment);
+  return replacePath(document,segment,points,anchorMap(document,segment,points));
+}
+
 /** Snap the dragged point to a visible 0/45/90 guide; otherwise use 15° when enabled. */
 export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number) {
   if(!enabled||!anchors.length)return {point,guide:undefined as readonly Point[]|undefined};

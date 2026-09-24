@@ -70,6 +70,29 @@ it("materializes the entire automatic route on first edit without losing its end
  expect(changed.physicalTopology!.segments[1]!.path.points.at(-1)).toEqual(points.at(-2));
  expect(changed.drawingDocuments!.dimensions![0]).toMatchObject({to:points.length-1,pointCount:points.length,lengthMm:500});
 });
+it("authors a dimension on visible automatic corners atomically and keeps it through move/save/undo",()=>{
+ const base=physicalFixture(),s=base.physicalTopology!.segments[1]!,points=physicalEditablePoints(base,s);
+ expect(points.length).toBeGreaterThan(2);
+ const h=executeEditorCommand(createEditorHistory(base),{type:"add-visible-pipe-dimension",id:"dim-auto",segmentId:s.id,from:1,to:0,pointCount:points.length,mode:"aligned"});
+ const d=h.present;
+ expect(d.physicalTopology!.segments[1]!.path).toEqual({kind:"polyline",points:points.slice(1,-1)});
+ expect(d.drawingDocuments!.dimensions![0]).toMatchObject({id:"dim-auto",from:0,to:1,pointCount:points.length});
+ expect(d.drawingDocuments!.showDimensions).toBe(true);
+ const moved=applyEditorCommand(d,{type:"edit-physical-bend",segmentId:s.id,index:0,position:{x:points[1]!.x+20,y:points[1]!.y+10},mode:"adjacent"});
+ expect(moved.drawingDocuments!.dimensions).toEqual(d.drawingDocuments!.dimensions);
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved))).drawingDocuments).toEqual(moved.drawingDocuments);
+ expect(undoEditorCommand(h).present).toBe(base);
+});
+it("rejects stale or locked automatic dimensions without materializing the source path",()=>{
+ const base=physicalFixture(),s=base.physicalTopology!.segments[1]!;
+ const cmd={type:"add-visible-pipe-dimension" as const,id:"dim",segmentId:s.id,from:0,to:1,pointCount:physicalEditablePoints(base,s).length,mode:"horizontal" as const};
+ expect(()=>applyEditorCommand(base,{...cmd,pointCount:2})).toThrow("Трасса изменилась");
+ for(const layer of ["dimensions","wires"]){
+  const locked={...base,views:{...base.views,drawing:{...base.views.drawing,layers:base.views.drawing.layers.map(l=>({...l,locked:l.id===layer}))}}};
+  expect(()=>applyEditorCommand(locked,cmd)).toThrow("заблокирован");
+ }
+ expect(s.path.kind).toBe("routed");expect(s.path.points).toEqual([]);
+});
 it("removes a straightened corner in normal mode but retains it in Shift mode",()=>{
  const d=fixture(),simple={...d,physicalTopology:{...d.physicalTopology,segments:[{...d.physicalTopology.segments[0]!,path:{kind:"polyline" as const,points:[{x:80,y:0}]}}]}};
  const cmd={type:"edit-physical-bend" as const,segmentId:"pipe",index:0,position:{x:150,y:50}};
