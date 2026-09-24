@@ -1,7 +1,8 @@
 import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
-import { coveringControlFractions, coveringKind, coveringRoute, pathLength, projectOntoPolyline, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
+import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
 import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
+import { drawingBendRadius, drawingRouteSection, projectOntoDrawingRoute } from "./drawing-route-path";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number }
@@ -28,14 +29,10 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
   for(const [spanIndex,original] of covering.spans.entries()){
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
-   const path=trimPolyline(route.points,(route.before+from*route.length)/route.total,(route.before+to*route.length)/route.total);if(path.length<2)continue;
    // Include both pipe exits so a shrink surface can taper instead of crossing its own corners.
    const fractions=[from,...coveringControlFractions(document,s.segmentId).filter(f=>f>from&&f<to),to];
-   const refined=fractions.slice(1).flatMap((f,i)=>{
-    const part=trimPolyline(route.points,(route.before+fractions[i]!*route.length)/route.total,(route.before+f*route.length)/route.total);
-    return i?part.slice(1):part;
-   });
-   const centerline=refined.length>=2?refined:path;
+   const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,fractions.map(f=>route.before+f*route.length));
+   const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
    const pipeWidth=drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const halfAt=(fraction:number):number=>{
@@ -51,20 +48,20 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     }
     return Math.max(covering.width*scale,width+.5*scale)/2;
    };
-   let distance=0;const widths=centerline.map((p,i)=>{if(i)distance+=Math.hypot(p.x-centerline[i-1]!.x,p.y-centerline[i-1]!.y);return halfAt(from+distance/route.length);});
-   maximumWidth=Math.max(maximumWidth,...widths.map(w=>2*w));
+   const widths=display.map(s=>halfAt((s.distance-route.before)/route.length));
+   for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
    surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex});paths.push(centerline);
    for(const part of ["from","to"] as const){const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
-  return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),metadata:{coveringKind:coveringKind(covering),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
+  return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),routeRadius:0,metadata:{coveringKind:coveringKind(covering),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
  });
 }
 
 export function moveCovering(document:HarnessDesignDocument,id:string,spanIndex:number,part:CoveringDragPart,start:Point,point:Point,tolerance=10):PhysicalCovering|null {
  const c=document.physicalTopology?.coverings?.find(c=>c.id===id),original=c?.spans[spanIndex];if(!c||!original)return null;
  const route=coveringRoute(document,original.segmentId);if(!route)return null;
- const s=resolvedCoveringSpan(document,original),project=(p:Point)=>(projectOntoPolyline(route.points,p).fraction*route.total-route.before)/route.length;
+ const s=resolvedCoveringSpan(document,original),project=(p:Point)=>(projectOntoDrawingRoute(route.points,drawingBendRadius(document),p)-route.before)/route.length;
  const delta=project(point)-project(start),minimum=Math.min(.001,(s.to-s.from)/4);
  let from=s.from,to=s.to,fromAnchor=original.fromAnchor,toAnchor=original.toAnchor;
  if(part==="body"){

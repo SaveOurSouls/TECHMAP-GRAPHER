@@ -7,6 +7,7 @@ import { physicalSegmentPoints } from "./physical-geometry";
 import { drawingPipeWidth } from "./drawing-thickness";
 import { coveringScene } from "./covering-layout";
 import { coveringSurfaces } from "./covering-renderer";
+import { drawingBendRadius, drawingRouteHitPoints } from "./drawing-route-path";
 
 /** Local contours from the pinned drawing; independent of camera, translation and placement scale. */
 export type DrawingPerimeters = ReadonlyMap<string, readonly (readonly Point[])[]>;
@@ -99,7 +100,7 @@ export function drawingObjectPerimeter(document:HarnessDesignDocument,id:string,
   const cable=document.cables.find(c=>c.id===id),wire=document.wires.find(w=>w.id===(cable?.memberWireIds[0]??id));
   const start=wire&&findWireEndpoint(document,wire.from,"drawing"),end=wire&&findWireEndpoint(document,wire.to,"drawing");
   const paths=segment?[physicalSegmentPoints(document,segment)]:wire&&start&&end?[physicalWirePoints(document,wire.id,start,end)??[start,...wire.drawingRoute,end]]:[];
-  const point=nearestOnPaths(paths,target);if(!point)return null;
+  const point=nearestOnPaths(paths.map(p=>drawingRouteHitPoints(p,drawingBendRadius(document))),target);if(!point)return null;
   const radius=segment?drawingPipeWidth(document,segment)/2:1.5;
   const angle=Math.atan2(target.y-point.y,target.x-point.x);
   return {x:point.x+radius*Math.cos(angle),y:point.y+radius*Math.sin(angle)};

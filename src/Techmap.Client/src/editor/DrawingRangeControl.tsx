@@ -2,9 +2,10 @@ import { useRef } from "react";
 import { InfoHint } from "../InfoHint";
 
 /** A drag previews freely, but creates one history entry when it finishes. */
-export function DrawingRangeControl({label, accessibleLabel, value, min, max, step, hint, onPreview, onCommit}: {
+export function DrawingRangeControl({label, accessibleLabel, value, min, max, step, hint, onPreview, onCommit, unit="×", digits=2}: {
   label:string; accessibleLabel:string; value:number; min:number; max:number; step:number;
   hint:string; onPreview:(value:number|null)=>void; onCommit:(value:number)=>void;
+  unit?:string; digits?:number;
 }) {
   const pending=useRef<number|null>(null);
   const cancel=()=>{pending.current=null;onPreview(null);};
@@ -21,5 +22,5 @@ export function DrawingRangeControl({label, accessibleLabel, value, min, max, st
     onPointerUp={commit} onPointerCancel={cancel} onLostPointerCapture={cancel}
     onKeyDown={e=>{if(e.key==="Escape"){e.stopPropagation();e.preventDefault();cancel();}}}
     onKeyUp={commit} onBlur={commit}
-  /></label><output>{value.toFixed(2)}×</output><InfoHint>{hint}</InfoHint></div>;
+  /></label><output>{value.toFixed(digits)}{unit}</output><InfoHint>{hint}</InfoHint></div>;
 }

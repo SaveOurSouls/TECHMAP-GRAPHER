@@ -40,6 +40,8 @@ export interface EditorSceneObject {
   readonly color: string;
   readonly points?: readonly EditorPoint[];
   readonly paths?: readonly (readonly EditorPoint[])[];
+  /** Presentation only. Zero keeps sharp joins; no physical lengths change. */
+  readonly routeRadius?: number;
   /** End-treatment presentation shares the wire identity and drawing layer. */
   readonly stripProfiles?: WireEndStripProfiles;
   readonly pipe?: PhysicalPipeSceneData;

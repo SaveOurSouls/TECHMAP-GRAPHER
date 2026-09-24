@@ -146,11 +146,12 @@ try {
  twisted=parseHarnessDesignDocument({...twisted,wires:[1,2].map(n=>({...createWire('pair-'+n,{connectorId:'pair-a',contactId:'pair-a:contact:'+n},{connectorId:'pair-b',contactId:'pair-b:contact:'+n}),e4RouteMode:'manual',e4Route:[{x:700,y:1640+24*n},{x:900,y:1840+24*n}]}))});
  twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
  const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
- combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5};
+ combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0};
  const leaderScene=drawingDocumentScene(combined);
  assert.ok(leaderScene.some(o=>o.kind==='position-leader'&&o.width===60));
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
  assert.equal(savedRemoved.content.drawingDocuments.leaderScale,2.5);
+ assert.equal(savedRemoved.content.drawingDocuments.bendRadius,0);
  assert.deepEqual(savedRemoved.content.drawingDocuments.leaders,JSON.parse(JSON.stringify(combined.drawingDocuments.leaders)));
  assert.deepEqual(savedRemoved.content.wires.find(w=>w.id==='e4-test').e4Route,e4Base.wires[0].e4Route);
  assert.deepEqual(savedRemoved.content.junctions,combined.junctions);

@@ -16,6 +16,19 @@ public sealed class HarnessDrawingAppearanceTests
     private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
     [Theory]
+    [InlineData(0)][InlineData(.25)][InlineData(24)][InlineData(200)]
+    public void Accepts_bend_radius(double radius)
+    {
+        var root=Fixture();root["drawingDocuments"]!["bendRadius"]=radius;Validate(root);
+    }
+    [Theory]
+    [InlineData("-1")][InlineData("200.01")][InlineData("null")][InlineData("\"24\"")][InlineData("false")]
+    public void Rejects_invalid_bend_radius(string value)
+    {
+        var root=Fixture();root["drawingDocuments"]!["bendRadius"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Theory]
     [InlineData(.25)][InlineData(1)][InlineData(2.5)][InlineData(4)]
     public void Accepts_leader_scale(double scale)
     {
