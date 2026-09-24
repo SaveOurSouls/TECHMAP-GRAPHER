@@ -10,6 +10,18 @@ export interface ScreenCrossSection {
   readonly firstWireDirection:1|-1;
   readonly routeIndex:number;
   readonly segmentByWireId:Readonly<Record<string,Segment>>;
+  readonly crossings:readonly Segment[];
+}
+
+/** Exact transverse extent at the requested position, including oblique paths. */
+export function screenSectionAt(span:ScreenCrossSection,position:number):{crossMinimum:number;crossMaximum:number} {
+  const along=(p:Point)=>span.orientation==="horizontal"?p.x:p.y;
+  const cross=(p:Point)=>span.orientation==="horizontal"?p.y:p.x;
+  const values=span.crossings.map(s=>{
+    const t=Math.max(0,Math.min(1,(position-along(s.start))/(along(s.end)-along(s.start))));
+    return cross(s.start)+(cross(s.end)-cross(s.start))*t;
+  });
+  return {crossMinimum:Math.min(...values),crossMaximum:Math.max(...values)};
 }
 
 /** Sweep every route at the same X, independently of its bend indices.
@@ -23,7 +35,7 @@ export function screenCrossSections(paths:readonly {id:string;points:readonly Po
     const cross=(p:Point)=>orientation==="horizontal"?p.y:p.x;
     const lists=paths.map(path=>path.points.slice(1).flatMap((end,index)=>{
       const start=path.points[index]!;
-      return cross(start)===cross(end)&&along(start)!==along(end)?[{index,start,end,orientation}]:[];
+      return along(start)!==along(end)?[{index,start,end,orientation}]:[];
     }));
     if(lists.some(list=>!list.length))continue;
     const breaks=[...new Set(lists.flatMap(list=>list.flatMap(s=>[along(s.start),along(s.end)])))].sort((a,b)=>a-b);
@@ -33,8 +45,9 @@ export function screenCrossSections(paths:readonly {id:string;points:readonly Po
       const start=breaks[i-1]!,end=breaks[i]!,middle=(start+end)/2;
       const selected=lists.map(list=>list.filter(s=>Math.min(along(s.start),along(s.end))<middle&&Math.max(along(s.start),along(s.end))>middle));
       if(selected.some(list=>!list.length))continue;
-      const crosses=selected.flatMap(list=>list.map(s=>cross(s.start)));
+      const crosses=selected.flatMap(list=>list.flatMap(s=>[start,end].map(p=>cross(s.start)+(cross(s.end)-cross(s.start))*(p-along(s.start))/(along(s.end)-along(s.start)))));
       spans.push({orientation,start,end,crossMinimum:Math.min(...crosses),crossMaximum:Math.max(...crosses),firstWireDirection:direction,routeIndex:0,
+        crossings:selected.flat(),
         segmentByWireId:Object.fromEntries(paths.map((path,index)=>[path.id,selected[index]![0]!]))});
     }
     if(spans.length)return spans.sort((a,b)=>direction*(a.start-b.start));

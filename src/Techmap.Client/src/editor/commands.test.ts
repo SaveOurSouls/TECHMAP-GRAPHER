@@ -1137,6 +1137,29 @@ describe("shared harness editor model", () => {
     })).toThrow(/Точка маршрута Э4 не найдена/);
   });
 
+  it("keeps drawn and electrical screen ports identical while sliding along inclined carriers",()=>{
+    const base=connectionDocument();
+    const inclined={...base,wires:base.wires.map((w,i)=>({...w,e4Route:[{x:700,y:64+24*i},{x:820,y:220+24*i},{x:940,y:220+24*i},{x:940,y:64+24*i}]}))};
+    const d=applyEditorCommand(inclined,{type:"create-screen",screen:{id:"s",wireIds:["w1","w2"],position:.5,width:30,label:"S",terminalSide:"both"}});
+    let diagonalPositions=0;
+    for(let i=0;i<=20;i++){
+      const moved=applyEditorCommand(d,{type:"update-screen",screenId:"s",position:i/20});
+      const model=wireScreenConnectionGeometry(moved,"s")!;
+      const drawing=getE4ScreenLayout(moved.screens[0]!,designToScene(moved,"e4"))!;
+      expect(drawing.center).toEqual(model.center);
+      expect(drawing.terminals).toEqual(model.terminals);
+      expect(model.orientation).toBe("horizontal");
+      if(model.center.x>700&&model.center.x<820){
+        diagonalPositions++;
+        expect(model.center.y).toBeCloseTo(76+(model.center.x-700)*156/120);
+        expect(model.crossSize).toBeCloseTo(42);
+      }
+      expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved))).screens).toEqual(moved.screens);
+      expect(moved.wires).toEqual(d.wires);
+    }
+    expect(diagonalPositions).toBeGreaterThan(1);
+  });
+
   it("inserts an E4 midpoint with one command, persists it and undoes it",()=>{
     const d=singleWireConnectionDocument(),a=wireEndpointE4Anchor(d,d.wires[0]!.from)!.position,b=wireEndpointE4Anchor(d,d.wires[0]!.to)!.position;
     const point={x:(a.x+b.x)/2,y:a.y};
@@ -1361,7 +1384,7 @@ describe("shared harness editor model", () => {
     })).toThrow(/общего параллельного участка/);
     expect(() => applyEditorCommand(document, {
       type: "create-screen", screen: { id: "s-hidden", wireIds: ["w1", "w3"], position: 0.5, label: "SH", width: 30 },
-    })).toThrow(/общего параллельного участка/);
+    })).toThrow(/общего поперечного охвата/);
   });
 
   it("connects an ordinary wire to the conducting point of a screen", () => {

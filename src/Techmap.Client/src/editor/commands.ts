@@ -28,6 +28,7 @@ import {
   wireE4PathContainsPoint,
   wireEndpointE4Anchor,
   wireGroupHasCommonE4ParallelSpan,
+  wireGroupHasScreenCrossSection,
   type ConnectorBaseColumnKey,
   type CableInstance,
   type ConnectorContact,
@@ -1976,8 +1977,8 @@ function validateWireGroups(document: HarnessDesignDocument): void {
   for (const group of document.diffPairs) if (!wireGroupHasCommonE4ParallelSpan(document, group.wireIds)) {
     throw new Error("Изменение уберёт общий параллельный участок дифференциальной пары.");
   }
-  for (const screen of document.screens) if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
-    throw new Error("Изменение уберёт общий параллельный участок проводов экрана.");
+  for (const screen of document.screens) if (!wireGroupHasScreenCrossSection(document, screen.wireIds)) {
+    throw new Error("Изменение уберёт общий поперечный охват проводов экрана.");
   }
 }
 
@@ -2152,8 +2153,8 @@ function normalizeScreen(document: HarnessDesignDocument, screen: WireScreenGrou
   if (terminalSide !== "above" && terminalSide !== "below" && terminalSide !== "both") {
     throw new Error("Сторона вывода экрана задана неверно.");
   }
-  if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
-    throw new Error("Выбранные провода не имеют общего параллельного участка для экрана.");
+  if (!wireGroupHasScreenCrossSection(document, screen.wireIds)) {
+    throw new Error("Выбранные провода не имеют общего поперечного охвата для экрана.");
   }
   return { id, wireIds: [...screen.wireIds], position: screen.position, label, width: screen.width, terminalSide };
 }

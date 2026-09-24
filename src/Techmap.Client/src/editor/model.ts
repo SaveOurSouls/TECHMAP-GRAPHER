@@ -1,6 +1,6 @@
 import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
-import { screenCrossSections } from "./e4-screen-spans";
+import { screenCrossSections, screenSectionAt } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
@@ -908,9 +908,10 @@ export function wireScreenConnectionGeometry(
   }
   const spanOffset = Math.max(0, Math.min(selected.end - selected.start, requestedDistance - accumulated));
   const along = selected.firstWireDirection === 1 ? selected.start + spanOffset : selected.end - spanOffset;
-  const cross = (selected.crossMinimum + selected.crossMaximum) / 2;
+  const section=screenSectionAt(selected,along);
+  const cross = (section.crossMinimum + section.crossMaximum) / 2;
   const alongSize = e4ScreenAlongSize;
-  const crossSize = Math.max(32, screen.width, selected.crossMaximum - selected.crossMinimum + 18);
+  const crossSize = Math.max(32, screen.width, section.crossMaximum - section.crossMinimum + 18);
   const center = selected.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
   const configuredSide = screen.terminalSide ?? "above";
   const terminalSides: readonly WireScreenEndpointSide[] = configuredSide === "both"
@@ -1055,8 +1056,8 @@ function validateParsedGroups(
   for (const group of diffPairs) if (!wireGroupHasCommonE4ParallelSpan(document, group.wireIds)) {
     throw new Error("Провода дифференциальной пары должны иметь общий параллельный участок.");
   }
-  for (const screen of screens) if (!wireGroupHasCommonE4ParallelSpan(document, screen.wireIds)) {
-    throw new Error("Провода экрана должны иметь общий параллельный участок.");
+  for (const screen of screens) if (!wireGroupHasScreenCrossSection(document, screen.wireIds)) {
+    throw new Error("Провода экрана должны иметь общий поперечный охват.");
   }
   for (const screen of screens) if (screen.wireIds.some((wireId) => {
     const wire = document.wires.find((item) => item.id === wireId);
@@ -1963,6 +1964,14 @@ export function wireE4PathContainsPoint(
   if (!start || !end) return false;
   const points = [start, ...wire.e4Route, end];
   return points.slice(1).some((current, index) => pointOnSegment(point, points[index]!, current));
+}
+
+export function wireGroupHasScreenCrossSection(document:HarnessDesignDocument,wireIds:readonly string[]):boolean {
+  return screenCrossSections(wireIds.map(id=>{
+    const wire=document.wires.find(w=>w.id===id);
+    const a=wire&&wireEndpointE4Anchor(document,wire.from),b=wire&&wireEndpointE4Anchor(document,wire.to);
+    return {id,points:wire&&a&&b?[a.position,...wire.e4Route,b.position]:[]};
+  })).length>0;
 }
 
 export function wireGroupHasCommonE4ParallelSpan(

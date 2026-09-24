@@ -8,7 +8,7 @@ import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
 import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
-import { screenCrossSections } from "./e4-screen-spans";
+import { screenCrossSections, screenSectionAt, type ScreenCrossSection } from "./e4-screen-spans";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
 import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
@@ -652,8 +652,8 @@ export interface E4ScreenLayout {
   readonly orientation: E4SegmentOrientation;
   readonly alongSize: number;
   readonly crossSize: number;
-  readonly span: E4ParallelSpan;
-  readonly spans: readonly E4ParallelSpan[];
+  readonly span: ScreenCrossSection;
+  readonly spans: readonly ScreenCrossSection[];
   readonly pathLength: number;
   readonly bodyConnectionPoint: EditorPoint;
   readonly connectionPoint: EditorPoint;
@@ -755,8 +755,9 @@ export function getE4ScreenLayout(
   }
   const spanOffset = Math.max(0, Math.min(span.end - span.start, requestedDistance - distance));
   const along = span.firstWireDirection === 1 ? span.start + spanOffset : span.end - spanOffset;
-  const cross = (span.crossMinimum + span.crossMaximum) / 2;
-  const crossSize = Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18);
+  const section=screenSectionAt(span,along);
+  const cross = (section.crossMinimum + section.crossMaximum) / 2;
+  const crossSize = Math.max(32, screen.width, section.crossMaximum - section.crossMinimum + 18);
   const center = span.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
   const configuredSide = screen.terminalSide ?? "above";
   const sides: readonly ("above" | "below")[] = configuredSide === "both"
