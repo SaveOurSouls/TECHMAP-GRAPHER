@@ -125,6 +125,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
+  readonly objectProperties?:(objectId:string)=>ReactNode;
   readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint, mode?: PhysicalDragMode) => void;
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
@@ -259,7 +260,7 @@ export function HarnessEditorWorkspace({
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
   onWireStripProfileClear,
-  onRelatedObjectsSelect,
+  objectProperties, onRelatedObjectsSelect,
   onObjectMove,
   onObjectMovePreview, onDrawingMove, onDrawingScale,
   onObjectEditRequest,
@@ -569,6 +570,7 @@ export function HarnessEditorWorkspace({
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
           onObjectGroupSelect={selectObjectGroup}
+          objectProperties={objectProperties}
           onRelatedObjectsSelect={onRelatedObjectsSelect}
           onObjectMove={onObjectMove}
           onDrawingScale={onDrawingScale}

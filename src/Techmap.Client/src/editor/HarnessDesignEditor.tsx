@@ -3,17 +3,15 @@ import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-l
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
 import {SpecificationItemsPanel} from "./SpecificationItemsPanel";
-import {DrawingRotationControl} from "./DrawingRotationControl";
 import { DrawingDimensionsPanel } from "./DrawingDimensionsPanel";
 import { drawingDimensionScene, dimensionRouteKey, toggleDrawingDimensions } from "./drawing-dimensions";
 import { projectComponentTemplateView } from "./component-template-view-renderer";
 import { materializePlacementRows } from "./component-template-placement";
 import { DrawingTableWindows } from "./DrawingTableWindows";
-import { drawingLocalPoint, drawingRotation, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
+import { drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
-import { PhysicalCoveringsPanel } from "./PhysicalCoveringsPanel";
 import { type PhysicalCovering, coveringMaterial, standardCovering } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
@@ -27,6 +25,7 @@ import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, e4RoutingIssues, type EditorCommand } from "./commands";
 import { InfoHint } from "../InfoHint";
 import { drawingBendRadius } from "./drawing-route-path";
+import { DrawingObjectProperties } from "./DrawingObjectProperties";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
@@ -1117,9 +1116,6 @@ export function HarnessDesignEditor({
     drawingPerimeters,
   );
   const layers = toUiLayers(history.present, view);
-  const selectedDrawingConnector = view === "drawing"
-    ? history.present.connectors.find(connector => connector.id === selectedObjectId && connector.libraryBinding?.mode === "template")
-    : undefined;
   const selectedConnector = view === "e4" && selectedObjectId
     ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
     : null;
@@ -1588,6 +1584,7 @@ export function HarnessDesignEditor({
         selectedObjectIds={selectedObjectIds}
         highlightedObjectIds={[...related.wireIds,...related.componentIds,...relatedSourceIds]}
         revealRequest={revealRequest}
+        objectProperties={view==="drawing"?id=><DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>:undefined}
         documentActions={<>{view==="drawing"&&<>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
@@ -1604,7 +1601,7 @@ export function HarnessDesignEditor({
           }
           if(run({type:"set-drawing-documents",documents:{...documents,dimensions:[...documents.dimensions??[],{id,wireId,from:Math.min(from,to),to:Math.max(from,to),pointCount,routeKey:dimensionRouteKey(history.present,wire!),mode,offset:40,lengthMm:null}]}})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
         }}
-        relationPanel={()=><>{view === "drawing" && <PhysicalTopologyPanel document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel pipeInterval={selectedPipeInterval} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}{view === "drawing" && history.present.physicalTopology && <PhysicalCoveringsPanel document={history.present} topology={history.present.physicalTopology} selectedIds={selectedObjectIds} onChange={topology=>run({type:"set-physical-topology",topology})} onReveal={id=>{setRelatedSourceIds([]);setSelectedObjectId(id);setSelectedObjectIds([id]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
+        relationPanel={()=><>{view === "drawing" && <PhysicalTopologyPanel mode="actions" document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel pipeInterval={selectedPipeInterval} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
           onReveal={id => {
             const found = id && selectionIndex ? resolveHarnessSelection(selectionIndex, [id], wholeNet) : related;
@@ -1612,11 +1609,6 @@ export function HarnessDesignEditor({
             setEditingObjectId(null); setView("drawing"); onViewChange?.("drawing");
             setRevealRequest({token: Date.now(), objectIds: [...found.wireIds, ...found.componentIds]});
           }} />
-          {selectedDrawingConnector && <section className="he-companion-list"><header className="ui-section-heading"><strong>Масштаб рисунка</strong><DrawingScaleControl label="Масштаб рисунка на чертеже" value={drawingScale(selectedDrawingConnector.drawingPlacements)} disabled={layers.some(layer=>layer.id===selectedDrawingConnector.layerIds.drawing&&layer.locked)} onChange={scale=>run({type:"set-drawing-placement",connectorId:selectedDrawingConnector.id,drawingId:DRAWING_VIEW_PLACEMENT_ID,scale})}/><InfoHint>Пропорциональный масштаб рисунка и его контактных точек. Электрические связи и заданные длины проводов сохраняются. Можно тянуть угловой маркер на поле. Поворот сохраняет центр рисунка и перемещает контакты вместе с ним. Снимите «Шаг 15°» для произвольного угла.</InfoHint></header><DrawingRotationControl value={drawingRotation(selectedDrawingConnector.drawingPlacements)} disabled={layers.some(layer=>layer.id===selectedDrawingConnector.layerIds.drawing&&layer.locked)} onChange={rotationDegrees=>{
-            const instance=componentTemplateViewInstances.find(i=>i.objectId===selectedDrawingConnector.id);
-            const bounds=instance?projectComponentTemplateView(instance,"drawing",selectedDrawingConnector.positions.drawing)?.bounds:undefined;
-            run({type:"set-drawing-placement",connectorId:selectedDrawingConnector.id,drawingId:DRAWING_VIEW_PLACEMENT_ID,rotationDegrees,...(bounds?{rotationCenter:{x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2}}:{})});
-          }}/></section>}
         </>}
         cables={(previewResult.document ?? history.present).cables}
         e4Overlays={view === "e4" ? {
