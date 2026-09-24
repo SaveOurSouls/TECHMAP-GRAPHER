@@ -2700,6 +2700,7 @@ export function CanvasViewport({
   const dragRef = useRef<CoveringPointerDrag | PointerDrag | ObjectPointerDrag | DrawingPointerDrag | WireRoutePointerDrag |
     E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | PhysicalNodeConnectPointerDrag | null>(null);
   const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
+  const inlineCaptureRef = useRef<HTMLDivElement | null>(null);
   const inlineDragActivatedRef = useRef(false);
   const suppressInlineDoubleClickUntilRef = useRef(0);
   const [inlineDragOffset, setInlineDragOffset] = useState<EditorPoint | null>(null);
@@ -2772,9 +2773,14 @@ export function CanvasViewport({
   }, [tool]);
 
   useEffect(() => {
-    const activeObjectId = inlineDragRef.current?.objectId;
-    if (activeObjectId) onObjectMovePreview?.(activeObjectId, null);
+    const drag = inlineDragRef.current;
     inlineDragRef.current = null;
+    if (drag) {
+      onObjectMovePreview?.(drag.objectId, null);
+      const target=inlineCaptureRef.current;
+      if(target?.hasPointerCapture(drag.pointerId))target.releasePointerCapture(drag.pointerId);
+    }
+    inlineCaptureRef.current = null;
     inlineDragActivatedRef.current = false;
     setInlineDragOffset(null);
     setConnectorAlignmentGuides({});
@@ -2831,13 +2837,28 @@ export function CanvasViewport({
   useEffect(() => {
     const cancelConnection = () => {
       const drag = dragRef.current;
-      if (drag?.kind === "physical-node-connect"||drag?.kind==="wire-route"||drag?.kind==="object") {
+      if (drag) {
         if(drag.kind==="wire-route")onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,null);
         if(drag.kind==="object")onObjectMovePreview?.(drag.objectId,null);
+        if(drag.kind==="covering")onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,drag.start,"cancel");
         dragRef.current = null;
         const canvas = canvasRef.current;
         if (canvas?.hasPointerCapture(drag.pointerId)) canvas.releasePointerCapture(drag.pointerId);
       }
+      const inline = inlineDragRef.current;
+      inlineDragRef.current = null;
+      if(inline){
+        onObjectMovePreview?.(inline.objectId,null);
+        const target=inlineCaptureRef.current;
+        if(target?.hasPointerCapture(inline.pointerId))target.releasePointerCapture(inline.pointerId);
+      }
+      inlineCaptureRef.current=null;
+      inlineDragActivatedRef.current=false;
+      setInlineDragOffset(null);
+      setConnectorAlignmentGuides({});
+      setDrawingPreview(null);
+      setWireLabelPreview(null);
+      setScreenPositionPreview(null);
       setPhysicalStart(null);
       setPhysicalNodePreview(null);
       setPhysicalGuide(undefined);
@@ -3424,6 +3445,7 @@ export function CanvasViewport({
     }
     if (!onObjectMove) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    inlineCaptureRef.current=event.currentTarget;
     inlineDragRef.current = {
       kind: "object",
       pointerId: event.pointerId,
@@ -3432,6 +3454,7 @@ export function CanvasViewport({
       objectId: inlineObject.id,
       objectX: inlineObject.x,
       objectY: inlineObject.y,
+      mode:event.shiftKey?"adjacent":"carry",
     };
     inlineDragActivatedRef.current = false;
   };
@@ -3446,13 +3469,14 @@ export function CanvasViewport({
       onObjectMove?.(drag.objectId, snappedObjectDestination(
         drag.objectId,
         inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
-      ));
+      ),drag.mode);
     }
     onObjectMovePreview?.(drag.objectId, null);
     setConnectorAlignmentGuides({});
     if (inlineDragActivatedRef.current) suppressInlineDoubleClickUntilRef.current = Date.now() + 500;
     setInlineDragOffset(null);
     inlineDragRef.current = null;
+    inlineCaptureRef.current = null;
     inlineDragActivatedRef.current = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -3464,6 +3488,7 @@ export function CanvasViewport({
     setConnectorAlignmentGuides({});
     setInlineDragOffset(null);
     inlineDragRef.current = null;
+    inlineCaptureRef.current = null;
     inlineDragActivatedRef.current = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -3485,7 +3510,7 @@ export function CanvasViewport({
     ));
     if (onObjectMovePreview) {
       setInlineDragOffset(null);
-      onObjectMovePreview(drag.objectId, destination);
+      onObjectMovePreview(drag.objectId, destination,drag.mode);
     } else {
       setInlineDragOffset({
         x: (destination.x - drag.objectX) * camera.zoom,
@@ -3516,6 +3541,7 @@ export function CanvasViewport({
         onPointerMove={pointerMove}
         onPointerUp={endPointer}
         onPointerCancel={cancelPointer}
+        onLostPointerCapture={cancelPointer}
         onDragOver={allowDrop}
         onDrop={drop}
         onDoubleClick={doubleClick}

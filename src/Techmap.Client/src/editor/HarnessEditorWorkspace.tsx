@@ -1,4 +1,5 @@
 import type { PhysicalDragMode } from "./physical-editing";
+import { InfoHint } from "../InfoHint";
 import type { CoveringDragPart } from "./covering-layout";
 import {type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
@@ -519,10 +520,10 @@ export function HarnessEditorWorkspace({
               className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
               type="button"
               aria-pressed={drawingSnapEnabled}
-              title="Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°."
               onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
             >Шаг 15°</button>
           )}
+          <InfoHint>Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°.</InfoHint>
         </div>
         <button
           className={`he-save-state ${saveState}`}

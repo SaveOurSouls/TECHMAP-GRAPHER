@@ -101,7 +101,7 @@
 .he-save-state:not(:disabled) { cursor: pointer; }
 .he-save-state:not(:disabled):hover { background: #eef5f7; }
 .he-save-state:disabled { opacity: 1; }
-.he-view-options { display: grid; place-items: center; }
+.he-view-options { display: flex; align-items: center; gap: 4px; }
 .he-angle-snap { width: 42px; height: 28px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; color: #617681; font-size: 10px; font-weight: 800; cursor: pointer; }
 .he-angle-snap.active { border-color: #8fc4da; background: #e3f3f9; color: #0875a3; }
 .he-save-state > span { width: 7px; height: 7px; border-radius: 50%; background: #55a480; }
