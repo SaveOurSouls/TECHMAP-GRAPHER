@@ -3,7 +3,6 @@ import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-l
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
 import {SpecificationItemsPanel} from "./SpecificationItemsPanel";
-import { previewE4ConnectorMove } from "./move-preview";
 import {DrawingRotationControl} from "./DrawingRotationControl";
 import { DrawingDimensionsPanel } from "./DrawingDimensionsPanel";
 import { drawingDimensionScene, dimensionRouteKey, toggleDrawingDimensions } from "./drawing-dimensions";
@@ -925,7 +924,6 @@ export function HarnessDesignEditor({
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб."};}
     }
     if (!movePreview) return { document: history.present, error: null };
-    if (view === "e4") return { document: previewE4ConnectorMove(history.present, movePreview.objectId, movePreview.point), error: null };
     try {
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point,drawingPerimeters);
       if(annotation)return {document:{...history.present,drawingDocuments:annotation},error:null};

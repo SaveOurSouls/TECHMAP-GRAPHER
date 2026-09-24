@@ -1,25 +1,6 @@
-import type { Point } from "./model";
+import { defaultE4WireLead, type E4RouteAnchor, type Point } from "./model";
 import type { PhysicalDragMode } from "./physical-editing";
-import { validateE4Route, type E4RoutingRequest } from "./e4-router";
-
-/** Repair only the changed shoulders before asking the global router. */
-export function completeOrthogonalShoulders(points:readonly Point[],request:E4RoutingRequest):Point[]|null {
-  let candidates:Point[][]=[[points[0]!]];
-  for(const b of points.slice(1)){
-    candidates=candidates.flatMap(path=>{
-      const a=path.at(-1)!;
-      if(a.x===b.x&&a.y===b.y)return [path];
-      if(a.x===b.x||a.y===b.y)return [[...path,b]];
-      return [[...path,{x:a.x,y:b.y},b],[...path,{x:b.x,y:a.y},b],
-        [...path,{x:(a.x+b.x)/2,y:a.y},{x:(a.x+b.x)/2,y:b.y},b],
-        [...path,{x:a.x,y:(a.y+b.y)/2},{x:b.x,y:(a.y+b.y)/2},b]];
-    });
-    if(candidates.length>256)return null;
-  }
-  for(const path of candidates){try{validateE4Route(path,request);return path;}catch{/* Try the other elbow. */}}
-  return null;
-}
-
+import { straightLeadEnd } from "./route-lead";
 /** Edit authored points before the electrical route validates its leads and obstacles. */
 export function editedE4Points(points:readonly Point[],index:number,point:Point,mode:PhysicalDragMode,insert=false):Point[] {
   if(!Number.isInteger(index)||index<0||index>=points.length-(insert?1:2))throw new Error("Точка маршрута Э4 не найдена.");
@@ -45,13 +26,33 @@ export function editedE4Points(points:readonly Point[],index:number,point:Point,
   return result;
 }
 
-/** Keep clicked points even when the router simplifies a straight interval. */
-export function retainE4Waypoints(points:readonly Point[],waypoints:readonly Point[]):Point[] {
-  return points.flatMap((a,index)=>{
-    const b=points[index+1];if(!b)return [{...a}];
-    const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
-    const inner=waypoints.filter(p=>Math.abs((p.x-a.x)*dy-(p.y-a.y)*dx)<1e-7)
-      .map(p=>({p,t:((p.x-a.x)*dx+(p.y-a.y)*dy)/length})).filter(p=>p.t>1e-8&&p.t<1-1e-8).sort((p,q)=>p.t-q.t);
-    return [{...a},...inner.filter((p,i)=>i===0||Math.abs(p.t-inner[i-1]!.t)>1e-8).map(({p})=>({...p}))];
-  });
+/** A freely edited shoulder starts after the directed contact's straight lead. */
+export function preserveE4Leads(points:readonly Point[],start:E4RouteAnchor,end:E4RouteAnchor):Point[] {
+  let result=[...points];
+  for(const [anchor,reverse] of [[start,false],[end,true]] as const){
+    if(reverse)result.reverse();
+    const direction=anchor.leadDirection;
+    if(direction){
+      const u=direction==="left"?{x:-1,y:0}:direction==="right"?{x:1,y:0}:direction==="up"?{x:0,y:-1}:{x:0,y:1};
+      const a=result[0]!,b=straightLeadEnd(result),d={x:b.x-a.x,y:b.y-a.y},length=Math.min(defaultE4WireLead,anchor.leadLength??defaultE4WireLead);
+      if(Math.abs(d.x*u.y-d.y*u.x)>1e-7||d.x*u.x+d.y*u.y<length)
+        result.splice(1,0,{x:a.x+u.x*length,y:a.y+u.y*length});
+    }
+    if(reverse)result.reverse();
+  }
+  return result;
+}
+
+export function moveE4Ends(points:readonly Point[],from:Point,to:Point,mode:PhysicalDragMode):Point[] {
+  let result=points.map(p=>({...p}));
+  if(result.length===2&&mode==="carry"){
+    const [a,b]=result as [Point,Point];result=[a,{x:a.x+(b.x-a.x)/3,y:a.y+(b.y-a.y)/3},{x:a.x+2*(b.x-a.x)/3,y:a.y+2*(b.y-a.y)/3},b];
+  }
+  const original=[...result];
+  for(const [at,p] of [[0,from],[result.length-1,to]] as const){
+    const a=original[at]!,delta={x:p.x-a.x,y:p.y-a.y},shoulder=at===0?1:at-1;
+    result[at]=p;
+    if(mode==="carry"&&result.length>2)result[shoulder]={x:result[shoulder]!.x+delta.x,y:result[shoulder]!.y+delta.y};
+  }
+  return result;
 }

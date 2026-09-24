@@ -1160,11 +1160,25 @@ describe("shared harness editor model", () => {
     const d=applyEditorCommand(singleWireConnectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:700,y:64},{x:700,y:200},{x:900,y:200},{x:900,y:64}]});
     const cmd={type:"edit-e4-bend" as const,wireId:"w1",index:1,position:{x:740,y:240},mode:"adjacent" as const};
     const moved=applyEditorCommand(d,cmd);
+    expect(moved.wires[0]!.e4Route).toEqual([{x:700,y:64},{x:740,y:240},{x:900,y:200},{x:900,y:64}]);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved))).wires[0]!.e4Route).toEqual(moved.wires[0]!.e4Route);
     for(const p of [{x:700,y:64},{x:740,y:240},{x:900,y:200},{x:900,y:64}])expect(moved.wires[0]!.e4Route).toContainEqual(p);
     expect(e4RoutingIssues(moved)).toEqual([]);
     const locked={...d,views:{...d.views,e4:{...d.views.e4,layers:d.views.e4.layers.map(l=>({...l,locked:l.id===d.wires[0]!.layerIds.e4}))}}};
     expect(()=>applyEditorCommand(locked,cmd)).toThrow("заблокирован");
     expect(()=>applyEditorCommand(d,{...cmd,index:999})).toThrow("не найдена");
+  });
+
+  it("moves E4 connectors in carry/Shift modes without rerouting remote corners",()=>{
+    const d=applyEditorCommand(singleWireConnectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:700,y:64},{x:700,y:200},{x:900,y:200},{x:900,y:64}]});
+    const carry=applyEditorCommand(d,{type:"move-connector",connectorId:"x1",view:"e4",position:{x:20,y:30},physicalDragMode:"carry"});
+    expect(carry.wires[0]!.e4Route).toEqual([{x:720,y:94},{x:700,y:200},{x:900,y:200},{x:900,y:64}]);
+    const adjacent=applyEditorCommand(d,{type:"move-connector",connectorId:"x1",view:"e4",position:{x:20,y:30},physicalDragMode:"adjacent"});
+    expect(adjacent.wires[0]!.e4Route.slice(1)).toEqual(d.wires[0]!.e4Route);
+    for(const doc of [carry,adjacent]){
+      expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(doc))).wires[0]!.e4Route).toEqual(doc.wires[0]!.e4Route);
+      expect(doc.wires[0]!.from).toEqual(d.wires[0]!.from);expect(doc.wires[0]!.to).toEqual(d.wires[0]!.to);
+    }
   });
 
   it("carries both E4 shoulders without doubling back along the contact lead",()=>{

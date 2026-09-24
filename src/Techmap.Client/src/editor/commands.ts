@@ -24,7 +24,7 @@ import {
   normalizeCableInstance,
   normalizeWireStripProfileBinding,
   validateConnectorLibraryMetadata,
-  validateOrthogonalE4Route,
+  validateE4Polyline,
   wireE4PathContainsPoint,
   wireEndpointE4Anchor,
   wireGroupHasCommonE4ParallelSpan,
@@ -52,7 +52,7 @@ import type { ConnectorLibraryBinding } from "./model";
 import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
-import { editedE4Points, retainE4Waypoints, completeOrthogonalShoulders } from "./e4-editing";
+import { editedE4Points, preserveE4Leads, moveE4Ends } from "./e4-editing";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -208,16 +208,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(screenJunctionEnds(wire))throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
       const request=createE4RoutingRequest(document,wire,wire.id);
       const points=editedE4Points([request.start.position,...wire.e4Route,request.end.position],command.index,command.position,command.mode,command.insert);
-      let route=points.slice(1,-1);
-      try{validateOrthogonalE4Route(request.start,route,request.end);}
-      catch{
-        const local=completeOrthogonalShoulders(points,request);
-        if(local)route=local.slice(1,-1);
-        else{
-          const routed=routeE4WireThroughWaypoints(request,route);
-          route=retainE4Waypoints(routed.points,route).slice(1,-1);
-        }
-      }
+      const route=preserveE4Leads(points,request.start,request.end).slice(1,-1);
       return setE4WireRoute(document,wire.id,route);
     }
     case "add-visible-pipe-dimension": {
@@ -299,6 +290,21 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if (command.view !== "e4") return command.physicalDragMode
         ? carryPhysicalExits(document,moved,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
         : moved;
+      if(command.physicalDragMode){
+        let changed=moved;
+        for(const wire of document.wires){
+          if(![wire.from,wire.to].some(e=>e.connectorId===command.connectorId)||screenJunctionEnds(wire))continue;
+          const a=wireEndpointE4Anchor(document,wire.from),b=wireEndpointE4Anchor(document,wire.to);
+          const start=wireEndpointE4Anchor(moved,wire.from),end=wireEndpointE4Anchor(moved,wire.to);
+          if(!a||!b||!start||!end)continue;
+          const points=preserveE4Leads(moveE4Ends([a.position,...wire.e4Route,b.position],start.position,end.position,command.physicalDragMode),start,end);
+          changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),e4RouteMode:"manual"}:w)};
+        }
+        for(const id of screenAttachmentWireIds(changed,changed.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId)).map(w=>w.id)))changed=rerouteWireE4ThroughJunctions(changed,id);
+        for(const junction of changed.junctions)validateJunctionAgainstWires(changed,junction);
+        validateWireGroups(changed);
+        return changed;
+      }
       try {
         return rebuildConnectorE4Wires(
           moved,
@@ -790,7 +796,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const start = wireEndpointE4Anchor(changed, wire.from);
       const end = wireEndpointE4Anchor(changed, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-      validateOrthogonalE4Route(start, route, end);
+      validateE4Polyline(start, route, end);
       const otherWireIds = new Set([
         ...changed.junctions
           .filter((junction) => movedJunctionIds.has(junction.id))
@@ -1157,7 +1163,7 @@ function retainEditableE4Routes(document: HarnessDesignDocument): HarnessDesignD
     const end = wireEndpointE4Anchor(changed, wire.to);
     if (!start || !end) continue;
     try {
-      validateOrthogonalE4Route(start, wire.e4Route, end);
+      validateE4Polyline(start, wire.e4Route, end);
     } catch {
       const junctions = changed.junctions.filter((junction) => junction.wireIds.includes(wire.id) &&
         ![wire.from, wire.to].some((endpoint) => isJunctionEndpoint(endpoint) && endpoint.junctionId === junction.id));
@@ -1252,7 +1258,7 @@ function preserveManualE4WireAfterConnectorMove(
   const start = wireEndpointE4Anchor(document, wire.from);
   const end = wireEndpointE4Anchor(document, wire.to);
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-  validateOrthogonalE4Route(start, routed.intermediate, end);
+  validateE4Polyline(start, routed.intermediate, end);
   validateE4Route(routed.points, request);
   return {
     ...document,
@@ -1383,7 +1389,7 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   const end = wireEndpointE4Anchor(document, wire.to);
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
   const copy = route.map((point) => ({ ...point }));
-  validateOrthogonalE4Route(start, copy, end);
+  validateE4Polyline(start, copy, end);
   // A manually moved wire owns the space first. Rebuild automatic neighbours
   // around it so two wires do not deadlock each other as mutual obstacles.
   const changed: HarnessDesignDocument = { ...document, wires: document.wires.map((item) => item.id === wireId
@@ -1725,7 +1731,7 @@ function rerouteWireE4ThroughJunctions(
           new Set([wireId, ...additionallyExcludedWireIds])),
         waypoints.map((waypoint) => waypoint.position),
       );
-      validateOrthogonalE4Route(start, routed.intermediate, end);
+      validateE4Polyline(start, routed.intermediate, end);
       return { ...document, wires: document.wires.map((item) => item.id === wireId
         ? { ...item, e4Route: routed.intermediate } : item) };
     } catch {
@@ -1750,7 +1756,7 @@ function rerouteWireE4ThroughJunctions(
     e4Route.push(...routed.intermediate);
     if (index < anchors.length - 2) e4Route.push({ ...legEnd.position });
   }
-  validateOrthogonalE4Route(start, e4Route, end);
+  validateE4Polyline(start, e4Route, end);
   validateE4Route(
     [start.position, ...e4Route, end.position],
     createE4RoutingRequest(document, wire, wireId, undefined, undefined, new Set([wireId, ...additionallyExcludedWireIds])),
@@ -1784,7 +1790,7 @@ function createE4RoutingRequest(
     if (!candidateStart || !candidateEnd) return null;
     const points = [candidateStart.position, ...candidate.e4Route, candidateEnd.position];
     try {
-      validateOrthogonalE4Route(candidateStart, candidate.e4Route, candidateEnd, screenJunctionEnds(candidate) ? 0 : defaultE4WireLead);
+      validateE4Polyline(candidateStart, candidate.e4Route, candidateEnd, screenJunctionEnds(candidate) ? 0 : defaultE4WireLead);
       return points;
     } catch {
       return null;

@@ -1,3 +1,4 @@
+import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
 import { screenCrossSections } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
@@ -776,7 +777,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
       const end = wireEndpointE4Anchor(document, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
       const screenBranch = [wire.from, wire.to].some(isScreenEndpoint) && [wire.from, wire.to].some(isJunctionEndpoint);
-      validateOrthogonalE4Route(start, wire.e4Route, end, screenBranch ? 0 : defaultE4WireLead);
+      validateE4Polyline(start, wire.e4Route, end, screenBranch ? 0 : defaultE4WireLead);
     }
   }
   validateParsedGroups(document, wireIds);
@@ -950,6 +951,19 @@ export function wireScreenConnectionPoint(
   preferredTerminalSide?: WireScreenEndpointSide,
 ): Point | null {
   return wireScreenConnectionGeometry(document, screenId, resolvingScreenIds, preferredTerminalSide)?.connectionPoint ?? null;
+}
+
+export function validateE4Polyline(
+  start:E4RouteAnchor,intermediate:readonly Point[],end:E4RouteAnchor,minimumLead=defaultE4WireLead,
+):void {
+  if(!Number.isFinite(minimumLead)||minimumLead<0)throw new Error("Минимальный прямой участок задан неверно.");
+  const points=[start.position,...intermediate,end.position];
+  for(let i=0;i<points.length;i++){
+    const p=points[i]!;
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||i>0&&Math.hypot(p.x-points[i-1]!.x,p.y-points[i-1]!.y)<1e-8)throw new Error("Маршрут Э4 должен состоять из ненулевых сегментов.");
+  }
+  validateLead(start,straightLeadEnd(points),minimumLead);
+  validateLead(end,straightLeadEnd([...points].reverse()),minimumLead);
 }
 
 export function validateOrthogonalE4Route(
@@ -1962,8 +1976,9 @@ export function wireGroupHasCommonE4ParallelSpan(
     const end = wireEndpointE4Anchor(document, wire.to)?.position;
     if (!start || !end) return [];
     const points = [start, ...wire.e4Route, end];
-    return points.slice(1).map((current, index) => {
+    return points.slice(1).flatMap((current, index) => {
       const previous = points[index]!;
+      if(previous.x!==current.x&&previous.y!==current.y)return [];
       return previous.y === current.y
         ? { orientation: "horizontal" as const, start: Math.min(previous.x, current.x), end: Math.max(previous.x, current.x) }
         : { orientation: "vertical" as const, start: Math.min(previous.y, current.y), end: Math.max(previous.y, current.y) };
@@ -1984,11 +1999,7 @@ export function wireGroupHasCommonE4ParallelSpan(
   return visit(0, null, 0, 0);
 }
 
-function pointOnSegment(point: Point, start: Point, end: Point): boolean {
-  if (start.x === end.x) return point.x === start.x && point.y >= Math.min(start.y, end.y) && point.y <= Math.max(start.y, end.y);
-  if (start.y === end.y) return point.y === start.y && point.x >= Math.min(start.x, end.x) && point.x <= Math.max(start.x, end.x);
-  return false;
-}
+function pointOnSegment(point: Point, start: Point, end: Point): boolean { return segmentPointDistance(point,{start,end})<1e-7; }
 
 function parseDiffPairs(value: unknown): readonly DiffPairGroup[] {
   if (!Array.isArray(value)) throw new Error("Дифференциальные пары заданы неверно.");

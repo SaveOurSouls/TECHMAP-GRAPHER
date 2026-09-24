@@ -1,3 +1,4 @@
+import { intersectSegments, segmentPointDistance, segmentEntersRect, segmentsParallel, parallelSegmentGap } from "./segment-geometry";
 import type { Point } from "./model";
 import { straightLeadEnd } from "./route-lead";
 
@@ -82,7 +83,7 @@ interface Rect {
 interface Segment {
   readonly start: Point;
   readonly end: Point;
-  readonly orientation: "horizontal" | "vertical";
+  readonly orientation: "horizontal" | "vertical" | "diagonal";
 }
 
 interface OccupiedSegment extends Segment {
@@ -209,8 +210,7 @@ export function validateE4Route(points: readonly Point[], request: E4RoutingRequ
 export function polylineLength(points: readonly Point[]): number {
   let length = 0;
   for (let index = 1; index < points.length; index += 1) {
-    length += Math.abs(points[index]!.x - points[index - 1]!.x) +
-      Math.abs(points[index]!.y - points[index - 1]!.y);
+    length += Math.hypot(points[index]!.x - points[index - 1]!.x, points[index]!.y - points[index - 1]!.y);
   }
   return length;
 }
@@ -263,7 +263,7 @@ function normalizeRequest(request: E4RoutingRequest): {
       allowedTouchPoints,
     })));
     for (let index = 1; route.allowCrossings !== false && index < segments.length; index += 1) {
-      if (segments[index - 1]!.orientation !== segments[index]!.orientation) {
+      if (!segmentsParallel(segments[index - 1]!,segments[index]!)) {
         occupiedBends.push({ point: route.points[index]!, allowedTouchPoints });
       }
     }
@@ -532,7 +532,7 @@ function automaticCrossingSurcharge(
   const crossingCost = wireClearance * 4;
   let result = 0;
   for (const occupied of occupiedSegments) {
-    if (!occupied.allowCrossings || occupied.orientation === segment.orientation) continue;
+    if (!occupied.allowCrossings || segmentsParallel(occupied,segment)) continue;
     const intersection = segmentIntersection(segment, occupied);
     if (intersection.kind !== "point") continue;
     const atRouteEndpoint = samePoint(intersection.point, segment.start) ||
@@ -600,14 +600,7 @@ function validateSegmentAgainstObstacles(
   }
 }
 
-function segmentCrossesRectInterior(segment: Segment, rect: Rect): boolean {
-  if (segment.orientation === "horizontal") {
-    if (!(segment.start.y > rect.top + EPSILON && segment.start.y < rect.bottom - EPSILON)) return false;
-    return positiveOverlap(segment.start.x, segment.end.x, rect.left, rect.right);
-  }
-  if (!(segment.start.x > rect.left + EPSILON && segment.start.x < rect.right - EPSILON)) return false;
-  return positiveOverlap(segment.start.y, segment.end.y, rect.top, rect.bottom);
-}
+function segmentCrossesRectInterior(segment: Segment, rect: Rect): boolean { return segmentEntersRect(segment,rect); }
 
 function validateSegmentAgainstOccupied(
   segment: Segment,
@@ -615,31 +608,12 @@ function validateSegmentAgainstOccupied(
   clearance: number,
 ): void {
   for (const occupied of occupiedSegments) {
-    if (segment.orientation !== occupied.orientation) {
-      const intersection = segmentIntersection(segment, occupied);
-      if (intersection.kind === "point") {
-        if (touchIsAllowed(intersection.point, segment, occupied)) continue;
-        if (!occupied.allowCrossings) {
-          throw new Error("Маршрут пересекает уже построенную часть самого себя.");
-        }
-        continue;
-      }
-      continue;
-    }
-    const projectionsOverlap = segment.orientation === "horizontal"
-      ? positiveOverlap(segment.start.x, segment.end.x, occupied.start.x, occupied.end.x)
-      : positiveOverlap(segment.start.y, segment.end.y, occupied.start.y, occupied.end.y);
-    if (!projectionsOverlap) {
-      const intersection = segmentIntersection(segment, occupied);
-      if (intersection.kind === "point" && touchIsAllowed(intersection.point, segment, occupied)) continue;
-      if (intersection.kind === "point" && !occupied.allowCrossings) {
-        throw new Error("Маршрут касается уже построенной части самого себя.");
-      }
-      continue;
-    }
-    const distance = segment.orientation === "horizontal"
-      ? Math.abs(segment.start.y - occupied.start.y)
-      : Math.abs(segment.start.x - occupied.start.x);
+    const intersection = segmentIntersection(segment, occupied);
+    if(intersection.kind === "point" && touchIsAllowed(intersection.point,segment,occupied))continue;
+    if(intersection.kind === "overlap")throw new Error("Маршрут коллинеарно накладывается на другой провод.");
+    if(intersection.kind === "point" && !occupied.allowCrossings)throw new Error("Маршрут пересекает уже построенную часть самого себя.");
+    const distance=parallelSegmentGap(segment,occupied);
+    if(distance===null)continue;
     if (distance <= EPSILON) throw new Error("Маршрут коллинеарно накладывается на другой провод.");
     if (distance + EPSILON < clearance) throw new Error("Между параллельными проводами не выдержан зазор.");
   }
@@ -678,22 +652,7 @@ function isSegmentEndpoint(point: Point, segment: Segment): boolean {
   return samePoint(point, segment.start) || samePoint(point, segment.end);
 }
 
-function pointToSegmentDistance(point: Point, segment: Segment): number {
-  const closest = segment.orientation === "horizontal"
-    ? {
-      x: clamp(point.x, segment.start.x, segment.end.x),
-      y: segment.start.y,
-    }
-    : {
-      x: segment.start.x,
-      y: clamp(point.y, segment.start.y, segment.end.y),
-    };
-  return Math.hypot(point.x - closest.x, point.y - closest.y);
-}
-
-function clamp(value: number, first: number, second: number): number {
-  return Math.max(Math.min(first, second), Math.min(Math.max(first, second), value));
-}
+function pointToSegmentDistance(point: Point, segment: Segment): number { return segmentPointDistance(point,segment); }
 
 function validateRouteLead(anchor: E4RouterAnchor, segment: Segment, isStart: boolean, length: number): void {
   length=Math.min(length,anchor.leadLength??length);
@@ -742,8 +701,8 @@ function toSegments(points: readonly Point[], label: string): readonly Segment[]
 function createSegment(start: Point, end: Point, label: string): Segment {
   const horizontal = Math.abs(start.y - end.y) <= EPSILON;
   const vertical = Math.abs(start.x - end.x) <= EPSILON;
-  if (horizontal === vertical) throw new Error(`${label} должен состоять из ненулевых ортогональных сегментов.`);
-  return { start, end, orientation: horizontal ? "horizontal" : "vertical" };
+  if (horizontal && vertical) throw new Error(`${label} должен состоять из ненулевых сегментов.`);
+  return { start, end, orientation: horizontal ? "horizontal" : vertical ? "vertical" : "diagonal" };
 }
 
 function simplifyPolyline(points: readonly Point[]): readonly Point[] {
@@ -792,44 +751,7 @@ function continuesForward(first: Point, second: Point, third: Point): boolean {
     (second.y - first.y) * (third.y - second.y) >= -EPSILON;
 }
 
-function segmentIntersection(left: Segment, right: Segment):
-  | { readonly kind: "none" }
-  | { readonly kind: "point"; readonly point: Point }
-  | { readonly kind: "overlap" } {
-  if (left.orientation === right.orientation) {
-    const sameAxis = left.orientation === "horizontal"
-      ? Math.abs(left.start.y - right.start.y) <= EPSILON
-      : Math.abs(left.start.x - right.start.x) <= EPSILON;
-    if (!sameAxis) return { kind: "none" };
-    const leftStart = left.orientation === "horizontal" ? left.start.x : left.start.y;
-    const leftEnd = left.orientation === "horizontal" ? left.end.x : left.end.y;
-    const rightStart = right.orientation === "horizontal" ? right.start.x : right.start.y;
-    const rightEnd = right.orientation === "horizontal" ? right.end.x : right.end.y;
-    const overlapStart = Math.max(Math.min(leftStart, leftEnd), Math.min(rightStart, rightEnd));
-    const overlapEnd = Math.min(Math.max(leftStart, leftEnd), Math.max(rightStart, rightEnd));
-    if (overlapEnd < overlapStart - EPSILON) return { kind: "none" };
-    if (overlapEnd > overlapStart + EPSILON) return { kind: "overlap" };
-    return left.orientation === "horizontal"
-      ? { kind: "point", point: { x: overlapStart, y: left.start.y } }
-      : { kind: "point", point: { x: left.start.x, y: overlapStart } };
-  }
-  const horizontal = left.orientation === "horizontal" ? left : right;
-  const vertical = left.orientation === "vertical" ? left : right;
-  const point = { x: vertical.start.x, y: horizontal.start.y };
-  return between(point.x, horizontal.start.x, horizontal.end.x) &&
-      between(point.y, vertical.start.y, vertical.end.y)
-    ? { kind: "point", point }
-    : { kind: "none" };
-}
-
-function positiveOverlap(firstStart: number, firstEnd: number, secondStart: number, secondEnd: number): boolean {
-  return Math.min(Math.max(firstStart, firstEnd), Math.max(secondStart, secondEnd)) -
-    Math.max(Math.min(firstStart, firstEnd), Math.min(secondStart, secondEnd)) > EPSILON;
-}
-
-function between(value: number, first: number, second: number): boolean {
-  return value >= Math.min(first, second) - EPSILON && value <= Math.max(first, second) + EPSILON;
-}
+const segmentIntersection = intersectSegments;
 
 function samePoint(left: Point, right: Point): boolean {
   return Math.abs(left.x - right.x) <= EPSILON && Math.abs(left.y - right.y) <= EPSILON;

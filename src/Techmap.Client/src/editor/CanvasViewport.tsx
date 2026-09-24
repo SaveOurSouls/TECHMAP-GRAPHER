@@ -1,3 +1,4 @@
+import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, physicalObjectSnapAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
@@ -394,6 +395,17 @@ function hitTestE4WireSegments(
     if (object.kind !== "wire" || object.id === excludedWireId) continue;
     const layer = layerMap.get(object.layerId);
     if (layer?.visible !== true || (internalOnly && layer.locked)) continue;
+    if(!internalOnly){
+      const points=getE4WireRoute(object);
+      for(let index=0;index<points.length-1;index++){
+        const start=points[index]!,end=points[index+1]!,dx=end.x-start.x,dy=end.y-start.y,length=dx*dx+dy*dy;
+        if(!length)continue;
+        const t=Math.max(0,Math.min(1,((point.x-start.x)*dx+(point.y-start.y)*dy)/length));
+        const projected={x:start.x+t*dx,y:start.y+t*dy},distance=Math.hypot(point.x-projected.x,point.y-projected.y);
+        if(distance<=tolerance)return {start,end,index,wireId:object.id,point:projected,distance,orientation:Math.abs(dx)>=Math.abs(dy)?"horizontal":"vertical"};
+      }
+      continue;
+    }
     const segments = e4WireSegments(getE4WireRoute(object));
     for (const segment of segments) {
       if (internalOnly && !movableE4Segment(segments, segment)) continue;
@@ -483,6 +495,8 @@ export interface E4WireCrossing {
   readonly overWireId: string;
   readonly underWireId: string;
   readonly overOrientation: E4SegmentOrientation;
+  readonly overDirection?:EditorPoint;
+  readonly underDirection?:EditorPoint;
 }
 
 export interface E4BridgeGeometry {
@@ -496,10 +510,14 @@ export interface E4BridgeGeometry {
 
 /** Geometry with coloured legs overlapping the exact butt-capped clear span. */
 export function getE4BridgeGeometry(
-  crossing: Pick<E4WireCrossing, "point" | "overOrientation">,
+  crossing: Pick<E4WireCrossing, "point" | "overOrientation" | "overDirection">,
   radius = E4_BRIDGE_RADIUS,
 ): E4BridgeGeometry {
   const { point, overOrientation } = crossing;
+  if(crossing.overDirection){
+    const u=crossing.overDirection,at=(n:number)=>({x:point.x+u.x*n,y:point.y+u.y*n});
+    return {clearStart:at(-radius-1),clearEnd:at(radius+1),coloredStart:at(-radius-2),coloredEnd:at(radius+2),arcStart:at(-radius),arcEnd:at(radius)};
+  }
   if (overOrientation === "horizontal") {
     return {
       clearStart: { x: point.x - radius - 1, y: point.y },
@@ -533,24 +551,23 @@ export function getE4WireCrossings(
   const result: E4WireCrossing[] = [];
   for (let overIndex = 1; overIndex < paintOrder.length; overIndex += 1) {
     const over = paintOrder[overIndex]!;
-    const overSegments = e4WireSegments(getE4WireRoute(over));
+    const segments=(o:EditorSceneObject)=>(o.points??[]).slice(1).map((end,i)=>({start:o.points![i]!,end}));
+    const overSegments = segments(over);
     for (let underIndex = 0; underIndex < overIndex; underIndex += 1) {
       const under = paintOrder[underIndex]!;
-      const underSegments = e4WireSegments(getE4WireRoute(under));
+      const underSegments = segments(under);
       for (const overSegment of overSegments) {
         for (const underSegment of underSegments) {
-          if (overSegment.orientation === underSegment.orientation) continue;
-          const horizontal = overSegment.orientation === "horizontal" ? overSegment : underSegment;
-          const vertical = overSegment.orientation === "vertical" ? overSegment : underSegment;
-          const point = { x: vertical.start.x, y: horizontal.start.y };
-          const onHorizontal = point.x >= Math.min(horizontal.start.x, horizontal.end.x) &&
-            point.x <= Math.max(horizontal.start.x, horizontal.end.x);
-          const onVertical = point.y >= Math.min(vertical.start.y, vertical.end.y) &&
-            point.y <= Math.max(vertical.start.y, vertical.end.y);
+          const hit=intersectSegments(overSegment,underSegment);
+          if(hit.kind!=="point"||segmentsParallel(overSegment,underSegment))continue;
+          const point=hit.point;
           const isJunction = junctions.some((junction) => pointMatches(junction.position, point));
-          if (!onHorizontal || !onVertical || isJunction) continue;
+          if (isJunction) continue;
           if (result.some((item) => item.overWireId === over.id && item.underWireId === under.id && pointMatches(item.point, point))) continue;
-          result.push({ point, overWireId: over.id, underWireId: under.id, overOrientation: overSegment.orientation });
+          const diagonal=[overSegment,underSegment].some(s=>s.start.x!==s.end.x&&s.start.y!==s.end.y);
+          const direction=(s:typeof overSegment)=>{const n=Math.hypot(s.end.x-s.start.x,s.end.y-s.start.y),sign=s.end.x<s.start.x||s.end.x===s.start.x&&s.end.y<s.start.y?-1:1;return {x:(s.end.x-s.start.x)/n*sign,y:(s.end.y-s.start.y)/n*sign};};
+          result.push({ point, overWireId: over.id, underWireId: under.id, overOrientation: overSegment.start.y===overSegment.end.y?"horizontal":"vertical",
+            ...(diagonal?{overDirection:direction(overSegment),underDirection:direction(underSegment)}:{}) });
         }
       }
     }
@@ -2061,7 +2078,9 @@ function drawE4BridgeCrossings(
     context.stroke();
     context.lineCap = "butt";
     context.beginPath();
-    if (crossing.overOrientation === "horizontal") {
+    if(crossing.underDirection){
+      const u=crossing.underDirection;context.moveTo(crossing.point.x-u.x*5,crossing.point.y-u.y*5);context.lineTo(crossing.point.x+u.x*5,crossing.point.y+u.y*5);
+    } else if (crossing.overOrientation === "horizontal") {
       context.moveTo(crossing.point.x, crossing.point.y - 5);
       context.lineTo(crossing.point.x, crossing.point.y + 5);
     } else {
@@ -2076,7 +2095,9 @@ function drawE4BridgeCrossings(
     context.beginPath();
     context.moveTo(geometry.coloredStart.x, geometry.coloredStart.y);
     context.lineTo(geometry.arcStart.x, geometry.arcStart.y);
-    if (crossing.overOrientation === "horizontal") {
+    if(crossing.overDirection){
+      const u=crossing.overDirection,n={x:u.y,y:-u.x},p=crossing.point;
+      context.bezierCurveTo(p.x-u.x*radius/2+n.x*radius,p.y-u.y*radius/2+n.y*radius,p.x+u.x*radius/2+n.x*radius,p.y+u.y*radius/2+n.y*radius,geometry.arcEnd.x,geometry.arcEnd.y);    } else if (crossing.overOrientation === "horizontal") {
       context.bezierCurveTo(
         crossing.point.x - radius / 2, crossing.point.y - radius,
         crossing.point.x + radius / 2, crossing.point.y - radius,

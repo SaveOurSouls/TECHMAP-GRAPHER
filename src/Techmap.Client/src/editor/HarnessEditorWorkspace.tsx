@@ -514,14 +514,14 @@ export function HarnessEditorWorkspace({
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
         </div>
         <div className="he-view-options">
-          {view === "drawing" && (
+          {(
             <button
               className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
               type="button"
               aria-pressed={drawingSnapEnabled}
-              title="Автоматический пайп: прямые выходы и приоритет 45°. Ручные перегибы сохраняются. Для свободных проводов — шаг 15°."
+              title="Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°."
               onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
-            >Авто 45°</button>
+            >Шаг 15°</button>
           )}
         </div>
         <button
