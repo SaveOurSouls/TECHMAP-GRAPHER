@@ -1,7 +1,7 @@
 import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
-import { snapPhysicalPoint, physicalObjectSnapAnchors } from "./physical-editing";
+import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -3020,7 +3020,7 @@ export function CanvasViewport({
             const points=selectedWire.points!,point=middle?.point??points[index+1]!;
             event.currentTarget.setPointerCapture(event.pointerId);
             dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:selectedWire.id,routeIndex:index,point,
-              mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:middle?[points[index]!,points[index+1]!]:[points[index]!,points[index+2]!]};
+              mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry")};
             return;
           }
         }
@@ -3069,7 +3069,7 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:middle?[points[index]!,points[index+1]!]:[points[index]!,points[index+2]!]};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry")};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
@@ -3169,7 +3169,7 @@ export function CanvasViewport({
       });
     } else if (drag.kind === "wire-route") {
       if(!inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY))return;
-      const result=snapPhysicalPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],drawingSnapEnabled,7/camera.zoom);
+      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],drawingSnapEnabled,7/camera.zoom);
       setPhysicalGuide(result.guide);
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,result.point,drag.mode,drag.insert);
     } else if (drag.kind === "e4-wire-label") {
@@ -3232,7 +3232,7 @@ export function CanvasViewport({
       const drag = dragRef.current;
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,null);
       const moved=inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY);
-      if(drag.insert||moved) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, moved?snapPhysicalPoint({
+      if(drag.insert||moved) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, moved?snapBendPoint({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
       },drag.anchors??[],drawingSnapEnabled,7/camera.zoom).point:drag.point,drag.mode,drag.insert);
@@ -3485,7 +3485,7 @@ export function CanvasViewport({
         onDoubleClick={doubleClick}
         onContextMenu={event=>{if(view!=="drawing"||!onPhysicalContextAction)return;event.preventDefault();const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);const node=objects.find(o=>o.kind==="physical-node"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));const segment=node??[...objects].reverse().find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));setPhysicalMenu(segment?{id:segment.id,point,node:!!node,x:Math.max(4,Math.min(local.x,(frameRef.current?.clientWidth??600)-220)),y:Math.max(4,Math.min(local.y,(frameRef.current?.clientHeight??400)-220))}:null);}}
       />
-      {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><line x1={physicalGuide[0]!.x*camera.zoom+camera.offsetX} y1={physicalGuide[0]!.y*camera.zoom+camera.offsetY} x2={physicalGuide[1]!.x*camera.zoom+camera.offsetX} y2={physicalGuide[1]!.y*camera.zoom+camera.offsetY} stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
+      {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><polyline points={physicalGuide.map(p=>`${p.x*camera.zoom+camera.offsetX},${p.y*camera.zoom+camera.offsetY}`).join(" ")} fill="none" stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
       {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{
         const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
         const drawings=view==="e4"?projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width??object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible):[];

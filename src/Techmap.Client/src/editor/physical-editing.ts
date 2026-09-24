@@ -37,6 +37,41 @@ export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:b
   return {point:{x:a.x+Math.cos(angle)*length,y:a.y+Math.sin(angle)*length},guide:undefined};
 }
 
+/** The moved shoulder group is rigid in carry mode. Each boundary constrains
+ * the pointer relative to a virtual anchor translated by that shoulder offset. */
+export function bendSnapAnchors(points:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode):Point[] {
+  const copy=[...points],at=index+1;
+  if(insert){const a=copy[index]!,b=copy[at]!;copy.splice(at,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
+  const origin=copy[at];if(!origin)return [];
+  const first=mode==="carry"?Math.max(1,at-1):at,last=mode==="carry"?Math.min(copy.length-2,at+1):at;
+  return [[first,first-1],[last,last+1]].flatMap(([moving,fixed])=>{
+    const a=copy[moving!]!,b=copy[fixed!];
+    return b?[{x:b.x-a.x+origin.x,y:b.y-a.y+origin.y}]:[];
+  });
+}
+
+/** Intersect two 15° direction families so both changing shoulders obey the
+ * same constraint. Collinear supports retain continuous motion along the line. */
+export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number) {
+  if(!enabled||anchors.length!==2)return snapPhysicalPoint(point,anchors,enabled,tolerance);
+  const [a,b]=anchors as readonly [Point,Point];
+  if(near(a,b))return snapPhysicalPoint(point,[a],enabled,tolerance);
+  const directions=Array.from({length:12},(_,i)=>({x:Math.cos(i*Math.PI/12),y:Math.sin(i*Math.PI/12)}));
+  let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
+  const add=(p:Point)=>{
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||near(a,p)||near(b,p))return;
+    const distance=Math.hypot(p.x-point.x,p.y-point.y);
+    if(!best||distance<best.distance-1e-7)best={point:p,guide:[a,p,b],distance};
+  };
+  for(const u of directions)for(const v of directions){
+    const denominator=u.x*v.y-u.y*v.x,dx=b.x-a.x,dy=b.y-a.y;
+    if(Math.abs(denominator)<1e-8){
+      if(Math.abs(dx*u.y-dy*u.x)<1e-7){const t=(point.x-a.x)*u.x+(point.y-a.y)*u.y;add({x:a.x+t*u.x,y:a.y+t*u.y});}
+    }else{const t=(dx*v.y-dy*v.x)/denominator;add({x:a.x+t*u.x,y:a.y+t*u.y});}
+  }
+  return best??snapPhysicalPoint(point,anchors,enabled,tolerance);
+}
+
 /** Update ordinal anchors explicitly; never silently attach a measurement to another corner. */
 function replacePath(document:HarnessDesignDocument,segment:PhysicalSegment,points:readonly Point[],oldToNew:ReadonlyMap<number,number>):HarnessDesignDocument {
   const t=document.physicalTopology!;

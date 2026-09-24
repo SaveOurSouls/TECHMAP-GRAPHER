@@ -1,6 +1,7 @@
 import {expect,it} from "vitest";
 import {physicalFixture} from "./physical-topology-fixture";
-import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors,carryPhysicalExits} from "./physical-editing";
+import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors,carryPhysicalExits,bendSnapAnchors,snapBendPoint} from "./physical-editing";
+import {editedE4Points} from "./e4-editing";
 import {applyEditorCommand} from "./commands";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
 import {parseHarnessDesignDocument} from "./model";
@@ -10,6 +11,34 @@ import {routePhysicalWires} from "./physical-wire-routing";
 function fixture(){const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,snap:false,
  nodes:[{id:"a",position:{x:0,y:0}},{id:"b",position:{x:300,y:100}}],routes:[],
  segments:[{id:"pipe",from:"a",to:"b",path:{kind:"polyline" as const,points:[{x:80,y:0},{x:150,y:70},{x:220,y:70}]}}]}};}
+
+it.each(["carry","adjacent"] as const)("snaps both changing shoulders in %s mode without moving remote points",mode=>{
+ const points=[{x:0,y:0},{x:100,y:0},{x:100,y:100},{x:200,y:100},{x:200,y:200}];
+ const anchors=bendSnapAnchors(points,1,false,mode);
+ for(const target of [{x:143,y:162},{x:73,y:91},{x:115,y:151}]){
+  const snap=snapBendPoint(target,anchors,true,7);
+  const edited=editedE4Points(points,1,snap.point,mode);
+  for(let i=1;i<edited.length;i++){
+   const a=edited[i-1]!,b=edited[i]!,angle=Math.atan2(b.y-a.y,b.x-a.x)/(Math.PI/12);
+   expect(angle).toBeCloseTo(Math.round(angle),6);
+  }
+  expect(edited[0]).toEqual(points[0]);expect(edited.at(-1)).toEqual(points.at(-1));
+  if(mode==="adjacent"){expect(edited[1]).toEqual(points[1]);expect(edited[3]).toEqual(points[3]);}
+ }
+});
+
+it("keeps free mode exact and allows continuous motion on a quantized straight line",()=>{
+ const anchors=[{x:0,y:0},{x:100,y:0}],p={x:43,y:2};
+ expect(snapBendPoint(p,anchors,false,7).point).toEqual(p);
+ expect(snapBendPoint(p,anchors,true,7).point).toEqual({x:43,y:0});
+});
+
+it("snaps a newly dragged midpoint with its carried shoulders",()=>{
+ const points=[{x:0,y:0},{x:100,y:0},{x:100,y:100},{x:200,y:100}];
+ const anchors=bendSnapAnchors(points,1,true,"carry"),p=snapBendPoint({x:131,y:73},anchors,true,7).point;
+ const moved=editedE4Points(points,1,p,"carry",true);
+ for(let i=1;i<moved.length;i++){const a=moved[i-1]!,b=moved[i]!,angle=Math.atan2(b.y-a.y,b.x-a.x)/(Math.PI/12);expect(angle).toBeCloseTo(Math.round(angle),6);}
+});
 it("carries neighboring shoulders normally and only the selected corner with Shift",()=>{
  const d=fixture();
  const command={type:"edit-physical-bend" as const,segmentId:"pipe",index:1,position:{x:170,y:110}};
