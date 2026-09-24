@@ -1201,7 +1201,7 @@ export function HarnessDesignEditor({
         const existing = t.coverings?.find(c => selectedObjectIds.includes(c.id));
         const spans = t.segments.filter(s => selectedObjectIds.includes(s.id)).map(s => ({segmentId:s.id,from:0,to:1}));
         if (!existing && !spans.length) throw new Error("Выберите участки или оболочку для назначения защиты.");
-        run({type:"set-physical-topology",topology:{...t,coverings:existing ? t.coverings?.map(c=>c.id===existing.id?{...c,material,name:material.displayName}:c) : [...t.coverings ?? [],{id:crypto.randomUUID(),name:material.displayName,material,spans,width:18,color:"#687e8a",lengthMm:null}]}});
+        run({type:"set-physical-topology",topology:{...t,coverings:existing ? t.coverings?.map(c=>c.id===existing.id?{...c,material,name:material.displayName}:c) : [...t.coverings ?? [],{id:crypto.randomUUID(),name:material.displayName,material,spans,width:0,color:"#687e8a",lengthMm:null}]}});
       } catch(error) { setMessage(error instanceof Error ? error.message : "Не удалось назначить защиту."); }
       return;
     }

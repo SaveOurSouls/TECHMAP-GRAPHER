@@ -45,8 +45,11 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
      width=pipeWidth+(bundle-pipeWidth)*Math.min(1,travel/Math.max(12*scale,pipeWidth));
     }
     // Array order is the physical stacking order; any lower surface remains enclosed.
-    for(const lower of coverings.slice(0,order))for(const ls of lower.spans){const r=resolvedCoveringSpan(document,ls);if(ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to)width=Math.max(width,pipeWidth+4*scale);}
-    return width/2+2*scale;
+    for(const lower of coverings.slice(0,order)) {
+     if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;}))
+      width=Math.max(lower.width*scale,width+.5*scale);
+    }
+    return Math.max(covering.width*scale,width+.5*scale)/2;
    };
    let distance=0;const widths=centerline.map((p,i)=>{if(i)distance+=Math.hypot(p.x-centerline[i-1]!.x,p.y-centerline[i-1]!.y);return halfAt(from+distance/route.length);});
    maximumWidth=Math.max(maximumWidth,...widths.map(w=>2*w));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { catalogOuterDiameter, drawingReferenceDiameter, drawingWireWidth, drawingPipeWidth } from "./drawing-thickness";
+import { catalogOuterDiameter, drawingReferenceDiameter, drawingWireWidth, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { coveringScene, moveCovering, wireExitPath } from "./covering-layout";
 import { coveringHit, coveringGrips, coveringSurfaces } from "./covering-renderer";
 import { coveringMeasuredLength, coveringRoute, type PhysicalCovering } from "./physical-coverings";
@@ -9,6 +9,7 @@ import { applyEditorCommand } from "./commands";
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "./model";
 import { hitTestEditorScene, drawEditorSceneObject } from "./CanvasViewport";
 import { vi } from "vitest";
+import { drawingObjectPerimeter } from "./drawing-object-perimeter";
 
 function straight():HarnessDesignDocument {
  const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,snap:false,nodes:d.physicalTopology!.nodes.map(n=>n.id==="NA"?{...n,position:{x:180,y:60}}:n.id==="J"?{...n,position:{x:480,y:60}}:n),segments:d.physicalTopology!.segments.map(s=>({...s,path: { kind: "routed" as const, points: [] }}))}};
@@ -98,7 +99,7 @@ describe("covering surfaces and editing",()=>{
   expect(coveringMeasuredLength(d,sleeve())).toBeNull();
  });
  it("shrinks around parallel wires on connector tails while nylon keeps its pipe width",()=>{
-  const c=sleeve({spans:[{segmentId:"S0",from:-.1,to:.3}]}),d=covered([c]);
+  const c=sleeve({width:0,spans:[{segmentId:"S0",from:-.1,to:.3}]}),d=covered([c]);
   const route=coveringRoute(d,"S0")!;expect(route.min).toBeLessThan(0);
   const exit=wireExitPath(d,"S0","from","W1",{x:118,y:60})!;expect(exit.length).toBeGreaterThanOrEqual(3);
   const heat=coveringGrips(coveringScene(d)[0]!);
@@ -106,5 +107,43 @@ describe("covering surfaces and editing",()=>{
   expect(heat[0]!.halfWidth).toBeLessThan(heat[1]!.halfWidth);
   expect(nylon[0]!.halfWidth).toBeCloseTo(nylon[1]!.halfWidth);
   expect(wireExitPath(covered([{...c,kind:"nylon"}]),"S0","from","W1",{x:118,y:60})).toBeNull();
+ });
+});
+
+describe("compact pipe and covering widths",()=>{
+ it("fits mixed wire diameters tightly and follows changes in routed membership",()=>{
+  const base=straight(),d={...base,connectors:base.connectors.map(c=>({...c,contacts:c.contacts.map((p,i)=>({...p,wireDiameterMm:i===0?1:2}))}))},s=d.physicalTopology!.segments[0]!;
+  const lanes=segmentWireLanes(d,s.id),bundle=lanes.reduce((sum,l)=>sum+l.width,0)+(lanes.length-1)*.25;
+  expect(drawingPipeWidth(d,s)).toBeCloseTo(bundle+.5);
+  expect(drawingPipeWidth(d,{...s,width:.1})).toBeCloseTo(bundle+.5);
+  expect(drawingPipeWidth(d,{...s,width:250.25})).toBe(250.25);
+  const empty={...d,physicalTopology:{...d.physicalTopology!,routes:[]}};
+  expect(drawingPipeWidth(empty,s)).toBe(.5);
+  expect(drawingPipeWidth(empty,{...s,width:0})).toBe(.5);
+ });
+ it("keeps leader anchors on the rendered pipe and covering after width changes",()=>{
+  const d=covered([sleeve({width:35.25})]);
+  expect(drawingObjectPerimeter(d,"cover",{x:300,y:160})).toEqual({x:300,y:60+35.25/2});
+  expect(drawingObjectPerimeter(d,"S0",{x:300,y:160})).toEqual({x:300,y:60+drawingPipeWidth(d,d.physicalTopology!.segments[0]!)/2});
+  const compact=covered([sleeve({width:0})]);
+  expect(drawingObjectPerimeter(compact,"cover",{x:300,y:160})!.y).toBeCloseTo(60+coveringScene(compact)[0]!.width/2);
+ });
+ it("encloses every lower surface and honours width edits at the current scale",()=>{
+  const d=covered([sleeve({id:"a",width:0}),sleeve({id:"b",width:0}),sleeve({id:"c",width:0})]);
+  const width=drawingPipeWidth(d,d.physicalTopology!.segments[0]!);
+  expect(coveringScene(d).map(s=>s.width)).toEqual([width+.5,width+1,width+1.5]);
+  const edited=covered([sleeve({width:35.25})]);
+  expect(coveringScene(edited)[0]!.width).toBe(35.25);
+  expect(coveringScene({...edited,drawingDocuments:{tables:[],leaders:[],bomOrder:[],physicalScale:2}})[0]!.width).toBe(70.5);
+ });
+ it.each([0,.01,3.5,250.25,10000000])("persists width %s in both pipe and covering",width=>{
+  const d=covered([sleeve({width})]);
+  const doc={...d,physicalTopology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>({...s,width}))}};
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(doc))).physicalTopology).toEqual(doc.physicalTopology);
+ });
+ it.each([-1,10000001,NaN,Infinity])("rejects invalid width %s on either object",width=>{
+  const d=covered();
+  expect(()=>parseHarnessDesignDocument({...d,physicalTopology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>({...s,width}))}})).toThrow();
+  expect(()=>parseHarnessDesignDocument(covered([sleeve({width})]))).toThrow();
  });
 });

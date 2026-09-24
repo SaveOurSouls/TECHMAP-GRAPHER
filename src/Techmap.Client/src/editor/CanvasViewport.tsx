@@ -1845,7 +1845,7 @@ export function drawEditorSceneObject(
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
     traceDrawingRoute(context,points);
-    context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=object.width+2;context.stroke();
+    if(selected){context.strokeStyle="#1179ac";context.lineWidth=object.width+2;context.stroke();}
     context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
 
     context.restore();return;

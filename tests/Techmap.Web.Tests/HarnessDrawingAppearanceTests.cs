@@ -16,6 +16,24 @@ public sealed class HarnessDrawingAppearanceTests
     private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
     [Theory]
+    [InlineData(0)][InlineData(0.01)][InlineData(3.5)][InlineData(250.25)][InlineData(10000000)]
+    public void Accepts_automatic_fractional_and_large_widths(double width)
+    {
+        var root=Fixture();
+        root["physicalTopology"]!["segments"]![0]!["width"]=width;
+        root["physicalTopology"]!["coverings"]![0]!["width"]=width;
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("segments",-1)][InlineData("segments",10000001)]
+    [InlineData("coverings",-1)][InlineData("coverings",10000001)]
+    public void Rejects_invalid_widths(string collection,double width)
+    {
+        var root=Fixture();
+        root["physicalTopology"]![collection]![0]!["width"]=width;
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Theory]
     [InlineData("scale")][InlineData("visible")][InlineData("diameter")][InlineData("kind")][InlineData("mode")][InlineData("anchor")][InlineData("fraction")]
     public void Rejects_invalid_appearance_fields(string mutation){
         var root=Fixture();var docs=root["drawingDocuments"]!;var cover=root["physicalTopology"]!["coverings"]![0]!;

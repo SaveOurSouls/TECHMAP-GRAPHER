@@ -33,7 +33,7 @@ public sealed class HarnessDesignApiTests
         using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
         Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
         var t=content["physicalTopology"]!;var segment=t["segments"]![0]!;
-        if(mutation=="width")segment["width"]=0;
+        if(mutation=="width")segment["width"]=-1;
         if(mutation=="color")segment["color"]="red";
         if(mutation=="showWires")segment["showWires"]="false";
         if(mutation=="exit")t["nodes"]![1]!["wireIds"]=new JsonArray();

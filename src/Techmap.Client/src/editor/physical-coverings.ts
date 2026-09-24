@@ -13,7 +13,7 @@ export interface PhysicalCovering {
   readonly kind?:CoveringKind;
   readonly lengthMode?:"auto"|"manual";
   readonly id: string; readonly name: string; readonly spans: readonly CoveringSpan[];
-  /** Drawing width, independent of manufacturing length. */
+  /** Drawing width; zero fits the underlying surfaces automatically. Independent of manufacturing length. */
   readonly width: number; readonly color: string; readonly lengthMm: number | null;
   readonly material?: CoveringMaterial;
 }
@@ -51,7 +51,7 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
   for (const c of value as PhysicalCovering[]) {
     if (!c || typeof c.id !== "string" || !c.id.trim() || c.id.length > 128 || existingIds.has(c.id)) return fail();
     existingIds.add(c.id);
-    if (typeof c.name !== "string" || !c.name.trim() || c.name.length > 256 || !/^#[0-9a-f]{6}$/i.test(c.color) || !Number.isFinite(c.width) || c.width < 1 || c.width > 200) return fail();
+    if (typeof c.name !== "string" || !c.name.trim() || c.name.length > 256 || !/^#[0-9a-f]{6}$/i.test(c.color) || !Number.isFinite(c.width) || c.width < 0 || c.width > 1e7) return fail();
     if(c.kind!==undefined&&!["heat-shrink","nylon","braid","metal-braid","tape","band"].includes(c.kind)||c.lengthMode!==undefined&&!["auto","manual"].includes(c.lengthMode))return fail();
     if (c.lengthMm !== null && (!Number.isFinite(c.lengthMm) || c.lengthMm < 0 || c.lengthMm > 1e9 || Math.abs(c.lengthMm * 1000 - Math.round(c.lengthMm * 1000)) > 1e-4)) return fail();
     if (!Array.isArray(c.spans) || !c.spans.length || c.spans.length > 20000 || new Set(c.spans.map(s => s?.segmentId)).size !== c.spans.length) return fail();
@@ -85,7 +85,7 @@ export function projectOntoPolyline(points:readonly Point[],point:Point){
 export function standardCovering(document:HarnessDesignDocument,segmentId:string,point:Point,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
  const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
  const at=projectOntoPolyline(physicalSegmentPoints(document,segment),point).fraction;
- return {id,name,kind:coveringKind({name}),lengthMode:"auto",width:Math.min(200,(segment.width??16)+8),color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+ return {id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
 }
 
 export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {

@@ -102,10 +102,15 @@ try {
  assert.equal(savedJoin.content.physicalTopology.segments.filter(s=>s.from==='drag-join'||s.to==='drag-join').length,3);
  assert.deepEqual(savedJoin.content.wires.map(w=>[w.id,w.from,w.to]),loaded.content.wires.map(w=>[w.id,w.from,w.to]));
  const removed=applyEditorCommand(savedJoin.content,{type:'remove-physical-segment',segmentId:'drag-branch'});
- const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,removed);
+ const compact={...removed,physicalTopology:{...removed.physicalTopology,
+   segments:removed.physicalTopology.segments.map((s,i)=>({...s,width:i===0?0:.125})),
+   coverings:removed.physicalTopology.coverings?.map((c,i)=>({...c,width:i===0?0:250.25}))}};
+ const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,compact);
+ assert.deepEqual(savedRemoved.content.physicalTopology.segments,compact.physicalTopology.segments);
+ assert.deepEqual(savedRemoved.content.physicalTopology.coverings,compact.physicalTopology.coverings);
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

@@ -72,7 +72,7 @@ internal static class HarnessPhysicalTopologyValidator
             var id = Text(segment, "id"); var from = Text(segment, "from"); var to = Text(segment, "to");
             if (!ids.Add(id) || from == to || !nodes.ContainsKey(from) || !nodes.ContainsKey(to)) throw Invalid();
             foreach (var p in AuthoredPoints(segment).EnumerateArray()) Point(p);
-            if(segment.TryGetProperty("width",out _)){var width=Number(segment,"width");if(width<4||width>200)throw Invalid();}
+            if(segment.TryGetProperty("width",out _)){var width=Number(segment,"width");if(width<0||width>10000000)throw Invalid();}
             if(segment.TryGetProperty("color",out _)){var color=Text(segment,"color");if(color.Length!=7||color[0]!='#'||color[1..].Any(c=>!Uri.IsHexDigit(c)))throw Invalid();}
             if(segment.TryGetProperty("showWires",out _))_=Boolean(segment,"showWires");
             if(segment.TryGetProperty("specificationItemId",out _))_=Text(segment,"specificationItemId");
@@ -88,7 +88,7 @@ internal static class HarnessPhysicalTopologyValidator
                 if(covering.TryGetProperty("lengthMode",out _)&&Text(covering,"lengthMode") is not ("auto" or "manual"))throw Invalid();
                 var color = LongText(covering, "color", 7);
                 if (color.Length != 7 || color[0] != '#' || color[1..].Any(c => !Uri.IsHexDigit(c))) throw Invalid();
-                var width = Number(covering,"width"); if (width < 1 || width > 200) throw Invalid();
+                var width = Number(covering,"width"); if (width < 0 || width > 10000000) throw Invalid();
                 if (!covering.TryGetProperty("lengthMm",out var length)) throw Invalid();
                 if (length.ValueKind != JsonValueKind.Null)
                 {

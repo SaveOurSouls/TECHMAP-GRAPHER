@@ -26,7 +26,7 @@ export function drawingWireWidth(document:HarnessDesignDocument,wire:WireInstanc
 }
 export function segmentWireLanes(document:HarnessDesignDocument,segmentId:string) {
   const members=(document.physicalTopology?.routes??[]).filter(r=>r.steps.some(s=>s.segmentId===segmentId)).map(r=>r.wireId).sort();
-  const gap=drawingPhysicalScale(document),widths=members.map(id=>drawingWireWidth(document,document.wires.find(w=>w.id===id)!));
+  const gap=.25*drawingPhysicalScale(document),widths=members.map(id=>drawingWireWidth(document,document.wires.find(w=>w.id===id)!));
   const total=widths.reduce((a,b)=>a+b,0)+Math.max(0,members.length-1)*gap;
   let x=-total/2;
   return members.map((id,i)=>{const width=widths[i]!,offset=x+width/2;x+=width+gap;return {id,width,offset};});
@@ -34,5 +34,5 @@ export function segmentWireLanes(document:HarnessDesignDocument,segmentId:string
 export function drawingPipeWidth(document:HarnessDesignDocument,segment:PhysicalSegment):number {
   const scale=drawingPhysicalScale(document),lanes=segmentWireLanes(document,segment.id);
   const bundle=lanes.length?lanes.at(-1)!.offset+lanes.at(-1)!.width/2-lanes[0]!.offset+lanes[0]!.width/2:0;
-  return Math.max((segment.width??12)*scale,bundle+4*scale);
+  return Math.max((segment.width??0)*scale,bundle+.5*scale);
 }
