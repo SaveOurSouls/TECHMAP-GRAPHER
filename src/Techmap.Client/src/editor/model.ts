@@ -1,7 +1,7 @@
 import { commonParallelSpan } from "./e4-parallel-spans";
 import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
-import { screenCrossSections, screenSectionAt } from "./e4-screen-spans";
+import { screenCrossSections, uprightScreenBody, clearScreenSections } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
@@ -891,9 +891,9 @@ export function wireScreenConnectionGeometry(
     const end = wire && wireEndpointE4AnchorInternal(document, wire.to, nextResolving)?.position;
     return {id:wireId, points:wire && start && end ? [start,...wire.e4Route,end] : []};
   }));
-  spans = clearDecorationSpans(spans, document.connectors.map(connector => ({
+  spans = clearScreenSections(spans, document.connectors.map(connector => ({
     ...connector.positions.e4, ...connectorE4TableGeometry(connector),
-  })), e4ScreenAlongSize / 2, span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
+  })), screen.width,e4ScreenAlongSize);
   if (spans.length === 0) return null;
   spans.sort((left, right) => left.firstWireDirection * (left.start - right.start));
   const pathLength = spans.reduce((sum, span) => sum + span.end - span.start, 0);
@@ -909,20 +909,14 @@ export function wireScreenConnectionGeometry(
   }
   const spanOffset = Math.max(0, Math.min(selected.end - selected.start, requestedDistance - accumulated));
   const along = selected.firstWireDirection === 1 ? selected.start + spanOffset : selected.end - spanOffset;
-  const section=screenSectionAt(selected,along);
-  const cross = (section.crossMinimum + section.crossMaximum) / 2;
-  const alongSize = e4ScreenAlongSize;
-  const crossSize = Math.max(32, screen.width, section.crossMaximum - section.crossMinimum + 18);
-  const center = selected.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
+  const {center,alongSize,crossSize}=uprightScreenBody(selected,along,screen.width,e4ScreenAlongSize);
   const configuredSide = screen.terminalSide ?? "above";
   const terminalSides: readonly WireScreenEndpointSide[] = configuredSide === "both"
     ? ["above", "below"]
     : [configuredSide];
   const terminals = terminalSides.map((side) => {
     const direction = side === "above" ? -1 : 1;
-    const bodyConnectionPoint = selected.orientation === "horizontal"
-      ? { x: center.x, y: center.y + direction * crossSize / 2 }
-      : { x: center.x + direction * crossSize / 2, y: center.y };
+    const bodyConnectionPoint = { x: center.x, y: center.y + direction * crossSize / 2 };
     // The port belongs to the oval itself. A wire only becomes connected after
     // the user explicitly starts or ends it on this perimeter point.
     const connectionPoint = bodyConnectionPoint;
@@ -940,7 +934,7 @@ export function wireScreenConnectionGeometry(
     connectionPoint: terminal.connectionPoint,
     terminalSide: terminal.side,
     terminals,
-    orientation: selected.orientation,
+    orientation: "horizontal",
     alongSize,
     crossSize,
   };

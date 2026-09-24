@@ -1,3 +1,4 @@
+import {clearDecorationSpans} from "./e4-decoration-spans";
 type Point = { readonly x: number; readonly y: number };
 type Orientation = "horizontal" | "vertical";
 interface Segment { readonly index:number; readonly start:Point; readonly end:Point; readonly orientation:Orientation }
@@ -24,9 +25,25 @@ export function screenSectionAt(span:ScreenCrossSection,position:number):{crossM
   return {crossMinimum:Math.min(...values),crossMaximum:Math.max(...values)};
 }
 
+/** Body orientation is independent of the axis used to slide along the wires. */
+export function uprightScreenBody(span:ScreenCrossSection,position:number,minimumHeight:number,narrowWidth:number) {
+  const section=screenSectionAt(span,position),cross=(section.crossMinimum+section.crossMaximum)/2;
+  const width=span.orientation==="horizontal"?narrowWidth:Math.max(narrowWidth,section.crossMaximum-section.crossMinimum+18);
+  const height=Math.max(32,minimumHeight,span.orientation==="horizontal"?section.crossMaximum-section.crossMinimum+18:width+14);
+  return {center:span.orientation==="horizontal"?{x:position,y:cross}:{x:cross,y:position},orientation:"horizontal" as const,alongSize:width,crossSize:height};
+}
+
+export function clearScreenSections(spans:readonly ScreenCrossSection[],tables:readonly {x:number;y:number;width:number;height:number}[],minimumHeight:number,narrowWidth:number):ScreenCrossSection[] {
+  return spans.flatMap(span=>{
+    const width=span.orientation==="horizontal"?narrowWidth:Math.max(narrowWidth,span.crossMaximum-span.crossMinimum+18);
+    const height=Math.max(32,minimumHeight,span.orientation==="horizontal"?span.crossMaximum-span.crossMinimum+18:width+14);
+    return clearDecorationSpans([span],tables,(span.orientation==="horizontal"?width:height)/2,()=>span.orientation==="horizontal"?height:width);
+  });
+}
+
 /** Sweep every route at the same X, independently of its bend indices.
- * A shield stays upright through staggered bends. Pure vertical bundles retain
- * their perpendicular shield as a fallback. Neither case modifies a route.
+ * A pure vertical bundle uses Y for movement; the body remains upright.
+ * Neither case modifies a route.
  */
 export function screenCrossSections(paths:readonly {id:string;points:readonly Point[]}[]):ScreenCrossSection[] {
   if(!paths.length)return [];

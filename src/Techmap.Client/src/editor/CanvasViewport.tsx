@@ -9,7 +9,7 @@ import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
 import {standardCoveringKinds,type PhysicalContextAction} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
-import { screenCrossSections, screenSectionAt, type ScreenCrossSection } from "./e4-screen-spans";
+import { screenCrossSections, uprightScreenBody, clearScreenSections, type ScreenCrossSection } from "./e4-screen-spans";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
 import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
@@ -679,8 +679,7 @@ export function getE4ScreenLayout(
     const wire=objects.find(object=>object.id===id && object.kind==="wire");
     return {id,points:wire ? getE4WireRoute(wire) : []};
   }));
-  const spans = clearDecorationSpans(candidates, objects.filter(object => object.kind === "connector"), e4ScreenAlongSize / 2,
-    span => Math.max(32, screen.width, span.crossMaximum - span.crossMinimum + 18));
+  const spans = clearScreenSections(candidates, objects.filter(object => object.kind === "connector"),screen.width,e4ScreenAlongSize);
   if (spans.length === 0) return null;
   const orderedSpans = [...spans].sort((a,b)=>a.firstWireDirection*(a.start-b.start));
   const pathLength = orderedSpans.reduce((sum, item) => sum + (item.end - item.start), 0);
@@ -697,19 +696,14 @@ export function getE4ScreenLayout(
   }
   const spanOffset = Math.max(0, Math.min(span.end - span.start, requestedDistance - distance));
   const along = span.firstWireDirection === 1 ? span.start + spanOffset : span.end - spanOffset;
-  const section=screenSectionAt(span,along);
-  const cross = (section.crossMinimum + section.crossMaximum) / 2;
-  const crossSize = Math.max(32, screen.width, section.crossMaximum - section.crossMinimum + 18);
-  const center = span.orientation === "horizontal" ? { x: along, y: cross } : { x: cross, y: along };
+  const {center,crossSize,alongSize}=uprightScreenBody(span,along,screen.width,e4ScreenAlongSize);
   const configuredSide = screen.terminalSide ?? "above";
   const sides: readonly ("above" | "below")[] = configuredSide === "both"
     ? ["above", "below"]
     : [configuredSide];
   const terminals = sides.map((side) => {
     const direction = side === "above" ? -1 : 1;
-    const bodyConnectionPoint = span.orientation === "horizontal"
-      ? { x: center.x, y: center.y + direction * crossSize / 2 }
-      : { x: center.x + direction * crossSize / 2, y: center.y };
+    const bodyConnectionPoint = { x: center.x, y: center.y + direction * crossSize / 2 };
     const connectionPoint = bodyConnectionPoint;
     return { side, bodyConnectionPoint, connectionPoint };
   });
@@ -718,9 +712,8 @@ export function getE4ScreenLayout(
     id: screen.id,
     wireIds: screen.wireIds,
     center,
-    orientation: span.orientation,
-    // The narrow axis follows the wires; the long axis crosses the bundle.
-    alongSize: e4ScreenAlongSize,
+    orientation: "horizontal",
+    alongSize,
     crossSize,
     span,
     spans: orderedSpans,
@@ -2997,7 +2990,7 @@ export function CanvasViewport({
               clientX: event.clientX,
               clientY: event.clientY,
               screenId: screen.id,
-              orientation: screen.orientation,
+              orientation: screen.span.orientation,
               position: overlays.screens.find((item) => item.id === screen.id)?.position ?? 0.5,
               spanLength: screen.pathLength,
             };
