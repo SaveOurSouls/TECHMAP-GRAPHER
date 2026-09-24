@@ -1,4 +1,5 @@
 import { drawingObjectPerimeter, type DrawingPerimeters } from "./drawing-object-perimeter";
+import {initialLinearLeader} from "./drawing-leader-placement";
 import { drawingLocalPoint, drawingPointToLocal } from "./drawing-scale";
 import { moveDrawingDimension, validateDrawingDimensions, type DrawingDimension } from "./drawing-dimensions";
 import type { EditorSceneObject } from "./editor-types";
@@ -199,9 +200,11 @@ export function addDrawingPositions(document:HarnessDesignDocument,perimeters?:D
     const existing=leaders.find(l=>l.objectId===objectId&&l.rowKey===row.key);
     if(existing){if(existing.hidden)leaders[leaders.indexOf(existing)]={...existing,hidden:false};continue;}
     const siblings=leaders.filter(l=>l.objectId===objectId),last=siblings.reduce<PositionLeader|undefined>((right,l)=>!right||l.circle.x>right.circle.x?l:right,undefined);
-    const edge=drawingObjectPerimeter(document,objectId,{x:origin.x+10000,y:origin.y-10000},perimeters);if(!edge)continue;
+    const linear=initialLinearLeader(document,objectId);
+    const target=linear?{x:linear.point.x+linear.normal.x*.01,y:linear.point.y+linear.normal.y*.01}:{x:origin.x+10000,y:origin.y-10000};
+    const edge=drawingObjectPerimeter(document,objectId,target,perimeters);if(!edge)continue;
     const circle=last?{x:last.circle.x+24,y:last.circle.y}:{x:edge.x+48,y:edge.y-48};
-    const anchor=drawingObjectPerimeter(document,objectId,circle,perimeters)!;
+    const anchor=linear?edge:drawingObjectPerimeter(document,objectId,circle,perimeters)!;
     const offset={x:anchor.x-origin.x,y:anchor.y-origin.y},connector=document.connectors.find(c=>c.id===objectId);
     leaders.push({id:createId(),objectId,rowKey:row.key,anchorOffset:offset,circle,...(connector?{anchorLocal:drawingPointToLocal(offset,connector.drawingPlacements)}:{})});
   }
