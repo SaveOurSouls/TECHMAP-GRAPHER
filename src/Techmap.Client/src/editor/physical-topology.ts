@@ -87,6 +87,50 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
       ? [{ segmentId: nextId, reverse: true }, step] : [step, { segmentId: nextId, reverse: false }]) })) };
 }
 
+/** Connects an existing physical node to any interior point of another pipe. */
+export function connectPhysicalNodeToSegment(
+  document: HarnessDesignDocument,
+  nodeId: string,
+  segmentId: string,
+  point: Point,
+  ids: { readonly junction: string; readonly segment: string; readonly continuation: string },
+): PhysicalTopology {
+  const topology = document.physicalTopology ?? emptyPhysicalTopology();
+  const source = topology.nodes.find(node => node.id === nodeId);
+  const segment = topology.segments.find(item => item.id === segmentId);
+  if (!source || !segment) throw new Error("Не удалось найти точку или целевой пайп.");
+  if (segment.from === nodeId || segment.to === nodeId) return topology;
+  const points = physicalSegmentPoints(document, segment);
+  const hit = projectOntoPolyline(points, point);
+  if (hit.fraction <= 1e-6 || hit.fraction >= 1 - 1e-6) throw new Error("Для присоединения выберите внутреннюю точку пайпа.");
+  let index = hit.index;
+  if (Math.hypot(points[index]!.x - hit.point.x, points[index]!.y - hit.point.y) > 1e-7) {
+    points.splice(index, 0, hit.point);
+  }
+  const prepared: HarnessDesignDocument = {
+    ...document,
+    physicalTopology: {
+      ...topology,
+      segments: topology.segments.map(item => item.id === segmentId
+        ? { ...item, path: { kind: "polyline" as const, points: points.slice(1, -1) } }
+        : item),
+    },
+  };
+  const split = splitPhysicalSegment(prepared, segmentId, index, ids.junction, ids.continuation);
+  return {
+    ...split,
+    segments: [...split.segments, {
+      id: ids.segment,
+      from: nodeId,
+      to: ids.junction,
+      path: { kind: "routed" as const, points: [] },
+      width: segment.width,
+      color: segment.color,
+      showWires: segment.showWires,
+    }],
+  };
+}
+
 export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessDesignDocument {
   const t = document.physicalTopology;
   if (!t) return document;

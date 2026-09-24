@@ -19,7 +19,7 @@ import { type PhysicalCovering, coveringMaterial, standardCovering } from "./phy
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
 import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
-import { ensureConnectorExits, movePhysicalHandle, removePhysicalHandle, insertPhysicalBend, branchPhysicalSegment } from "./physical-topology";
+import { ensureConnectorExits, movePhysicalHandle, removePhysicalHandle, insertPhysicalBend, branchPhysicalSegment, connectPhysicalNodeToSegment } from "./physical-topology";
 import { physicalNodePoint, physicalNodeLocalPoint } from "./physical-ports";
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
@@ -1718,6 +1718,7 @@ export function HarnessDesignEditor({
           else {setCoveringPreview(null);const t=history.present.physicalTopology!;run({type:"set-physical-topology",topology:{...t,coverings:t.coverings?.map(c=>c.id===id?covering:c)}});}
         }}
         onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,path: { kind: "routed" as const, points: [] }}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
+        onPhysicalNodeConnectToSegment={(fromNodeId,segmentId,point)=>{const t=history.present.physicalTopology;if(!t)return;try{const ids={junction:crypto.randomUUID(),segment:crypto.randomUUID(),continuation:crypto.randomUUID()};const topology=routePhysicalWires(history.present,connectPhysicalNodeToSegment(history.present,fromNodeId,segmentId,point,ids));if(run({type:"set-physical-topology",topology})){setSelectedObjectId(ids.segment);setSelectedObjectIds([ids.segment]);}}catch(error){setMessage(error instanceof Error?error.message:"Не удалось присоединить точку к пайпу.");}}}
         onPhysicalContextAction={(segmentId,point,action)=>{
           const t=history.present.physicalTopology;if(!t)return;
           if(action==="remove-pipe"){

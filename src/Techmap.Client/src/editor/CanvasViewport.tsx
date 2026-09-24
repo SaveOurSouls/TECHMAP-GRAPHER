@@ -118,6 +118,7 @@ export interface CanvasViewportProps {
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
   readonly onObjectEditRequest?: (objectId: string) => void;
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
+  readonly onPhysicalNodeConnectToSegment?: (fromNodeId:string,segmentId:string,point:EditorPoint)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
@@ -1434,7 +1435,10 @@ export function objectsInPaintOrder(
   for (const layer of [...layers].reverse()) {
     if (layer.visible) result.push(...(objectGroups.get(layer.id) ?? []));
   }
-  return result;
+  // Connection points are interaction anchors, not ordinary artwork. Keep them
+  // above every user-reordered layer so wires, covers and tables cannot hide them.
+  const connectionPoints = result.filter((object) => object.kind === "physical-node");
+  return [...result.filter((object) => object.kind !== "physical-node"), ...connectionPoints];
 }
 
 export interface VisibleCableSheathScene {
@@ -2438,6 +2442,7 @@ function redrawCanvas(
   resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
   componentTemplateImageCache = new ComponentTemplateImageCache(),
   highlightedObjectIds: readonly string[] = [],
+  physicalNodePreview?: { readonly from: EditorPoint; readonly to: EditorPoint } | null,
 ) {
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -2498,12 +2503,24 @@ function redrawCanvas(
   for (const object of objectsInPaintOrder(objects,layers)) {
     if (object.kind === "connector" && selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context,object,view,camera.zoom);
   }
+  if (physicalNodePreview) {
+    context.save();
+    context.strokeStyle = "#1179ac";
+    context.globalAlpha = 0.65;
+    context.lineWidth = 2 / Math.max(0.5, camera.zoom);
+    context.setLineDash([7 / Math.max(0.5, camera.zoom), 5 / Math.max(0.5, camera.zoom)]);
+    context.beginPath();
+    context.moveTo(physicalNodePreview.from.x, physicalNodePreview.from.y);
+    context.lineTo(physicalNodePreview.to.x, physicalNodePreview.to.y);
+    context.stroke();
+    context.restore();
+  }
   if (view === "drawing") {
     for (const object of objectsInPaintOrder(objects,layers)) {
       if (object.kind !== "physical-node" && object.kind !== "physical-segment") continue;
       const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : [object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
-      points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?"#b9edf6":"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
+      points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
       context.restore();
     }
@@ -2621,7 +2638,7 @@ export function CanvasViewport({
   onWireRoutePointMove, onWireRoutePointPreview,
   onWireRoutePointRemove,
   onObjectEditRequest,
-  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect,
+  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
   onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -2693,6 +2710,8 @@ export function CanvasViewport({
     ? objects.find((object) => object.id === selectedObjectId && object.kind === "connector") ?? null
     : null;
   const inlineLayout = inlineObject ? getE4ConnectorLayout(inlineObject) : null;
+  const [physicalStart,setPhysicalStart]=useState<string|null>(null);
+  const [physicalNodePreview,setPhysicalNodePreview]=useState<{from:EditorPoint;to:EditorPoint}|null>(null);
 
   useEffect(() => {
     if (tool !== "wire") {
@@ -2730,6 +2749,7 @@ export function CanvasViewport({
         resolveComponentTemplateAssetUrl,
         componentTemplateImageCacheRef.current!,
         highlightedObjectIds,
+        physicalNodePreview,
       );
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
@@ -2746,7 +2766,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [highlightedObjectIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view]);
+  }, [highlightedObjectIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -2759,7 +2779,6 @@ export function CanvasViewport({
     return () => frame.removeEventListener("wheel", wheel, true);
   }, [camera, onCameraChange]);
 
-  const [physicalStart,setPhysicalStart]=useState<string|null>(null);
   useEffect(()=>{setPhysicalStart(null);},[tool,view]);
   const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number; node?:boolean; wires?:boolean}|null>(null);
   const localPoint = (clientX: number, clientY: number): EditorPoint => {
@@ -2800,6 +2819,7 @@ export function CanvasViewport({
       if(node){
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current={kind:"physical-node-connect",pointerId:event.pointerId,fromNodeId:node.id,clientX:event.clientX,clientY:event.clientY,moved:false};
+        setPhysicalNodePreview({from:{x:node.x+5,y:node.y+5},to:{x:node.x+5,y:node.y+5}});
         return;
       }
     }
@@ -3061,6 +3081,12 @@ export function CanvasViewport({
     if(drag.pointerId !== event.pointerId)return;
     if(drag.kind==="physical-node-connect") {
       if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) drag.moved=true;
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const source=objects.find(o=>o.id===drag.fromNodeId&&o.kind==="physical-node");
+      const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
+      const segmentPoint=targetSegment?projectOntoPolyline(targetSegment.points??[],point).point:null;
+      setPhysicalNodePreview({from:source?{x:source.x+5,y:source.y+5}:point,to:target?{x:target.x+5,y:target.y+5}:segmentPoint??point});
       return;
     }
     if(drag.kind==="covering"){onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),"preview");return;}
@@ -3106,13 +3132,18 @@ export function CanvasViewport({
       const drag=dragRef.current;
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
       if(drag.moved&&target) {
         onPhysicalNodesConnect?.(drag.fromNodeId,target.id);
+        setPhysicalStart(null);
+      } else if (drag.moved && targetSegment) {
+        onPhysicalNodeConnectToSegment?.(drag.fromNodeId,targetSegment.id,projectOntoPolyline(targetSegment.points??[],point).point);
         setPhysicalStart(null);
       } else if(!drag.moved) {
         if(physicalStart&&physicalStart!==drag.fromNodeId){onPhysicalNodesConnect?.(physicalStart,drag.fromNodeId);setPhysicalStart(null);}
         else setPhysicalStart(drag.fromNodeId);
       }
+      setPhysicalNodePreview(null);
     } else if(dragRef.current?.kind==="covering") {const drag=dragRef.current;onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)?"commit":"cancel");
     } else if(dragRef.current?.kind==="companion") {
       const drag=dragRef.current;
@@ -3190,6 +3221,7 @@ export function CanvasViewport({
     if (dragRef.current.kind === "wire-route") onWireRoutePointPreview?.(dragRef.current.wireId,dragRef.current.routeIndex,null);
     if (dragRef.current.kind === "e4-wire-label") setWireLabelPreview(null);
     if (dragRef.current.kind === "e4-screen") setScreenPositionPreview(null);
+    if (dragRef.current.kind === "physical-node-connect") setPhysicalNodePreview(null);
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };

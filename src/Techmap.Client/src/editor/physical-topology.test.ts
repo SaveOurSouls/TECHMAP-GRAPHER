@@ -2,7 +2,7 @@ import { physicalFixture } from "./physical-topology-fixture";
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand } from "./commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
-import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, type PhysicalTopology } from "./physical-topology";
+import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, connectPhysicalNodeToSegment, type PhysicalTopology } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
@@ -114,6 +114,18 @@ describe("physical topology", () => {
     const removed = removePhysicalSegment(withOnlyPipe, "S0");
     expect(removed.nodes.some(node => node.id === "J")).toBe(false);
     expect(parseHarnessDesignDocument({ ...withOnlyPipe, physicalTopology: removed }).physicalTopology).toEqual(removed);
+  });
+  it("connects a node to an interior point of another pipe and preserves the pipe style", () => {
+    const d = physicalFixture();
+    const segment = d.physicalTopology!.segments[0]!;
+    const points = physicalSegmentPoints(d, segment);
+    const point = { x: (points[0]!.x + points[1]!.x) / 2, y: (points[0]!.y + points[1]!.y) / 2 };
+    const topology = connectPhysicalNodeToSegment(d, "NC", "S0", point, { junction: "join", segment: "branch", continuation: "tail" });
+    expect(topology.nodes.some(node => node.id === "join")).toBe(true);
+    expect(topology.segments.find(item => item.id === "branch")).toMatchObject({ from: "NC", to: "join" });
+    expect(topology.segments.find(item => item.id === "tail")).toMatchObject({ from: "join", to: "J" });
+    expect(topology.segments.filter(item => item.from === "join" || item.to === "join")).toHaveLength(3);
+    expect(parseHarnessDesignDocument({ ...d, physicalTopology: topology }).physicalTopology).toEqual(topology);
   });
 });
 

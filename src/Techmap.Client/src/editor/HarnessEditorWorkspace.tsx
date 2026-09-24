@@ -169,6 +169,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly drawingSnapEnabled?: boolean;
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
+  readonly onPhysicalNodeConnectToSegment?: (fromNodeId:string,segmentId:string,point:EditorPoint)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
@@ -282,7 +283,7 @@ export function HarnessEditorWorkspace({
   onWireRoutePointRemove,
   drawingSnapEnabled = true,
   onDrawingSnapChange,
-  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect,
+  onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
   propertyInspector,
   canvasEditor,
   diagnostics = [],
@@ -587,6 +588,7 @@ export function HarnessEditorWorkspace({
           onCanvasDoubleClick={onCanvasDoubleClick}
           onPhysicalContextAction={onPhysicalContextAction}
           onPhysicalNodesConnect={onPhysicalNodesConnect}
+          onPhysicalNodeConnectToSegment={onPhysicalNodeConnectToSegment}
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />
