@@ -1238,6 +1238,45 @@ describe("shared harness editor model", () => {
     expect(undoEditorCommand(h).present).toBe(d);
   });
 
+  it.each(["carry","adjacent"] as const)("moves both a T carrier and its branch from the same connector in %s mode",mode=>{
+    const base=connectionDocument();
+    const d=applyEditorCommand(base,{type:"create-junction",junction:{id:"j",position:{x:700,y:64},wireIds:["w1","branch"]},branchWire:createWire("branch",{connectorId:"x1",contactId:"x1:contact:3"},createJunctionEndpoint("j"),100,"NET-A")});
+    const history=executeEditorCommand(createEditorHistory(d),{type:"move-connector",connectorId:"x1",view:"e4",position:{x:10,y:20},physicalDragMode:mode});
+    const changed=history.present,j=changed.junctions[0]!;
+    expect(changed.connectors[0]!.positions.e4).toEqual({x:10,y:20});
+    for(const id of j.wireIds)expect(wireE4PathContainsPoint(changed,changed.wires.find(w=>w.id===id)!,j.position)).toBe(true);
+    expect(e4RoutingIssues(changed)).toEqual([]);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed))).junctions).toEqual(changed.junctions);
+    expect(changed.wires.map(w=>[w.id,w.from,w.to])).toEqual(d.wires.map(w=>[w.id,w.from,w.to]));
+    expect(undoEditorCommand(history).present).toBe(d);
+  });
+
+  it("reconciles two moving through-wires at one junction instead of rejecting their different projections",()=>{
+    const base=connectionDocument();
+    const d=parseHarnessDesignDocument({...base,wires:base.wires.map(w=>({...w,circuit:"NET-A",e4Route:w.id==="w1"
+      ?[{x:740,y:64},{x:740,y:250},{x:860,y:250},{x:860,y:64}]
+      :[{x:700,y:88},{x:800,y:188},{x:930,y:188},{x:930,y:88}]})),junctions:[{id:"j",position:{x:740,y:128},wireIds:["w1","w2"]}]});
+    expect(e4RoutingIssues(d)).toEqual([]);
+    const changed=applyEditorCommand(d,{type:"move-connector",connectorId:"x1",view:"e4",position:{x:10,y:20},physicalDragMode:"carry"});
+    const j=changed.junctions[0]!;
+    expect(j.position.x).toBeGreaterThan(740);
+    for(const wire of changed.wires)expect(wireE4PathContainsPoint(changed,wire,j.position)).toBe(true);
+    expect(e4RoutingIssues(changed)).toEqual([]);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed))).junctions).toEqual(changed.junctions);
+  });
+
+  it("preserves remote author corners of a valid branch while its carrier moves",()=>{
+    let d=applyEditorCommand(connectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:740,y:64},{x:740,y:180},{x:900,y:180},{x:900,y:64}]});
+    d=applyEditorCommand(d,{type:"create-junction",junction:{id:"j",position:{x:800,y:180},wireIds:["w1","branch"]},branchWire:createWire("branch",{connectorId:"x1",contactId:"x1:contact:3"},createJunctionEndpoint("j"),100,"NET-A")});
+    d=applyEditorCommand(d,{type:"set-e4-wire-route",wireId:"branch",route:[{x:700,y:112},{x:700,y:400},{x:800,y:400}]});
+    const index=d.wires[0]!.e4Route.findIndex(p=>p.x===900&&p.y===180);
+    const changed=applyEditorCommand(d,{type:"edit-e4-bend",wireId:"w1",index,position:{x:920,y:200},mode:"adjacent"});
+    const branch=changed.wires.find(w=>w.id==="branch")!;
+    expect(branch.e4Route).toContainEqual({x:700,y:400});
+    expect(branch.e4Route).toContainEqual({x:700,y:112});
+    expect(e4RoutingIssues(changed)).toEqual([]);
+  });
+
   it("rebuilds connected E4 wires after flipping a connector", () => {
     let document = connectionDocument();
     const before = document.wires.find((wire) => wire.id === "w1")!.e4Route;

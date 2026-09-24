@@ -45,6 +45,22 @@ export function movedE4Junctions(document:HarnessDesignDocument,wireId:string,be
   return result;
 }
 
+/** A T node follows its carrier, never a branch that merely ends there. If
+ * several carriers move differently, use the junction's stored carrier order;
+ * the remaining routes must join that one position in the same transaction. */
+export function resolveE4JunctionMoves(document:HarnessDesignDocument,proposals:ReadonlyMap<string,ReadonlyMap<string,Point>>):Map<string,Point> {
+  const result=new Map<string,Point>();
+  for(const junction of document.junctions){
+    for(const id of junction.wireIds){
+      const wire=document.wires.find(w=>w.id===id);
+      if(!wire||[wire.from,wire.to].some(e=>e.junctionId===junction.id))continue;
+      const point=proposals.get(id)?.get(junction.id);
+      if(point){result.set(junction.id,point);break;}
+    }
+  }
+  return result;
+}
+
 /** Move shared junctions and bend only attached portions of their other wires. */
 export function followE4Junctions(before:HarnessDesignDocument,after:HarnessDesignDocument,positions:ReadonlyMap<string,Point>,owners:ReadonlySet<string>,mode:PhysicalDragMode):HarnessDesignDocument {
   const changed={...after,junctions:after.junctions.map(j=>positions.has(j.id)?{...j,position:positions.get(j.id)!}:j)};

@@ -52,7 +52,7 @@ import type { ConnectorLibraryBinding } from "./model";
 import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
-import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions } from "./e4-editing";
+import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -217,7 +217,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),command.mode);
       const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>id!==wire.id));
       if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
-      for(const id of branches)changed=rerouteWireE4ThroughJunctions(changed,id,new Set([...branches].filter(other=>other!==id)));
+      changed=repairE4JunctionBranches(changed,branches);
       return setE4WireRoute(changed,wire.id,route);
     }
     case "add-visible-pipe-dimension": {
@@ -303,7 +303,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         const connector=document.connectors.find(c=>c.id===command.connectorId)!;
         if(document.views.e4.layers.some(l=>l.locked&&(l.id===connector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===connector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
         let changed=moved;
-        const positions=new Map<string,Point>(),owners=new Set<string>();
+        const proposals=new Map<string,ReadonlyMap<string,Point>>(),owners=new Set<string>();
         for(const wire of document.wires){
           if(![wire.from,wire.to].some(e=>e.connectorId===command.connectorId)||screenJunctionEnds(wire))continue;
           const a=wireEndpointE4Anchor(document,wire.from),b=wireEndpointE4Anchor(document,wire.to);
@@ -312,19 +312,19 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           const original=[a.position,...wire.e4Route,b.position];
           const raw=moveE4Ends(original,start.position,end.position,command.physicalDragMode);
           const baseline=moveE4Ends(original,a.position,b.position,command.physicalDragMode);
-          for(const [id,p] of movedE4Junctions(document,wire.id,baseline,raw)){
-            const previous=positions.get(id);
-            if(previous&&Math.hypot(previous.x-p.x,previous.y-p.y)>1e-6)throw new Error("Общий узел получил несовместимые положения. Переместите его отдельно.");
-            positions.set(id,p);
-          }
+          proposals.set(wire.id,movedE4Junctions(document,wire.id,baseline,raw));
           owners.add(wire.id);
           const points=preserveE4Leads(raw,start,end);
           changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),e4RouteMode:"manual"}:w)};
         }
-        changed=followE4Junctions(document,changed,positions,owners,command.physicalDragMode);
-        const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>!owners.has(id)));
+        const positions=resolveE4JunctionMoves(document,proposals);
+        const branches=new Set(document.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds.filter(id=>{
+          const wire=findWire(changed,id);
+          return !owners.has(id)||[wire.from,wire.to].some(e=>e.junctionId===j.id)||!wireE4PathContainsPoint(changed,wire,positions.get(j.id)!);
+        })));
+        changed=followE4Junctions(document,changed,positions,new Set([...owners].filter(id=>!branches.has(id))),command.physicalDragMode);
         if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
-        for(const id of branches)changed=rerouteWireE4ThroughJunctions(changed,id,new Set([...branches].filter(other=>other!==id)));
+        changed=repairE4JunctionBranches(changed,branches);
         for(const id of screenAttachmentWireIds(changed,changed.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId)).map(w=>w.id)))changed=rerouteWireE4ThroughJunctions(changed,id);
         for(const junction of changed.junctions)validateJunctionAgainstWires(changed,junction);
         validateWireGroups(changed);
@@ -1716,6 +1716,23 @@ function wireRouteTouchesConnector(
         Math.max(Math.min(first.x, second.x), rect.left) <= Math.min(Math.max(first.x, second.x), rect.right)) return true;
   }
   return false;
+}
+
+/** Keep the author's unaffected corners when the deformed branch is valid.
+ * Reflow is a fallback for collisions, not the default for every shared node. */
+function repairE4JunctionBranches(document:HarnessDesignDocument,wireIds:ReadonlySet<string>):HarnessDesignDocument {
+  let changed=document;
+  const pending=[...wireIds];
+  for(const [index,id] of pending.entries()){
+    try {
+      validateE4WireIds(changed,[id]);
+      for(const j of changed.junctions.filter(j=>j.wireIds.includes(id)))validateJunctionAgainstWires(changed,j);
+    } catch {
+      changed=rerouteWireE4ThroughJunctions(changed,id,new Set(pending.slice(index+1)));
+    }
+  }
+  validateE4WireIds(changed,pending);
+  return changed;
 }
 
 function rerouteWireE4ThroughJunctions(
