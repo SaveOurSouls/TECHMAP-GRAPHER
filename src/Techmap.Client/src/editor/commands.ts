@@ -3,7 +3,7 @@ import { reconcileDrawingDimensions, pipeMeasuredWireLength } from "./drawing-di
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
-import { prunePhysicalTopology } from "./physical-topology";
+import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
 import {
   connectorBaseColumnKeys,
@@ -53,6 +53,7 @@ import { resolveWireColorHex } from "./wire-reference-catalog";
 export type EditorCommand =
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
+  | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
@@ -198,6 +199,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
     case "set-physical-topology":
       if (document.views.drawing.layers.some(layer => layer.id === "wires" && layer.locked)) throw new Error("Слой проводов заблокирован.");
       return { ...document, physicalTopology: parsePhysicalTopology(command.topology, document) };
+    case "remove-physical-segment":
+      if (document.views.drawing.layers.some(layer => layer.id === "wires" && layer.locked)) throw new Error("Слой проводов заблокирован.");
+      return { ...document, physicalTopology: parsePhysicalTopology(removePhysicalSegment(document, command.segmentId), document) };
     case "add-connector":
       if (document.connectors.some((item) => item.id === command.connector.id)) {
         throw new Error("Соединитель с таким ID уже существует.");

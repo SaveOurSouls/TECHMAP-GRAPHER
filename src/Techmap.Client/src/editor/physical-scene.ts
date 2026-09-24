@@ -3,6 +3,7 @@ import type { EditorPoint, EditorSceneObject } from "./editor-types";
 import { physicalSegmentControls, physicalSegmentPoints } from "./physical-geometry";
 import { physicalNodePoint, physicalNodeDirection } from "./physical-ports";
 import { drawingPipeWidth } from "./drawing-thickness";
+import { defaultLayerIds } from "./model";
 
 /** One boundary between physical topology and presentation. */
 export function physicalTopologyScene(document: HarnessDesignDocument): EditorSceneObject[] {
@@ -21,7 +22,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {
     const point = physicalNodePoint(document, node);
     return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`,
-      layerId: "wires", x: point.x - 5, y: point.y - 5, width: 10, height: 10, color: "#1179ac",
+      layerId: defaultLayerIds.connectionPoints, x: point.x - 5, y: point.y - 5, width: 10, height: 10,
+      color: node.connectorId ? "#f59e0b" : "#1179ac",
+      metadata: { nodeRole: node.connectorId ? "connector-exit" : "junction" },
       port: { connectorId: node.connectorId, direction: physicalNodeDirection(document, node) } };
   });
   return [...segments, ...nodes];

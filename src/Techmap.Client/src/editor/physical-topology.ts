@@ -40,6 +40,22 @@ export function removePhysicalHandle(document: HarnessDesignDocument, segment: P
   return { ...segment, path: { ...segment.path, points: segment.path.points.filter((_, i) => i !== handle.bendIndex) }};
 }
 
+/** Removes a pipe and all authored geometry that belongs only to that pipe. */
+export function removePhysicalSegment(document: HarnessDesignDocument, segmentId: string): PhysicalTopology {
+  const topology = document.physicalTopology ?? emptyPhysicalTopology();
+  if (!topology.segments.some(segment => segment.id === segmentId)) return topology;
+  const segments = topology.segments.filter(segment => segment.id !== segmentId);
+  // A route that used the deleted pipe is no longer a continuous physical path;
+  // drop it completely so the remaining steps cannot point at a detached node.
+  const routes = topology.routes.filter(route => !route.steps.some(step => step.segmentId === segmentId));
+  const coverings = topology.coverings
+    ?.map(covering => ({ ...covering, spans: covering.spans.filter(span => span.segmentId !== segmentId) }))
+    .filter(covering => covering.spans.length > 0);
+  const referenced = new Set(segments.flatMap(segment => [segment.from, segment.to]));
+  const nodes = topology.nodes.filter(node => node.connectorId || referenced.has(node.id));
+  return { ...topology, nodes, segments, routes, coverings };
+}
+
 export function insertPhysicalBend(document: HarnessDesignDocument, segment: PhysicalSegment, point: Point): PhysicalSegment {
   const controls = physicalSegmentControls(document, segment);
   let best = Infinity, index = 0;

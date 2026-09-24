@@ -2,7 +2,7 @@ import { physicalFixture } from "./physical-topology-fixture";
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand } from "./commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
-import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, type PhysicalTopology } from "./physical-topology";
+import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, type PhysicalTopology } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
@@ -102,6 +102,18 @@ describe("physical topology", () => {
     const d = applyEditorCommand(physicalFixture(), { type: "remove-wire", wireId: "W1" });
     expect(d.physicalTopology!.routes.map(r => r.wireId)).toEqual(["W2", "W3"]);
     expect(() => parseHarnessDesignDocument(d)).not.toThrow();
+  });
+  it("removes a pipe, its authored bends, protection spans and orphan junction", () => {
+    const d = physicalFixture();
+    const topology = removePhysicalSegment(d, "S0");
+    expect(topology.segments.some(segment => segment.id === "S0")).toBe(false);
+    expect(topology.routes.some(route => route.steps.some(step => step.segmentId === "S0"))).toBe(false);
+    expect(topology.coverings ?? []).toEqual([]);
+    expect(topology.nodes.some(node => node.id === "J")).toBe(true);
+    const withOnlyPipe = { ...d, physicalTopology: { ...d.physicalTopology!, segments: [d.physicalTopology!.segments[0]!], routes: d.physicalTopology!.routes.filter(route => route.steps.some(step => step.segmentId === "S0")) } };
+    const removed = removePhysicalSegment(withOnlyPipe, "S0");
+    expect(removed.nodes.some(node => node.id === "J")).toBe(false);
+    expect(parseHarnessDesignDocument({ ...withOnlyPipe, physicalTopology: removed }).physicalTopology).toEqual(removed);
   });
 });
 

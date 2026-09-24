@@ -235,6 +235,15 @@ interface E4WireLabelPointerDrag {
   readonly wireId: string;
 }
 
+interface PhysicalNodeConnectPointerDrag {
+  readonly kind: "physical-node-connect";
+  readonly pointerId: number;
+  readonly fromNodeId: string;
+  readonly clientX: number;
+  readonly clientY: number;
+  moved: boolean;
+}
+
 export type E4SegmentOrientation = "horizontal" | "vertical";
 
 export interface E4WireSegment {
@@ -1845,8 +1854,11 @@ export function drawEditorSceneObject(
   if (object.kind === "physical-node") {
     const x=object.x+5,y=object.y+5;
     // A movable exit point, without an uneditable decorative fitting.
-    context.fillStyle=selected?"#00a0b7":"#bbc8ce";
+    context.fillStyle=selected?"#00a0b7":object.color;
+    context.strokeStyle=object.metadata?.nodeRole === "connector-exit" ? "#8a4b00" : "#17485d";
+    context.lineWidth=1.5;
     context.beginPath();context.arc(x,y,5,0,Math.PI*2);context.fill();
+    context.stroke();
     context.restore(); return;
   }
   if (object.kind === "connector" && componentTemplateViewInstance) {
@@ -2619,7 +2631,7 @@ export function CanvasViewport({
     componentTemplateImageCacheRef.current = new ComponentTemplateImageCache();
   }
   const dragRef = useRef<CoveringPointerDrag | PointerDrag | ObjectPointerDrag | DrawingPointerDrag | WireRoutePointerDrag |
-    E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | null>(null);
+    E4WireSegmentPointerDrag | E4WireLabelPointerDrag | E4ScreenPointerDrag | PhysicalNodeConnectPointerDrag | null>(null);
   const inlineDragRef = useRef<ObjectPointerDrag | null>(null);
   const inlineDragActivatedRef = useRef(false);
   const suppressInlineDoubleClickUntilRef = useRef(0);
@@ -2785,7 +2797,11 @@ export function CanvasViewport({
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const node=objects.find(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
-      if(node){if(physicalStart&&physicalStart!==node.id){onPhysicalNodesConnect(physicalStart,node.id);setPhysicalStart(null);}else setPhysicalStart(node.id);return;}
+      if(node){
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current={kind:"physical-node-connect",pointerId:event.pointerId,fromNodeId:node.id,clientX:event.clientX,clientY:event.clientY,moved:false};
+        return;
+      }
     }
     if(event.button===0&&event.shiftKey&&view==="drawing"&&tool==="select") {
       const local=localPoint(event.clientX,event.clientY),point=screenToWorld(camera,local);
@@ -3043,6 +3059,10 @@ export function CanvasViewport({
     const drag = dragRef.current;
     if (!drag) {const hit=view==="drawing"&&tool==="select"?gripAt(screenToWorld(camera,localPoint(event.clientX,event.clientY))):null;setHoverGrip(hit);event.currentTarget.style.cursor=hit?"ew-resize":"";return;}
     if(drag.pointerId !== event.pointerId)return;
+    if(drag.kind==="physical-node-connect") {
+      if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) drag.moved=true;
+      return;
+    }
     if(drag.kind==="covering"){onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),"preview");return;}
     if(drag.kind==="companion") { setDrawingPreview({objectId:drag.objectId,drawingId:drag.drawingId,offset:{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom}});
     } else if (drag.kind === "pan") {
@@ -3082,7 +3102,18 @@ export function CanvasViewport({
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    if(dragRef.current?.kind==="covering") {const drag=dragRef.current;onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)?"commit":"cancel");
+    if(dragRef.current?.kind==="physical-node-connect") {
+      const drag=dragRef.current;
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      if(drag.moved&&target) {
+        onPhysicalNodesConnect?.(drag.fromNodeId,target.id);
+        setPhysicalStart(null);
+      } else if(!drag.moved) {
+        if(physicalStart&&physicalStart!==drag.fromNodeId){onPhysicalNodesConnect?.(physicalStart,drag.fromNodeId);setPhysicalStart(null);}
+        else setPhysicalStart(drag.fromNodeId);
+      }
+    } else if(dragRef.current?.kind==="covering") {const drag=dragRef.current;onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)?"commit":"cancel");
     } else if(dragRef.current?.kind==="companion") {
       const drag=dragRef.current;
       if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) onDrawingMove?.(drag.objectId,drag.drawingId,{x:drag.offset.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.offset.y+(event.clientY-drag.clientY)/camera.zoom});
@@ -3369,7 +3400,7 @@ export function CanvasViewport({
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?pipeSceneControls(w):w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите узел или перегиб пайпа"}</div></>}
       {hoverGrip&&view==="drawing"&&<svg className="he-covering-grip" aria-hidden="true"><line x1={(hoverGrip.point.x-hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y1={(hoverGrip.point.y-hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} x2={(hoverGrip.point.x+hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y2={(hoverGrip.point.y+hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} stroke="#00a9db" strokeWidth="6"/><circle cx={hoverGrip.point.x*camera.zoom+camera.offsetX} cy={hoverGrip.point.y*camera.zoom+camera.offsetY} r="5" fill="white" stroke="#007ca8" strokeWidth="2"/></svg>}
-      {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{physicalMenu.wires ? <><strong>Провода пайпа</strong><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).length===0&&<span>Нет назначенных проводов</span>}</> : physicalMenu.node ? <button role="menuitem" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : (["branch",...standardCoveringKinds] as const).map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
+      {physicalMenu&&<div role="menu" aria-label="Объекты на канале" style={{position:"absolute",left:physicalMenu.x,top:physicalMenu.y,zIndex:30,display:"grid",background:"white",border:"1px solid #a9b9c4",borderRadius:6,padding:6,boxShadow:"0 4px 16px #0003"}} onKeyDown={e=>{if(e.key==="Escape")setPhysicalMenu(null);}}>{physicalMenu.wires ? <><strong>Провода пайпа</strong><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).length===0&&<span>Нет назначенных проводов</span>}</> : physicalMenu.node ? <button role="menuitem" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : (["branch",...standardCoveringKinds,"remove-pipe"] as const).map(action=><button type="button" role="menuitem" className="ui-control" key={action} onClick={()=>{onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action);setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action==="remove-pipe"?"Удалить пайп":action}</button>)}<button type="button" className="ui-control" onClick={()=>setPhysicalMenu(null)}>Закрыть</button></div>}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}
       {inlineEditor && inlineObject && inlineLayout && (

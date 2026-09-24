@@ -1720,6 +1720,10 @@ export function HarnessDesignEditor({
         onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,path: { kind: "routed" as const, points: [] }}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
         onPhysicalContextAction={(segmentId,point,action)=>{
           const t=history.present.physicalTopology;if(!t)return;
+          if(action==="remove-pipe"){
+            if(run({type:"remove-physical-segment",segmentId})){setSelectedObjectId(null);setSelectedObjectIds([]);}
+            return;
+          }
           if(action==="branch"){
             try{const ids={junction:crypto.randomUUID(),continuation:crypto.randomUUID(),tip:crypto.randomUUID(),branch:crypto.randomUUID()};
             if(run({type:"set-physical-topology",topology:branchPhysicalSegment(history.present,segmentId,point,ids)})){setSelectedObjectId(ids.tip);setSelectedObjectIds([ids.tip]);}}

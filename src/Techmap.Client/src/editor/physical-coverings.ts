@@ -74,7 +74,7 @@ export function splitCoveringSpans(coverings: readonly PhysicalCovering[] | unde
 }
 
 export const standardCoveringKinds=["Термоусадка","Нейлонка","Оплётка","Нитевый бандаж","Обмотка","Металлическая плетёнка"] as const;
-export type PhysicalContextAction=typeof standardCoveringKinds[number]|"branch";
+export type PhysicalContextAction=typeof standardCoveringKinds[number]|"branch"|"remove-pipe";
 export function projectOntoPolyline(points:readonly Point[],point:Point){
  let best={point:points[0]??point,index:1,fraction:0,distance:Infinity},travelled=0;const total=pathLength(points);
  for(let i=1;i<points.length;i++){const a=points[i-1]!,b=points[i]!,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy),t=length?Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/(length*length))):0;

@@ -556,6 +556,7 @@ export const defaultLayerIds = {
   connectors: "connectors",
   wires: "wires",
   dimensions: "dimensions",
+  connectionPoints: "connection-points",
 } as const;
 
 export function createDefaultConnectorBaseColumns(): readonly ConnectorBaseColumn[] {
@@ -672,6 +673,7 @@ export function connectorE4TableGeometry(connector: ConnectorInstance): Connecto
 
 function defaultLayers(): readonly EditorLayer[] {
   return [
+    { id: defaultLayerIds.connectionPoints, name: "Точки соединения", order: 3, visible: true, locked: false },
     { id: defaultLayerIds.dimensions, name: "Размеры", order: 2, visible: true, locked: false },
     { id: defaultLayerIds.connectors, name: "Соединители", order: 1, visible: true, locked: false },
     { id: defaultLayerIds.wires, name: "Провода", order: 0, visible: true, locked: false },
@@ -1884,6 +1886,13 @@ function parseView(value: unknown): EditorViewState {
   if (new Set(layers.map((layer) => layer.id)).size !== layers.length ||
       new Set(layers.map((layer) => layer.order)).size !== layers.length) {
     throw new Error("Слои должны иметь уникальные ID и порядок.");
+  }
+  // Documents created before M4-93 have no dedicated connection-point layer.
+  // Add it on read so physical nodes stay visible above wires and coverings while
+  // preserving every user-controlled visibility/lock state of existing layers.
+  if (!layers.some((layer) => layer.id === defaultLayerIds.connectionPoints)) {
+    const nextOrder = layers.reduce((maximum, layer) => Math.max(maximum, layer.order), -1) + 1;
+    layers.push({ id: defaultLayerIds.connectionPoints, name: "Точки соединения", order: nextOrder, visible: true, locked: false });
   }
   const wireCrossingStyle = record.wireCrossingStyle === undefined ? "none" : record.wireCrossingStyle;
   if (wireCrossingStyle !== "none" && wireCrossingStyle !== "bridge") {
