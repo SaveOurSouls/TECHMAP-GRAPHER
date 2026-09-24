@@ -31,7 +31,7 @@ try {
  const {createProjectApi}=await module('project-api.ts'),{createHarnessDesignApi}=await module('editor/design-api.ts');
  const {createConnector,createWire}=await module('editor/commands.ts');
  const {createEmptyHarnessDesign,parseHarnessDesignDocument,createOrthogonalE4Route,wireEndpointE4Anchor}=await module('editor/model.ts');
- const {ensureConnectorExits,physicalSegmentHandles,movePhysicalHandle,insertPhysicalBend,physicalSegmentControls,branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths}=await module('editor/physical-topology.ts');
+ const {ensureConnectorExits,physicalSegmentHandles,movePhysicalHandle,insertPhysicalBend,physicalSegmentControls,branchPhysicalSegment,routePhysicalWires,physicalWireDisplayPaths,connectPhysicalNodeToSegment}=await module('editor/physical-topology.ts');
  const {standardCovering}=await module('editor/physical-coverings.ts');
  const {buildDrawingBom,emptyDrawingDocuments}=await module('editor/drawing-documents.ts');
  let env=await start();const projects=createProjectApi(env.config,env.session,env.fetcher),designs=createHarnessDesignApi(env.config,env.session,env.fetcher);
@@ -93,6 +93,19 @@ try {
  await designs.save(project.projectId,harnessId,migrated.revision,migrated.content);
  assert.deepEqual((await designs.get(project.projectId,harnessId)).content,parsed);
  await stop();env=await start();assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,parsed);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true};
+ // M4-94: the actual node-to-pipe operation survives API validation and restart.
+ const restartedDesigns=createHarnessDesignApi(env.config,env.session,env.fetcher);
+ const loaded=await restartedDesigns.get(project.projectId,harnessId);
+ const joined=applyEditorCommand(loaded.content,{type:'set-physical-topology',topology:routePhysicalWires(loaded.content,
+   connectPhysicalNodeToSegment(loaded.content,'C1','main',{x:330,y:160},{junction:'drag-join',segment:'drag-branch',continuation:'drag-tail'}))});
+ const savedJoin=await restartedDesigns.save(project.projectId,harnessId,loaded.revision,joined);
+ assert.equal(savedJoin.content.physicalTopology.segments.filter(s=>s.from==='drag-join'||s.to==='drag-join').length,3);
+ assert.deepEqual(savedJoin.content.wires.map(w=>[w.id,w.from,w.to]),loaded.content.wires.map(w=>[w.id,w.from,w.to]));
+ const removed=applyEditorCommand(savedJoin.content,{type:'remove-physical-segment',segmentId:'drag-branch'});
+ const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,removed);
+ assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
+ await stop();env=await start();
+ assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

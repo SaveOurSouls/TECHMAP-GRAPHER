@@ -1502,7 +1502,7 @@ export function hitTestEditorScene(
   const paintOrder = objectsInPaintOrder(objects, layers);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const tolerance = 7 / zoom;
-  const node = paintOrder.find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
+  const node = [...paintOrder].reverse().find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
   if (node) return node.id;
   if (view === "drawing") {
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
@@ -2779,7 +2779,22 @@ export function CanvasViewport({
     return () => frame.removeEventListener("wheel", wheel, true);
   }, [camera, onCameraChange]);
 
-  useEffect(()=>{setPhysicalStart(null);},[tool,view]);
+  useEffect(() => {
+    const cancelConnection = () => {
+      const drag = dragRef.current;
+      if (drag?.kind === "physical-node-connect") {
+        dragRef.current = null;
+        const canvas = canvasRef.current;
+        if (canvas?.hasPointerCapture(drag.pointerId)) canvas.releasePointerCapture(drag.pointerId);
+      }
+      setPhysicalStart(null);
+      setPhysicalNodePreview(null);
+    };
+    cancelConnection();
+    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") cancelConnection(); };
+    window.addEventListener("keydown", keydown);
+    return () => { window.removeEventListener("keydown", keydown); cancelConnection(); };
+  }, [tool, view]);
   const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number; node?:boolean; wires?:boolean}|null>(null);
   const localPoint = (clientX: number, clientY: number): EditorPoint => {
     const bounds = canvasRef.current?.getBoundingClientRect();
@@ -3133,16 +3148,17 @@ export function CanvasViewport({
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
       const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
-      if(drag.moved&&target) {
+      const moved=drag.moved||inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY);
+      if(moved&&target) {
         onPhysicalNodesConnect?.(drag.fromNodeId,target.id);
         setPhysicalStart(null);
-      } else if (drag.moved && targetSegment) {
+      } else if (moved && targetSegment) {
         onPhysicalNodeConnectToSegment?.(drag.fromNodeId,targetSegment.id,projectOntoPolyline(targetSegment.points??[],point).point);
         setPhysicalStart(null);
-      } else if(!drag.moved) {
+      } else if(!moved) {
         if(physicalStart&&physicalStart!==drag.fromNodeId){onPhysicalNodesConnect?.(physicalStart,drag.fromNodeId);setPhysicalStart(null);}
         else setPhysicalStart(drag.fromNodeId);
-      }
+      } else setPhysicalStart(null);
       setPhysicalNodePreview(null);
     } else if(dragRef.current?.kind==="covering") {const drag=dragRef.current;onCoveringDrag?.(drag.objectId,drag.spanIndex,drag.part,drag.start,screenToWorld(camera,localPoint(event.clientX,event.clientY)),inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)?"commit":"cancel");
     } else if(dragRef.current?.kind==="companion") {
@@ -3221,7 +3237,7 @@ export function CanvasViewport({
     if (dragRef.current.kind === "wire-route") onWireRoutePointPreview?.(dragRef.current.wireId,dragRef.current.routeIndex,null);
     if (dragRef.current.kind === "e4-wire-label") setWireLabelPreview(null);
     if (dragRef.current.kind === "e4-screen") setScreenPositionPreview(null);
-    if (dragRef.current.kind === "physical-node-connect") setPhysicalNodePreview(null);
+    if (dragRef.current.kind === "physical-node-connect") {setPhysicalNodePreview(null);setPhysicalStart(null);}
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };

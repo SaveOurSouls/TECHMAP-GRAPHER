@@ -127,6 +127,20 @@ describe("physical topology", () => {
     expect(topology.segments.filter(item => item.from === "join" || item.to === "join")).toHaveLength(3);
     expect(parseHarnessDesignDocument({ ...d, physicalTopology: topology }).physicalTopology).toEqual(topology);
   });
+  it("deletes only dependent geometry and restores it with undo", () => {
+    const base = physicalFixture();
+    const doc = {...base, physicalTopology: {...base.physicalTopology!,
+      nodes: [...base.physicalTopology!.nodes, {id: "loose", position: {x: 10, y: 20}}],
+      coverings: [{id: "wrap", name: "Tape", width: 12, color: "#333333", lengthMm: null,
+        spans: [{segmentId: "S0", from: 0, to: 1}, {segmentId: "S1", from: 0, to: 1}]}]}};
+    const h = executeEditorCommand(createEditorHistory(doc), {type: "remove-physical-segment", segmentId: "S0"});
+    expect(h.present.physicalTopology!.nodes.some(node => node.id === "loose")).toBe(true);
+    expect(h.present.physicalTopology!.coverings![0]!.spans).toEqual([{segmentId: "S1", from: 0, to: 1}]);
+    expect(h.present.physicalTopology!.routes.map(route => route.wireId)).toEqual(["W3"]);
+    expect(h.present.wires).toBe(doc.wires);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).physicalTopology).toEqual(h.present.physicalTopology);
+    expect(undoEditorCommand(h).present).toBe(doc);
+  });
 });
 
 it("keeps connector exits and drag coordinates consistent with a rotated scaled drawing",async()=>{

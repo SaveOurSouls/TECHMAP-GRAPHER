@@ -31,6 +31,9 @@ it("keeps physical connection points on a dedicated top layer and distinguishes 
  expect(junction.metadata?.nodeRole).toBe("junction");
  const painted=objectsInPaintOrder(scene,doc.views.drawing.layers.map(layer=>({...layer,label:layer.name})));
  expect(painted.findIndex(o=>o.id==="NA")).toBeGreaterThan(painted.findIndex(o=>o.id==="S0"));
+ const manuallyReordered=objectsInPaintOrder(scene,[...doc.views.drawing.layers].reverse().map(layer=>({...layer,label:layer.name})));
+ expect(manuallyReordered.at(-1)?.id).toBe("J");
+ expect(manuallyReordered.findIndex(o=>o.id==="NA")).toBeGreaterThan(manuallyReordered.findIndex(o=>o.id==="S0"));
 });
 it("migrates legacy view layers with a visible connection-point layer",()=>{
  const doc=physicalFixture();
@@ -38,6 +41,9 @@ it("migrates legacy view layers with a visible connection-point layer",()=>{
  const parsed=parseHarnessDesignDocument(legacy);
  expect(parsed.views.e4.layers.find(layer=>layer.id===defaultLayerIds.connectionPoints)).toMatchObject({visible:true,locked:false});
  expect(parsed.views.drawing.layers.find(layer=>layer.id===defaultLayerIds.connectionPoints)).toMatchObject({visible:true,locked:false});
+ const highOrder={...legacy,views:{...legacy.views,drawing:{...legacy.views.drawing,layers:legacy.views.drawing.layers.map((layer,i)=>({...layer,order:10000-i}))}}};
+ const migrated=parseHarnessDesignDocument(highOrder);
+ expect(()=>parseHarnessDesignDocument(JSON.parse(JSON.stringify(migrated)))).not.toThrow();
 });
 it("resolves typed port directions at the same scene boundary",()=>{
  const base=physicalFixture(),doc={...base,physicalTopology:{...base.physicalTopology!,nodes:base.physicalTopology!.nodes.map(n=>({...n,direction:"up" as const}))}};

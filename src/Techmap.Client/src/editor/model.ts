@@ -1891,7 +1891,10 @@ function parseView(value: unknown): EditorViewState {
   // Add it on read so physical nodes stay visible above wires and coverings while
   // preserving every user-controlled visibility/lock state of existing layers.
   if (!layers.some((layer) => layer.id === defaultLayerIds.connectionPoints)) {
-    const nextOrder = layers.reduce((maximum, layer) => Math.max(maximum, layer.order), -1) + 1;
+    const occupiedOrders = new Set(layers.map(layer => layer.order));
+    let nextOrder = 10000;
+    while (occupiedOrders.has(nextOrder) && nextOrder >= 0) nextOrder--;
+    if (nextOrder < 0) throw new Error("Нет свободного порядка для слоя точек соединения.");
     layers.push({ id: defaultLayerIds.connectionPoints, name: "Точки соединения", order: nextOrder, visible: true, locked: false });
   }
   const wireCrossingStyle = record.wireCrossingStyle === undefined ? "none" : record.wireCrossingStyle;
