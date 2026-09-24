@@ -916,6 +916,10 @@ export function HarnessDesignEditor({
     if (!history) return { document: null, error: null };
     if(coveringPreview&&history.present.physicalTopology)return {document:{...history.present,physicalTopology:{...history.present.physicalTopology,coverings:history.present.physicalTopology.coverings?.map(c=>c.id===coveringPreview.id?coveringPreview:c)}},error:null};
     if(thicknessPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:thicknessPreview}},error:null};
+    if(pipePreview&&view==="e4"){
+      try{return {document:applyEditorCommand(history.present,{type:"edit-e4-bend",wireId:pipePreview.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
+      catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб Э4."};}
+    }
     if(pipePreview&&history.present.physicalTopology) {
       try{return {document:applyEditorCommand(history.present,{type:"edit-physical-bend",segmentId:pipePreview.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб."};}
@@ -1881,8 +1885,9 @@ export function HarnessDesignEditor({
             run({ type: "remove-screen", screenId: screen.id });
           }
         }}
-        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&history.present.physicalTopology?.segments.some(s=>s.id===id)?{id,index,point,mode,insert}:null)}
+        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.physicalTopology?.segments.some(s=>s.id===id))?{id,index,point,mode,insert}:null)}
         onWireRoutePointMove={(wireId, routeIndex, point, mode="carry", insert=false) => {
+          if(view==="e4"){run({type:"edit-e4-bend",wireId,index:routeIndex,position:point,mode,insert});return;}
           const topology = history.present.physicalTopology;
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) { run({type:"edit-physical-bend",segmentId:wireId,index:routeIndex,position:point,mode,insert}); return; }

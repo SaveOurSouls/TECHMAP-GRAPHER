@@ -52,8 +52,10 @@ import type { ConnectorLibraryBinding } from "./model";
 import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
+import { editedE4Points, retainE4Waypoints, completeOrthogonalShoulders } from "./e4-editing";
 
 export type EditorCommand =
+  | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode}
   | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
   | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -200,6 +202,24 @@ export function applyEditorCommand(
 
 function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {
   switch (command.type) {
+    case "edit-e4-bend": {
+      const wire=findWire(document,command.wireId);
+      if(document.views.e4.layers.some(l=>l.id===wire.layerIds.e4&&l.locked))throw new Error("Слой проводов заблокирован.");
+      if(screenJunctionEnds(wire))throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
+      const request=createE4RoutingRequest(document,wire,wire.id);
+      const points=editedE4Points([request.start.position,...wire.e4Route,request.end.position],command.index,command.position,command.mode,command.insert);
+      let route=points.slice(1,-1);
+      try{validateOrthogonalE4Route(request.start,route,request.end);}
+      catch{
+        const local=completeOrthogonalShoulders(points,request);
+        if(local)route=local.slice(1,-1);
+        else{
+          const routed=routeE4WireThroughWaypoints(request,route);
+          route=retainE4Waypoints(routed.points,route).slice(1,-1);
+        }
+      }
+      return setE4WireRoute(document,wire.id,route);
+    }
     case "add-visible-pipe-dimension": {
       if(document.views.drawing.layers.some(l=>(l.id==="wires"||l.id==="dimensions")&&l.locked))throw new Error("Слой трассы или размеров заблокирован.");
       const changed=materializePhysicalPath(document,command.segmentId);

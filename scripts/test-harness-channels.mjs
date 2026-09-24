@@ -117,13 +117,21 @@ try {
  const visible=physicalEditablePoints(automatic,automatic.physicalTopology.segments.at(-1));
  assert.ok(visible.length>2);
  const measuredAutomatic=applyEditorCommand(automatic,{type:'add-visible-pipe-dimension',id:'visible-dimension',segmentId:'dim-pipe',from:1,to:2,pointCount:visible.length,mode:'aligned'});
- const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,measuredAutomatic);
+ let e4Base=createEmptyHarnessDesign();
+ for(const [id,x] of [['x1',0],['x2',1000]])e4Base=applyEditorCommand(e4Base,{type:'add-connector',connector:createConnector(id,id,1,{x,y:0})});
+ e4Base=applyEditorCommand(e4Base,{type:'flip-connector-orientation',connectorId:'x2'});
+ e4Base=applyEditorCommand(e4Base,{type:'add-wire',wire:createWire('e4-test',{connectorId:'x1',contactId:'x1:contact:1'},{connectorId:'x2',contactId:'x2:contact:1'})});
+ e4Base=applyEditorCommand(e4Base,{type:'set-e4-wire-route',wireId:'e4-test',route:[{x:648,y:64},{x:648,y:200},{x:976,y:200},{x:976,y:64}]});
+ e4Base=applyEditorCommand(e4Base,{type:'edit-e4-bend',wireId:'e4-test',index:0,position:{x:636,y:64},mode:'adjacent',insert:true});
+ const combined={...measuredAutomatic,connectors:[...measuredAutomatic.connectors,...e4Base.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires]};
+ const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
+ assert.deepEqual(savedRemoved.content.wires.find(w=>w.id==='e4-test').e4Route,e4Base.wires[0].e4Route);
  assert.deepEqual(savedRemoved.content.physicalTopology.segments,measuredAutomatic.physicalTopology.segments);
  assert.deepEqual(savedRemoved.content.drawingDocuments.dimensions,measuredAutomatic.drawingDocuments.dimensions);
  assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(measuredAutomatic.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
- const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true,automaticCornerDimensionChecked:true};
+ const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true,automaticCornerDimensionChecked:true,e4MidpointChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

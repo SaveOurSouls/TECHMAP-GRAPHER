@@ -1,3 +1,4 @@
+import { straightLeadEnd } from "./route-lead";
 import { screenCrossSections } from "./e4-screen-spans";
 import { validDrawingScale } from "./drawing-scale";
 import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
@@ -966,8 +967,8 @@ export function validateOrthogonalE4Route(
       throw new Error("Маршрут Э4 должен состоять из ненулевых ортогональных сегментов.");
     }
   }
-  validateLead(start, points[1]!, minimumLead);
-  validateLead(end, points.at(-2)!, minimumLead);
+  validateLead(start, straightLeadEnd(points), minimumLead);
+  validateLead(end, straightLeadEnd([...points].reverse()), minimumLead);
 }
 
 export function createOrthogonalE4Route(

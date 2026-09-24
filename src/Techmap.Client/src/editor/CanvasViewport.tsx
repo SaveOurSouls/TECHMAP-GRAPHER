@@ -992,6 +992,11 @@ export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;p
   return points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+points[i]!.x)/2,y:(p.y+points[i]!.y)/2}}));
 }
 
+export function e4Midpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
+  if(object.kind!=="wire"||!object.points)return [];
+  return object.points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+object.points![i]!.x)/2,y:(p.y+object.points![i]!.y)/2}}));
+}
+
 export function hitTestWireEnd(
   object: EditorSceneObject | undefined,
   point: EditorPoint,
@@ -2552,6 +2557,13 @@ function redrawCanvas(
     drawE4Junctions(context, visibleOverlays.junctions);
     drawE4Screens(context, visibleOverlays.screens, objects);
     drawE4ConnectorAlignmentGuides(context, alignmentGuides, camera.zoom);
+    for(const wire of objectsInPaintOrder(objects,layers).filter(o=>o.kind==="wire"&&selectedObjectIds.has(o.id))){
+      context.save();context.fillStyle="#1179ac";
+      for(const {point:p} of e4Midpoints(wire)){context.globalAlpha=.35;context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fill();}
+      context.globalAlpha=1;context.lineWidth=1.5/camera.zoom;context.strokeStyle="#006f99";
+      for(const p of (wire.points??[]).slice(1,-1)){context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fillStyle="white";context.fill();context.stroke();}
+      context.restore();
+    }
   }
   context.restore();
 }
@@ -3019,6 +3031,19 @@ export function CanvasViewport({
         const wireLabel = onE4WireLabelPositionChange
           ? hitTestE4WireLabel(objects, layers, worldPoint, camera.zoom)
           : null;
+        const selectedWire=objects.find(o=>o.id===selectedObjectId&&o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked));
+        if(selectedWire&&onWireRoutePointMove){
+          const corner=hitTestWireRoutePoint(selectedWire,worldPoint,camera.zoom);
+          const middle=corner===null?e4Midpoints(selectedWire).find(h=>Math.hypot(h.point.x-worldPoint.x,h.point.y-worldPoint.y)<=7/camera.zoom):undefined;
+          const index=corner??middle?.index;
+          if(index!==undefined&&index!==null){
+            const points=selectedWire.points!,point=middle?.point??points[index+1]!;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:selectedWire.id,routeIndex:index,point,
+              mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:middle?[points[index]!,points[index+1]!]:[points[index]!,points[index+2]!]};
+            return;
+          }
+        }
         if (wireLabel) {
           const wire = objects.find((item) => item.id === wireLabel.wireId);
           const layer = wire ? layers.find((item) => item.id === wire.layerId) : null;
@@ -3491,7 +3516,7 @@ export function CanvasViewport({
             : objects.find((item) => item.id === selectedObjectId)?.kind === "wire"
               ? view === "drawing"
                 ? "Точки трассы: перетащить; двойной щелчок — удалить"
-                : "Сегменты: перетащить; двойной щелчок по изгибу — удалить"
+                : "Точки: перенос · середина: добавить · Shift: соседние участки"
               : "Ctrl + колесо — масштаб"}</span>
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?pipeSceneEditablePoints(w):w.points??[]).map((p,i)=><circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите узел или перегиб пайпа"}</div></>}

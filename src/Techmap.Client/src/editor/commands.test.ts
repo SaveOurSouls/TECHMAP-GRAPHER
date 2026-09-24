@@ -1136,6 +1136,45 @@ describe("shared harness editor model", () => {
     })).toThrow(/Точка маршрута Э4 не найдена/);
   });
 
+  it("inserts an E4 midpoint with one command, persists it and undoes it",()=>{
+    const d=singleWireConnectionDocument(),a=wireEndpointE4Anchor(d,d.wires[0]!.from)!.position,b=wireEndpointE4Anchor(d,d.wires[0]!.to)!.position;
+    const point={x:(a.x+b.x)/2,y:a.y};
+    const h=executeEditorCommand(createEditorHistory(d),{type:"edit-e4-bend",wireId:"w1",index:0,position:point,mode:"adjacent",insert:true});
+    expect(h.present.wires[0]!.e4Route).toContainEqual(point);
+    expect(h.present.wires[0]!.from).toEqual(d.wires[0]!.from);
+    expect(h.present.wires[0]!.to).toEqual(d.wires[0]!.to);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).wires[0]!.e4Route).toEqual(h.present.wires[0]!.e4Route);
+    expect(undoEditorCommand(h).present).toBe(d);
+  });
+  it("keeps a collinear editing handle inside the required contact lead",()=>{
+    const base=singleWireConnectionDocument();
+    const d=applyEditorCommand(base,{type:"set-e4-wire-route",wireId:"w1",route:[{x:648,y:64},{x:648,y:200},{x:976,y:200},{x:976,y:64}]});
+    const point={x:636,y:64};
+    const next=applyEditorCommand(d,{type:"edit-e4-bend",wireId:"w1",index:0,position:point,mode:"adjacent",insert:true});
+    expect(next.wires[0]!.e4Route).toEqual([point,...d.wires[0]!.e4Route]);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(next))).wires[0]!.e4Route).toEqual(next.wires[0]!.e4Route);
+    expect(e4RoutingIssues(next)).toEqual([]);
+  });
+
+  it("moves an E4 corner with Shift while preserving remote waypoints and rejects locked edits",()=>{
+    const d=applyEditorCommand(singleWireConnectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:700,y:64},{x:700,y:200},{x:900,y:200},{x:900,y:64}]});
+    const cmd={type:"edit-e4-bend" as const,wireId:"w1",index:1,position:{x:740,y:240},mode:"adjacent" as const};
+    const moved=applyEditorCommand(d,cmd);
+    for(const p of [{x:700,y:64},{x:740,y:240},{x:900,y:200},{x:900,y:64}])expect(moved.wires[0]!.e4Route).toContainEqual(p);
+    expect(e4RoutingIssues(moved)).toEqual([]);
+    const locked={...d,views:{...d.views,e4:{...d.views.e4,layers:d.views.e4.layers.map(l=>({...l,locked:l.id===d.wires[0]!.layerIds.e4}))}}};
+    expect(()=>applyEditorCommand(locked,cmd)).toThrow("заблокирован");
+    expect(()=>applyEditorCommand(d,{...cmd,index:999})).toThrow("не найдена");
+  });
+
+  it("carries both E4 shoulders without doubling back along the contact lead",()=>{
+    const d=applyEditorCommand(singleWireConnectionDocument(),{type:"set-e4-wire-route",wireId:"w1",route:[{x:700,y:64},{x:700,y:200},{x:800,y:200},{x:900,y:200},{x:900,y:64}]});
+    const moved=applyEditorCommand(d,{type:"edit-e4-bend",wireId:"w1",index:2,position:{x:820,y:230},mode:"carry"});
+    expect(moved.wires[0]!.e4Route).toContainEqual({x:720,y:230});
+    expect(moved.wires[0]!.e4Route).toContainEqual({x:920,y:230});
+    expect(e4RoutingIssues(moved)).toEqual([]);
+  });
+
   it("moves junctions attached to a dragged internal segment and reroutes their branches", () => {
     let document = connectionDocument();
     document = applyEditorCommand(document, {

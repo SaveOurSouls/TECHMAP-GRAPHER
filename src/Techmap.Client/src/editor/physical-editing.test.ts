@@ -18,6 +18,12 @@ it("carries neighboring shoulders normally and only the selected corner with Shi
  expect(shift.physicalTopology!.segments[0]!.path.points).toEqual([{x:80,y:0},{x:170,y:110},{x:220,y:70}]);
  expect(d.physicalTopology.segments[0]!.path.points[1]).toEqual({x:150,y:70});
 });
+it("carries both inner shoulders when dragging a new midpoint immediately",()=>{
+ const d=fixture(),cmd={type:"edit-physical-bend" as const,segmentId:"pipe",index:1,position:{x:125,y:55},insert:true};
+ const carry=applyEditorCommand(d,{...cmd,mode:"carry"}),shift=applyEditorCommand(d,{...cmd,mode:"adjacent"});
+ expect(carry.physicalTopology!.segments[0]!.path.points).toEqual([{x:90,y:20},{x:125,y:55},{x:160,y:90},{x:220,y:70}]);
+ expect(shift.physicalTopology!.segments[0]!.path.points).toEqual([{x:80,y:0},{x:125,y:55},{x:150,y:70},{x:220,y:70}]);
+});
 it("moves a node with its nearest shoulder, preserving all distant corners",()=>{
  const d=fixture(),command={type:"move-physical-node" as const,nodeId:"a",position:{x:20,y:30}};
  const carry=applyEditorCommand(d,{...command,mode:"carry"}),shift=applyEditorCommand(d,{...command,mode:"adjacent"});

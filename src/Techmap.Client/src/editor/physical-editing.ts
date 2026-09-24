@@ -85,6 +85,9 @@ export function editPhysicalBend(document:HarnessDesignDocument,id:string,index:
   const points=[...original];
   if(insert){
     if(index<0||index>=points.length-1)return document;
+    const a=points[index]!,b=points[index+1]!;
+    const delta={x:point.x-(a.x+b.x)/2,y:point.y-(a.y+b.y)/2};
+    if(mode==="carry")for(const i of [index,index+1])if(i>0&&i<points.length-1)points[i]=shifted(points[i]!,delta);
     points.splice(index+1,0,point);
     for(const [old,value] of map)if(value>index)map.set(old,value+1);
   }else {

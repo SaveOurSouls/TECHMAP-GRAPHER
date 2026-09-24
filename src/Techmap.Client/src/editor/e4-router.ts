@@ -1,4 +1,5 @@
 import type { Point } from "./model";
+import { straightLeadEnd } from "./route-lead";
 
 export type E4RouteDirection = "left" | "right" | "up" | "down" | null;
 
@@ -177,8 +178,8 @@ export function validateE4Route(points: readonly Point[], request: E4RoutingRequ
     throw new Error("Маршрут должен начинаться и заканчиваться в заданных контактах.");
   }
   const segments = toSegments(points, "Маршрут");
-  validateRouteLead(input.start, segments[0]!, true, input.options.leadLength);
-  validateRouteLead(input.end, segments.at(-1)!, false, input.options.leadLength);
+  validateRouteLead(input.start, {...segments[0]!,end:straightLeadEnd(points)}, true, input.options.leadLength);
+  validateRouteLead(input.end, {...segments.at(-1)!,start:straightLeadEnd([...points].reverse())}, false, input.options.leadLength);
 
   for (let index = 0; index < segments.length; index += 1) {
     const ignoredObstacleIds = new Set<string>();
