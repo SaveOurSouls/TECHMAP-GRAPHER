@@ -30,17 +30,23 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
    // Include both pipe exits so a shrink surface can taper instead of crossing its own corners.
-   const fractions=[from,...coveringControlFractions(document,s.segmentId).filter(f=>f>from&&f<to),to];
+   const control=coveringControlFractions(document,s.segmentId).filter(f=>f>from&&f<to);
+   const transitions:number[]=[];
+   if(coveringKind(covering)==="heat-shrink") {
+    // Keep a pair of short shoulders at every pipe/sleeve boundary. The two
+    // samples are intentionally close, producing a visible Z rather than a
+    // single diagonal L edge when the diameter changes.
+    const epsilon=Math.min(.015,Math.max(.001,(to-from)/20));
+    for(const boundary of [0,1]) if(boundary>from&&boundary<to) transitions.push(boundary-epsilon,boundary,boundary+epsilon);
+   }
+   const fractions=[from,...control,...transitions.filter(f=>f>from&&f<to).sort((a,b)=>a-b),to];
    const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,fractions.map(f=>route.before+f*route.length));
    const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
    const pipeWidth=drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const halfAt=(fraction:number):number=>{
     let width=pipeWidth;
-    if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)){
-     const travel=(fraction<0?-fraction:fraction-1)*route.length;
-     width=pipeWidth+(bundle-pipeWidth)*Math.min(1,travel/Math.max(12*scale,pipeWidth));
-    }
+    if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=bundle;
     // Array order is the physical stacking order; any lower surface remains enclosed.
     for(const lower of coverings.slice(0,order)) {
      if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;}))

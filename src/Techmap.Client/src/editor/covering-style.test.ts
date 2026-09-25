@@ -30,6 +30,14 @@ it("retains legacy defaults and chooses the preferred texture without changing g
   expect(coveringTextureFile("braid",{texture:"none"})).toBeNull();
   expect(coveringTextureFile("braid",style)).toBe("Metal049A");
 });
+it("creates paired shoulders at heat-shrink boundaries instead of a single L transition",()=>{
+ const d=physicalFixture(), base=d.physicalTopology!.segments[0]!;
+ const document={...d,physicalTopology:{...d.physicalTopology!,coverings:[{id:"heat",name:"Термоусадка",kind:"heat-shrink",lengthMode:"auto",width:20,color:"#999",lengthMm:null,spans:[{segmentId:base.id,from:-.25,to:.35}]}]}} as any;
+ const surface=JSON.parse(coveringScene(document)[0]!.metadata!.surfaces!)[0];
+ expect(surface.path.length).toBeGreaterThan(3);
+ const shoulders=surface.path.filter((_: unknown,i:number)=>i>0&&Math.hypot(surface.path[i].x-surface.path[i-1].x,surface.path[i].y-surface.path[i-1].y)<5);
+ expect(shoulders.length).toBeGreaterThanOrEqual(2);
+});
 it("persists independent styles through a command, reload, sleeve move and branch split",()=>{
   const d=physicalFixture(),changed=applyEditorCommand(d,{type:"set-physical-topology",topology:fixture().physicalTopology!});
   const loaded=parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed)));
