@@ -4,6 +4,7 @@ import { physicalSegmentPoints, physicalSegmentControls, physicalNodePoint } fro
 import { drawingBendRadius, projectOntoDrawingRoute } from "./drawing-route-path";
 import { validCoveringStyle, type CoveringStyle } from "./covering-style";
 import {applyCoveringPreference} from "./covering-library";
+import {resolvePipeBundles,type PipeBundle} from "./pipe-bundle-model";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -20,6 +21,7 @@ export function validateCoveringMaterial(value:unknown):void {
 }
 export type CoveringKind="heat-shrink"|"nylon"|"braid"|"metal-braid"|"tape"|"band";
 export interface PhysicalCovering {
+  readonly bundle?: PipeBundle;
   readonly style?:CoveringStyle;
   readonly kind?:CoveringKind;
   readonly lengthMode?:"auto"|"manual";
@@ -70,6 +72,7 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
     for (const s of c.spans) if (!s || !segmentIds.has(s.segmentId) || !Number.isFinite(s.from) || !Number.isFinite(s.to) || s.from < -10000 || s.to > 10001 || s.from >= s.to || [s.fromAnchor,s.toAnchor].some(i=>i!==undefined&&(!Number.isInteger(i)||i<0||i>1001))) return fail();
     if (c.material !== undefined) validateCoveringMaterial(c.material);
   }
+  resolvePipeBundles(value,segmentIds);
   return value;
 }
 

@@ -122,6 +122,8 @@ internal static class HarnessPhysicalTopologyValidator
                 }
             }
         }
+        if (t.TryGetProperty("coverings", out var coverings))
+            HarnessPipeBundleValidator.Validate(coverings, segments.Keys.ToHashSet(StringComparer.Ordinal));
         var assigned = new HashSet<string>(StringComparer.Ordinal);
         foreach (var route in Array(t, "routes", 20000).EnumerateArray())
         {
