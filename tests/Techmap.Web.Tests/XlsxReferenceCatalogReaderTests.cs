@@ -27,6 +27,8 @@ public sealed class XlsxReferenceCatalogReaderTests
         Assert.Equal(10, preview.Records[0].Payload.GetProperty("Цена").GetInt32());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, preview.Records[0].Payload.GetProperty("Пусто").ValueKind);
         Assert.Equal("2P", preview.Records[2].Payload.GetProperty("Pair").GetString());
+        Assert.Equal(new[] { "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто" },
+            System.Text.Json.JsonSerializer.Deserialize<string[]>(preview.Records[0].Payload.GetProperty("_techmapColumnOrder").GetString()!));
     }
 
     [Fact]

@@ -621,6 +621,11 @@ public sealed class XlsxReferenceCatalogReader
             if (mapping.LayerArray is not null)
                 ApplyLayerArray(payloadValues, mapping.LayerArray);
 
+            // JSON payloads are canonicalized by property name. Keep worksheet order separately.
+            if (mapping.ImportAllColumns)
+                payloadValues["_techmapColumnOrder"] = JsonSerializer.Serialize(resolved
+                    .OrderBy(field => field.ColumnIndex).Select(field => field.Mapping.TargetProperty));
+
             using var payloadDocument = JsonDocument.Parse(JsonSerializer.Serialize(payloadValues));
             var payload = payloadDocument.RootElement.Clone();
             var recordLocation = Location(sheets[selectedIndex].Name, rowNumber);

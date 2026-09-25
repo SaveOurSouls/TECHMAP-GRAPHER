@@ -84,13 +84,6 @@ function positiveInteger(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function formatCell(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "string") return value;
@@ -846,7 +839,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
               disabled={busy !== null}
               onClick={() => setEditableSourceId(source.sourceId)}
             ><strong>{profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
-              <span>{source.sourceId}</span><em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
+              <em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
           </div>
           <form className="reference-new-source" onSubmit={(event) => {
             event.preventDefault();
@@ -876,13 +869,9 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
           {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
           {activeSourceId && !activeError && active !== undefined && <>
-            {active && <dl className="active-reference-facts">
-              <div><dt>Записей</dt><dd>{active.records.length}</dd></div>
-              <div><dt>Источник</dt><dd>{active.sourceUri ?? active.sourceKind}</dd></div>
-              <div><dt>Снимок создан</dt><dd>{formatDateTime(active.capturedUtc)}</dd></div>
-            </dl>}
             <EditableReferenceTable
               sourceId={activeSourceId}
+              displayName={profiles?.find(profile => profile.sourceId === activeSourceId)?.displayName}
               snapshot={active}
               disabled={busy !== null}
               onSave={async (request) => {

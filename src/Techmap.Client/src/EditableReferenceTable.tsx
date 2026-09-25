@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { referenceTableProfiles } from "./reference-table-profiles";
 import type {
   EditableReferenceRecord,
   PublishEditableReferenceTableRequest,
@@ -11,6 +12,7 @@ export interface EditableReferenceColumn {
   readonly id: string;
   readonly name: string;
   readonly sourceColumn: string;
+  readonly label?: string;
 }
 
 export interface EditableReferenceRow {
@@ -19,6 +21,8 @@ export interface EditableReferenceRow {
   readonly sourceKey: string;
   readonly values: Readonly<Record<string, string>>;
   readonly originalValues: Readonly<Record<string, unknown>>;
+  readonly originalPayload?: Readonly<Record<string, unknown>>;
+  readonly sourceLocation?: string | null;
 }
 
 export interface EditableReferenceDraft {
@@ -30,6 +34,7 @@ export interface EditableReferenceDraft {
 
 interface EditableReferenceTableProps {
   readonly sourceId: string;
+  readonly displayName?: string;
   readonly snapshot: ReferenceCatalogSnapshot | null;
   readonly disabled: boolean;
   readonly onSave: (request: PublishEditableReferenceTableRequest) => Promise<void>;
@@ -54,17 +59,66 @@ function fieldLinks(snapshot: ReferenceCatalogSnapshot | null): Readonly<Record<
   }
 }
 
+const columnOrderKey = "_techmapColumnOrder";
+const sourceKeyField = "$sourceKey";
+const layerField = /^layer([DL])([123])$/;
+
+export function referenceColumnLabel(column: EditableReferenceColumn): string {
+  return column.sourceColumn || column.label || column.name;
+}
+
+function storedColumnOrder(snapshot: ReferenceCatalogSnapshot | null): string[] {
+  const raw = snapshot?.records.find(record => typeof record.payload[columnOrderKey] === "string")?.payload[columnOrderKey];
+  try {
+    const value: unknown = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [];
+  } catch { return []; }
+}
+
+function layerValue(payload: Readonly<Record<string, unknown>>, name: string): unknown {
+  const match = layerField.exec(name);
+  if (!match || !Array.isArray(payload.layers)) return payload[name];
+  const layer = payload.layers.find(item => item && typeof item === "object" && item.index === Number(match[2]));
+  return layer?.[match[1] === "D" ? "diameterMm" : "stripLengthMm"];
+}
+
+function visibleKey(entityType: string, key: string): string {
+  // Coax cable keys contain length-prefixed source values and an optional duplicate suffix.
+  const match = entityType === "coax-cable" ? /^(\d+):/.exec(key) : null;
+  return match ? key.slice(match[0].length, match[0].length + Number(match[1])) : key;
+}
+
 export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null): EditableReferenceDraft {
   const links = fieldLinks(snapshot);
-  const names = [...new Set(snapshot?.records.flatMap((record) => Object.keys(record.payload)) ?? [])]
-    .filter((name) => name !== fieldLinksKey);
-  const columns = names.map((name) => ({ id: crypto.randomUUID(), name, sourceColumn: links[name] ?? "" }));
+  const profile = referenceTableProfiles[snapshot?.sourceId ?? ""];
+  const payloadNames = [...new Set(snapshot?.records.flatMap(record => Object.keys(record.payload)) ?? [])]
+    .filter(name => !name.startsWith("_techmap") && !(profile && name === "layers"));
+  const storedOrder = storedColumnOrder(snapshot);
+  const ordered = storedOrder.length ? storedOrder : snapshot?.sourceId === "technology-wires"
+    ? ["Марка", "Core", "Сечение C", "Pair", "Сечение P"].filter(name => payloadNames.includes(name)) : [];
+  const names = [...new Set([
+    ...ordered,
+    ...(profile?.columns.map(column => column.name) ?? []),
+    ...payloadNames,
+  ])].filter(name => !name.startsWith("_techmap"));
+  // Generic imports keep their source headers; wire composite keys never become visible columns.
+  if (!profile && snapshot?.sourceId !== "technology-wires" && snapshot?.records.length &&
+      !snapshot.records.every(record => /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(record.sourceKey)) &&
+      !names.includes(sourceKeyField) && !snapshot.records.every(record => Object.values(record.payload).includes(record.sourceKey))) {
+    names.unshift(sourceKeyField);
+  }
+  const columns = names.map(name => ({ id: crypto.randomUUID(), name, sourceColumn: links[name] ?? "",
+    label: profile?.columns.find(column => column.name === name)?.label ?? (name === sourceKeyField ? "Код" : name) }));
   const rows = (snapshot?.records ?? []).map((record) => ({
     id: crypto.randomUUID(),
     entityType: record.entityType,
     sourceKey: record.sourceKey,
-    values: Object.fromEntries(columns.map((column) => [column.id, textValue(record.payload[column.name])])),
-    originalValues: Object.fromEntries(columns.map((column) => [column.id, record.payload[column.name]])),
+    values: Object.fromEntries(columns.map(column => [column.id, textValue(column.name === sourceKeyField
+      ? visibleKey(record.entityType, record.sourceKey) : layerValue(record.payload, column.name))])),
+    originalValues: Object.fromEntries(columns.map(column => [column.id, column.name === sourceKeyField
+      ? visibleKey(record.entityType, record.sourceKey) : layerValue(record.payload, column.name)])),
+    originalPayload: record.payload,
+    sourceLocation: record.sourceLocation,
   }));
   return { sourceKind: snapshot?.sourceKind ?? "editable-table", sourceUri: snapshot?.sourceUri ?? "", columns, rows };
 }
@@ -89,23 +143,47 @@ export function editableReferenceRequest(
     .map((column) => [column.name, column.sourceColumn]));
   const records: EditableReferenceRecord[] = draft.rows.map((row, index) => {
     const entityType = row.entityType.trim();
-    const sourceKey = row.sourceKey.trim();
+    const keyColumn = normalizedColumns.find(column => column.name === sourceKeyField);
+    let sourceKey = row.sourceKey.trim();
+    if (keyColumn) {
+      const edited = (row.values[keyColumn.id] ?? "").trim();
+      const prefix = row.entityType === "coax-cable" ? /^(\d+):/.exec(sourceKey) : null;
+      if (!edited) throw new Error(`Заполните ${referenceColumnLabel(keyColumn)} в строке ${index + 1}.`);
+      sourceKey = prefix ? `${edited.length}:${edited}${sourceKey.slice(prefix[0].length + Number(prefix[1]))}` : edited;
+    }
     if (!entityType || !sourceKey) throw new Error(`Заполните тип и ключ в строке ${index + 1}.`);
     const identity = `${entityType}\n${sourceKey}`;
     if (seen.has(identity)) throw new Error(`Ключ «${sourceKey}» повторяется для типа «${entityType}».`);
     seen.add(identity);
+    const payload: Record<string, unknown> = { ...row.originalPayload };
+    for (const column of normalizedColumns) {
+      if (column.name === sourceKeyField) continue;
+      const value = row.values[column.id] ?? "";
+      const original = row.originalValues[column.id];
+      if (value === textValue(original) && Object.hasOwn(row.originalValues, column.id)) continue;
+      const match = layerField.exec(column.name);
+      if (match && (Array.isArray(payload.layers) || entityType.startsWith("coax-"))) {
+        const layers = Array.isArray(payload.layers) ? payload.layers.map(item => ({ ...item })) : [];
+        const layerIndex = Number(match[2]);
+        let layer = layers.find(item => item.index === layerIndex);
+        if (!layer) { layer = { index: layerIndex }; layers.push(layer); }
+        const property = match[1] === "D" ? "diameterMm" : "stripLengthMm";
+        if (!value.trim() || value === "—" || value === "-") delete layer[property];
+        else {
+          const numeric = Number(value.replace(",", "."));
+          if (!Number.isFinite(numeric) || numeric < 0) throw new Error(`Введите размер в миллиметрах: ${referenceColumnLabel(column)}, строка ${index + 1}.`);
+          layer[property] = numeric;
+        }
+        payload.layers = layers.filter(item => Object.keys(item).length > 1).sort((a, b) => a.index - b.index);
+      } else payload[column.name] = value;
+    }
+    if (normalizedColumns.some(column => !Object.hasOwn(row.originalValues, column.id))) {
+      payload[columnOrderKey] = JSON.stringify(normalizedColumns.map(column => column.name));
+    }
+    if (Object.keys(links).length > 0) payload[fieldLinksKey] = JSON.stringify(links);
     return {
-      entityType,
-      sourceKey,
-      payload: {
-        ...Object.fromEntries(normalizedColumns.map((column) => {
-          const value = row.values[column.id] ?? "";
-          const original = row.originalValues[column.id];
-          return [column.name, original !== undefined && value === textValue(original) ? original : value];
-        })),
-        ...(Object.keys(links).length > 0 ? { [fieldLinksKey]: JSON.stringify(links) } : {}),
-      },
-      sourceLocation: null,
+      entityType, sourceKey, payload,
+      sourceLocation: row.sourceLocation ?? null,
     };
   });
   return {
@@ -116,22 +194,26 @@ export function editableReferenceRequest(
   };
 }
 
-export function EditableReferenceTable({ sourceId, snapshot, disabled, onSave }: EditableReferenceTableProps) {
+export function EditableReferenceTable({ sourceId, displayName, snapshot, disabled, onSave }: EditableReferenceTableProps) {
   const [draft, setDraft] = useState(() => editableReferenceDraft(snapshot));
   const [newFieldName, setNewFieldName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [addingColumn, setAddingColumn] = useState(false);
   useEffect(() => {
     setDraft(editableReferenceDraft(snapshot));
     setError(null);
-  }, [snapshot]);
+    setAddingColumn(false);
+    setNewFieldName("");
+  }, [snapshot, sourceId]);
   const blocked = disabled || saving;
-  const columnsById = useMemo(() => new Map(draft.columns.map((column) => [column.id, column])), [draft.columns]);
+  const title = displayName ?? referenceTableProfiles[sourceId]?.title ?? (sourceId === "technology-wires" ? "Провода" : sourceId || "Справочник");
 
   const addField = () => {
     const name = newFieldName.trim();
     if (!name) return;
-    if (draft.columns.some((column) => column.name.toLocaleLowerCase("ru-RU") === name.toLocaleLowerCase("ru-RU"))) {
+    if (name.startsWith("_") || name.startsWith("$")) { setError("Начните название столбца с буквы или цифры."); return; }
+    if (draft.columns.some((column) => [column.name, referenceColumnLabel(column)].some(label => label.toLocaleLowerCase("ru-RU") === name.toLocaleLowerCase("ru-RU")))) {
       setError("Поле с таким названием уже есть.");
       return;
     }
@@ -142,6 +224,7 @@ export function EditableReferenceTable({ sourceId, snapshot, disabled, onSave }:
       rows: draft.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: "" } })),
     });
     setNewFieldName("");
+    setAddingColumn(false);
     setError(null);
   };
 
@@ -159,58 +242,47 @@ export function EditableReferenceTable({ sourceId, snapshot, disabled, onSave }:
 
   return <section className="editable-reference-card" aria-labelledby="editable-reference-title">
     <div className="section-title-row reference-card-title">
-      <div><p className="eyebrow">РЕДАКТИРУЕМАЯ ТАБЛИЦА</p><h2 id="editable-reference-title">{sourceId || "Справочник"}</h2></div>
+      <div><h2 id="editable-reference-title">{title}</h2><p className="editable-reference-count">Строк: {draft.rows.length}</p></div>
       <button className="primary-action" type="button" disabled={blocked} onClick={() => void save()}>
-        {saving ? "Сохраняем…" : "Сохранить версию"}
+        {saving ? "Сохраняем…" : "Сохранить"}
       </button>
     </div>
-    <p className="editable-reference-note">Строки и поля принадлежат локальному справочнику. Ссылка и имя исходного столбца сохраняются только как настройка будущей синхронизации.</p>
-    <label className="editable-reference-source">Ссылка на источник для синхронизации
-      <input type="url" value={draft.sourceUri} placeholder="Адрес опубликованного источника" disabled={blocked}
-        onChange={(event) => setDraft({ ...draft, sourceUri: event.target.value })} />
-    </label>
     <div className="editable-reference-actions">
-      <input value={newFieldName} placeholder="Название нового текстового поля" disabled={blocked}
-        onChange={(event) => setNewFieldName(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addField(); } }} />
-      <button type="button" className="secondary-action" disabled={blocked || !newFieldName.trim()} onClick={addField}>+ Поле</button>
+      <span>Нажмите на ячейку, чтобы изменить значение</span>
+      <button type="button" className="secondary-action" disabled={blocked} onClick={() => setAddingColumn(!addingColumn)} aria-expanded={addingColumn}>Добавить столбец</button>
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setDraft({
         ...draft,
         rows: [...draft.rows, {
-          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? "generic-record", sourceKey: "", values: {}, originalValues: {},
+          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? referenceTableProfiles[sourceId]?.entityType ?? "generic-record",
+          sourceKey: crypto.randomUUID(), values: {}, originalValues: {},
         }],
-      })}>+ Строка</button>
+      })}>Добавить строку</button>
     </div>
+    {addingColumn && <div className="editable-reference-add-column">
+      <input aria-label="Название нового столбца" autoFocus value={newFieldName} placeholder="Название столбца" disabled={blocked}
+        onChange={(event) => setNewFieldName(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addField(); } }} />
+      <button type="button" className="secondary-action" disabled={blocked || !newFieldName.trim()} onClick={addField}>Добавить</button>
+    </div>}
     {error && <p className="reference-state error" role="alert">{error}</p>}
-    <div className="editable-reference-scroll">
-      <table className="editable-reference-table">
-        <thead><tr><th>Тип записи</th><th>Ключ / артикул</th>{draft.columns.map((column) => <th key={column.id}>
-          <input aria-label={`Название поля ${column.name}`} value={column.name} disabled={blocked}
-            onChange={(event) => setDraft({ ...draft, columns: draft.columns.map((item) => item.id === column.id ? { ...item, name: event.target.value } : item) })} />
-          <input aria-label={`Столбец синхронизации ${column.name}`} value={column.sourceColumn} disabled={blocked}
-            placeholder="Столбец источника"
-            onChange={(event) => setDraft({ ...draft, columns: draft.columns.map((item) => item.id === column.id ? { ...item, sourceColumn: event.target.value } : item) })} />
-          <button type="button" aria-label={`Удалить поле ${column.name}`} disabled={blocked} onClick={() => setDraft({
-            ...draft, columns: draft.columns.filter((item) => item.id !== column.id),
-            rows: draft.rows.map((row) => ({ ...row, values: Object.fromEntries(Object.entries(row.values).filter(([key]) => key !== column.id)) })),
-          })}>×</button>
-        </th>)}<th aria-label="Действия" /></tr></thead>
+    <div className="editable-reference-scroll" role="region" aria-label={`Таблица: ${title}`} tabIndex={0}>
+      <table className="editable-reference-table" aria-label={title}>
+        <thead><tr><th scope="col" className="editable-reference-position">Поз.</th>{draft.columns.map((column) => <th scope="col" key={column.id}>
+          {referenceColumnLabel(column)}
+        </th>)}<th scope="col" className="editable-reference-row-action">Действия</th></tr></thead>
         <tbody>{draft.rows.map((row, rowIndex) => <tr key={row.id}>
-          <td><input aria-label={`Тип записи ${rowIndex + 1}`} value={row.entityType} disabled={blocked} onChange={(event) => setDraft({
-            ...draft, rows: draft.rows.map((item) => item.id === row.id ? { ...item, entityType: event.target.value } : item),
-          })} /></td>
-          <td><input aria-label={`Ключ строки ${rowIndex + 1}`} value={row.sourceKey} disabled={blocked} onChange={(event) => setDraft({
-            ...draft, rows: draft.rows.map((item) => item.id === row.id ? { ...item, sourceKey: event.target.value } : item),
-          })} /></td>
+          <th scope="row" className="editable-reference-position">{rowIndex + 1}</th>
           {draft.columns.map((column) => <td key={column.id}><input
-            aria-label={`${columnsById.get(column.id)?.name ?? column.name}, строка ${rowIndex + 1}`}
+            aria-label={`${referenceColumnLabel(column)}, строка ${rowIndex + 1}`}
+            title={row.values[column.id] || referenceColumnLabel(column)} placeholder="—"
             value={row.values[column.id] ?? ""} disabled={blocked}
             onChange={(event) => setDraft({ ...draft, rows: draft.rows.map((item) => item.id === row.id
               ? { ...item, values: { ...item.values, [column.id]: event.target.value } } : item) })} /></td>)}
-          <td><button type="button" aria-label={`Удалить строку ${rowIndex + 1}`} disabled={blocked}
-            onClick={() => setDraft({ ...draft, rows: draft.rows.filter((item) => item.id !== row.id) })}>×</button></td>
+          <td className="editable-reference-row-action"><button type="button" aria-label={`Удалить строку ${rowIndex + 1}`} disabled={blocked}
+            onClick={() => setDraft({ ...draft, rows: draft.rows.filter((item) => item.id !== row.id) })}>Удалить</button></td>
         </tr>)}</tbody>
       </table>
     </div>
+    {draft.rows.length === 0 && <p className="editable-reference-empty">В таблице пока нет строк. Добавьте первую строку.</p>}
   </section>;
 }
