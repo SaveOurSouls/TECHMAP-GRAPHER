@@ -10,6 +10,15 @@ import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from
 import { tableWindowPosition, tableWindowStyle, resizeTableWindow } from "./DrawingTableWindows";
 
 describe("drawing tables and position leaders",()=>{
+ it.each([true,false])("preserves volume switch %s through command, JSON and undo",enabled=>{
+   const original=physicalFixture();
+   const history=executeEditorCommand(createEditorHistory(original),{type:"set-drawing-documents",documents:{...emptyDrawingDocuments(),volumeShading:enabled}});
+   expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(history.present))).drawingDocuments?.volumeShading).toBe(enabled);
+   expect(undoEditorCommand(history).present).toEqual(original);
+ });
+ it.each([null,0,"false",{},[]])("rejects invalid volume switch %j",volumeShading=>{
+   expect(()=>parseHarnessDesignDocument({...physicalFixture(),drawingDocuments:{...emptyDrawingDocuments(),volumeShading}})).toThrow();
+ });
   it("uses readable placeholders instead of internal endpoint identifiers",()=>{
     const d=physicalFixture();
     expect(connectionEndLabel(d,createScreenEndpoint("2c7e77f8-2dad-4d26-bfcd-e905e7bc730b","above"))).toBe("Экран");

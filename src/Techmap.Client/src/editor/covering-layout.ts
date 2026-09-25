@@ -1,3 +1,4 @@
+import { coveringWidthProfile, profileHalfWidth } from "./covering-width-profile";
 import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
@@ -29,19 +30,6 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
   for(const [spanIndex,original] of covering.spans.entries()){
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
-   // Include both pipe exits so a shrink surface can taper instead of crossing its own corners.
-   const control=coveringControlFractions(document,s.segmentId).filter(f=>f>from&&f<to);
-   const transitions:number[]=[];
-   if(coveringKind(covering)==="heat-shrink") {
-    // Keep a pair of short shoulders at every pipe/sleeve boundary. The two
-    // samples are intentionally close, producing a visible Z rather than a
-    // single diagonal L edge when the diameter changes.
-    const epsilon=Math.min(.015,Math.max(.001,(to-from)/20));
-    for(const boundary of [0,1]) if(boundary>from&&boundary<to) transitions.push(boundary-epsilon,boundary,boundary+epsilon);
-   }
-   const fractions=[from,...control,...transitions.filter(f=>f>from&&f<to).sort((a,b)=>a-b),to];
-   const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,fractions.map(f=>route.before+f*route.length));
-   const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
    const pipeWidth=drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const halfAt=(fraction:number):number=>{
@@ -54,7 +42,12 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     }
     return Math.max(covering.width*scale,width+.5*scale)/2;
    };
-   const widths=display.map(s=>halfAt((s.distance-route.before)/route.length));
+   const boundaries=[0,1,...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
+   const profile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
+   const stops=[...profile.map(p=>route.before+p.at),...coveringControlFractions(document,s.segmentId).map(f=>route.before+f*route.length)];
+   const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
+   const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
+   const widths=display.map(s=>profileHalfWidth(profile,s.distance-route.before));
    for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
    surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex});paths.push(centerline);

@@ -163,7 +163,7 @@ try {
  twisted=parseHarnessDesignDocument({...twisted,wires:[1,2].map(n=>({...createWire('pair-'+n,{connectorId:'pair-a',contactId:'pair-a:contact:'+n},{connectorId:'pair-b',contactId:'pair-b:contact:'+n}),e4RouteMode:'manual',e4Route:[{x:700,y:1640+24*n},{x:900,y:1840+24*n}]}))});
  twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
  const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
- combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0};
+ combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0,volumeShading:false};
  const coveringStyle={texture:`asset:${textureAttachment.sha256}`,textureScale:2.5,textureRotation:-30,hatch:'cross',hatchColor:'#ff0000',hatchSpacing:6,hatchRotation:60,lineColor:'#0000ff'};
  combined.drawingDocuments.coveringLibrary={textures:[{sha256:textureAttachment.sha256,name:'test-texture.png'}],defaults:{braid:{texture:coveringStyle.texture}}};
  combined.physicalTopology={...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>({...c,style:coveringStyle}))};
@@ -173,6 +173,7 @@ try {
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
  assert.equal(savedRemoved.content.drawingDocuments.leaderScale,2.5);
  assert.equal(savedRemoved.content.drawingDocuments.bendRadius,0);
+ assert.equal(savedRemoved.content.drawingDocuments.volumeShading,false);
  assert.deepEqual(savedRemoved.content.drawingDocuments.leaders,JSON.parse(JSON.stringify(combined.drawingDocuments.leaders)));
  assert.deepEqual(savedRemoved.content.wires.find(w=>w.id==='e4-test').e4Route,e4Base.wires[0].e4Route);
  assert.deepEqual(savedRemoved.content.junctions,combined.junctions);
@@ -188,6 +189,7 @@ try {
  const copied=await createProjectApi(env.config,env.session,env.fetcher).copyProject(project.projectId);
  const copyContent=(await createHarnessDesignApi(env.config,env.session,env.fetcher).get(copied.projectId,copied.harnesses[0].harnessId)).content;
  assert.deepEqual(copyContent.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
+ assert.equal(copyContent.drawingDocuments.volumeShading,false);
  const assets=await createCoveringAssetApi(env.config,env.session,copied.projectId,env.fetcher).list();
  const copiedTexture=assets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(copiedTexture);
  const textureResponse=await env.fetcher(copiedTexture.url);assert.equal(textureResponse.status,200);
@@ -198,6 +200,7 @@ try {
  env=await start();const importedProject=await createProjectApi(env.config,env.session,env.fetcher).getProject(importId);
  const importedDesign=await createHarnessDesignApi(env.config,env.session,env.fetcher).get(importId,importedProject.harnesses[0].harnessId);
  assert.deepEqual(importedDesign.content.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
+ assert.equal(importedDesign.content.drawingDocuments.volumeShading,false);
  const importedAssets=await createCoveringAssetApi(env.config,env.session,importId,env.fetcher).list();
  const importedTexture=importedAssets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(importedTexture);
  const importedBytes=await env.fetcher(importedTexture.url);assert.equal(importedBytes.status,200);assert.equal(Buffer.from(await importedBytes.arrayBuffer()).toString('base64'),texturePng);

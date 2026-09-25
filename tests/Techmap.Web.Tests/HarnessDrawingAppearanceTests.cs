@@ -7,6 +7,19 @@ using Xunit;
 namespace Techmap.Web.Tests;
 public sealed class HarnessDrawingAppearanceTests
 {
+    [Theory]
+    [InlineData(true)][InlineData(false)]
+    public void Accepts_volume_switch(bool enabled)
+    {
+        var root=Fixture();root["drawingDocuments"]!["volumeShading"]=enabled;Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("0")][InlineData("\"false\"")][InlineData("{}")][InlineData("[]")]
+    public void Rejects_non_boolean_volume_switch(string value)
+    {
+        var root=Fixture();root["drawingDocuments"]!["volumeShading"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     private static JsonObject Fixture()=>JsonNode.Parse("""
       {"connectors":[{"id":"A","contacts":[{"wireDiameterMm":1.2}]}],"wires":[],"drawingDocuments":{"tables":[],"leaders":[],"bomOrder":[],"physicalScale":1.5,"showDimensions":true,
        "dimensions":[{"id":"D","segmentId":"S","from":0,"to":1,"pointCount":2,"routeKey":"[\"S\",\"N1\",\"N2\",0]","mode":"path","offset":40,"lengthMm":150}]},
