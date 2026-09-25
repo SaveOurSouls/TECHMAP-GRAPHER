@@ -4,6 +4,7 @@ export { routePhysicalWires } from "./physical-wire-routing";
 import { physicalSegmentControls, physicalSegmentPoints } from "./physical-geometry";
 export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints, physicalNodeDirection, physicalNodeContactDirection, automaticPipeRoute } from "./physical-geometry";
 import { splitCoveringSpans, pathLength, projectOntoPolyline } from "./physical-coverings";
+import { prunePipeBundles } from "./pipe-bundle-editing";
 import type { HarnessDesignDocument, Point } from "./model";
 
 import { emptyPhysicalTopology, type PhysicalDirection, type PhysicalNode, type PhysicalSegment, type PhysicalTopology } from "./physical-topology-model";
@@ -49,9 +50,7 @@ export function removePhysicalSegment(document: HarnessDesignDocument, segmentId
   // A route that used the deleted pipe is no longer a continuous physical path;
   // drop it completely so the remaining steps cannot point at a detached node.
   const routes = topology.routes.filter(route => !route.steps.some(step => step.segmentId === segmentId));
-  const coverings = topology.coverings
-    ?.map(covering => ({ ...covering, spans: covering.spans.filter(span => span.segmentId !== segmentId) }))
-    .filter(covering => covering.spans.length > 0);
+  const coverings = prunePipeBundles(topology.coverings,segments);
   const referenced = new Set(segments.flatMap(segment => [segment.from, segment.to]));
   const nodes = topology.nodes.filter(node => node.connectorId || referenced.has(node.id) ||
     node.id !== removed.from && node.id !== removed.to);
@@ -147,7 +146,7 @@ export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessD
     const b = nodes.find(n => n.id === (r.steps.at(-1)!.reverse ? last.from : last.to))?.connectorId;
     return (!a || a === wire.from.connectorId) && (!b || b === wire.to.connectorId);
   });
-  return { ...document, physicalTopology: { ...t, nodes, segments, routes, coverings: t.coverings?.map(c=>({...c,spans:c.spans.filter(s=>segments.some(segment=>segment.id===s.segmentId))})).filter(c=>c.spans.length) } };
+  return { ...document, physicalTopology: { ...t, nodes, segments, routes, coverings: prunePipeBundles(t.coverings,segments) } };
 }
 
 /** Split the exact clicked span, preserve existing legs, then add a perpendicular branch handle. */

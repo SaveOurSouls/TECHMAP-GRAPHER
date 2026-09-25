@@ -30,6 +30,33 @@ public sealed class HarnessPipeBundleTests
             Cover("outer", Member("inner", "covering"), Member("s2")), Cover("inner", Member("s0"), Member("s1")));
         Validate(root);
     }
+    [Fact] public void Accepts_longitudinal_fragments_as_one_member()
+    {
+        var root = Fixture();
+        root["physicalTopology"]!["nodes"]!.AsArray().Add(new JsonObject { ["id"] = "mid", ["position"] = new JsonObject { ["x"] = 100, ["y"] = 0 } });
+        root["physicalTopology"]!["segments"]![0]!["to"] = "mid";
+        root["physicalTopology"]!["segments"]![1]!["from"] = "mid";
+        var chain = Member("s0"); chain["continuationIds"] = new JsonArray("s1");
+        var inner = Cover("inner", chain, Member("s2"));
+        inner["spans"]!.AsArray().Add(new JsonObject { ["segmentId"] = "s1", ["from"] = 0, ["to"] = .5 });
+        root["physicalTopology"]!["coverings"] = new JsonArray(inner);
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("[]")][InlineData("[\"missing\"]")]
+    [InlineData("[\"s0\"]")][InlineData("[\"s1\"]")][InlineData("[12]")]
+    public void Rejects_invalid_or_disconnected_continuations(string value)
+    {
+        var root = Fixture(); var chain = Member("s0"); chain["continuationIds"] = JsonNode.Parse(value);
+        root["physicalTopology"]!["coverings"] = new JsonArray(Cover("c", chain, Member("s2")));
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(root));
+    }
+    [Fact] public void Rejects_continuations_on_group_reference()
+    {
+        var root = Fixture(); var member = Member("inner", "covering"); member["continuationIds"] = new JsonArray("s1");
+        root["physicalTopology"]!["coverings"] = new JsonArray(Cover("inner", Member("s0"), Member("s1")), Cover("outer", member, Member("s2")));
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(root));
+    }
     [Theory]
     [InlineData("null")][InlineData("[]")][InlineData("{}")]
     [InlineData("{\"mode\":\"wrong\",\"members\":[]}")]

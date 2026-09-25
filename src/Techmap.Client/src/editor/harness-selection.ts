@@ -1,4 +1,5 @@
 import type { HarnessDesignDocument, WireEndpoint } from "./model";
+import {resolvePipeBundles} from "./pipe-bundle-model";
 
 /** Electrical identity never depends on labels, geometry or a shared housing. */
 export function electricalEndpointKey(endpoint: WireEndpoint): string {
@@ -23,7 +24,8 @@ export function buildHarnessSelectionIndex(document: HarnessDesignDocument) {
     components.set(segment.id, new Set(document.physicalTopology!.routes.filter(r => r.steps.some(step => step.segmentId === segment.id)).map(r => r.wireId)));
   }
   for (const node of document.physicalTopology?.nodes ?? []) components.set(node.id, new Set(document.physicalTopology!.segments.filter(s => s.from === node.id || s.to === node.id).flatMap(s => [...components.get(s.id) ?? []])));
-  for (const c of document.physicalTopology?.coverings ?? []) components.set(c.id,new Set(c.spans.flatMap(s=>[...components.get(s.segmentId) ?? []])));
+  const bundles=resolvePipeBundles(document.physicalTopology?.coverings??[],new Set(document.physicalTopology?.segments.map(s=>s.id)??[]));
+  for (const c of document.physicalTopology?.coverings ?? []) components.set(c.id,new Set((bundles.get(c.id)??c.spans.map(s=>s.segmentId)).flatMap(id=>[...components.get(id) ?? []])));
   for (const dimension of document.drawingDocuments?.dimensions ?? []) {
     components.set(dimension.id,new Set(dimension.segmentId ? components.get(dimension.segmentId) ?? [] : dimension.wireId ? [dimension.wireId] : []));
   }

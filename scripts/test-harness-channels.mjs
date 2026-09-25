@@ -176,7 +176,12 @@ try {
    spans:[{segmentId:bundlePipes[0],from:.2,to:.8}],bundle:{mode,members}});
  const innerBundle=bundleCover('bundle-inner','flat',bundlePipes.slice(0,2).map(id=>({kind:'segment',id})));
  const outerBundle=bundleCover('bundle-outer','round',[{kind:'covering',id:innerBundle.id},{kind:'segment',id:bundlePipes[2]}]);
- combined.physicalTopology={...combined.physicalTopology,coverings:[...combined.physicalTopology.coverings,outerBundle,innerBundle]};
+ const chainBundle={...bundleCover('bundle-chain','flat',[{kind:'segment',id:'chain-head',continuationIds:['chain-tail']},{kind:'segment',id:bundlePipes[2]}]),spans:[{segmentId:'chain-head',from:.2,to:1},{segmentId:'chain-tail',from:0,to:.8}]};
+ const expectedBundleGroups=[outerBundle,innerBundle,chainBundle];
+ combined.physicalTopology={...combined.physicalTopology,
+   nodes:[...combined.physicalTopology.nodes,...[0,1,2].map(i=>({id:`chain-node-${i}`,position:{x:200+i*100,y:2200}}))],
+   segments:[...combined.physicalTopology.segments,...['chain-head','chain-tail'].map((id,i)=>({id,from:`chain-node-${i}`,to:`chain-node-${i+1}`,path:{kind:'polyline',points:[]}}))],
+   coverings:[...combined.physicalTopology.coverings,...expectedBundleGroups]};
  const leaderScene=drawingDocumentScene(combined);
  assert.ok(leaderScene.some(o=>o.kind==='position-leader'&&o.width===60));
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
@@ -186,6 +191,12 @@ try {
    method:'PUT',headers:createMutationHeaders(env.session),body:JSON.stringify({expectedRevision:savedRemoved.revision,schemaVersion:1,content:invalidBundle})});
  assert.equal(invalidBundleResponse.status,400,'Cyclic bundle rejected by server');
  assert.deepEqual((await restartedDesigns.get(project.projectId,harnessId)).content,savedRemoved.content,'Rejected bundle leaves document unchanged');
+ const disconnected=structuredClone(combined);
+ disconnected.physicalTopology.coverings.find(c=>c.id==='bundle-chain').bundle.members[0].continuationIds=[bundlePipes[1]];
+ const disconnectedResponse=await env.fetcher(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`,{
+   method:'PUT',headers:createMutationHeaders(env.session),body:JSON.stringify({expectedRevision:savedRemoved.revision,schemaVersion:1,content:disconnected})});
+ assert.equal(disconnectedResponse.status,400,'Disconnected continuation rejected by server');
+ assert.deepEqual((await restartedDesigns.get(project.projectId,harnessId)).content,savedRemoved.content);
  assert.equal(savedRemoved.content.drawingDocuments.leaderScale,2.5);
  assert.equal(savedRemoved.content.drawingDocuments.bendRadius,0);
  assert.equal(savedRemoved.content.drawingDocuments.volumeShading,false);
@@ -194,7 +205,7 @@ try {
  assert.deepEqual(savedRemoved.content.junctions,combined.junctions);
  assert.deepEqual(savedRemoved.content.screens,combined.screens);
  assert.deepEqual(savedRemoved.content.diffPairs,combined.diffPairs);
- assert.deepEqual(savedRemoved.content.physicalTopology.segments,measuredAutomatic.physicalTopology.segments);
+ assert.deepEqual(savedRemoved.content.physicalTopology.segments,combined.physicalTopology.segments);
  assert.deepEqual(savedRemoved.content.drawingDocuments.dimensions,measuredAutomatic.drawingDocuments.dimensions);
  assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(combined.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
@@ -205,7 +216,7 @@ try {
  const copyContent=(await createHarnessDesignApi(env.config,env.session,env.fetcher).get(copied.projectId,copied.harnesses[0].harnessId)).content;
  assert.deepEqual(copyContent.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
  assert.equal(copyContent.drawingDocuments.volumeShading,false);
- assert.deepEqual(copyContent.physicalTopology.coverings.filter(c=>c.bundle),[outerBundle,innerBundle]);
+ assert.deepEqual(copyContent.physicalTopology.coverings.filter(c=>c.bundle),expectedBundleGroups);
  const assets=await createCoveringAssetApi(env.config,env.session,copied.projectId,env.fetcher).list();
  const copiedTexture=assets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(copiedTexture);
  const textureResponse=await env.fetcher(copiedTexture.url);assert.equal(textureResponse.status,200);
@@ -217,7 +228,7 @@ try {
  const importedDesign=await createHarnessDesignApi(env.config,env.session,env.fetcher).get(importId,importedProject.harnesses[0].harnessId);
  assert.deepEqual(importedDesign.content.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
  assert.equal(importedDesign.content.drawingDocuments.volumeShading,false);
- assert.deepEqual(importedDesign.content.physicalTopology.coverings.filter(c=>c.bundle),[outerBundle,innerBundle]);
+ assert.deepEqual(importedDesign.content.physicalTopology.coverings.filter(c=>c.bundle),expectedBundleGroups);
  const importedAssets=await createCoveringAssetApi(env.config,env.session,importId,env.fetcher).list();
  const importedTexture=importedAssets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(importedTexture);
  const importedBytes=await env.fetcher(importedTexture.url);assert.equal(importedBytes.status,200);assert.equal(Buffer.from(await importedBytes.arrayBuffer()).toString('base64'),texturePng);

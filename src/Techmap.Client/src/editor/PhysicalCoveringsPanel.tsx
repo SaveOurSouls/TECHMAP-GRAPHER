@@ -1,4 +1,5 @@
 import {applyCoveringPreference} from "./covering-library";
+import {prunePipeBundles} from "./pipe-bundle-editing";
 import { DraftNumberInput } from "../component-library/DraftNumberInput";
 import { InfoHint } from "../InfoHint";
 import { CoveringStyleFields } from "./CoveringStyleFields";
@@ -31,7 +32,7 @@ export function PhysicalCoveringsPanel({ document, topology: t, selectedIds, onC
       {selected.spans.map(span => <div className="he-physical-fields" key={span.segmentId}><span>S{t.segments.findIndex(s => s.id === span.segmentId) + 1}</span>
         {(["from", "to"] as const).map(key => <label key={key}>{key === "from" ? "Начало" : "Конец"}<select aria-label={`${key === "from" ? "Привязка начала" : "Привязка конца"} покрытия ${span.segmentId}`} value={span[key==='from'?'fromAnchor':'toAnchor']??'free'} onChange={e=>update({spans:selected.spans.map(s=>s===span?{...resolvedCoveringSpan(document,s),[key==='from'?'fromAnchor':'toAnchor']:e.target.value==='free'?undefined:Number(e.target.value)}:s)})}><option value="free">Свободно</option>{coveringControlFractions(document,span.segmentId).map((f,i)=><option key={i} value={i} disabled={key==='from'?f>=resolvedCoveringSpan(document,span).to:f<=resolvedCoveringSpan(document,span).from}>Точка {i+1}</option>)}</select></label>)}
       </div>)}
-      <button className="ui-control" type="button" onClick={() => onChange({ ...t, coverings: t.coverings?.filter(c => c.id !== selected.id) })}>Удалить оболочку</button>
+      <button className="ui-control" type="button" onClick={() => onChange({ ...t, coverings: prunePipeBundles(t.coverings?.filter(c => c.id !== selected.id),t.segments) })}>Удалить оболочку</button>
       <button className="ui-control" type="button" disabled={t.coverings?.at(-1)?.id===selected.id} onClick={()=>onChange({...t,coverings:[...t.coverings?.filter(c=>c.id!==selected.id)??[],selected]})}>На передний план</button>
       <button className="ui-control" type="button" disabled={t.coverings?.[0]?.id===selected.id} onClick={()=>onChange({...t,coverings:[selected,...t.coverings?.filter(c=>c.id!==selected.id)??[]]})}>На задний план</button>
     </div>}

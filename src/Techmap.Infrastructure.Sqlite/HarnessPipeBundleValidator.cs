@@ -12,7 +12,7 @@ internal static class HarnessPipeBundleValidator
         item.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String &&
         value.GetString() is { Length: > 0 and <= 128 } text && !string.IsNullOrWhiteSpace(text) ? text : throw Invalid();
 
-    internal static void Validate(JsonElement coverings, IReadOnlySet<string> segmentIds)
+    internal static void Validate(JsonElement coverings, IReadOnlyDictionary<string, (string From, string To)> segments)
     {
         var byId = coverings.EnumerateArray().ToDictionary(c => Text(c, "id"), StringComparer.Ordinal);
         var resolved = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
@@ -35,8 +35,20 @@ internal static class HarnessPipeBundleValidator
             foreach (var member in members.EnumerateArray())
             {
                 var kind = Text(member, "kind"); var memberId = Text(member, "id");
-                if (kind is not ("segment" or "covering") || kind == "segment" && !segmentIds.Contains(memberId)) throw Invalid();
-                IEnumerable<string> children = kind == "segment" ? [memberId] : Visit(memberId, depth + 1);
+                if (kind is not ("segment" or "covering") || kind == "segment" && !segments.ContainsKey(memberId)) throw Invalid();
+                var chain = new List<string> { memberId };
+                if (member.TryGetProperty("continuationIds", out var continuation))
+                {
+                    if (kind != "segment" || continuation.ValueKind != JsonValueKind.Array || continuation.GetArrayLength() is < 1 or >= MaximumMembers) throw Invalid();
+                    var visitedNodes = new HashSet<string>(StringComparer.Ordinal) { segments[memberId].From, segments[memberId].To };
+                    foreach (var item in continuation.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.String || item.GetString() is not { } next ||
+                            !segments.TryGetValue(next, out var segment) || segments[chain[^1]].To != segment.From || !visitedNodes.Add(segment.To)) throw Invalid();
+                        chain.Add(next);
+                    }
+                }
+                IEnumerable<string> children = kind == "segment" ? chain : Visit(memberId, depth + 1);
                 if (kind == "covering") height = Math.Max(height, 1 + heights[memberId]);
                 foreach (var leaf in children)
                     if (!leaves.Add(leaf) || leaves.Count > MaximumMembers) throw Invalid();

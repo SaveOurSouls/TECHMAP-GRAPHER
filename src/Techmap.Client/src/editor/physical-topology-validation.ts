@@ -2,6 +2,7 @@ import type { HarnessDesignDocument, Point } from "./model";
 import type { PhysicalTopology, PhysicalDirection } from "./physical-topology-model";
 import { validateCoverings } from "./physical-coverings";
 import { readPhysicalSegmentPath } from "./physical-path-codec";
+import { validatePipeContinuations } from "./pipe-bundle-model";
 
 export function parsePhysicalTopology(value: unknown, document: HarnessDesignDocument): PhysicalTopology | undefined {
   if (value === undefined) return undefined;
@@ -54,6 +55,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     if (from.connectorId && from.connectorId !== w.from.connectorId || to.connectorId && to.connectorId !== w.to.connectorId) return fail();
   }
   validateCoverings(t.coverings, new Set(t.segments.map(s => s.id)), ids);
+  validatePipeContinuations(t.coverings??[],t.segments);
   for(const c of t.coverings??[])for(const span of c.spans){const count=t.segments.find(s=>s.id===span.segmentId)!.path.points.length+2;
     if([span.fromAnchor,span.toAnchor].some(i=>i!==undefined&&i>=count)||span.fromAnchor!==undefined&&span.toAnchor!==undefined&&span.fromAnchor>=span.toAnchor)return fail();}
   return t;

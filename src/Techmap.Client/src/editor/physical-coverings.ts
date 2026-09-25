@@ -5,6 +5,7 @@ import { drawingBendRadius, projectOntoDrawingRoute } from "./drawing-route-path
 import { validCoveringStyle, type CoveringStyle } from "./covering-style";
 import {applyCoveringPreference} from "./covering-library";
 import {resolvePipeBundles,type PipeBundle} from "./pipe-bundle-model";
+import {splitPipeBundleMembers} from "./pipe-bundle-editing";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -77,7 +78,7 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
 }
 
 export function splitCoveringSpans(coverings: readonly PhysicalCovering[] | undefined, id: string, nextId: string, fraction: number): readonly PhysicalCovering[] | undefined {
-  return coverings?.map(c => ({ ...c, spans: c.spans.flatMap(s => s.segmentId !== id ? [s] : [
+  return coverings?.map(c => ({ ...splitPipeBundleMembers(c,id,nextId), spans: c.spans.flatMap(s => s.segmentId !== id ? [s] : [
     ...(s.from < fraction ? [{ segmentId: id, from: s.from / fraction, to: Math.min(s.to, fraction) / fraction }] : []),
     ...(s.to > fraction ? [{ segmentId: nextId, from: Math.max(0, (s.from - fraction) / (1 - fraction)), to: (s.to - fraction) / (1 - fraction) }] : []),
   ]) }));
