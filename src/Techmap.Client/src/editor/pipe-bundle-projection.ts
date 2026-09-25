@@ -31,6 +31,9 @@ interface Projection {
 
 const cache = new WeakMap<HarnessDesignDocument, ReadonlyMap<string, Projection>>();
 const nodeCache = new WeakMap<HarnessDesignDocument, ReadonlyMap<string,Point>>();
+// Each immutable preview owns one sampled centreline per pipe. All its wires,
+// hit tests and handles share it; replacing the document invalidates the cache.
+const displayCache = new WeakMap<HarnessDesignDocument, Map<string, readonly Sample[] | undefined>>();
 const mix = (a: Point, b: Point, t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -246,7 +249,16 @@ export function projectPipeBundlePoint(document:HarnessDesignDocument,segmentId:
 }
 
 /** Consumers use radius=0: samples already contain circular tangent joins. */
-export function pipeBundleDisplaySamples(document: HarnessDesignDocument, segmentId: string): Sample[] | undefined {
+export function pipeBundleDisplaySamples(document: HarnessDesignDocument, segmentId: string): readonly Sample[] | undefined {
+  let samples = displayCache.get(document);
+  if (!samples) { samples = new Map(); displayCache.set(document, samples); }
+  if (samples.has(segmentId)) return samples.get(segmentId);
+  const result = buildDisplaySamples(document, segmentId);
+  samples.set(segmentId, result);
+  return result;
+}
+
+function buildDisplaySamples(document: HarnessDesignDocument, segmentId: string): readonly Sample[] | undefined {
   if(!hasPipeBundleProjection(document,segmentId))return undefined;
   const projection = projections(document).get(segmentId);
   const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;

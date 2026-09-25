@@ -28,6 +28,30 @@ function parallel(): HarnessDesignDocument {
         spans:[{segmentId:"s0",from:.3,to:.7}],bundle:{mode:"flat",members:[{kind:"segment",id:"s0"},{kind:"segment",id:"s1"}]}}]}};
 }
 
+it("shares immutable pipe samples across wire lanes and invalidates on geometry, radius, width and undo",()=>{
+ const base=parallel(),doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18}};
+ const before=pipeBundleDisplaySamples(doc,"s1")!;
+ expect(pipeBundleDisplaySamples(doc,"s1")).toBe(before);
+ const copy=JSON.parse(JSON.stringify(before));
+ for(const wire of doc.wires)physicalWireDisplayPaths(doc,wire.id,{x:0,y:0},{x:600,y:0});
+ expect(before).toEqual(copy);
+ const moved=applyEditorCommand(doc,{type:"move-physical-node",nodeId:"b1",position:{x:700,y:130},mode:"carry"});
+ const variants=[moved,
+   {...doc,drawingDocuments:{...doc.drawingDocuments,bendRadius:35}},
+   {...doc,physicalTopology:{...doc.physicalTopology!,coverings:doc.physicalTopology!.coverings!.map(c=>({...c,width:80}))}},
+ ];
+ for(const next of variants){
+   const samples=pipeBundleDisplaySamples(next,"s1")!;
+   expect(samples).not.toBe(before);
+   expect(samples).toEqual(pipeBundleDisplaySamples(JSON.parse(JSON.stringify(next)),"s1"));
+   expect(pipeBundleDisplaySamples(next,"s1")).toBe(samples);
+ }
+ expect(pipeBundleDisplaySamples(doc,"s1")).toBe(before);
+ expect(pipeBundleDisplaySamples(moved,"s1")).not.toEqual(before);
+ expect(before).toEqual(copy);
+ expect(moved.wires).toBe(doc.wires);
+});
+
 it("keeps a coating over a bundle on the same axis when its convergence handle moves",()=>{
  const base=parallel(),inner=base.physicalTopology!.coverings![0]!;
  const overlay=standardCoveringOver(base,inner,"Оплётка","overlay");
