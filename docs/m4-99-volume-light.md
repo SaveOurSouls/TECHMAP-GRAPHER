@@ -18,3 +18,5 @@
 старые canvas-контексты без градиентов не требуют дополнительного API.
 
 ZIP r3: rtifacts/m4-99-r3/TECHMAP-GRAPHER-0.55.0-m4-99-r3-win-x64.zip, 54401721 bytes, SHA-256 $h.
+
+ZIP r4: rtifacts/m4-99-r4/TECHMAP-GRAPHER-0.55.0-m4-99-r4-win-x64.zip, 54402249 bytes, SHA-256 $h.
