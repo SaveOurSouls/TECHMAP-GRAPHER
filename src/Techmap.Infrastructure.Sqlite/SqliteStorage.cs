@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 21;
+    public const int CurrentSchemaVersion = 22;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1312,6 +1312,13 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         return reader.ReadToEnd();
     }
 
+    private static string ReadHatchingSeeds()
+    {
+        using var stream = typeof(SqliteStorage).Assembly.GetManifestResourceStream("Techmap.Infrastructure.Sqlite.HatchingMaterialSeeds.sql")!;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1731,6 +1738,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 19, MigrationId: ComponentTemplateDraftMigrationId, Sql: ComponentTemplateDraftSchemaSql),
             (Version: 20, MigrationId: ProjectComponentSnapshotsV5MigrationId, Sql: ProjectComponentSnapshotsV5SchemaSql),
             (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql),
+            (Version: 22, MigrationId: "M4-115-hatching-library", Sql: ReadHatchingSeeds()),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1879,6 +1887,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         }
 
         if (schemaVersion >= 21) ExecuteSchemaSql(expected, GlobalMaterialsSchemaSql);
+        if (schemaVersion >= 22) ExecuteSchemaSql(expected, ReadHatchingSeeds());
         return ReadSchemaShape(expected);
     }
 
@@ -2023,6 +2032,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 Sql: ProjectComponentSnapshotsV5SchemaSql,
                 Description: "Project component snapshots support content schema version 5"),
             20 => (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql, Description: "Global material library with validated PNG textures"),
+            21 => (Version: 22, MigrationId: "M4-115-hatching-library", Sql: ReadHatchingSeeds(), Description: "Parametric hatching material presets"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -2099,7 +2109,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20 or 21))
             {
                 return false;
             }

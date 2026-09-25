@@ -4,7 +4,7 @@ import type {CoveringKind} from "./editor/physical-coverings";
 export interface GlobalMaterial {
  materialId:string; name:string; mediaType:"image/png"; imageBase64:string;
  lineColor:string; lineWidth:number; textureAngle:number; textureScale:number;
- tint:string; coveringKind:CoveringKind|null; updatedUtc:string; revision:number;
+ tint:string; backgroundColor?:string; hatchCode?:string|null; hatchLineWidth?:number; coveringKind:CoveringKind|null; updatedUtc:string; revision:number;
 }
 export function createMaterialLibraryApi(config:RuntimeConfig,session:LocalSession,fetcher:typeof fetch=fetch){
  const route="material-library";

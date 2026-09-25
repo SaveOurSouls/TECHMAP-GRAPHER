@@ -66,3 +66,13 @@ it("does not return a partially changed type when material download fails",async
  await expect(prepareGlobalCoverings(before,{type:"set-physical-topology",topology:{...before.physicalTopology,coverings:[{...cover,kind:"heat-shrink"}]}},async()=>[material],async()=>{throw new Error("offline");})).rejects.toThrow("offline");
  expect(before.physicalTopology.coverings[0]).toBe(cover);
 });
+
+it("pins hatching, background and independent line width without a raster dependency",async()=>{
+ const doc=physicalFixture(),cover=standardCovering(doc,"S0",{x:200,y:60},"Термоусадка","hatch");
+ const pin=vi.fn(async()=>entry);
+ const prepared=await prepareGlobalCoverings(doc,{type:"set-physical-topology",topology:{...doc.physicalTopology!,coverings:[cover]}},async()=>[{...material,hatchCode:"H48",hatchLineWidth:3,backgroundColor:"#aabbcc",textureScale:.1}],pin);
+ expect(pin).not.toHaveBeenCalled();
+ const result=executeEditorCommand(createEditorHistory(doc),prepared).present;
+ expect(result.physicalTopology!.coverings![0]).toMatchObject({color:"#aabbcc",style:{texture:"none",hatchCode:"H48",hatchLineWidth:3,hatchSpacing:1,hatchColor:material.tint}});
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(result))).physicalTopology).toEqual(result.physicalTopology);
+});

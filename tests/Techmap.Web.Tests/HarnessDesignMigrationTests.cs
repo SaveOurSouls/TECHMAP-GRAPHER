@@ -56,7 +56,7 @@ public sealed class HarnessDesignMigrationTests
                     DROP TABLE harness_design_documents;
                         DROP TABLE IF EXISTS component_template_drafts;
                         DROP TABLE IF EXISTS global_materials;
-                        DELETE FROM schema_history WHERE version IN (9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21);
+                        DELETE FROM schema_history WHERE version IN (9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
                     PRAGMA user_version = 8;
                     """;
                 downgrade.ExecuteNonQuery();

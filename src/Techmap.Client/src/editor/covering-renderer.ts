@@ -1,4 +1,5 @@
 import {textureOverlay} from "./texture-tint";
+import {drawCatalogHatch} from "../hatching";
 import {drawThreadBand} from "./thread-band-renderer";
 import { drawVolumeSurface } from "./drawing-volume";
 import type { CoveringHandle, CoveringSurface } from "./covering-layout";
@@ -30,17 +31,17 @@ const hatchTiles=new Map<string,HTMLCanvasElement>();
 /** A bounded repeat tile avoids per-line work on very long pipes. */
 function hatchTile(style:Required<CoveringStyle>):HTMLCanvasElement|null {
   if(style.hatch==="none"||typeof document==="undefined")return null;
-  const key=JSON.stringify([style.hatch,style.hatchColor]);
+  const key=JSON.stringify([style.hatch,style.hatchColor,style.hatchLineWidth,style.hatchSpacing]);
   const cached=hatchTiles.get(key);if(cached)return cached;
   const tile=document.createElement("canvas");tile.width=tile.height=32;
   const ctx=tile.getContext("2d");if(!ctx)return null;
-  drawHatchTile(ctx,style.hatch,style.hatchColor);
+  drawHatchTile(ctx,style.hatch,style.hatchColor,style.hatchLineWidth*32/style.hatchSpacing);
   if(hatchTiles.size>=64)hatchTiles.delete(hatchTiles.keys().next().value!);
   hatchTiles.set(key,tile);return tile;
 }
-export function drawHatchTile(ctx:CanvasRenderingContext2D,hatch:Required<CoveringStyle>["hatch"],color:string):void {
-  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();
-  if(hatch==="dots"){ctx.arc(16,16,2,0,2*Math.PI);ctx.fill();}
+export function drawHatchTile(ctx:CanvasRenderingContext2D,hatch:Required<CoveringStyle>["hatch"],color:string,width=2):void {
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=width;ctx.beginPath();
+  if(hatch==="dots"){ctx.arc(16,16,width/2,0,2*Math.PI);ctx.fill();}
   else if(hatch!=="none"){
     ctx.moveTo(0,16);ctx.lineTo(32,16);
     if(hatch==="cross"){ctx.moveTo(16,0);ctx.lineTo(16,32);}
@@ -82,6 +83,10 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     }
     const tile=hatchTile(style);
     if(tile){const pattern=context.createPattern(tile,"repeat");if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.hatchRotation).scale(style.hatchSpacing/32));context.fillStyle=pattern;context.fill();}}
+    if(style.hatchCode){
+      const xs=polygon.map(p=>p.x),ys=polygon.map(p=>p.y),x=Math.min(...xs),y=Math.min(...ys);
+      context.save();context.clip();drawCatalogHatch(context,style.hatchCode,style.hatchSpacing/10,style.hatchRotation,style.hatchColor,style.hatchLineWidth,{x,y,width:Math.max(...xs)-x,height:Math.max(...ys)-y});context.restore();
+    }
     if(object.metadata?.volumeShading === "true") drawVolumeSurface(context,polygon,surface.path);
     if(object.metadata?.coveringKind === "band" && style.texture!=="none")
       drawThreadBand(context,surface,style.textureScale,style.textureRotation,style.textureTint);

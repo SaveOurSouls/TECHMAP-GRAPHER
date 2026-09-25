@@ -19,7 +19,8 @@ public sealed class GlobalMaterialApiTests
         using var client = factory.CreateLocalClient();
         var csrf = await Start(client);
         var list = await client.GetFromJsonAsync<JsonElement>("/api/v1/material-library", Ct);
-        Assert.Equal(6, list.GetProperty("materials").GetArrayLength());
+        Assert.Equal(54, list.GetProperty("materials").GetArrayLength());
+        Assert.Equal(48, list.GetProperty("materials").EnumerateArray().Count(m => m.GetProperty("hatchCode").ValueKind == JsonValueKind.String));
         var seedId = list.GetProperty("materials")[0].GetProperty("materialId").GetGuid();
         var seed = (await client.GetFromJsonAsync<GlobalMaterial>($"/api/v1/material-library/{seedId}", Ct))!;
         var body = seed with { MaterialId = Guid.NewGuid(), Name = "API материал", CoveringKind = "heat-shrink", Revision = 0 };
@@ -28,10 +29,13 @@ public sealed class GlobalMaterialApiTests
         var saved = (await created.Content.ReadFromJsonAsync<GlobalMaterial>(Ct))!;
         Assert.Equal(1, saved.Revision);
         var route = $"/api/v1/material-library/{saved.MaterialId}";
-        using var updated = await Send(client, HttpMethod.Put, route, saved with { Name = "Updated", Tint = "#000000" }, csrf);
+        using var updated = await Send(client, HttpMethod.Put, route, saved with { Name = "Updated", Tint = "#000000", BackgroundColor = "#abcdef", HatchCode = "H07", HatchLineWidth = 2.5 }, csrf);
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         var version2 = (await updated.Content.ReadFromJsonAsync<GlobalMaterial>(Ct))!;
         Assert.Equal(2, version2.Revision);
+        Assert.Equal("#abcdef", version2.BackgroundColor);
+        Assert.Equal("H07", version2.HatchCode);
+        Assert.Equal(2.5, version2.HatchLineWidth);
         using var stale = await Send(client, HttpMethod.Put, route, saved, csrf);
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         using var staleDelete = await Send(client, HttpMethod.Delete, route + "?expectedRevision=1", null, csrf);

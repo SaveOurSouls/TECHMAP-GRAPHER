@@ -6,6 +6,41 @@ namespace Techmap.Web.Tests;
 public sealed class GlobalMaterialPersistenceTests
 {
     [Fact]
+    public async Task Schema_21_upgrade_adds_hatches_once_and_keeps_edited_texture_rows()
+    {
+        var root=Path.Combine(Path.GetTempPath(),"techmap-hatch-migration",Guid.NewGuid().ToString("N"));
+        GlobalMaterial edited;string path;
+        using(var storage=SqliteStorage.Open(root))
+        {
+            path=storage.Layout.DatabasePath;
+            var library=new SqliteGlobalMaterialLibrary(storage);
+            var seed=library.Get(library.List().First(m=>m.HatchCode is null).MaterialId);
+            edited=library.Update(seed with {Name="Edited before upgrade",Tint="#dc2626"});
+        }
+        using(var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path,Pooling=false}.ToString()))
+        {
+            db.Open();using var command=db.CreateCommand();
+            command.CommandText="DELETE FROM global_materials WHERE json_extract(metadata_json,'$.hatchCode') IS NOT NULL; DELETE FROM schema_history WHERE version=22; PRAGMA user_version=21;";
+            command.ExecuteNonQuery();
+        }
+        await using(var lease=DataRootLease.Acquire(root))
+        {
+            var service=new SqliteStorageMigrationService(lease);
+            var request=new StorageMigrationRequest(root+"-backups","0.62.0-m4-115",SqliteStorage.CurrentSchemaVersion);
+            var result=await service.MigrateIfRequiredAsync(request,TestContext.Current.CancellationToken);
+            service.CompleteSuccessfulStartup(result);
+        }
+        Guid removed;
+        using(var storage=SqliteStorage.Open(root))
+        {
+            var library=new SqliteGlobalMaterialLibrary(storage);
+            Assert.Equal(edited,library.Get(edited.MaterialId));
+            Assert.Equal(48,library.List().Count(m=>m.HatchCode is not null));
+            var hatch=library.List().First(m=>m.HatchCode is not null);removed=hatch.MaterialId;library.Delete(removed,hatch.Revision);
+        }
+        using(var storage=SqliteStorage.Open(root))Assert.DoesNotContain(new SqliteGlobalMaterialLibrary(storage).List(),m=>m.MaterialId==removed);
+    }
+    [Fact]
     public async Task Global_rows_and_png_bytes_survive_reopen_and_are_in_backup_without_projects()
     {
         var root=Path.Combine(Path.GetTempPath(),"techmap-material-tests",Guid.NewGuid().ToString("N"));
@@ -21,7 +56,7 @@ public sealed class GlobalMaterialPersistenceTests
                 store.Update(full);
             }
             var seed=store.Get(store.List()[0].MaterialId);
-            saved=store.Create(seed with {MaterialId=Guid.NewGuid(),Name="Backup fixture",CoveringKind=null,Revision=0,Tint="#ffffff"});
+            saved=store.Create(seed with {MaterialId=Guid.NewGuid(),Name="Backup fixture",CoveringKind=null,Revision=0,Tint="#ffffff",BackgroundColor="#16a34a",HatchCode="H48",HatchLineWidth=3.5});
         }
         using(var storage=SqliteStorage.Open(root))
         {

@@ -1041,6 +1041,10 @@ $inertEmbeddedUrls = @(
 $userSelectedSourceUrls = @(
     "https://docs.google.com/spreadsheets/d/1CywbVLHdLh2wO1-N2IkDdjfSMYtofsHPz-KnniQCjGg/edit?gid=122798924#gid=122798924"
 )
+# Hatching catalogue source citations are inert metadata, never fetched by the
+# renderer. Permit only the exact 48 provenance URLs shipped with the catalogue.
+$hatchingCitations = @((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "design/hatching_catalog/catalog.json") | ConvertFrom-Json) | ForEach-Object source)
+$hatchingCitations += @((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot "design/hatching_catalog/hatch_sources.json") | ConvertFrom-Json) | ForEach-Object raw_url)
 foreach ($asset in $webAssets) {
     $content = Get-Content -Raw -LiteralPath $asset.FullName
     $externalUrls = @([regex]::Matches($content, '(?i)https?://[^\s"''`<>]+') |
@@ -1048,7 +1052,7 @@ foreach ($asset in $webAssets) {
         Where-Object {
             $url = $_
             -not ($inertEmbeddedUrls | Where-Object { $url.StartsWith($_, [StringComparison]::Ordinal) }) -and
-                $url -cnotin $userSelectedSourceUrls
+                $url -cnotin $userSelectedSourceUrls -and $url -cnotin $hatchingCitations
         })
     if ($externalUrls.Count -gt 0) {
         throw "Web asset contains an unexpected external HTTP(S) URL: $($asset.FullName): $($externalUrls[0])"

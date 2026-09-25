@@ -1018,7 +1018,22 @@ public sealed class SqliteStorageMigrationService : IStorageMigrationService
         var sourceDatabasePath = Path.Combine(backupPath, StorageGenerationLayout.DatabaseFileName);
         var tableColumns = ReadDataTableColumns(sourceDatabasePath);
         var expected = ComputeDataFingerprint(sourceDatabasePath, tableColumns);
-        var actual = ComputeDataFingerprint(candidateDatabasePath, tableColumns);
+        // Schema 22 adds only these shipped presets. Existing rows, including
+        // any colliding ID, must still compare byte-for-byte with the backup.
+        var newHatches = new List<string>();
+        if (ReadRawUserVersion(sourceDatabasePath) == 21 && tableColumns.ContainsKey("global_materials"))
+        {
+            using var source = OpenReadOnly(sourceDatabasePath);
+            for (var i = 1; i <= 48; i++)
+            {
+                var id = $"a4115000-0000-4000-8000-{i:D12}";
+                using var exists = source.CreateCommand();
+                exists.CommandText = "SELECT COUNT(*) FROM global_materials WHERE material_id=$id";
+                exists.Parameters.AddWithValue("$id", id);
+                if (Convert.ToInt64(exists.ExecuteScalar(), CultureInfo.InvariantCulture) == 0) newHatches.Add(id);
+            }
+        }
+        var actual = ComputeDataFingerprint(candidateDatabasePath, tableColumns, newHatches);
         if (!string.Equals(expected, actual, StringComparison.Ordinal))
         {
             throw new StorageMigrationException(
@@ -1068,7 +1083,8 @@ public sealed class SqliteStorageMigrationService : IStorageMigrationService
 
     private static string ComputeDataFingerprint(
         string databasePath,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> tableColumns)
+        IReadOnlyDictionary<string, IReadOnlyList<string>> tableColumns,
+        IReadOnlyList<string>? addedHatchIds = null)
     {
         using var connection = OpenReadOnly(databasePath);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -1083,7 +1099,13 @@ public sealed class SqliteStorageMigrationService : IStorageMigrationService
             using var command = connection.CreateCommand();
             var projection = string.Join(",", columns.Select(QuoteIdentifier));
             var ordering = string.Join(",", columns.Select(QuoteIdentifier));
-            command.CommandText = $"SELECT {projection} FROM {QuoteIdentifier(table)} ORDER BY {ordering};";
+            var filter = "";
+            if (table == "global_materials" && addedHatchIds is { Count: > 0 })
+            {
+                filter = " WHERE material_id NOT IN (" + string.Join(",", addedHatchIds.Select((_, i) => "$h" + i)) + ")";
+                for (var i = 0; i < addedHatchIds.Count; i++) command.Parameters.AddWithValue("$h" + i, addedHatchIds[i]);
+            }
+            command.CommandText = $"SELECT {projection} FROM {QuoteIdentifier(table)}{filter} ORDER BY {ordering};";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {

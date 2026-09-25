@@ -70,10 +70,11 @@ public sealed class SqliteGlobalMaterialLibrary(SqliteStorage storage) : IGlobal
     {
         if (string.IsNullOrWhiteSpace(m.Name) || m.Name.Length > 255) throw new ArgumentException("Название материала обязательно (до 255 знаков).");
         if (m.MediaType != "image/png") throw new ArgumentException("Загрузите PNG; SVG преобразуется в PNG в редакторе.");
+        if (m.HatchCode is not null && !Regex.IsMatch(m.HatchCode, "^H(0[1-9]|[1-3][0-9]|4[0-8])$")) throw new ArgumentException("Неизвестная штриховка.");
         if (m.CoveringKind is not (null or "heat-shrink" or "nylon" or "braid" or "metal-braid" or "tape" or "band")) throw new ArgumentException("Неизвестный тип оболочки.");
-        foreach (var color in new[] { m.LineColor, m.Tint })
+        foreach (var color in new[] { m.LineColor, m.Tint, m.BackgroundColor })
             if (color is null || !Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$")) throw new ArgumentException("Цвет материала задан неверно.");
-        foreach (var (n, min, max) in new[] { (m.LineWidth, .1, 20d), (m.TextureScale, .1, 10d), (m.TextureAngle, -180d, 180d) })
+        foreach (var (n, min, max) in new[] { (m.LineWidth, .1, 20d), (m.HatchLineWidth, .1, 20d), (m.TextureScale, .1, 10d), (m.TextureAngle, -180d, 180d) })
             if (!double.IsFinite(n) || n < min || n > max) throw new ArgumentException("Параметры текстуры вне диапазона.");
         if (m.ImageBase64 is null || m.ImageBase64.Length > 13981016) throw new ArgumentException("Изображение превышает 10 МиБ.");
         try

@@ -67,7 +67,7 @@ public sealed class HarnessDrawingAppearanceTests
     [Fact] public void Accepts_independent_covering_style()
     {
         var root=Fixture();root["physicalTopology"]!["coverings"]![0]!["style"]=JsonNode.Parse("""
-        {"texture":"Metal049A","textureScale":2.5,"textureRotation":-30,"hatch":"cross","hatchColor":"#ff0000","hatchSpacing":6,"hatchRotation":60,"lineColor":"#0000ff"}
+        {"texture":"Metal049A","textureScale":2.5,"textureRotation":-30,"hatch":"cross","hatchColor":"#ff0000","hatchSpacing":6,"hatchRotation":60,"lineColor":"#0000ff","hatchCode":"H48","hatchLineWidth":2.5}
         """);Validate(root);
     }
     [Theory]
@@ -76,6 +76,7 @@ public sealed class HarnessDrawingAppearanceTests
     [InlineData("{\"textureRotation\":181}")][InlineData("{\"textureRotation\":\"45\"}")]
     [InlineData("{\"hatch\":\"unknown\"}")][InlineData("{\"hatchColor\":\"red\"}")][InlineData("{\"lineColor\":\"#12345g\"}")]
     [InlineData("{\"hatchSpacing\":0}")][InlineData("{\"hatchSpacing\":101}")][InlineData("{\"hatchRotation\":181}")]
+    [InlineData("{\"hatchCode\":\"H49\"}")][InlineData("{\"hatchLineWidth\":0}")][InlineData("{\"hatchLineWidth\":21}")]
     public void Rejects_invalid_covering_style(string style)
     {
         var root=Fixture();root["physicalTopology"]!["coverings"]![0]!["style"]=JsonNode.Parse(style);

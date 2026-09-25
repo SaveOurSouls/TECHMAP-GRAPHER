@@ -112,3 +112,13 @@ Rubber002, Fabric061 and Metal049A color maps © ambientCG contributors,
 dedicated to the public domain under CC0 1.0 Universal:
 https://creativecommons.org/publicdomain/zero/1.0/ .
 Sources and modifications: `wwwroot/textures/coverings/SOURCES.md`.
+
+## QCAD hatching definitions (M4-115)
+
+48 PAT definitions and catalogue metadata are integrated from user-supplied commit
+0f86ed2c0da47a8bc910570920fbb49108aaa3a8. QCAD sources identify GPL version 3;
+notices, full licence, source URLs and original PAT text are shipped in
+wwwroot/hatching and retained in design/hatching_catalog. The TypeScript renderer
+in src/Techmap.Client/src/hatching.ts is a new parametric implementation (2026-09-26).
+Catalogue previews are illustrative, not certified ISO/DIN material designations.
+Corresponding project source: https://github.com/SaveOurSouls/TECHMAP-GRAPHER.
