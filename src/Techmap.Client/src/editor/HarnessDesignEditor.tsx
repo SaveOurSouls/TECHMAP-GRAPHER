@@ -28,6 +28,7 @@ import { applyEditorCommand, createWire, e4RoutingIssues, type EditorCommand } f
 import { InfoHint } from "../InfoHint";
 import { drawingBendRadius } from "./drawing-route-path";
 import { DrawingObjectProperties } from "./DrawingObjectProperties";
+import { PipeBundleEditor, type PipeBundleDraft, beginPipeBundle, pipeBundleDraftTopology, pipeBundleDraftHighlights, togglePipeBundleMember } from "./PipeBundleEditor";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
@@ -684,6 +685,7 @@ export function HarnessDesignEditor({
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
   const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
   const [wholeNet, setWholeNet] = useState(false);
+  const [pipeBundleDraft, setPipeBundleDraft] = useState<PipeBundleDraft | null>(null);
   const [revealRequest, setRevealRequest] = useState<{token: number; objectIds: readonly string[]} | undefined>();
   const selectionIndex = useMemo(() => history ? buildHarnessSelectionIndex(history.present) : null, [history?.present]);
   const related = useMemo(() => selectionIndex ? resolveHarnessSelection(selectionIndex, relatedSourceIds.length ? relatedSourceIds : selectedObjectIds, wholeNet) : {wireIds: [], componentIds: [], rowIds: [], unresolvedIds: []}, [selectionIndex, relatedSourceIds, selectedObjectIds, wholeNet]);
@@ -1057,6 +1059,7 @@ export function HarnessDesignEditor({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if(pipeBundleDraft){if(event.key==='Escape'){event.preventDefault();setPipeBundleDraft(null);}return;}
       if (placementBusyRef.current || pendingPlacementRef.current) return;
       if (event.key === "Escape" && editingObjectId) {
         event.preventDefault();
@@ -1089,7 +1092,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [editingObjectId, run, selectedObjectIds]);
+  }, [editingObjectId, run, selectedObjectIds,pipeBundleDraft]);
 
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
@@ -1587,10 +1590,15 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
-        highlightedObjectIds={[...related.wireIds,...related.componentIds,...relatedSourceIds]}
+        highlightedObjectIds={pipeBundleDraft&&history.present.physicalTopology?pipeBundleDraftHighlights(history.present.physicalTopology,pipeBundleDraft):[...related.wireIds,...related.componentIds,...relatedSourceIds]}
+        onObjectPick={view==='drawing'&&pipeBundleDraft?id=>{if(id&&history.present.physicalTopology)setPipeBundleDraft(togglePipeBundleMember(history.present.physicalTopology,pipeBundleDraft,id));}:undefined}
+        onObjectPickCancel={()=>setPipeBundleDraft(null)}
         revealRequest={revealRequest}
-        objectProperties={view==="drawing"?id=><DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>:undefined}
+        objectProperties={view==="drawing"?id=>
+          <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
+            onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setPipeBundleDraft(beginPipeBundle(topology,bundleId));}}/>:undefined}
         documentActions={<>{view==="drawing"&&<>
+          {pipeBundleDraft&&history.present.physicalTopology&&<PipeBundleEditor topology={history.present.physicalTopology} draft={pipeBundleDraft} onChange={setPipeBundleDraft} onCancel={()=>setPipeBundleDraft(null)} onSave={()=>{try{const topology=pipeBundleDraftTopology(history.present.physicalTopology!,pipeBundleDraft);if(run({type:'set-physical-topology',topology}))setPipeBundleDraft(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
           <button type="button" className="ui-control" onClick={()=>setMaterialSettings(true)}>Материалы</button>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
@@ -1696,6 +1704,7 @@ export function HarnessDesignEditor({
         }))]}
         previewMessage={previewResult.error}
         onViewChange={(nextView) => {
+          setPipeBundleDraft(null);
           setEditingObjectId(null);
           setView(nextView);
           onViewChange?.(nextView);

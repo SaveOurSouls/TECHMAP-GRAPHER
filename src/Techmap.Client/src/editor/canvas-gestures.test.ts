@@ -68,3 +68,16 @@ it("cancels Canvas object capture loss and ignores its later pointerup",()=>{
   f.canvasHandlers.onPointerUp!(f.event(false,160,130));
   expect(f.move).not.toHaveBeenCalled();
 });
+
+it('picks a bundle participant without creating a pipe drag or changing selection',()=>{
+ const pick=vi.fn(),move=vi.fn(),select=vi.fn(),double=vi.fn(),cancel=vi.fn();
+ const pipe:EditorSceneObject={id:'pipe',kind:'physical-segment',layerId:'pipes',label:'S1',color:'#333333',x:0,y:0,width:10,height:0,points:[{x:20,y:50},{x:300,y:50}]};
+ const tree=CanvasViewport({view:'drawing',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[pipe],layers:[{id:'pipes',label:'Pipes',visible:true,locked:false}],selectedObjectId:null,
+  onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onObjectSelect:select,onObjectMove:move,onObjectPick:pick,onObjectPickCancel:cancel,onCanvasDoubleClick:double});
+ const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+ const handlers=canvas.props as Record<string,(event:any)=>void>,capture=vi.fn();
+ const e={pointerId:1,button:0,clientX:100,clientY:50,currentTarget:{setPointerCapture:capture},preventDefault:vi.fn(),stopPropagation:vi.fn()};
+ handlers.onPointerDown!(e);handlers.onDoubleClick!(e);
+ expect(pick).toHaveBeenCalledExactlyOnceWith('pipe');expect(capture).not.toHaveBeenCalled();expect(select).not.toHaveBeenCalled();expect(move).not.toHaveBeenCalled();expect(double).not.toHaveBeenCalled();
+ handlers.onKeyDown!({...e,key:'Escape'});expect(cancel).toHaveBeenCalledOnce();
+});

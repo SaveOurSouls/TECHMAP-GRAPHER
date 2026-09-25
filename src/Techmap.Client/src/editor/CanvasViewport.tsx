@@ -93,6 +93,8 @@ export interface CanvasViewportProps {
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly objectProperties?: (objectId:string)=>ReactNode;
+  readonly onObjectPick?: (objectId:string|null)=>void;
+  readonly onObjectPickCancel?: ()=>void;
   readonly onRelatedObjectsSelect?: (ids:readonly string[])=>void;
   readonly onObjectMove?: (objectId: string, point: EditorPoint, mode?: PhysicalDragMode) => void;
   /** Shows a transient move without adding an undo entry. Passing null clears it. */
@@ -2647,7 +2649,7 @@ export function CanvasViewport({
   onViewportSizeChange,
   onObjectSelect,
   onObjectGroupSelect,
-  objectProperties, onRelatedObjectsSelect, onObjectMove, onDrawingMove, onDrawingScale,
+  objectProperties, onObjectPick, onObjectPickCancel, onRelatedObjectsSelect, onObjectMove, onDrawingMove, onDrawingScale,
   onObjectMovePreview, onPipeIntervalSelect, onCoveringDrag,
   onWireConnect,
   onWireReconnect,
@@ -2842,6 +2844,7 @@ export function CanvasViewport({
     return () => { window.removeEventListener("keydown", keydown); cancelConnection(); };
   }, [tool, view]);
   const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number; node?:boolean; wires?:boolean}|null>(null);
+  useEffect(()=>{if(onObjectPick)setPhysicalMenu(null);},[!!onObjectPick]);
   const [hoverTarget,setHoverTarget]=useState<CanvasHintTarget|null>(null);
   useEffect(()=>{setHoverTarget(null);setPhysicalMenu(null);},[view,tool,camera]);
   useEffect(()=>{
@@ -2884,6 +2887,12 @@ export function CanvasViewport({
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     setHoverTarget(null);
     if(event.button===2)return;setPhysicalMenu(null);
+    if(event.button===0&&onObjectPick){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const selectable=objects.filter(o=>layers.some(l=>l.id===o.layerId&&!l.locked));
+      onObjectPick(hitTestEditorScene(selectable,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl));
+      return;
+    }
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const node=objects.find(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
@@ -3357,6 +3366,7 @@ export function CanvasViewport({
   };
 
   const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if(onObjectPick)return;
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
     if (view === "e4" && tool === "select" && onE4WireRoutePointRemove) {
       const selectedWire = objects.find((item) => item.id === selectedObjectId);
@@ -3523,6 +3533,7 @@ export function CanvasViewport({
         tabIndex={0}
         aria-label={`${view === "e4" ? "Поле схемы Э4" : "Поле чертежа"}. Масштаб ${Math.round(camera.zoom * 100)} процентов`}
         onPointerDown={pointerDown}
+        onKeyDown={event=>{if(onObjectPick&&event.key==='Escape'){event.stopPropagation();onObjectPickCancel?.();}}}
         onPointerMove={pointerMove}
         onPointerLeave={()=>setHoverTarget(null)}
         onPointerUp={endPointer}
@@ -3532,6 +3543,7 @@ export function CanvasViewport({
         onDrop={drop}
         onDoubleClick={doubleClick}
         onContextMenu={event=>{
+          if(onObjectPick){event.preventDefault();return;}
           if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties))return;
           event.preventDefault();
           setHoverTarget(null);

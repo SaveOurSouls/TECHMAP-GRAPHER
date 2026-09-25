@@ -4,11 +4,11 @@ import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
 import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { drawingBendRadius, drawingRouteSection, projectOntoDrawingRoute } from "./drawing-route-path";
+import { pipeBundleSections } from "./pipe-bundle-section";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number }
 export type CoveringDragPart="from"|"to"|"body";
-
 /** Mitered edges are shared by the filled surface and endpoint grips. */
 export function offsetPolyline(points:readonly Point[],offsets:readonly number[]):Point[] {
  return points.map((p,i)=>{
@@ -24,6 +24,7 @@ export function offsetPolyline(points:readonly Point[],offsets:readonly number[]
 export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[] {
  const topology=document.physicalTopology;if(!topology)return [];
  const scale=drawingPhysicalScale(document),coverings=topology.coverings??[];
+ const bundleSections=pipeBundleSections(document);
  const supportsBySegment=new Map<string,WidthSupport[]>();
  return coverings.map((covering,order)=>{
   const handles:CoveringHandle[]=[],surfaces:CoveringSurface[]=[],paths:Point[][]=[];
@@ -32,9 +33,11 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
   for(const [spanIndex,original] of covering.spans.entries()){
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
-   const pipeWidth=drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
+   const groupedWidth=bundleSections.get(covering.id)?.width;
+   const pipeWidth=groupedWidth??drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const halfAt=(fraction:number):number=>{
+    if(groupedWidth!==undefined)return groupedWidth/2;
     let width=pipeWidth;
     if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=bundle;
     // Array order is the physical stacking order; any lower surface remains enclosed.

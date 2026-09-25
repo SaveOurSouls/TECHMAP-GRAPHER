@@ -11,10 +11,11 @@ import { DRAWING_VIEW_PLACEMENT_ID,drawingRotation,drawingScale } from "./drawin
 import { projectComponentTemplateView,type ComponentTemplateViewInstance } from "./component-template-view-renderer";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 
-export function DrawingObjectProperties({document,objectId,selectedIds,onCommand,onSelect,instances}: {
+export function DrawingObjectProperties({document,objectId,selectedIds,onCommand,onSelect,instances,onBundleEdit}: {
   document:HarnessDesignDocument;objectId:string;onCommand:(command:EditorCommand)=>boolean;
   selectedIds:readonly string[];
   onSelect:(id:string)=>void;instances:readonly ComponentTemplateViewInstance[];
+  onBundleEdit?:(id:string)=>void;
 }) {
   const t=document.physicalTopology,connector=document.connectors.find(c=>c.id===objectId),wire=document.wires.find(w=>w.id===objectId);
   const topology=t&&(t.nodes.some(n=>n.id===objectId)||t.segments.some(s=>s.id===objectId)||wire);
@@ -41,6 +42,7 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
       if(onCommand({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],applyCoveringPreference({id,name:"Оболочка",kind:"braid",width:0,color:"#84959f",lengthMm:null,spans:segments.map(s=>({segmentId:s.id,from:0,to:1}))},document.drawingDocuments?.coveringLibrary)]}}))onSelect(id);
     }}>Оболочка на выделенные пайпы</button>}
     {t?.segments.some(s=>s.id===objectId)&&<button type="button" className="ui-control" onClick={()=>onCommand({type:"remove-physical-segment",segmentId:objectId})}>Удалить пайп</button>}
+    {cover&&onBundleEdit&&<button type="button" className="ui-control" onClick={()=>onBundleEdit(objectId)}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h4l4 5h4M2 13h4l4-5M2 8h12" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg> Объединить</button>}
     {cover&&t&&<PhysicalCoveringsPanel compact document={document} topology={t} selectedIds={[objectId]} onChange={topology=>onCommand({type:"set-physical-topology",topology})} onReveal={onSelect}/>}
   </>;
 }
