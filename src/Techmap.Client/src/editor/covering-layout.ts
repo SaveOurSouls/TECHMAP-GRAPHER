@@ -1,4 +1,4 @@
-import { coveringWidthProfile, profileHalfWidth } from "./covering-width-profile";
+import { coveringWidthProfile, encloseWidthProfiles, profileHalfWidth, type WidthSupport } from "./covering-width-profile";
 import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
@@ -24,8 +24,10 @@ export function offsetPolyline(points:readonly Point[],offsets:readonly number[]
 export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[] {
  const topology=document.physicalTopology;if(!topology)return [];
  const scale=drawingPhysicalScale(document),coverings=topology.coverings??[];
+ const supportsBySegment=new Map<string,WidthSupport[]>();
  return coverings.map((covering,order)=>{
   const handles:CoveringHandle[]=[],surfaces:CoveringSurface[]=[],paths:Point[][]=[];
+  const ownSupports:{segmentId:string;support:WidthSupport}[]=[];
   let maximumWidth=0;
   for(const [spanIndex,original] of covering.spans.entries()){
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
@@ -43,7 +45,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     return Math.max(covering.width*scale,width+.5*scale)/2;
    };
    const boundaries=[0,1,...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
-   const profile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
+   const baseProfile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
+   const profile=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],.25*scale);
+   ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
    const stops=[...profile.map(p=>route.before+p.at),...coveringControlFractions(document,s.segmentId).map(f=>route.before+f*route.length)];
    const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
    const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
@@ -53,6 +57,7 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex});paths.push(centerline);
    for(const part of ["from","to"] as const){const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
+  for(const {segmentId,support} of ownSupports) supportsBySegment.set(segmentId,[...(supportsBySegment.get(segmentId)??[]),support]);
   return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),routeRadius:0,metadata:{coveringKind:coveringKind(covering),...(document.drawingDocuments?.volumeShading === false ? {volumeShading:"false"} : {}),coveringStyle:JSON.stringify({...covering.style,texture:!covering.style?.texture||covering.style.texture==="auto"?document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(covering)]?.texture??"auto":covering.style.texture}),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
  });
 }

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { coveringWidthProfile, profileHalfWidth } from "./covering-width-profile";
+import { coveringWidthProfile, encloseWidthProfiles, profileHalfWidth } from "./covering-width-profile";
 import { coveringScene, moveCovering } from "./covering-layout";
 import { coveringSurfaces } from "./covering-renderer";
 import { physicalFixture } from "./physical-topology-fixture";
@@ -54,4 +54,23 @@ it("retains ramp corners when a sleeve ends within a ramp and when the pipe bend
  expect(bentSurface.polygon).toContainEqual({x:150-15.25,y:60});
  expect(bentSurface.polygon).toContainEqual({x:150-5.25,y:65});
  expect(bentSurface.polygon.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))).toBe(true);
+});
+
+it("encloses intersecting lower ramps with the exact piecewise linear envelope",()=>{
+ const base=[{at:0,halfWidth:1},{at:100,halfWidth:1}];
+ const supports=[{from:0,to:100,profile:[{at:0,halfWidth:2},{at:100,halfWidth:12}]},
+  {from:0,to:100,profile:[{at:0,halfWidth:12},{at:100,halfWidth:2}]}];
+ const result=encloseWidthProfiles(base,supports,.25);
+ expect(result).toEqual([{at:0,halfWidth:12.25},{at:50,halfWidth:7.25},{at:100,halfWidth:12.25}]);
+});
+
+it("keeps a third sleeve outside a lower ramp clipped at its end",()=>{
+ const doc=fixture("heat-shrink"),[lower,middle]=doc.physicalTopology!.coverings!;
+ const outer={...middle!,id:"outer",spans:[{segmentId:"S0",from:.05,to:.95}]};
+ const layered={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[lower!,
+  {...middle!,spans:[{segmentId:"S0",from:87.5/300,to:212.5/300}]},outer]}};
+ const surfaces=coveringScene(layered).map(c=>coveringSurfaces(c)[0]!);
+ const profiles=surfaces.map(s=>s.polygon.slice(0,s.path.length).map(p=>({at:p.x,halfWidth:p.y})));
+ for(let x=87.5;x<=212.5;x+=.25) expect(profileHalfWidth(profiles[2]!,x)).toBeGreaterThanOrEqual(profileHalfWidth(profiles[1]!,x)+.25-1e-8);
+ expect(profiles[2]!.every((p,i)=>i===0||p.at>profiles[2]![i-1]!.at)).toBe(true);
 });
