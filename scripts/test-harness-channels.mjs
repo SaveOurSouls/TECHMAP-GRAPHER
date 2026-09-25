@@ -76,7 +76,7 @@ try {
  doc.physicalTopology={...t,segments:t.segments.map(s=>s.id==='main'||s.id==='tail'?{...s,specificationItemId:'sheath'}:s)};
  assert.deepEqual(doc.wires,before);assert.equal(buildDrawingBom(doc,2).find(r=>r.objectIds.includes('glue')).amount,5);
  const sheath=buildDrawingBom(doc,2).find(r=>r.objectIds.includes('sheath'));assert.equal(sheath.amount,2.4);assert.deepEqual(sheath.objectIds,['sheath','main','tail']);
- assert.notDeepEqual(physicalWireDisplayPaths(doc,'W1',{x:0,y:0},{x:1,y:1})[1],physicalWireDisplayPaths(doc,'W2',{x:0,y:0},{x:1,y:1})[1]);
+ assert.notDeepEqual(physicalWireDisplayPaths(doc,'W1',{x:0,y:0},{x:1,y:1})[0],physicalWireDisplayPaths(doc,'W2',{x:0,y:0},{x:1,y:1})[0]);
  const exits=ensureConnectorExits({...doc,physicalTopology:undefined});
  assert.equal(exits.nodes.length,connectors.length);assert.equal(ensureConnectorExits({...doc,physicalTopology:exits}),exits);
  const pipe=doc.physicalTopology.segments.find(s=>s.id==='second-exit');

@@ -73,7 +73,7 @@ it("converges straight parallel members onto one sleeve axis with transitions ou
 it("routes each wire inside its projected pipe while preserving measured and electrical data",()=>{
   const doc=parallel(),before=JSON.stringify(doc);
   const pipe=pipeBundleDisplaySamples(doc,"s1")!.map(p=>p.point);
-  expect(physicalWireDisplayPaths(doc,"W2",{x:0,y:100},{x:600,y:100})![1]).toEqual(pipe);
+  expect(physicalWireDisplayPaths(doc,"W2",{x:0,y:100},{x:600,y:100})![0]).toEqual(pipe);
   expect(physicalWirePoints(doc,"W2",{x:0,y:100},{x:600,y:100})).toEqual([{x:0,y:100},{x:600,y:100}]);
   expect(doc.wires.map(w=>w.lengthMm)).toEqual([400,400]);
   expect(JSON.stringify(doc)).toBe(before);

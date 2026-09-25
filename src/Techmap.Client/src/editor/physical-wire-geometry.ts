@@ -29,28 +29,24 @@ export function physicalWirePoints(document: HarnessDesignDocument, wireId: stri
 /** Display lanes never alter measured centreline geometry or electrical endpoints. */
 const offsetPolyline=(points:readonly Point[],offsets:readonly number[]):Point[]=>points.map((p,i)=>{const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!,before=Math.hypot(p.x-a.x,p.y-a.y),after=Math.hypot(b.x-p.x,b.y-p.y),u=before?{x:-(p.y-a.y)/before,y:(p.x-a.x)/before}:null,v=after?{x:-(b.y-p.y)/after,y:(b.x-p.x)/after}:null,n=u&&v?{x:u.x+v.x,y:u.y+v.y}:u??v??{x:0,y:1},len=Math.hypot(n.x,n.y)||1;return {x:p.x+n.x/len*offsets[i]!,y:p.y+n.y/len*offsets[i]!};});
 
-/** Give each rendered leg its neighbouring point as tangent context. Paths are
- * still returned separately so per-leg lane styles and visibility stay intact;
- * the renderer can therefore round the shared node without drawing a corner
- * between two independently traced paths. */
-function joinDisplayPaths(paths:readonly (readonly Point[])[]):Point[][] {
-  return paths.map((path,index)=>{
-    const result=[...path];
-    const previous=paths[index-1],next=paths[index+1];
-    if(previous?.length && result.length>0 && previous.length>1)
-      result.unshift(previous[previous.length-2]!);
-    if(next?.length && result.length>0 && next.length>1)
-      result.push(next[1]!);
-    return result;
-  });
+/** A null leg is a visibility break, not a route shortcut. Draw each continuous
+ * run once so rounding sees both sides of a junction without overlapping strokes. */
+function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
+  const result:Point[][]=[];let current:Point[]=[];
+  for(const path of paths){
+    if(path===null){if(current.length)result.push(current);current=[];continue;}
+    for(const point of path)if(!current.length||Math.hypot(point.x-current.at(-1)!.x,point.y-current.at(-1)!.y)>1e-7)current.push(point);
+  }
+  if(current.length)result.push(current);
+  return result;
 }
 export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
- const paths:Point[][]=[];
+ const paths:(Point[]|null)[]=[];
  const projected=route.steps.some(step=>hasPipeBundleProjection(document,step.segmentId));
  for(const step of route.steps){
   const segment=t.segments.find(s=>s.id===step.segmentId)!;
-  if(segment.showWires===false)continue;
+  if(segment.showWires===false){paths.push(null);continue;}
   const offset=segmentWireLanes(document,segment.id).find(l=>l.id===wireId)?.offset??0;
   const points=pipeBundleDisplaySamples(document,segment.id)?.map(s=>s.point)??(projected?drawingRouteHitPoints(physicalSegmentPoints(document,segment),drawingBendRadius(document)):physicalSegmentPoints(document,segment));
   const lane=offsetPolyline(points,points.map(()=>offset));
@@ -79,9 +75,6 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const startPath=fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from);
  const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
  const routePaths=[startPath,...paths,endPath];
- // A hidden middle leg is an intentional gap. Do not bridge its neighbours
- // merely to provide tangent context to the visible portions.
- const hiddenLeg=route.steps.some(step=>t.segments.find(s=>s.id===step.segmentId)?.showWires===false);
- const joined=hiddenLeg?routePaths:joinDisplayPaths(routePaths);
+ const joined=joinDisplayPaths(routePaths);
  return projected?joined.map(path=>drawingRouteHitPoints(path,drawingBendRadius(document))):joined;
 }

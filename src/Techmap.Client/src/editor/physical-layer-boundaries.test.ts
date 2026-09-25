@@ -43,7 +43,7 @@ it("keeps measured wire geometry independent of lane visibility and width", () =
     segments: document.physicalTopology!.segments.map(segment => ({ ...segment, width: 100, showWires: false })) } };
   expect(physicalWirePoints(styled, "W1", start, end)).toEqual(physicalWirePoints(document, "W1", start, end));
   expect(physicalWireDisplayPaths(styled, "W1", start, end)).toHaveLength(2);
-  expect(physicalWireDisplayPaths(document, "W1", start, end)).toHaveLength(4);
+  expect(physicalWireDisplayPaths(document, "W1", start, end)).toHaveLength(1);
   expect(styled.wires).toBe(document.wires);
   expect(styled.physicalTopology.routes).toBe(document.physicalTopology!.routes);
   expect(JSON.stringify(document)).toBe(before);
