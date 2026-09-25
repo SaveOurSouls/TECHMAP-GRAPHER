@@ -1,9 +1,10 @@
+import { drawVolumeStroke } from "./drawing-volume";
 import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
-import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures, volumeGradient } from "./covering-renderer";
+import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
 import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
@@ -1831,16 +1832,13 @@ export function drawEditorSceneObject(
     traceDrawingRoute(context,points,object.routeRadius);
     if(selected){context.strokeStyle="#1179ac";context.lineWidth=object.width+2;context.stroke();}
     context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
-    if(object.metadata?.volumeShading !== "false") {
-      const points=object.points??[],xs=points.map(p=>p.x),ys=points.map(p=>p.y),shade=volumeGradient(context,{minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)});
-      if(shade){context.strokeStyle=shade;context.globalAlpha=.72;context.lineWidth=Math.max(1,object.width*.55);context.stroke();context.globalAlpha=1;}
-    }
+    if(object.metadata?.volumeShading === "true") drawVolumeStroke(context,object.width);
 
     context.restore();return;
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
-    for(const path of object.paths){traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);}
+    for(const path of object.paths){traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);if(object.metadata?.volumeShading!=="false")drawVolumeStroke(context,lineWidth);}
     context.restore();return;
   }
   if (object.kind === "physical-node") {
@@ -1901,7 +1899,7 @@ export function drawEditorSceneObject(
       else context.stroke();
       context.setLineDash([]);
       if (view === "drawing" && object.kind === "wire") {
-        if(object.metadata?.volumeShading !== "false") { const xs=points.map(p=>p.x),ys=points.map(p=>p.y),shade=volumeGradient(context,{minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)}); if(shade){context.strokeStyle=shade;context.globalAlpha=.6;context.lineWidth=Math.max(1,(Number(object.metadata?.drawingWidth??3))*.45);context.stroke();context.globalAlpha=1;} }
+        if(object.metadata?.volumeShading === "true") drawVolumeStroke(context,Number(object.metadata?.drawingWidth??3));
         drawWireStripProfiles(context, object, selected);
       }
       if (selected) {
@@ -3587,3 +3585,4 @@ export function CanvasViewport({
     </div>
   );
 }
+

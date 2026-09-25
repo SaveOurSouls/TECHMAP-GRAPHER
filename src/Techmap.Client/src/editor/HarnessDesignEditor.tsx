@@ -1576,7 +1576,7 @@ export function HarnessDesignEditor({
         harnessId={harnessId}
         harnessDesignation={harnessDesignation}
         view={view}
-        objects={withCoveringTextureUrls(scene,textureAssets.urls).map(object => (object.kind === "wire" || object.kind === "physical-segment" || object.kind === "physical-covering") && history.present.drawingDocuments?.volumeShading === false ? {...object,metadata:{...object.metadata,volumeShading:"false"}} : object)}
+        objects={withCoveringTextureUrls(scene,textureAssets.urls).map(object => (object.kind === "wire" || object.kind === "physical-segment" || object.kind === "physical-covering") ? {...object,metadata:{...object.metadata,volumeShading:String(history.present.drawingDocuments?.volumeShading !== false)}} : object)}
         layers={layers}
         catalogItems={catalog.items}
         catalogSources={catalog.sources}
@@ -1945,3 +1945,4 @@ export function HarnessDesignEditor({
     </div>
   );
 }
+

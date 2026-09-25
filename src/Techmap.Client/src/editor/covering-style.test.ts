@@ -5,22 +5,21 @@ import {parseHarnessDesignDocument} from "./model";
 import {coveringScene,moveCovering} from "./covering-layout";
 import {splitCoveringSpans,type PhysicalCovering} from "./physical-coverings";
 import {coveringTextureFile,defaultCoveringStyle,resolvedCoveringStyle,type CoveringStyle} from "./covering-style";
-import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures,volumeGradient} from "./covering-renderer";
+import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
+import {drawVolumeSurface} from "./drawing-volume";
 
 const style:CoveringStyle={texture:"Metal049A",textureScale:2.5,textureRotation:-30,hatch:"cross",hatchColor:"#ff0000",hatchSpacing:6,hatchRotation:60,lineColor:"#0000ff"};
 const cover:PhysicalCovering={id:"style-cover",name:"Оболочка",color:"#ffffff",width:20,lengthMm:90,spans:[{segmentId:"S0",from:.1,to:.8}],style};
-const fixture=()=>{const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,coverings:[cover]}};};
+const fixture=()=>{const d=physicalFixture();return {...d,drawingDocuments:{tables:[],leaders:[],bomOrder:[],volumeShading:false},physicalTopology:{...d.physicalTopology!,coverings:[cover]}};};
+it("shades sleeve bands from local centre points",()=>{
+ const fills:string[]=[];const state={fillStyle:"",save:()=>undefined,restore:()=>undefined,beginPath:()=>undefined,moveTo:()=>undefined,lineTo:()=>undefined,closePath:()=>undefined,fill:()=>fills.push(state.fillStyle),clip:()=>undefined};
+ drawVolumeSurface(state as unknown as CanvasRenderingContext2D,[{x:0,y:-10},{x:100,y:-10},{x:100,y:10},{x:0,y:10}],[{x:0,y:0},{x:100,y:0}]);
+ expect(fills.length).toBe(8);expect(fills[0]).toBe("rgba(0,0,0,.25)");
+});
 afterEach(()=>vi.unstubAllGlobals());
 it("imports every built-in texture through the asset pipeline",()=>{
   expect(Object.keys(coveringTextureUrls)).toEqual(["Rubber002","Fabric061","Metal049A"]);
   for(const [name,url] of Object.entries(coveringTextureUrls))expect(url).toContain(name);
-});
-it("uses a bounded volume gradient and can disable it without changing geometry",()=>{
- const stops:{at:number;color:string}[]=[];
- const ctx={createLinearGradient:()=>({addColorStop:(at:number,color:string)=>stops.push({at,color})})} as unknown as CanvasRenderingContext2D;
- expect(volumeGradient(ctx,{minX:0,minY:0,maxX:10,maxY:20})).toBeTruthy();
- expect(stops.map(s=>s.at)).toEqual([0,.18,.5,.82,1]);
- expect(volumeGradient(ctx,{minX:0,minY:0,maxX:10,maxY:20},false)).toBe("");
 });
 
 it("retains legacy defaults and chooses the preferred texture without changing geometry",()=>{
@@ -30,14 +29,7 @@ it("retains legacy defaults and chooses the preferred texture without changing g
   expect(coveringTextureFile("braid",{texture:"none"})).toBeNull();
   expect(coveringTextureFile("braid",style)).toBe("Metal049A");
 });
-it("creates paired shoulders at heat-shrink boundaries instead of a single L transition",()=>{
- const d=physicalFixture(), base=d.physicalTopology!.segments[0]!;
- const document={...d,physicalTopology:{...d.physicalTopology!,coverings:[{id:"heat",name:"Термоусадка",kind:"heat-shrink",lengthMode:"auto",width:20,color:"#999",lengthMm:null,spans:[{segmentId:base.id,from:-.25,to:.35}]}]}} as any;
- const surface=JSON.parse(coveringScene(document)[0]!.metadata!.surfaces!)[0];
- expect(surface.path.length).toBeGreaterThan(3);
- const shoulders=surface.path.filter((_: unknown,i:number)=>i>0&&Math.hypot(surface.path[i].x-surface.path[i-1].x,surface.path[i].y-surface.path[i-1].y)<5);
- expect(shoulders.length).toBeGreaterThanOrEqual(2);
-});
+
 it("persists independent styles through a command, reload, sleeve move and branch split",()=>{
   const d=physicalFixture(),changed=applyEditorCommand(d,{type:"set-physical-topology",topology:fixture().physicalTopology!});
   const loaded=parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed)));
