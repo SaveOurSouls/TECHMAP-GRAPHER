@@ -1,8 +1,9 @@
 import { expect, it } from "vitest";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { standardCoveringOver } from "./physical-coverings";
+import { drawingRouteSamples } from "./drawing-route-path";
 import { physicalFixture } from "./physical-topology-fixture";
-import { pipeBundleDisplaySamples, projectPipeBundleControls, projectPipeBundlePoint, unprojectPipeBundleEdit } from "./pipe-bundle-projection";
+import { pipeBundleDisplaySamples, pipeBundleTransitionHandles, projectPipeBundleControls, projectPipeBundlePoint, unprojectPipeBundleEdit } from "./pipe-bundle-projection";
 import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
 import { createEmptyHarnessDesign, type HarnessDesignDocument } from "./model";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
@@ -38,6 +39,78 @@ it("keeps a coating over a bundle on the same axis when its convergence handle m
  const scene=coveringScene(next);
  expect(scene.find(c=>c.id==="overlay")!.paths).toEqual(scene.find(c=>c.id==="group")!.paths);
  expect(JSON.parse(scene.find(c=>c.id==="overlay")!.metadata!.coveringHandles!).filter((h:{part:string})=>h.part.startsWith("transition-"))).toHaveLength(0);
+});
+
+it("deduplicates transition handles and keeps a bent shared axis finite",()=>{
+ const base=parallel(),topology=base.physicalTopology!;
+ const segments=topology.segments.map(s=>s.id==="s0"
+   ?{...s,path:{kind:"polyline" as const,points:[{x:160,y:0},{x:210,y:80},{x:390,y:80},{x:440,y:0}]}}
+   :s.id==="s1"
+     ?{...s,path:{kind:"polyline" as const,points:[{x:160,y:100},{x:210,y:180},{x:390,y:180},{x:440,y:100}]}}
+     :s);
+ const doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18},physicalTopology:{...topology,segments}};
+ const samples=pipeBundleDisplaySamples(doc,"s0")!,handles=pipeBundleTransitionHandles(doc,"group");
+ expect(handles).toHaveLength(4);
+ expect(samples.every(s=>Number.isFinite(s.point.x)&&Number.isFinite(s.point.y))).toBe(true);
+ expect(samples[0]!.point).toEqual({x:0,y:0});
+ expect(samples.at(-1)!.point).toEqual({x:600,y:0});
+ const source=drawingRouteSamples(physicalSegmentPoints(doc,segments[0]!),18);
+ const length=source.at(-1)!.distance;
+ const point=(t:number)=>{const index=source.findIndex(p=>p.distance>=t*length),b=source[index]!,a=source[Math.max(0,index-1)]!,u=(t*length-a.distance)/(b.distance-a.distance||1);
+   return projectPipeBundlePoint(doc,"s0",t,{x:a.point.x+(b.point.x-a.point.x)*u,y:a.point.y+(b.point.y-a.point.y)*u});};
+ for(const t of [.22,.3,.7,.78]){
+   const a=point(t-1e-7),b=point(t+1e-7);
+   expect(Math.hypot(a.x-b.x,a.y-b.y)).toBeLessThan(.01);
+ }
+ const reversed={...doc,physicalTopology:{...doc.physicalTopology,coverings:doc.physicalTopology.coverings!.map(c=>({...c,spans:[...c.spans].reverse()}))}};
+ expect(pipeBundleDisplaySamples(reversed,"s0")).toEqual(samples);
+});
+
+it("shares a moved transition when an overlay stores several supports in reverse order",()=>{
+ const base=parallel(),inner={...base.physicalTopology!.coverings![0]!,spans:[{segmentId:"s0",from:.3,to:.7},{segmentId:"s1",from:.3,to:.7}]};
+ const overlay=standardCoveringOver(base,inner,"Оплётка","overlay");
+ const doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18},physicalTopology:{...base.physicalTopology!,coverings:[inner,{...overlay,spans:[...overlay.spans].reverse()}]}};
+ const moved=moveCovering(doc,"group",0,"transition-from",{x:132,y:100},{x:102,y:100},0)!;
+ const next={...doc,physicalTopology:{...doc.physicalTopology,coverings:[moved,doc.physicalTopology.coverings[1]!]}};
+ const single={...next,physicalTopology:{...next.physicalTopology,coverings:[moved]}};
+ expect(pipeBundleDisplaySamples(next,"s1")).toEqual(pipeBundleDisplaySamples(single,"s1"));
+ expect(pipeBundleTransitionHandles(next,"overlay")).toHaveLength(0);
+ const reordered={...next,physicalTopology:{...next.physicalTopology,coverings:[...next.physicalTopology.coverings].reverse()}};
+ expect(pipeBundleDisplaySamples(reordered,"s1")).toEqual(pipeBundleDisplaySamples(next,"s1"));
+ expect(pipeBundleTransitionHandles(reordered,"group")).toEqual(pipeBundleTransitionHandles(next,"group"));
+});
+
+it("keeps one handle per action where bundle participants coincide",()=>{
+ const base=parallel(),doc={...base,physicalTopology:{...base.physicalTopology!,nodes:base.physicalTopology!.nodes.map(n=>({...n,position:{...n.position,y:0}}))}};
+ const handles=pipeBundleTransitionHandles(doc,"group");
+ expect(handles).toHaveLength(2);
+ expect(new Set(handles.map(h=>h.part)).size).toBe(2);
+});
+
+it.each([false,true])("joins an outer transition continuously to an already grouped pipe (reverse %s)",reverse=>{
+ const base=parallel(),inner={...base.physicalTopology!.coverings![0]!,spans:[{segmentId:"s0",from:.1,to:.9}]};
+ const outer={...inner,id:"outer",spans:[{segmentId:"s0",from:.4,to:.6}],bundle:{mode:"flat" as const,members:[{kind:"covering" as const,id:"group"},{kind:"segment" as const,id:"s2"}]}};
+ const doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18},physicalTopology:{...base.physicalTopology!,segments:base.physicalTopology!.segments.map(s=>reverse&&s.id==="s1"?{...s,from:s.to,to:s.from}:s),coverings:[inner,outer]}};
+ for(const station of [.4-(.6-.4)/3,.4,.6,.6+(.6-.4)/3]){
+   const point=(t:number)=>projectPipeBundlePoint(doc,"s1",reverse?1-t:t,{x:t*600,y:100});
+   const before=point(station-1e-7),after=point(station+1e-7);
+   expect(Math.hypot(before.x-after.x,before.y-after.y),`station ${station} before ${JSON.stringify(before)} after ${JSON.stringify(after)}`).toBeLessThan(.01);
+ }
+ expect(doc.wires).toBe(base.wires);
+ expect(doc.physicalTopology.routes).toBe(base.physicalTopology!.routes);
+});
+
+it("keeps a coating of an inner bundle centred inside the outer sleeve",()=>{
+ const base=parallel(),inner=base.physicalTopology!.coverings![0]!;
+ const outer={...inner,id:"outer",bundle:{mode:"flat" as const,members:[{kind:"covering" as const,id:"group"},{kind:"segment" as const,id:"s2"}]}};
+ const overlay=standardCoveringOver(base,inner,"Оплётка","overlay");
+ const doc={...base,physicalTopology:{...base.physicalTopology!,coverings:[inner,overlay,outer]}};
+ const scene=coveringScene(doc);
+ expect(scene.find(c=>c.id==="overlay")!.paths).toEqual(scene.find(c=>c.id==="group")!.paths);
+ expect(scene.at(-1)!.id).toBe("outer");
+ const reordered={...doc,physicalTopology:{...doc.physicalTopology,coverings:[outer,inner,overlay]}};
+ expect(coveringScene(reordered).at(-1)!.id).toBe("outer");
+ expect(pipeBundleDisplaySamples(reordered,"s1")).toEqual(pipeBundleDisplaySamples(doc,"s1"));
 });
 
 it.each(['carry','adjacent'] as const)('snaps authored corners and inserted midpoints through bundle projection in %s mode',mode=>{

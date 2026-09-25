@@ -5,7 +5,7 @@ import { coveringControlFractions, coveringKind, coveringRoute, resolvedCovering
 import { coveringDiameterRatio, drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
-import { pipeBundleAxisPath } from "./pipe-bundle-model";
+import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 
@@ -32,7 +32,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
  // shells are painted after their contained groups regardless of save order.
  const coverings:PhysicalCovering[]=sourceCoverings.filter(c=>!c.bundle),seen=new Set(coverings.map(c=>c.id));
  const addBundle=(covering:PhysicalCovering)=>{if(seen.has(covering.id))return;seen.add(covering.id);
-   for(const member of covering.bundle?.members??[])if(member.kind==='covering'){const inner=sourceCoverings.find(c=>c.id===member.id);if(inner)addBundle(inner);}
+   for(const member of covering.bundle?.members??[])if(member.kind==='covering'){const inner=sourceCoverings.find(c=>c.id===member.id);if(inner){
+     for(const layer of sourceCoverings)if(layer.bundle&&pipeBundleCoatingKey(layer)===pipeBundleCoatingKey(inner))addBundle(layer);
+   }}
    coverings.push(covering);};
  for(const covering of sourceCoverings)if(covering.bundle)addBundle(covering);
  const bundleSections=pipeBundleSections(document);

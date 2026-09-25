@@ -14,6 +14,14 @@ export interface PipeBundle {
 export const maximumBundleMembers = 128;
 export const maximumBundleDepth = 16;
 
+/** Coatings on the same ordered bundle and support intervals share an axis.
+ * Paint order and object property insertion order are not geometry. */
+export function pipeBundleCoatingKey(c:PhysicalCovering):string {
+ return JSON.stringify([c.bundle?.mode,c.bundle?.members.map(m=>m.kind==="segment"?[m.kind,m.id,m.continuationIds??[]]:[m.kind,m.id]),
+  [...c.spans].sort((a,b)=>a.segmentId.localeCompare(b.segmentId)||a.from-b.from||a.to-b.to)
+   .map(s=>[s.segmentId,s.from,s.to,s.fromAnchor,s.toAnchor])]);
+}
+
 /** Split fragments are consecutive lengths of one cross-section, not extra disks. */
 export const pipeMemberSegments = (member: Extract<PipeBundleMember, {kind:"segment"}>): readonly string[] =>
   [member.id, ...member.continuationIds ?? []];
