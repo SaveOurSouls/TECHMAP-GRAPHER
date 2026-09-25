@@ -1945,4 +1945,3 @@ export function HarnessDesignEditor({
     </div>
   );
 }
-

@@ -85,4 +85,3 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     context.beginPath();context.moveTo(p.x-n.x*w,p.y-n.y*w);context.lineTo(p.x+n.x*w,p.y+n.y*w);context.stroke();
   }
 }
-

@@ -3585,4 +3585,3 @@ export function CanvasViewport({
     </div>
   );
 }
-
