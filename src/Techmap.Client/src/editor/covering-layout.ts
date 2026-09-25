@@ -6,9 +6,10 @@ import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./draw
 import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
 import { pipeBundleProjectionStops, projectPipeBundlePoint } from "./pipe-bundle-projection";
+import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
-export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number }
+export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
 export type CoveringDragPart="from"|"to"|"body";
 /** Mitered edges are shared by the filled surface and endpoint grips. */
 export function offsetPolyline(points:readonly Point[],offsets:readonly number[]):Point[] {
@@ -65,8 +66,10 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const widths=display.map(s=>profileHalfWidth(profile,s.distance-route.before));
    for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
-   surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex});paths.push(centerline);
-   for(const part of ["from","to"] as const){const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
+   surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex,
+     ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),
+     ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
+   for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
   for(const {segmentId,support} of ownSupports) supportsBySegment.set(segmentId,[...(supportsBySegment.get(segmentId)??[]),support]);
   return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),routeRadius:0,metadata:{coveringKind:coveringKind(covering),...(document.drawingDocuments?.volumeShading === false ? {volumeShading:"false"} : {}),coveringStyle:JSON.stringify({...covering.style,texture:!covering.style?.texture||covering.style.texture==="auto"?document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(covering)]?.texture??"auto":covering.style.texture}),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
@@ -75,6 +78,7 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
 
 export function moveCovering(document:HarnessDesignDocument,id:string,spanIndex:number,part:CoveringDragPart,start:Point,point:Point,tolerance=10):PhysicalCovering|null {
  const c=document.physicalTopology?.coverings?.find(c=>c.id===id),original=c?.spans[spanIndex];if(!c||!original)return null;
+ const bundleMove=moveBundleCovering(document,c,spanIndex,part,start,point,tolerance);if(bundleMove)return bundleMove;
  const route=coveringRoute(document,original.segmentId);if(!route)return null;
  const s=resolvedCoveringSpan(document,original);
  const display=drawingRouteSection(route.points,drawingBendRadius(document),0,route.total,

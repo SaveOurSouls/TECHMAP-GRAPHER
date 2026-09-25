@@ -17,6 +17,14 @@ export const maximumBundleDepth = 16;
 export const pipeMemberSegments = (member: Extract<PipeBundleMember, {kind:"segment"}>): readonly string[] =>
   [member.id, ...member.continuationIds ?? []];
 
+/** Ordered longitudinal paths. A nested group contributes its existing paths,
+ * never another parallel leaf for each fragment created by a split. */
+export function pipeBundlePaths(covering: PhysicalCovering, coverings: readonly PhysicalCovering[]): readonly (readonly string[])[] {
+  return covering.bundle?.members.flatMap(member => member.kind === "segment"
+    ? [pipeMemberSegments(member)]
+    : pipeBundlePaths(coverings.find(c => c.id === member.id)!, coverings)) ?? [];
+}
+
 /** Returns ordered unique leaves. Used by validation, selection and layout so
  * nesting cannot silently duplicate a pipe or invent a missing participant. */
 export function resolvePipeBundles(coverings: readonly PhysicalCovering[], segmentIds: ReadonlySet<string>): ReadonlyMap<string, readonly string[]> {

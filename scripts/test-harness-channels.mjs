@@ -162,7 +162,7 @@ try {
  twisted=applyEditorCommand(twisted,{type:'flip-connector-orientation',connectorId:'pair-b'});
  twisted=parseHarnessDesignDocument({...twisted,wires:[1,2].map(n=>({...createWire('pair-'+n,{connectorId:'pair-a',contactId:'pair-a:contact:'+n},{connectorId:'pair-b',contactId:'pair-b:contact:'+n}),e4RouteMode:'manual',e4Route:[{x:700,y:1640+24*n},{x:900,y:1840+24*n}]}))});
  twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
- const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
+ let combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
  combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0,volumeShading:false};
  const coveringStyle={texture:`asset:${textureAttachment.sha256}`,textureScale:2.5,textureRotation:-30,hatch:'cross',hatchColor:'#ff0000',hatchSpacing:6,hatchRotation:60,lineColor:'#0000ff'};
  combined.drawingDocuments.coveringLibrary={textures:[{sha256:textureAttachment.sha256,name:'test-texture.png'}],defaults:{braid:{texture:coveringStyle.texture}}};
@@ -177,14 +177,29 @@ try {
  const innerBundle=bundleCover('bundle-inner','flat',bundlePipes.slice(0,2).map(id=>({kind:'segment',id})));
  const outerBundle=bundleCover('bundle-outer','round',[{kind:'covering',id:innerBundle.id},{kind:'segment',id:bundlePipes[2]}]);
  const chainBundle={...bundleCover('bundle-chain','flat',[{kind:'segment',id:'chain-head',continuationIds:['chain-tail']},{kind:'segment',id:bundlePipes[2]}]),spans:[{segmentId:'chain-head',from:.2,to:1},{segmentId:'chain-tail',from:0,to:.8}]};
- const expectedBundleGroups=[outerBundle,innerBundle,chainBundle];
+ let expectedBundleGroups=[outerBundle,innerBundle,chainBundle];
  combined.physicalTopology={...combined.physicalTopology,
    nodes:[...combined.physicalTopology.nodes,...[0,1,2].map(i=>({id:`chain-node-${i}`,position:{x:200+i*100,y:2200}}))],
    segments:[...combined.physicalTopology.segments,...['chain-head','chain-tail'].map((id,i)=>({id,from:`chain-node-${i}`,to:`chain-node-${i+1}`,path:{kind:'polyline',points:[]}}))],
    coverings:[...combined.physicalTopology.coverings,...expectedBundleGroups]};
+ const {moveCovering,coveringScene}=await module('editor/covering-layout.ts');
+ const {pipeBundleDisplaySamples}=await module('editor/pipe-bundle-projection.ts');
+ const movedBundle=moveCovering(combined,'bundle-chain',0,'body',{x:260,y:2200},{x:270,y:2200});
+ assert.ok(movedBundle);
+ assert.ok(Math.abs(movedBundle.spans[0].from-.3)<1e-7);
+ assert.ok(Math.abs(movedBundle.spans[1].to-.9)<1e-7);
+ // Match editor commands: each change creates a new immutable document so
+ // presentation caches cannot retain the geometry from before the sleeve drag.
+ combined={...combined,physicalTopology:{...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>c.id===movedBundle.id?movedBundle:c)}};
+ expectedBundleGroups=combined.physicalTopology.coverings.filter(c=>c.bundle);
+ const bundleDisplay=content=>({pipes:content.physicalTopology.segments.flatMap(s=>{const p=pipeBundleDisplaySamples(content,s.id);return p?[{id:s.id,samples:p}]:[];}),
+   shells:coveringScene(content).filter(c=>expectedBundleGroups.some(g=>g.id===c.id)).map(c=>({id:c.id,paths:c.paths,width:c.width}))});
+ const expectedDisplay=bundleDisplay(combined);
+ assert.ok(expectedDisplay.pipes.length>=4);
  const leaderScene=drawingDocumentScene(combined);
  assert.ok(leaderScene.some(o=>o.kind==='position-leader'&&o.width===60));
  const savedRemoved=await restartedDesigns.save(project.projectId,harnessId,savedJoin.revision,combined);
+ assert.deepEqual(bundleDisplay(savedRemoved.content),expectedDisplay,'Bundle projection survives save');
  const invalidBundle=structuredClone(combined);
  invalidBundle.physicalTopology.coverings.find(c=>c.id==='bundle-inner').bundle.members[1]={kind:'covering',id:'bundle-outer'};
  const invalidBundleResponse=await env.fetcher(`/api/v1/projects/${project.projectId}/harnesses/${harnessId}/design`,{
@@ -210,13 +225,16 @@ try {
  assert.deepEqual(savedRemoved.content.physicalTopology.coverings,JSON.parse(JSON.stringify(combined.physicalTopology.coverings)));
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
- assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
+ const reopened=(await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content;
+ assert.deepEqual(reopened,savedRemoved.content);
+ assert.deepEqual(bundleDisplay(reopened),expectedDisplay,'Bundle projection survives restart');
  const {createCoveringAssetApi}=await module('editor/covering-assets.ts');
  const copied=await createProjectApi(env.config,env.session,env.fetcher).copyProject(project.projectId);
  const copyContent=(await createHarnessDesignApi(env.config,env.session,env.fetcher).get(copied.projectId,copied.harnesses[0].harnessId)).content;
  assert.deepEqual(copyContent.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
  assert.equal(copyContent.drawingDocuments.volumeShading,false);
  assert.deepEqual(copyContent.physicalTopology.coverings.filter(c=>c.bundle),expectedBundleGroups);
+ assert.deepEqual(bundleDisplay(copyContent),expectedDisplay,'Bundle projection survives copy');
  const assets=await createCoveringAssetApi(env.config,env.session,copied.projectId,env.fetcher).list();
  const copiedTexture=assets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(copiedTexture);
  const textureResponse=await env.fetcher(copiedTexture.url);assert.equal(textureResponse.status,200);
@@ -229,6 +247,7 @@ try {
  assert.deepEqual(importedDesign.content.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
  assert.equal(importedDesign.content.drawingDocuments.volumeShading,false);
  assert.deepEqual(importedDesign.content.physicalTopology.coverings.filter(c=>c.bundle),expectedBundleGroups);
+ assert.deepEqual(bundleDisplay(importedDesign.content),expectedDisplay,'Bundle projection survives export/import');
  const importedAssets=await createCoveringAssetApi(env.config,env.session,importId,env.fetcher).list();
  const importedTexture=importedAssets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(importedTexture);
  const importedBytes=await env.fetcher(importedTexture.url);assert.equal(importedBytes.status,200);assert.equal(Buffer.from(await importedBytes.arrayBuffer()).toString('base64'),texturePng);

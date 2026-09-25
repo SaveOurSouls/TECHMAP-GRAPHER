@@ -232,3 +232,19 @@ export function unprojectPipeBundleEdit(document: HarnessDesignDocument, segment
   const displayedOrigin=projectPipeBundleControls(document,segmentId,[original])[0]!;
   return { x: original.x + target.x - displayedOrigin.x, y: original.y + target.y - displayedOrigin.y };
 }
+
+/** Context actions target the segment under the pointer. Recover its authored
+ * station, not the nearest point of an unrelated, unshifted centreline. */
+export function unprojectPipeBundlePoint(document:HarnessDesignDocument,segmentId:string,point:Point):Point {
+  const samples=pipeBundleDisplaySamples(document,segmentId);if(!samples)return point;
+  let nearest=Infinity,fraction=0;
+  for(let i=1;i<samples.length;i++){
+    const a=samples[i-1]!,b=samples[i]!,dx=b.point.x-a.point.x,dy=b.point.y-a.point.y;
+    const t=Math.max(0,Math.min(1,((point.x-a.point.x)*dx+(point.y-a.point.y)*dy)/(dx*dx+dy*dy||1)));
+    const delta=Math.hypot(point.x-a.point.x-t*dx,point.y-a.point.y-t*dy);
+    if(delta<nearest){nearest=delta;fraction=a.fraction+(b.fraction-a.fraction)*t;}
+  }
+  const raw=physicalSegmentPoints(document,document.physicalTopology!.segments.find(s=>s.id===segmentId)!);
+  const length=pathLength(raw);let distance=0;
+  return at(raw.map((p,i)=>{if(i)distance+=Math.hypot(p.x-raw[i-1]!.x,p.y-raw[i-1]!.y);return {fraction:length?distance/length:0,point:p};}),fraction);
+}

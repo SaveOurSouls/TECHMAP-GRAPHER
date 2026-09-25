@@ -77,7 +77,8 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     const tile=hatchTile(style);
     if(tile){const pattern=context.createPattern(tile,"repeat");if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.hatchRotation).scale(style.hatchSpacing/32));context.fillStyle=pattern;context.fill();}}
     if(object.metadata?.volumeShading === "true") drawVolumeSurface(context,polygon,surface.path);
-    context.beginPath();polygon.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.closePath();
+    context.beginPath();polygon.forEach((p,i)=>i&&!(surface.openEnd&&i===polygon.length/2)?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+    if(!surface.openStart){const p=polygon[0]!;context.lineTo(p.x,p.y);}
     context.strokeStyle=selected?"#007fae":style.lineColor;context.lineWidth=selected?2:1;context.stroke();context.restore();
   }
   if(selected)for(const grip of coveringGrips(object)){

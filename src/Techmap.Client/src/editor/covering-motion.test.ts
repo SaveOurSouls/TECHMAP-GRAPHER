@@ -1,0 +1,76 @@
+import { expect, it } from "vitest";
+import { createEmptyHarnessDesign, type HarnessDesignDocument } from "./model";
+import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
+import { coveringScene, moveCovering } from "./covering-layout";
+import { pipeBundleDisplaySamples, unprojectPipeBundlePoint } from "./pipe-bundle-projection";
+import { branchPhysicalSegment, connectPhysicalNodeToSegment } from "./physical-topology";
+import { coveringGrips, coveringSurfaces } from "./covering-renderer";
+import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
+
+function fixture():HarnessDesignDocument {
+  return {...createEmptyHarnessDesign(),drawingDocuments:{tables:[],leaders:[],bomOrder:[],bendRadius:0},physicalTopology:{snap:false,
+    nodes:[{id:'a',position:{x:0,y:0}},{id:'j',position:{x:300,y:0}},{id:'b',position:{x:600,y:0}},
+      {id:'p',position:{x:0,y:100}},{id:'q',position:{x:600,y:100}},{id:'tip',position:{x:450,y:200}}],
+    segments:[{id:'s0',from:'a',to:'j',path:{kind:'polyline',points:[]},width:10},
+      {id:'s1',from:'j',to:'b',path:{kind:'polyline',points:[]},width:10},
+      {id:'s2',from:'p',to:'q',path:{kind:'polyline',points:[]},width:10}],routes:[],
+    coverings:[{id:'group',name:'Общая',width:0,color:'#334455',lengthMm:200,lengthMode:'manual',
+      spans:[{segmentId:'s0',from:.2,to:1},{segmentId:'s1',from:0,to:.6}],
+      bundle:{mode:'flat',members:[{kind:'segment',id:'s0',continuationIds:['s1']},{kind:'segment',id:'s2'}]}}]}};
+}
+
+it('moves the whole sleeve across a split from either fragment and undoes once',()=>{
+  const doc=fixture(),c=doc.physicalTopology!.coverings![0]!,before=JSON.stringify(doc);
+  const moved=moveCovering(doc,c.id,0,'body',{x:240,y:0},{x:300,y:0})!;
+  expect(moved.spans).toEqual([{segmentId:'s0',from:.4,to:1},{segmentId:'s1',from:0,to:.8}]);
+  expect(moveCovering(doc,c.id,1,'body',{x:360,y:0},{x:420,y:0})).toEqual(moved);
+  expect(moved.lengthMm).toBe(200);
+  const history=executeEditorCommand(createEditorHistory(doc),{type:'set-physical-topology',topology:{...doc.physicalTopology!,coverings:[moved]}});
+  expect(undoEditorCommand(history).present).toBe(doc);
+  expect(JSON.stringify(doc)).toBe(before);
+});
+
+it('crosses a fragment boundary completely, reconstructs spans on return and clamps as one body',()=>{
+  const doc=fixture(),t=doc.physicalTopology!,c={...t.coverings![0]!,spans:[{segmentId:'s0',from:.5,to:.9}]};
+  const initial={...doc,physicalTopology:{...t,coverings:[c]}};
+  const moved=moveCovering(initial,c.id,0,'body',{x:180,y:0},{x:480,y:0})!;
+  expect(moved.spans).toEqual([{segmentId:'s1',from:.5,to:.9}]);
+  const next={...doc,physicalTopology:{...t,coverings:[moved]}};
+  expect(moveCovering(next,c.id,0,'body',{x:480,y:0},{x:180,y:0})!.spans).toEqual(c.spans);
+  const clamped=moveCovering(initial,c.id,0,'body',{x:180,y:0},{x:900,y:0})!;
+  expect(clamped.spans).toEqual([{segmentId:'s1',from:.6,to:1}]);
+});
+
+it('resizes the outer edge across a split and exposes no internal grip',()=>{
+  const doc=fixture(),c=doc.physicalTopology!.coverings![0]!;
+  expect(bundleSpanEdgeVisible(doc,c,0,'to')).toBe(false);
+  expect(bundleSpanEdgeVisible(doc,c,1,'from')).toBe(false);
+  expect(coveringGrips(coveringScene(doc)[0]!).map(g=>[g.spanIndex,g.part])).toEqual([[0,'from'],[1,'to']]);
+  expect(coveringSurfaces(coveringScene(doc)[0]!).map(s=>[s.openStart,s.openEnd])).toEqual([[undefined,true],[true,undefined]]);
+  const smaller=moveBundleCovering(doc,c,1,'to',{x:480,y:0},{x:240,y:0},0)!;
+  expect(smaller.spans).toEqual([{segmentId:'s0',from:.2,to:.8}]);
+  const next={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[smaller]}};
+  expect(moveBundleCovering(next,smaller,0,'to',{x:240,y:0},{x:480,y:0},0)!.spans).toEqual(c.spans);
+  expect(moveBundleCovering(doc,c,0,'body',{x:240,y:0},{x:240,y:0},0)).toBe(c);
+});
+
+it('maps a context hit to the original station and keeps a new T branch on the displayed pipe',()=>{
+  const doc=fixture(),screen={x:450,y:5},original=unprojectPipeBundlePoint(doc,'s2',screen);
+  expect(original).toEqual({x:450,y:100});
+  const t=branchPhysicalSegment(doc,'s2',original,{junction:'cut',continuation:'tail',tip:'end',branch:'branch'});
+  const changed={...doc,physicalTopology:t};
+  const tail=pipeBundleDisplaySamples(changed,'tail')![0]!.point;
+  expect(tail).toEqual(screen);
+  expect(pipeBundleDisplaySamples(changed,'branch')![0]!.point).toEqual(screen);
+  expect(t.nodes.find(n=>n.id==='cut')!.position).toEqual(original);
+});
+
+it('connects an existing node at the projected station without mutating the saved member axis',()=>{
+  const doc=fixture(),screen={x:420,y:5};
+  const topology=connectPhysicalNodeToSegment(doc,'tip','s2',unprojectPipeBundlePoint(doc,'s2',screen),
+    {junction:'cut',segment:'new',continuation:'tail'});
+  const changed={...doc,physicalTopology:topology};
+  expect(topology.nodes.find(n=>n.id==='cut')!.position).toEqual({x:420,y:100});
+  expect(pipeBundleDisplaySamples(changed,'new')!.at(-1)!.point).toEqual(screen);
+  expect(doc.physicalTopology!.segments.find(s=>s.id==='s2')!.path.points).toEqual([]);
+});
