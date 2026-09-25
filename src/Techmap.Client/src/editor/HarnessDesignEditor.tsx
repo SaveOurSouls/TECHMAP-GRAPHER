@@ -1,4 +1,4 @@
-import {createGlobalCoveringPreparer} from "./global-covering-materials";
+import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-covering-materials";
 import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { physicalTopologyScene } from "./physical-scene";
@@ -992,7 +992,7 @@ export function HarnessDesignEditor({
     if (placementBusyRef.current || pendingPlacementRef.current) return false;
     const current = historyRef.current;
     if (!current) return false;
-    if(command.type==="set-physical-topology"&&!command.coveringLibrary&&command.topology.coverings?.some(c=>!current.present.physicalTopology?.coverings?.some(old=>old.id===c.id))){
+    if(command.type==="set-physical-topology"&&!command.coveringLibrary&&command.topology.coverings?.some(c=>coveringMaterialChanged(current.present,c))){
       if(preparingCovering.current){setMessage("Подождите: закрепляем материал оболочки.");return false;}
       preparingCovering.current=true;const generation=loadGeneration.current;setMessage("Закрепляем материал оболочки…");
       void prepareCoverings(current.present,command).then(prepared=>{

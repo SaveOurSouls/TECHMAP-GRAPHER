@@ -36,7 +36,7 @@ it("moves only the chosen coating behind the others",()=>{
   const d=physicalFixture(),cover=(id:string)=>({id,name:id,width:0,color:"#123456",lengthMm:null,spans:[{segmentId:"S0",from:0,to:1}]});
   const t={...d.physicalTopology!,coverings:[cover("a"),cover("b"),cover("c")]};let changed=t;
   const tree=PhysicalCoveringsPanel({compact:true,document:{...d,physicalTopology:t},topology:t,selectedIds:["b"],onReveal:vi.fn(),onChange:value=>{changed=value as typeof t;return true;}});
-  elements(tree).find(e=>e.type==="button"&&e.props.children==="На задний план")!.props.onClick();
+  elements(tree).find(e=>e.type==="button"&&e.props["aria-label"]==="На задний план")!.props.onClick();
   expect(changed.coverings.map(c=>c.id)).toEqual(["b","a","c"]);expect(changed.segments).toBe(t.segments);
 });
 it("keeps selected wires for manual routes and creates a sleeve for all selected pipes",()=>{

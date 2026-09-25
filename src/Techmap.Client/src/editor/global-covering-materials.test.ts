@@ -39,3 +39,30 @@ it("an explicit local preference wins and failed asset pinning cannot return a h
  await expect(prepareGlobalCoverings(doc,command,list,pin)).rejects.toThrow("upload failed");expect(doc.physicalTopology?.coverings??[]).toHaveLength(0);
 });
 it.each([{lineWidth:0},{lineWidth:NaN},{lineWidth:21},{textureTint:"red"}])("rejects invalid extended style %o",style=>expect(validCoveringStyle(style)).toBe(false));
+
+it("changing an existing type replaces its pinned texture atomically and preserves shape and lengths",async()=>{
+ const doc=physicalFixture(),cover={...standardCovering(doc,"S0",{x:200,y:60},"Оплётка","old"),width:17,lengthMm:45,lengthMode:"manual" as const,style:{texture:"Metal049A" as const,hatch:"cross" as const}};
+ const before={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[cover]}};
+ const prepared=await prepareGlobalCoverings(before,{type:"set-physical-topology",topology:{...before.physicalTopology,coverings:[{...cover,kind:"heat-shrink"}]}},async()=>[material],async()=>entry);
+ const history=executeEditorCommand(createEditorHistory(before),prepared),result=history.present.physicalTopology!.coverings![0]!;
+ expect(result).toMatchObject({id:cover.id,width:17,lengthMm:45,lengthMode:"manual",spans:cover.spans,kind:"heat-shrink",style:{texture:`asset:${entry.sha256}`,hatch:"cross"}});
+ expect(history.present.wires).toBe(before.wires);
+ expect(undoEditorCommand(history).present).toEqual(before);
+ expect(redoEditorCommand(undoEditorCommand(history)).present).toEqual(history.present);
+});
+
+it.each([false,true])("type change uses local preference or builtin fallback without keeping the old image (local %s)",async local=>{
+ const doc=physicalFixture(),cover={...standardCovering(doc,"S0",{x:200,y:60},"Оплётка","old"),style:{texture:"Metal049A" as const,textureRotation:15}};
+ const before={...doc,drawingDocuments:{tables:[],leaders:[],bomOrder:[],coveringLibrary:{textures:[],defaults:local?{"heat-shrink":{texture:"none" as const}}:{}}},physicalTopology:{...doc.physicalTopology!,coverings:[cover]}};
+ const list=vi.fn(async()=>[]),pin=vi.fn(async()=>entry);
+ const prepared=await prepareGlobalCoverings(before,{type:"set-physical-topology",topology:{...before.physicalTopology,coverings:[{...cover,kind:"heat-shrink"}]}},list,pin);
+ expect(prepared.topology.coverings![0]!.style).toMatchObject({texture:local?"none":"auto",textureRotation:15});
+ expect(list).toHaveBeenCalledTimes(local?0:1);expect(pin).not.toHaveBeenCalled();
+});
+
+it("does not return a partially changed type when material download fails",async()=>{
+ const doc=physicalFixture(),cover=standardCovering(doc,"S0",{x:200,y:60},"Оплётка","old");
+ const before={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[cover]}};
+ await expect(prepareGlobalCoverings(before,{type:"set-physical-topology",topology:{...before.physicalTopology,coverings:[{...cover,kind:"heat-shrink"}]}},async()=>[material],async()=>{throw new Error("offline");})).rejects.toThrow("offline");
+ expect(before.physicalTopology.coverings[0]).toBe(cover);
+});

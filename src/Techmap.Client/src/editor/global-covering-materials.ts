@@ -6,17 +6,29 @@ import {coveringKind,type PhysicalCovering} from "./physical-coverings";
 import type {HarnessDesignDocument} from "./model";
 import type {EditorCommand} from "./commands";
 import type {CoveringTextureEntry} from "./covering-library";
+import {applyCoveringPreference} from "./covering-library";
 export function applyGlobalMaterial(cover:PhysicalCovering,material:GlobalMaterial,entry:CoveringTextureEntry):PhysicalCovering {
- return {...cover,style:{...cover.style,texture:`asset:${entry.sha256}`,lineColor:material.lineColor,lineWidth:material.lineWidth,textureScale:material.textureScale,textureRotation:material.textureAngle,textureTint:material.tint},color:material.tint};
+ return {...cover,style:{...cover.style,texture:`asset:${entry.sha256}`,lineColor:material.lineColor,lineWidth:material.lineWidth,textureScale:material.textureScale,textureRotation:material.textureAngle,textureTint:material.tint}};
 }
-/** Resolve only newly created coverings. Existing document preferences explicitly override global defaults. */
+/** A deliberate type change resolves its new material just like placement.
+ * Geometry-only edits never refresh an existing, pinned texture. */
+export function coveringMaterialChanged(document:HarnessDesignDocument,cover:PhysicalCovering):boolean {
+ const previous=document.physicalTopology?.coverings?.find(c=>c.id===cover.id);
+ return !previous||coveringKind(previous)!==coveringKind(cover);
+}
 export async function prepareGlobalCoverings(document:HarnessDesignDocument,command:Extract<EditorCommand,{type:"set-physical-topology"}>,list:()=>Promise<GlobalMaterial[]>,pin:(material:GlobalMaterial)=>Promise<CoveringTextureEntry>):Promise<typeof command> {
- const oldIds=new Set(document.physicalTopology?.coverings?.map(c=>c.id));
- const added=(command.topology.coverings??[]).filter(c=>!oldIds.has(c.id)&&!document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(c)]);
- if(!added.length)return command;
- const materials=await list(),entries:CoveringTextureEntry[]=[],replacements=new Map<string,PhysicalCovering>();
+ const changed=(command.topology.coverings??[]).filter(c=>coveringMaterialChanged(document,c));
+ const replacements=new Map<string,PhysicalCovering>();
+ for(const c of changed){
+  const previous=document.physicalTopology?.coverings?.find(old=>old.id===c.id);
+  if(previous)replacements.set(c.id,applyCoveringPreference({...c,style:{...c.style,texture:"auto"}},document.drawingDocuments?.coveringLibrary));
+ }
+ const replace=()=>({...command,topology:{...command.topology,coverings:command.topology.coverings?.map(c=>replacements.get(c.id)??c)}});
+ const added=changed.filter(c=>!document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(c)]);
+ if(!added.length)return replacements.size?replace():command;
+ const materials=await list(),entries:CoveringTextureEntry[]=[];
  for(const c of added){const material=materials.find(m=>m.coveringKind===coveringKind(c));if(!material)continue;const entry=await pin(material);entries.push(entry);replacements.set(c.id,applyGlobalMaterial(c,material,entry));}
- if(!entries.length)return command;
+ if(!entries.length)return replacements.size?replace():command;
  const library=document.drawingDocuments?.coveringLibrary??{textures:[],defaults:{}};
  return {...command,coveringLibrary:{...library,textures:[...new Map([...library.textures,...entries].map(e=>[e.sha256,e])).values()]},topology:{...command.topology,coverings:command.topology.coverings!.map(c=>replacements.get(c.id)??c)}};
 }
