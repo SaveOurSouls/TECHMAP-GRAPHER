@@ -3,8 +3,9 @@ import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
 import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
-import { drawingBendRadius, drawingRouteSection, projectOntoDrawingRoute } from "./drawing-route-path";
+import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
+import { pipeBundleProjectionStops, projectPipeBundlePoint } from "./pipe-bundle-projection";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number }
@@ -23,7 +24,14 @@ export function offsetPolyline(points:readonly Point[],offsets:readonly number[]
 
 export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[] {
  const topology=document.physicalTopology;if(!topology)return [];
- const scale=drawingPhysicalScale(document),coverings=topology.coverings??[];
+ const scale=drawingPhysicalScale(document),sourceCoverings=topology.coverings??[];
+ // Physical stacking of ordinary coatings is authored by array order. Bundle
+ // shells are painted after their contained groups regardless of save order.
+ const coverings:PhysicalCovering[]=sourceCoverings.filter(c=>!c.bundle),seen=new Set(coverings.map(c=>c.id));
+ const addBundle=(covering:PhysicalCovering)=>{if(seen.has(covering.id))return;seen.add(covering.id);
+   for(const member of covering.bundle?.members??[])if(member.kind==='covering'){const inner=sourceCoverings.find(c=>c.id===member.id);if(inner)addBundle(inner);}
+   coverings.push(covering);};
+ for(const covering of sourceCoverings)if(covering.bundle)addBundle(covering);
  const bundleSections=pipeBundleSections(document);
  const supportsBySegment=new Map<string,WidthSupport[]>();
  return coverings.map((covering,order)=>{
@@ -51,9 +59,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const baseProfile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
    const profile=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],.25*scale);
    ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
-   const stops=[...profile.map(p=>route.before+p.at),...coveringControlFractions(document,s.segmentId).map(f=>route.before+f*route.length)];
+   const stops=[...profile.map(p=>route.before+p.at),...[...coveringControlFractions(document,s.segmentId),...pipeBundleProjectionStops(document,s.segmentId,covering.id)].map(f=>route.before+f*route.length)];
    const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
-   const centerline=display.map(s=>s.point);if(centerline.length<2)continue;
+   const centerline=display.map(p=>projectPipeBundlePoint(document,s.segmentId,(p.distance-route.before)/route.length,p.point,covering.id));if(centerline.length<2)continue;
    const widths=display.map(s=>profileHalfWidth(profile,s.distance-route.before));
    for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
@@ -68,7 +76,19 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
 export function moveCovering(document:HarnessDesignDocument,id:string,spanIndex:number,part:CoveringDragPart,start:Point,point:Point,tolerance=10):PhysicalCovering|null {
  const c=document.physicalTopology?.coverings?.find(c=>c.id===id),original=c?.spans[spanIndex];if(!c||!original)return null;
  const route=coveringRoute(document,original.segmentId);if(!route)return null;
- const s=resolvedCoveringSpan(document,original),project=(p:Point)=>(projectOntoDrawingRoute(route.points,drawingBendRadius(document),p)-route.before)/route.length;
+ const s=resolvedCoveringSpan(document,original);
+ const display=drawingRouteSection(route.points,drawingBendRadius(document),0,route.total,
+   pipeBundleProjectionStops(document,original.segmentId,c.id).map(f=>route.before+f*route.length))
+   .map(p=>({distance:p.distance,point:projectPipeBundlePoint(document,original.segmentId,(p.distance-route.before)/route.length,p.point,c.id)}));
+ const project=(point:Point)=>{
+   let nearest=Infinity,at=0;
+   for(let i=1;i<display.length;i++){const a=display[i-1]!,b=display[i]!,dx=b.point.x-a.point.x,dy=b.point.y-a.point.y;
+     const t=Math.max(0,Math.min(1,((point.x-a.point.x)*dx+(point.y-a.point.y)*dy)/(dx*dx+dy*dy||1)));
+     const distance=Math.hypot(point.x-a.point.x-t*dx,point.y-a.point.y-t*dy);
+     if(distance<nearest){nearest=distance;at=a.distance+(b.distance-a.distance)*t;}
+   }
+   return (at-route.before)/route.length;
+ };
  const delta=project(point)-project(start),minimum=Math.min(.001,(s.to-s.from)/4);
  let from=s.from,to=s.to,fromAnchor=original.fromAnchor,toAnchor=original.toAnchor;
  if(part==="body"){

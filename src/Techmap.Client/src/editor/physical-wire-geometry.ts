@@ -2,6 +2,8 @@ import type { HarnessDesignDocument, Point } from "./model";
 import { physicalSegmentPoints, physicalContactTail } from "./physical-geometry";
 import { segmentWireLanes } from "./drawing-thickness";
 import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline } from "./physical-coverings";
+import { hasPipeBundleProjection, pipeBundleDisplaySamples } from "./pipe-bundle-projection";
+import { drawingBendRadius, drawingRouteHitPoints } from "./drawing-route-path";
 
 /** Conductors follow the pipe centreline exactly; do not apply another angle snap. */
 export function physicalWirePoints(document: HarnessDesignDocument, wireId: string, start: Point, end: Point): Point[] | null {
@@ -29,11 +31,12 @@ const offsetPolyline=(points:readonly Point[],offsets:readonly number[]):Point[]
 export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
  const paths:Point[][]=[];
+ const projected=route.steps.some(step=>hasPipeBundleProjection(document,step.segmentId));
  for(const step of route.steps){
   const segment=t.segments.find(s=>s.id===step.segmentId)!;
   if(segment.showWires===false)continue;
   const offset=segmentWireLanes(document,segment.id).find(l=>l.id===wireId)?.offset??0;
-  const points=physicalSegmentPoints(document,segment);
+  const points=pipeBundleDisplaySamples(document,segment.id)?.map(s=>s.point)??(projected?drawingRouteHitPoints(physicalSegmentPoints(document,segment),drawingBendRadius(document)):physicalSegmentPoints(document,segment));
   const lane=offsetPolyline(points,points.map(()=>offset));
   if(step.reverse)lane.reverse();paths.push(lane);
  }
@@ -57,5 +60,7 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const toNode=t.nodes.find(n=>n.id===(last.reverse?t.segments.find(s=>s.id===last.segmentId)!.from:t.segments.find(s=>s.id===last.segmentId)!.to))!;
  const fromTail=wireExitPath(document,first.segmentId,first.reverse?"to":"from",wireId,wire.from.contactId,start);
  const toTail=wireExitPath(document,last.segmentId,last.reverse?"from":"to",wireId,wire.to.contactId,end);
- return [fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from),...paths,toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse()];
+ const startPath=fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from);
+ const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
+ return [projected?drawingRouteHitPoints(startPath,drawingBendRadius(document)):startPath,...paths,projected?drawingRouteHitPoints(endPath,drawingBendRadius(document)):endPath];
 }

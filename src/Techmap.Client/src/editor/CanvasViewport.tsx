@@ -948,6 +948,7 @@ export function hitTestWireRoutePoint(
 
 export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
   if(object.kind!=="physical-segment")return [];
+  if(object.pipe?.midpoints)return object.pipe.midpoints.map((point,index)=>({point,index}));
   const points=[object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
   return points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+points[i]!.x)/2,y:(p.y+points[i]!.y)/2}}));
 }

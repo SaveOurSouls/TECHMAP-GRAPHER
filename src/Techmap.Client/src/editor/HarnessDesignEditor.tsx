@@ -1,6 +1,8 @@
 import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { physicalTopologyScene } from "./physical-scene";
+import { hasPipeBundleProjection, unprojectPipeBundleEdit, pipeBundleNodePoint } from "./pipe-bundle-projection";
+import { physicalEditablePoints } from "./physical-editing";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
@@ -445,7 +447,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
+      ...(view === "drawing" ? {routeRadius:document.physicalTopology?.routes.find(r=>r.wireId===wire.id)?.steps.some(s=>hasPipeBundleProjection(document,s.segmentId))?0:drawingBendRadius(document)} : {}),
       ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
@@ -932,7 +934,11 @@ export function HarnessDesignEditor({
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб Э4."};}
     }
     if(pipePreview&&history.present.physicalTopology) {
-      try{return {document:applyEditorCommand(history.present,{type:"edit-physical-bend",segmentId:pipePreview.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
+      try{const segment=history.present.physicalTopology.segments.find(s=>s.id===pipePreview.id)!;
+        const points=physicalEditablePoints(history.present,segment),i=pipePreview.index+1;
+        const original=pipePreview.insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
+        const position=unprojectPipeBundleEdit(history.present,pipePreview.id,original,pipePreview.point);
+        return {document:applyEditorCommand(history.present,{type:"edit-physical-bend",segmentId:pipePreview.id,index:pipePreview.index,position,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб."};}
     }
     if (!movePreview) return { document: history.present, error: null };
@@ -942,7 +948,8 @@ export function HarnessDesignEditor({
       const topology = history.present.physicalTopology;
       const node = topology?.nodes.find(n => n.id === movePreview.objectId);
       if (node && topology) {
-        return { document: applyEditorCommand(history.present, {type:"move-physical-node",nodeId:node.id,position:{x:movePreview.point.x+5,y:movePreview.point.y+5},mode:movePreview.mode??"carry"}), error:null };
+        const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
+        return { document: applyEditorCommand(history.present, {type:"move-physical-node",nodeId:node.id,position:{x:movePreview.point.x+5+original.x-display.x,y:movePreview.point.y+5+original.y-display.y},mode:movePreview.mode??"carry"}), error:null };
       }
       return { document: applyEditorCommand(history.present, {
         type: "move-connector",
@@ -1733,7 +1740,8 @@ export function HarnessDesignEditor({
           if(annotation){run({type:"set-drawing-documents",documents:annotation});return;}
           const topology = history.present.physicalTopology;
           const node = topology?.nodes.find(n => n.id === objectId);
-          if (topology && node) { run({type:"move-physical-node",nodeId:node.id,position:{x:point.x+5,y:point.y+5},mode}); }
+          if (topology && node) { const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
+            run({type:"move-physical-node",nodeId:node.id,position:{x:point.x+5+original.x-display.x,y:point.y+5+original.y-display.y},mode}); }
           else run({type:"move-connector",connectorId:objectId,view,position:point,physicalDragMode:mode});
         }}
         onPipeIntervalSelect={(id,from,to)=>setSelectedPipeInterval({id,from,to})}
@@ -1906,7 +1914,9 @@ export function HarnessDesignEditor({
           if(view==="e4"){run({type:"edit-e4-bend",wireId,index:routeIndex,position:point,mode,insert});return;}
           const topology = history.present.physicalTopology;
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { run({type:"edit-physical-bend",segmentId:wireId,index:routeIndex,position:point,mode,insert}); return; }
+          if (topology && segment) { const points=physicalEditablePoints(history.present,segment),i=routeIndex+1;
+            const original=insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
+            run({type:"edit-physical-bend",segmentId:wireId,index:routeIndex,position:unprojectPipeBundleEdit(history.present,wireId,original,point),mode,insert}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);
