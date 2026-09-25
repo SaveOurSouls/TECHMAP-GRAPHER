@@ -1,0 +1,338 @@
+[
+  {
+    "name": "ansi31",
+    "sha": "94cd5025a67e7c60115eba1252b625ce86be5ff3",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi31.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi31.pat",
+    "text": "*ANSI31,ANSI31\n45, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "ansi32",
+    "sha": "ba787b0c9531963c71818041cec9a4f87da6fd94",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi32.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi32.pat",
+    "text": "*ANSI32,ANSI32\n45, 0,0, 0,9.525\n45, 4.49013,0, 0,9.525\n"
+  },
+  {
+    "name": "ansi33",
+    "sha": "c4e0f330a6dd1a6f41d95c53b01e42fd8e00e704",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi33.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi33.pat",
+    "text": "*ANSI33,ANSI33\n45, 0,0, 0,6.35\n45, 4.49013,0, 0,6.35, 3.175,-1.5875\n"
+  },
+  {
+    "name": "ansi34",
+    "sha": "733e248cafa06d6f361351dc12bbf5a572f7d685",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi34.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi34.pat",
+    "text": "*ANSI34,ANSI34\n45, 0,0, 0,19.05\n45, 4.49013,0, 0,19.05\n45, 8.98026,0, 0,19.05\n45, 13.4704,0, 0,19.05\n"
+  },
+  {
+    "name": "ansi35",
+    "sha": "cc658f5114c27195974302aea74912c5c302875d",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi35.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi35.pat",
+    "text": "*ANSI35,ANSI35\n45, 0,0, 0,6.35\n45, 4.49013,0, 0,6.35, 7.9375,-1.5875,0,-1.5875\n"
+  },
+  {
+    "name": "ansi36",
+    "sha": "f95e3eaba3d4254b7c84f6b1a4d202983b4cd48e",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi36.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi36.pat",
+    "text": "*ANSI36,ANSI36\n45, 0,0, 5.55625,3.175, 7.9375,-1.5875,0,-1.5875\n"
+  },
+  {
+    "name": "ansi37",
+    "sha": "228bbaecb140640508f337619efd5eb17a14a5bf",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi37.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi37.pat",
+    "text": "*ANSI37,ANSI37\n45, 0,0, 0,3.175\n135, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "ansi38",
+    "sha": "99ff067223643f71f18be2403a20b26d27a38288",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi38.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi38.pat",
+    "text": "*ANSI38,ANSI38\n45, 0,0, 0,3.175\n135, 0,0, 6.35,3.175, 7.9375,-4.7625\n"
+  },
+  {
+    "name": "brass",
+    "sha": "ebaf52045f340d5e2ec75bf1b47f5bf5d1b53437",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brass.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brass.pat",
+    "text": "*BRASS,BRASS\n0, 0,0, 0,6.35\n0, 0,3.175, 0,6.35, 3.175,-1.5875\n"
+  },
+  {
+    "name": "brick",
+    "sha": "a8e2e9a076f15816efabb5105bf3a5d27f2772ea",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brick.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brick.pat",
+    "text": "*BRICK,BRICK\n0, 0,0, 0,6.35\n90, 0,0, 0,12.7, 6.35,-6.35\n90, 6.35,0, 0,12.7, -6.35,6.35\n"
+  },
+  {
+    "name": "brstone",
+    "sha": "532d79f351b6adafa2130fc600936b05ceeb64d8",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brstone.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brstone.pat",
+    "text": "*BRSTONE,BRSTONE\n0, 0,0, 0,8.382\n90, 22.86,0, 8.382,12.7, 8.382,-8.382\n90, 20.32,0, 8.382,12.7, 8.382,-8.382\n0, 22.86,1.397, 12.7,8.382, -22.86,2.54\n0, 22.86,2.794, 12.7,8.382, -22.86,2.54\n0, 22.86,4.191, 12.7,8.382, -22.86,2.54\n0, 22.86,5.588, 12.7,8.382, -22.86,2.54\n0, 22.86,6.985, 12.7,8.382, -22.86,2.54\n"
+  },
+  {
+    "name": "clay",
+    "sha": "eb39ec276e2a96f6e5f781488ec74fa16f7d5a5a",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/clay.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/clay.pat",
+    "text": "*CLAY,CLAY\n0, 0,0, 0,4.7625\n0, 0,.79375, 0,4.7625\n0, 0,1.5875, 0,4.7625\n0, 0,3.175, 0,4.7625, 4.7625,-3.175\n"
+  },
+  {
+    "name": "cork",
+    "sha": "82c1831f5283a6fb083fde08cc423de96a22a5cd",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/cork.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/cork.pat",
+    "text": "*CORK,CORK\n0, 0,0, 0,3.175\n135, 1.5875,-1.5875, 0,8.98026, 4.49013,-4.49013\n135, 2.38125,-1.5875, 0,8.98026, 4.49013,-4.49013\n135, 3.175,-1.5875, 0,8.98026, 4.49013,-4.49013\n"
+  },
+  {
+    "name": "dolmit",
+    "sha": "c0e86fecf2a0a27bbe9c99ad9a597f74aa5a578c",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dolmit.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dolmit.pat",
+    "text": "*DOLMIT,DOLMIT\n0, 0,0, 0,6.35\n45, 0,0, 0,17.9605, 8.98026,-17.9605\n"
+  },
+  {
+    "name": "earth",
+    "sha": "0abec10b2c113367f7dbfa3c9becd1ffa35a89dd",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/earth.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/earth.pat",
+    "text": "*EARTH,EARTH\n0, 0,0, 6.35,6.35, 6.35,-6.35\n0, 0,2.38125, 6.35,6.35, 6.35,-6.35\n0, 0,4.7625, 6.35,6.35, 6.35,-6.35\n90, .79375,5.55625, 6.35,6.35, 6.35,-6.35\n90, 3.175,5.55625, 6.35,6.35, 6.35,-6.35\n90, 5.55625,5.55625, 6.35,6.35, 6.35,-6.35\n"
+  },
+  {
+    "name": "gravel",
+    "sha": "dd1a78697cc2638e4a186ee3d5846136d75d3a86",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/gravel.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/gravel.pat",
+    "text": "*GRAVEL,GRAVEL\n228.0128, 18.288,25.4, 305.851,1.88796, 3.41721,-338.305\n184.9697, 16.002,22.86, -305.855,1.1002, 5.86405,-580.54\n132.5104, 10.16,22.352, -377.595,1.56032, 4.13482,-409.347\n267.2737, .254,16.002, -508.633,1.20815, 5.34005,-528.664\n292.8337, 0,10.668, -330.198,1.23208, 5.23634,-518.398\n357.2737, 2.032,5.842, -508.633,1.20815, 5.34005,-528.664\n37.6942, 7.366,5.588, -416.59,.913587, 7.06194,-699.131\n72.2553, 12.954,9.906, 586.404,.967664, 6.6672,-660.053\n121.4296, 14.986,16.256, 387.712,1.20409, 5.35813,-530.455\n175.2364, 12.192,20.828, -280.544,2.10934, 6.11713,-299.739\n222.3974, 6.096,21.336, 413.481,.815543, 7.91078,-783.168\n138.8141, 25.4,15.748, 234.164,2.38943, 2.70005,-267.306\n171.4692, 23.368,17.526, -334.082,1.25595, 5.13682,-508.546\n225, 18.288,18.288, 17.9605,17.9605, 3.59209,-32.3289\n203.1986, 16.51,21.336, -136.743,3.33517, 1.93441,-191.506\n291.8014, 14.732,20.574, -80.1833,4.71665, 2.73566,-134.048\n30.9638, 15.748,18.034, 91.4773,4.35607, 4.4432,-143.663\n161.5651, 19.558,20.32, -56.2253,8.03219, 3.21287,-77.109\n16.3895, 0,20.574, 265.18,1.4334, 4.50088,-445.588\n70.3462, 4.318,21.844, -297.294,1.70858, 3.77599,-373.822\n293.1986, 19.558,25.4, -136.743,3.33517, 3.8688,-189.572\n343.6105, 21.082,21.844, -265.18,1.4334, 4.50088,-445.588\n339.444, 0,4.826, -136.751,2.97284, 4.34035,-212.677\n294.7751, 4.064,3.302, -306.904,1.77401, 3.63672,-360.036\n66.8014, 19.812,0, 136.743,3.33517, 3.8688,-189.572\n17.354, 21.336,3.556, -345.474,1.51524, 4.25783,-421.524\n69.444, 7.366,0, -136.751,2.97284, 2.17018,-214.848\n101.3099, 18.288,0, 104.608,4.98135, 1.29515,-128.22\n165.9638, 18.034,1.27, -80.0853,6.16041, 5.23634,-99.4905\n186.009, 12.954,2.54, -255.263,1.32949, 4.85267,-480.414\n303.6901, 15.748,15.748, -56.3575,7.04469, 3.66324,-87.9178\n353.1572, 17.78,12.7, 434.777,1.00876, 6.39557,-633.16\n60.9454, 24.13,11.938, -204.766,2.46708, 2.61508,-258.894\n90, 25.4,14.224, 25.4,25.4, 1.524,-23.876\n120.2564, 12.446,3.302, -204.773,1.82834, 3.52867,-349.339\n48.0128, 10.668,6.35, 305.851,1.88796, 6.83443,-334.888\n0, 15.24,11.43, 25.4,25.4, 6.604,-18.796\n325.3048, 21.844,11.43, -310.042,1.60645, 4.0161,-397.593\n254.0546, 25.146,9.144, 104.669,3.48897, 3.69829,-181.217\n207.646, 24.13,5.588, 545.36,1.07142, 6.02145,-596.125\n175.4261, 18.796,2.794, 331.174,1.01277, 6.37029,-630.658\n175.4261, 18.796,2.794, 331.174,1.01277, 6.37029,-630.658\n"
+  },
+  {
+    "name": "mudst",
+    "sha": "caa38b0ff6b13e6a937a89ef566a0d5b73adda5b",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/mudst.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/mudst.pat",
+    "text": "*MUDST,MUDST\n0, 0,0, 12.7,6.35, 6.35,-6.35,0,-6.35,0,-6.35\n"
+  },
+  {
+    "name": "plast",
+    "sha": "209eb849e3d0dbfe83fac25ef51750c751ddb44f",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/plast.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/plast.pat",
+    "text": "*PLAST,PLAST\n0, 0,0, 0,6.35\n0, 0,.79375, 0,6.35\n0, 0,1.5875, 0,6.35\n"
+  },
+  {
+    "name": "plasti",
+    "sha": "c9ffd62b53be2cf3c1a961ed7ca205aa7a04d6f3",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/plasti.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/plasti.pat",
+    "text": "*PLASTI,PLASTI\n0, 0,0, 0,6.35\n0, 0,.79375, 0,6.35\n0, 0,1.5875, 0,6.35\n0, 0,3.96875, 0,6.35\n"
+  },
+  {
+    "name": "steel",
+    "sha": "f0195e6065970cd540d154eead37afbce2a127ce",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/steel.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/steel.pat",
+    "text": "*STEEL,STEEL\n45, 0,0, 0,3.175\n45, 0,1.5875, 0,3.175\n"
+  },
+  {
+    "name": "ar-conc",
+    "sha": "53fb9114be969dbd33f8e3b2227ea2cb973b2d66",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-conc.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-conc.pat",
+    "text": "*AR-CONC,AR-CONC\n50, 0,0, 104.896,-149.807, 19.05,-209.55\n355, 0,0, -51.7604,187.258, 15.24,-167.64\n100.451, 15.182,-1.32825, 145.557,-176.27, 16.19,-178.09\n46.1842, 0,50.8, 157.343,-224.71, 28.575,-314.325\n96.6356, 22.5899,47.2965, 218.335,-264.405, 24.285,-267.135\n351.184, 0,50.8, 196.679,280.887, 22.86,-251.46\n21, 25.4,38.1, 104.896,-149.807, 19.05,-209.55\n326, 25.4,38.1, -51.7604,187.258, 15.24,-167.64\n71.4514, 38.0345,29.5779, 145.557,-176.27, 16.19,-178.09\n37.5, 0,0, 53.9242,65.2018, 0,-165.608,0,-170.18,0,-168.275\n7.5, 0,0, 79.3242,90.6018, 0,-97.028,0,-161.798,0,-64.135\n-32.5, -56.642,0, 117.434,68.0212, 0,-63.5,0,-198.12,0,-262.89\n-42.5, -82.042,0, 92.0344,118.821, 0,-82.55,0,-131.572,0,-186.69\n"
+  },
+  {
+    "name": "ar-sand",
+    "sha": "93979f3c31122b18478b4873fc817af3af56283a",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-sand.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-sand.pat",
+    "text": "*AR-SAND,AR-SAND\n37.5, 0,0, 28.5242,39.8018, 0,-38.608,0,-43.18,0,-41.275\n7.5, 0,0, 53.9242,65.2018, 0,-20.828,0,-34.798,0,-13.335\n-32.5, -31.242,0, 66.6344,42.6212, 0,-12.7,0,-45.72,0,-59.69\n-42.5, -31.242,0, 41.2344,68.0212, 0,-6.35,0,-29.972,0,-34.29\n"
+  },
+  {
+    "name": "ar-b816",
+    "sha": "ba65fcd9e0be25007cf30aebdef41dc500c4f7da",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b816.pat",
+    "text": "*AR-B816,AR-B816\n0, 0,0, 0,203.2\n90, 0,0, 203.2,203.2, 203.2,-203.2\n"
+  },
+  {
+    "name": "ar-b816c",
+    "sha": "f7e1e989f1605c14f979478a946a52188772de1c",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816c.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b816c.pat",
+    "text": "*AR-B816C,AR-B816C\n0, 0,0, 203.2,203.2, 396.875,-9.525\n0, -203.2,9.525, 203.2,203.2, 396.875,-9.525\n90, 0,0, 203.2,203.2, -212.725,193.675\n90, -9.525,0, 203.2,203.2, -212.725,193.675\n"
+  },
+  {
+    "name": "ar-b88",
+    "sha": "84e764ac338f8468f63e45a249b418e96ea1c2d1",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b88.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b88.pat",
+    "text": "*AR-B88,AR-B88\n0, 0,0, 0,203.2\n90, 0,0, 203.2,101.6, 203.2,-203.2\n"
+  },
+  {
+    "name": "ar-brelm",
+    "sha": "9ad692ee89ff1e91927850fe7750e2851a352e96",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brelm.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-brelm.pat",
+    "text": "*AR-BRELM,AR-BRELM\n0, 0,0, 0,135.484, 193.675,-9.525\n0, 0,57.15, 0,135.484, 193.675,-9.525\n0, 50.8,67.7418, 0,135.484, 92.075,-9.525\n0, 50.8,124.892, 0,135.484, 92.075,-9.525\n90, 0,0, 0,203.2, 57.15,-78.3336\n90, -9.525,0, 0,203.2, 57.15,-78.3336\n90, 50.8,67.7418, 0,101.6, 57.15,-78.3336\n90, 41.275,67.7418, 0,101.6, 57.15,-78.3336\n"
+  },
+  {
+    "name": "ar-brstd",
+    "sha": "1ee7a83a37b75b50afcd95357f4d52ec222776ed",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brstd.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-brstd.pat",
+    "text": "*AR-BRSTD,AR-BRSTD\n0, 0,0, 0,67.7418\n90, 0,0, 67.7418,101.6, 67.7418,-67.7418\n"
+  },
+  {
+    "name": "ar-hbone",
+    "sha": "9831108aae74817498d338ceb4b5d93374728836",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-hbone.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-hbone.pat",
+    "text": "*AR-HBONE,AR-HBONE\n45, 0,0, 101.6,101.6, 304.8,-101.6\n135, 71.842,71.842, 101.6,-101.6, 304.8,-101.6\n"
+  },
+  {
+    "name": "ar-parq1",
+    "sha": "d9a5501d7601d3b50f0240795ed90a28d92da2d4",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-parq1.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-parq1.pat",
+    "text": "*AR-PARQ1,AR-PARQ1\n90, 0,0, 304.8,304.8, 304.8,-304.8\n90, 50.8,0, 304.8,304.8, 304.8,-304.8\n90, 101.6,0, 304.8,304.8, 304.8,-304.8\n90, 152.4,0, 304.8,304.8, 304.8,-304.8\n90, 203.2,0, 304.8,304.8, 304.8,-304.8\n90, 254,0, 304.8,304.8, 304.8,-304.8\n90, 304.8,0, 304.8,304.8, 304.8,-304.8\n0, 0,304.8, 304.8,-304.8, 304.8,-304.8\n0, 0,355.6, 304.8,-304.8, 304.8,-304.8\n0, 0,406.4, 304.8,-304.8, 304.8,-304.8\n0, 0,457.2, 304.8,-304.8, 304.8,-304.8\n0, 0,508, 304.8,-304.8, 304.8,-304.8\n0, 0,558.8, 304.8,-304.8, 304.8,-304.8\n0, 0,609.6, 304.8,-304.8, 304.8,-304.8\n"
+  },
+  {
+    "name": "ar-rroof",
+    "sha": "796beaf2ff11c0869004430e1e3938b903323429",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rroof.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-rroof.pat",
+    "text": "*AR-RROOF,AR-RROOF\n0, 0,0, 55.88,25.4, 381,-50.8,127,-25.4\n0, 33.782,12.7, -25.4,33.782, 76.2,-8.382,152.4,-19.05\n0, 12.7,21.59, 132.08,17.018, 203.2,-35.56,101.6,-25.4\n"
+  },
+  {
+    "name": "ar-rshke",
+    "sha": "b17a94b2cd2fb7c192e5d38c1acf3d2ffead5014",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rshke.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-rshke.pat",
+    "text": "*AR-RSHKE,AR-RSHKE\n0, 0,0, 647.7,304.8, 152.4,-127,177.8,-76.2,228.6,-101.6\n0, 152.4,12.7, 647.7,304.8, 127,-482.6,101.6,-152.4\n0, 457.2,-19.05, 647.7,304.8, 76.2,-787.4\n90, 0,0, 304.8,215.9, 292.1,-927.1\n90, 152.4,0, 304.8,215.9, 285.75,-933.45\n90, 279.4,0, 304.8,215.9, 266.7,-952.5\n90, 457.2,-19.05, 304.8,215.9, 292.1,-927.1\n90, 533.4,-19.05, 304.8,215.9, 292.1,-927.1\n90, 762,0, 304.8,215.9, 279.4,-939.8\n"
+  },
+  {
+    "name": "jis_wood",
+    "sha": "834f1a83d827beda5be92c2619248cd5d1c04213",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_wood.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_wood.pat",
+    "text": "*JIS_WOOD,JIS_WOOD\n45, 0,0, 0,.70710678\n"
+  },
+  {
+    "name": "insul",
+    "sha": "40c6f939c957b2f1e8c66cd79d7b23660300a485",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/insul.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/insul.pat",
+    "text": "*INSUL,INSUL\n0, 0,0, 0,9.525\n0, 0,3.175, 0,9.525, 3.175,-3.175\n0, 0,6.35, 0,9.525, 3.175,-3.175\n"
+  },
+  {
+    "name": "flex",
+    "sha": "ed492d1d62971ddeb2f50967d700b25f32b529a5",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/flex.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/flex.pat",
+    "text": "*FLEX,FLEX\n0, 0,0, 0,6.35, 6.35,-6.35\n45, 6.35,0, 4.49013,4.49013, 1.5875,-5.80526,1.5875,-8.98026\n"
+  },
+  {
+    "name": "grass",
+    "sha": "8b847f8343d9430d9a7a4ffe339e75a62f9e0f94",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/grass.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/grass.pat",
+    "text": "*GRASS,GRASS\n90, 0,0, 17.9605,17.9605, 4.7625,-31.1585\n45, 0,0, 0,25.4, 4.7625,-20.6375\n135, 0,0, 0,25.4, 4.7625,-20.6375\n"
+  },
+  {
+    "name": "net",
+    "sha": "368310d6cff3c17363c66dc898ac1b28f3f89814",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/net.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/net.pat",
+    "text": "*NET,NET\n0, 0,0, 0,3.175\n90, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "net3",
+    "sha": "0fb8a8c76740cd63a5df8f79909d5802b01dc515",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/net3.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/net3.pat",
+    "text": "*NET3,NET3\n0, 0,0, 0,3.175\n60, 0,0, 0,3.175\n120, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "dots",
+    "sha": "730cefdcb628e265663aa896b8d7e83e1618b862",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dots.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dots.pat",
+    "text": "*DOTS,DOTS\n0, 0,0, .79375,1.5875, 0,-1.5875\n"
+  },
+  {
+    "name": "line",
+    "sha": "3734642cf543c5594fb60adf1ae44f05f02285f4",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/line.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/line.pat",
+    "text": "*LINE,LINE\n0, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "cross",
+    "sha": "ea087d8927dbcb97728432bf74766aa33a85025d",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/cross.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/cross.pat",
+    "text": "*CROSS,CROSS\n0, 0,0, 6.35,6.35, 3.175,-9.525\n90, 1.5875,-1.5875, 6.35,6.35, 3.175,-9.525\n"
+  },
+  {
+    "name": "dash",
+    "sha": "6070a8ce90bb3680c98992c27681295b4765159d",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dash.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dash.pat",
+    "text": "*DASH,DASH\n0, 0,0, 3.175,3.175, 3.175,-3.175\n"
+  },
+  {
+    "name": "angle",
+    "sha": "71af3e05c763b7a3bdd47dfbb30bcc8d63c51360",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/angle.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/angle.pat",
+    "text": "*ANGLE,ANGLE\n0, 0,0, 0,6.985, 5.08,-1.905\n90, 0,0, 0,6.985, 5.08,-1.905\n"
+  },
+  {
+    "name": "grate",
+    "sha": "3b60be9532df7cc78c2d30c5e5aa2109869c9396",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/grate.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/grate.pat",
+    "text": "*GRATE,GRATE\n0, 0,0, 0,.79375\n90, 0,0, 0,3.175\n"
+  },
+  {
+    "name": "hex",
+    "sha": "0642e67912c5b8c064d86124fbd176784b434b27",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hex.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hex.pat",
+    "text": "*HEX,HEX\n0, 0,0, 0,5.49926, 3.175,-6.35\n120, 0,0, 0,5.49926, 3.175,-6.35\n60, 3.175,0, 0,5.49926, 3.175,-6.35\n"
+  },
+  {
+    "name": "honey",
+    "sha": "ade6901564a66f24e43efa5e498ea811127c183f",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/honey.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/honey.pat",
+    "text": "*HONEY,HONEY\n0, 0,0, 4.7625,2.74963, 3.175,-6.35\n120, 0,0, 4.7625,2.74963, 3.175,-6.35\n60, 0,0, 4.7625,2.74963, -6.35,3.175\n"
+  },
+  {
+    "name": "square",
+    "sha": "b6b66aeb68752f2f843836765dc01288f3bd99de",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/square.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/square.pat",
+    "text": "*SQUARE,SQUARE\n0, 0,0, 0,3.175, 3.175,-3.175\n90, 0,0, 0,3.175, 3.175,-3.175\n"
+  },
+  {
+    "name": "triang",
+    "sha": "1fd6506407dc4695756d258cfde660e92b562184",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/triang.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/triang.pat",
+    "text": "*TRIANG,TRIANG\n60, 0,0, 4.7625,8.24889, 4.7625,-4.7625\n120, 0,0, 4.76250001,8.24889, 4.7625,-4.7625\n0, -2.38125,4.12445, 4.7625,8.24889, 4.7625,-4.7625\n"
+  },
+  {
+    "name": "zigzag",
+    "sha": "c1d8ec3a3fd4370f919d5ab638365fa69ce7d0c9",
+    "url": "https://github.com/qcad/qcad/blob/master/patterns/metric/zigzag.pat",
+    "raw_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/zigzag.pat",
+    "text": "*ZIGZAG,ZIGZAG\n0, 0,0, 3.175,3.175, 3.175,-3.175\n90, 3.175,0, 3.175,3.175, 3.175,-3.175\n"
+  }
+]

@@ -1,0 +1,2034 @@
+[
+  {
+    "name": "acad_iso02w100.pat",
+    "path": "patterns/metric/acad_iso02w100.pat",
+    "sha": "1cbfabb2f2fc4445812d7f52af9596c0d4363d1d",
+    "size": 50,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso02w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso02w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1cbfabb2f2fc4445812d7f52af9596c0d4363d1d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso02w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso02w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1cbfabb2f2fc4445812d7f52af9596c0d4363d1d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso02w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso03w100.pat",
+    "path": "patterns/metric/acad_iso03w100.pat",
+    "sha": "1ce939904e87ff627c692795c0ef45573d3ae45b",
+    "size": 51,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso03w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso03w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1ce939904e87ff627c692795c0ef45573d3ae45b",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso03w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso03w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1ce939904e87ff627c692795c0ef45573d3ae45b",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso03w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso04w100.pat",
+    "path": "patterns/metric/acad_iso04w100.pat",
+    "sha": "1c65dccd63fed0337d7dbf270e8019cb3024022e",
+    "size": 56,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso04w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso04w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1c65dccd63fed0337d7dbf270e8019cb3024022e",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso04w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso04w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1c65dccd63fed0337d7dbf270e8019cb3024022e",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso04w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso05w100.pat",
+    "path": "patterns/metric/acad_iso05w100.pat",
+    "sha": "e741e87c03642df767aedee3fb455d3af6c82b73",
+    "size": 62,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso05w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso05w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e741e87c03642df767aedee3fb455d3af6c82b73",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso05w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso05w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e741e87c03642df767aedee3fb455d3af6c82b73",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso05w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso06w100.pat",
+    "path": "patterns/metric/acad_iso06w100.pat",
+    "sha": "0f094160244b61ece4aa22468de9b07176b6c4be",
+    "size": 87,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso06w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso06w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0f094160244b61ece4aa22468de9b07176b6c4be",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso06w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso06w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0f094160244b61ece4aa22468de9b07176b6c4be",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso06w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso07w100.pat",
+    "path": "patterns/metric/acad_iso07w100.pat",
+    "sha": "2b25378750fe26f49300d7ddb11370f2efb02e5a",
+    "size": 50,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso07w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso07w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/2b25378750fe26f49300d7ddb11370f2efb02e5a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso07w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso07w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/2b25378750fe26f49300d7ddb11370f2efb02e5a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso07w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso08w100.pat",
+    "path": "patterns/metric/acad_iso08w100.pat",
+    "sha": "6e515e4c68c91db49ce2bce21d4265e5c15464fb",
+    "size": 55,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso08w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso08w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6e515e4c68c91db49ce2bce21d4265e5c15464fb",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso08w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso08w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6e515e4c68c91db49ce2bce21d4265e5c15464fb",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso08w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso09w100.pat",
+    "path": "patterns/metric/acad_iso09w100.pat",
+    "sha": "a4aeacfb6e16abdcc77eaeb10aa7031cc9e084a9",
+    "size": 60,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso09w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso09w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a4aeacfb6e16abdcc77eaeb10aa7031cc9e084a9",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso09w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso09w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a4aeacfb6e16abdcc77eaeb10aa7031cc9e084a9",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso09w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso10w100.pat",
+    "path": "patterns/metric/acad_iso10w100.pat",
+    "sha": "fd90bcd59a181905b1b164fcbd19e422335aa137",
+    "size": 56,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso10w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso10w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/fd90bcd59a181905b1b164fcbd19e422335aa137",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso10w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso10w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/fd90bcd59a181905b1b164fcbd19e422335aa137",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso10w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso11w100.pat",
+    "path": "patterns/metric/acad_iso11w100.pat",
+    "sha": "dc46e2abc6e65ef012917ef3a92ce5559e2b3557",
+    "size": 62,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso11w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso11w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/dc46e2abc6e65ef012917ef3a92ce5559e2b3557",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso11w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso11w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/dc46e2abc6e65ef012917ef3a92ce5559e2b3557",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso11w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso12w100.pat",
+    "path": "patterns/metric/acad_iso12w100.pat",
+    "sha": "bc0ab7385ffbe272efe84f2fab4719c2f477bbde",
+    "size": 62,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso12w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso12w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/bc0ab7385ffbe272efe84f2fab4719c2f477bbde",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso12w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso12w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/bc0ab7385ffbe272efe84f2fab4719c2f477bbde",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso12w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso13w100.pat",
+    "path": "patterns/metric/acad_iso13w100.pat",
+    "sha": "1bed0bab2c6c6ecaf36f852a0341719357932194",
+    "size": 89,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso13w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso13w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1bed0bab2c6c6ecaf36f852a0341719357932194",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso13w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso13w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1bed0bab2c6c6ecaf36f852a0341719357932194",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso13w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso14w100.pat",
+    "path": "patterns/metric/acad_iso14w100.pat",
+    "sha": "72941d99ee1eeef8ee8a5b27130f6e1c1528fe56",
+    "size": 87,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso14w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso14w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/72941d99ee1eeef8ee8a5b27130f6e1c1528fe56",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso14w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso14w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/72941d99ee1eeef8ee8a5b27130f6e1c1528fe56",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso14w100.pat"
+    }
+  },
+  {
+    "name": "acad_iso15w100.pat",
+    "path": "patterns/metric/acad_iso15w100.pat",
+    "sha": "79757ca033a8bb735ba1003c9a07d6601ae22478",
+    "size": 94,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso15w100.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso15w100.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/79757ca033a8bb735ba1003c9a07d6601ae22478",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/acad_iso15w100.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/acad_iso15w100.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/79757ca033a8bb735ba1003c9a07d6601ae22478",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/acad_iso15w100.pat"
+    }
+  },
+  {
+    "name": "angle.pat",
+    "path": "patterns/metric/angle.pat",
+    "sha": "71af3e05c763b7a3bdd47dfbb30bcc8d63c51360",
+    "size": 72,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/angle.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/angle.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/71af3e05c763b7a3bdd47dfbb30bcc8d63c51360",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/angle.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/angle.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/71af3e05c763b7a3bdd47dfbb30bcc8d63c51360",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/angle.pat"
+    }
+  },
+  {
+    "name": "ansi31.pat",
+    "path": "patterns/metric/ansi31.pat",
+    "sha": "94cd5025a67e7c60115eba1252b625ce86be5ff3",
+    "size": 32,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi31.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi31.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/94cd5025a67e7c60115eba1252b625ce86be5ff3",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi31.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi31.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/94cd5025a67e7c60115eba1252b625ce86be5ff3",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi31.pat"
+    }
+  },
+  {
+    "name": "ansi32.pat",
+    "path": "patterns/metric/ansi32.pat",
+    "sha": "ba787b0c9531963c71818041cec9a4f87da6fd94",
+    "size": 55,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi32.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi32.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ba787b0c9531963c71818041cec9a4f87da6fd94",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi32.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi32.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ba787b0c9531963c71818041cec9a4f87da6fd94",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi32.pat"
+    }
+  },
+  {
+    "name": "ansi33.pat",
+    "path": "patterns/metric/ansi33.pat",
+    "sha": "c4e0f330a6dd1a6f41d95c53b01e42fd8e00e704",
+    "size": 68,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi33.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi33.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c4e0f330a6dd1a6f41d95c53b01e42fd8e00e704",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi33.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi33.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c4e0f330a6dd1a6f41d95c53b01e42fd8e00e704",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi33.pat"
+    }
+  },
+  {
+    "name": "ansi34.pat",
+    "path": "patterns/metric/ansi34.pat",
+    "sha": "733e248cafa06d6f361351dc12bbf5a572f7d685",
+    "size": 101,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi34.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi34.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/733e248cafa06d6f361351dc12bbf5a572f7d685",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi34.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi34.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/733e248cafa06d6f361351dc12bbf5a572f7d685",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi34.pat"
+    }
+  },
+  {
+    "name": "ansi35.pat",
+    "path": "patterns/metric/ansi35.pat",
+    "sha": "cc658f5114c27195974302aea74912c5c302875d",
+    "size": 79,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi35.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi35.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/cc658f5114c27195974302aea74912c5c302875d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi35.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi35.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/cc658f5114c27195974302aea74912c5c302875d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi35.pat"
+    }
+  },
+  {
+    "name": "ansi36.pat",
+    "path": "patterns/metric/ansi36.pat",
+    "sha": "f95e3eaba3d4254b7c84f6b1a4d202983b4cd48e",
+    "size": 64,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi36.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi36.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/f95e3eaba3d4254b7c84f6b1a4d202983b4cd48e",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi36.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi36.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/f95e3eaba3d4254b7c84f6b1a4d202983b4cd48e",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi36.pat"
+    }
+  },
+  {
+    "name": "ansi37.pat",
+    "path": "patterns/metric/ansi37.pat",
+    "sha": "228bbaecb140640508f337619efd5eb17a14a5bf",
+    "size": 50,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi37.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi37.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/228bbaecb140640508f337619efd5eb17a14a5bf",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi37.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi37.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/228bbaecb140640508f337619efd5eb17a14a5bf",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi37.pat"
+    }
+  },
+  {
+    "name": "ansi38.pat",
+    "path": "patterns/metric/ansi38.pat",
+    "sha": "99ff067223643f71f18be2403a20b26d27a38288",
+    "size": 69,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi38.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi38.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/99ff067223643f71f18be2403a20b26d27a38288",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ansi38.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ansi38.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/99ff067223643f71f18be2403a20b26d27a38288",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ansi38.pat"
+    }
+  },
+  {
+    "name": "ar-b816.pat",
+    "path": "patterns/metric/ar-b816.pat",
+    "sha": "ba65fcd9e0be25007cf30aebdef41dc500c4f7da",
+    "size": 68,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b816.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ba65fcd9e0be25007cf30aebdef41dc500c4f7da",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b816.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b816.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ba65fcd9e0be25007cf30aebdef41dc500c4f7da",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816.pat"
+    }
+  },
+  {
+    "name": "ar-b816c.pat",
+    "path": "patterns/metric/ar-b816c.pat",
+    "sha": "f7e1e989f1605c14f979478a946a52188772de1c",
+    "size": 183,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b816c.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816c.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/f7e1e989f1605c14f979478a946a52188772de1c",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b816c.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b816c.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/f7e1e989f1605c14f979478a946a52188772de1c",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b816c.pat"
+    }
+  },
+  {
+    "name": "ar-b88.pat",
+    "path": "patterns/metric/ar-b88.pat",
+    "sha": "84e764ac338f8468f63e45a249b418e96ea1c2d1",
+    "size": 66,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b88.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b88.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/84e764ac338f8468f63e45a249b418e96ea1c2d1",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-b88.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-b88.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/84e764ac338f8468f63e45a249b418e96ea1c2d1",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-b88.pat"
+    }
+  },
+  {
+    "name": "ar-brelm.pat",
+    "path": "patterns/metric/ar-brelm.pat",
+    "sha": "9ad692ee89ff1e91927850fe7750e2851a352e96",
+    "size": 332,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-brelm.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brelm.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/9ad692ee89ff1e91927850fe7750e2851a352e96",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-brelm.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-brelm.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/9ad692ee89ff1e91927850fe7750e2851a352e96",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brelm.pat"
+    }
+  },
+  {
+    "name": "ar-brstd.pat",
+    "path": "patterns/metric/ar-brstd.pat",
+    "sha": "1ee7a83a37b75b50afcd95357f4d52ec222776ed",
+    "size": 78,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-brstd.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brstd.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1ee7a83a37b75b50afcd95357f4d52ec222776ed",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-brstd.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-brstd.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1ee7a83a37b75b50afcd95357f4d52ec222776ed",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-brstd.pat"
+    }
+  },
+  {
+    "name": "ar-conc-01.pat",
+    "path": "patterns/metric/ar-conc-01.pat",
+    "sha": "491478bde997796b59dedcf51fe1534f2f6eda5a",
+    "size": 24493,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-conc-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-conc-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/491478bde997796b59dedcf51fe1534f2f6eda5a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-conc-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-conc-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/491478bde997796b59dedcf51fe1534f2f6eda5a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-conc-01.pat"
+    }
+  },
+  {
+    "name": "ar-conc.pat",
+    "path": "patterns/metric/ar-conc.pat",
+    "sha": "53fb9114be969dbd33f8e3b2227ea2cb973b2d66",
+    "size": 713,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-conc.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-conc.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/53fb9114be969dbd33f8e3b2227ea2cb973b2d66",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-conc.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-conc.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/53fb9114be969dbd33f8e3b2227ea2cb973b2d66",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-conc.pat"
+    }
+  },
+  {
+    "name": "ar-hbone.pat",
+    "path": "patterns/metric/ar-hbone.pat",
+    "sha": "9831108aae74817498d338ceb4b5d93374728836",
+    "size": 101,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-hbone.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-hbone.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/9831108aae74817498d338ceb4b5d93374728836",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-hbone.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-hbone.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/9831108aae74817498d338ceb4b5d93374728836",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-hbone.pat"
+    }
+  },
+  {
+    "name": "ar-parq1.pat",
+    "path": "patterns/metric/ar-parq1.pat",
+    "sha": "d9a5501d7601d3b50f0240795ed90a28d92da2d4",
+    "size": 556,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-parq1.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-parq1.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/d9a5501d7601d3b50f0240795ed90a28d92da2d4",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-parq1.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-parq1.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/d9a5501d7601d3b50f0240795ed90a28d92da2d4",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-parq1.pat"
+    }
+  },
+  {
+    "name": "ar-rroof.pat",
+    "path": "patterns/metric/ar-rroof.pat",
+    "sha": "796beaf2ff11c0869004430e1e3938b903323429",
+    "size": 169,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-rroof.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rroof.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/796beaf2ff11c0869004430e1e3938b903323429",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-rroof.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-rroof.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/796beaf2ff11c0869004430e1e3938b903323429",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rroof.pat"
+    }
+  },
+  {
+    "name": "ar-rshke.pat",
+    "path": "patterns/metric/ar-rshke.pat",
+    "sha": "b17a94b2cd2fb7c192e5d38c1acf3d2ffead5014",
+    "size": 410,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-rshke.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rshke.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/b17a94b2cd2fb7c192e5d38c1acf3d2ffead5014",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-rshke.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-rshke.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/b17a94b2cd2fb7c192e5d38c1acf3d2ffead5014",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-rshke.pat"
+    }
+  },
+  {
+    "name": "ar-sand.pat",
+    "path": "patterns/metric/ar-sand.pat",
+    "sha": "93979f3c31122b18478b4873fc817af3af56283a",
+    "size": 254,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-sand.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-sand.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/93979f3c31122b18478b4873fc817af3af56283a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/ar-sand.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/ar-sand.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/93979f3c31122b18478b4873fc817af3af56283a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/ar-sand.pat"
+    }
+  },
+  {
+    "name": "barbwire.pat",
+    "path": "patterns/metric/barbwire.pat",
+    "sha": "88131ef65577becc33a504e9b236520f0d6e9f19",
+    "size": 2962,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/barbwire.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/barbwire.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/88131ef65577becc33a504e9b236520f0d6e9f19",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/barbwire.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/barbwire.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/88131ef65577becc33a504e9b236520f0d6e9f19",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/barbwire.pat"
+    }
+  },
+  {
+    "name": "blocks-01.pat",
+    "path": "patterns/metric/blocks-01.pat",
+    "sha": "987d1998321f53a93d844f2f8048e32d381c7ea9",
+    "size": 1649,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/blocks-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/blocks-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/987d1998321f53a93d844f2f8048e32d381c7ea9",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/blocks-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/blocks-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/987d1998321f53a93d844f2f8048e32d381c7ea9",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/blocks-01.pat"
+    }
+  },
+  {
+    "name": "blocks-02.pat",
+    "path": "patterns/metric/blocks-02.pat",
+    "sha": "b24151ff689985e1a78ea6265d0ee81b63bc566f",
+    "size": 1318,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/blocks-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/blocks-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/b24151ff689985e1a78ea6265d0ee81b63bc566f",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/blocks-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/blocks-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/b24151ff689985e1a78ea6265d0ee81b63bc566f",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/blocks-02.pat"
+    }
+  },
+  {
+    "name": "box-overlap.pat",
+    "path": "patterns/metric/box-overlap.pat",
+    "sha": "df8cb0cf6130fbbe2afbedf80c95b2c39d0ab4ee",
+    "size": 389,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/box-overlap.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/box-overlap.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/df8cb0cf6130fbbe2afbedf80c95b2c39d0ab4ee",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/box-overlap.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/box-overlap.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/df8cb0cf6130fbbe2afbedf80c95b2c39d0ab4ee",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/box-overlap.pat"
+    }
+  },
+  {
+    "name": "box.pat",
+    "path": "patterns/metric/box.pat",
+    "sha": "002e3c8d0a0e0210003aceab8e45abdfcef48c48",
+    "size": 225,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/box.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/box.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/002e3c8d0a0e0210003aceab8e45abdfcef48c48",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/box.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/box.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/002e3c8d0a0e0210003aceab8e45abdfcef48c48",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/box.pat"
+    }
+  },
+  {
+    "name": "boxjoin-01.pat",
+    "path": "patterns/metric/boxjoin-01.pat",
+    "sha": "65f30e6036db034e626cf7c708fe01d603f220fd",
+    "size": 438,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/boxjoin-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/boxjoin-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/65f30e6036db034e626cf7c708fe01d603f220fd",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/boxjoin-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/boxjoin-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/65f30e6036db034e626cf7c708fe01d603f220fd",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/boxjoin-01.pat"
+    }
+  },
+  {
+    "name": "boxjoin-02.pat",
+    "path": "patterns/metric/boxjoin-02.pat",
+    "sha": "bd24174ef8fb5c7b2aa92ab5e8a886c2c80cf959",
+    "size": 607,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/boxjoin-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/boxjoin-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/bd24174ef8fb5c7b2aa92ab5e8a886c2c80cf959",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/boxjoin-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/boxjoin-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/bd24174ef8fb5c7b2aa92ab5e8a886c2c80cf959",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/boxjoin-02.pat"
+    }
+  },
+  {
+    "name": "brass.pat",
+    "path": "patterns/metric/brass.pat",
+    "sha": "ebaf52045f340d5e2ec75bf1b47f5bf5d1b53437",
+    "size": 62,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brass.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brass.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ebaf52045f340d5e2ec75bf1b47f5bf5d1b53437",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brass.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brass.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ebaf52045f340d5e2ec75bf1b47f5bf5d1b53437",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/brass.pat"
+    }
+  },
+  {
+    "name": "brick.pat",
+    "path": "patterns/metric/brick.pat",
+    "sha": "a8e2e9a076f15816efabb5105bf3a5d27f2772ea",
+    "size": 87,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brick.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brick.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a8e2e9a076f15816efabb5105bf3a5d27f2772ea",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brick.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brick.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a8e2e9a076f15816efabb5105bf3a5d27f2772ea",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/brick.pat"
+    }
+  },
+  {
+    "name": "brstone.pat",
+    "path": "patterns/metric/brstone.pat",
+    "sha": "532d79f351b6adafa2130fc600936b05ceeb64d8",
+    "size": 309,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brstone.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/brstone.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/532d79f351b6adafa2130fc600936b05ceeb64d8",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/brstone.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/brstone.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/532d79f351b6adafa2130fc600936b05ceeb64d8",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/brstone.pat"
+    }
+  },
+  {
+    "name": "bubbles-01.pat",
+    "path": "patterns/metric/bubbles-01.pat",
+    "sha": "e626c8851af90ecab404c21f3f4628b230ddb14b",
+    "size": 17320,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e626c8851af90ecab404c21f3f4628b230ddb14b",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/bubbles-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e626c8851af90ecab404c21f3f4628b230ddb14b",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-01.pat"
+    }
+  },
+  {
+    "name": "bubbles-02.pat",
+    "path": "patterns/metric/bubbles-02.pat",
+    "sha": "bc95bd31da6cb3edd1bfa120cbcbad9886fdabdf",
+    "size": 11996,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/bc95bd31da6cb3edd1bfa120cbcbad9886fdabdf",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/bubbles-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/bc95bd31da6cb3edd1bfa120cbcbad9886fdabdf",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-02.pat"
+    }
+  },
+  {
+    "name": "bubbles-03.pat",
+    "path": "patterns/metric/bubbles-03.pat",
+    "sha": "a2820f09fbd94db6b9a6b7d02515fa6c0b6618af",
+    "size": 8587,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-03.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-03.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a2820f09fbd94db6b9a6b7d02515fa6c0b6618af",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/bubbles-03.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/bubbles-03.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a2820f09fbd94db6b9a6b7d02515fa6c0b6618af",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/bubbles-03.pat"
+    }
+  },
+  {
+    "name": "celtic-01.pat",
+    "path": "patterns/metric/celtic-01.pat",
+    "sha": "9977a351bfb55320f55274b24381aad14fa8c526",
+    "size": 6185,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/9977a351bfb55320f55274b24381aad14fa8c526",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/celtic-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/9977a351bfb55320f55274b24381aad14fa8c526",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-01.pat"
+    }
+  },
+  {
+    "name": "celtic-02.pat",
+    "path": "patterns/metric/celtic-02.pat",
+    "sha": "e8e636ccaf0b84640cb49069889e7652f4477d84",
+    "size": 3363,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e8e636ccaf0b84640cb49069889e7652f4477d84",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/celtic-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e8e636ccaf0b84640cb49069889e7652f4477d84",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-02.pat"
+    }
+  },
+  {
+    "name": "celtic-03.pat",
+    "path": "patterns/metric/celtic-03.pat",
+    "sha": "bc65408023f905fd85956ac9d5cd9cc35d7d8936",
+    "size": 708,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-03.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-03.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/bc65408023f905fd85956ac9d5cd9cc35d7d8936",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/celtic-03.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-03.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/bc65408023f905fd85956ac9d5cd9cc35d7d8936",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-03.pat"
+    }
+  },
+  {
+    "name": "celtic-04.pat",
+    "path": "patterns/metric/celtic-04.pat",
+    "sha": "6c857f9abbc3e4c0e70ef62631e8d1557f9a4545",
+    "size": 840,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-04.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-04.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6c857f9abbc3e4c0e70ef62631e8d1557f9a4545",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/celtic-04.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/celtic-04.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6c857f9abbc3e4c0e70ef62631e8d1557f9a4545",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/celtic-04.pat"
+    }
+  },
+  {
+    "name": "circles-02.pat",
+    "path": "patterns/metric/circles-02.pat",
+    "sha": "d93d74b19f5277a81bd4040085d751e0a0cc4c87",
+    "size": 3822,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/circles-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/circles-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/d93d74b19f5277a81bd4040085d751e0a0cc4c87",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/circles-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/circles-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/d93d74b19f5277a81bd4040085d751e0a0cc4c87",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/circles-02.pat"
+    }
+  },
+  {
+    "name": "circles.pat",
+    "path": "patterns/metric/circles.pat",
+    "sha": "0444c6f97ac20013bcb01b3f88cbf59cede591d7",
+    "size": 1552,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/circles.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/circles.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0444c6f97ac20013bcb01b3f88cbf59cede591d7",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/circles.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/circles.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0444c6f97ac20013bcb01b3f88cbf59cede591d7",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/circles.pat"
+    }
+  },
+  {
+    "name": "clay.pat",
+    "path": "patterns/metric/clay.pat",
+    "sha": "eb39ec276e2a96f6e5f781488ec74fa16f7d5a5a",
+    "size": 108,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/clay.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/clay.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/eb39ec276e2a96f6e5f781488ec74fa16f7d5a5a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/clay.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/clay.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/eb39ec276e2a96f6e5f781488ec74fa16f7d5a5a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/clay.pat"
+    }
+  },
+  {
+    "name": "cork.pat",
+    "path": "patterns/metric/cork.pat",
+    "sha": "82c1831f5283a6fb083fde08cc423de96a22a5cd",
+    "size": 174,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/cork.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/cork.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/82c1831f5283a6fb083fde08cc423de96a22a5cd",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/cork.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/cork.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/82c1831f5283a6fb083fde08cc423de96a22a5cd",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/cork.pat"
+    }
+  },
+  {
+    "name": "cross.pat",
+    "path": "patterns/metric/cross.pat",
+    "sha": "ea087d8927dbcb97728432bf74766aa33a85025d",
+    "size": 89,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/cross.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/cross.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ea087d8927dbcb97728432bf74766aa33a85025d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/cross.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/cross.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ea087d8927dbcb97728432bf74766aa33a85025d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/cross.pat"
+    }
+  },
+  {
+    "name": "dash.pat",
+    "path": "patterns/metric/dash.pat",
+    "sha": "6070a8ce90bb3680c98992c27681295b4765159d",
+    "size": 45,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dash.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dash.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6070a8ce90bb3680c98992c27681295b4765159d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dash.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dash.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6070a8ce90bb3680c98992c27681295b4765159d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/dash.pat"
+    }
+  },
+  {
+    "name": "dolmit.pat",
+    "path": "patterns/metric/dolmit.pat",
+    "sha": "c0e86fecf2a0a27bbe9c99ad9a597f74aa5a578c",
+    "size": 67,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dolmit.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dolmit.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c0e86fecf2a0a27bbe9c99ad9a597f74aa5a578c",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dolmit.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dolmit.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c0e86fecf2a0a27bbe9c99ad9a597f74aa5a578c",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/dolmit.pat"
+    }
+  },
+  {
+    "name": "dots.pat",
+    "path": "patterns/metric/dots.pat",
+    "sha": "730cefdcb628e265663aa896b8d7e83e1618b862",
+    "size": 44,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dots.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/dots.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/730cefdcb628e265663aa896b8d7e83e1618b862",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/dots.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/dots.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/730cefdcb628e265663aa896b8d7e83e1618b862",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/dots.pat"
+    }
+  },
+  {
+    "name": "earth.pat",
+    "path": "patterns/metric/earth.pat",
+    "sha": "0abec10b2c113367f7dbfa3c9becd1ffa35a89dd",
+    "size": 240,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/earth.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/earth.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0abec10b2c113367f7dbfa3c9becd1ffa35a89dd",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/earth.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/earth.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0abec10b2c113367f7dbfa3c9becd1ffa35a89dd",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/earth.pat"
+    }
+  },
+  {
+    "name": "escher.pat",
+    "path": "patterns/metric/escher.pat",
+    "sha": "644a1b63d24821c961401a1285c9330684ea161f",
+    "size": 932,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/escher.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/escher.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/644a1b63d24821c961401a1285c9330684ea161f",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/escher.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/escher.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/644a1b63d24821c961401a1285c9330684ea161f",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/escher.pat"
+    }
+  },
+  {
+    "name": "explosion.pat",
+    "path": "patterns/metric/explosion.pat",
+    "sha": "64488f614f20d012c9662d2f1a6d467bc5392e14",
+    "size": 4302,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/explosion.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/explosion.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/64488f614f20d012c9662d2f1a6d467bc5392e14",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/explosion.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/explosion.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/64488f614f20d012c9662d2f1a6d467bc5392e14",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/explosion.pat"
+    }
+  },
+  {
+    "name": "flex.pat",
+    "path": "patterns/metric/flex.pat",
+    "sha": "ed492d1d62971ddeb2f50967d700b25f32b529a5",
+    "size": 99,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/flex.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/flex.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ed492d1d62971ddeb2f50967d700b25f32b529a5",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/flex.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/flex.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ed492d1d62971ddeb2f50967d700b25f32b529a5",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/flex.pat"
+    }
+  },
+  {
+    "name": "grass.pat",
+    "path": "patterns/metric/grass.pat",
+    "sha": "8b847f8343d9430d9a7a4ffe339e75a62f9e0f94",
+    "size": 122,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/grass.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/grass.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/8b847f8343d9430d9a7a4ffe339e75a62f9e0f94",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/grass.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/grass.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/8b847f8343d9430d9a7a4ffe339e75a62f9e0f94",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/grass.pat"
+    }
+  },
+  {
+    "name": "grate.pat",
+    "path": "patterns/metric/grate.pat",
+    "sha": "3b60be9532df7cc78c2d30c5e5aa2109869c9396",
+    "size": 47,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/grate.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/grate.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/3b60be9532df7cc78c2d30c5e5aa2109869c9396",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/grate.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/grate.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/3b60be9532df7cc78c2d30c5e5aa2109869c9396",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/grate.pat"
+    }
+  },
+  {
+    "name": "gravel-01.pat",
+    "path": "patterns/metric/gravel-01.pat",
+    "sha": "8b2aeb2597e9293beae82c333b27a097e3d057fe",
+    "size": 3126,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/gravel-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/gravel-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/8b2aeb2597e9293beae82c333b27a097e3d057fe",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/gravel-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/gravel-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/8b2aeb2597e9293beae82c333b27a097e3d057fe",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/gravel-01.pat"
+    }
+  },
+  {
+    "name": "gravel.pat",
+    "path": "patterns/metric/gravel.pat",
+    "sha": "dd1a78697cc2638e4a186ee3d5846136d75d3a86",
+    "size": 2375,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/gravel.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/gravel.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/dd1a78697cc2638e4a186ee3d5846136d75d3a86",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/gravel.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/gravel.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/dd1a78697cc2638e4a186ee3d5846136d75d3a86",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/gravel.pat"
+    }
+  },
+  {
+    "name": "hatch-dots.pat",
+    "path": "patterns/metric/hatch-dots.pat",
+    "sha": "d5637f5645d1facb63c709b972060ac3c658de33",
+    "size": 1074,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hatch-dots.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hatch-dots.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/d5637f5645d1facb63c709b972060ac3c658de33",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hatch-dots.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hatch-dots.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/d5637f5645d1facb63c709b972060ac3c658de33",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hatch-dots.pat"
+    }
+  },
+  {
+    "name": "hatch-sqrs.pat",
+    "path": "patterns/metric/hatch-sqrs.pat",
+    "sha": "da55e3b330b6b09393487e0d758e1088e2baa9ee",
+    "size": 1199,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hatch-sqrs.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hatch-sqrs.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/da55e3b330b6b09393487e0d758e1088e2baa9ee",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hatch-sqrs.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hatch-sqrs.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/da55e3b330b6b09393487e0d758e1088e2baa9ee",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hatch-sqrs.pat"
+    }
+  },
+  {
+    "name": "hex.pat",
+    "path": "patterns/metric/hex.pat",
+    "sha": "0642e67912c5b8c064d86124fbd176784b434b27",
+    "size": 109,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hex.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hex.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0642e67912c5b8c064d86124fbd176784b434b27",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hex.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hex.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0642e67912c5b8c064d86124fbd176784b434b27",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hex.pat"
+    }
+  },
+  {
+    "name": "hexagons.pat",
+    "path": "patterns/metric/hexagons.pat",
+    "sha": "a865da434d2af4b3a6648e46fa0d793010525dfc",
+    "size": 900,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexagons.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexagons.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a865da434d2af4b3a6648e46fa0d793010525dfc",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hexagons.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexagons.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a865da434d2af4b3a6648e46fa0d793010525dfc",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexagons.pat"
+    }
+  },
+  {
+    "name": "hexjoin-01.pat",
+    "path": "patterns/metric/hexjoin-01.pat",
+    "sha": "5d7a37b8c6fd34ebc39be068c987f924c12dfa50",
+    "size": 645,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexjoin-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexjoin-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/5d7a37b8c6fd34ebc39be068c987f924c12dfa50",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hexjoin-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexjoin-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/5d7a37b8c6fd34ebc39be068c987f924c12dfa50",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexjoin-01.pat"
+    }
+  },
+  {
+    "name": "hexjoin-02.pat",
+    "path": "patterns/metric/hexjoin-02.pat",
+    "sha": "de3a451e1fde0c9674e6205635924b3a3a7e0077",
+    "size": 786,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexjoin-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexjoin-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/de3a451e1fde0c9674e6205635924b3a3a7e0077",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hexjoin-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hexjoin-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/de3a451e1fde0c9674e6205635924b3a3a7e0077",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hexjoin-02.pat"
+    }
+  },
+  {
+    "name": "holly.pat",
+    "path": "patterns/metric/holly.pat",
+    "sha": "c95046cbe1e6a994fb6f95d718f5142a06632220",
+    "size": 11994,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/holly.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/holly.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c95046cbe1e6a994fb6f95d718f5142a06632220",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/holly.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/holly.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c95046cbe1e6a994fb6f95d718f5142a06632220",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/holly.pat"
+    }
+  },
+  {
+    "name": "honey.pat",
+    "path": "patterns/metric/honey.pat",
+    "sha": "ade6901564a66f24e43efa5e498ea811127c183f",
+    "size": 124,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/honey.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/honey.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/ade6901564a66f24e43efa5e498ea811127c183f",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/honey.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/honey.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/ade6901564a66f24e43efa5e498ea811127c183f",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/honey.pat"
+    }
+  },
+  {
+    "name": "hound.pat",
+    "path": "patterns/metric/hound.pat",
+    "sha": "03ad9f92978cab4431719cb9fd5a0c32ffaa6bc8",
+    "size": 79,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hound.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/hound.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/03ad9f92978cab4431719cb9fd5a0c32ffaa6bc8",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/hound.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/hound.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/03ad9f92978cab4431719cb9fd5a0c32ffaa6bc8",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/hound.pat"
+    }
+  },
+  {
+    "name": "insul.pat",
+    "path": "patterns/metric/insul.pat",
+    "sha": "40c6f939c957b2f1e8c66cd79d7b23660300a485",
+    "size": 96,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/insul.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/insul.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/40c6f939c957b2f1e8c66cd79d7b23660300a485",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/insul.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/insul.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/40c6f939c957b2f1e8c66cd79d7b23660300a485",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/insul.pat"
+    }
+  },
+  {
+    "name": "jis_lc_20.pat",
+    "path": "patterns/metric/jis_lc_20.pat",
+    "sha": "056fb896939457431d2ca1ee6b4c34a160343dce",
+    "size": 50,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_20.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_20.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/056fb896939457431d2ca1ee6b4c34a160343dce",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_lc_20.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_20.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/056fb896939457431d2ca1ee6b4c34a160343dce",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_20.pat"
+    }
+  },
+  {
+    "name": "jis_lc_20a.pat",
+    "path": "patterns/metric/jis_lc_20a.pat",
+    "sha": "c5bb42c929c503e59837ae7044bfbf517f6dde32",
+    "size": 51,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_20a.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_20a.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c5bb42c929c503e59837ae7044bfbf517f6dde32",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_lc_20a.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_20a.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c5bb42c929c503e59837ae7044bfbf517f6dde32",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_20a.pat"
+    }
+  },
+  {
+    "name": "jis_lc_8.pat",
+    "path": "patterns/metric/jis_lc_8.pat",
+    "sha": "7cd67671b66be1e85285fd09b29e09628e7be9d6",
+    "size": 50,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_8.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_8.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/7cd67671b66be1e85285fd09b29e09628e7be9d6",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_lc_8.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_8.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/7cd67671b66be1e85285fd09b29e09628e7be9d6",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_8.pat"
+    }
+  },
+  {
+    "name": "jis_lc_8a.pat",
+    "path": "patterns/metric/jis_lc_8a.pat",
+    "sha": "6dd2046f82a58d4cb1f90596456f3f2249aaf778",
+    "size": 51,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_8a.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_8a.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6dd2046f82a58d4cb1f90596456f3f2249aaf778",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_lc_8a.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_lc_8a.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6dd2046f82a58d4cb1f90596456f3f2249aaf778",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_lc_8a.pat"
+    }
+  },
+  {
+    "name": "jis_rc_10.pat",
+    "path": "patterns/metric/jis_rc_10.pat",
+    "sha": "33922308398f318654f5bca6696f07787c10bbec",
+    "size": 69,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_10.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_10.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/33922308398f318654f5bca6696f07787c10bbec",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_rc_10.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_10.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/33922308398f318654f5bca6696f07787c10bbec",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_10.pat"
+    }
+  },
+  {
+    "name": "jis_rc_15.pat",
+    "path": "patterns/metric/jis_rc_15.pat",
+    "sha": "0855594c9e2be578df459cf1c3dd14f19f1be165",
+    "size": 69,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_15.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_15.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0855594c9e2be578df459cf1c3dd14f19f1be165",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_rc_15.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_15.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0855594c9e2be578df459cf1c3dd14f19f1be165",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_15.pat"
+    }
+  },
+  {
+    "name": "jis_rc_18.pat",
+    "path": "patterns/metric/jis_rc_18.pat",
+    "sha": "3d4610c48d4df00a9d660d5d1fc36c0260226df2",
+    "size": 63,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_18.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_18.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/3d4610c48d4df00a9d660d5d1fc36c0260226df2",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_rc_18.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_18.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/3d4610c48d4df00a9d660d5d1fc36c0260226df2",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_18.pat"
+    }
+  },
+  {
+    "name": "jis_rc_30.pat",
+    "path": "patterns/metric/jis_rc_30.pat",
+    "sha": "893d69993c2be5229ea75e1dca7eb8fee1b89811",
+    "size": 63,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_30.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_30.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/893d69993c2be5229ea75e1dca7eb8fee1b89811",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_rc_30.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_rc_30.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/893d69993c2be5229ea75e1dca7eb8fee1b89811",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_rc_30.pat"
+    }
+  },
+  {
+    "name": "jis_stn_1e.pat",
+    "path": "patterns/metric/jis_stn_1e.pat",
+    "sha": "2c0e82ab01a4facf78d3d7294fef98340697172a",
+    "size": 59,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_stn_1e.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_stn_1e.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/2c0e82ab01a4facf78d3d7294fef98340697172a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_stn_1e.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_stn_1e.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/2c0e82ab01a4facf78d3d7294fef98340697172a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_stn_1e.pat"
+    }
+  },
+  {
+    "name": "jis_stn_2.5.pat",
+    "path": "patterns/metric/jis_stn_2.5.pat",
+    "sha": "6c27c21c6c63120220963fcecd06d7a079ad9e6a",
+    "size": 68,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_stn_2.5.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_stn_2.5.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6c27c21c6c63120220963fcecd06d7a079ad9e6a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_stn_2.5.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_stn_2.5.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6c27c21c6c63120220963fcecd06d7a079ad9e6a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_stn_2.5.pat"
+    }
+  },
+  {
+    "name": "jis_wood.pat",
+    "path": "patterns/metric/jis_wood.pat",
+    "sha": "834f1a83d827beda5be92c2619248cd5d1c04213",
+    "size": 40,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_wood.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_wood.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/834f1a83d827beda5be92c2619248cd5d1c04213",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/jis_wood.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/jis_wood.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/834f1a83d827beda5be92c2619248cd5d1c04213",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/jis_wood.pat"
+    }
+  },
+  {
+    "name": "lattice-01.pat",
+    "path": "patterns/metric/lattice-01.pat",
+    "sha": "e36920d76648f9d4e89142d48b1df9b3ffb23265",
+    "size": 911,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e36920d76648f9d4e89142d48b1df9b3ffb23265",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e36920d76648f9d4e89142d48b1df9b3ffb23265",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-01.pat"
+    }
+  },
+  {
+    "name": "lattice-02.pat",
+    "path": "patterns/metric/lattice-02.pat",
+    "sha": "bc639238abd28ac14b875dbd3b9f06cdac88c521",
+    "size": 361,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/bc639238abd28ac14b875dbd3b9f06cdac88c521",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/bc639238abd28ac14b875dbd3b9f06cdac88c521",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-02.pat"
+    }
+  },
+  {
+    "name": "lattice-03.pat",
+    "path": "patterns/metric/lattice-03.pat",
+    "sha": "0bfb8ab34167932360a28d9d32a1fd0df180fbdf",
+    "size": 353,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-03.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-03.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0bfb8ab34167932360a28d9d32a1fd0df180fbdf",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-03.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-03.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0bfb8ab34167932360a28d9d32a1fd0df180fbdf",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-03.pat"
+    }
+  },
+  {
+    "name": "lattice-04.pat",
+    "path": "patterns/metric/lattice-04.pat",
+    "sha": "6d1b2d7272c871aa1ccd3b90ff07cb717d9b39e4",
+    "size": 443,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-04.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-04.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6d1b2d7272c871aa1ccd3b90ff07cb717d9b39e4",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-04.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-04.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6d1b2d7272c871aa1ccd3b90ff07cb717d9b39e4",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-04.pat"
+    }
+  },
+  {
+    "name": "lattice-05.pat",
+    "path": "patterns/metric/lattice-05.pat",
+    "sha": "c1c8e20b259c719a457c60e4f12d37d729102709",
+    "size": 507,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-05.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-05.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c1c8e20b259c719a457c60e4f12d37d729102709",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-05.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-05.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c1c8e20b259c719a457c60e4f12d37d729102709",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-05.pat"
+    }
+  },
+  {
+    "name": "lattice-06.pat",
+    "path": "patterns/metric/lattice-06.pat",
+    "sha": "b7b1336aefbc5f91e54889ebb4abed54e864be08",
+    "size": 648,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-06.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-06.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/b7b1336aefbc5f91e54889ebb4abed54e864be08",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-06.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-06.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/b7b1336aefbc5f91e54889ebb4abed54e864be08",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-06.pat"
+    }
+  },
+  {
+    "name": "lattice-07.pat",
+    "path": "patterns/metric/lattice-07.pat",
+    "sha": "a1f43de6af7036433cb081ad4e1d69bec09f7f8d",
+    "size": 609,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-07.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-07.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a1f43de6af7036433cb081ad4e1d69bec09f7f8d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/lattice-07.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/lattice-07.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a1f43de6af7036433cb081ad4e1d69bec09f7f8d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/lattice-07.pat"
+    }
+  },
+  {
+    "name": "leaf-01.pat",
+    "path": "patterns/metric/leaf-01.pat",
+    "sha": "9c231dbe2423d991c658dd6e38b492c30b12be9c",
+    "size": 14133,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/9c231dbe2423d991c658dd6e38b492c30b12be9c",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/leaf-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/9c231dbe2423d991c658dd6e38b492c30b12be9c",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-01.pat"
+    }
+  },
+  {
+    "name": "leaf-02.pat",
+    "path": "patterns/metric/leaf-02.pat",
+    "sha": "262f3377975451ad844f9b1c3868b0b7d5cb8623",
+    "size": 8745,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/262f3377975451ad844f9b1c3868b0b7d5cb8623",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/leaf-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/262f3377975451ad844f9b1c3868b0b7d5cb8623",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-02.pat"
+    }
+  },
+  {
+    "name": "leaf-03.pat",
+    "path": "patterns/metric/leaf-03.pat",
+    "sha": "74ba1875765382e1c5bd6548863b71d82c221e24",
+    "size": 4622,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-03.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-03.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/74ba1875765382e1c5bd6548863b71d82c221e24",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/leaf-03.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/leaf-03.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/74ba1875765382e1c5bd6548863b71d82c221e24",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/leaf-03.pat"
+    }
+  },
+  {
+    "name": "line.pat",
+    "path": "patterns/metric/line.pat",
+    "sha": "3734642cf543c5594fb60adf1ae44f05f02285f4",
+    "size": 27,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/line.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/line.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/3734642cf543c5594fb60adf1ae44f05f02285f4",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/line.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/line.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/3734642cf543c5594fb60adf1ae44f05f02285f4",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/line.pat"
+    }
+  },
+  {
+    "name": "looplinks.pat",
+    "path": "patterns/metric/looplinks.pat",
+    "sha": "d6a1d531dbc1d396aa6310cd739459eb9034d859",
+    "size": 5118,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/looplinks.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/looplinks.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/d6a1d531dbc1d396aa6310cd739459eb9034d859",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/looplinks.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/looplinks.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/d6a1d531dbc1d396aa6310cd739459eb9034d859",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/looplinks.pat"
+    }
+  },
+  {
+    "name": "maze-01.pat",
+    "path": "patterns/metric/maze-01.pat",
+    "sha": "32e6f46d59dfffadc4adf3fca3af4b084b957a5d",
+    "size": 1078,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/maze-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/maze-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/32e6f46d59dfffadc4adf3fca3af4b084b957a5d",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/maze-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/maze-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/32e6f46d59dfffadc4adf3fca3af4b084b957a5d",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/maze-01.pat"
+    }
+  },
+  {
+    "name": "maze-02.pat",
+    "path": "patterns/metric/maze-02.pat",
+    "sha": "152d7eb189d1c6025156c8e0c6f6c98921e10b1a",
+    "size": 1504,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/maze-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/maze-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/152d7eb189d1c6025156c8e0c6f6c98921e10b1a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/maze-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/maze-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/152d7eb189d1c6025156c8e0c6f6c98921e10b1a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/maze-02.pat"
+    }
+  },
+  {
+    "name": "mudst.pat",
+    "path": "patterns/metric/mudst.pat",
+    "sha": "caa38b0ff6b13e6a937a89ef566a0d5b73adda5b",
+    "size": 59,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/mudst.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/mudst.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/caa38b0ff6b13e6a937a89ef566a0d5b73adda5b",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/mudst.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/mudst.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/caa38b0ff6b13e6a937a89ef566a0d5b73adda5b",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/mudst.pat"
+    }
+  },
+  {
+    "name": "net.pat",
+    "path": "patterns/metric/net.pat",
+    "sha": "368310d6cff3c17363c66dc898ac1b28f3f89814",
+    "size": 42,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/net.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/net.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/368310d6cff3c17363c66dc898ac1b28f3f89814",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/net.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/net.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/368310d6cff3c17363c66dc898ac1b28f3f89814",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/net.pat"
+    }
+  },
+  {
+    "name": "net3.pat",
+    "path": "patterns/metric/net3.pat",
+    "sha": "0fb8a8c76740cd63a5df8f79909d5802b01dc515",
+    "size": 62,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/net3.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/net3.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/0fb8a8c76740cd63a5df8f79909d5802b01dc515",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/net3.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/net3.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/0fb8a8c76740cd63a5df8f79909d5802b01dc515",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/net3.pat"
+    }
+  },
+  {
+    "name": "plast.pat",
+    "path": "patterns/metric/plast.pat",
+    "sha": "209eb849e3d0dbfe83fac25ef51750c751ddb44f",
+    "size": 68,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/plast.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/plast.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/209eb849e3d0dbfe83fac25ef51750c751ddb44f",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/plast.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/plast.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/209eb849e3d0dbfe83fac25ef51750c751ddb44f",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/plast.pat"
+    }
+  },
+  {
+    "name": "plasti.pat",
+    "path": "patterns/metric/plasti.pat",
+    "sha": "c9ffd62b53be2cf3c1a961ed7ca205aa7a04d6f3",
+    "size": 91,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/plasti.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/plasti.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c9ffd62b53be2cf3c1a961ed7ca205aa7a04d6f3",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/plasti.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/plasti.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c9ffd62b53be2cf3c1a961ed7ca205aa7a04d6f3",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/plasti.pat"
+    }
+  },
+  {
+    "name": "qcad-logo.pat",
+    "path": "patterns/metric/qcad-logo.pat",
+    "sha": "a9a5ccbce2a9537c2091301c314c9edeb78bd95a",
+    "size": 7995,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/qcad-logo.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/qcad-logo.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a9a5ccbce2a9537c2091301c314c9edeb78bd95a",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/qcad-logo.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/qcad-logo.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a9a5ccbce2a9537c2091301c314c9edeb78bd95a",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/qcad-logo.pat"
+    }
+  },
+  {
+    "name": "redback.pat",
+    "path": "patterns/metric/redback.pat",
+    "sha": "97fdaf88a49839cec58bee70fce54f85dee2791c",
+    "size": 10485,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/redback.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/redback.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/97fdaf88a49839cec58bee70fce54f85dee2791c",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/redback.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/redback.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/97fdaf88a49839cec58bee70fce54f85dee2791c",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/redback.pat"
+    }
+  },
+  {
+    "name": "sacncr.pat",
+    "path": "patterns/metric/sacncr.pat",
+    "sha": "a18a8b6927625db225db086f06d8ca0b7590b12c",
+    "size": 70,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/sacncr.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/sacncr.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/a18a8b6927625db225db086f06d8ca0b7590b12c",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/sacncr.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/sacncr.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/a18a8b6927625db225db086f06d8ca0b7590b12c",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/sacncr.pat"
+    }
+  },
+  {
+    "name": "scaffold.pat",
+    "path": "patterns/metric/scaffold.pat",
+    "sha": "350386a3c968ad89cce902e589318ce0627e7c3b",
+    "size": 2424,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/scaffold.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/scaffold.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/350386a3c968ad89cce902e589318ce0627e7c3b",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/scaffold.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/scaffold.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/350386a3c968ad89cce902e589318ce0627e7c3b",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/scaffold.pat"
+    }
+  },
+  {
+    "name": "square.pat",
+    "path": "patterns/metric/square.pat",
+    "sha": "b6b66aeb68752f2f843836765dc01288f3bd99de",
+    "size": 76,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/square.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/square.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/b6b66aeb68752f2f843836765dc01288f3bd99de",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/square.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/square.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/b6b66aeb68752f2f843836765dc01288f3bd99de",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/square.pat"
+    }
+  },
+  {
+    "name": "squiggle-01.pat",
+    "path": "patterns/metric/squiggle-01.pat",
+    "sha": "169aa2a286ec206f30c9c387fc33803b8cf7389e",
+    "size": 1427,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/squiggle-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/squiggle-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/169aa2a286ec206f30c9c387fc33803b8cf7389e",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/squiggle-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/squiggle-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/169aa2a286ec206f30c9c387fc33803b8cf7389e",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/squiggle-01.pat"
+    }
+  },
+  {
+    "name": "squiggle-02.pat",
+    "path": "patterns/metric/squiggle-02.pat",
+    "sha": "22813769f0eec1d9039f7ab082e3308224e669aa",
+    "size": 2698,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/squiggle-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/squiggle-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/22813769f0eec1d9039f7ab082e3308224e669aa",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/squiggle-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/squiggle-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/22813769f0eec1d9039f7ab082e3308224e669aa",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/squiggle-02.pat"
+    }
+  },
+  {
+    "name": "stars.pat",
+    "path": "patterns/metric/stars.pat",
+    "sha": "3759bfb85ed3eb5e4ea862b8b3c96ef0ed7c91ed",
+    "size": 123,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/stars.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/stars.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/3759bfb85ed3eb5e4ea862b8b3c96ef0ed7c91ed",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/stars.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/stars.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/3759bfb85ed3eb5e4ea862b8b3c96ef0ed7c91ed",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/stars.pat"
+    }
+  },
+  {
+    "name": "steel.pat",
+    "path": "patterns/metric/steel.pat",
+    "sha": "f0195e6065970cd540d154eead37afbce2a127ce",
+    "size": 52,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/steel.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/steel.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/f0195e6065970cd540d154eead37afbce2a127ce",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/steel.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/steel.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/f0195e6065970cd540d154eead37afbce2a127ce",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/steel.pat"
+    }
+  },
+  {
+    "name": "swamp.pat",
+    "path": "patterns/metric/swamp.pat",
+    "sha": "301b9758ffad944e93a2a8089acae91e8112f713",
+    "size": 259,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/swamp.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/swamp.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/301b9758ffad944e93a2a8089acae91e8112f713",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/swamp.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/swamp.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/301b9758ffad944e93a2a8089acae91e8112f713",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/swamp.pat"
+    }
+  },
+  {
+    "name": "trans.pat",
+    "path": "patterns/metric/trans.pat",
+    "sha": "6d6174b9aab99e0b6ddd8ce0f073abb7f70a0e4e",
+    "size": 61,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/trans.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/trans.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/6d6174b9aab99e0b6ddd8ce0f073abb7f70a0e4e",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/trans.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/trans.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/6d6174b9aab99e0b6ddd8ce0f073abb7f70a0e4e",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/trans.pat"
+    }
+  },
+  {
+    "name": "tri-overlap.pat",
+    "path": "patterns/metric/tri-overlap.pat",
+    "sha": "72811def63041217245a72520ed5cbc1cdc35860",
+    "size": 684,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/tri-overlap.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/tri-overlap.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/72811def63041217245a72520ed5cbc1cdc35860",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/tri-overlap.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/tri-overlap.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/72811def63041217245a72520ed5cbc1cdc35860",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/tri-overlap.pat"
+    }
+  },
+  {
+    "name": "triang.pat",
+    "path": "patterns/metric/triang.pat",
+    "sha": "1fd6506407dc4695756d258cfde660e92b562184",
+    "size": 152,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/triang.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/triang.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/1fd6506407dc4695756d258cfde660e92b562184",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/triang.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/triang.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/1fd6506407dc4695756d258cfde660e92b562184",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/triang.pat"
+    }
+  },
+  {
+    "name": "weatherboard.pat",
+    "path": "patterns/metric/weatherboard.pat",
+    "sha": "e230e05492a72a15be3bab1b03c6d7559923c25e",
+    "size": 262,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/weatherboard.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/weatherboard.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e230e05492a72a15be3bab1b03c6d7559923c25e",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/weatherboard.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/weatherboard.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e230e05492a72a15be3bab1b03c6d7559923c25e",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/weatherboard.pat"
+    }
+  },
+  {
+    "name": "weaving.pat",
+    "path": "patterns/metric/weaving.pat",
+    "sha": "e4662c7c299d015fafcbfeee8428c2c7aaa31fd7",
+    "size": 7233,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/weaving.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/weaving.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/e4662c7c299d015fafcbfeee8428c2c7aaa31fd7",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/weaving.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/weaving.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/e4662c7c299d015fafcbfeee8428c2c7aaa31fd7",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/weaving.pat"
+    }
+  },
+  {
+    "name": "wire-fence.pat",
+    "path": "patterns/metric/wire-fence.pat",
+    "sha": "157947cde394b1a3ba4c2ddda4fd0eedb3bebfcf",
+    "size": 835,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/wire-fence.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/wire-fence.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/157947cde394b1a3ba4c2ddda4fd0eedb3bebfcf",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/wire-fence.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/wire-fence.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/157947cde394b1a3ba4c2ddda4fd0eedb3bebfcf",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/wire-fence.pat"
+    }
+  },
+  {
+    "name": "xmastree-01.pat",
+    "path": "patterns/metric/xmastree-01.pat",
+    "sha": "89456f5ff63a028d38434b712da976c110882665",
+    "size": 2930,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/xmastree-01.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/xmastree-01.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/89456f5ff63a028d38434b712da976c110882665",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/xmastree-01.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/xmastree-01.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/89456f5ff63a028d38434b712da976c110882665",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/xmastree-01.pat"
+    }
+  },
+  {
+    "name": "xmastree-02.pat",
+    "path": "patterns/metric/xmastree-02.pat",
+    "sha": "da85395c55b4fdc99acb11864c58b7e81692b972",
+    "size": 2904,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/xmastree-02.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/xmastree-02.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/da85395c55b4fdc99acb11864c58b7e81692b972",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/xmastree-02.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/xmastree-02.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/da85395c55b4fdc99acb11864c58b7e81692b972",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/xmastree-02.pat"
+    }
+  },
+  {
+    "name": "zigzag.pat",
+    "path": "patterns/metric/zigzag.pat",
+    "sha": "c1d8ec3a3fd4370f919d5ab638365fa69ce7d0c9",
+    "size": 88,
+    "url": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/zigzag.pat?ref=master",
+    "html_url": "https://github.com/qcad/qcad/blob/master/patterns/metric/zigzag.pat",
+    "git_url": "https://api.github.com/repos/qcad/qcad/git/blobs/c1d8ec3a3fd4370f919d5ab638365fa69ce7d0c9",
+    "download_url": "https://raw.githubusercontent.com/qcad/qcad/master/patterns/metric/zigzag.pat",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/qcad/qcad/contents/patterns/metric/zigzag.pat?ref=master",
+      "git": "https://api.github.com/repos/qcad/qcad/git/blobs/c1d8ec3a3fd4370f919d5ab638365fa69ce7d0c9",
+      "html": "https://github.com/qcad/qcad/blob/master/patterns/metric/zigzag.pat"
+    }
+  }
+]
