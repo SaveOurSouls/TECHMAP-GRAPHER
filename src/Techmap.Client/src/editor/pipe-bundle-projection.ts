@@ -1,3 +1,4 @@
+import { bundleTransitionPoint } from "./pipe-bundle-transition";
 import type { HarnessDesignDocument, Point } from "./model";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { pathLength, projectOntoPolyline, resolvedCoveringSpan } from "./physical-coverings";
@@ -9,6 +10,8 @@ interface Sample { readonly fraction: number; readonly point: Point }
 interface Chain { readonly ids: readonly string[]; readonly lengths: readonly number[]; readonly length: number; readonly samples: readonly Sample[] }
 interface Placement {
   readonly coveringId: string;
+  readonly coatingIds: ReadonlySet<string>;
+  readonly transitionStart?:number; readonly transitionEnd?:number;
   readonly ancestors: ReadonlySet<string>;
   readonly axis: Chain;
   readonly chain: Chain;
@@ -77,8 +80,15 @@ function projections(document: HarnessDesignDocument): ReadonlyMap<string, Proje
     const parents = coverings.filter(c => c.bundle?.members.some(m => m.kind === "covering" && m.id === id));
     return new Set(parents.flatMap(p => [p.id, ...ancestors(p.id)]));
   }
+  // Coincident layers around the same bundle share one convergence geometry.
+  // A copied coating must not independently pull the same pipes a second time.
+  const coatingKey = (c: typeof coverings[number]) => JSON.stringify([c.bundle?.members, c.spans]);
+  const coatingOwners = new Map<string, string>();
+  for (const c of coverings) if (c.bundle && !coatingOwners.has(coatingKey(c))) coatingOwners.set(coatingKey(c), c.id);
   for (const covering of coverings) {
     if (!covering.bundle) continue;
+    if (coatingOwners.get(coatingKey(covering)) !== covering.id) continue;
+    const coatingIds = new Set(coverings.filter(c => c.bundle && coatingKey(c) === coatingKey(covering)).map(c => c.id));
     const section = sections.get(covering.id)!, members = memberChains(covering.bundle.members);
     // One common sleeve has one display axis, even when saved intervals refer
     // to several members. Use the same stable choice as its renderer.
@@ -109,7 +119,7 @@ function projections(document: HarnessDesignDocument): ReadonlyMap<string, Proje
             return leaf && ancestors(groupId).has(covering.id) ? [[groupId, own.offset - leaf.offset] as const] : [];
           }));
           const source = routes.get(id)!, previous = result.get(id);
-          const additions = intervals.map(interval => ({ coveringId: covering.id, ancestors: ancestors(covering.id), axis, chain: member,
+          const additions = intervals.map(interval => ({ coveringId: covering.id, coatingIds, transitionStart:covering.bundle!.transitionStart, transitionEnd:covering.bundle!.transitionEnd, ancestors: ancestors(covering.id), axis, chain: member,
             ...interval, reverse, offset: own.offset, depth: own.depth, leafCount: section.leafOffsets.size, groupOffsets }));
           result.set(id, { source: source.samples, length: source.length, placements: [...previous?.placements ?? [], ...additions] });
         }
@@ -129,15 +139,15 @@ function localFraction(p: Placement, id: string, fraction: number): number {
   const index = p.chain.ids.indexOf(id), before = p.chain.lengths.slice(0, index).reduce((a, b) => a + b, 0);
   return ((p.reverse ? 1 - fraction : fraction) * p.chain.length - before) / p.chain.lengths[index]!;
 }
-const transition = (p: Placement) => Math.min(.08, (p.end - p.start) / 3);
+const transition = (p: Placement,side:"start"|"end"="start") => side==="start"?p.transitionStart??Math.min(.08,(p.end-p.start)/3):p.transitionEnd??Math.min(.08,(p.end-p.start)/3);
 function weight(p: Placement, t: number): number {
   // Preserve endpoints while converging before, not inside, the sleeve.
-  const lo = Math.max(0, p.start - transition(p)), hi = Math.min(1, p.end + transition(p));
+  const lo = Math.max(0, p.start - transition(p)), hi = Math.min(1, p.end + transition(p,"end"));
   if (t <= lo || t >= hi) return 0;
   return Math.max(0, Math.min(1, (t - lo) / (p.start - lo || .001), (hi - t) / (hi - p.end || .001)));
 }
 function eligible(p: Placement, coveringId?: string): boolean {
-  return !coveringId || p.coveringId !== coveringId && !p.ancestors.has(coveringId);
+  return !coveringId || !p.coatingIds.has(coveringId) && !p.ancestors.has(coveringId);
 }
 
 export function hasPipeBundleProjection(document: HarnessDesignDocument, segmentId: string): boolean {
@@ -155,8 +165,9 @@ export function pipeBundleDepth(document:HarnessDesignDocument,segmentId:string)
 export function pipeBundleProjectionStops(document: HarnessDesignDocument, segmentId: string, coveringId?: string): number[] {
   const projection = projections(document).get(segmentId); if (!projection) return [];
   return [...new Set(projection.placements.filter(p => eligible(p, coveringId)).flatMap(p =>
-    [p.start - transition(p), Math.max(.001, p.start), Math.min(.999, p.end), p.end + transition(p), ...p.axis.samples.map(s => s.fraction)]
-      .filter(t => t >= p.start - transition(p) && t <= p.end + transition(p))
+    [p.start - transition(p), Math.max(.001, p.start), Math.min(.999, p.end), p.end + transition(p,"end"), ...p.axis.samples.map(s => s.fraction),
+      ...(drawingBendRadius(document)>0?Array.from({length:65},(_,i)=>[p.start-transition(p)*i/64,p.end+transition(p,"end")*i/64]).flat():[])]
+      .filter(t => t >= p.start - transition(p) && t <= p.end + transition(p,"end"))
       .map(t => localFraction(p, segmentId, t))).filter(t => t > 0 && t < 1))].sort((a, b) => a - b);
 }
 
@@ -169,7 +180,17 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
     const t = chainFraction(placement, segmentId, fraction), blend = weight(placement, t);
     if (!blend) continue;
     const offset = coveringId && placement.groupOffsets.has(coveringId) ? placement.groupOffsets.get(coveringId)! : placement.offset;
-    result = mix(result, offsetAt(placement.axis.samples, t, offset), blend);
+    const target=offsetAt(placement.axis.samples,t,offset);
+    const radius=drawingBendRadius(document);
+    if(radius>0&&(t<placement.start||t>placement.end)){
+      const entering=t<placement.start,edge=entering?placement.start:placement.end;
+      const outer=entering?Math.max(0,edge-transition(placement)):Math.min(1,edge+transition(placement,"end"));
+      const sourcePoint=at(placement.chain.samples,placement.reverse?1-outer:outer);
+      const edgePoint=offsetAt(placement.axis.samples,edge,offset);
+      const a=at(placement.axis.samples,Math.max(0,edge-.00001)),b=at(placement.axis.samples,Math.min(1,edge+.00001));
+      result=entering?bundleTransitionPoint(sourcePoint,edgePoint,{x:b.x-a.x,y:b.y-a.y},(t-outer)/(edge-outer),radius)
+        :bundleTransitionPoint(edgePoint,sourcePoint,{x:b.x-a.x,y:b.y-a.y},(t-edge)/(outer-edge),radius);
+    }else result = mix(result, target, blend);
   }
   return { x: point.x + (result.x - source.x), y: point.y + (result.y - source.y) };
 }
@@ -250,4 +271,22 @@ export function unprojectPipeBundlePoint(document:HarnessDesignDocument,segmentI
   const raw=physicalSegmentPoints(document,document.physicalTopology!.segments.find(s=>s.id===segmentId)!);
   const length=pathLength(raw);let distance=0;
   return at(raw.map((p,i)=>{if(i)distance+=Math.hypot(p.x-raw[i-1]!.x,p.y-raw[i-1]!.y);return {fraction:length?distance/length:0,point:p};}),fraction);
+}
+
+/** Generated convergence controls are kept separate from authored route bends. */
+export function pipeBundleTransitionHandles(document:HarnessDesignDocument,coveringId:string){
+ const covering=document.physicalTopology?.coverings?.find(c=>c.id===coveringId);if(!covering?.bundle)return [];
+ const result:{objectId:string;spanIndex:number;part:"transition-from"|"transition-to";point:Point;normal:Point;halfWidth:number;bound:boolean;tangent:Point;axisLength:number;fraction:number}[]=[];
+ for(const [id,projection] of projections(document))for(const p of projection.placements){
+  if(p.coveringId!==coveringId)continue;
+  const spanIndex=covering.spans.findIndex(s=>p.axis.ids.includes(s.segmentId));if(spanIndex<0)continue;
+  for(const side of ["start","end"] as const){
+   const value=side==="start"?Math.max(0,p.start-transition(p)):Math.min(1,p.end+transition(p,"end"));
+   const fraction=localFraction(p,id,value);if(fraction<=0||fraction>=1)continue;
+   const a=at(p.axis.samples,Math.max(0,value-.00001)),b=at(p.axis.samples,Math.min(1,value+.00001)),length=distance(a,b)||1;
+   const tangent={x:(b.x-a.x)/length,y:(b.y-a.y)/length};
+   result.push({objectId:coveringId,spanIndex,part:side==="start"?"transition-from":"transition-to",point:projectPipeBundlePoint(document,id,fraction,at(projection.source,fraction)),normal:{x:-tangent.y,y:tangent.x},halfWidth:0,bound:false,tangent,axisLength:p.axis.length,fraction:transition(p,side)});
+  }
+ }
+ return result;
 }

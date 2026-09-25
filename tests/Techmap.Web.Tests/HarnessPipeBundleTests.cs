@@ -24,6 +24,14 @@ public sealed class HarnessPipeBundleTests
     """)!.AsObject();
     private static void Validate(JsonObject root)
     { using var json = JsonDocument.Parse(root.ToJsonString()); HarnessPhysicalTopologyValidator.Validate(json.RootElement); }
+    [Theory]
+    [InlineData(0.001)][InlineData(0.13)][InlineData(0.5)]
+    public void Accepts_adjustable_transition_extent(double extent)
+    {
+        var root=Fixture();var c=Cover("c",Member("s0"),Member("s1"));c["bundle"]!["transitionStart"]=extent;c["bundle"]!["transitionEnd"]=extent;
+        root["physicalTopology"]!["coverings"]=new JsonArray(c);Validate(root);
+        c["bundle"]!["transitionStart"]=-1;Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Fact] public void Accepts_nested_groups_independent_of_paint_order()
     {
         var root = Fixture(); root["physicalTopology"]!["coverings"] = new JsonArray(

@@ -1,10 +1,12 @@
 import { expect, it } from "vitest";
 import { physicalSegmentPoints } from "./physical-geometry";
+import { standardCoveringOver } from "./physical-coverings";
 import { physicalFixture } from "./physical-topology-fixture";
 import { pipeBundleDisplaySamples, projectPipeBundleControls, projectPipeBundlePoint, unprojectPipeBundleEdit } from "./pipe-bundle-projection";
 import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
 import { createEmptyHarnessDesign, type HarnessDesignDocument } from "./model";
-import { createConnector, createWire } from "./commands";
+import { applyEditorCommand, createConnector, createWire } from "./commands";
+import { createEditorHistory,executeEditorCommand,undoEditorCommand } from "./history";
 import { coveringScene, moveCovering } from "./covering-layout";
 import { splitPhysicalSegment } from "./physical-topology";
 import { pipeBundleSections } from "./pipe-bundle-section";
@@ -24,6 +26,19 @@ function parallel(): HarnessDesignDocument {
       coverings:[{id:"group",name:"Оболочка",width:0,color:"#334455",lengthMm:240,lengthMode:"manual",
         spans:[{segmentId:"s0",from:.3,to:.7}],bundle:{mode:"flat",members:[{kind:"segment",id:"s0"},{kind:"segment",id:"s1"}]}}]}};
 }
+
+it("keeps a coating over a bundle on the same axis when its convergence handle moves",()=>{
+ const base=parallel(),inner=base.physicalTopology!.coverings![0]!;
+ const overlay=standardCoveringOver(base,inner,"Оплётка","overlay");
+ const doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18},physicalTopology:{...base.physicalTopology!,coverings:[inner,overlay]}};
+ const moved=moveCovering(doc,"group",0,"transition-from",{x:132,y:100},{x:102,y:100},0)!;
+ const next={...doc,physicalTopology:{...doc.physicalTopology,coverings:[moved,overlay]}};
+ const single={...next,physicalTopology:{...next.physicalTopology,coverings:[moved]}};
+ expect(pipeBundleDisplaySamples(next,"s1")).toEqual(pipeBundleDisplaySamples(single,"s1"));
+ const scene=coveringScene(next);
+ expect(scene.find(c=>c.id==="overlay")!.paths).toEqual(scene.find(c=>c.id==="group")!.paths);
+ expect(JSON.parse(scene.find(c=>c.id==="overlay")!.metadata!.coveringHandles!).filter((h:{part:string})=>h.part.startsWith("transition-"))).toHaveLength(0);
+});
 
 it.each(['carry','adjacent'] as const)('snaps authored corners and inserted midpoints through bundle projection in %s mode',mode=>{
   const base=parallel(),topology=base.physicalTopology!;
@@ -201,4 +216,22 @@ it("leaves an unbundled pipe and authored geometry unchanged", () => {
   const source = physicalSegmentPoints(document, document.physicalTopology!.segments[0]!);
   expect(projectPipeBundleControls(document, "S0", source)).toEqual(source);
   expect(JSON.stringify(document)).toBe(JSON.stringify(physicalFixture()));
+});
+
+it("rounds member convergence outside sleeve edges and exposes movable transition controls",()=>{
+ const base=parallel(),doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18}};
+ for(const id of ["s0","s1"]){const points=pipeBundleDisplaySamples(doc,id)!;expect(points.every(p=>Number.isFinite(p.point.x)&&Number.isFinite(p.point.y))).toBe(true);
+ const inside=points.filter(p=>p.fraction>=.3&&p.fraction<=.7);expect(inside.every(p=>Math.abs(p.point.y-(id==="s0"?-5:5))<1e-6)).toBe(true);
+ const edge=points.findIndex(p=>Math.abs(p.fraction-.3)<1e-8);const a=points[edge-1]!.point,b=points[edge]!.point;
+ expect(Math.abs((b.y-a.y)/(b.x-a.x))).toBeLessThan(.06);
+ }
+ const changed=moveCovering(doc,"group",0,"transition-from",{x:132,y:100},{x:102,y:100},0)!;
+ expect(changed.bundle!.transitionStart).toBeCloseTo(.13);expect(changed.spans).toEqual(doc.physicalTopology!.coverings![0]!.spans);
+ const next={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[changed]}};
+ const start=pipeBundleDisplaySamples(next,"s1")!.find(p=>Math.abs(p.fraction-.17)<1e-7)!.point;expect(start.x).toBeCloseTo(102);expect(start.y).toBe(100);
+ expect(next.wires).toBe(doc.wires);
+ const history=executeEditorCommand(createEditorHistory(doc),{type:"set-physical-topology",topology:next.physicalTopology});
+ expect(history.present.physicalTopology!.coverings![0]!.bundle!.transitionStart).toBeCloseTo(.13);
+ expect(undoEditorCommand(history).present).toBe(doc);
+ expect(()=>applyEditorCommand(doc,{type:"set-physical-topology",topology:{...doc.physicalTopology!,coverings:[{...changed,bundle:{...changed.bundle!,transitionStart:-1}}]}})).toThrow();
 });

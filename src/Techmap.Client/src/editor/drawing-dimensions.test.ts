@@ -1,7 +1,7 @@
 import {buildHarnessSelectionIndex,resolveHarnessSelection} from "./harness-selection";
 import { describe,it,expect } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { dimensionGeometry,dimensionRouteKey,dimensionWirePoints,segmentDimensionKey,pipeMeasuredWireLength,validateDrawingDimensions } from "./drawing-dimensions";
+import { dimensionGeometry,dimensionRouteKey,dimensionWirePoints,segmentDimensionKey,pipeMeasuredWireLength,validateDrawingDimensions,setPipeIntervalLength,toggleDrawingDimensions,drawingDimensionScene } from "./drawing-dimensions";
 import { applyEditorCommand } from "./commands";
 import { createEditorHistory,executeEditorCommand,undoEditorCommand } from "./history";
 import { calculateWireCutLength,parseHarnessDesignDocument } from "./model";
@@ -53,8 +53,44 @@ describe("bound dimensions",()=>{
   const moved=applyEditorCommand(measured,{type:"set-physical-topology",topology:{...measured.physicalTopology!,snap:false,segments:measured.physicalTopology!.segments.map(s=>({...s,path: { kind: "routed" as const, points: s.path.points.map(p=>({x:p.x+20,y:p.y+10})) }}))}});
   expect(moved.wires.map(w=>w.lengthMm)).toEqual([325.5,175.5,250]);
   const changed=applyEditorCommand(moved,{type:"set-physical-topology",topology:{...moved.physicalTopology!,segments:moved.physicalTopology!.segments.map(s=>s.id==="S0"?{...s,path: { kind: "routed" as const, points: [] }}:s)}});
-  expect(changed.wires.map(w=>w.lengthMm)).toEqual([null,null,250]);
+  expect(changed.wires.map(w=>w.lengthMm)).toEqual([325.5,175.5,250]);
+  expect(changed.drawingDocuments!.dimensions![0]).toMatchObject({from:0,to:1,pointCount:2,lengthMm:125.5});
   expect(()=>applyEditorCommand(measured,{type:"update-wire",wireId:"W1",lengthMm:1})).toThrow(/размерами/);
   expect(pipeMeasuredWireLength(measured,"W1").managed).toBe(true);
  });
+});
+
+it("keeps endpoint length and undo when a bend is deleted and auxiliary dimensions never affect cutting",()=>{
+ const d=physicalFixture(),docs=setPipeIntervalLength(d,"S0",0,2,125.5);
+ const total=docs.dimensions![0]!;
+ const before=applyEditorCommand(d,{type:"set-drawing-documents",documents:{...docs,dimensionMode:"vertical",showDimensions:true,dimensions:[total,{...total,id:"aux",auxiliary:true,lengthMm:999}]}});
+ expect(pipeMeasuredWireLength(before,"W1").managed).toBe(true);
+ const h=executeEditorCommand(createEditorHistory(before),{type:"remove-physical-bend",segmentId:"S0",index:0});
+ expect(h.present.drawingDocuments!.dimensions).toHaveLength(2);
+ expect(h.present.drawingDocuments!.dimensions![0]).toMatchObject({to:1,pointCount:2,lengthMm:125.5});
+ expect(undoEditorCommand(h).present).toBe(before);
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(h.present.drawingDocuments);
+ const auxiliaryOnly=applyEditorCommand(d,{type:"set-drawing-documents",documents:{...docs,dimensions:[{...total,auxiliary:true,lengthMm:999}]}});
+ expect(auxiliaryOnly.wires).toEqual(d.wires);expect(pipeMeasuredWireLength(auxiliaryOnly,"W1").managed).toBe(false);
+ const scene=drawingDimensionScene(before);expect(scene[0]!.metadata!.dimensionMode).toBe("vertical");
+ const overridden={...before,drawingDocuments:{...before.drawingDocuments!,dimensions:before.drawingDocuments!.dimensions!.map(x=>({...x,mode:"horizontal" as const,modeOverride:true}))}};
+ expect(drawingDimensionScene(overridden)[0]!.metadata!.dimensionMode).toBe("horizontal");
+});
+it("creates one endpoint measurement per pipe independently of bend count",()=>{
+ const d=physicalFixture(),docs=toggleDrawingDimensions(d);
+ expect(docs.dimensions!.filter(x=>x.segmentId)).toHaveLength(d.physicalTopology!.segments.length);
+ expect(docs.dimensions!.every(x=>x.from===0&&x.to===x.pointCount-1)).toBe(true);
+});
+
+it("auxiliary wire dimensions allow manual manufacturing lengths",()=>{
+ const d=fixture(),wire=d.wires[0]!,dimension={id:"aux",wireId:wire.id,from:0,to:3,pointCount:4,routeKey:dimensionRouteKey(d,wire),mode:"aligned" as const,offset:40,lengthMm:999,auxiliary:true};
+ const measured=applyEditorCommand(d,{type:"set-drawing-documents",documents:{...emptyDrawingDocuments(),dimensions:[dimension]}});
+ expect(applyEditorCommand(measured,{type:"update-wire",wireId:wire.id,lengthMm:42}).wires[0]!.lengthMm).toBe(42);
+});
+it("combines legacy partial lengths when their common bend is removed and undo restores both",()=>{
+ const d=physicalFixture();let docs=setPipeIntervalLength(d,"S0",0,1,100);docs=setPipeIntervalLength({...d,drawingDocuments:docs},"S0",1,2,200);
+ const before=applyEditorCommand(d,{type:"set-drawing-documents",documents:docs});
+ const h=executeEditorCommand(createEditorHistory(before),{type:"remove-physical-bend",segmentId:"S0",index:0});
+ expect(h.present.drawingDocuments!.dimensions).toHaveLength(1);expect(h.present.drawingDocuments!.dimensions![0]).toMatchObject({from:0,to:1,lengthMm:300});
+ expect(undoEditorCommand(h).present).toBe(before);
 });

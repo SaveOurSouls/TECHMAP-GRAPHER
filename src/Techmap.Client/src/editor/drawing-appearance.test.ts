@@ -3,7 +3,7 @@ import { physicalFixture } from "./physical-topology-fixture";
 import { catalogOuterDiameter, drawingReferenceDiameter, drawingWireWidth, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { coveringScene, moveCovering, wireExitPath } from "./covering-layout";
 import { coveringHit, coveringGrips, coveringSurfaces } from "./covering-renderer";
-import { coveringMeasuredLength, coveringRoute, type PhysicalCovering } from "./physical-coverings";
+import { coveringMeasuredLength, coveringRoute, standardCoveringOver, type PhysicalCovering } from "./physical-coverings";
 import { drawingDimensionScene, dimensionTargetPoints, moveDrawingDimension, setPipeIntervalLength, toggleDrawingDimensions } from "./drawing-dimensions";
 import { applyEditorCommand } from "./commands";
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "./model";
@@ -73,6 +73,12 @@ describe("pipe dimensions",()=>{
 });
 
 describe("covering surfaces and editing",()=>{
+ it("creates a second covering from the existing span when the pipe is already covered",()=>{
+  const d=covered([sleeve({id:"base",spans:[{segmentId:"S0",from:.2,to:.7,fromAnchor:0,toAnchor:1}]})]);
+  const next=standardCoveringOver(d,d.physicalTopology!.coverings![0]! ,"Оплётка","overlay");
+  expect(next.spans).toEqual([{segmentId:"S0",from:.2,to:.7,fromAnchor:0,toAnchor:1}]);
+  expect(coveringScene({...d,physicalTopology:{...d.physicalTopology!,coverings:[...d.physicalTopology!.coverings!,next]}}).map(o=>o.id)).toEqual(["base","overlay"]);
+ });
  it("is opaque, preserves layer order, and can be hit above the pipe",()=>{
   const d=covered([sleeve({id:"nylon",kind:"nylon"}),sleeve()]),scene=coveringScene(d);
   expect(scene.map(s=>s.id)).toEqual(["nylon","cover"]);

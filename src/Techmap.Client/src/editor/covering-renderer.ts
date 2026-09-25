@@ -81,7 +81,9 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     if(!surface.openStart){const p=polygon[0]!;context.lineTo(p.x,p.y);}
     context.strokeStyle=selected?"#007fae":style.lineColor;context.lineWidth=selected?2:1;context.stroke();context.restore();
   }
-  if(selected)for(const grip of coveringGrips(object)){
+  for(const grip of coveringGrips(object)){
+    if(grip.part.startsWith("transition-")){context.beginPath();context.arc(grip.point.x,grip.point.y,4,0,Math.PI*2);context.fillStyle="white";context.fill();context.strokeStyle="#007fae";context.lineWidth=2;context.stroke();continue;}
+    if(!selected)continue;
     const {point:p,normal:n,halfWidth:w}=grip;context.strokeStyle=grip.bound?"#21905c":"#007fae";context.lineWidth=3;
     context.beginPath();context.moveTo(p.x-n.x*w,p.y-n.y*w);context.lineTo(p.x+n.x*w,p.y+n.y*w);context.stroke();
   }

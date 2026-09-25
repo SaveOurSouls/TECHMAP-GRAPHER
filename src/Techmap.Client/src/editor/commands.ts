@@ -57,7 +57,7 @@ import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
-  | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode}
+  | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode;readonly auxiliary?:boolean}
   | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
   | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"move-physical-node";readonly nodeId:string;readonly position:Point;readonly mode:PhysicalDragMode}
@@ -197,7 +197,7 @@ export function applyEditorCommand(
   document: HarnessDesignDocument,
   command: EditorCommand,
 ): HarnessDesignDocument {
-  if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
+  if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId&&!d.auxiliary)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
   return reconcileDrawingDimensions(document,refreshAutomaticPhysicalRoutes(document,prunePhysicalTopology(applyCommand(document, command))));
 }
 
@@ -230,7 +230,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const dimensions=[...docs.dimensions??[],{id:command.id,segmentId:segment.id,
         from:Math.min(command.from,command.to),to:Math.max(command.from,command.to),
         pointCount:command.pointCount,routeKey:segmentDimensionKey(changed,segment.id),
-        mode:command.mode,offset:40,lengthMm:null}];
+        mode:command.mode,modeOverride:false,auxiliary:command.auxiliary,offset:40,lengthMm:null}];
       return {...changed,drawingDocuments:validateDrawingDocuments({...docs,showDimensions:true,dimensions},changed)};
     }
     case "remove-physical-bend": {

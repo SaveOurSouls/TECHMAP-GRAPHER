@@ -45,7 +45,9 @@ internal static class HarnessDrawingDimensionsValidator
             }
             else expected=RouteKey(root,wire,out directCount);
             if(!JsonNode.DeepEquals(actual,expected)||directCount.HasValue&&count!=directCount.Value)throw Invalid();
-            items.Add(new(wireId,segmentId,from,to,count,Length(d,"lengthMm")));
+            foreach(var flag in new[]{"auxiliary","modeOverride"})if(d.TryGetProperty(flag,out var flagValue)&&flagValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
+            var length=Length(d,"lengthMm");
+            if(!d.TryGetProperty("auxiliary",out var auxiliary)||auxiliary.ValueKind!=JsonValueKind.True)items.Add(new(wireId,segmentId,from,to,count,length));
         }
         foreach(var group in items.Where(i=>i.Wire is not null).GroupBy(i=>i.Wire!))
         {

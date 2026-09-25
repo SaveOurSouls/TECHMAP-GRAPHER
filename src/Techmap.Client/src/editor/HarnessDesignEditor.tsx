@@ -16,7 +16,7 @@ import { drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./dr
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
-import { type PhysicalCovering, coveringMaterial, standardCovering } from "./physical-coverings";
+import { type PhysicalCovering, coveringMaterial, standardCovering, standardCoveringOver } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
 import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
@@ -922,11 +922,13 @@ export function HarnessDesignEditor({
   const [thicknessPreview,setThicknessPreview]=useState<number|null>(null);
   const [bendRadiusPreview,setBendRadiusPreview]=useState<number|null>(null);
   const [leaderScalePreview,setLeaderScalePreview]=useState<number|null>(null);
+  const [coveringRatioPreview,setCoveringRatioPreview]=useState<number|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number};mode?:import("./physical-editing").PhysicalDragMode;insert?:boolean}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
     if(bendRadiusPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius:bendRadiusPreview}},error:null};
     if(leaderScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale:leaderScalePreview}},error:null};
+    if(coveringRatioPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio:coveringRatioPreview}},error:null};
     if(coveringPreview&&history.present.physicalTopology)return {document:{...history.present,physicalTopology:{...history.present.physicalTopology,coverings:history.present.physicalTopology.coverings?.map(c=>c.id===coveringPreview.id?coveringPreview:c)}},error:null};
     if(thicknessPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:thicknessPreview}},error:null};
     if(pipePreview&&view==="e4"){
@@ -974,7 +976,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, leaderScalePreview, bendRadiusPreview]);
+  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, leaderScalePreview, bendRadiusPreview, coveringRatioPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1608,21 +1610,23 @@ export function HarnessDesignEditor({
           {pipeBundleDraft&&history.present.physicalTopology&&<PipeBundleEditor topology={history.present.physicalTopology} draft={pipeBundleDraft} onChange={setPipeBundleDraft} onCancel={()=>setPipeBundleDraft(null)} onSave={()=>{try{const topology=pipeBundleDraftTopology(history.present.physicalTopology!,pipeBundleDraft);if(run({type:'set-physical-topology',topology}))setPipeBundleDraft(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
           <button type="button" className="ui-control" onClick={()=>setMaterialSettings(true)}>Материалы</button>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
+          <DrawingRangeControl label="Диаметры 1:" unit="" digits={1} accessibleLabel="Соотношение диаметров оболочек" min={1.1} max={4} step={.1} value={coveringRatioPreview??history.present.drawingDocuments?.coveringDiameterRatio??2} onPreview={setCoveringRatioPreview} onCommit={coveringDiameterRatio=>{if(coveringDiameterRatio!==(history.present.drawingDocuments?.coveringDiameterRatio??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio}});}} hint="Глобальное правило 1:x для соседних оболочек. При увеличении ширины переходы сохраняют форму; локальные ширины и материал не меняются."/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
           <DrawingRangeControl label="Позиции" accessibleLabel="Масштаб позиционных обозначений" min={.25} max={4} step={.05} value={leaderScalePreview??history.present.drawingDocuments?.leaderScale??1} onPreview={setLeaderScalePreview} onCommit={leaderScale=>{if(leaderScale!==(history.present.drawingDocuments?.leaderScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale}});}} hint="Размер кружков, номеров и точек выносок. Ручное положение сохраняется. Escape отменяет изменение; отпускание ползунка сохраняет его одним шагом отмены."/>
+          <label>Размеры<select aria-label="Общее направление размеров" value={history.present.drawingDocuments?.dimensionMode??"aligned"} onChange={e=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionMode:e.target.value as import("./drawing-dimensions").DimensionMode}})}><option value="aligned">Между концами</option><option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option></select></label>
           <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}>Отобразить размеры</button>
           <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}>Объёмный свет</button>
           <InfoHint>Затемнение краёв и светлая середина пайпов, проводов и покрытий. Сохраняется для этого чертежа; отключение не меняет материалы, цвета и размеры.</InfoHint>
         </>}{view==="drawing"&&<button type="button" className="ui-control" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}>Добавить позиции</button>}{(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}</>}
         drawingWindows={camera=><DrawingTableWindows wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
-        onDimensionCreate={(wireId,from,to,pointCount,mode)=>{
+        onDimensionCreate={(wireId,from,to,pointCount,mode,auxiliary)=>{
           const wire=history.present.wires.find(w=>w.id===wireId),segment=history.present.physicalTopology?.segments.find(s=>s.id===wireId);if(!wire&&!segment)return;
           const id=crypto.randomUUID(),documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
           if(segment){
-            if(run({type:"add-visible-pipe-dimension",id,segmentId:segment.id,from,to,pointCount,mode})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
+            if(run({type:"add-visible-pipe-dimension",id,segmentId:segment.id,from,to,pointCount,mode:history.present.drawingDocuments?.dimensionMode??mode,auxiliary})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
             return;
           }
-          if(run({type:"set-drawing-documents",documents:{...documents,dimensions:[...documents.dimensions??[],{id,wireId,from:Math.min(from,to),to:Math.max(from,to),pointCount,routeKey:dimensionRouteKey(history.present,wire!),mode,offset:40,lengthMm:null}]}})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
+          if(run({type:"set-drawing-documents",documents:{...documents,dimensions:[...documents.dimensions??[],{id,wireId,auxiliary,modeOverride:false,from:Math.min(from,to),to:Math.max(from,to),pointCount,routeKey:dimensionRouteKey(history.present,wire!),mode,offset:40,lengthMm:null}]}})){setSelectedObjectId(id);setSelectedObjectIds([id]);}
         }}
         relationPanel={()=><>{view === "drawing" && <PhysicalTopologyPanel mode="actions" document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel pipeInterval={selectedPipeInterval} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}<HarnessRelationsPanel showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
@@ -1753,7 +1757,7 @@ export function HarnessDesignEditor({
         }}
         onPhysicalNodesConnect={(from,to)=>{const t=history.present.physicalTopology;if(t&&from!==to){const existing=t.segments.find(s=>s.from===from&&s.to===to||s.from===to&&s.to===from);const id=existing?.id??crypto.randomUUID();if(existing||run({type:"set-physical-topology",topology:routePhysicalWires(history.present,{...t,segments:[...t.segments,{id,from,to,path: { kind: "routed" as const, points: [] }}]})})){setSelectedObjectId(id);setSelectedObjectIds([id]);}}}}
         onPhysicalNodeConnectToSegment={(fromNodeId,segmentId,point)=>{const t=history.present.physicalTopology;if(!t)return;try{const ids={junction:crypto.randomUUID(),segment:crypto.randomUUID(),continuation:crypto.randomUUID()};const topology=routePhysicalWires(history.present,connectPhysicalNodeToSegment(history.present,fromNodeId,segmentId,unprojectPipeBundlePoint(history.present,segmentId,point),ids));if(run({type:"set-physical-topology",topology})){setSelectedObjectId(ids.segment);setSelectedObjectIds([ids.segment]);}}catch(error){setMessage(error instanceof Error?error.message:"Не удалось присоединить точку к пайпу.");}}}
-        onPhysicalContextAction={(segmentId,point,action)=>{
+        onPhysicalContextAction={(segmentId,point,action,target="segment")=>{
           const t=history.present.physicalTopology;if(!t)return;
           point=unprojectPipeBundlePoint(history.present,segmentId,point);
           if(action==="remove-pipe"){
@@ -1765,7 +1769,9 @@ export function HarnessDesignEditor({
             if(run({type:"set-physical-topology",topology:branchPhysicalSegment(history.present,segmentId,point,ids)})){setSelectedObjectId(ids.tip);setSelectedObjectIds([ids.tip]);}}
             catch(error){setMessage(error instanceof Error?error.message:"Не удалось создать ответвление.");}return;
           }
-          const covering=standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
+          const source=target==="covering"?t.coverings?.find(c=>c.id===segmentId):undefined;
+          if(target==="covering"&&!source)return;
+          const covering=source?standardCoveringOver(history.present,source,action,crypto.randomUUID()):standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
           if(run({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],covering]}})){setSelectedObjectId(covering.id);setSelectedObjectIds([covering.id]);}
         }}
         onObjectMovePreview={previewObjectMove}

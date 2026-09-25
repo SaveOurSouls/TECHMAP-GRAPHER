@@ -20,6 +20,8 @@ export function drawingReferenceDiameter(document:HarnessDesignDocument):number 
   return values.length?Math.min(...values):1;
 }
 export const drawingPhysicalScale=(document:HarnessDesignDocument)=>document.drawingDocuments?.physicalScale??1;
+/** Global 1:x relationship used when adjacent protective layers grow. */
+export const coveringDiameterRatio=(document:HarnessDesignDocument)=>document.drawingDocuments?.coveringDiameterRatio??2;
 export function drawingWireWidth(document:HarnessDesignDocument,wire:WireInstance):number {
   const reference=drawingReferenceDiameter(document);
   return 2.5*drawingPhysicalScale(document)*(wireOuterDiameter(document,wire)??reference)/reference;

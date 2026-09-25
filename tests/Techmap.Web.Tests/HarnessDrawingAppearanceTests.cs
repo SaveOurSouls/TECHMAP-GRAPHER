@@ -8,6 +8,14 @@ namespace Techmap.Web.Tests;
 public sealed class HarnessDrawingAppearanceTests
 {
     [Theory]
+    [InlineData(1.1)][InlineData(2)][InlineData(4)]
+    public void Accepts_covering_diameter_ratio(double ratio)
+    {var root=Fixture();root["drawingDocuments"]!["coveringDiameterRatio"]=ratio;Validate(root);}
+    [Theory]
+    [InlineData("0")][InlineData("4.1")][InlineData("null")][InlineData("true")]
+    public void Rejects_invalid_covering_diameter_ratio(string value)
+    {var root=Fixture();root["drawingDocuments"]!["coveringDiameterRatio"]=JsonNode.Parse(value);Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));}
+    [Theory]
     [InlineData(true)][InlineData(false)]
     public void Accepts_volume_switch(bool enabled)
     {

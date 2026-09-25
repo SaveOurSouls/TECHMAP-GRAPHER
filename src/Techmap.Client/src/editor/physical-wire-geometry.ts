@@ -76,5 +76,5 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
  const routePaths=[startPath,...paths,endPath];
  const joined=joinDisplayPaths(routePaths);
- return projected?joined.map(path=>drawingRouteHitPoints(path,drawingBendRadius(document))):joined;
+ return joined;
 }

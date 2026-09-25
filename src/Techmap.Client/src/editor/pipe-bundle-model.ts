@@ -8,6 +8,7 @@ export type PipeBundleMember =
  * the cross-section; it never changes the physical or electrical route graph. */
 export interface PipeBundle {
   readonly mode: BundlePackingMode;
+  readonly transitionStart?:number; readonly transitionEnd?:number;
   readonly members: readonly PipeBundleMember[];
 }
 export const maximumBundleMembers = 128;
@@ -50,6 +51,7 @@ export function resolvePipeBundles(coverings: readonly PhysicalCovering[], segme
     if (!bundle || typeof bundle !== "object" || Array.isArray(bundle) ||
       bundle.mode !== "flat" && bundle.mode !== "round" || !Array.isArray(bundle.members) ||
       bundle.members.length < 2 || bundle.members.length > maximumBundleMembers) return fail();
+    if([bundle.transitionStart,bundle.transitionEnd].some(n=>n!==undefined&&(!Number.isFinite(n)||n<.001||n>.5)))return fail();
     active.add(id);
     const leaves: string[] = [], seen = new Set<string>();
     let height = 1;

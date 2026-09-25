@@ -86,6 +86,7 @@ export function splitCoveringSpans(coverings: readonly PhysicalCovering[] | unde
 
 export const standardCoveringKinds=["Термоусадка","Нейлонка","Оплётка","Нитевый бандаж","Обмотка","Металлическая плетёнка"] as const;
 export type PhysicalContextAction=typeof standardCoveringKinds[number]|"branch"|"remove-pipe";
+export type PhysicalContextTarget="segment"|"covering";
 export function projectOntoPolyline(points:readonly Point[],point:Point){
  let best={point:points[0]??point,index:1,fraction:0,distance:Infinity},travelled=0;const total=pathLength(points);
  for(let i=1;i<points.length;i++){const a=points[i-1]!,b=points[i]!,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy),t=length?Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/(length*length))):0;
@@ -98,6 +99,13 @@ export function standardCovering(document:HarnessDesignDocument,segmentId:string
  const points=physicalSegmentPoints(document,segment),length=pathLength(points);
  const at=length?projectOntoDrawingRoute(points,drawingBendRadius(document),point)/length:0;
  return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]},document.drawingDocuments?.coveringLibrary);
+}
+
+/** Creates a second protective layer over the exact interval(s) of an existing
+ * layer. Context actions intentionally keep the source spans and anchors, so
+ * adding a sleeve on top does not require an uncovered pipe hit. */
+export function standardCoveringOver(document:HarnessDesignDocument,source:PhysicalCovering,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
+ return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:source.spans.map(span=>({...span})),...(source.bundle?{bundle:{...source.bundle,members:source.bundle.members.map(m=>({...m}))}}:{})},document.drawingDocuments?.coveringLibrary);
 }
 
 export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {
@@ -133,7 +141,7 @@ export function coveringMeasuredLength(document:HarnessDesignDocument,c:Physical
  let sum=0;
  for(const s of c.spans){
   if(s.fromAnchor===undefined||s.toAnchor===undefined)return null;
-  const dims=document.drawingDocuments?.dimensions?.filter(d=>d.segmentId===s.segmentId)??[];
+  const dims=document.drawingDocuments?.dimensions?.filter(d=>d.segmentId===s.segmentId&&!d.auxiliary)??[];
   const exact=dims.find(d=>d.from===s.fromAnchor&&d.to===s.toAnchor);
   if(exact){if(exact.lengthMm===null)return null;sum+=Math.round(exact.lengthMm*1000);continue;}
   const parts=dims.filter(d=>d.from>=s.fromAnchor!&&d.to<=s.toAnchor!).sort((a,b)=>a.from-b.from);

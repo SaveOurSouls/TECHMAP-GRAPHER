@@ -45,7 +45,7 @@ it('resizes the outer edge across a split and exposes no internal grip',()=>{
   const doc=fixture(),c=doc.physicalTopology!.coverings![0]!;
   expect(bundleSpanEdgeVisible(doc,c,0,'to')).toBe(false);
   expect(bundleSpanEdgeVisible(doc,c,1,'from')).toBe(false);
-  expect(coveringGrips(coveringScene(doc)[0]!).map(g=>[g.spanIndex,g.part])).toEqual([[0,'from'],[1,'to']]);
+  expect(coveringGrips(coveringScene(doc)[0]!).filter(g=>!g.part.startsWith("transition-")).map(g=>[g.spanIndex,g.part])).toEqual([[0,'from'],[1,'to']]);
   expect(coveringSurfaces(coveringScene(doc)[0]!).map(s=>[s.openStart,s.openEnd])).toEqual([[undefined,true],[true,undefined]]);
   const smaller=moveBundleCovering(doc,c,1,'to',{x:480,y:0},{x:240,y:0},0)!;
   expect(smaller.spans).toEqual([{segmentId:'s0',from:.2,to:.8}]);
@@ -150,7 +150,7 @@ it('snaps the common start to a split while updating the opposite end of the rev
   expect(resized.spans[1]!.from).toBe(.2);
   expect(resized.spans[1]!.to).toBeCloseTo(.5);
   const scene=coveringScene({...doc,physicalTopology:{...doc.physicalTopology!,coverings:[resized]}})[0]!;
-  expect(coveringGrips(scene).map(g=>g.point.x)).toEqual([300,480]);
+  expect(coveringGrips(scene).filter(g=>!g.part.startsWith("transition-")).map(g=>g.point.x)).toEqual([300,480]);
 });
 
 it('keeps disjoint intervals separate and limits shrinking by the shortest corresponding interval',()=>{

@@ -2,16 +2,16 @@ import { coveringWidthProfile, encloseWidthProfiles, profileHalfWidth, type Widt
 import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
-import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
+import { coveringDiameterRatio, drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
 import { pipeBundleAxisPath } from "./pipe-bundle-model";
-import { pipeBundleProjectionStops, projectPipeBundlePoint } from "./pipe-bundle-projection";
+import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 
-export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
+export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
-export type CoveringDragPart="from"|"to"|"body";
+export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
 /** Mitered edges are shared by the filled surface and endpoint grips. */
 export function offsetPolyline(points:readonly Point[],offsets:readonly number[]):Point[] {
  return points.map((p,i)=>{
@@ -27,6 +27,7 @@ export function offsetPolyline(points:readonly Point[],offsets:readonly number[]
 export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[] {
  const topology=document.physicalTopology;if(!topology)return [];
  const scale=drawingPhysicalScale(document),sourceCoverings=topology.coverings??[];
+ const diameterRatio=coveringDiameterRatio(document),coveringClearance=.5*scale;
  // Physical stacking of ordinary coatings is authored by array order. Bundle
  // shells are painted after their contained groups regardless of save order.
  const coverings:PhysicalCovering[]=sourceCoverings.filter(c=>!c.bundle),seen=new Set(coverings.map(c=>c.id));
@@ -55,13 +56,18 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     // Array order is the physical stacking order; any lower surface remains enclosed.
     for(const lower of coverings.slice(0,order)) {
      if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;}))
-      width=Math.max(lower.width*scale,width+.5*scale);
+      width=Math.max(lower.width*scale,width+coveringClearance);
     }
-    return Math.max(covering.width*scale,width+.5*scale)/2;
+    return (width+.5*scale)/2;
    };
    const boundaries=[0,1,...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
    const baseProfile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
-   const profile=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],.25*scale);
+   const fitted=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
+   // The width field controls the largest diameter. Every smaller diameter
+   // grows with it, at 1/ratio of the increment per adjacent support level.
+   const levels=[...new Set(fitted.map(p=>p.halfWidth))].sort((a,b)=>b-a);
+   const growth=Math.max(0,covering.width*scale/2-(levels[0]??0));
+   const profile=fitted.map(p=>({...p,halfWidth:p.halfWidth+growth/Math.pow(diameterRatio,levels.indexOf(p.halfWidth))}));
    ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
    const stops=[...profile.map(p=>route.before+p.at),...[...coveringControlFractions(document,s.segmentId),...pipeBundleProjectionStops(document,s.segmentId,covering.id)].map(f=>route.before+f*route.length)];
    const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
@@ -74,6 +80,7 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
    for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
+  if(covering.bundle)handles.push(...pipeBundleTransitionHandles(document,covering.id));
   for(const {segmentId,support} of ownSupports) supportsBySegment.set(segmentId,[...(supportsBySegment.get(segmentId)??[]),support]);
   return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),routeRadius:0,metadata:{coveringKind:coveringKind(covering),...(document.drawingDocuments?.volumeShading === false ? {volumeShading:"false"} : {}),coveringStyle:JSON.stringify({...covering.style,texture:!covering.style?.texture||covering.style.texture==="auto"?document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(covering)]?.texture??"auto":covering.style.texture}),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
  });
@@ -81,6 +88,13 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
 
 export function moveCovering(document:HarnessDesignDocument,id:string,spanIndex:number,part:CoveringDragPart,start:Point,point:Point,tolerance=10):PhysicalCovering|null {
  const c=document.physicalTopology?.coverings?.find(c=>c.id===id),original=c?.spans[spanIndex];if(!c||!original)return null;
+ if(part==="transition-from"||part==="transition-to"){
+  if(!c.bundle)return null;
+  const grip=pipeBundleTransitionHandles(document,c.id).find(h=>h.part===part&&h.spanIndex===spanIndex);if(!grip)return null;
+  const dx=point.x-start.x,dy=point.y-start.y,change=(dx*grip.tangent.x+dy*grip.tangent.y)/grip.axisLength;
+  const key=part==="transition-from"?"transitionStart":"transitionEnd";
+  return {...c,bundle:{...c.bundle,[key]:Math.max(.001,Math.min(.5,grip.fraction+(part==="transition-from"?-change:change)))}};
+ }
  const bundleMove=moveBundleCovering(document,c,spanIndex,part,start,point,tolerance);if(bundleMove)return bundleMove;
  const route=coveringRoute(document,original.segmentId);if(!route)return null;
  const s=resolvedCoveringSpan(document,original);

@@ -5,7 +5,7 @@ import {PhysicalTopologyPanel} from "./PhysicalTopologyPanel";
 import {PhysicalCoveringsPanel} from "./PhysicalCoveringsPanel";
 import {DrawingObjectProperties} from "./DrawingObjectProperties";
 import {CanvasObjectHint,CANVAS_HINT_DELAY} from "./CanvasObjectHint";
-import {canvasPopoverPosition} from "./CanvasObjectPopover";
+import {canvasPopoverPosition,CanvasObjectPopover} from "./CanvasObjectPopover";
 import {physicalFixture} from "./physical-topology-fixture";
 import {applyEditorCommand,type EditorCommand} from "./commands";
 
@@ -63,4 +63,11 @@ it("waits more than one second before showing a hint and cancels a departed targ
   vi.advanceTimersByTime(CANVAS_HINT_DELAY-1000);expect(hooks.set).toHaveBeenCalledExactlyOnceWith(target);
   cleanup();hooks.set.mockClear();const cancel=hooks.effects[0]!() as ()=>void;cancel();hooks.set.mockClear();
   vi.advanceTimersByTime(CANVAS_HINT_DELAY+1);expect(hooks.set).not.toHaveBeenCalled();
+});
+
+it("does not dismiss the property editor for a bubbled nested hint toggle",()=>{
+ const close=vi.fn(),tree=CanvasObjectPopover({x:0,y:0,label:"Properties",children:null,onClose:close});
+ expect(tree.props.popover).toBe("manual");
+ const parent={},hint={};tree.props.onToggle({target:hint,currentTarget:parent,newState:"closed"});expect(close).not.toHaveBeenCalled();
+ tree.props.onToggle({target:parent,currentTarget:parent,newState:"closed"});expect(close).toHaveBeenCalledOnce();
 });

@@ -21,8 +21,11 @@ export function CanvasObjectPopover({x,y,label,children,onClose}: {
     const resize=new ResizeObserver(position);resize.observe(element);window.addEventListener("resize",position);
     return ()=>{resize.disconnect();window.removeEventListener("resize",position);};
   },[x,y]);
-  return <div ref={ref} popover="auto" role="dialog" tabIndex={-1} aria-label={label} className="he-object-popover"
-    onToggle={e=>{if(e.newState==="closed")close.current();}}
+  // Keep the properties surface independent from nested InfoHint popovers. The
+  // automatic popover mode closes when another top-layer surface opens, which
+  // made a hint click discard the whole right-click editor.
+  return <div ref={ref} popover="manual" role="dialog" tabIndex={-1} aria-label={label} className="he-object-popover"
+    onToggle={e=>{if(e.target===e.currentTarget&&e.newState==="closed")close.current();}}
     onKeyDown={e=>{if(e.key==="Escape"){e.stopPropagation();onClose();}}}>
     <header className="ui-section-heading"><strong>{label}</strong><button type="button" className="ui-control" aria-label="Закрыть свойства" onClick={onClose}>×</button></header>
     {children}

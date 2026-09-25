@@ -7,6 +7,15 @@ using Xunit;
 namespace Techmap.Web.Tests;
 public sealed class HarnessDrawingDimensionsValidatorTests
 {
+    [Fact]
+    public void Auxiliary_dimensions_do_not_override_manufacturing_lengths_and_flags_are_validated()
+    {
+        var root=Fixture();var dimensions=root["drawingDocuments"]!["dimensions"]!.AsArray();
+        var auxiliary=dimensions[0]!.DeepClone();auxiliary["id"]="AUX";auxiliary["lengthMm"]=999;auxiliary["auxiliary"]=true;auxiliary["modeOverride"]=false;dimensions.Add(auxiliary);
+        root["drawingDocuments"]!["dimensionMode"]="vertical";Validate(root);
+        auxiliary["auxiliary"]="true";Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+        auxiliary["auxiliary"]=true;root["drawingDocuments"]!["dimensionMode"]="bad";Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     private static JsonObject Fixture()
     {
         var routeKey=JsonSerializer.Serialize(new object[]{"c:A:1","c:B:2",2});

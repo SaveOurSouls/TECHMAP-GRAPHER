@@ -29,6 +29,7 @@ internal static class HarnessPipeBundleValidator
             if (!byId.TryGetValue(id, out var covering) || !covering.TryGetProperty("bundle", out var bundle) ||
                 Text(bundle, "mode") is not ("flat" or "round") || !bundle.TryGetProperty("members", out var members) ||
                 members.ValueKind != JsonValueKind.Array || members.GetArrayLength() is < 2 or > MaximumMembers) throw Invalid();
+            foreach(var key in new[]{"transitionStart","transitionEnd"})if(bundle.TryGetProperty(key,out var extent)&&(extent.ValueKind!=JsonValueKind.Number||!extent.TryGetDouble(out var number)||!double.IsFinite(number)||number<.001||number>.5))throw Invalid();
             active.Add(id);
             var leaves = new HashSet<string>(StringComparer.Ordinal);
             var height = 1;

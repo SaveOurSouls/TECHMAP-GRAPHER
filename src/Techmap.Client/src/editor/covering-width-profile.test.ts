@@ -74,3 +74,13 @@ it("keeps a third sleeve outside a lower ramp clipped at its end",()=>{
  for(let x=87.5;x<=212.5;x+=.25) expect(profileHalfWidth(profiles[2]!,x)).toBeGreaterThanOrEqual(profileHalfWidth(profiles[1]!,x)+.25-1e-8);
  expect(profiles[2]!.every((p,i)=>i===0||p.at>profiles[2]![i-1]!.at)).toBe(true);
 });
+
+it.each([1.1,2,4])("grows every adjacent diameter at 1:%s without flattening the profile",ratio=>{
+ const d=fixture("heat-shrink"),t=d.physicalTopology!;
+ const widths=(width:number)=>{const doc={...d,drawingDocuments:{...d.drawingDocuments!,coveringDiameterRatio:ratio},physicalTopology:{...t,coverings:t.coverings!.map(c=>c.id==="upper"?{...c,width}:c)}};const surface=coveringSurfaces(coveringScene(doc)[1]!)[0]!;return surface.polygon.slice(0,surface.path.length);};
+ const base=widths(0),a=widths(40),b=widths(42);
+ expect(a[0]!.y).toBeGreaterThan(base[0]!.y);
+ expect(b[0]!.y-a[0]!.y).toBeCloseTo(1/ratio);
+ expect(Math.max(...b.map(p=>p.y))-Math.max(...a.map(p=>p.y))).toBeCloseTo(1);
+ expect(Math.max(...b.map(p=>p.y))).toBeGreaterThan(b[0]!.y);
+});

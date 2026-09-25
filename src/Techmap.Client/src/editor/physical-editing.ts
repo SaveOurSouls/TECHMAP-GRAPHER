@@ -2,6 +2,7 @@ import type { HarnessDesignDocument, Point } from "./model";
 import type { PhysicalSegment } from "./physical-topology-model";
 import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geometry";
 import { physicalNodePoint } from "./physical-ports";
+import { measuredWireLength } from "./drawing-dimensions";
 import { resolvedCoveringSpan } from "./physical-coverings";
 
 export type PhysicalDragMode = "carry" | "adjacent";
@@ -122,7 +123,11 @@ function replacePath(document:HarnessDesignDocument,segment:PhysicalSegment,poin
   const coverings=t.coverings?.map(c=>({...c,spans:c.spans.map(s=>s.segmentId!==segment.id?s:{...resolvedCoveringSpan(document,s),
     fromAnchor:s.fromAnchor===undefined?undefined:oldToNew.get(s.fromAnchor),
     toAnchor:s.toAnchor===undefined?undefined:oldToNew.get(s.toAnchor)})}));
-  const dimensions=document.drawingDocuments?.dimensions?.flatMap(d=>{
+  const stored=document.drawingDocuments?.dimensions;
+  const affected=stored?.filter(d=>d.segmentId===segment.id&&!d.auxiliary)??[];
+  const lost=affected.some(d=>!oldToNew.has(d.from)||!oldToNew.has(d.to));
+  const source=lost&&affected.length?[...stored!.filter(d=>!affected.includes(d)),{...affected[0]!,from:0,to:affected[0]!.pointCount-1,lengthMm:measuredWireLength(affected)}]:stored;
+  const dimensions=source?.flatMap(d=>{
     if(d.segmentId!==segment.id)return [d];
     const from=oldToNew.get(d.from),to=oldToNew.get(d.to);
     return from===undefined||to===undefined||from>=to?[]:[{...d,from,to,pointCount:points.length,

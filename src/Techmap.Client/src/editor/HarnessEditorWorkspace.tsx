@@ -1,7 +1,7 @@
 import type { PhysicalDragMode } from "./physical-editing";
 import { InfoHint } from "../InfoHint";
 import type { CoveringDragPart } from "./covering-layout";
-import {type PhysicalContextAction} from "./physical-coverings";
+import {type PhysicalContextAction,type PhysicalContextTarget} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
 import { useCallback, useEffect, useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import {
@@ -103,7 +103,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly relationPanel?: ReactNode | ((tool:EditorTool,onToolChange:(tool:EditorTool)=>void)=>ReactNode);
   readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
-  readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode)=>void;
+  readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode,auxiliary?:boolean)=>void;
   readonly documentActions?: ReactNode;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
@@ -175,7 +175,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
   readonly onPhysicalNodeConnectToSegment?: (fromNodeId:string,segmentId:string,point:EditorPoint)=>void;
-  readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction)=>void;
+  readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction,target?:PhysicalContextTarget)=>void;
   readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
   readonly propertyInspector?: ReactNode;
   readonly canvasEditor?: ReactNode;

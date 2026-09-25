@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HarnessDesignDocument } from "./model";
 import type { DrawingDocuments } from "./drawing-documents";
+import { InfoHint } from "../InfoHint";
 import { setPipeIntervalLength, type DimensionMode } from "./drawing-dimensions";
 
 /** Contextual properties only: dimensions are authored by clicking a pipe. */
@@ -11,8 +12,9 @@ export function DrawingDimensionsPanel({document,selectedId,pipeInterval,onChang
 }) {
   const docs=document.drawingDocuments,dimension=docs?.dimensions?.find(d=>d.id===selectedId);
   const segment=document.physicalTopology?.segments.find(s=>s.id===selectedId);
-  const from=pipeInterval?.id===selectedId?pipeInterval.from:0;
-  const to=pipeInterval?.id===selectedId?pipeInterval.to:(segment?.path.points.length??0)+1;
+  void pipeInterval;
+  const from=0;
+  const to=(segment?.path.points.length??0)+1;
   const selected=dimension??docs?.dimensions?.find(d=>d.segmentId===segment?.id&&d.from===from&&d.to===to);
   const dirty=useRef(false);
   const [value,setValue]=useState(""),[invalid,setInvalid]=useState(false);
@@ -27,13 +29,13 @@ export function DrawingDimensionsPanel({document,selectedId,pipeInterval,onChang
   };
   if(!segment&&!dimension)return null;
   return <section className="he-relations" aria-label="Длина выбранного участка">
-    <strong>{segment?`Пайп · точки ${from+1}–${to+1}`:"Размер"}</strong>
+    <strong>{segment?`Пайп · точки ${from+1}–${to+1}`:dimension?.auxiliary?"Вспомогательный размер":"Размер"}</strong>
     <label>Длина, мм<input key={`${selectedId}:${from}:${to}`} aria-label="Размер, мм" inputMode="decimal" value={value} aria-invalid={invalid} onChange={e=>{dirty.current=true;setValue(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/></label>
     {invalid&&<small role="alert">Введите длину от 0 до 10 000 000 мм с точностью до 0,001 мм.</small>}
-    {selected&&<label>Отображение<select aria-label="Направление размера" value={selected.mode} onChange={e=>edit({mode:e.target.value as DimensionMode})}>
-      <option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option><option value="aligned">Вдоль между точками</option>
+    {selected&&<label>Отображение<select aria-label="Направление размера" value={selected.modeOverride===false?"global":selected.mode} onChange={e=>edit(e.target.value==="global"?{modeOverride:false}:{mode:e.target.value as DimensionMode,modeOverride:true})}>
+      <option value="global">По общей настройке</option><option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option><option value="aligned">Вдоль между точками</option>
     </select></label>}
-    <small>Размеры включаются общей кнопкой. Перетащите размерную линию для выноса; соседние линии притягиваются друг к другу.</small>
+    <InfoHint>Размеры включаются общей кнопкой. Перетащите размерную линию для выноса; соседние линии притягиваются друг к другу. Вспомогательные размеры не влияют на длины проводов.</InfoHint>
     {selected&&<button type="button" className="ui-control" onClick={()=>docs&&onChange({...docs,dimensions:docs.dimensions?.filter(d=>d.id!==selected.id)})}>Удалить размер</button>}
   </section>;
 }
