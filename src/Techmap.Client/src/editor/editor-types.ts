@@ -19,6 +19,9 @@ export interface EditorPoint {
 
 /** Computed scene data only; never serialized into a harness document. */
 export interface PhysicalPipeSceneData {
+  readonly authoredPoints?: readonly EditorPoint[];
+  readonly fromNodeId?: string;
+  readonly toNodeId?: string;
   readonly midpoints?: readonly EditorPoint[];
   readonly controls: readonly EditorPoint[];
   readonly handles: readonly EditorPoint[];

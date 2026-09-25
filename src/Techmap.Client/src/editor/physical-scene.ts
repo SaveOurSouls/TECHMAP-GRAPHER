@@ -26,6 +26,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     color: segment.color ?? "#aebfc9", points: display?.map(s => s.point) ?? physicalSegmentPoints(document, segment),
     routeRadius:display ? 0 : drawingBendRadius(document),
     pipe: {
+      fromNodeId: segment.from,
+      toNodeId: segment.to,
+      authoredPoints: authored,
       controls: controls,
       handles: editable.slice(1,-1),
       midpoints,

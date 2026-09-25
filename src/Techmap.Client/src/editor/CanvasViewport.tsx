@@ -2,7 +2,7 @@ import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
-import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors } from "./physical-editing";
+import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -209,6 +209,7 @@ interface ObjectPointerDrag {
   readonly objectY: number;
   readonly mode?:PhysicalDragMode;
   readonly anchors?:readonly EditorPoint[];
+  readonly routeAnchors?:readonly EditorPoint[];
 }
 
 interface WireRoutePointerDrag {
@@ -2861,7 +2862,9 @@ export function CanvasViewport({
     if (view !== "e4") {
       setConnectorAlignmentGuides({});
       const drag=dragRef.current;
-      const result=snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],drawingSnapEnabled,7/camera.zoom);
+      const result=drag?.kind==='object'&&drag.routeAnchors?.length
+        ?snapBendPoint(destination,drag.routeAnchors,drawingSnapEnabled,7/camera.zoom,{x:drag.objectX,y:drag.objectY})
+        :snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],drawingSnapEnabled,7/camera.zoom);
       setPhysicalGuide(result.guide);
       return result.point;
     }
@@ -3183,6 +3186,7 @@ export function CanvasViewport({
           objectY: object.y,
           mode:event.shiftKey?"adjacent":"carry",
           anchors:view==="drawing"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
+          routeAnchors:view==='drawing'?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
         };
       }
     }

@@ -50,26 +50,66 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
   });
 }
 
-/** Intersect two 15° direction families so both changing shoulders obey the
- * same constraint. Collinear supports retain continuous motion along the line. */
-export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number) {
-  if(!enabled||anchors.length!==2)return snapPhysicalPoint(point,anchors,enabled,tolerance);
-  const [a,b]=anchors as readonly [Point,Point];
-  if(near(a,b))return snapPhysicalPoint(point,[a],enabled,tolerance);
+/** Intersect 15° direction families and validate every changing shoulder.
+ * Collinear supports retain continuous motion along the line. */
+export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point) {
+  const unique=anchors.filter((a,i)=>anchors.findIndex(b=>near(a,b))===i);
+  if(!enabled||unique.length<2)return snapPhysicalPoint(point,unique,enabled,tolerance);
+  const a=unique[0]!;
   const directions=Array.from({length:12},(_,i)=>({x:Math.cos(i*Math.PI/12),y:Math.sin(i*Math.PI/12)}));
   let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
   const add=(p:Point)=>{
-    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||near(a,p)||near(b,p))return;
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
+    if(unique.some(anchor=>{
+      const dx=p.x-anchor.x,dy=p.y-anchor.y,length=Math.hypot(dx,dy);
+      return length<1e-6||!directions.some(u=>Math.abs(dx*u.y-dy*u.x)<=1e-7*length);
+    }))return;
     const distance=Math.hypot(p.x-point.x,p.y-point.y);
-    if(!best||distance<best.distance-1e-7)best={point:p,guide:[a,p,b],distance};
+    if(!best||distance<best.distance-1e-7)best={point:p,guide:unique.flatMap((anchor,i)=>i?[p,anchor]:[anchor]),distance};
   };
-  for(const u of directions)for(const v of directions){
+  for(const b of unique.slice(1))for(const u of directions)for(const v of directions){
     const denominator=u.x*v.y-u.y*v.x,dx=b.x-a.x,dy=b.y-a.y;
     if(Math.abs(denominator)<1e-8){
       if(Math.abs(dx*u.y-dy*u.x)<1e-7){const t=(point.x-a.x)*u.x+(point.y-a.y)*u.y;add({x:a.x+t*u.x,y:a.y+t*u.y});}
     }else{const t=(dx*v.y-dy*v.x)/denominator;add({x:a.x+t*u.x,y:a.y+t*u.y});}
   }
-  return best??snapPhysicalPoint(point,anchors,enabled,tolerance);
+  // Several fixed shoulders may admit no common 15-degree point. Keep the
+  // original position instead of silently violating one connected route.
+  return best??{point:fallback??point,guide:undefined};
+}
+
+/** The same initially straight path must produce the same carried shoulders
+ * in the interaction constraints and in the committed model. */
+export function carriedExitPoints(points:readonly Point[],mode:PhysicalDragMode):readonly Point[]{
+  if(mode!=='carry'||points.length!==2)return points;
+  const [a,b]=points as readonly [Point,Point];
+  return [a,{x:a.x+(b.x-a.x)/3,y:a.y+(b.y-a.y)/3},
+    {x:a.x+2*(b.x-a.x)/3,y:a.y+2*(b.y-a.y)/3},b];
+}
+
+/** Only boundaries between translated and fixed vertices constrain a move.
+ * References use topology IDs, never coincident coordinates or nearby nodes. */
+export function physicalObjectRouteAnchors(objects:readonly {
+  id:string;kind:string;x:number;y:number;points?:readonly Point[];
+  port?:{connectorId?:string};pipe?:{fromNodeId?:string;toNodeId?:string;authoredPoints?:readonly Point[];handles:readonly Point[]};
+}[],object:{id:string;kind:string;x:number;y:number},mode:PhysicalDragMode):Point[]{
+  const ids=new Set(object.kind==='physical-node'?[object.id]:objects.filter(o=>o.kind==='physical-node'&&o.port?.connectorId===object.id).map(o=>o.id));
+  return objects.flatMap(o=>{
+    if(o.kind!=='physical-segment'||!o.pipe||!o.points?.length)return [];
+    const from=!!o.pipe.fromNodeId&&ids.has(o.pipe.fromNodeId),to=!!o.pipe.toNodeId&&ids.has(o.pipe.toNodeId);
+    if(!from&&!to)return [];
+    // Bundle projection is presentation only. The committed move translates
+    // authored vertices by the pointer delta, including a projected node origin.
+    const points=carriedExitPoints(o.pipe.authoredPoints??[o.points[0]!,...o.pipe.handles,o.points.at(-1)!],mode);
+    const moving=new Set<number>();
+    if(from){moving.add(0);if(mode==='carry'&&points.length>2)moving.add(1);}
+    if(to){moving.add(points.length-1);if(mode==='carry'&&points.length>2)moving.add(points.length-2);}
+    return points.slice(1).flatMap((p,i)=>{
+      if(moving.has(i)===moving.has(i+1))return [];
+      const mobile=moving.has(i)?points[i]!:p,fixed=moving.has(i)?p:points[i]!;
+      return [{x:object.x+fixed.x-mobile.x,y:object.y+fixed.y-mobile.y}];
+    });
+  });
 }
 
 /** Update ordinal anchors explicitly; never silently attach a measurement to another corner. */
@@ -149,11 +189,7 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
   let result=after;
   for(const segment of before.physicalTopology.segments){
     if(!nodeIds.has(segment.from)&&!nodeIds.has(segment.to))continue;
-    let original=physicalEditablePoints(before,segment);
-    if(mode==="carry"&&original.length===2){
-      const [a,b]=original as readonly [Point,Point];
-      original=[a,{x:a.x+(b.x-a.x)/3,y:a.y+(b.y-a.y)/3},{x:a.x+2*(b.x-a.x)/3,y:a.y+2*(b.y-a.y)/3},b];
-    }
+    const original=carriedExitPoints(physicalEditablePoints(before,segment),mode);
     const points=[...original],map=anchorMap(before,segment,original),shifts=new Map<number,Point[]>();
     for(const side of ["from","to"] as const){
       if(!nodeIds.has(segment[side]))continue;
