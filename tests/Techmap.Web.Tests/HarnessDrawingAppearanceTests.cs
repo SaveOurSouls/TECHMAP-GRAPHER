@@ -15,6 +15,34 @@ public sealed class HarnessDrawingAppearanceTests
       """)!.AsObject();
     private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
+    [Fact] public void Accepts_covering_library_and_content_addressed_texture()
+    {
+        var root=Fixture();var hash=new string('a',64);
+        root["drawingDocuments"]!["coveringLibrary"]=new JsonObject {
+            ["textures"]=new JsonArray(new JsonObject{["sha256"]=hash,["name"]="stripes.png"}),
+            ["defaults"]=new JsonObject{["braid"]=new JsonObject{["texture"]="asset:"+hash}}
+        };
+        root["physicalTopology"]!["coverings"]![0]!["style"]=new JsonObject{["texture"]="asset:"+hash};Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("[]")][InlineData("{\"textures\":[],\"defaults\":null}")]
+    [InlineData("{\"textures\":[],\"defaults\":{\"wrong\":{\"texture\":\"auto\"}}}")]
+    [InlineData("{\"textures\":[],\"defaults\":{\"braid\":{\"texture\":\"remote.jpg\"}}}")]
+    [InlineData("{\"textures\":[],\"defaults\":{\"braid\":{\"texture\":\"none\",\"material\":{}}}}")]
+    public void Rejects_invalid_covering_library(string value)
+    {
+        var root=Fixture();root["drawingDocuments"]!["coveringLibrary"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Fact] public void Rejects_missing_or_duplicate_library_texture()
+    {
+        var root=Fixture();var hash=new string('a',64);
+        var library=new JsonObject{["textures"]=new JsonArray(),["defaults"]=new JsonObject{["braid"]=new JsonObject{["texture"]="asset:"+hash}}};
+        root["drawingDocuments"]!["coveringLibrary"]=library;
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+        library["textures"]=new JsonArray(new JsonObject{["sha256"]=hash,["name"]="a"},new JsonObject{["sha256"]=hash,["name"]="b"});
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Fact] public void Accepts_independent_covering_style()
     {
         var root=Fixture();root["physicalTopology"]!["coverings"]![0]!["style"]=JsonNode.Parse("""

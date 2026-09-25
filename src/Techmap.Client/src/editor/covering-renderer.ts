@@ -6,11 +6,15 @@ import type { CoveringKind } from "./physical-coverings";
 const textures=new Map<string,HTMLImageElement>();
 const listeners=new Set<()=>void>();
 export const coveringTextureUrl=(file:string,base="/")=>`${base.endsWith("/")?base:base+"/"}textures/coverings/${file}.jpg`;
-export function warmCoveringTextures(invalidate:()=>void):()=>void {
+export function warmCoveringTextures(invalidate:()=>void,objects:readonly EditorSceneObject[]=[]):()=>void {
   listeners.add(invalidate);
   if(typeof Image!=="undefined")for(const file of ["Rubber002","Fabric061","Metal049A"])if(!textures.has(file)){
     const image=new Image();textures.set(file,image);
     image.onload=()=>listeners.forEach(fn=>fn());image.src=coveringTextureUrl(file,typeof document==="undefined"?"/":document.querySelector("base")?.getAttribute("href")??"/");
+  }
+  if(typeof Image!=="undefined")for(const object of objects){const url=object.metadata?.coveringTextureUrl;if(!url||textures.has(url))continue;
+    const image=new Image();textures.set(url,image);image.onload=()=>listeners.forEach(fn=>fn());image.src=url;
+    if(textures.size>1030)for(const key of textures.keys())if(!["Rubber002","Fabric061","Metal049A"].includes(key)&&!objects.some(o=>o.metadata?.coveringTextureUrl===key)){textures.delete(key);break;}
   }
   return ()=>{listeners.delete(invalidate);};
 }
@@ -60,7 +64,7 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     const polygon=surface.polygon;if(!polygon.length)continue;
     context.save();context.beginPath();polygon.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.closePath();
     context.fillStyle=object.color;context.fill();
-    const image=file?textures.get(file):undefined;
+    const image=object.metadata?.coveringTextureUrl?textures.get(object.metadata.coveringTextureUrl):file?textures.get(file):undefined;
     if(image?.complete&&image.naturalWidth){
       const pattern=context.createPattern(image,"repeat");
       if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.textureRotation).scale(.08*style.textureScale));context.save();context.globalAlpha=.38;context.fillStyle=pattern;context.fill();context.restore();}

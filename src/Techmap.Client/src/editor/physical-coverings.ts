@@ -3,6 +3,7 @@ import { findWireEndpoint, type HarnessDesignDocument, type Point } from "./mode
 import { physicalSegmentPoints, physicalSegmentControls, physicalNodePoint } from "./physical-geometry";
 import { drawingBendRadius, projectOntoDrawingRoute } from "./drawing-route-path";
 import { validCoveringStyle, type CoveringStyle } from "./covering-style";
+import {applyCoveringPreference} from "./covering-library";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -10,6 +11,13 @@ export interface CoveringMaterial {
   readonly sourceKey: string; readonly displayName: string;
 }
 export interface CoveringSpan { readonly segmentId: string; readonly from: number; readonly to: number; readonly fromAnchor?:number; readonly toAnchor?:number }
+export function validateCoveringMaterial(value:unknown):void {
+  const fail=():never=>{throw new Error("Некорректная привязка материала оболочки.");};
+  if(!value||typeof value!=="object")return fail();
+  const m=value as CoveringMaterial;
+  if (m.entityType !== "protective-covering" || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(m.snapshotId) || m.snapshotId === "00000000-0000-0000-0000-000000000000" || !/^[\da-f]{64}$/i.test(m.snapshotSha256) || !/^[\da-f]{64}$/i.test(m.recordId)) return fail();
+  for (const key of ["sourceId", "sourceKey", "displayName"] as const) if (typeof m[key] !== "string" || !m[key].trim() || m[key].length > 512) return fail();
+}
 export type CoveringKind="heat-shrink"|"nylon"|"braid"|"metal-braid"|"tape"|"band";
 export interface PhysicalCovering {
   readonly style?:CoveringStyle;
@@ -60,12 +68,7 @@ export function validateCoverings(value: unknown, segmentIds: ReadonlySet<string
     if (c.lengthMm !== null && (!Number.isFinite(c.lengthMm) || c.lengthMm < 0 || c.lengthMm > 1e9 || Math.abs(c.lengthMm * 1000 - Math.round(c.lengthMm * 1000)) > 1e-4)) return fail();
     if (!Array.isArray(c.spans) || !c.spans.length || c.spans.length > 20000 || new Set(c.spans.map(s => s?.segmentId)).size !== c.spans.length) return fail();
     for (const s of c.spans) if (!s || !segmentIds.has(s.segmentId) || !Number.isFinite(s.from) || !Number.isFinite(s.to) || s.from < -10000 || s.to > 10001 || s.from >= s.to || [s.fromAnchor,s.toAnchor].some(i=>i!==undefined&&(!Number.isInteger(i)||i<0||i>1001))) return fail();
-    if (c.material !== undefined) {
-      if (!c.material || typeof c.material !== "object") return fail();
-      const m = c.material;
-      if (m.entityType !== "protective-covering" || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(m.snapshotId) || m.snapshotId === "00000000-0000-0000-0000-000000000000" || !/^[\da-f]{64}$/i.test(m.snapshotSha256) || !/^[\da-f]{64}$/i.test(m.recordId)) return fail();
-      for (const key of ["sourceId", "sourceKey", "displayName"] as const) if (typeof m[key] !== "string" || !m[key].trim() || m[key].length > 512) return fail();
-    }
+    if (c.material !== undefined) validateCoveringMaterial(c.material);
   }
   return value;
 }
@@ -90,7 +93,7 @@ export function standardCovering(document:HarnessDesignDocument,segmentId:string
  const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
  const points=physicalSegmentPoints(document,segment),length=pathLength(points);
  const at=length?projectOntoDrawingRoute(points,drawingBendRadius(document),point)/length:0;
- return {id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]};
+ return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]},document.drawingDocuments?.coveringLibrary);
 }
 
 export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {

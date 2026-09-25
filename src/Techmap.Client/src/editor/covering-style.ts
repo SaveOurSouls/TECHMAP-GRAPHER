@@ -2,8 +2,10 @@ import type { CoveringKind } from "./physical-coverings";
 
 export const coveringTextureOptions = ["auto", "none", "Rubber002", "Fabric061", "Metal049A"] as const;
 export const coveringHatchOptions = ["none", "parallel", "cross", "dots"] as const;
+export type CoveringTexture = typeof coveringTextureOptions[number] | `asset:${string}`;
+export const validCoveringTexture=(value:unknown):value is CoveringTexture=>typeof value==="string"&&(coveringTextureOptions.includes(value as typeof coveringTextureOptions[number])||/^asset:[a-f0-9]{64}$/.test(value));
 export interface CoveringStyle {
-  readonly texture?: typeof coveringTextureOptions[number];
+  readonly texture?: CoveringTexture;
   readonly textureScale?: number;
   readonly textureRotation?: number;
   readonly hatch?: typeof coveringHatchOptions[number];
@@ -24,7 +26,7 @@ export function coveringTextureFile(kind:CoveringKind,style?:CoveringStyle):stri
 export function validCoveringStyle(value:unknown):value is CoveringStyle {
   if(!value||typeof value!=="object"||Array.isArray(value))return false;
   const s=value as CoveringStyle;
-  if(s.texture!==undefined&&!coveringTextureOptions.includes(s.texture)||s.hatch!==undefined&&!coveringHatchOptions.includes(s.hatch))return false;
+  if(s.texture!==undefined&&!validCoveringTexture(s.texture)||s.hatch!==undefined&&!coveringHatchOptions.includes(s.hatch))return false;
   for(const key of ["hatchColor","lineColor"] as const)if(s[key]!==undefined&&(typeof s[key]!=="string"||!/^#[\da-f]{6}$/i.test(s[key])))return false;
   return ([['textureScale',.1,10],['textureRotation',-180,180],['hatchSpacing',1,100],['hatchRotation',-180,180]] as const)
     .every(([key,min,max])=>s[key]===undefined||typeof s[key]==="number"&&Number.isFinite(s[key])&&s[key]>=min&&s[key]<=max);

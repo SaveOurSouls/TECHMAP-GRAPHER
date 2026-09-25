@@ -1,3 +1,4 @@
+import {applyCoveringPreference} from "./covering-library";
 import { InfoHint } from "../InfoHint";
 import { DraftNumberInput } from "../component-library/DraftNumberInput";
 import type { EditorCommand } from "./commands";
@@ -37,7 +38,7 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
     {topology&&<PhysicalTopologyPanel mode="object" document={document} selectedId={objectId} selectedIds={selectedIds.includes(objectId)?selectedIds:[objectId]} onChange={topology=>onCommand({type:"set-physical-topology",topology})} onSelect={onSelect}/>}
     {t?.segments.some(s=>s.id===objectId)&&<button type="button" className="ui-control" onClick={()=>{
       const segments=t.segments.filter(s=>s.id===objectId||selectedIds.includes(s.id)),id=crypto.randomUUID();
-      if(onCommand({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],{id,name:"Оболочка",width:0,color:"#84959f",lengthMm:null,spans:segments.map(s=>({segmentId:s.id,from:0,to:1}))}]}}))onSelect(id);
+      if(onCommand({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],applyCoveringPreference({id,name:"Оболочка",kind:"braid",width:0,color:"#84959f",lengthMm:null,spans:segments.map(s=>({segmentId:s.id,from:0,to:1}))},document.drawingDocuments?.coveringLibrary)]}}))onSelect(id);
     }}>Оболочка на выделенные пайпы</button>}
     {t?.segments.some(s=>s.id===objectId)&&<button type="button" className="ui-control" onClick={()=>onCommand({type:"remove-physical-segment",segmentId:objectId})}>Удалить пайп</button>}
     {cover&&t&&<PhysicalCoveringsPanel compact document={document} topology={t} selectedIds={[objectId]} onChange={topology=>onCommand({type:"set-physical-topology",topology})} onReveal={onSelect}/>}

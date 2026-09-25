@@ -2753,7 +2753,7 @@ export function CanvasViewport({
         height: Math.max(1, Math.round(canvas.clientHeight)),
       });
     };
-    const stopTextures=warmCoveringTextures(redraw);
+    const stopTextures=warmCoveringTextures(redraw,displayObjects);
     componentTemplateImageCacheRef.current!.setInvalidate(redraw);
     redraw();
     const observer = new ResizeObserver(redraw);

@@ -25,7 +25,12 @@ async function start(){
   const config=await(await fetcher('/runtime-config.json')).json(),session=await(await fetcher('/api/v1/session')).json();
   return {fetcher,config,session};
 }
-async function stop(){if(server?.exitCode===null){const done=once(server,'exit');server.kill();await done;}}
+async function stop(){const running=server;server=undefined;if(running?.exitCode===null&&running.signalCode===null){const done=once(running,'exit');running.kill();await done;}}
+async function maintenance(args){
+ const child=spawn(join(packageRoot,'Techmap.Server.exe'),['--no-browser',`--data-root=${dataRoot}`,...args],{cwd:packageRoot,windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';
+ child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+ const timer=setTimeout(()=>child.kill(),60000);try{const [code]=await once(child,'exit');assert.equal(code,0,output);return output;}finally{clearTimeout(timer);}
+}
 
 try {
  const {createProjectApi}=await module('project-api.ts'),{createHarnessDesignApi}=await module('editor/design-api.ts');
@@ -39,6 +44,10 @@ try {
  let project=await projects.createProject({designation:'CHANNELS-TEST',name:'Синтетический жгут М4-63',status:'draft'});
  project=(await projects.addHarness(project.projectId,{commandId:crypto.randomUUID(),expectedRevision:0},{designation:'Т-ветвь и второй выход',quantity:2})).project;
  const harnessId=project.harnesses[0].harnessId;
+ const texturePng='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+ const {createMutationHeaders}=await module('local-session.ts');
+ const uploadResponse=await env.fetcher(`/api/v1/projects/${project.projectId}/attachments`,{method:'POST',headers:createMutationHeaders(env.session),body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:project.revision,fileName:'test-texture.png',mediaType:'image/png',purpose:'covering-texture',contentBase64:texturePng})});
+ assert.equal(uploadResponse.status,200);const textureAttachment=(await uploadResponse.json()).attachment;
  const connectors=[createConnector('A','X1',2,{x:100,y:100}),createConnector('B','X2',2,{x:700,y:100}),createConnector('C','X3',2,{x:550,y:420})];
  const endpoint=(id,n)=>({connectorId:id,contactId:id+':contact:'+n});
  let doc={...createEmptyHarnessDesign(),connectors,wires:[createWire('W1',endpoint('A',1),endpoint('B',1),null),createWire('W2',endpoint('A',1),endpoint('C',1),null),createWire('W3',endpoint('A',2),endpoint('C',2),null)]};
@@ -147,7 +156,8 @@ try {
  twisted=applyEditorCommand(twisted,{type:'create-diff-pair',group:{id:'inclined-pair',wireIds:['pair-1','pair-2'],step:20,amplitude:4,variant:2}});
  const combined={...measuredAutomatic,diffPairs:twisted.diffPairs,screens:e4Base.screens,connectors:[...measuredAutomatic.connectors,...e4Base.connectors,...shared.connectors,...twisted.connectors],wires:[...measuredAutomatic.wires,...e4Base.wires,...shared.wires,...twisted.wires],junctions:[...measuredAutomatic.junctions,...e4Base.junctions,...shared.junctions]};
  combined.drawingDocuments={...addDrawingPositions(combined),leaderScale:2.5,bendRadius:0};
- const coveringStyle={texture:'Metal049A',textureScale:2.5,textureRotation:-30,hatch:'cross',hatchColor:'#ff0000',hatchSpacing:6,hatchRotation:60,lineColor:'#0000ff'};
+ const coveringStyle={texture:`asset:${textureAttachment.sha256}`,textureScale:2.5,textureRotation:-30,hatch:'cross',hatchColor:'#ff0000',hatchSpacing:6,hatchRotation:60,lineColor:'#0000ff'};
+ combined.drawingDocuments.coveringLibrary={textures:[{sha256:textureAttachment.sha256,name:'test-texture.png'}],defaults:{braid:{texture:coveringStyle.texture}}};
  combined.physicalTopology={...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>({...c,style:coveringStyle}))};
  assert.ok(combined.physicalTopology.coverings.length>0);
  const leaderScene=drawingDocumentScene(combined);
@@ -166,6 +176,23 @@ try {
  assert.ok(!savedRemoved.content.physicalTopology.segments.some(s=>s.id==='drag-branch'));
  await stop();env=await start();
  assert.deepEqual((await createHarnessDesignApi(env.config,env.session,env.fetcher).get(project.projectId,harnessId)).content,savedRemoved.content);
+ const {createCoveringAssetApi}=await module('editor/covering-assets.ts');
+ const copied=await createProjectApi(env.config,env.session,env.fetcher).copyProject(project.projectId);
+ const copyContent=(await createHarnessDesignApi(env.config,env.session,env.fetcher).get(copied.projectId,copied.harnesses[0].harnessId)).content;
+ assert.deepEqual(copyContent.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
+ const assets=await createCoveringAssetApi(env.config,env.session,copied.projectId,env.fetcher).list();
+ const copiedTexture=assets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(copiedTexture);
+ const textureResponse=await env.fetcher(copiedTexture.url);assert.equal(textureResponse.status,200);
+ assert.equal(Buffer.from(await textureResponse.arrayBuffer()).toString('base64'),texturePng);
+ await stop();const exportPath=dataRoot+'-texture-roundtrip.techmap-project.zip';
+ assert.match(await maintenance([`--export-project=${project.projectId}`,`--export-destination=${exportPath}`]),/TECHMAP_PROJECT_EXPORT_STATUS=ok/);
+ const importLog=await maintenance([`--import-project=${exportPath}`]),importId=/TECHMAP_PROJECT_IMPORT_PROJECT_ID=([^\s]+)/.exec(importLog)?.[1];assert.ok(importId,importLog);
+ env=await start();const importedProject=await createProjectApi(env.config,env.session,env.fetcher).getProject(importId);
+ const importedDesign=await createHarnessDesignApi(env.config,env.session,env.fetcher).get(importId,importedProject.harnesses[0].harnessId);
+ assert.deepEqual(importedDesign.content.drawingDocuments.coveringLibrary,combined.drawingDocuments.coveringLibrary);
+ const importedAssets=await createCoveringAssetApi(env.config,env.session,importId,env.fetcher).list();
+ const importedTexture=importedAssets.find(a=>a.entry.sha256===textureAttachment.sha256);assert.ok(importedTexture);
+ const importedBytes=await env.fetcher(importedTexture.url);assert.equal(importedBytes.status,200);assert.equal(Buffer.from(await importedBytes.arrayBuffer()).toString('base64'),texturePng);
  const report={status:'ok',dataRoot,projectId:project.projectId,harnessId,branchChecked:true,multipleExitsChecked:true,wireIdentityChecked:true,bomChecked:true,restartChecked:true,pipeEditingChecked:true,automaticExitsChecked:true,sharedDimensionsChecked:true,nodeToPipeChecked:true,pipeRemovalRestartChecked:true,compactWidthsChecked:true,midpointEditingChecked:true,automaticCornerDimensionChecked:true,e4MidpointChecked:true,e4DiagonalChecked:true};
  await writeFile(join(dataRoot,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } finally {await stop();await vite.close();await writeFile(join(dataRoot,'server.log'),log);}

@@ -1,3 +1,4 @@
+import {applyCoveringPreference} from "./covering-library";
 import { DraftNumberInput } from "../component-library/DraftNumberInput";
 import { InfoHint } from "../InfoHint";
 import { CoveringStyleFields } from "./CoveringStyleFields";
@@ -15,7 +16,7 @@ export function PhysicalCoveringsPanel({ document, topology: t, selectedIds, onC
   return <section className="he-relations" aria-label="Оболочки и защита"><details open={!!selected}>
     <summary hidden={compact}>Оболочки и защита · {t.coverings?.length ?? 0}</summary>
     {!compact&&<>
-    <header className="ui-section-heading"><InfoHint>Выберите участки и создайте общую оболочку. Для материала защиты дважды щёлкните позицию каталога «Защита»: тип protective-covering в универсальном справочнике. Начало и конец — проценты каждого участка. Ширина условная; расход задаётся отдельной длиной в миллиметрах. Разветвление сохраняет покрытые интервалы.</InfoHint><button className="ui-control" type="button" disabled={!segments.length} onClick={() => onChange({ ...t, coverings: [...t.coverings ?? [], { id: crypto.randomUUID(), name: "Оболочка", width: 0, color: "#84959f", lengthMm: null, spans: segments.map(s => ({ segmentId: s.id, from: 0, to: 1 })) }] })}>Оболочка +</button></header>
+    <header className="ui-section-heading"><InfoHint>Выберите участки и создайте общую оболочку. Для материала защиты дважды щёлкните позицию каталога «Защита»: тип protective-covering в универсальном справочнике. Начало и конец — проценты каждого участка. Ширина условная; расход задаётся отдельной длиной в миллиметрах. Разветвление сохраняет покрытые интервалы.</InfoHint><button className="ui-control" type="button" disabled={!segments.length} onClick={() => onChange({ ...t, coverings: [...t.coverings ?? [], applyCoveringPreference({ id: crypto.randomUUID(), name: "Оболочка", kind:"braid", width: 0, color: "#84959f", lengthMm: null, spans: segments.map(s => ({ segmentId: s.id, from: 0, to: 1 })) },document.drawingDocuments?.coveringLibrary)] })}>Оболочка +</button></header>
     {t.coverings?.map(c => <button key={c.id} type="button" className="ui-control" aria-pressed={selected?.id === c.id} onClick={() => onReveal(c.id)}>{c.name}</button>)}
     </>}
     {selected && <div className="he-physical-fields">
@@ -26,7 +27,7 @@ export function PhysicalCoveringsPanel({ document, topology: t, selectedIds, onC
       <label>Длина, мм<DraftNumberInput aria-label="Длина защиты, мм" min={0} step="0.001" value={coveringMeasuredLength(document,selected) ?? ""} onValueChange={lengthMm=>update({lengthMode:'manual',lengthMm})} onEmpty={()=>update({lengthMode:'manual',lengthMm:null})}/></label>
       <InfoHint>Тяните поверхность вдоль пайпа, торцы — для растяжения. Зелёный торец привязан к точке. Два привязанных торца берут длину из размеров пайпа.</InfoHint>
       <small>{selected.material?.displayName ?? "Графическая оболочка · без материала"}</small>
-      <CoveringStyleFields style={selected.style} color={selected.color} onChange={style=>update({style})} onColorChange={color=>update({color})}/>
+      <CoveringStyleFields style={selected.style} color={selected.color} kind={coveringKind(selected)} library={document.drawingDocuments?.coveringLibrary} onChange={style=>update({style})} onColorChange={color=>update({color})}/>
       {selected.spans.map(span => <div className="he-physical-fields" key={span.segmentId}><span>S{t.segments.findIndex(s => s.id === span.segmentId) + 1}</span>
         {(["from", "to"] as const).map(key => <label key={key}>{key === "from" ? "Начало" : "Конец"}<select aria-label={`${key === "from" ? "Привязка начала" : "Привязка конца"} покрытия ${span.segmentId}`} value={span[key==='from'?'fromAnchor':'toAnchor']??'free'} onChange={e=>update({spans:selected.spans.map(s=>s===span?{...resolvedCoveringSpan(document,s),[key==='from'?'fromAnchor':'toAnchor']:e.target.value==='free'?undefined:Number(e.target.value)}:s)})}><option value="free">Свободно</option>{coveringControlFractions(document,span.segmentId).map((f,i)=><option key={i} value={i} disabled={key==='from'?f>=resolvedCoveringSpan(document,span).to:f<=resolvedCoveringSpan(document,span).from}>Точка {i+1}</option>)}</select></label>)}
       </div>)}

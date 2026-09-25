@@ -17,6 +17,13 @@ internal static class HarnessPhysicalTopologyValidator
     private static string LongText(JsonElement e,string key,int maximum) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.String && v.GetString() is {} s && !string.IsNullOrWhiteSpace(s) && s.Length<=maximum ? s : throw Invalid();
     private static decimal Number(JsonElement e,string key) => e.ValueKind==JsonValueKind.Object && e.TryGetProperty(key,out var v) && v.ValueKind==JsonValueKind.Number && v.TryGetDecimal(out var n) ? n : throw Invalid();
     private static bool Direction(string value) => value is "left" or "right" or "up" or "down";
+    internal static void ValidateMaterial(JsonElement material)
+    {
+        if(Text(material,"entityType")!="protective-covering") throw Invalid();
+        _=LongText(material,"sourceId",512); _=LongText(material,"sourceKey",512); _=LongText(material,"displayName",512);
+        if(!Guid.TryParseExact(Text(material,"snapshotId"),"D",out var guid) || guid==Guid.Empty) throw Invalid();
+        foreach(var key in new[]{"snapshotSha256","recordId"}) {var hash=Text(material,key); if(hash.Length!=64 || hash.Any(c=>!Uri.IsHexDigit(c))) throw Invalid();}
+    }
 
     // Legacy fields are accepted only at the persistence boundary. New clients write path.
     internal static JsonElement AuthoredPoints(JsonElement segment)
@@ -111,10 +118,7 @@ internal static class HarnessPhysicalTopologyValidator
                 }
                 if(covering.TryGetProperty("material",out var material))
                 {
-                    if(Text(material,"entityType")!="protective-covering") throw Invalid();
-                    _=LongText(material,"sourceId",512); _=LongText(material,"sourceKey",512); _=LongText(material,"displayName",512);
-                    if(!Guid.TryParseExact(Text(material,"snapshotId"),"D",out var guid) || guid==Guid.Empty) throw Invalid();
-                    foreach(var key in new[]{"snapshotSha256","recordId"}) {var hash=Text(material,key); if(hash.Length!=64 || hash.Any(c=>!Uri.IsHexDigit(c))) throw Invalid();}
+                    ValidateMaterial(material);
                 }
             }
         }

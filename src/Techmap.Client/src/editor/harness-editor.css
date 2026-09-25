@@ -509,3 +509,14 @@
 .he-covering-style>summary { cursor:pointer; padding:6px 0; }
 .he-material-colors { display:flex; gap:2px; flex-wrap:wrap; margin-top:3px; }
 .he-material-colors button { width:13px; height:13px; min-width:13px; padding:0; border:1px solid #94a3b8; border-radius:2px; }
+.he-material-settings { width:min(900px,calc(100vw - 32px)); max-height:calc(100vh - 32px); padding:16px; border:1px solid #bdcbd3; border-radius:8px; background:#f7fafc; color:#27445a; overflow:auto; }
+.he-material-settings::backdrop { background:#1e334655; }
+.he-material-settings fieldset { border:0; padding:0; margin:0; min-width:0; }
+.he-material-table { width:100%; table-layout:fixed; border-collapse:collapse; margin:10px 0; font-size:12px; }
+.he-material-table th,.he-material-table td { border:1px solid #d5e0e6; padding:6px; text-align:left; vertical-align:middle; }
+.he-material-table th { background:#eaf0f4; }
+.he-material-table th:first-child { width:24%; }
+.he-material-table select,.he-material-search input { width:100%; min-width:0; padding:5px; border:1px solid #bfccd4; border-radius:4px; background:white; color:inherit; }
+.he-material-table img { width:72px; height:40px; object-fit:contain; }
+.he-texture-drop { border:1px dashed #91adbd; padding:10px; border-radius:5px; }
+.he-material-search { display:flex; align-items:center; gap:10px; margin:12px 0; }

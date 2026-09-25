@@ -1,3 +1,5 @@
+import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
+import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { physicalTopologyScene } from "./physical-scene";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
@@ -676,6 +678,8 @@ export function HarnessDesignEditor({
   const [view, setView] = useState<HarnessEditorView>(initialView);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
+  const [materialSettings,setMaterialSettings]=useState(false);
+  const textureAssets=useCoveringAssets(config,session,projectId,materialSettings||!!history?.present.drawingDocuments?.coveringLibrary?.textures.length);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
   const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
@@ -1559,6 +1563,7 @@ export function HarnessDesignEditor({
         message={componentGraphIntegrityMessage}
         onRetry={() => void refreshComponentGraph(loadGeneration.current)}
       />}
+      {materialSettings&&<CoveringMaterialSettings config={config} session={session} document={history.present} urls={textureAssets.urls} assetError={textureAssets.error} upload={textureAssets.upload} onChange={documents=>run({type:"set-drawing-documents",documents})} onClose={()=>setMaterialSettings(false)}/>}
       <HarnessEditorErrorBoundary
         key={`${harnessId}:${uiFailureNonce}`}
         onError={(failure) => setMessage(`Ошибка отображения: ${failure}`)}
@@ -1571,7 +1576,7 @@ export function HarnessDesignEditor({
         harnessId={harnessId}
         harnessDesignation={harnessDesignation}
         view={view}
-        objects={scene}
+        objects={withCoveringTextureUrls(scene,textureAssets.urls)}
         layers={layers}
         catalogItems={catalog.items}
         catalogSources={catalog.sources}
@@ -1586,6 +1591,7 @@ export function HarnessDesignEditor({
         revealRequest={revealRequest}
         objectProperties={view==="drawing"?id=><DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>:undefined}
         documentActions={<>{view==="drawing"&&<>
+          <button type="button" className="ui-control" onClick={()=>setMaterialSettings(true)}>Материалы</button>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
           <DrawingRangeControl label="Позиции" accessibleLabel="Масштаб позиционных обозначений" min={.25} max={4} step={.05} value={leaderScalePreview??history.present.drawingDocuments?.leaderScale??1} onPreview={setLeaderScalePreview} onCommit={leaderScale=>{if(leaderScale!==(history.present.drawingDocuments?.leaderScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale}});}} hint="Размер кружков, номеров и точек выносок. Ручное положение сохраняется. Escape отменяет изменение; отпускание ползунка сохраняет его одним шагом отмены."/>
