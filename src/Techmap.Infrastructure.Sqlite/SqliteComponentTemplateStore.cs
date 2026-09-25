@@ -988,6 +988,12 @@ public sealed class SqliteComponentTemplateStore(
         return bytes;
     }
 
+    internal static void ValidateMaterialPng(byte[] bytes)
+    {
+        var dimensions = ValidatePng(bytes);
+        ValidateDimensions(dimensions.Width, dimensions.Height);
+    }
+
     private static ImageDimensions ValidatePng(ReadOnlySpan<byte> bytes)
     {
         ReadOnlySpan<byte> signature = [137, 80, 78, 71, 13, 10, 26, 10];

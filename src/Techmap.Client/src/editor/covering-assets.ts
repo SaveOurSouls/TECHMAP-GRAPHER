@@ -32,9 +32,9 @@ export function createCoveringAssetApi(config:RuntimeConfig,session:LocalSession
     },
   };
 }
-export function useCoveringAssets(config:RuntimeConfig,session:LocalSession,projectId:string,needed:boolean) {
+export function useCoveringAssets(config:RuntimeConfig,session:LocalSession,projectId:string,needed:boolean,version="") {
   const api=useMemo(()=>createCoveringAssetApi(config,session,projectId),[config,session,projectId]);
   const [urls,setUrls]=useState<Readonly<Record<string,string>>>({}),[error,setError]=useState("");
-  useEffect(()=>{let cancelled=false;setUrls({});setError("");if(needed)void api.list().then(items=>{if(!cancelled)setUrls(Object.fromEntries(items.map(a=>[a.entry.sha256,a.url])));}).catch(e=>{if(!cancelled)setError(String(e.message));});return()=>{cancelled=true;};},[api,needed]);
+  useEffect(()=>{let cancelled=false;setUrls({});setError("");if(needed)void api.list().then(items=>{if(!cancelled)setUrls(Object.fromEntries(items.map(a=>[a.entry.sha256,a.url])));}).catch(e=>{if(!cancelled)setError(String(e.message));});return()=>{cancelled=true;};},[api,needed,version]);
   return {urls,error,upload:async(file:File):Promise<CoveringTextureEntry>=>{const value=await api.upload(file);setUrls(old=>({...old,[value.entry.sha256]:value.url}));return value.entry;}};
 }

@@ -6,4 +6,5 @@
   <ItemGroup>
     <ProjectReference Include="../Techmap.Application/Techmap.Application.csproj" />
   </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="GlobalMaterialSeeds.sql" /></ItemGroup>
 </Project>

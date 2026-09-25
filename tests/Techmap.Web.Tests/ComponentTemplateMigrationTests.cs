@@ -272,9 +272,11 @@ public sealed class ComponentTemplateMigrationTests
                     DROP TABLE component_template_article_bindings;
                     DROP TABLE component_template_versions;
                     DROP TABLE IF EXISTS component_template_drafts;
+                        DROP TABLE IF EXISTS global_materials;
                     DROP TABLE component_templates;
                         DROP TABLE IF EXISTS component_template_drafts;
-                        DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
+                        DROP TABLE IF EXISTS global_materials;
+                        DELETE FROM schema_history WHERE version IN (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21);
                     PRAGMA user_version = 9;
                     """;
                 command.ExecuteNonQuery();

@@ -13,10 +13,12 @@ export interface CoveringStyle {
   readonly hatchSpacing?: number;
   readonly hatchRotation?: number;
   readonly lineColor?: string;
+  readonly lineWidth?: number;
+  readonly textureTint?: string;
 }
 export const defaultCoveringStyle: Required<CoveringStyle> = {
   texture:"auto", textureScale:1, textureRotation:0, hatch:"none",
-  hatchColor:"#34434e", hatchSpacing:8, hatchRotation:45, lineColor:"#34434e",
+  hatchColor:"#34434e", hatchSpacing:8, hatchRotation:45, lineColor:"#34434e", lineWidth:1, textureTint:"#ffffff",
 };
 export const resolvedCoveringStyle=(style?:CoveringStyle):Required<CoveringStyle>=>({...defaultCoveringStyle,...style});
 const files:Record<CoveringKind,string>={"heat-shrink":"Rubber002",nylon:"Fabric061",braid:"Fabric061","metal-braid":"Metal049A",tape:"Rubber002",band:"Fabric061"};
@@ -27,7 +29,8 @@ export function validCoveringStyle(value:unknown):value is CoveringStyle {
   if(!value||typeof value!=="object"||Array.isArray(value))return false;
   const s=value as CoveringStyle;
   if(s.texture!==undefined&&!validCoveringTexture(s.texture)||s.hatch!==undefined&&!coveringHatchOptions.includes(s.hatch))return false;
-  for(const key of ["hatchColor","lineColor"] as const)if(s[key]!==undefined&&(typeof s[key]!=="string"||!/^#[\da-f]{6}$/i.test(s[key])))return false;
+  for(const key of ["hatchColor","lineColor","textureTint"] as const)if(s[key]!==undefined&&(typeof s[key]!=="string"||!/^#[\da-f]{6}$/i.test(s[key])))return false;
   return ([['textureScale',.1,10],['textureRotation',-180,180],['hatchSpacing',1,100],['hatchRotation',-180,180]] as const)
-    .every(([key,min,max])=>s[key]===undefined||typeof s[key]==="number"&&Number.isFinite(s[key])&&s[key]>=min&&s[key]<=max);
+    .every(([key,min,max])=>s[key]===undefined||typeof s[key]==="number"&&Number.isFinite(s[key])&&s[key]>=min&&s[key]<=max) &&
+    (s.lineWidth===undefined || typeof s.lineWidth==="number" && Number.isFinite(s.lineWidth) && s.lineWidth>=.1 && s.lineWidth<=20);
 }

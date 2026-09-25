@@ -29,6 +29,10 @@ const ComponentLibrary = lazy(async () => {
   const module = await import("./component-library/ComponentLibrary");
   return { default: module.ComponentLibrary };
 });
+const MaterialLibrary = lazy(async () => {
+  const module = await import("./MaterialLibrary");
+  return { default: module.MaterialLibrary };
+});
 
 interface AppProps {
   readonly config: RuntimeConfig;
@@ -50,6 +54,7 @@ const sections = [
   { id: "projects", label: "Проекты" },
   { id: "references", label: "Справочники" },
   { id: "library", label: "Библиотека" },
+  { id: "materials", label: "Материалы" },
 ] as const;
 export type AppSection = typeof sections[number]["id"];
 const harnessTabs = [
@@ -944,9 +949,13 @@ export function App({ config, session }: AppProps) {
             </>
           ) : activeSection === "references" ? (
             <ReferenceImportPanel config={config} session={session} />
-          ) : (
+          ) : activeSection === "library" ? (
             <Suspense fallback={<p className="panel-message" role="status">Открываем библиотеку…</p>}>
               <ComponentLibrary config={config} session={session} />
+            </Suspense>
+          ) : (
+            <Suspense fallback={<p className="panel-message" role="status">Открываем материалы…</p>}>
+              <MaterialLibrary config={config} session={session} />
             </Suspense>
           )}
         </main>

@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 20;
+    public const int CurrentSchemaVersion = 21;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -1295,6 +1295,23 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             "schema_version IN (3, 4, 5)",
             StringComparison.Ordinal);
 
+    private const string GlobalMaterialsMigrationId = "M4-110-global-material-library";
+    private static readonly string GlobalMaterialsSchemaSql = """
+        CREATE TABLE global_materials (
+            material_id TEXT PRIMARY KEY NOT NULL,
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json)),
+            image_png BLOB NOT NULL CHECK (length(image_png) BETWEEN 1 AND 10485760)
+        ) STRICT;
+        """ + ReadMaterialSeeds();
+
+    private static string ReadMaterialSeeds()
+    {
+        using var stream = typeof(SqliteStorage).Assembly.GetManifestResourceStream("Techmap.Infrastructure.Sqlite.GlobalMaterialSeeds.sql")!;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     private readonly string connectionString;
     private readonly int busyTimeoutMilliseconds;
     private readonly SemaphoreSlim writerGate = new(initialCount: 1, maxCount: 1);
@@ -1713,6 +1730,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 18, MigrationId: ComponentTemplateContentV5MigrationId, Sql: ComponentTemplateContentV5SchemaSql),
             (Version: 19, MigrationId: ComponentTemplateDraftMigrationId, Sql: ComponentTemplateDraftSchemaSql),
             (Version: 20, MigrationId: ProjectComponentSnapshotsV5MigrationId, Sql: ProjectComponentSnapshotsV5SchemaSql),
+            (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1860,6 +1878,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             ExecuteSchemaSql(expected, ProjectComponentSnapshotsV5SchemaSql);
         }
 
+        if (schemaVersion >= 21) ExecuteSchemaSql(expected, GlobalMaterialsSchemaSql);
         return ReadSchemaShape(expected);
     }
 
@@ -2003,6 +2022,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 MigrationId: ProjectComponentSnapshotsV5MigrationId,
                 Sql: ProjectComponentSnapshotsV5SchemaSql,
                 Description: "Project component snapshots support content schema version 5"),
+            20 => (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql, Description: "Global material library with validated PNG textures"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -2079,7 +2099,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20))
             {
                 return false;
             }

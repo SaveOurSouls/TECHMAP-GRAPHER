@@ -2,14 +2,14 @@
   "manifestFormat": 1,
   "productId": "TECHMAP-GRAPHER",
   "delivery": "portable-web",
-  "appVersion": "0.59.0-m4-109",
+  "appVersion": "0.60.0-m4-110",
   "api": {
     "major": 1,
     "minClientMajor": 1,
     "maxClientMajor": 1
   },
   "storage": {
-    "schema": 20,
+    "schema": 21,
     "minReadableSchema": 1
   },
   "target": {

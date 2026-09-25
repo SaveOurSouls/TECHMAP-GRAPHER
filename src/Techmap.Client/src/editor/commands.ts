@@ -1,3 +1,4 @@
+import type {CoveringLibrary} from "./covering-library";
 import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength, segmentDimensionKey, type DimensionMode } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
@@ -62,7 +63,7 @@ export type EditorCommand =
   | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"move-physical-node";readonly nodeId:string;readonly position:Point;readonly mode:PhysicalDragMode}
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
-  | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology }
+  | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology; readonly coveringLibrary?:CoveringLibrary }
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
@@ -255,7 +256,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       return {...document,drawingDocuments:validateDrawingDocuments(command.documents,document)};
     case "set-physical-topology":
       if (document.views.drawing.layers.some(layer => layer.id === "wires" && layer.locked)) throw new Error("Слой проводов заблокирован.");
-      return { ...document, physicalTopology: parsePhysicalTopology(command.topology, document) };
+      return { ...document, ...(command.coveringLibrary?{drawingDocuments:validateDrawingDocuments({...document.drawingDocuments??{tables:[],leaders:[],bomOrder:[]},coveringLibrary:command.coveringLibrary},document)}:{}), physicalTopology: parsePhysicalTopology(command.topology, document) };
     case "remove-physical-segment":
       if (document.views.drawing.layers.some(layer => layer.id === "wires" && layer.locked)) throw new Error("Слой проводов заблокирован.");
       return { ...document, physicalTopology: parsePhysicalTopology(removePhysicalSegment(document, command.segmentId), document) };

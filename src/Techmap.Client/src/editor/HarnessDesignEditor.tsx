@@ -1,3 +1,4 @@
+import {createGlobalCoveringPreparer} from "./global-covering-materials";
 import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { physicalTopologyScene } from "./physical-scene";
@@ -675,6 +676,8 @@ export function HarnessDesignEditor({
     () => componentPlacementApiOverride ?? createComponentPlacementApi(config, session),
     [componentPlacementApiOverride, config, session],
   );
+  const prepareCoverings=useMemo(()=>createGlobalCoveringPreparer(config,session,projectId),[config,session,projectId]);
+  const preparingCovering=useRef(false);
   const catalog = useEditorReferenceCatalog(config, session);
   const terminalLookup = useTerminalArticleLookup(config, session);
   const wireLookup = useWireDatabaseLookup(config, session);
@@ -682,7 +685,7 @@ export function HarnessDesignEditor({
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [materialSettings,setMaterialSettings]=useState(false);
-  const textureAssets=useCoveringAssets(config,session,projectId,materialSettings||!!history?.present.drawingDocuments?.coveringLibrary?.textures.length);
+  const textureAssets=useCoveringAssets(config,session,projectId,materialSettings||!!history?.present.drawingDocuments?.coveringLibrary?.textures.length,history?.present.drawingDocuments?.coveringLibrary?.textures.map(t=>t.sha256).join(",")??"");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
   const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
@@ -989,6 +992,18 @@ export function HarnessDesignEditor({
     if (placementBusyRef.current || pendingPlacementRef.current) return false;
     const current = historyRef.current;
     if (!current) return false;
+    if(command.type==="set-physical-topology"&&!command.coveringLibrary&&command.topology.coverings?.some(c=>!current.present.physicalTopology?.coverings?.some(old=>old.id===c.id))){
+      if(preparingCovering.current){setMessage("Подождите: закрепляем материал оболочки.");return false;}
+      preparingCovering.current=true;const generation=loadGeneration.current;setMessage("Закрепляем материал оболочки…");
+      void prepareCoverings(current.present,command).then(prepared=>{
+        if(loadGeneration.current!==generation)return;
+        if(historyRef.current?.present!==current.present)throw new Error("Чертёж изменился во время загрузки материала. Повторите добавление оболочки.");
+        const next=executeEditorCommand(current,prepared);historyRef.current=next;setHistory(next);setMessage("");
+        const added=prepared.topology.coverings?.find(c=>!current.present.physicalTopology?.coverings?.some(old=>old.id===c.id));
+        if(added){setSelectedObjectId(added.id);setSelectedObjectIds([added.id]);}
+      }).catch(error=>setMessage(error instanceof Error?error.message:"Не удалось закрепить материал.")).finally(()=>{preparingCovering.current=false});
+      return false;
+    }
     try {
       const next = executeEditorCommand(current, command);
       historyRef.current = next;
@@ -999,7 +1014,7 @@ export function HarnessDesignEditor({
       setMessage(error instanceof Error ? error.message : "Не удалось изменить документ жгута.");
       return false;
     }
-  }, []);
+  }, [prepareCoverings]);
 
   const initializedExits = useRef(new Set<string>());
   useEffect(() => {
