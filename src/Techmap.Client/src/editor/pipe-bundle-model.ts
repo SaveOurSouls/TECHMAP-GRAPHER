@@ -25,6 +25,12 @@ export function pipeBundlePaths(covering: PhysicalCovering, coverings: readonly 
     : pipeBundlePaths(coverings.find(c => c.id === member.id)!, coverings)) ?? [];
 }
 
+/** First covered member in authored membership order owns the common display
+ * axis. Reordering spans during motion must not move the shell to another pipe. */
+export function pipeBundleAxisPath(covering: PhysicalCovering, coverings: readonly PhysicalCovering[]): readonly string[] {
+  return pipeBundlePaths(covering,coverings).find(ids=>covering.spans.some(s=>ids.includes(s.segmentId)))??[];
+}
+
 /** Returns ordered unique leaves. Used by validation, selection and layout so
  * nesting cannot silently duplicate a pipe or invent a missing participant. */
 export function resolvePipeBundles(coverings: readonly PhysicalCovering[], segmentIds: ReadonlySet<string>): ReadonlyMap<string, readonly string[]> {

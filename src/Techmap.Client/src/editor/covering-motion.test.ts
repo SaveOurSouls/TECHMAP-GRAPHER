@@ -74,3 +74,22 @@ it('connects an existing node at the projected station without mutating the save
   expect(pipeBundleDisplaySamples(changed,'new')!.at(-1)!.point).toEqual(screen);
   expect(doc.physicalTopology!.segments.find(s=>s.id==='s2')!.path.points).toEqual([]);
 });
+
+it('moves all independent supports by one fraction, clamped by the first boundary reached',()=>{
+  const base=fixture(),t=base.physicalTopology!,c={...t.coverings![0]!,spans:[...t.coverings![0]!.spans,{segmentId:'s2',from:.4,to:.9}]};
+  const doc={...base,physicalTopology:{...t,coverings:[c]}};
+  const moved=moveCovering(doc,c.id,0,'body',{x:180,y:0},{x:300,y:0})!;
+  expect(moved.spans.find(s=>s.segmentId==='s0')!.from).toBeCloseTo(.4);
+  expect(moved.spans.find(s=>s.segmentId==='s1')!.to).toBeCloseTo(.8);
+  expect(moved.spans.find(s=>s.segmentId==='s2')!.from).toBeCloseTo(.5);
+  expect(moved.spans.find(s=>s.segmentId==='s2')!.to).toBe(1);
+  expect(moved.lengthMm).toBe(c.lengthMm);
+});
+
+it('moves a reversed support towards the same world end',()=>{
+  const base=fixture(),t=base.physicalTopology!,c={...t.coverings![0]!,spans:[...t.coverings![0]!.spans,{segmentId:'s2',from:.2,to:.8}]};
+  const doc={...base,physicalTopology:{...t,segments:t.segments.map(s=>s.id==='s2'?{...s,from:s.to,to:s.from}:s),coverings:[c]}};
+  const moved=moveCovering(doc,c.id,0,'body',{x:180,y:0},{x:240,y:0})!;
+  expect(moved.spans.find(s=>s.segmentId==='s2')!.from).toBeCloseTo(.1);
+  expect(moved.spans.find(s=>s.segmentId==='s2')!.to).toBeCloseTo(.7);
+});

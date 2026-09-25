@@ -5,6 +5,7 @@ import { coveringControlFractions, coveringKind, coveringRoute, resolvedCovering
 import { drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
 import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
+import { pipeBundleAxisPath } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 
@@ -39,7 +40,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
   const handles:CoveringHandle[]=[],surfaces:CoveringSurface[]=[],paths:Point[][]=[];
   const ownSupports:{segmentId:string;support:WidthSupport}[]=[];
   let maximumWidth=0;
+  const bundleAxis=covering.bundle?pipeBundleAxisPath(covering,sourceCoverings):undefined;
   for(const [spanIndex,original] of covering.spans.entries()){
+   if(bundleAxis&&!bundleAxis.includes(original.segmentId))continue;
    const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
    const groupedWidth=bundleSections.get(covering.id)?.width;

@@ -49,6 +49,20 @@ it("routes each wire inside its projected pipe while preserving measured and ele
   expect(JSON.stringify(doc)).toBe(before);
 });
 
+it("uses one common sleeve axis for independent supports without duplicating shells",()=>{
+  const doc=parallel(),topology=doc.physicalTopology!;
+  const covering={...topology.coverings![0]!,spans:[{segmentId:"s0",from:.3,to:.7},{segmentId:"s1",from:.3,to:.7}]};
+  const independent={...doc,physicalTopology:{...topology,coverings:[covering]}};
+  expect(projectPipeBundlePoint(independent,"s0",.5,{x:300,y:0})).toEqual({x:300,y:-5});
+  expect(projectPipeBundlePoint(independent,"s1",.5,{x:300,y:100})).toEqual({x:300,y:5});
+  const shell=coveringScene(independent)[0]!;
+  expect(shell.paths).toHaveLength(1);
+  expect(shell.paths![0]!.every(p=>p.y===0)).toBe(true);
+  const reversed={...independent,physicalTopology:{...independent.physicalTopology,coverings:[{...covering,spans:[...covering.spans].reverse()}]}};
+  expect(coveringScene(reversed)[0]!.paths).toEqual(shell.paths);
+  expect(pipeBundleDisplaySamples(reversed,"s1")).toEqual(pipeBundleDisplaySamples(independent,"s1"));
+});
+
 it("follows a moved sleeve and recreates the same display after JSON without storing display vertices",()=>{
   const doc=parallel(),t=doc.physicalTopology!;
   const moved=moveCovering(doc,"group",0,"body",{x:200,y:0},{x:260,y:0})!;

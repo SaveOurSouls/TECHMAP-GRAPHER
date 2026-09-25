@@ -7,6 +7,7 @@ import { pipeBundleProjectionStops, projectPipeBundlePoint } from "./pipe-bundle
 interface Station { point: Point; distance: number }
 interface Part { id: string; before: number; length: number; min: number; max: number }
 interface Interval { from: number; to: number }
+const pointDistance=(a:Point,b:Point)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function closestDistance(stations: readonly Station[], point: Point): number {
   let nearest=Infinity,result=0;
@@ -50,10 +51,32 @@ export function moveBundleCovering(document:HarnessDesignDocument,covering:Physi
   if(!covering.bundle)return null;
   const original=covering.spans[spanIndex];if(!original)return null;
   const paths=pipeBundlePaths(covering,document.physicalTopology!.coverings??[]);
-  const path=paths.find(ids=>ids.includes(original.segmentId));if(!path||path.length<2)return null;
+  const path=paths.find(ids=>ids.includes(original.segmentId));if(!path)return null;
+  const supported=paths.filter(ids=>covering.spans.some(s=>ids.includes(s.segmentId)));
+  if(path.length<2&&supported.length<2)return null;
   const axis=coveringAxis(document,covering,path);if(!axis||!axis.intervals.length)return null;
   const delta=closestDistance(axis.stations,point)-closestDistance(axis.stations,start);
   if(Math.abs(delta)<1e-8)return covering;
+  if(part==='body'&&supported.length>1){
+    const axes=supported.map(ids=>coveringAxis(document,covering,ids));
+    if(axes.some(a=>!a||!a.length||!a.intervals.length))return covering;
+    const a=axis.stations[0]!.point,b=axis.stations.at(-1)!.point;
+    const oriented=axes.map(axis=>{const first=axis!.stations[0]!.point,last=axis!.stations.at(-1)!.point;
+      const reverse=pointDistance(a,last)+pointDistance(b,first)<pointDistance(a,first)+pointDistance(b,last);
+      return {axis:axis!,direction:reverse?-1:1};});
+    let lower=-Infinity,upper=Infinity;
+    for(const {axis:a,direction} of oriented){
+      const lo=(a.min-a.intervals[0]!.from)/a.length,hi=(a.max-a.intervals.at(-1)!.to)/a.length;
+      lower=Math.max(lower,direction===1?lo:-hi);upper=Math.min(upper,direction===1?hi:-lo);
+    }
+    const shift=Math.max(lower,Math.min(upper,delta/axis.length));if(Math.abs(shift)<1e-8)return covering;
+    const spans=oriented.flatMap(({axis,direction})=>axis.parts.flatMap(p=>axis.intervals.flatMap(r=>{
+      const offset=shift*axis.length*direction;
+      const from=Math.max(p.before+p.min*p.length,r.from+offset),to=Math.min(p.before+p.max*p.length,r.to+offset);
+      return to-from>1e-7?[{segmentId:p.id,from:(from-p.before)/p.length,to:(to-p.before)/p.length}]:[];
+    })));
+    return {...covering,spans};
+  }
   const current=axis.parts.find(p=>p.id===original.segmentId)!,span=resolvedCoveringSpan(document,original);
   let ranges=axis.intervals.map(r=>({...r}));
   if(part==='body'){

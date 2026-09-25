@@ -169,7 +169,7 @@ try {
  combined.physicalTopology={...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>({...c,style:coveringStyle}))};
  assert.ok(combined.physicalTopology.coverings.length>0);
  // Bundle membership survives the same persistence boundaries as sleeves.
- // Geometry/UI grouping is tested separately; this checks IDs and nesting only.
+ // Persist membership, motion and derived projection through all boundaries.
  const bundlePipes=combined.physicalTopology.segments.slice(0,3).map(s=>s.id);
  assert.equal(bundlePipes.length,3);
  const bundleCover=(id,mode,members)=>({id,name:id,kind:'heat-shrink',width:0,color:'#8899aa',lengthMm:null,
@@ -191,6 +191,24 @@ try {
  // Match editor commands: each change creates a new immutable document so
  // presentation caches cannot retain the geometry from before the sleeve drag.
  combined={...combined,physicalTopology:{...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>c.id===movedBundle.id?movedBundle:c)}};
+ // Independent supports, including a reversed path, follow one sleeve gesture.
+ const multiSupport={...chainBundle,id:'bundle-multiple',lengthMode:'manual',lengthMm:123,
+   spans:[{segmentId:'chain-head',from:.2,to:1},{segmentId:'chain-tail',from:0,to:.8},{segmentId:'support-reverse',from:.2,to:.8}],
+   bundle:{mode:'flat',members:[{kind:'segment',id:'chain-head',continuationIds:['chain-tail']},{kind:'segment',id:'support-reverse'}]}};
+ combined={...combined,physicalTopology:{...combined.physicalTopology,
+   nodes:[...combined.physicalTopology.nodes,{id:'support-left',position:{x:200,y:2300}},{id:'support-right',position:{x:400,y:2300}}],
+   segments:[...combined.physicalTopology.segments,{id:'support-reverse',from:'support-right',to:'support-left',path:{kind:'polyline',points:[]}}],
+   coverings:[...combined.physicalTopology.coverings,multiSupport]}};
+ const lengthsBefore=JSON.stringify({wires:combined.wires,segments:combined.physicalTopology.segments,dimensions:combined.drawingDocuments.dimensions});
+ const movedMultiple=moveCovering(combined,multiSupport.id,0,'body',{x:260,y:2200},{x:270,y:2200});
+ assert.ok(movedMultiple);
+ assert.ok(Math.abs(movedMultiple.spans.find(s=>s.segmentId==='chain-head').from-.3)<1e-7);
+ assert.ok(Math.abs(movedMultiple.spans.find(s=>s.segmentId==='chain-tail').to-.9)<1e-7);
+ assert.ok(Math.abs(movedMultiple.spans.find(s=>s.segmentId==='support-reverse').from-.15)<1e-7);
+ assert.ok(Math.abs(movedMultiple.spans.find(s=>s.segmentId==='support-reverse').to-.75)<1e-7);
+ assert.equal(movedMultiple.lengthMm,123);
+ combined={...combined,physicalTopology:{...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>c.id===movedMultiple.id?movedMultiple:c)}};
+ assert.equal(JSON.stringify({wires:combined.wires,segments:combined.physicalTopology.segments,dimensions:combined.drawingDocuments.dimensions}),lengthsBefore);
  expectedBundleGroups=combined.physicalTopology.coverings.filter(c=>c.bundle);
  const bundleDisplay=content=>({pipes:content.physicalTopology.segments.flatMap(s=>{const p=pipeBundleDisplaySamples(content,s.id);return p?[{id:s.id,samples:p}]:[];}),
    shells:coveringScene(content).filter(c=>expectedBundleGroups.some(g=>g.id===c.id)).map(c=>({id:c.id,paths:c.paths,width:c.width}))});

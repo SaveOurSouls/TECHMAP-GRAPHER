@@ -2,7 +2,7 @@ import type { HarnessDesignDocument, Point } from "./model";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { pathLength, projectOntoPolyline, resolvedCoveringSpan } from "./physical-coverings";
 import { drawingBendRadius, drawingRouteSamples } from "./drawing-route-path";
-import { pipeMemberSegments, type PipeBundleMember } from "./pipe-bundle-model";
+import { pipeMemberSegments, pipeBundleAxisPath, type PipeBundleMember } from "./pipe-bundle-model";
 import { pipeBundleSections } from "./pipe-bundle-section";
 
 interface Sample { readonly fraction: number; readonly point: Point }
@@ -80,7 +80,10 @@ function projections(document: HarnessDesignDocument): ReadonlyMap<string, Proje
   for (const covering of coverings) {
     if (!covering.bundle) continue;
     const section = sections.get(covering.id)!, members = memberChains(covering.bundle.members);
-    const axes = [...new Set(covering.spans.map(s => members.find(c => c.ids.includes(s.segmentId))!))];
+    // One common sleeve has one display axis, even when saved intervals refer
+    // to several members. Use the same stable choice as its renderer.
+    const axisIds=pipeBundleAxisPath(covering,coverings);
+    const axes=members.filter(c=>c.ids[0]===axisIds[0]);
     for (const axis of axes) {
       if (!axis.length) continue;
       const ranges = covering.spans.filter(s => axis.ids.includes(s.segmentId)).map(s => {
