@@ -2,15 +2,20 @@ import type { CoveringHandle, CoveringSurface } from "./covering-layout";
 import type { EditorPoint, EditorSceneObject } from "./editor-types";
 import { coveringTextureFile,resolvedCoveringStyle,type CoveringStyle } from "./covering-style";
 import type { CoveringKind } from "./physical-coverings";
+import rubberTexture from "./covering-textures/Rubber002.jpg";
+import fabricTexture from "./covering-textures/Fabric061.jpg";
+import metalTexture from "./covering-textures/Metal049A.jpg";
 
 const textures=new Map<string,HTMLImageElement>();
 const listeners=new Set<()=>void>();
-export const coveringTextureUrl=(file:string,base="/")=>`${base.endsWith("/")?base:base+"/"}textures/coverings/${file}.jpg`;
+export const coveringTextureUrls: Readonly<Record<string, string>> = {
+  Rubber002: rubberTexture, Fabric061: fabricTexture, Metal049A: metalTexture,
+};
 export function warmCoveringTextures(invalidate:()=>void,objects:readonly EditorSceneObject[]=[]):()=>void {
   listeners.add(invalidate);
   if(typeof Image!=="undefined")for(const file of ["Rubber002","Fabric061","Metal049A"])if(!textures.has(file)){
     const image=new Image();textures.set(file,image);
-    image.onload=()=>listeners.forEach(fn=>fn());image.src=coveringTextureUrl(file,typeof document==="undefined"?"/":document.querySelector("base")?.getAttribute("href")??"/");
+    image.onload=()=>listeners.forEach(fn=>fn());image.src=coveringTextureUrls[file]!;
   }
   if(typeof Image!=="undefined")for(const object of objects){const url=object.metadata?.coveringTextureUrl;if(!url||textures.has(url))continue;
     const image=new Image();textures.set(url,image);image.onload=()=>listeners.forEach(fn=>fn());image.src=url;

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,14 @@ async function start(){
   server.stdout.on('data',b=>{output+=b;log+=b;});server.stderr.on('data',b=>{output+=b;log+=b;});
   baseUrl=await new Promise((res,rej)=>{const timeout=setTimeout(()=>{clearInterval(timer);rej(new Error(output));},30000);const timer=setInterval(()=>{const match=/TECHMAP_HOST_URL=(https?:\/\/[^\s]+)/.exec(output);if(match){clearTimeout(timeout);clearInterval(timer);res(match[1]);}else if(server.exitCode!==null){clearTimeout(timeout);clearInterval(timer);rej(new Error(output));}},100);});
   const page=await fetch(baseUrl);assert.equal(page.status,200);
+  for(const texture of ['Rubber002','Fabric061','Metal049A']) {
+    const files=(await readdir(join(packageRoot,'wwwroot/assets'))).filter(name=>name.startsWith(texture+'-')&&name.endsWith('.jpg'));
+    assert.equal(files.length,1,`Packaged texture ${texture}`);
+    const response=await fetch(new URL('assets/'+files[0],baseUrl));
+    assert.equal(response.status,200,`Texture HTTP ${texture}`);
+    assert.match(response.headers.get('content-type')??'',/^image\/jpeg/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()),await readFile(join(packageRoot,'wwwroot/assets',files[0])));
+  }
   const cookie=page.headers.getSetCookie().map(c=>c.split(';')[0]).join('; '),origin=new URL(baseUrl).origin;
   const fetcher=(path,init={})=>fetch(new URL(String(path),origin),{...init,headers:{...init.headers,Cookie:cookie,Origin:origin}});
   const config=await(await fetcher('/runtime-config.json')).json(),session=await(await fetcher('/api/v1/session')).json();

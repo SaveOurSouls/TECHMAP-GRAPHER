@@ -962,7 +962,7 @@ export function ComponentLibrary({ config, session }: Props) {
   async function addAsset(file: File,place=false) {
     setBusy(true);
     try {
-      const assetInput = await importDrawingImage(file);
+      const assetInput = await importDrawingImage(file, { removeWhiteBackground: true });
       let persisted: ComponentTemplate | null = null;
       if (!draft.templateId || dirty || draft.draftRevision > 0) { persisted = await publishWorkingDraft(); if (!persisted) return; applyPersisted(persisted); }
       const result = await api.addAsset(persisted?.templateId ?? draft.templateId!, { expectedVersion: persisted?.version ?? draft.version, ...assetInput });

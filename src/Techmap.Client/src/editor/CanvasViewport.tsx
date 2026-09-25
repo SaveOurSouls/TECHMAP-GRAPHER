@@ -1399,6 +1399,7 @@ export function hitTestConnectorContact(
 export function objectsInPaintOrder(
   objects: readonly EditorSceneObject[],
   layers: readonly EditorLayer[],
+  view?: HarnessEditorView,
 ): readonly EditorSceneObject[] {
   const objectGroups = new Map<string, EditorSceneObject[]>();
   for (const object of objects) {
@@ -1414,7 +1415,11 @@ export function objectsInPaintOrder(
   // Connection points are interaction anchors, not ordinary artwork. Keep them
   // above every user-reordered layer so wires, covers and tables cannot hide them.
   const connectionPoints = result.filter((object) => object.kind === "physical-node");
-  return [...result.filter((object) => object.kind !== "physical-node"), ...connectionPoints];
+  const artwork = result.filter((object) => object.kind !== "physical-node");
+  // Drawing connector pictures are underlays; preserve user order within each pass.
+  return view === "drawing"
+    ? [...artwork.filter(object => object.kind === "connector"), ...artwork.filter(object => object.kind !== "connector"), ...connectionPoints]
+    : [...artwork, ...connectionPoints];
 }
 
 export interface VisibleCableSheathScene {
@@ -1475,12 +1480,14 @@ export function hitTestEditorScene(
   componentTemplateViewInstances: readonly ComponentTemplateViewInstance[] = [],
   resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl,
 ): string | null {
-  const paintOrder = objectsInPaintOrder(objects, layers);
+  const paintOrder = objectsInPaintOrder(objects, layers, view);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const tolerance = 7 / zoom;
   const node = [...paintOrder].reverse().find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
   if (node) return node.id;
   if (view === "drawing") {
+    const contact = hitTestConnectorContact(paintOrder, layers, point, zoom, view);
+    if (contact) return contact.connectorId;
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
     if(annotation)return annotation.id;
     const pipe = [...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
@@ -2410,7 +2417,7 @@ export function getEditorSceneBounds(
   return bounds;
 }
 
-function redrawCanvas(
+export function redrawCanvas(
   canvas: HTMLCanvasElement,
   view: HarnessEditorView,
   camera: EditorCamera,
@@ -2452,7 +2459,7 @@ function redrawCanvas(
   }
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const highlighted = new Set(highlightedObjectIds);
-  for (const object of objectsInPaintOrder(objects, layers)) {
+  for (const object of objectsInPaintOrder(objects, layers, view)) {
     if (highlighted.has(object.id) && object.kind === "wire") {
       const points = view === "e4" ? getE4WireRoute(object) : object.points ?? [];
       context.save(); context.strokeStyle = "#f2af28"; context.globalAlpha = .65;
@@ -2481,9 +2488,6 @@ function redrawCanvas(
       componentTemplateImageCache,
       view === "drawing" ? ratio * .9 : 0,
     );
-  }
-  for (const object of objectsInPaintOrder(objects,layers)) {
-    if (object.kind === "connector" && selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context,object,view,camera.zoom);
   }
   if (physicalNodePreview) {
     context.save();
@@ -2527,6 +2531,13 @@ function redrawCanvas(
       for(const p of (wire.points??[]).slice(1,-1)){context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fillStyle="white";context.fill();context.stroke();}
       context.restore();
     }
+  }
+  // Contact marks are a final interaction pass, including unselected connectors.
+  // No wire, sleeve, picture, table or E4 overlay can paint over them.
+  for (const object of objectsInPaintOrder(objects, layers, view)) {
+    if (object.kind !== "connector") continue;
+    drawConnectorContactOverrides(context, object, view, true);
+    if (selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context, object, view, camera.zoom);
   }
   context.restore();
 }
@@ -3564,7 +3575,7 @@ export function CanvasViewport({
         >{inlineEditor}</div>
       )}
       <ul className="visually-hidden" aria-label="Объекты на поле">
-        {objectsInPaintOrder(objects, layers).map((object) => <li key={object.id}>{object.label}</li>)}
+        {objectsInPaintOrder(objects, layers, view).map((object) => <li key={object.id}>{object.label}</li>)}
       </ul>
     </div>
   );

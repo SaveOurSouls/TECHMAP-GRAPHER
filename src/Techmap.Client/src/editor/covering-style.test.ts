@@ -5,15 +5,15 @@ import {parseHarnessDesignDocument} from "./model";
 import {coveringScene,moveCovering} from "./covering-layout";
 import {splitCoveringSpans,type PhysicalCovering} from "./physical-coverings";
 import {coveringTextureFile,defaultCoveringStyle,resolvedCoveringStyle,type CoveringStyle} from "./covering-style";
-import {coveringTextureUrl,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
+import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
 
 const style:CoveringStyle={texture:"Metal049A",textureScale:2.5,textureRotation:-30,hatch:"cross",hatchColor:"#ff0000",hatchSpacing:6,hatchRotation:60,lineColor:"#0000ff"};
 const cover:PhysicalCovering={id:"style-cover",name:"Оболочка",color:"#ffffff",width:20,lengthMm:90,spans:[{segmentId:"S0",from:.1,to:.8}],style};
 const fixture=()=>{const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,coverings:[cover]}};};
 afterEach(()=>vi.unstubAllGlobals());
-it("loads bundled textures under the configured application prefix",()=>{
-  expect(coveringTextureUrl("Fabric061")).toBe("/textures/coverings/Fabric061.jpg");
-  expect(coveringTextureUrl("Fabric061","/techmap/")).toBe("/techmap/textures/coverings/Fabric061.jpg");
+it("imports every built-in texture through the asset pipeline",()=>{
+  expect(Object.keys(coveringTextureUrls)).toEqual(["Rubber002","Fabric061","Metal049A"]);
+  for(const [name,url] of Object.entries(coveringTextureUrls))expect(url).toContain(name);
 });
 
 it("retains legacy defaults and chooses the preferred texture without changing geometry",()=>{

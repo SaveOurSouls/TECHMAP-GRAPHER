@@ -196,6 +196,13 @@ function Test-HostMode {
         $webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
         $ui = Invoke-WebRequest -UseBasicParsing -WebSession $webSession -Uri "$origin$routePrefix/"
         Assert-Equal ([int]$ui.StatusCode) 200 "UI request failed."
+        foreach ($texture in @("Rubber002", "Fabric061", "Metal049A")) {
+            $textureFiles = @(Get-ChildItem -LiteralPath (Join-Path (Split-Path $ExecutablePath) "wwwroot/assets") -Filter "$texture-*.jpg")
+            Assert-Equal $textureFiles.Count 1 "Built-in texture is missing from the package."
+            $response = Invoke-WebRequest -UseBasicParsing -Uri "$origin$routePrefix/assets/$($textureFiles[0].Name)"
+            Assert-Equal ([int]$response.StatusCode) 200 "Built-in texture request failed."
+            Assert-Equal $response.RawContentLength $textureFiles[0].Length "Built-in texture content is incomplete."
+        }
         if ($ui.Content.IndexOf("TECHMAP-GRAPHER", [StringComparison]::Ordinal) -lt 0) {
             throw "UI response does not identify TECHMAP-GRAPHER."
         }
