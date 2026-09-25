@@ -5,7 +5,7 @@ import {parseHarnessDesignDocument} from "./model";
 import {coveringScene,moveCovering} from "./covering-layout";
 import {splitCoveringSpans,type PhysicalCovering} from "./physical-coverings";
 import {coveringTextureFile,defaultCoveringStyle,resolvedCoveringStyle,type CoveringStyle} from "./covering-style";
-import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
+import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures,volumeGradient} from "./covering-renderer";
 
 const style:CoveringStyle={texture:"Metal049A",textureScale:2.5,textureRotation:-30,hatch:"cross",hatchColor:"#ff0000",hatchSpacing:6,hatchRotation:60,lineColor:"#0000ff"};
 const cover:PhysicalCovering={id:"style-cover",name:"Оболочка",color:"#ffffff",width:20,lengthMm:90,spans:[{segmentId:"S0",from:.1,to:.8}],style};
@@ -14,6 +14,13 @@ afterEach(()=>vi.unstubAllGlobals());
 it("imports every built-in texture through the asset pipeline",()=>{
   expect(Object.keys(coveringTextureUrls)).toEqual(["Rubber002","Fabric061","Metal049A"]);
   for(const [name,url] of Object.entries(coveringTextureUrls))expect(url).toContain(name);
+});
+it("uses a bounded volume gradient and can disable it without changing geometry",()=>{
+ const stops:{at:number;color:string}[]=[];
+ const ctx={createLinearGradient:()=>({addColorStop:(at:number,color:string)=>stops.push({at,color})})} as unknown as CanvasRenderingContext2D;
+ expect(volumeGradient(ctx,{minX:0,minY:0,maxX:10,maxY:20})).toBeTruthy();
+ expect(stops.map(s=>s.at)).toEqual([0,.18,.5,.82,1]);
+ expect(volumeGradient(ctx,{minX:0,minY:0,maxX:10,maxY:20},false)).toBe("");
 });
 
 it("retains legacy defaults and chooses the preferred texture without changing geometry",()=>{

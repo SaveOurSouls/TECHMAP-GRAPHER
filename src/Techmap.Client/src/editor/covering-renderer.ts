@@ -46,6 +46,15 @@ export function drawHatchTile(ctx:CanvasRenderingContext2D,hatch:Required<Coveri
 }
 export const coveringGrips=(object:EditorSceneObject):CoveringHandle[]=>JSON.parse(object.metadata?.coveringHandles??"[]");
 export const coveringSurfaces=(object:EditorSceneObject):CoveringSurface[]=>JSON.parse(object.metadata?.surfaces??"[]");
+export function volumeGradient(context:CanvasRenderingContext2D,bounds:{minX:number;minY:number;maxX:number;maxY:number},enabled=true):CanvasGradient|string {
+  if(!enabled)return "";
+  if(typeof context.createLinearGradient !== "function") return "";
+  const gradient=context.createLinearGradient(bounds.minX,bounds.minY,bounds.maxX,bounds.minY);
+  if(!gradient || typeof gradient.addColorStop !== "function") return "";
+  gradient.addColorStop(0,"rgba(0,0,0,.28)");gradient.addColorStop(.18,"rgba(255,255,255,.12)");
+  gradient.addColorStop(.5,"rgba(255,255,255,.30)");gradient.addColorStop(.82,"rgba(255,255,255,.08)");gradient.addColorStop(1,"rgba(0,0,0,.25)");
+  return gradient;
+}
 
 /** Even/odd containment supports concave sleeves around bends. */
 export function coveringHit(object:EditorSceneObject,p:EditorPoint,tolerance:number):number|null {
@@ -69,6 +78,10 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     const polygon=surface.polygon;if(!polygon.length)continue;
     context.save();context.beginPath();polygon.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.closePath();
     context.fillStyle=object.color;context.fill();
+    if(object.metadata?.volumeShading !== "false") {
+      const xs=polygon.map(p=>p.x),ys=polygon.map(p=>p.y),shade=volumeGradient(context,{minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)});
+      if(shade){context.fillStyle=shade;context.globalAlpha=.7;context.fill();context.globalAlpha=1;}
+    }
     const image=object.metadata?.coveringTextureUrl?textures.get(object.metadata.coveringTextureUrl):file?textures.get(file):undefined;
     if(image?.complete&&image.naturalWidth){
       const pattern=context.createPattern(image,"repeat");

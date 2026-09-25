@@ -24,7 +24,7 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly bendRadius?:number; readonly showDimensions?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly bendRadius?:number; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -140,7 +140,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   if(d.coveringLibrary!==undefined)validateCoveringLibrary(d.coveringLibrary);
   if(d.bendRadius!==undefined&&(typeof d.bendRadius!=="number"||!Number.isFinite(d.bendRadius)||d.bendRadius<0||d.bendRadius>200))return fail();
   if(d.leaderScale!==undefined&&(typeof d.leaderScale!=="number"||!Number.isFinite(d.leaderScale)||d.leaderScale<.25||d.leaderScale>4))return fail();
-  if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean")return fail();
+  if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean"||d.volumeShading!==undefined&&typeof d.volumeShading!=="boolean")return fail();
   if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;

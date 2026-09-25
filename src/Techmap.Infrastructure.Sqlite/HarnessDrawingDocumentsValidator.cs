@@ -31,6 +31,7 @@ internal static class HarnessDrawingDocumentsValidator
         if(d.TryGetProperty("leaderScale",out var leaderScale)&&(leaderScale.ValueKind!=JsonValueKind.Number||!leaderScale.TryGetDouble(out var leaderFactor)||!double.IsFinite(leaderFactor)||leaderFactor<.25||leaderFactor>4))throw Invalid();
         if(d.TryGetProperty("physicalScale",out var scale)&&(scale.ValueKind!=JsonValueKind.Number||!scale.TryGetDouble(out var factor)||!double.IsFinite(factor)||factor<.2||factor>8))throw Invalid();
         if(d.TryGetProperty("showDimensions",out var visible)&&visible.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
+        if(d.TryGetProperty("volumeShading",out var shading)&&shading.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
         var ids=new HashSet<string>(StringComparer.Ordinal);
         foreach(var key in new[]{"connectors","wires","cables"}) if(root.TryGetProperty(key,out var list)&&list.ValueKind==JsonValueKind.Array) foreach(var e in list.EnumerateArray())ids.Add(Text(e,"id"));
         if(root.TryGetProperty("physicalTopology",out var t)&&t.ValueKind==JsonValueKind.Object) foreach(var key in new[]{"nodes","segments","coverings"})if(t.TryGetProperty(key,out var list)&&list.ValueKind==JsonValueKind.Array)foreach(var e in list.EnumerateArray())ids.Add(Text(e,"id"));

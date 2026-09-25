@@ -21,6 +21,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       handles: physicalEditablePoints(document,segment).slice(1,-1),
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
+    ...(document.drawingDocuments?.volumeShading === false ? { metadata: { volumeShading: "false" } } : {}),
   }));
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {
     const point = physicalNodePoint(document, node);

@@ -3,7 +3,7 @@ import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
-import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
+import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures, volumeGradient } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
 import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
@@ -1831,6 +1831,10 @@ export function drawEditorSceneObject(
     traceDrawingRoute(context,points,object.routeRadius);
     if(selected){context.strokeStyle="#1179ac";context.lineWidth=object.width+2;context.stroke();}
     context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
+    if(object.metadata?.volumeShading !== "false") {
+      const points=object.points??[],xs=points.map(p=>p.x),ys=points.map(p=>p.y),shade=volumeGradient(context,{minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)});
+      if(shade){context.strokeStyle=shade;context.globalAlpha=.72;context.lineWidth=Math.max(1,object.width*.55);context.stroke();context.globalAlpha=1;}
+    }
 
     context.restore();return;
   }
@@ -1896,7 +1900,10 @@ export function drawEditorSceneObject(
       if (view === "e4" && object.kind === "wire" && !selected) strokeE4Wire(context, object.color);
       else context.stroke();
       context.setLineDash([]);
-      if (view === "drawing" && object.kind === "wire") drawWireStripProfiles(context, object, selected);
+      if (view === "drawing" && object.kind === "wire") {
+        if(object.metadata?.volumeShading !== "false") { const xs=points.map(p=>p.x),ys=points.map(p=>p.y),shade=volumeGradient(context,{minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)}); if(shade){context.strokeStyle=shade;context.globalAlpha=.6;context.lineWidth=Math.max(1,(Number(object.metadata?.drawingWidth??3))*.45);context.stroke();context.globalAlpha=1;} }
+        drawWireStripProfiles(context, object, selected);
+      }
       if (selected) {
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#1179ac";
