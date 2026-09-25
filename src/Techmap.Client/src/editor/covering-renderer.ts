@@ -1,4 +1,5 @@
-import {tintedTexture} from "./texture-tint";
+import {textureOverlay} from "./texture-tint";
+import {drawThreadBand} from "./thread-band-renderer";
 import { drawVolumeSurface } from "./drawing-volume";
 import type { CoveringHandle, CoveringSurface } from "./covering-layout";
 import type { EditorPoint, EditorSceneObject } from "./editor-types";
@@ -72,13 +73,18 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
     context.fillStyle=object.color;context.fill();
     const image=object.metadata?.coveringTextureUrl?textures.get(object.metadata.coveringTextureUrl):file?textures.get(file):undefined;
     if(image?.complete&&image.naturalWidth){
-      const tile=object.metadata?.coveringStyle?.includes("textureTint")?tintedTexture(image,style.textureTint):image;
+      // The polygon is the opaque background layer. The material image is
+      // always an alpha texture so its light/empty pixels reveal that fill;
+      // this keeps background and thread/braid colour independently editable.
+      const tile=textureOverlay(image,style.textureTint);
       const pattern=context.createPattern(tile,"repeat");
-      if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.textureRotation).scale(tile===image ? .08*style.textureScale : .5*style.textureScale*64/tile.width));context.save();context.globalAlpha=tile===image ? .38 : 1;context.fillStyle=pattern;context.fill();context.restore();}
+      if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.textureRotation).scale(.5*style.textureScale*64/tile.width));context.save();context.fillStyle=pattern;context.fill();context.restore();}
     }
     const tile=hatchTile(style);
     if(tile){const pattern=context.createPattern(tile,"repeat");if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.hatchRotation).scale(style.hatchSpacing/32));context.fillStyle=pattern;context.fill();}}
     if(object.metadata?.volumeShading === "true") drawVolumeSurface(context,polygon,surface.path);
+    if(object.metadata?.coveringKind === "band" && style.texture!=="none")
+      drawThreadBand(context,surface,style.textureScale,style.textureRotation,style.textureTint);
     context.beginPath();polygon.forEach((p,i)=>i&&!(surface.openEnd&&i===polygon.length/2)?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
     if(!surface.openStart){const p=polygon[0]!;context.lineTo(p.x,p.y);}
     context.strokeStyle=selected?"#007fae":style.lineColor;context.lineWidth=selected?Math.max(2,style.lineWidth):style.lineWidth;context.stroke();context.restore();

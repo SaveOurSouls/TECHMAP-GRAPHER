@@ -47,8 +47,8 @@ it.each([null,[],{texture:"remote.jpg"},{texture:null},{textureScale:0},{texture
 });
 it("renders fill, texture, hatch and outline independently with separate transforms",()=>{
   class Matrix { angle=0;size=1;rotate(n:number){this.angle=n;return this;}scale(n:number){this.size=n;return this;} }
-  class FakeImage { complete=true;naturalWidth=1024;onload?:()=>void;set src(_:string){this.onload?.();} }
-  const tileCtx=new Proxy({},{get:()=>vi.fn(),set:()=>true});
+  class FakeImage { complete=true;naturalWidth=1024;naturalHeight=1024;onload?:()=>void;set src(_:string){this.onload?.();} }
+  const tileCtx=new Proxy({},{get:(_,key)=>key==="getImageData"?()=>({data:new Uint8ClampedArray([0,0,0,255,255,255,255,255])}):vi.fn(),set:()=>true});
   vi.stubGlobal("Image",FakeImage);vi.stubGlobal("DOMMatrix",Matrix);
   vi.stubGlobal("document",{querySelector:()=>null,createElement:()=>({getContext:()=>tileCtx})});
   const transforms:Matrix[]=[],patterns:object[]=[],fills:unknown[]=[];
@@ -57,7 +57,7 @@ it("renders fill, texture, hatch and outline independently with separate transfo
   const stop=warmCoveringTextures(vi.fn());
   drawCoveringSurface(ctx,coveringScene(fixture())[0]!,false);stop();
   expect(fills).toEqual(["#ffffff",...patterns]);
-  expect(transforms.map(m=>[m.angle,m.size])).toEqual([[-30,.2],[60,6/32]]);
+  expect(transforms.map(m=>[m.angle,m.size])).toEqual([[-30,2.5*32/512],[60,6/32]]);
   expect(state.strokeStyle).toBe("#0000ff");
   fills.length=0;transforms.length=0;
   const d=fixture();d.physicalTopology.coverings=[{...cover,style:{...style,texture:"none",hatch:"none"}}];

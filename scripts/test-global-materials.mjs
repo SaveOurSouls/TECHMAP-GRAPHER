@@ -59,6 +59,19 @@ try {
  doc=applyEditorCommand(doc,command);
  assert.equal(doc.physicalTopology.coverings[0].style.textureTint,'#dc2626');assert.equal(doc.physicalTopology.coverings[0].style.lineWidth,2.5);
  const api=createHarnessDesignApi(env.config,env.session,env.fetcher),first=await api.get(project.projectId,harnessId);await api.save(project.projectId,harnessId,first.revision,doc);
+ // M4-112: an existing sleeve changes type and pins the replacement in one edit.
+ const band=await materials.get(seeds.find(m=>m.coveringKind==='band').materialId);
+ const currentProject=await(await env.fetcher(path)).json();
+ const bandUpload=await env.fetcher(`${path}/attachments`,{method:'POST',headers,body:JSON.stringify({commandId:crypto.randomUUID(),expectedRevision:currentProject.revision,fileName:'band.png',mediaType:'image/png',contentBase64:band.imageBase64,purpose:'covering-texture'})});
+ assert.equal(bandUpload.status,200,await bandUpload.clone().text());const bandAttachment=(await bandUpload.json()).attachment;
+ const previous=doc.physicalTopology.coverings[0];
+ const replacement=await prepareGlobalCoverings(doc,{type:'set-physical-topology',topology:{...doc.physicalTopology,coverings:[{...previous,kind:'band'}]}},materials.list,async m=>{assert.equal(m.materialId,band.materialId);return {sha256:bandAttachment.sha256,name:band.name};});
+ doc=applyEditorCommand(doc,replacement);
+ assert.equal(doc.physicalTopology.coverings[0].style.texture,`asset:${bandAttachment.sha256}`);
+ assert.notEqual(doc.physicalTopology.coverings[0].style.texture,previous.style.texture);
+ assert.equal(doc.physicalTopology.coverings[0].color,previous.color);
+ assert.deepEqual(doc.physicalTopology.coverings[0].spans,previous.spans);
+ const saved=await api.get(project.projectId,harnessId);await api.save(project.projectId,harnessId,saved.revision,doc);
  mat=await materials.update({...mat,tint:'#16a34a',lineWidth:5});await materials.remove(mat);
  assert.deepEqual((await api.get(project.projectId,harnessId)).content.physicalTopology,parseHarnessDesignDocument(doc).physicalTopology);
  const content=await env.fetcher(`${path}/attachments/${attachment.attachmentId}/content`);assert.equal(content.status,200);assert.deepEqual(Buffer.from(await content.arrayBuffer()),Buffer.from(original.imageBase64,'base64'));

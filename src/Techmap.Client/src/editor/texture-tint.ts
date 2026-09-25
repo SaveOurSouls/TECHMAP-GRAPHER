@@ -16,3 +16,25 @@ export function tintedTexture(image:HTMLImageElement,tint:string):HTMLCanvasElem
  const pixels=ctx.getImageData(0,0,tile.width,tile.height);tintTexturePixels(pixels.data,tint);ctx.putImageData(pixels,0,0);
  if(tiles.size>=24)tiles.delete(tiles.keys().next().value!);tiles.set(key,tile);return tile;
 }
+
+/** Turns a white/neutral source into a transparent texture layer. The selected
+ * background remains visible below it, while dark marks retain their density. */
+export function textureOverlay(image:HTMLImageElement,tint:string):HTMLCanvasElement {
+ const key=`overlay|${image.src}|${tint}`;const cached=tiles.get(key);if(cached)return cached;
+ const tile=document.createElement("canvas"),scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight));
+ tile.width=Math.max(1,Math.round(image.naturalWidth*scale));tile.height=Math.max(1,Math.round(image.naturalHeight*scale));
+ const ctx=tile.getContext("2d")!;ctx.drawImage(image,0,0,tile.width,tile.height);
+ const pixels=ctx.getImageData(0,0,tile.width,tile.height);
+ textureOverlayPixels(pixels.data,tint);
+ ctx.putImageData(pixels,0,0);if(tiles.size>=24)tiles.delete(tiles.keys().next().value!);tiles.set(key,tile);return tile;
+}
+
+export function textureOverlayPixels(pixels:Uint8ClampedArray,tint:string):void {
+ const rgb=[1,3,5].map(i=>parseInt(tint.slice(i,i+2),16));
+ for(let i=0;i<pixels.length;i+=4){
+  const luminance=(.2126*pixels[i]!+.7152*pixels[i+1]!+.0722*pixels[i+2]!)/255;
+  const alpha=Math.round(pixels[i+3]!*(1-luminance)**1.35);
+  for(let c=0;c<3;c++)pixels[i+c]=rgb[c]!;
+  pixels[i+3]=alpha;
+ }
+}
