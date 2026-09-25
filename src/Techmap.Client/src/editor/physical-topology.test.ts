@@ -172,8 +172,10 @@ it("displays E4 conductors as separate channel lanes and hides them without chan
  const first=physicalWireDisplayPaths(d,"W1",start,end)!,second=physicalWireDisplayPaths(d,"W2",start,end)!;
  expect(first[1]).not.toEqual(second[1]);
  const t={...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>({...s,showWires:false,width:24,color:"#112233"}))};
- const h=executeEditorCommand(createEditorHistory(d),{type:"set-physical-topology",topology:t});
- expect(physicalWireDisplayPaths(h.present,"W1",start,end)).toHaveLength(2);
+    const h=executeEditorCommand(createEditorHistory(d),{type:"set-physical-topology",topology:t});
+    const hiddenPaths=physicalWireDisplayPaths(h.present,"W1",start,end)!;
+    expect(hiddenPaths).toHaveLength(2);
+    expect(hiddenPaths[0]!.length).toBeLessThan(physicalWireDisplayPaths(d,"W1",start,end)![0]!.length);
  expect(h.present.wires).toEqual(d.wires);expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).physicalTopology).toEqual(t);
  expect(undoEditorCommand(h).present).toEqual(d);
 });

@@ -79,6 +79,9 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const startPath=fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from);
  const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
  const routePaths=[startPath,...paths,endPath];
- const joined=joinDisplayPaths(routePaths);
+ // A hidden middle leg is an intentional gap. Do not bridge its neighbours
+ // merely to provide tangent context to the visible portions.
+ const hiddenLeg=route.steps.some(step=>t.segments.find(s=>s.id===step.segmentId)?.showWires===false);
+ const joined=hiddenLeg?routePaths:joinDisplayPaths(routePaths);
  return projected?joined.map(path=>drawingRouteHitPoints(path,drawingBendRadius(document))):joined;
 }
