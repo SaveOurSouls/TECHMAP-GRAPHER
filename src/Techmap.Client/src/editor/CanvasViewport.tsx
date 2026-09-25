@@ -1,4 +1,4 @@
-import { drawVolumeStroke } from "./drawing-volume";
+import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
@@ -1796,6 +1796,12 @@ function drawWireStripProfiles(
         ? object.color
         : stripProfilePalette[(primitive.layerIndex - 1) % stripProfilePalette.length]!;
       context.fill();
+      if (object.metadata?.volumeShading === "true") {
+        drawVolumeSurface(context, primitive.polygon, primitive.centerline);
+        context.beginPath();
+        primitive.polygon.forEach((point, i) => i === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+        context.closePath();
+      }
       context.stroke();
     });
   }
@@ -1838,7 +1844,8 @@ export function drawEditorSceneObject(
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
-    for(const path of object.paths){traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);if(object.metadata?.volumeShading!=="false")drawVolumeStroke(context,lineWidth);}
+    for(const path of object.paths){traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,lineWidth);}
+    drawWireStripProfiles(context, object, selected);
     context.restore();return;
   }
   if (object.kind === "physical-node") {
@@ -2460,6 +2467,7 @@ export function redrawCanvas(
       getVisibleCableSheathScene(cables, objects, layers).geometries,
       selectedObjectIds,
       camera.zoom,
+      new Set(objects.filter(object => object.kind === "wire" && object.metadata?.volumeShading === "true").map(object => object.id)),
     );
   }
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
@@ -2552,6 +2560,7 @@ export function drawCableSheaths(
   geometries: readonly CableSheathGeometry[],
   selectedObjectIds: ReadonlySet<string>,
   zoom = 1,
+  shadedWireIds: ReadonlySet<string> = new Set(),
 ): void {
   const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
   for (const geometry of geometries) {
@@ -2565,6 +2574,12 @@ export function drawCableSheaths(
     context.closePath();
     context.fillStyle = selected ? "rgba(17, 121, 172, 0.13)" : "rgba(82, 105, 119, 0.08)";
     context.fill();
+    if (geometry.memberWireIds.some(id => shadedWireIds.has(id))) {
+      drawVolumeSurface(context, geometry.polygon, geometry.centerline);
+      context.beginPath();
+      geometry.polygon.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+      context.closePath();
+    }
     context.strokeStyle = selected ? "#1179ac" : "#607d8b";
     context.lineWidth = (selected ? 3 : 2) / safeZoom;
     context.setLineDash(selected ? [] : [8 / safeZoom, 4 / safeZoom]);
