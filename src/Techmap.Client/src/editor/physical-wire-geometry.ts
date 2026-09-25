@@ -28,6 +28,22 @@ export function physicalWirePoints(document: HarnessDesignDocument, wireId: stri
 
 /** Display lanes never alter measured centreline geometry or electrical endpoints. */
 const offsetPolyline=(points:readonly Point[],offsets:readonly number[]):Point[]=>points.map((p,i)=>{const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!,before=Math.hypot(p.x-a.x,p.y-a.y),after=Math.hypot(b.x-p.x,b.y-p.y),u=before?{x:-(p.y-a.y)/before,y:(p.x-a.x)/before}:null,v=after?{x:-(b.y-p.y)/after,y:(b.x-p.x)/after}:null,n=u&&v?{x:u.x+v.x,y:u.y+v.y}:u??v??{x:0,y:1},len=Math.hypot(n.x,n.y)||1;return {x:p.x+n.x/len*offsets[i]!,y:p.y+n.y/len*offsets[i]!};});
+
+/** Give each rendered leg its neighbouring point as tangent context. Paths are
+ * still returned separately so per-leg lane styles and visibility stay intact;
+ * the renderer can therefore round the shared node without drawing a corner
+ * between two independently traced paths. */
+function joinDisplayPaths(paths:readonly (readonly Point[])[]):Point[][] {
+  return paths.map((path,index)=>{
+    const result=[...path];
+    const previous=paths[index-1],next=paths[index+1];
+    if(previous?.length && result.length>0 && previous.length>1)
+      result.unshift(previous[previous.length-2]!);
+    if(next?.length && result.length>0 && next.length>1)
+      result.push(next[1]!);
+    return result;
+  });
+}
 export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
  const paths:Point[][]=[];
@@ -62,5 +78,7 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const toTail=wireExitPath(document,last.segmentId,last.reverse?"from":"to",wireId,wire.to.contactId,end);
  const startPath=fromTail?(first.reverse?fromTail.reverse():fromTail):physicalContactTail(document,fromNode,wire.from.contactId,start,from);
  const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
- return [projected?drawingRouteHitPoints(startPath,drawingBendRadius(document)):startPath,...paths,projected?drawingRouteHitPoints(endPath,drawingBendRadius(document)):endPath];
+ const routePaths=[startPath,...paths,endPath];
+ const joined=joinDisplayPaths(routePaths);
+ return projected?joined.map(path=>drawingRouteHitPoints(path,drawingBendRadius(document))):joined;
 }

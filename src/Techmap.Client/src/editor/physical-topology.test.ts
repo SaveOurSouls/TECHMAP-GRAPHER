@@ -5,6 +5,7 @@ import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor
 import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, connectPhysicalNodeToSegment, type PhysicalTopology } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
+import { drawingRouteCommands } from "./drawing-route-path";
 
 
 describe("physical topology", () => {
@@ -102,6 +103,17 @@ describe("physical topology", () => {
     const d = applyEditorCommand(physicalFixture(), { type: "remove-wire", wireId: "W1" });
     expect(d.physicalTopology!.routes.map(r => r.wireId)).toEqual(["W2", "W3"]);
     expect(() => parseHarnessDesignDocument(d)).not.toThrow();
+  });
+  it("shares tangent context at each connected node without merging per-leg paths",()=>{
+    const d=physicalFixture(),paths=physicalWireDisplayPaths(d,"W1",{x:118,y:28},{x:768,y:528})!;
+    expect(paths).toHaveLength(4);
+    for(let i=1;i<paths.length;i++){
+      expect(paths[i]![0]).toEqual(paths[i-1]!.slice(0,-2).at(-1));
+      if(i<paths.length-1)expect(paths[i]!.at(-1)).toEqual(paths[i+1]![2]);
+    }
+    const rounded=drawingRouteCommands(paths[1]!,18);
+    expect(rounded.some(command=>command.kind==="arc")).toBe(true);
+    expect(paths.every(path=>path.every(point=>Number.isFinite(point.x)&&Number.isFinite(point.y)))).toBe(true);
   });
   it("removes a pipe, its authored bends, protection spans and orphan junction", () => {
     const d = physicalFixture();
