@@ -3125,7 +3125,7 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry")};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point)};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);

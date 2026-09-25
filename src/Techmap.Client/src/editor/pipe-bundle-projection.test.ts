@@ -9,6 +9,7 @@ import { coveringScene, moveCovering } from "./covering-layout";
 import { splitPhysicalSegment } from "./physical-topology";
 import { pipeBundleSections } from "./pipe-bundle-section";
 import { physicalTopologyScene } from "./physical-scene";
+import { bendSnapAnchors, snapBendPoint, editPhysicalBend, physicalEditablePoints } from "./physical-editing";
 
 function parallel(): HarnessDesignDocument {
   const connectors=["A","B","C","D"].map((id,i)=>createConnector(id,id,1,{x:i%2*600,y:Math.floor(i/2)*100}));
@@ -23,6 +24,35 @@ function parallel(): HarnessDesignDocument {
       coverings:[{id:"group",name:"Оболочка",width:0,color:"#334455",lengthMm:240,lengthMode:"manual",
         spans:[{segmentId:"s0",from:.3,to:.7}],bundle:{mode:"flat",members:[{kind:"segment",id:"s0"},{kind:"segment",id:"s1"}]}}]}};
 }
+
+it.each(['carry','adjacent'] as const)('snaps authored corners and inserted midpoints through bundle projection in %s mode',mode=>{
+  const base=parallel(),topology=base.physicalTopology!;
+  const doc={...base,physicalTopology:{...topology,snap:true,segments:topology.segments.map(s=>s.id==='s1'?{...s,path:{kind:'polyline' as const,points:[{x:200,y:100},{x:200,y:300},{x:400,y:300},{x:400,y:100}]}}:s)}};
+  const segment=doc.physicalTopology.segments.find(s=>s.id==='s1')!;
+  const original=physicalEditablePoints(doc,segment),scene=physicalTopologyScene(doc).find(o=>o.id===segment.id)!;
+  for(const insert of [false,true]){
+    const index=1,origin=insert?{x:(original[index]!.x+original[index+1]!.x)/2,y:(original[index]!.y+original[index+1]!.y)/2}:original[index+1]!;
+    const shown=insert?scene.pipe!.midpoints![index]!:scene.pipe!.handles[index]!;
+    expect(Math.hypot(shown.x-origin.x,shown.y-origin.y)).toBeGreaterThan(1);
+    const anchors=bendSnapAnchors(original,index,insert,mode,shown);
+    const target={x:shown.x+37,y:shown.y+43};
+    const snapped=snapBendPoint(target,anchors,true,7).point;
+    const authored=unprojectPipeBundleEdit(doc,segment.id,origin,snapped);
+    const edited=editPhysicalBend(doc,segment.id,index,authored,mode,insert);
+    const points=physicalEditablePoints(edited,edited.physicalTopology!.segments.find(s=>s.id===segment.id)!);
+    points.slice(1).forEach((p,i)=>{
+      const a=points[i]!,length=Math.hypot(p.x-a.x,p.y-a.y);
+      if(length<1e-6)return;
+      const angle=Math.atan2(p.y-a.y,p.x-a.x)/(Math.PI/12);
+      expect(angle).toBeCloseTo(Math.round(angle),6);
+    });
+    const free=unprojectPipeBundleEdit(doc,segment.id,origin,snapBendPoint(target,anchors,false,7).point);
+    expect(free.x-origin.x).toBeCloseTo(37);
+    expect(free.y-origin.y).toBeCloseTo(43);
+    expect(edited.physicalTopology!.coverings).toEqual(doc.physicalTopology.coverings);
+    expect(edited.wires).toBe(doc.wires);
+  }
+});
 
 it("converges straight parallel members onto one sleeve axis with transitions outside its edges",()=>{
   const doc=parallel(),before=JSON.stringify(doc);

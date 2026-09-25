@@ -39,14 +39,17 @@ export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:b
 
 /** The moved shoulder group is rigid in carry mode. Each boundary constrains
  * the pointer relative to a virtual anchor translated by that shoulder offset. */
-export function bendSnapAnchors(points:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode):Point[] {
+export function bendSnapAnchors(points:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode,displayOrigin?:Point):Point[] {
   const copy=[...points],at=index+1;
   if(insert){const a=copy[index]!,b=copy[at]!;copy.splice(at,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
   const origin=copy[at];if(!origin)return [];
   const first=mode==="carry"?Math.max(1,at-1):at,last=mode==="carry"?Math.min(copy.length-2,at+1):at;
   return [[first,first-1],[last,last+1]].flatMap(([moving,fixed])=>{
     const a=copy[moving!]!,b=copy[fixed!];
-    return b?[{x:b.x-a.x+origin.x,y:b.y-a.y+origin.y}]:[];
+    // Pointer deltas are later applied to authored vertices. Translate the
+    // constraints into the displayed handle frame, without snapping the
+    // generated convergence geometry of a bundled pipe.
+    return b?[{x:b.x-a.x+(displayOrigin??origin).x,y:b.y-a.y+(displayOrigin??origin).y}]:[];
   });
 }
 
