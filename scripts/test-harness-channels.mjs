@@ -208,6 +208,15 @@ try {
  assert.ok(Math.abs(movedMultiple.spans.find(s=>s.segmentId==='support-reverse').to-.75)<1e-7);
  assert.equal(movedMultiple.lengthMm,123);
  combined={...combined,physicalTopology:{...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>c.id===movedMultiple.id?movedMultiple:c)}};
+ // Hit the displayed handle: overlapping groups offset it from the authored axis.
+ const multiHandle=JSON.parse(coveringScene(combined).find(c=>c.id===multiSupport.id).metadata.coveringHandles).find(h=>h.part==='to');
+ const resizedMultiple=moveCovering(combined,multiSupport.id,multiHandle.spanIndex,'to',multiHandle.point,{x:350,y:multiHandle.point.y},0);
+ assert.ok(resizedMultiple);
+ assert.ok(Math.abs(resizedMultiple.spans.find(s=>s.segmentId==='chain-tail').to-.5)<1e-7);
+ assert.ok(Math.abs(resizedMultiple.spans.find(s=>s.segmentId==='support-reverse').from-.35)<1e-7);
+ assert.ok(Math.abs(resizedMultiple.spans.find(s=>s.segmentId==='support-reverse').to-.75)<1e-7);
+ assert.equal(resizedMultiple.lengthMm,123);
+ combined={...combined,physicalTopology:{...combined.physicalTopology,coverings:combined.physicalTopology.coverings.map(c=>c.id===resizedMultiple.id?resizedMultiple:c)}};
  assert.equal(JSON.stringify({wires:combined.wires,segments:combined.physicalTopology.segments,dimensions:combined.drawingDocuments.dimensions}),lengthsBefore);
  expectedBundleGroups=combined.physicalTopology.coverings.filter(c=>c.bundle);
  const bundleDisplay=content=>({pipes:content.physicalTopology.segments.flatMap(s=>{const p=pipeBundleDisplaySamples(content,s.id);return p?[{id:s.id,samples:p}]:[];}),

@@ -43,6 +43,23 @@ function coveringAxis(document:HarnessDesignDocument,covering:PhysicalCovering,i
   return {parts,stations,intervals,length,min:parts[0]!.min*parts[0]!.length,max:length+(parts.at(-1)!.max-1)*parts.at(-1)!.length};
 }
 
+/** Re-split intervals while keeping unchanged edge bindings. Resizing one end
+ * must not detach an opposite end from its authored bend. Body motion detaches
+ * bindings intentionally, as ordinary covering motion does. */
+function spansForRanges(document:HarnessDesignDocument,covering:PhysicalCovering,
+  axis:NonNullable<ReturnType<typeof coveringAxis>>,ranges:readonly Interval[],keepBindings:boolean):CoveringSpan[]{
+  return axis.parts.flatMap(p=>ranges.flatMap(r=>{
+    const from=Math.max(p.before+p.min*p.length,r.from),to=Math.min(p.before+p.max*p.length,r.to);
+    if(to-from<=1e-7)return [];
+    const span:CoveringSpan={segmentId:p.id,from:(from-p.before)/p.length,to:(to-p.before)/p.length};
+    if(!keepBindings)return [span];
+    const originals=covering.spans.filter(s=>s.segmentId===p.id).map(s=>resolvedCoveringSpan(document,s));
+    const fromAnchor=originals.find(s=>Math.abs(s.from-span.from)<1e-8)?.fromAnchor;
+    const toAnchor=originals.find(s=>Math.abs(s.to-span.to)<1e-8)?.toAnchor;
+    return [{...span,...(fromAnchor!==undefined?{fromAnchor}:{}),...(toAnchor!==undefined?{toAnchor}:{})}];
+  }));
+}
+
 /** Translate a bundle sleeve in one longitudinal parameter space. Crossing a
  * split redistributes spans instead of stretching just the fragment under the
  * pointer. The command still owns one covering and one undo transaction. */
@@ -57,24 +74,50 @@ export function moveBundleCovering(document:HarnessDesignDocument,covering:Physi
   const axis=coveringAxis(document,covering,path);if(!axis||!axis.intervals.length)return null;
   const delta=closestDistance(axis.stations,point)-closestDistance(axis.stations,start);
   if(Math.abs(delta)<1e-8)return covering;
-  if(part==='body'&&supported.length>1){
+  if(supported.length>1){
     const axes=supported.map(ids=>coveringAxis(document,covering,ids));
     if(axes.some(a=>!a||!a.length||!a.intervals.length))return covering;
     const a=axis.stations[0]!.point,b=axis.stations.at(-1)!.point;
     const oriented=axes.map(axis=>{const first=axis!.stations[0]!.point,last=axis!.stations.at(-1)!.point;
       const reverse=pointDistance(a,last)+pointDistance(b,first)<pointDistance(a,first)+pointDistance(b,last);
       return {axis:axis!,direction:reverse?-1:1};});
+    const current=axis.parts.find(p=>p.id===original.segmentId)!;
+    const span=resolvedCoveringSpan(document,original);
+    const edge=current.before+(part==='from'?span.from:span.to)*current.length;
+    const selected=axis.intervals.findIndex(r=>edge>=r.from-1e-7&&edge<=r.to+1e-7);
+    const edits=oriented.map(({axis:a,direction})=>{
+      const localPart=part==='body'?part:direction===1?part:part==='from'?'to':'from';
+      // Disjoint intervals retain their order along the common axis, including
+      // when an independent support was authored in the opposite direction.
+      const index=direction===1?selected:a.intervals.length-1-selected;
+      return {axis:a,direction,localPart,index,ranges:a.intervals.map(r=>({...r}))};
+    });
     let lower=-Infinity,upper=Infinity;
-    for(const {axis:a,direction} of oriented){
-      const lo=(a.min-a.intervals[0]!.from)/a.length,hi=(a.max-a.intervals.at(-1)!.to)/a.length;
+    for(const {axis:a,direction,localPart,index,ranges} of edits){
+      let lo=(a.min-ranges[0]!.from)/a.length,hi=(a.max-ranges.at(-1)!.to)/a.length;
+      if(localPart!=='body'){
+        const range=ranges[index];if(!range)continue;
+        const minimum=Math.min(a.length*.001,(range.to-range.from)/4);
+        const start=localPart==='from'?(ranges[index-1]?.to??a.min):range.from+minimum;
+        const end=localPart==='from'?range.to-minimum:(ranges[index+1]?.from??a.max);
+        lo=(start-range[localPart])/a.length;hi=(end-range[localPart])/a.length;
+      }
       lower=Math.max(lower,direction===1?lo:-hi);upper=Math.min(upper,direction===1?hi:-lo);
     }
-    const shift=Math.max(lower,Math.min(upper,delta/axis.length));if(Math.abs(shift)<1e-8)return covering;
-    const spans=oriented.flatMap(({axis,direction})=>axis.parts.flatMap(p=>axis.intervals.flatMap(r=>{
-      const offset=shift*axis.length*direction;
-      const from=Math.max(p.before+p.min*p.length,r.from+offset),to=Math.min(p.before+p.max*p.length,r.to+offset);
-      return to-from>1e-7?[{segmentId:p.id,from:(from-p.before)/p.length,to:(to-p.before)/p.length}]:[];
-    })));
+    let shift=Math.max(lower,Math.min(upper,delta/axis.length));
+    if(part!=='body'){
+      const target=edge+shift*axis.length;
+      const anchor=axis.parts.flatMap(p=>[p.before,p.before+p.length]).find(d=>
+        Math.abs(d-target)<=tolerance&&(d-edge)/axis.length>=lower&&(d-edge)/axis.length<=upper);
+      if(anchor!==undefined)shift=(anchor-edge)/axis.length;
+    }
+    if(Math.abs(shift)<1e-8)return covering;
+    for(const edit of edits){
+      const offset=shift*edit.axis.length*edit.direction;
+      if(edit.localPart==='body')edit.ranges=edit.ranges.map(r=>({from:r.from+offset,to:r.to+offset}));
+      else if(edit.ranges[edit.index])edit.ranges[edit.index]![edit.localPart]+=offset;
+    }
+    const spans=edits.flatMap(({axis,ranges})=>spansForRanges(document,covering,axis,ranges,part!=='body'));
     return {...covering,spans};
   }
   const current=axis.parts.find(p=>p.id===original.segmentId)!,span=resolvedCoveringSpan(document,original);
@@ -94,10 +137,7 @@ export function moveBundleCovering(document:HarnessDesignDocument,covering:Physi
     if(anchor!==undefined)target=anchor;
     if(part==='from')range.from=target;else range.to=target;
   }
-  const spans:CoveringSpan[]=axis.parts.flatMap(p=>ranges.flatMap(r=>{
-    const from=Math.max(p.before+p.min*p.length,r.from),to=Math.min(p.before+p.max*p.length,r.to);
-    return to-from>1e-7?[{segmentId:p.id,from:(from-p.before)/p.length,to:(to-p.before)/p.length}]:[];
-  }));
+  const spans=spansForRanges(document,covering,axis,ranges,part!=='body');
   return {...covering,spans:[...covering.spans.filter(s=>!path.includes(s.segmentId)),...spans]};
 }
 

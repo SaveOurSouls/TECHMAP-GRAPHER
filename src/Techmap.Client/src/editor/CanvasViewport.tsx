@@ -2916,6 +2916,7 @@ export function CanvasViewport({
       const pipeGrip=objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
       const cover=[...objects].reverse().find(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&coveringHit(o,point,4/camera.zoom)!==null);
       if(!pipeGrip&&(grip||cover)){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
+        setHoverGrip(null);
         onObjectSelect(objectId,false);event.currentTarget.setPointerCapture(event.pointerId);dragRef.current={kind:"covering",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId,spanIndex,part:grip?.part??"body",start:point};return;}
     }
     const shouldPan = tool === "pan" || event.button === 1;

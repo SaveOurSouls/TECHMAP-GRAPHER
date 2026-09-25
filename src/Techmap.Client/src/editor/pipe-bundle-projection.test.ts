@@ -103,6 +103,27 @@ it("projects nested shells by their own centre, independent of covering array or
   expect(scene.map(c=>c.id)).toEqual(['group','outer']);
 });
 
+it("moves a partially overlapping outer sleeve without moving the inner bounds or authored routes",()=>{
+  const base=parallel(),t=base.physicalTopology!,inner={...t.coverings![0]!,spans:[{segmentId:'s0',from:.2,to:.6}]};
+  const outer={...inner,id:'outer',spans:[{segmentId:'s0',from:.4,to:.8}],
+    bundle:{mode:'flat' as const,members:[{kind:'covering' as const,id:'group'},{kind:'segment' as const,id:'s2'}]}};
+  const doc={...base,physicalTopology:{...t,coverings:[outer,inner]}},before=JSON.stringify(doc);
+  const moved=moveCovering(doc,'outer',0,'body',{x:300,y:0},{x:360,y:0},0)!;
+  const next={...doc,physicalTopology:{...doc.physicalTopology,coverings:[moved,inner]}};
+  // The inner sleeve is packed inside the outer where they overlap, and
+  // returns to its own centre outside the outer's transition zone.
+  const shell=coveringScene(next).find(c=>c.id==='group')!.paths![0]!;
+  expect(shell[0]).toEqual({x:120,y:0});
+  expect(shell.at(-1)).toEqual({x:360,y:-5});
+  expect(projectPipeBundlePoint(next,'s1',.3,{x:180,y:100})).toEqual({x:180,y:5});
+  expect(projectPipeBundlePoint(next,'s1',.55,{x:330,y:100})).toEqual({x:330,y:0});
+  const reordered={...next,physicalTopology:{...next.physicalTopology,coverings:[inner,moved]}};
+  expect(pipeBundleDisplaySamples(reordered,'s1')).toEqual(pipeBundleDisplaySamples(next,'s1'));
+  expect(next.physicalTopology.coverings[1]).toBe(inner);
+  expect(next.physicalTopology.segments).toBe(t.segments);
+  expect(JSON.stringify(doc)).toBe(before);
+});
+
 it("maps a reversed pipe onto the shared axis without reversing its authored endpoints",()=>{
   const doc=parallel();
   const reversed={...doc,physicalTopology:{...doc.physicalTopology!,segments:doc.physicalTopology!.segments.map(s=>s.id==='s1'?{...s,from:s.to,to:s.from}:s)}};
