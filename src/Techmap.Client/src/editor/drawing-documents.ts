@@ -8,9 +8,12 @@ import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, t
 import { coveringPaths, coveringMeasuredLength } from "./physical-coverings";
 import { physicalNodePoint } from "./physical-ports";
 import { physicalSegmentPoints } from "./physical-geometry";
+import { movePositionLeaderOnRails, movePositionRail } from "./position-rail";
+export { createPositionRail } from "./position-rail";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
 export interface PositionLeader { readonly id: string; readonly objectId: string; readonly rowKey: string; readonly anchorOffset: Point; readonly circle: Point; readonly anchorLocal?: Point; readonly hidden?: boolean }
+export interface PositionRail { readonly id: string; readonly start: Point; readonly end: Point; readonly leaderIds: readonly string[] }
 export interface DrawingSpecificationItem {
   readonly id: string;
   readonly kind: "abstract" | "manual";
@@ -24,7 +27,7 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -142,7 +145,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   if(d.bendRadius!==undefined&&(typeof d.bendRadius!=="number"||!Number.isFinite(d.bendRadius)||d.bendRadius<0||d.bendRadius>200))return fail();
   if(d.leaderScale!==undefined&&(typeof d.leaderScale!=="number"||!Number.isFinite(d.leaderScale)||d.leaderScale<.25||d.leaderScale>4))return fail();
   if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.coveringDiameterRatio!==undefined&&(!Number.isFinite(d.coveringDiameterRatio)||d.coveringDiameterRatio<1.1||d.coveringDiameterRatio>4)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean"||d.volumeShading!==undefined&&typeof d.volumeShading!=="boolean")return fail();
-  if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
+  if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||d.rails!==undefined&&(!Array.isArray(d.rails)||d.rails.length>10000)||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;
   const point=(p:Point)=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e7&&Math.abs(p.y)<=1e7;
@@ -151,6 +154,12 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
     (t.width!==undefined&&(!Number.isFinite(t.width)||t.width<280||t.width>4000))||(t.height!==undefined&&(!Number.isFinite(t.height)||t.height<160||t.height>4000)))return fail();
   for(const l of d.leaders){if(ids.has(`${l.id}:anchor`))return fail();ids.add(`${l.id}:anchor`);}
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle)||(l.anchorLocal!==undefined&&!point(l.anchorLocal))||(l.hidden!==undefined&&typeof l.hidden!=="boolean"))return fail();
+  const claimed=new Set<string>(),leaderIds=new Set(d.leaders.map(l=>l.id));
+  for(const rail of d.rails??[]){
+    if(!rail||!text(rail.id)||ids.has(rail.id)||ids.has(`${rail.id}:start`)||ids.has(`${rail.id}:end`)||!point(rail.start)||!point(rail.end)||rail.start.x!==rail.end.x&&rail.start.y!==rail.end.y||Math.hypot(rail.end.x-rail.start.x,rail.end.y-rail.start.y)<24||!Array.isArray(rail.leaderIds)||rail.leaderIds.length>d.leaders.length)return fail();
+    ids.add(rail.id);ids.add(`${rail.id}:start`);ids.add(`${rail.id}:end`);
+    for(const leaderId of rail.leaderIds){if(!leaderIds.has(leaderId)||claimed.has(leaderId))return fail();claimed.add(leaderId);}
+  }
   if(new Set(d.bomOrder).size!==d.bomOrder.length||d.bomOrder.some(k=>!text(k,4096)))return fail();
   if(d.bomText!==undefined){if(!d.bomText||typeof d.bomText!=="object"||Array.isArray(d.bomText)||Object.keys(d.bomText).length>50000)return fail();for(const [key,edit] of Object.entries(d.bomText)){if(!text(key,4096)||!edit||typeof edit!=="object"||Array.isArray(edit)||Object.entries(edit).some(([k,v])=>!["index","designation","name","note"].includes(k)||typeof v!=="string"||v.length>4096))return fail();}}
   if(d.specificationItems!==undefined){if(!Array.isArray(d.specificationItems)||d.specificationItems.length>50000)return fail();const itemIds=new Set<string>();for(const item of d.specificationItems){if(!item||!text(item.id)||itemIds.has(item.id)||!((item.kind==="abstract")||(item.kind==="manual"))||!text(item.type,256)||typeof item.designation!=="string"||item.designation.length>4096||!text(item.name,4096)||(!Number.isFinite(item.amount)&&item.amount!==null)||item.amount!==null&&(item.amount<0||item.amount>1e9)||!["шт.","м","г","кг","л"].includes(item.unit)||typeof item.note!=="string"||item.note.length>4096||item.position!==undefined&&!point(item.position)||item.objectId!==undefined&&!text(item.objectId)||item.sourceIdentity!==undefined&&!text(item.sourceIdentity,4096))return fail();itemIds.add(item.id);if(ids.has(item.id))return fail();ids.add(item.id);}}
@@ -179,16 +188,21 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
     return [{id:l.id,kind:"position-leader",layerId:"dimensions",label:origin&&row?String(row.position):"?",x:l.circle.x-radius,y:l.circle.y-radius,width:radius*2,height:radius*2,color:origin&&row?"#365568":"#c23535",points:[anchor,l.circle]},
       {id:`${l.id}:anchor`,kind:"leader-anchor",layerId:"dimensions",label:"",x:anchor.x-anchorRadius,y:anchor.y-anchorRadius,width:anchorRadius*2,height:anchorRadius*2,color:origin&&row?"#365568":"#c23535"}];
   });
-  return [...tables,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
+  const rails:EditorSceneObject[]=(d.rails??[]).flatMap(rail=>[
+    {id:rail.id,kind:"position-rail",layerId:"dimensions",label:"Линия позиций",x:Math.min(rail.start.x,rail.end.x),y:Math.min(rail.start.y,rail.end.y),width:Math.abs(rail.end.x-rail.start.x),height:Math.abs(rail.end.y-rail.start.y),color:"#587084",points:[rail.start,rail.end]},
+    ...(["start","end"] as const).map(end=>({id:`${rail.id}:${end}`,kind:"rail-handle" as const,layerId:"dimensions",label:"Конец линии позиций",x:rail[end].x-5,y:rail[end].y-5,width:10,height:10,color:"#587084"}))
+  ]);
+  return [...tables,...rails,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
 }
 export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters):DrawingDocuments|null {
   const d=document.drawingDocuments;if(!d)return null;
   const dimension=moveDrawingDimension(document,id,point,perimeters);if(dimension)return dimension;
+  const rail=movePositionRail(d,id,point);if(rail)return rail;
   if(d.specificationItems?.some(i=>i.id===id&&i.position))return {...d,specificationItems:d.specificationItems.map(i=>i.id===id?{...i,position:point}:i)};
   if(d.tables.some(t=>t.id===id)) return {...d,tables:d.tables.map(t=>t.id===id?{...t,position:point}:t)};
   const leader=d.leaders.find(l=>l.id===id||`${l.id}:anchor`===id);if(!leader)return null;
   const scale=d.leaderScale??1;
-  if(leader.id===id)return {...d,leaders:d.leaders.map(l=>l.id===id?{...l,circle:{x:point.x+12*scale,y:point.y+12*scale}}:l)};
+  if(leader.id===id)return movePositionLeaderOnRails(d,id,{x:point.x+12*scale,y:point.y+12*scale});
   const origin=drawingObjectOrigin(document,leader.objectId);if(!origin)return null;
   const anchor=drawingObjectPerimeter(document,leader.objectId,{x:point.x+4*scale,y:point.y+4*scale},perimeters);if(!anchor)return null;
   const offset={x:anchor.x-origin.x,y:anchor.y-origin.y},connector=document.connectors.find(c=>c.id===leader.objectId);

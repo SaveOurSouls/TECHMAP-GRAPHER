@@ -23,6 +23,8 @@ const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
   "drawing-table": "Таблица",
   "position-leader": "Выноска",
   "leader-anchor": "Якорь выноски",
+  "position-rail": "Линия привязки позиций",
+  "rail-handle": "Конец линии привязки",
   "physical-covering": "Оболочка",
   "physical-node": "Узел ветви",
   "physical-segment": "Участок ветви",

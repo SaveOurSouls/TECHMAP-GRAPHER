@@ -8,9 +8,9 @@ export type EditorTool =
   | "connector"
   | "wire"
   | "text"
-  | "dimension-auxiliary" | "dimension" | "dimension-horizontal" | "dimension-vertical";
+  | "dimension-auxiliary" | "dimension" | "dimension-horizontal" | "dimension-vertical" | "position-rail";
 
-export type EditorObjectKind = "specification-item" | "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor";
+export type EditorObjectKind = "specification-item" | "connector" | "wire" | "text" | "dimension" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor" | "position-rail" | "rail-handle";
 
 export interface EditorPoint {
   readonly x: number;

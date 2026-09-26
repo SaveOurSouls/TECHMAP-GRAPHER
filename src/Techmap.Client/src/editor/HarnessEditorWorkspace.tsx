@@ -104,6 +104,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode,auxiliary?:boolean)=>void;
+  readonly onPositionRailCreate?:(start:EditorPoint,end:EditorPoint,leaderIds:readonly string[])=>void;
   readonly documentActions?: ReactNode;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
@@ -243,7 +244,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPipeIntervalSelect,onCoveringDrag,
+  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onPipeIntervalSelect,onCoveringDrag,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -568,6 +569,7 @@ export function HarnessEditorWorkspace({
           diagnosticOverlay={diagnosticOverlay}
           onPipeIntervalSelect={onPipeIntervalSelect} onCoveringDrag={onCoveringDrag}
           onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
+          onPositionRailCreate={(...args)=>{onPositionRailCreate?.(...args);setTool("select");}}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
