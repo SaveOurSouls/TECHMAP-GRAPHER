@@ -12,13 +12,14 @@ internal static class ProjectComponentPlacementRemapper
 {
     internal static ProjectComponentPlacementRemap RemapHarnessDesign(
         string designJson,
-        IReadOnlyDictionary<Guid, Guid> placementIds)
+        IReadOnlyDictionary<Guid, Guid> placementIds,
+        long harnessQuantity = 1)
     {
         ArgumentNullException.ThrowIfNull(designJson);
         ArgumentNullException.ThrowIfNull(placementIds);
         if (placementIds.Count == 0)
             return new ProjectComponentPlacementRemap(
-                designJson,
+                ManufacturingRouteRemapper.Remap(designJson, designJson, placementIds, harnessQuantity),
                 new Dictionary<Guid, string>());
         JsonObject root;
         try
@@ -103,7 +104,7 @@ internal static class ProjectComponentPlacementRemapper
             if (source != Guid.Empty) instances[source] = connector.ToJsonString();
         }
 
-        return new ProjectComponentPlacementRemap(root.ToJsonString(), instances);
+        return new ProjectComponentPlacementRemap(ManufacturingRouteRemapper.Remap(designJson, root.ToJsonString(), placementIds, harnessQuantity), instances);
     }
 
     private static void RemapEndpoint(

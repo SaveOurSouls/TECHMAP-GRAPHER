@@ -105,7 +105,9 @@ public static class HarnessDesignEndpoints
             document.Revision,
             content.RootElement.Clone(),
             document.CreatedUtc,
-            document.UpdatedUtc);
+            document.UpdatedUtc,
+            document.SourceFingerprint,
+            document.HarnessQuantity);
     }
 
     private static async Task<PutHarnessDesignRequest?> ReadRequestAsync(
@@ -161,7 +163,7 @@ public static class HarnessDesignEndpoints
         var status = error.Code switch
         {
             "project_not_found" or "harness_not_found" => StatusCodes.Status404NotFound,
-            "design_revision_conflict" or "design_writer_upgrade_required" => StatusCodes.Status409Conflict,
+            "design_revision_conflict" or "design_writer_upgrade_required" or "manufacturing_route_source_stale" => StatusCodes.Status409Conflict,
             "design_content_too_large" => StatusCodes.Status413PayloadTooLarge,
             _ => StatusCodes.Status400BadRequest,
         };

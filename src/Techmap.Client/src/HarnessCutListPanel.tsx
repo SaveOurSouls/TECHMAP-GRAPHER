@@ -60,11 +60,12 @@ export function HarnessCutListPanel({ api, projectId, harnessId, onReveal }: Har
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setCutList(null);
     setError(null);
     void api.get(projectId, harnessId).then(result => {
       if (!cancelled) setCutList(result);
     }).catch(loadError => {
-      if (!cancelled) setError(errorText(loadError));
+      if (!cancelled) { setCutList(null); setError(errorText(loadError)); }
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });

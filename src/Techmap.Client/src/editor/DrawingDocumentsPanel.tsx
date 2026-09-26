@@ -1,3 +1,4 @@
+import { routeCutReadiness } from "../manufacturing/route-cut-readiness";
 import type { DrawingPerimeters } from "./drawing-object-perimeter";
 import { pipeMeasuredWireLength } from "./drawing-dimensions";
 import { Fragment, useEffect, useState, type CSSProperties } from "react";
@@ -102,12 +103,13 @@ function ConnectionSectionPicker({ document, wire, options, disabled, onCommand 
     }}><option value="">—</option>{sections.map(section => <option key={section} value={section}>{section}</option>)}</select>;
 }
 
-export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"], wireOptions = builtInWireOptions, onWireSearch}: {
-  perimeters?:DrawingPerimeters;readOnly?:boolean;availableKinds?:readonly ("bom"|"connections"|"cut")[];
+export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"], wireOptions = builtInWireOptions, onWireSearch,sourceFingerprint,unsaved=false}: {
+  sourceFingerprint?:string;unsaved?:boolean;perimeters?:DrawingPerimeters;readOnly?:boolean;availableKinds?:readonly ("bom"|"connections"|"cut")[];
   mode?:"controls"|"bom"|"connections";document:HarnessDesignDocument;quantity:number;selectedId:string|null;selectedIds:readonly string[];
   onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void;
   wireOptions?: readonly WireDatabaseOption[]; onWireSearch?: (query: string) => void;
 }) {
+  const cutReady=routeCutReadiness(document,sourceFingerprint,unsaved);
   const [filter,setFilter]=useState("");
   const [onlyRelated,setOnlyRelated]=useState(false);
   const d=document.drawingDocuments ?? emptyDrawingDocuments(),rows=buildDrawingBom(document,quantity);
@@ -123,7 +125,7 @@ export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,
   const Content = mode === "controls" ? "details" : "div";
   return <section className="he-relations" aria-label={mode==="connections"?"Таблица соединений":"Документы схемы"}><Content className={mode!=="controls"?"he-document-content":undefined} {...(mode==="controls"?{open:!!leader}:{})}>{mode==="controls"&&<summary>{availableKinds.length===1?"Таблица соединений":"Таблицы и выноски"}</summary>}
     <header className="ui-section-heading"><InfoHint>{mode==="connections"||availableKinds.length===1 ? "Соединения взяты из текущего документа жгута. Фильтр не меняет данные. В Э4 и Чертеже таблицу можно открыть на поле, передвинуть и закрепить у края. В Маршруте доступен просмотр." : <>Количество спецификации рассчитано для всего количества жгутов. Фильтр меняет показ, но не расход. Кружок перемещается свободно, якорь — по периметру своего объекта; номер следует позиции спецификации. Таблицы на поле перетаскиваются за заголовок. «Добавить позиции» размещает все номера. Кнопка с глазом показывает или скрывает позицию сразу у всех её обозначений; новые номера располагаются рядом по горизонтали.</>}</InfoHint></header>
-    {mode==="controls" && <div className="he-relations-actions">{availableKinds.map(kind=><button key={kind} className="ui-control" type="button" onClick={()=>addTable(kind)}>{kind==="bom"?"Спецификация +":kind==="cut"?"Резка +":"Соединения +"}</button>)}</div>}
+    {mode==="controls" && <div className="he-relations-actions">{availableKinds.map(kind=><button key={kind} className="ui-control" type="button" disabled={kind==="cut"&&!cutReady.ready} title={kind==="cut"?cutReady.message:undefined} onClick={()=>{if(kind!=="cut"||cutReady.ready)addTable(kind);}}>{kind==="bom"?"Спецификация +":kind==="cut"?"Резка +":"Соединения +"}</button>)}</div>}
     {mode==="controls" && d.tables.filter(t=>availableKinds.includes(t.kind)).map(t=><div className="he-relations-actions" key={t.id}><span>{t.kind==="bom"?"Спецификация":t.kind==="cut"?"Резка":"Соединения"}</span><button className="ui-control" type="button" onClick={()=>onChange({...d,tables:d.tables.filter(i=>i.id!==t.id)})}>Убрать с поля</button></div>)}
     {mode!=="controls" && <><div className="he-document-tools"><input aria-label="Поиск строки документа" placeholder="Поиск" value={filter} onChange={e=>setFilter(e.target.value)}/>
     <label><input type="checkbox" checked={onlyRelated} onChange={e=>setOnlyRelated(e.target.checked)}/>Только связанные</label>

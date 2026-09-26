@@ -72,10 +72,10 @@ public sealed class ElectricalGraphValidatorTests
             case "from": graph["wires"]![0]!.AsObject().Remove("from"); break;
             case "to": graph["wires"]![0]!.AsObject().Remove("to"); break;
             case "marker-zero": graph["requiredWriterContractVersion"] = 0; break;
-            case "marker-future": graph["requiredWriterContractVersion"] = 2; break;
+            case "marker-future": graph["requiredWriterContractVersion"] = 3; break;
             case "marker-null": graph["requiredWriterContractVersion"] = null; break;
             case "writer-zero": writer = 0; break;
-            case "writer-future": writer = 2; break;
+            case "writer-future": writer = 3; break;
         }
         var error = Assert.Throws<HarnessDesignDocumentException>(() => fixture.Designs.Put(
             fixture.ProjectId, fixture.HarnessId, before.Revision, 1, graph.ToJsonString(), writer));

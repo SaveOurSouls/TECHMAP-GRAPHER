@@ -576,7 +576,7 @@ public sealed class SqliteProjectComponentSnapshotStore(
         connectors.Add(instance.DeepClone());
         using (var candidate = JsonDocument.Parse(root.ToJsonString()))
         {
-            try { ElectricalGraphValidator.Validate(candidate.RootElement); }
+            try { ElectricalGraphValidator.Validate(candidate.RootElement); ManufacturingRouteValidator.Validate(candidate.RootElement); }
             catch (HarnessDesignDocumentException error)
             {
                 throw new ProjectComponentSnapshotException(error.Code, error.Message, error.Field, innerException: error);

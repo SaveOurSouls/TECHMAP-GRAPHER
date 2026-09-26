@@ -44,7 +44,8 @@ public static class HarnessCutListEndpoints
             item.Pieces,
             item.TotalMetres,
             item.Status,
-            item.Warnings)).ToArray());
+            item.Warnings,
+            item.SourceKind)).ToArray());
 
     private static IResult Execute(Func<IResult> operation)
     {

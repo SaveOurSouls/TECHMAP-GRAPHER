@@ -1106,6 +1106,7 @@ public sealed class SqliteProjectExportService : IProjectExportService
         if (parsedSchemaVersion != design.SchemaVersion) return false;
         try {
             ElectricalGraphValidator.Validate(design.Content);
+            ManufacturingRouteValidator.Validate(design.Content);
             HarnessStripProfileValidator.Validate(design.Content);
             SqliteHarnessDesignDocumentStore.ValidateCableInstances(design.Content);
             HarnessE4RowOrderValidator.Validate(design.Content);

@@ -44,13 +44,14 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "schemaVersion");
         }
 
-        if (writerContractVersion is not (null or 1))
-            throw Invalid("unsupported_design_writer_contract", "The supported design writer contract is 1.", "writerContractVersion");
+        if (writerContractVersion is not (null or 1 or 2))
+            throw Invalid("unsupported_design_writer_contract", "The supported design writer contracts are 1 and 2.", "writerContractVersion");
         var canonicalJson = ValidateContent(contentJson, schemaVersion);
-        if (writerContractVersion == 1)
+        if (writerContractVersion is 1 or 2)
         {
             var markedContent = JsonNode.Parse(canonicalJson)!.AsObject();
-            markedContent["requiredWriterContractVersion"] = 1;
+            using var unmarked = JsonDocument.Parse(canonicalJson);
+            markedContent["requiredWriterContractVersion"] = Math.Max(writerContractVersion.Value, ElectricalGraphValidator.RequiredWriterContract(unmarked.RootElement));
             canonicalJson = ValidateContent(markedContent.ToJsonString(), schemaVersion);
         }
         var now = CanonicalUtc(timeProvider.GetUtcNow());
@@ -64,8 +65,32 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 ElectricalGraphValidator.RequiredWriterContract(incoming.RootElement));
             if (requiredWriter > (writerContractVersion ?? 0))
                 throw new HarnessDesignDocumentException("design_writer_upgrade_required",
-                    "This document requires design writer contract 1. Update the client before saving.",
+                    $"This document requires design writer contract {requiredWriter}. Update the client before saving.",
                     "writerContractVersion", before.Revision);
+            var hasPreviousRoute = previous.RootElement.TryGetProperty("manufacturingRoute", out var previousRoute);
+            var hasIncomingRoute = incoming.RootElement.TryGetProperty("manufacturingRoute", out var incomingRoute);
+            if (hasIncomingRoute)
+            {
+                var currentFingerprint = ManufacturingRouteSourceFingerprint.Compute(incoming.RootElement, before.HarnessQuantity!.Value);
+                var sameRoute = hasPreviousRoute && JsonElement.DeepEquals(previousRoute, incomingRoute);
+                var fresh = string.Equals(incomingRoute.GetProperty("source").GetProperty("sha256").GetString(), currentFingerprint, StringComparison.OrdinalIgnoreCase);
+                if (!sameRoute && !fresh)
+                    throw new HarnessDesignDocumentException("manufacturing_route_source_stale", "The route source differs from the current construction. Refresh the source before editing the route.", "content.manufacturingRoute.source", before.Revision);
+                if (fresh) ManufacturingRouteValidator.ValidateReferences(incoming.RootElement);
+                if (!sameRoute)
+                {
+                    using var photos = unitOfWork.CreateCommand("SELECT content_sha256 FROM project_attachments WHERE project_id = $project AND purpose = 'route-photo' AND media_type = 'image/png';");
+                    photos.Parameters.AddWithValue("$project", Format(projectId.Value));
+                    using var photoReader = photos.ExecuteReader();
+                    var hashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    while (photoReader.Read()) hashes.Add(photoReader.GetString(0));
+                    foreach (var row in incomingRoute.GetProperty("rows").EnumerateArray())
+                        if (row.TryGetProperty("photos", out var rowPhotos))
+                            foreach (var photo in rowPhotos.EnumerateArray())
+                                if (!hashes.Contains(photo.GetProperty("sha256").GetString()!))
+                                    throw Invalid("invalid_manufacturing_route", "Route photo must reference a PNG attachment owned by this project with purpose route-photo.", "content.manufacturingRoute.rows.photos");
+                }
+            }
             using var update = unitOfWork.CreateCommand(
                 """
                 UPDATE harness_design_documents
@@ -316,6 +341,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);
             ElectricalGraphValidator.Validate(root);
+            ManufacturingRouteValidator.Validate(root);
 
             return root.GetRawText();
         }
@@ -568,9 +594,9 @@ public sealed class SqliteHarnessDesignDocumentStore(
         EnsureHarness(unitOfWork, projectId, harnessId);
         using var command = unitOfWork.CreateCommand(
             """
-            SELECT revision, schema_version, content_json, created_utc, updated_utc
-            FROM harness_design_documents
-            WHERE harness_id = $harnessId;
+            SELECT d.revision, d.schema_version, d.content_json, d.created_utc, d.updated_utc, h.quantity
+            FROM harness_design_documents d INNER JOIN harnesses h ON h.harness_id = d.harness_id
+            WHERE d.harness_id = $harnessId;
             """);
         command.Parameters.AddWithValue("$harnessId", Format(harnessId.Value));
         using var reader = command.ExecuteReader();
@@ -585,9 +611,11 @@ public sealed class SqliteHarnessDesignDocumentStore(
             reader.GetInt32(1),
             reader.GetString(2),
             ParseUtc(reader.GetString(3)),
-            ParseUtc(reader.GetString(4)));
+            ParseUtc(reader.GetString(4)),
+            HarnessQuantity: reader.GetInt64(5));
         _ = ValidateContent(result.ContentJson, result.SchemaVersion);
-        return result;
+        using var content = JsonDocument.Parse(result.ContentJson);
+        return result with { SourceFingerprint = ManufacturingRouteSourceFingerprint.Compute(content.RootElement, result.HarnessQuantity!.Value) };
     }
 
     private static void EnsureHarness(

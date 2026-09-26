@@ -162,7 +162,9 @@ public sealed record HarnessDesignResponse(
     long Revision,
     JsonElement Content,
     DateTimeOffset CreatedUtc,
-    DateTimeOffset UpdatedUtc);
+    DateTimeOffset UpdatedUtc,
+    string? SourceFingerprint = null,
+    long? HarnessQuantity = null);
 
 public sealed record HarnessCutListItemResponse(
     string WireId,
@@ -178,7 +180,8 @@ public sealed record HarnessCutListItemResponse(
     long Pieces,
     decimal? TotalMetres,
     string Status,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    string SourceKind = "wire");
 
 public sealed record HarnessCutListResponse(
     Guid ProjectId,

@@ -1,4 +1,5 @@
 import {restoreTemplateContactNumbers,templateContactNumbers} from "./template-contact-numbering";
+import { parseManufacturingRoute, type ManufacturingRoute } from "../manufacturing/route-model";
 import { commonParallelSpan } from "./e4-parallel-spans";
 import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
@@ -544,7 +545,8 @@ export interface HarnessDesignDocument {
   readonly physicalTopology?: PhysicalTopology;
   readonly schemaVersion: 1;
   /** Minimum writer contract required to safely preserve this document. */
-  readonly requiredWriterContractVersion?: 1;
+  readonly requiredWriterContractVersion?: 1 | 2;
+  readonly manufacturingRoute?: ManufacturingRoute;
   /** User-created wire colors retained by this harness even when temporarily unused. */
   readonly customWireColors?: readonly string[];
   readonly connectors: readonly ConnectorInstance[];
@@ -706,7 +708,7 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
 
 export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocument {
   const record = requireRecord(value, "Сервер вернул повреждённый документ жгута.");
-  if (record.requiredWriterContractVersion !== undefined && record.requiredWriterContractVersion !== 1) {
+  if (record.requiredWriterContractVersion !== undefined && record.requiredWriterContractVersion !== 1 && record.requiredWriterContractVersion !== 2) {
     throw new Error("Для этого документа требуется более новая версия приложения.");
   }
   if (record.schemaVersion !== 1 || !Array.isArray(record.connectors) || !Array.isArray(record.wires)) {
@@ -716,7 +718,8 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   const views = requireRecord(record.views, "Представления документа жгута заданы неверно.");
   let document: HarnessDesignDocument = {
     schemaVersion: 1,
-    ...(record.requiredWriterContractVersion === 1 ? { requiredWriterContractVersion: 1 as const } : {}),
+    ...(record.requiredWriterContractVersion === 1 || record.requiredWriterContractVersion === 2 ? { requiredWriterContractVersion: record.requiredWriterContractVersion } : {}),
+    ...(record.manufacturingRoute !== undefined ? { manufacturingRoute: parseManufacturingRoute(record.manufacturingRoute) } : {}),
     customWireColors: parseCustomWireColors(record.customWireColors),
     connectors: record.connectors.map(parseConnector),
     wires: wireValues.map(parseWire),

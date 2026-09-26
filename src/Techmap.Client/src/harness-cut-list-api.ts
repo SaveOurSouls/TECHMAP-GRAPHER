@@ -5,6 +5,7 @@ export type HarnessCutListStatus = "limited" | "ready" | "incomplete";
 export type HarnessCutListItemStatus = "ready" | "incomplete";
 
 export interface HarnessCutListItem {
+  readonly sourceKind?: "wire" | "cable" | "covering";
   readonly wireId: string;
   readonly circuit: string;
   readonly material: string;
@@ -129,6 +130,7 @@ function parseItem(value: unknown): HarnessCutListItem {
   }
   return Object.freeze({
     wireId: requireNonEmptyString(record, "wireId"),
+    ...(record.sourceKind === "wire" || record.sourceKind === "cable" || record.sourceKind === "covering" ? { sourceKind: record.sourceKind } : {}),
     circuit: requireString(record, "circuit"),
     material: requireNonEmptyString(record, "material"),
     materialSourceKey,

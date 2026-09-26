@@ -1,3 +1,6 @@
+import { buildLiveCutList } from "./live-cut-list";
+import { HarnessCutListTable } from "../HarnessCutListPanel";
+import { routeCutReadiness } from "../manufacturing/route-cut-readiness";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InfoHint } from "../InfoHint";
 import type { EditorCommand } from "./commands";
@@ -40,19 +43,23 @@ function CutField({label,value,nullable,onCommit}:{label:string;value:number|nul
   return <label>{label}<input type="text" inputMode="decimal" aria-label={label} aria-invalid={invalid} value={draft} onChange={e=>{setDraft(e.target.value);setInvalid(false);}} onBlur={commit} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}}}/>{invalid&&<small role="alert">Проверьте значение и допустимую длину.</small>}</label>;
 }
 
-export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,onReveal,onCommand,embedded=false}:{embedded?:boolean;document:HarnessDesignDocument;quantity:number;revision:number;unsaved:boolean;relatedIds:readonly string[];onReveal:(id:string)=>void;onCommand:(c:EditorCommand)=>boolean}) {
+export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,onReveal,onCommand,sourceFingerprint,embedded=false}:{sourceFingerprint?:string;embedded?:boolean;document:HarnessDesignDocument;quantity:number;revision:number;unsaved:boolean;relatedIds:readonly string[];onReveal:(id:string)=>void;onCommand:(c:EditorCommand)=>boolean}) {
   const [open,setOpen]=useState(embedded),[selected,setSelected]=useState("");
   const trigger=useRef<HTMLButtonElement>(null);
   const close=()=>{setOpen(false);trigger.current?.focus();};
-  const ids=cutBlankIds(document);
+  const cutReady=routeCutReadiness(document,sourceFingerprint,unsaved);
+  const ids=[...cutBlankIds(document),...(document.physicalTopology?.coverings??[]).map(c=>c.id)];
+  const live=useMemo(()=>buildLiveCutList(document,"","",quantity),[document,quantity]);
   const relatedSource=relatedIds.find(id=>document.wires.some(w=>w.id===id)||document.cables.some(c=>c.id===id));
   const related=relatedSource?buildCutDiagram(document,relatedSource,quantity)?.objectId:undefined;
   const active=ids.includes(selected)?selected:related ?? ids[0] ?? "";
+  const activeCovering=document.physicalTopology?.coverings?.find(c=>c.id===active);
   const diagram=useMemo(()=>buildCutDiagram(document,active,quantity),[document,active,quantity]);
   const commit=(field:"lengthMm"|"endCorrectionFromMm"|"endCorrectionToMm"|"cutRoundingStepMm",value:string)=>{
     if(!diagram)return false;const patch={[field]:value===""&&field==="lengthMm"?null:Number(value)};
     return onCommand(diagram.kind==="cable"?{type:"update-cable",cableId:diagram.objectId,...patch}:{type:"update-wire",wireId:diagram.objectId,...patch});
   };
+  if(!cutReady.ready)return <section className="he-relations"><p role="status">{cutReady.message}</p></section>;
   return <section className="he-relations">{!embedded&&<button ref={trigger} className="ui-control" type="button" disabled={!ids.length} onClick={()=>{setSelected(related ?? ids[0] ?? "");setOpen(true);}}>Схема резки / разделки</button>}
     {open&&<div className={embedded?"":"he-cut-backdrop"}><section className={embedded?"he-cut-embedded":"he-cut-dialog"} role={embedded?"region":"dialog"} aria-modal={embedded?undefined:true} aria-label="Схема резки и разделки" onKeyDown={e=>{
         if(!embedded&&e.key==="Escape"){e.preventDefault();e.stopPropagation();close();}
@@ -60,8 +67,8 @@ export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,o
         if(!embedded&&e.key==="Tab") {const controls=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),summary,[tabindex="0"]')).filter(n=>n.getClientRects().length);const first=controls[0],last=controls.at(-1);if(e.shiftKey&&window.document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&window.document.activeElement===last){e.preventDefault();first?.focus();}}
       }}>
       <header className="ui-section-heading"><strong>Резка и разделка</strong><InfoHint>Заготовка = физическая длина + поправки A/B, затем округление вверх до шага. Масштаб изображения условный. Разделка обрабатывает ту же заготовку и не создаёт второй расход. Кабель учитывается целиком; профили его жил показаны ниже. Профиль без данных не считается нулевой разделкой.</InfoHint>{!embedded&&<button className="ui-control" type="button" autoFocus onClick={close}>Закрыть</button>}</header>
-      <div className="he-relations-actions"><select aria-label="Заготовка" value={active} onChange={e=>setSelected(e.target.value)}>{ids.map((id,index)=><option key={id} value={id}>{document.wires.find(w=>w.id===id)?.circuit || (document.cables.some(c=>c.id===id)?"Кабель ":"Провод ")+(index+1)}</option>)}</select><span role="status">{unsaved?`Текущий документ · не сохранён · база r${revision}`:`Сохранённая ревизия r${revision}`}</span><button className="ui-control" type="button" disabled={!diagram} onClick={()=>{if(diagram)onReveal(diagram.objectId);if(!embedded)close();}}>На чертеже</button></div>
-      {embedded&&<div className="he-document-table"><table aria-label="Карта резки"><thead><tr>{["Заготовка","Материал","Длина резки, мм","Кол-во","Всего, м"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{ids.map((id,index)=>{const row=buildCutDiagram(document,id,quantity);return row&&<tr key={id} className={id===active?"is-related":""}><td><button type="button" className="he-wire-row" title={id} onClick={()=>{setSelected(id);onReveal(id);}}>{document.wires.find(w=>w.id===id)?.circuit || (row.kind==="wire"?"Провод ":"Кабель ")+(index+1)}</button></td><td>{row.material??"—"}</td><td>{mm(row.cutLengthMm)}</td><td>{row.quantity}</td><td>{mm(row.totalMetres)}</td></tr>;})}</tbody></table></div>}
+      <div className="he-relations-actions"><select aria-label="Заготовка" value={active} onChange={e=>setSelected(e.target.value)}>{ids.map((id,index)=><option key={id} value={id}>{document.physicalTopology?.coverings?.find(c=>c.id===id)?.name || document.wires.find(w=>w.id===id)?.circuit || (document.cables.some(c=>c.id===id)?"Кабель ":"Провод ")+(index+1)}</option>)}</select><span role="status">{unsaved?`Текущий документ · не сохранён · база r${revision}`:`Сохранённая ревизия r${revision}`}</span><button className="ui-control" type="button" disabled={!diagram&&!activeCovering} onClick={()=>{if(diagram||activeCovering)onReveal(diagram?.objectId??activeCovering!.id);if(!embedded)close();}}>На чертеже</button></div>
+      {embedded&&<HarnessCutListTable cutList={live} onReveal={id=>{setSelected(id);onReveal(id);}} highlightedIds={[active]}/>}
       {diagram?<><strong>{diagram.material ?? "Материал не закреплён"}</strong><div className="he-cut-fields">{([
         ["lengthMm","Исходная длина, мм",diagram.sourceLengthMm], ["endCorrectionFromMm","Поправка A, мм",diagram.correctionA], ["endCorrectionToMm","Поправка B, мм",diagram.correctionB], ["cutRoundingStepMm","Шаг округления, мм",diagram.roundingMm],
       ] as const).map(([key,label,value])=><CutField key={`${diagram.objectId}:${key}`} label={label} value={value} nullable={key==="lengthMm"} onCommit={value=>commit(key,value)}/>)}</div>
@@ -69,7 +76,7 @@ export function CutDiagramPanel({document,quantity,revision,unsaved,relatedIds,o
         {diagram.warnings.length>0&&<details open><summary>Проверить · {diagram.warnings.length}</summary><ul>{diagram.warnings.map(w=><li key={w}>{w}</li>)}</ul></details>}
         <CutDiagramSvg diagram={diagram}/>
         {diagram.kind==="wire"?<div className="he-cut-end-tables"><LayerTable label="A" end={diagram.a}/><LayerTable label="B" end={diagram.b}/></div>:<>{diagram.conductors.map((c,index)=><details key={c.id}><summary>Жила {index+1} · A {c.a.label} → B {c.b.label}</summary><CutDiagramSvg diagram={diagram} a={c.a} b={c.b}/><div className="he-cut-end-tables"><LayerTable label="A" end={c.a}/><LayerTable label="B" end={c.b}/></div></details>)}</>}
-      </>:<p>Заготовка удалена или отсутствует.</p>}
+      </>:activeCovering?<p>Оболочка · {activeCovering.name}. Длина определяется заданными размерами в мм; разделка проводов к оболочке не применяется.</p>:<p>Заготовка удалена или отсутствует.</p>}
     </section></div>}
   </section>;
 }

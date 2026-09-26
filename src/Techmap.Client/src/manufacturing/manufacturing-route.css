@@ -1,0 +1,78 @@
+.manufacturing-route-panel { min-height:100vh; padding:26px 32px; color:#233d50; background:#f4f7f9; font:14px/1.45 var(--font-sans,Arial,sans-serif); }
+.manufacturing-route-panel h2,.manufacturing-route-panel h3,.manufacturing-route-panel h4 { margin:0; }
+.manufacturing-route-panel button,.manufacturing-route-dialog button { padding:8px 12px; border:1px solid #ccd9e2; border-radius:5px; background:#fff; color:#254a62; cursor:pointer; font:inherit; }
+.manufacturing-route-panel button:disabled,.manufacturing-route-dialog button:disabled { opacity:.45; cursor:default; }
+.manufacturing-route-panel button:hover:not(:disabled),.manufacturing-route-dialog button:hover:not(:disabled) { background:#edf5fa; border-color:#739db8; }
+.manufacturing-route-panel button.primary-action { background:#146f9c; color:#fff; border-color:#146f9c; }
+.manufacturing-route-header { display:flex; align-items:center; justify-content:space-between; gap:20px; border-bottom:1px solid #dce5eb; padding-bottom:18px; }
+.manufacturing-route-header h2 { font-size:25px; }
+.manufacturing-route-header .eyebrow,.manufacturing-route-dialog .eyebrow { margin:0 0 5px; color:#608094; font-size:11px; font-weight:700; letter-spacing:.12em; }
+.manufacturing-route-status { margin:7px 0 0; color:#607786; font-size:12px; }
+.manufacturing-route-actions,.manufacturing-route-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.manufacturing-route-toolbar { margin:18px 0; }
+.manufacturing-route-toolbar span { margin-left:auto; font-size:12px; color:#607786; }
+.manufacturing-route-error { padding:12px 16px; color:#9c352d; background:#fff1ed; border:1px solid #efcbc3; border-radius:6px; }
+.route-rebase-preview { margin:16px 0; padding:18px; border:1px solid #8eafc4; background:#eaf5fc; border-radius:7px; }
+.route-rebase-preview button { margin-right:8px; }
+.manufacturing-route-empty { max-width:650px; margin:70px auto; padding:36px; border:1px solid #dce5eb; border-radius:10px; background:#fff; }
+.manufacturing-route-empty h3 { font-size:21px; }
+.manufacturing-route-empty p { color:#607786; margin:14px 0 24px; }
+.manufacturing-route-body { display:grid; grid-template-columns:minmax(0,1fr) 310px; align-items:start; gap:22px; }
+.manufacturing-route-rows h3,.manufacturing-route-sources h3 { font-size:14px; margin-bottom:14px; }
+.manufacturing-route-row { display:flex; align-items:flex-start; gap:15px; background:#fff; padding:16px; margin-bottom:9px; border:1px solid #dbe5eb; border-radius:7px; }
+.manufacturing-route-row.selected { border-color:#468aac; box-shadow:inset 3px 0 #468aac; }
+.route-check { display:flex; align-items:center; gap:12px; color:#6e8290; font-size:12px; padding-top:7px; }
+.route-row-main { flex:1; min-width:0; }
+.route-row-main .route-row-title { border:0; padding:2px 0; font-size:15px; font-weight:700; text-align:left; background:none; }
+.route-row-main small { display:block; color:#70838f; font-size:11px; margin-top:3px; }
+.route-row-main p { margin:8px 0 0; font-size:12px; color:#70838f; white-space:pre-wrap; }
+.route-ready,.route-draft { white-space:nowrap; border-radius:12px; padding:3px 9px; font-size:11px; background:#eff3f5; color:#71818c; }
+.route-ready { background:#e2f4ea; color:#277444; }
+.manufacturing-route-sources { background:#fff; border:1px solid #dce5eb; padding:18px; border-radius:7px; }
+.manufacturing-route-sources>p { font-size:12px; color:#70838f; }
+.route-source-check { display:flex; align-items:flex-start; gap:10px; padding:12px 0; border-top:1px solid #e8eef2; }
+.route-source-check strong,.route-source-check small { display:block; }
+.route-source-check strong { font-size:13px; }
+.route-source-check small { color:#71818c; font-size:11px; margin-top:3px; }
+.manufacturing-route-dialog { width:min(1180px,94vw); max-width:none; max-height:92vh; padding:24px; border:1px solid #b6cbd9; border-radius:10px; box-shadow:0 22px 80px #17324433; color:#233d50; font:14px/1.45 var(--font-sans,Arial,sans-serif); }
+.manufacturing-route-dialog::backdrop { background:#152d4666; }
+.manufacturing-route-dialog>header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding-bottom:16px; border-bottom:1px solid #dce5eb; }
+.manufacturing-route-dialog h3 { margin:0; font-size:18px; }
+.manufacturing-route-dialog label { display:flex; flex-direction:column; gap:5px; color:#526d80; font-size:12px; }
+.manufacturing-route-dialog input:not([type=checkbox],[type=radio],[type=range]),.manufacturing-route-dialog textarea,.manufacturing-route-dialog select { min-width:0; box-sizing:border-box; border:1px solid #cbdbe5; border-radius:4px; padding:8px; color:#243d50; background:#fff; font:inherit; }
+.route-editor-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:18px 0; }
+.route-editor-fields textarea { height:38px; min-height:38px; resize:vertical; }
+.route-presentation-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.route-presentation-toolbar h4 { margin:0 auto 0 0; }
+.route-presentation-toolbar label { flex-direction:row; align-items:center; }
+.route-presentation-section>p { color:#738794; font-size:12px; }
+.route-presentation { display:block; width:100%; max-height:520px; min-height:280px; border:1px solid #d7e3eb; border-radius:6px; background:#f8fbfd; touch-action:none; }
+.route-svg-object { cursor:pointer; }
+.route-svg-object text { font:12px Arial,sans-serif; fill:#24465d; pointer-events:none; }
+.route-point-handle { fill:#fff; stroke:#3887b2; stroke-width:2; cursor:grab; }
+.route-svg-object:not(.selected) .route-point-handle { opacity:.25; }
+.route-svg-object:hover .route-point-handle { opacity:1; }
+.route-source-details { margin:8px 0 18px; padding:0; list-style:none; font-size:11px; color:#607a8c; }
+.route-source-details li { display:flex; flex-wrap:wrap; gap:15px; padding:3px 0; }
+.route-terminal-requirements { padding:8px 0 20px; }
+.route-terminal-requirements h4 { margin:0 0 8px; }
+.route-terminal-requirements table { width:100%; border-collapse:collapse; font-size:12px; }
+.route-terminal-requirements th,.route-terminal-requirements td { padding:7px 10px; text-align:left; border-bottom:1px solid #e1e9ef; }
+.route-terminal-requirements th { background:#f5f8fa; color:#567183; font-weight:600; }
+.route-operations { border-top:1px solid #dce5eb; padding-top:18px; }
+.route-operations h4 { margin:0 0 12px; }
+.route-operation-add { display:flex; gap:10px; align-items:end; margin-bottom:12px; }
+.route-operation-add label { min-width:240px; }
+.route-operation-row { display:grid; grid-template-columns:38px minmax(120px,1fr) minmax(140px,1fr) minmax(120px,1fr) auto; gap:9px; align-items:center; padding:9px; border:1px solid #dce5eb; border-radius:5px; margin-bottom:7px; }
+.route-operation-row.selected { background:#f0f7fb; border-color:#91b4c9; }
+.route-operation-row>label { flex-direction:row; align-items:center; }
+.route-operation-row>span { font-size:12px; }
+.route-operation-binding { margin-top:18px; padding:16px; border-radius:6px; background:#f6f9fb; }
+.route-operation-binding>div:first-of-type { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.route-operation-results { max-height:190px; overflow:auto; display:flex; flex-wrap:wrap; gap:8px; padding-top:12px; }
+.route-operation-results button { text-align:left; flex:1 0 220px; }
+.route-operation-results strong,.route-operation-results small { display:block; }
+.route-operation-results small { color:#728695; margin-top:2px; }
+.manufacturing-route-dialog>footer { position:sticky; bottom:-24px; background:#fff; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; padding:14px 0; border-top:1px solid #dce5eb; font-size:12px; color:#71818c; }
+.manufacturing-route-dialog>footer label { flex-direction:row; align-items:center; }
+@media(max-width:900px) { .manufacturing-route-panel { padding:18px; }.manufacturing-route-body { grid-template-columns:1fr; }.manufacturing-route-header { align-items:flex-start; }.route-operation-row { grid-template-columns:35px 1fr 1fr; }.route-operation-row>input { grid-column:2; }.route-editor-fields { grid-template-columns:1fr; } }

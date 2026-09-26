@@ -23,6 +23,7 @@ import { createHarnessCutListApi } from "./harness-cut-list-api";
 import { HarnessCutListPanel } from "./HarnessCutListPanel";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RouteDrawingsPanel } from "./RouteDrawingsPanel";
+import { ManufacturingRoutePanel } from "./manufacturing/ManufacturingRoutePanel";
 import { InfoHint } from "./InfoHint";
 
 const ComponentLibrary = lazy(async () => {
@@ -135,7 +136,7 @@ interface HarnessDocumentTabsProps {
   readonly harness: HarnessSummary;
   readonly activeTab: HarnessTab;
   readonly onTabChange: (tab: HarnessTab) => void;
-  readonly onOpen?: (tab: Exclude<HarnessTab, "route">) => void;
+  readonly onOpen?: (tab: HarnessTab) => void;
 }
 
 export function HarnessDocumentTabs({
@@ -146,7 +147,7 @@ export function HarnessDocumentTabs({
 }: HarnessDocumentTabsProps) {
   const openTab = (tab: typeof harnessTabs[number]) => {
     onTabChange(tab.id);
-    if (tab.id !== "route") onOpen?.(tab.id);
+    onOpen?.(tab.id);
   };
   return (
     <div className="harness-document-buttons" role="group" aria-label={`Документация жгута ${harness.designation}`}>
@@ -644,6 +645,9 @@ export function App({ config, session }: AppProps) {
     if (selectedHarness) setEditHarnessQuantity(String(selectedHarness.quantity));
   }, [selectedHarness]);
 
+  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route") {
+    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={() => setEditorOpen(false)} />;
+  }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab !== "route") {
     return (
       <HarnessDesignEditor

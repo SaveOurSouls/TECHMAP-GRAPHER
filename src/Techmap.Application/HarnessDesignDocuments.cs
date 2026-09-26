@@ -8,7 +8,9 @@ public sealed record HarnessDesignDocument(
     int SchemaVersion,
     string ContentJson,
     DateTimeOffset CreatedUtc,
-    DateTimeOffset UpdatedUtc);
+    DateTimeOffset UpdatedUtc,
+    string? SourceFingerprint = null,
+    long? HarnessQuantity = null);
 
 public interface IHarnessDesignDocumentStore
 {

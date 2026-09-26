@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Techmap.Contracts;
 using Techmap.Web;
 using Xunit;
@@ -10,6 +11,65 @@ namespace Techmap.Web.Tests;
 public sealed class HarnessCutListApiTests
 {
     private const string Origin = "http://127.0.0.1:18762";
+
+    [Theory]
+    [InlineData("missing", "route_cut_not_prepared")]
+    [InlineData("stale", "route_source_stale")]
+    [InlineData("strip-only", "route_cut_not_prepared")]
+    [InlineData("unprepared", "route_cut_not_prepared")]
+    [InlineData("unbound", "route_cut_not_prepared")]
+    public async Task Direct_cut_api_cannot_bypass_route_preparation(string mutation, string expectedError)
+    {
+        await using var factory = new TechmapWebApplicationFactory(); using var client = factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=JsonSerializer.SerializeToElement(new { schemaVersion=1,connectors=Array.Empty<object>(),wires=new[]{new{id="w",circuit="",lengthMm=100}} });
+        var ready=JsonNode.Parse(PreparedCutRouteFixture.Add(content,1).GetRawText())!;
+        var route=ready["manufacturingRoute"]!;
+        if(mutation=="missing")ready.AsObject().Remove("manufacturingRoute");
+        if(mutation=="strip-only")route["rows"]![0]!["operations"]![0]!["mode"]="strip-both";
+        if(mutation=="unprepared")route["rows"]![0]!["prepared"]=false;
+        if(mutation=="unbound")route["rows"]![0]!["operations"]![0]!["binding"]=null;
+        using var save=await SendAsync(client,HttpMethod.Put,DesignRoute(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,JsonSerializer.SerializeToElement(ready),2),csrf);
+        Assert.True(save.IsSuccessStatusCode,await save.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        if(mutation=="stale")
+        {
+            ready["wires"]![0]!["lengthMm"]=101;
+            using var changed=await SendAsync(client,HttpMethod.Put,DesignRoute(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(ready),2),csrf);
+            Assert.True(changed.IsSuccessStatusCode,await changed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+        using var result=await client.GetAsync(CutListRoute(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest,result.StatusCode);
+        var error=await result.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal(expectedError,error!.Error);Assert.Contains("Карта резки недоступна",error.Message!);
+    }
+
+    [Fact]
+    public async Task Covering_cut_uses_measured_mm_and_dimension_changes_invalidate_the_route()
+    {
+        await using var factory=new TechmapWebApplicationFactory();using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf,quantity:3);
+        using var original=JsonDocument.Parse("""
+        {"schemaVersion":1,"connectors":[],"wires":[],"drawingDocuments":{"tables":[],"leaders":[],"bomOrder":[],"dimensions":[{"id":"D","segmentId":"S","from":0,"to":1,"pointCount":2,"routeKey":"[\"S\",\"N1\",\"N2\",0]","mode":"path","offset":40,"lengthMm":120.125}]},
+        "physicalTopology":{"snap":false,"nodes":[{"id":"N1","position":{"x":0,"y":0}},{"id":"N2","position":{"x":9999,"y":0}}],"segments":[{"id":"S","from":"N1","to":"N2","bends":[]}],"routes":[],"coverings":[{"id":"C","name":"Оплётка","kind":"braid","lengthMode":"auto","width":20,"color":"#334455","lengthMm":null,"spans":[{"segmentId":"S","from":0,"to":1,"fromAnchor":0,"toAnchor":1}]}]}}
+        """);
+        var ready=JsonNode.Parse(PreparedCutRouteFixture.Add(original.RootElement,3).GetRawText())!;
+        using var save=await SendAsync(client,HttpMethod.Put,DesignRoute(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,JsonSerializer.SerializeToElement(ready),2),csrf);
+        Assert.True(save.IsSuccessStatusCode,await save.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var cut=(await client.GetFromJsonAsync<HarnessCutListResponse>(CutListRoute(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken))!;
+        var covering=Assert.Single(cut.Items);Assert.Equal("covering",covering.SourceKind);Assert.Equal("C",covering.WireId);Assert.Equal(120.125m,covering.CutLengthMm);Assert.Equal(.360375m,covering.TotalMetres);
+        ready["drawingDocuments"]!["dimensions"]![0]!["lengthMm"]=121.125m;
+        using var changed=await SendAsync(client,HttpMethod.Put,DesignRoute(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(ready),2),csrf);
+        Assert.True(changed.IsSuccessStatusCode,await changed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var stale=await client.GetAsync(CutListRoute(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal("route_source_stale",(await stale.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))!.Error);
+        ready["manufacturingRoute"]!["rows"]=new JsonArray();
+        var current=(await client.GetFromJsonAsync<HarnessDesignResponse>(DesignRoute(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken))!;
+        ready["manufacturingRoute"]!["source"]!["sha256"]=current.SourceFingerprint;
+        using var omitted=await SendAsync(client,HttpMethod.Put,DesignRoute(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(2,1,JsonSerializer.SerializeToElement(ready),2),csrf);
+        Assert.True(omitted.IsSuccessStatusCode,await omitted.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var blocked=await client.GetAsync(CutListRoute(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal("route_cut_not_prepared",(await blocked.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken))!.Error);
+    }
 
     [Fact]
     public async Task Cut_list_uses_exact_decimal_lengths_defaults_and_harness_quantity()
@@ -48,6 +108,7 @@ public sealed class HarnessCutListApiTests
             Assert.Equal(HttpStatusCode.OK, save.StatusCode);
         }
 
+        await PrepareCutRouteAsync(client, csrf, ids.ProjectId, ids.HarnessId);
         using var response = await client.GetAsync(
             CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
         var rawJson = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -135,6 +196,7 @@ public sealed class HarnessCutListApiTests
             Assert.Equal(HttpStatusCode.OK, save.StatusCode);
         }
 
+        await PrepareCutRouteAsync(client, csrf, ids.ProjectId, ids.HarnessId);
         using var response = await client.GetAsync(
             CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
         var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
@@ -183,6 +245,7 @@ public sealed class HarnessCutListApiTests
             Assert.Equal(HttpStatusCode.OK, save.StatusCode);
         }
 
+        await PrepareCutRouteAsync(client, csrf, ids.ProjectId, ids.HarnessId);
         using var response = await client.GetAsync(
             CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
         var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
@@ -248,6 +311,7 @@ public sealed class HarnessCutListApiTests
             Assert.Equal(HttpStatusCode.OK, save.StatusCode);
         }
 
+        await PrepareCutRouteAsync(client, csrf, ids.ProjectId, ids.HarnessId);
         using var response = await client.GetAsync(
             CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
         var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
@@ -304,6 +368,7 @@ public sealed class HarnessCutListApiTests
             Assert.Equal(HttpStatusCode.OK, save.StatusCode);
         }
 
+        await PrepareCutRouteAsync(client, csrf, ids.ProjectId, ids.HarnessId);
         using var response = await client.GetAsync(
             CutListRoute(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
         var result = await response.Content.ReadFromJsonAsync<HarnessCutListResponse>(
@@ -411,6 +476,14 @@ public sealed class HarnessCutListApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("invalid_cut_list_design", Assert.IsType<ApiErrorResponse>(error).Error);
         Assert.Equal($"content.wires[0].materialBinding.{field}", error.Field);
+    }
+
+    private static async Task PrepareCutRouteAsync(HttpClient client, string csrf, Guid projectId, Guid harnessId)
+    {
+        var design = (await client.GetFromJsonAsync<HarnessDesignResponse>(DesignRoute(projectId, harnessId), TestContext.Current.CancellationToken))!;
+        var content = PreparedCutRouteFixture.Add(design.Content, design.HarnessQuantity ?? 1, design.SourceFingerprint);
+        using var prepared = await SendAsync(client, HttpMethod.Put, DesignRoute(projectId, harnessId), new PutHarnessDesignRequest(design.Revision, 1, content, 2), csrf);
+        Assert.True(prepared.IsSuccessStatusCode, await prepared.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     private static async Task<string> StartSessionAsync(HttpClient client)

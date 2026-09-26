@@ -57,7 +57,7 @@ public sealed class HarnessCutListPersistenceIntegrationTests
                 .Replace("FIRST_CONNECTOR_ID", firstConnectorId.ToString("D"), StringComparison.Ordinal)
                 .Replace("SECOND_CONNECTOR_ID", secondConnectorId.ToString("D"), StringComparison.Ordinal)
                 .Replace("SNAPSHOT_ID", snapshotId.ToString("D"), StringComparison.Ordinal));
-            var expectedContent = content.RootElement.GetRawText();
+            var expectedContent = PreparedCutRouteFixture.Add(content.RootElement, 6).GetRawText();
 
             using (var storage = SqliteStorage.Open(root))
             {
@@ -76,7 +76,7 @@ public sealed class HarnessCutListPersistenceIntegrationTests
                     harnessId,
                     expectedRevision: 0,
                     schemaVersion: 1,
-                    expectedContent);
+                    expectedContent, writerContractVersion: 2);
 
                 Assert.Equal(harnessId, saved.HarnessId);
                 Assert.Equal(1, saved.Revision);
@@ -101,7 +101,8 @@ public sealed class HarnessCutListPersistenceIntegrationTests
 
             using (var reopenedContent = JsonDocument.Parse(reopenedDesign.ContentJson))
             {
-                Assert.True(JsonElement.DeepEquals(content.RootElement, reopenedContent.RootElement));
+                using var preparedExpected = JsonDocument.Parse(expectedContent);
+                Assert.True(JsonElement.DeepEquals(preparedExpected.RootElement, reopenedContent.RootElement));
                 var connectors = reopenedContent.RootElement.GetProperty("connectors");
                 Assert.Equal(firstConnectorId, connectors[0].GetProperty("id").GetGuid());
                 Assert.Equal(secondConnectorId, connectors[1].GetProperty("id").GetGuid());

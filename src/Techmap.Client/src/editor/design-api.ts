@@ -9,6 +9,8 @@ export interface HarnessDesignResource {
   readonly revision: number;
   readonly content: HarnessDesignDocument;
   readonly updatedUtc: string;
+  readonly sourceFingerprint?: string;
+  readonly harnessQuantity?: number;
   /** Present when only derived E4 route geometry had to be rebuilt to open the document safely. */
   readonly recoveryWarning?: string;
 }
@@ -75,7 +77,7 @@ export function createHarnessDesignApi(
       return request(resource(projectId, harnessId), {
         method: "PUT",
         headers,
-        body: JSON.stringify({ expectedRevision, schemaVersion: 1, writerContractVersion: 1, content: validatedContent }),
+        body: JSON.stringify({ expectedRevision, schemaVersion: 1, writerContractVersion: 2, content: validatedContent }),
       });
     },
   };
@@ -95,6 +97,8 @@ function parseResource(value: unknown): HarnessDesignResource {
     revision: record.revision as number,
     content: parsedContent.content,
     updatedUtc: requireString(record.updatedUtc, "updatedUtc"),
+    ...(typeof record.sourceFingerprint === "string" && /^[a-f0-9]{64}$/i.test(record.sourceFingerprint) ? { sourceFingerprint: record.sourceFingerprint } : {}),
+    ...(Number.isSafeInteger(record.harnessQuantity) && (record.harnessQuantity as number) > 0 ? { harnessQuantity: record.harnessQuantity as number } : {}),
     ...(parsedContent.warning ? { recoveryWarning: parsedContent.warning } : {}),
   };
 }

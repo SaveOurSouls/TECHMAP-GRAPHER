@@ -55,12 +55,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
         {
             var store = new SqliteHarnessDesignDocumentStore(destinationStorage, TimeProvider.System);
             var design = store.Get(importedProject.ProjectId, importedHarness.HarnessId);
-            Assert.Equal(1, JsonNode.Parse(design.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+            Assert.Equal(2, JsonNode.Parse(design.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+            var route = JsonNode.Parse(design.ContentJson)!["manufacturingRoute"]!;
+            Assert.Equal(design.SourceFingerprint, route["source"]!["sha256"]!.GetValue<string>());
+            var importedConnector = route["rows"]![0]!["sourceObjects"]![0]!["id"]!.GetValue<string>();
+            Assert.DoesNotContain(Guid.Parse(importedConnector), source.PlacementIds);
             Assert.Equal("design_writer_upgrade_required", Assert.Throws<HarnessDesignDocumentException>(() =>
                 store.Put(importedProject.ProjectId, importedHarness.HarnessId, design.Revision, 1, design.ContentJson)).Code);
             var copied = new SqliteProjectCatalog(destinationStorage).CopyProject(importedProject.ProjectId);
             var copyDesign = store.Get(copied.ProjectId, Assert.Single(copied.Harnesses).HarnessId);
-            Assert.Equal(1, JsonNode.Parse(copyDesign.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+            Assert.Equal(2, JsonNode.Parse(copyDesign.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+            Assert.Equal(copyDesign.SourceFingerprint, JsonNode.Parse(copyDesign.ContentJson)!["manufacturingRoute"]!["source"]!["sha256"]!.GetValue<string>());
         }
     }
 
@@ -318,9 +323,21 @@ public sealed class ProjectComponentPlacementPortabilityTests
         {
             content["wires"]![1]!["from"] = new JsonObject { ["connectorId"] = firstId.ToString("D"), ["contactId"] = ContactId(firstId, firstLogicalId) + ":second" };
             content["wires"]![1]!["to"] = new JsonObject { ["connectorId"] = secondId.ToString("D"), ["contactId"] = ContactId(secondId, secondLogicalId) + ":second" };
+            using var physicalSource = JsonDocument.Parse(content.ToJsonString());
+            content["manufacturingRoute"] = new JsonObject
+            {
+                ["contractVersion"] = 1, ["source"] = new JsonObject { ["fingerprintVersion"] = 1, ["sha256"] = ManufacturingRouteSourceFingerprint.Compute(physicalSource.RootElement, design.HarnessQuantity!.Value) },
+                ["status"] = "draft", ["rows"] = new JsonArray(new JsonObject
+                {
+                    ["id"] = "route-row", ["kind"] = "assembly", ["title"] = "Assembly", ["comment"] = "",
+                    ["sourceObjects"] = new JsonArray(new JsonObject { ["kind"] = "connector", ["id"] = firstId.ToString("D") }),
+                    ["dependsOn"] = new JsonArray(), ["operations"] = new JsonArray(), ["prepared"] = false,
+                    ["presentation"] = new JsonObject { ["backgroundOpacity"] = .25, ["objects"] = new JsonArray() },
+                }),
+            };
         }
         _ = designs.Put(project.ProjectId, harness.HarnessId, 2,
-            SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString(), protectedGraph ? 1 : null);
+            SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString(), protectedGraph ? 2 : null);
 
         return new SourceGraph(
             project.ProjectId, harness.HarnessId, [firstId, secondId],

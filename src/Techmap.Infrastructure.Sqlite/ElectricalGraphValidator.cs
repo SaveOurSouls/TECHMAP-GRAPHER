@@ -8,16 +8,16 @@ internal static class ElectricalGraphValidator
 {
     internal static int RequiredWriterContract(JsonElement root)
     {
-        if (!root.TryGetProperty("requiredWriterContractVersion", out var version)) return 0;
-        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number != 1)
+        if (!root.TryGetProperty("requiredWriterContractVersion", out var version)) return root.TryGetProperty("manufacturingRoute", out _) ? 2 : 0;
+        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number is not (1 or 2))
             throw new HarnessDesignDocumentException("unsupported_design_writer_contract",
                 "The document requires an unsupported design writer contract.", "content.requiredWriterContractVersion");
-        return number;
+        return root.TryGetProperty("manufacturingRoute", out _) ? Math.Max(2, number) : number;
     }
 
     internal static void Validate(JsonElement root)
     {
-        var strict = RequiredWriterContract(root) == 1;
+        var strict = RequiredWriterContract(root) >= 1;
         if (strict)
             foreach (var property in new[] { "connectors", "wires" })
                 if (!root.TryGetProperty(property, out _)) throw Invalid("A protected document requires its electrical collections.", "content." + property);

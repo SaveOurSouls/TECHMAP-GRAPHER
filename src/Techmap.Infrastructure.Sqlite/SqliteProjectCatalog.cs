@@ -1375,7 +1375,13 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
             }
             using (var sourceDesign = JsonDocument.Parse(designJson))
                 ElectricalGraphValidator.Validate(sourceDesign.RootElement);
-            var remapped = ProjectComponentPlacementRemapper.RemapHarnessDesign(designJson, placementIdMap);
+            long quantity;
+            using (var harnessQuantity = unitOfWork.CreateCommand("SELECT quantity FROM harnesses WHERE harness_id = $harnessId;"))
+            {
+                harnessQuantity.Parameters.AddWithValue("$harnessId", destinationHarnessId);
+                quantity = Convert.ToInt64(harnessQuantity.ExecuteScalar(), CultureInfo.InvariantCulture);
+            }
+            var remapped = ProjectComponentPlacementRemapper.RemapHarnessDesign(designJson, placementIdMap, quantity);
             using (var design = unitOfWork.CreateCommand(
                        "UPDATE harness_design_documents SET content_json = $content WHERE harness_id = $harnessId;"))
             {

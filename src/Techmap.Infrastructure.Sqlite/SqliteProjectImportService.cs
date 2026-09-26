@@ -407,7 +407,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
                     .Where(placement => placement.HarnessId == harness.HarnessId)
                     .ToDictionary(
                         placement => Guid.ParseExact(placement.PlacementId, "D"),
-                        placement => placementIdMap[Guid.ParseExact(placement.PlacementId, "D")])),
+                        placement => placementIdMap[Guid.ParseExact(placement.PlacementId, "D")]), harness.Quantity!.Value),
             StringComparer.Ordinal);
         using (var insert = unitOfWork.CreateCommand(
                    """
@@ -1243,6 +1243,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
         if (parsedSchemaVersion != design.SchemaVersion) return false;
         try {
             ElectricalGraphValidator.Validate(design.Content);
+            ManufacturingRouteValidator.Validate(design.Content);
             HarnessStripProfileValidator.Validate(design.Content);
             SqliteHarnessDesignDocumentStore.ValidateCableInstances(design.Content);
             HarnessE4RowOrderValidator.Validate(design.Content);

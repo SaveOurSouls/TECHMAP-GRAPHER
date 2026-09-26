@@ -17,7 +17,8 @@ public sealed record HarnessCutListItem(
     long Pieces,
     decimal? TotalMetres,
     string Status,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    string SourceKind = "wire");
 
 public sealed record HarnessCutList(
     ProjectIdentity ProjectId,
@@ -199,7 +200,7 @@ public sealed class HarnessCutListService(
                         cableId,
                         string.Empty,
                         material,
-                        harness.Quantity));
+                        harness.Quantity) with { SourceKind = "cable" });
                     index++;
                 }
             }
@@ -220,6 +221,26 @@ public sealed class HarnessCutListService(
                 index++;
             }
 
+            if (root.TryGetProperty("physicalTopology", out var topology) && topology.ValueKind == JsonValueKind.Object && topology.TryGetProperty("coverings", out var coverings))
+            {
+                foreach (var covering in coverings.EnumerateArray())
+                {
+                    var coveringId = covering.GetProperty("id").GetString()!;
+                    var lengthMm = CoveringManufacturingLength.Measure(root, covering);
+                    var material = covering.TryGetProperty("material", out var bound) && bound.ValueKind == JsonValueKind.Object ? bound : (JsonElement?)null;
+                    var warnings = new List<string>();
+                    if (material is null) warnings.Add(MissingMaterialWarningCode);
+                    if (lengthMm is null) warnings.Add(MissingLengthWarningCode);
+                    items.Add(new HarnessCutListItem(coveringId, covering.GetProperty("name").GetString()!,
+                        material?.GetProperty("displayName").GetString() ?? NotPinnedMaterial,
+                        material?.GetProperty("sourceKey").GetString(), material?.GetProperty("displayName").GetString(),
+                        lengthMm, 0, 0, .001m, lengthMm, harness.Quantity,
+                        lengthMm * harness.Quantity / 1000m, lengthMm is null ? IncompleteStatus : ReadyStatus, warnings, "covering"));
+                }
+            }
+            RouteCutReadiness.Require(root, design.SourceFingerprint);
+            if (design.HarnessQuantity is not null && design.HarnessQuantity != harness.Quantity)
+                throw new HarnessCutListException("route_source_stale", RouteCutReadiness.StaleMessage);
             var hasMissingMaterials = items.Any(item => item.MaterialSourceKey is null);
             var hasMissingLengths = items.Any(item => item.CutLengthMm is null);
             var warning = hasMissingMaterials
