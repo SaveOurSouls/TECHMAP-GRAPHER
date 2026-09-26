@@ -204,6 +204,21 @@ export function App({ config, session }: AppProps) {
   const autosaveRef = useRef<AutosaveController<ProjectEditDraft> | null>(null);
   const unsubscribeAutosaveRef = useRef<(() => void) | null>(null);
   const discreteMutationRef = useRef(false);
+  const libraryNavigationGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const sectionTransitionPending = useRef(false);
+  const registerLibraryNavigationGuard = useCallback((guard: (() => Promise<boolean>) | null) => {
+    libraryNavigationGuard.current = guard;
+  }, []);
+  const changeSection = async (section: AppSection) => {
+    if (section === activeSection || sectionTransitionPending.current) return;
+    sectionTransitionPending.current = true;
+    try {
+      if (activeSection === "library" && libraryNavigationGuard.current && !await libraryNavigationGuard.current()) return;
+      setActiveSection(section);
+    } catch (navigationError) {
+      setError(errorText(navigationError));
+    } finally { sectionTransitionPending.current = false; }
+  };
 
   const replaceProject = useCallback((details: ProjectDetails, synchronizeEditor = true) => {
     const summary = projectSummary(details);
@@ -664,7 +679,7 @@ export function App({ config, session }: AppProps) {
       </header>
 
       <div className="workspace">
-        <AppNavigation activeSection={activeSection} onSectionChange={setActiveSection} />
+        <AppNavigation activeSection={activeSection} onSectionChange={section=>void changeSection(section)} />
 
         <main className="content">
           {activeSection === "projects" ? (
@@ -951,7 +966,7 @@ export function App({ config, session }: AppProps) {
             <ReferenceImportPanel config={config} session={session} />
           ) : activeSection === "library" ? (
             <Suspense fallback={<p className="panel-message" role="status">Открываем библиотеку…</p>}>
-              <ComponentLibrary config={config} session={session} />
+              <ComponentLibrary config={config} session={session} onNavigationGuard={registerLibraryNavigationGuard} />
             </Suspense>
           ) : (
             <Suspense fallback={<p className="panel-message" role="status">Открываем материалы…</p>}>

@@ -1,4 +1,6 @@
 import { DraftNumberInput } from "./DraftNumberInput";
+import { readLibraryDraftRecovery, removeLibraryDraftRecovery, writeLibraryDraftRecovery } from "./library-draft-recovery";
+import { LibraryNavigationController, librarySaveAcknowledgesCurrentEdit, type LibraryNavigationChoice } from "./library-navigation-controller";
 import { DrawingGeneratorPanel } from "./DrawingGeneratorPanel";
 import { clearArticleDrawings, detachIncompleteGenerators, reconcileArticleDrawings } from "./drawing-reset";
 import { newDrawingGenerator, reconcileDrawingGenerators, generatorFromLegacyArray, assignGeneratorRole, guardGeneratorArticleEdit, materializeGenerator, validateDrawingGenerators, type DrawingGenerator, type GeneratorRole } from "./drawing-generator";
@@ -78,8 +80,8 @@ import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, p
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
-interface Props { config: RuntimeConfig; session: LocalSession; }
-interface Draft { drawingGenerators?: DrawingGenerator[]; e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+interface Props { config: RuntimeConfig; session: LocalSession; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void; }
+export interface Draft { drawingGenerators?: DrawingGenerator[]; e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
 
 export const TEMPLATE_UNDO_LIMIT = 100;
 export function pushTemplateUndo(stack: readonly TemplateContentV2[], current: TemplateContentV2): TemplateContentV2[] {
@@ -92,6 +94,10 @@ const newDraft = (): Draft => {
   const content = newTemplateContentV2();
   return { articleDrawings: [], drawingContactBindings: [], templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
 };
+function loadLibraryRecovery() {
+  try { return typeof window === "undefined" ? null : readLibraryDraftRecovery(window.localStorage); }
+  catch { return null; }
+}
 const firstLayerIds = (content: TemplateContentV2) => Object.fromEntries(content.views.map(view => [view.id, view.layers[0]!.id]));
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Неизвестная ошибка.";
 const constantValue = (expression: NumericExpressionV2) => expression.kind === "constant" ? expression.value : null;
@@ -391,12 +397,20 @@ export function nextTemplateSelectionV2(current: readonly string[], id: string |
   return current.includes(id) ? current.filter(candidate => candidate !== id) : [...current, id];
 }
 
-export function ComponentLibrary({ config, session }: Props) {
+export function ComponentLibrary({ config, session, onNavigationGuard }: Props) {
   const wireLookup = useWireDatabaseLookup(config, session);
   const api = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const referenceApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const [items, setItems] = useState<readonly ComponentTemplateSummary[]>([]);
-  const [draft, setDraft] = useState<Draft>(() => newDraft());
+  const [recovery] = useState(loadLibraryRecovery);
+  const [draft, setDraft] = useState<Draft>(() => recovery?.draft ?? newDraft());
+  const editSequence = useRef(0);
+  const hasEdited = useRef(Boolean(recovery));
+  const navigationController = useRef(new LibraryNavigationController());
+  const choiceResolver = useRef<((choice: LibraryNavigationChoice) => void) | null>(null);
+  const [navigationPrompt, setNavigationPrompt] = useState(false);
+  const navigationDialog = useRef<HTMLDialogElement>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [viewId, setViewId] = useState(() => draft.content.views[0]!.id);
   const [activeLayerIds, setActiveLayerIds] = useState<Record<string, string>>(() => firstLayerIds(draft.content));
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
@@ -406,10 +420,10 @@ export function ComponentLibrary({ config, session }: Props) {
   const [drawingTarget,setDrawingTarget]=useState<DrawingTarget>("drawing");
   const [removeDrawingPrompt,setRemoveDrawingPrompt]=useState(false);
   const [clearDrawingScope,setClearDrawingScope]=useState<"article"|"series">("series");
-  const [dirty, setDirty] = useState(true);
+  const [dirty, setDirty] = useState(recovery?.dirty ?? true);
   const [autoSaveFailed, setAutoSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(recovery ? "Восстановлен последний черновик библиотеки" : null);
   const [diagnostics, setDiagnostics] = useState<readonly TemplateV2Diagnostic[]>([]);
   const [upgradedFromV1, setUpgradedFromV1] = useState(false);
   const [assetMismatch, setAssetMismatch] = useState(false);
@@ -581,6 +595,8 @@ export function ComponentLibrary({ config, session }: Props) {
   }, [terminalArticleQuery, referenceApi]);
 
   function setLoadedDraft(item: LoadedTemplate, content: TemplateContentV2, nextDiagnostics: readonly TemplateV2Diagnostic[], migrated: boolean, mismatch: boolean, table?: E4ConnectorSeriesTable, terminals?: readonly ArticleBinding[], bindings: readonly TerminalContactTypeBindingV5[] | null = null) {
+    hasEdited.current = migrated;
+    editSequence.current += 1;
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
     const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
     setDraft({ drawingGenerators: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
@@ -594,13 +610,9 @@ export function ComponentLibrary({ config, session }: Props) {
   }
 
   async function open(summary: ComponentTemplateSummary) {
+    if (!await requestNavigation()) return;
     setBusy(true);
     try {
-      if ((dirty || draft.draftRevision > 0) && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
-        const persisted = await publishWorkingDraft();
-        if (!persisted) return;
-        applyPersisted(persisted);
-      }
       const published = await api.get(summary.templateId);
       const savedDraft = await api.getDraft(summary.templateId);
       const item: LoadedTemplate = savedDraft
@@ -633,6 +645,8 @@ export function ComponentLibrary({ config, session }: Props) {
   }
 
   function resetNewDraft() {
+    hasEdited.current = false;
+    editSequence.current += 1;
     const next = newDraft(); setDraft(next); setViewId(next.content.views[0]!.id); setActiveLayerIds(firstLayerIds(next.content));
     setGraphicEditorMode("e4");
     setSelectedId(null); setUndoStack([]); setDirty(true); setAutoSaveFailed(false); setUpgradedFromV1(false); setAssetMismatch(false); setDiagnostics([]); setError(null); setSaved(null);
@@ -642,19 +656,80 @@ export function ComponentLibrary({ config, session }: Props) {
     setTerminalArticleQuery(""); setTerminalArticleSuggestions([]); setTerminalArticleSearchState("idle"); setTerminalArticleSearchMessage(null);
   }
   async function startNew() {
-    if ((dirty || draft.draftRevision > 0) && (draft.templateId !== null || draft.code.trim() || draft.name.trim() !== "Новый компонент")) {
-      setBusy(true);
-      try {
-        const persisted = await publishWorkingDraft();
-        if (!persisted) return;
-        applyPersisted(persisted);
-        await loadList();
-      } catch (caught) { setError(errorText(caught)); return; }
-      finally { setBusy(false); }
-    }
+    if (!await requestNavigation()) return;
     resetNewDraft();
   }
-  function markDirty() { setDirty(true); setAutoSaveFailed(false); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
+  function markDirty() { hasEdited.current = true; editSequence.current += 1; setDirty(true); setAutoSaveFailed(false); setSaved(null); if (!assetMismatch) setDiagnostics([]); }
+
+  function clearRecovery(): boolean {
+    try {
+      if (removeLibraryDraftRecovery(window.localStorage)) { setRecoveryError(null); return true; }
+    } catch { /* Storage may be disabled by the browser. */ }
+    setRecoveryError("Не удалось удалить локальный черновик. Правки оставлены в редакторе.");
+    return false;
+  }
+
+  function answerNavigation(choice: LibraryNavigationChoice) {
+    setNavigationPrompt(false);
+    choiceResolver.current?.(choice);
+    choiceResolver.current = null;
+  }
+
+  async function saveDraftForNavigation(): Promise<boolean> {
+    const sequence = editSequence.current;
+    setBusy(true);
+    try {
+      const result = await persistWorkingDraft();
+      if (!result) { setAutoSaveFailed(true); return false; }
+      if ("baseVersion" in result) applySavedDraft(result, sequence);
+      else applyPersisted(result, false, sequence);
+      // App may unmount us immediately after resolving the guard, before the
+      // recovery effect runs. Persist the ACK metadata synchronously as well.
+      if (librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current)) {
+        const acknowledged = { ...draft, templateId: result.templateId, version: "baseVersion" in result ? result.baseVersion : result.version, draftRevision: "baseVersion" in result ? result.draftRevision : 0 };
+        try { writeLibraryDraftRecovery(window.localStorage, acknowledged, false); } catch { /* server has acknowledged this draft */ }
+      }
+      return librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current);
+    } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); return false; }
+    finally { setBusy(false); }
+  }
+
+  function requestNavigation(): Promise<boolean> {
+    return navigationController.current.request({
+      hasChanges: dirty && hasEdited.current,
+      busy,
+      choose: () => new Promise(resolve => { choiceResolver.current = resolve; setNavigationPrompt(true); }),
+      save: saveDraftForNavigation,
+      discard: () => { if (!clearRecovery()) return false; resetNewDraft(); return true; },
+    });
+  }
+
+  const navigationRef = useRef(requestNavigation);
+  navigationRef.current = requestNavigation;
+  useEffect(() => {
+    onNavigationGuard?.(() => navigationRef.current());
+    return () => { onNavigationGuard?.(null); choiceResolver.current?.("stay"); };
+  }, [onNavigationGuard]);
+
+  useEffect(() => {
+    if (navigationPrompt) navigationDialog.current?.showModal();
+    else navigationDialog.current?.close();
+  }, [navigationPrompt]);
+
+  useEffect(() => {
+    if (!hasEdited.current && !draft.templateId) return;
+    try {
+      if (writeLibraryDraftRecovery(window.localStorage, draft, dirty)) { setRecoveryError(null); return; }
+    } catch { /* Storage may be disabled by the browser. */ }
+    setRecoveryError("Локальное восстановление недоступно. Сохраните черновик на сервере перед закрытием.");
+  }, [draft, dirty]);
+
+  useEffect(() => {
+    if (!dirty || !hasEdited.current) return;
+    const preventClose = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", preventClose);
+    return () => window.removeEventListener("beforeunload", preventClose);
+  }, [draft, dirty]);
   function setCompatibleTerminals(terminals: readonly ArticleBinding[]) {
     const identities = new Set(terminals.map(articleIdentity));
     const bindings = (draft.terminalContactTypeBindings ?? []).filter(binding => identities.has(articleIdentity(binding.terminalArticleKey)));
@@ -820,6 +895,8 @@ export function ComponentLibrary({ config, session }: Props) {
       if (!saved) return null;
       if ("baseVersion" in saved) {
         templateId = saved.templateId; version = saved.baseVersion; revision = saved.draftRevision;
+        // Publication can fail after the draft ACK; retries need its new revision.
+        setDraft(current => ({ ...current, templateId: saved.templateId, version: saved.baseVersion, draftRevision: saved.draftRevision }));
       } else {
         return saved;
       }
@@ -827,12 +904,17 @@ export function ComponentLibrary({ config, session }: Props) {
     return revision > 0 ? api.publishDraft(templateId!, version, revision) : api.get(templateId!);
   }
 
-  function applySavedDraft(result: ComponentTemplateDraft) {
+  function applySavedDraft(result: ComponentTemplateDraft, sequence = editSequence.current) {
     setDraft(current => ({ ...current, templateId: result.templateId, version: result.baseVersion, draftRevision: result.draftRevision }));
+    if (!librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current)) return;
     setDirty(false); setAutoSaveFailed(false); setSaved("Сохранено"); setError(null);
   }
 
-  function applyPersisted(result: ComponentTemplate, resetUndo = false) {
+  function applyPersisted(result: ComponentTemplate, resetUndo = false, sequence = editSequence.current) {
+    if (!librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current)) {
+      setDraft(current => ({ ...current, templateId: result.templateId, version: result.version, draftRevision: 0 }));
+      return;
+    }
     if (!isTemplateContentV3(result.content) && !isTemplateContentV4(result.content) && !isTemplateContentV5(result.content)) throw new Error("Сервер вернул неподдерживаемый формат после сохранения.");
     const content = isTemplateContentV5(result.content) ? projectTemplateContentV5ToV3(result.content)
       : isTemplateContentV4(result.content) ? v3CoreFromV4(result.content) : result.content;
@@ -851,10 +933,11 @@ export function ComponentLibrary({ config, session }: Props) {
   }
   async function save(): Promise<boolean> {
     if (!dirty && draft.draftRevision === 0) return true;
+    const sequence = editSequence.current;
     setBusy(true);
     try {
       const result = await publishWorkingDraft();
-      if (result) { applyPersisted(result); await loadList(); return true; }
+      if (result) { applyPersisted(result, false, sequence); await loadList(); return librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current); }
       setAutoSaveFailed(true); return false;
     } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); return false; }
     finally { setBusy(false); }
@@ -903,9 +986,11 @@ export function ComponentLibrary({ config, session }: Props) {
       const generator={...activeGenerator,articles:[...activeGenerator.articles.filter(a=>!articleIds.includes(a.articleId)),...articleIds.map(articleId=>activeGenerator.articles.find(a=>a.articleId===articleId)??{articleId,nodeIds:[]})]};
       const working={...draft,drawingGenerators:draft.drawingGenerators?.map(g=>g.id===generator.id?generator:g),articleDrawings:draft.articleDrawings?.filter(d=>!(articleIds.includes(d.articleVariantId)&&d.target===drawingTarget))};
       const body=validatedBody(working);if(!body||!working.templateId)return;
+      setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);setDraft(working);markDirty();
+      const sequence = editSequence.current;
       setBusy(true);
-      try {const result=await api.saveDraft(working.templateId,{expectedVersion:working.version,expectedDraftRevision:working.draftRevision,...body});setUndoStack(stack=>[...stack.slice(-(TEMPLATE_UNDO_LIMIT-1)),draft]);setDraft(working);applySavedDraft(result);}
-      catch(caught){setError(errorText(caught));}finally{setBusy(false);}
+      try {const result=await api.saveDraft(working.templateId,{expectedVersion:working.version,expectedDraftRevision:working.draftRevision,...body});applySavedDraft(result, sequence);}
+      catch(caught){setAutoSaveFailed(true);setError(errorText(caught));}finally{setBusy(false);}
       return;
     }
     const visibleView = editorContent.views.find(view => view.id === activeView.id)!;
@@ -914,15 +999,16 @@ export function ComponentLibrary({ config, session }: Props) {
     const articleIds=all?draft.content.articleVariants.map(a=>a.id):[articleVariantId];
     const working = { ...draft, drawingGenerators: draft.drawingGenerators?.map(generator => generator.target === drawingTarget ? {...generator, articles:generator.articles.filter(article=>!articleIds.includes(article.articleId))} : generator), articleDrawings: [...(draft.articleDrawings ?? []).filter(item => !(articleIds.includes(item.articleVariantId)&&item.target===drawingTarget)), ...articleIds.map(id=>({...drawing,articleVariantId:id}))] };
     const body = validatedBody(working); if (!body) return;
+    setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
+    setDraft(working); markDirty();
+    const sequence = editSequence.current;
     setBusy(true);
     try {
       const result = working.templateId ? await api.saveDraft(working.templateId, {expectedVersion:working.version,expectedDraftRevision:working.draftRevision,...body}) : await api.create(body);
-      setUndoStack(stack => [...stack.slice(-(TEMPLATE_UNDO_LIMIT - 1)), draft]);
-      setDraft(working);
-      if ("baseVersion" in result) applySavedDraft(result); else applyPersisted(result);
-      setSaved(`Рисунок ${draft.content.articleVariants.find(a => a.id === articleVariantId)?.articleKey} сохранён`);
+      if ("baseVersion" in result) applySavedDraft(result, sequence); else applyPersisted(result, false, sequence);
+      if (librarySaveAcknowledgesCurrentEdit(sequence, editSequence.current)) setSaved(`Рисунок ${draft.content.articleVariants.find(a => a.id === articleVariantId)?.articleKey} сохранён`);
       await loadList();
-    } catch (caught) { setError(errorText(caught)); } finally { setBusy(false); }
+    } catch (caught) { setAutoSaveFailed(true); setError(errorText(caught)); } finally { setBusy(false); }
   }
 
   function returnToLibrary() {
@@ -934,18 +1020,22 @@ export function ComponentLibrary({ config, session }: Props) {
   }
 
   useEffect(() => {
-    if (graphicEditorMode === "drawing") return;
+    if (navigationPrompt) return;
+    // The current API creates a published first version. Only an explicit save
+    // may do that; incomplete new series are protected by local recovery.
+    if (!draft.templateId) return;
     if (!shouldAutoSaveTemplate({ dirty, failed: autoSaveFailed, busy, assetMismatch, code: draft.code, name: draft.name })) return;
     const timer = window.setTimeout(() => {
+      const sequence = editSequence.current;
       setBusy(true);
       void persistWorkingDraft().then(result => {
         if (!result) setAutoSaveFailed(true);
-        else if ("baseVersion" in result) applySavedDraft(result);
-        else applyPersisted(result);
+        else if ("baseVersion" in result) applySavedDraft(result, sequence);
+        else applyPersisted(result, false, sequence);
       }).catch(caught => { setAutoSaveFailed(true); setError(errorText(caught)); }).finally(() => setBusy(false));
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [assetMismatch, autoSaveFailed, busy, dirty, draft, graphicEditorMode]);
+  }, [assetMismatch, autoSaveFailed, busy, dirty, draft, navigationPrompt]);
 
   async function removeTemplate() {
     if (!draft.templateId) return;
@@ -1128,8 +1218,16 @@ export function ComponentLibrary({ config, session }: Props) {
   const resolveAssetUrl = (assetId: string) => draft.templateId && draft.version > 0 ? api.assetContentUrl(draft.templateId, draft.version, assetId) : "";
 
   return <div className="component-library">
+    <dialog ref={navigationDialog} className="project-delete-dialog" aria-labelledby="library-navigation-title" onCancel={event => { event.preventDefault(); answerNavigation("stay"); }}>
+      <h2 id="library-navigation-title">Сохранить правки библиотеки?</h2>
+      <p>Серия «{draft.code || draft.name}» содержит несохранённые изменения. Сохранённый серверный черновик останется доступен при следующем открытии.</p>
+      {draft.templateId === null && <p>Для новой серии сохранение создаст её первую версию в библиотеке.</p>}
+      <div className="project-heading-actions"><button type="button" onClick={() => answerNavigation("stay")} autoFocus>Остаться</button><button type="button" onClick={() => answerNavigation("discard")}>Отбросить правки</button><button type="button" className="primary-action" onClick={() => answerNavigation("save")}>{draft.templateId ? "Сохранить черновик" : "Сохранить новую серию"}</button></div>
+    </dialog>
     <header className="content-heading library-heading"><div><p className="eyebrow">M2 · БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ</p><h1>Серии и компоненты <InfoHint>Здесь задаются серия, артикулы и таблица контактов Э4. Графика используется для вспомогательных видов.</InfoHint></h1></div><button className="primary-action" type="button" onClick={() => void startNew()} disabled={busy}>+ Новая серия</button></header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError(null)} aria-label="Закрыть">×</button></div>}
+    {recoveryError && <div className="error-banner" role="alert">{recoveryError}</div>}
+    {recovery && <p role="status">Последний черновик библиотеки восстановлен. Серверная версия не заменялась.</p>}
     {upgradedFromV1 && <div className="library-upgrade-banner" role="status"><strong>Открыта прежняя версия шаблона.</strong><span>Она преобразована только в памяти и будет сохранена как новая версия v3.</span>{diagnostics.map(item => <small key={`${item.code}/${item.path}`}>{item.code}: {item.message}</small>)}</div>}
     {!upgradedFromV1 && diagnostics.length > 0 && <div className="library-diagnostics" role="alert">{diagnostics.map(item => <span key={`${item.code}/${item.path}`}>{item.path}: {item.message}</span>)}</div>}
     <div className="library-layout"><aside className="library-catalog"><div className="panel-heading"><h2>Шаблоны</h2><button className="refresh-button" onClick={() => void loadList()} disabled={busy}>Обновить</button></div><div className="library-template-list">{items.length ? items.map(item => <button key={item.templateId} className={item.templateId === draft.templateId ? "library-template selected" : "library-template"} onClick={() => void open(item)} disabled={busy}><strong>{item.code}</strong><span>{item.name}</span><small>версия {item.version}</small></button>) : <p className="panel-message">Создайте первый графический шаблон.</p>}</div></aside>
