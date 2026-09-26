@@ -1,3 +1,4 @@
+import {restoreTemplateContactNumbers,templateContactNumbers} from "./template-contact-numbering";
 import { commonParallelSpan } from "./e4-parallel-spans";
 import { segmentPointDistance } from "./segment-geometry";
 import { straightLeadEnd } from "./route-lead";
@@ -25,6 +26,7 @@ export type ConnectorLibraryBinding =
   | { readonly mode: "series"; readonly seriesId: string; readonly partNumber: string }
   | {
       readonly mode: "template";
+      readonly contactNumbering?: "source-v1";
       readonly templateId: string;
       readonly templateVersion: number;
       readonly versionSha256: string;
@@ -1176,7 +1178,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       throw new Error("Значение контакта ссылается на отсутствующее справочное поле.");
     }
   }
-  const connector: ConnectorInstance = {
+  let connector: ConnectorInstance = {
     ...(record.drawingPlacements === undefined ? {} : {drawingPlacements: parseDrawingPlacements(record.drawingPlacements)}),
     ...(record.e4TableMode === true ? { e4TableMode: true } : {}),
     ...(record.terminalCatalog === undefined ? {} : { terminalCatalog: parseConnectorTerminalCatalog(record.terminalCatalog) }),
@@ -1195,6 +1197,8 @@ function parseConnector(value: unknown): ConnectorInstance {
     },
     libraryBinding,
   };
+  validateConnectorLibraryMetadata(connector);
+  connector = restoreTemplateContactNumbers(connector);
   validateConnectorLibraryMetadata(connector);
   // Expanding an older table must keep its contact anchors in place, otherwise
   // persisted manual routes can become invalid before the editor even opens.
@@ -1268,8 +1272,11 @@ function parseConnectorLibraryBinding(value: unknown): ConnectorLibraryBinding |
   const record = requireRecord(value, "Привязка соединителя к библиотечной серии задана неверно.");
   if (record.mode === "free") return { mode: "free" };
   if (record.mode === "template") {
+    if (record.contactNumbering !== undefined && record.contactNumbering !== "source-v1")
+      throw new Error("Неизвестная версия нумерации контактов шаблона. Обновите приложение.");
     const binding = {
       mode: "template" as const,
+      ...(record.contactNumbering === "source-v1" ? {contactNumbering: "source-v1" as const} : {}),
       templateId: requireText(record.templateId, "ID шаблона компонента"),
       templateVersion: requireInteger(record.templateVersion, "Версия шаблона компонента", 1, 1_000_000),
       versionSha256: parseSha256(record.versionSha256, "Хэш версии шаблона компонента"),
@@ -1306,14 +1313,23 @@ function validateComponentTemplateBinding(
     throw new Error("Число контактов не совпадает с закреплённым вариантом шаблона.");
   }
   const logicalIds = new Set<string>();
+  if (binding.contactNumbering !== undefined && binding.contactNumbering !== "source-v1")
+    throw new Error("Неизвестная версия нумерации контактов шаблона.");
+  const sourceByLogicalId = new Map(binding.snapshot.contacts.map(contact => [contact.logicalContactId, contact]));
+  if (sourceByLogicalId.size !== binding.snapshot.contacts.length)
+    throw new Error("Логические ID материализованных контактов должны быть уникальны.");
+  const numbers = binding.contactNumbering === "source-v1"
+    ? templateContactNumbers(binding.snapshot.contacts.map(contact => contact.sourceNumber))
+    : connector.contacts.map((_, index) => index + 1);
   connector.contacts.forEach((contact, index) => {
-    const snapshotContact = binding.snapshot.contacts[index]!;
-    if (!contact.logicalContactId || !logicalIds.add(contact.logicalContactId) ||
-        contact.logicalContactId !== snapshotContact.logicalContactId ||
+    const snapshotContact = sourceByLogicalId.get(contact.logicalContactId!);
+    if (!contact.logicalContactId || logicalIds.has(contact.logicalContactId) ||
+        !snapshotContact ||
         contact.id !== `${connector.id}:contact:${contact.logicalContactId}` ||
-        contact.number !== index + 1 || contact.libraryContact !== null) {
+        contact.number !== (binding.contactNumbering === "source-v1" ? Number(snapshotContact.sourceNumber) : numbers[index]) || contact.libraryContact !== null) {
       throw new Error("Контакты не соответствуют закреплённой материализации шаблона.");
     }
+    logicalIds.add(contact.logicalContactId);
     if (contact.terminalArticle && !templateTerminalChoices(connector, contact.logicalContactId).includes(contact.terminalArticle)) {
       throw new Error("Терминал контакта не входит в список совместимых терминалов закреплённого шаблона.");
     }

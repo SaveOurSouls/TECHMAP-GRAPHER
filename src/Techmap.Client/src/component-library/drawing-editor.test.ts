@@ -111,16 +111,16 @@ describe("M4-15 drawing editor", () => {
     core=editContactPointV3(core,view.id,pointId,{x:c(123),y:c(234)});
     core.views[1]!.layers[0]!.nodes[0]!.fill={color:"#123456",hatch:{kind:"cross",spacing:7,angle:30,backgroundColor:"#ffffff"}};
     const binding={logicalContactId:core.logicalContacts[0]!.id,seriesRowId:table.articles[0]!.rows[1]!.seriesRowId};
-    table.seriesDefaults[1]!.values.number="A2"; table.seriesDefaults[1]!.values.name="DATA";
+    table.seriesDefaults[1]!.values.number="20"; table.seriesDefaults[1]!.values.name="DATA";
     const drawings=[drawingSelection(core.views[1]!,[rectangle,pointId],core.articleVariants[0]!.id),drawingSelection(core.views[1]!,[ellipse],core.articleVariants[1]!.id)];
     const content=JSON.parse(JSON.stringify(createTemplateContentV5FromEditor(core,table,[],[],undefined,drawings,[binding]).content));
     expect(validateTemplateContentV5(content).valid).toBe(true);
     const preview=drawingContactContent(core,table,[binding],core.articleVariants[0]!.id);
-    expect(preview.logicalContacts[0]).toMatchObject({number:"A2",name:"DATA"});
+    expect(preview.logicalContacts[0]).toMatchObject({number:"20",name:"DATA"});
     const envelope={templateId:"test-template",version:3,versionSha256:"a".repeat(64),code:"T",name:"Test",articleBindings:core.articleVariants.map(({sourceId,entityType,articleKey})=>({sourceId,entityType,articleKey})),assets:[],content};
     const placed=createConnectorInstanceFromComponentTemplateV3(envelope,{id:"connector-test",designation:"X1",articleVariantId:core.articleVariants[0]!.id,e4Position:{x:10,y:20}});
     expect(placed.contacts).toHaveLength(2);
-    expect(JSON.stringify(placed)).toContain("A2");
+    expect(JSON.stringify(placed)).toContain("20");
     expect(placed.libraryBinding?.mode).toBe("template");
     if(placed.libraryBinding?.mode === "template") { expect(placed.libraryBinding.snapshot.contacts[0]!.representations).toHaveLength(0); expect(placed.libraryBinding.snapshot.contacts[1]!.representations[0]).toMatchObject({x:123,y:234}); }
     const a=projectComponentTemplateView({content,objectId:"X1",articleVariantId:core.articleVariants[0]!.id,snapshotId:"test"},"drawing",{x:0,y:0});

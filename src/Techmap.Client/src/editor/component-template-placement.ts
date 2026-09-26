@@ -1,3 +1,4 @@
+import {templateContactNumbers} from "./template-contact-numbering";
 import { evaluateNumericExpressionV3 } from "../component-library/template-commands-v3";
 import { resolveTemplateParameterValuesV2 } from "../component-library/template-repeat-v2";
 import { materializeArticleVariantV3 } from "../component-library/template-article-materialization-v3";
@@ -58,6 +59,8 @@ export interface ComponentTemplatePlacementEnvelopeV3 {
 export type ComponentTemplatePlacementEnvelope = ComponentTemplatePlacementEnvelopeV3;
 
 export interface CreateComponentTemplateConnectorOptions {
+  /** Internal authoring/legacy verification only; never submit as a new placement. */
+  readonly legacyNumberingPreview?: boolean;
   readonly id: string;
   readonly designation: string;
   /** Either the full v3 variant or its stable variant ID. */
@@ -108,7 +111,9 @@ export function createConnectorInstanceFromComponentTemplateV3(
   // catalog metadata.
   const articleBindings = uniqueArticleKeys(content.articleVariants);
   const assets = template.assets.map(snapshotAsset);
-  const contacts = rows.map((row, index) => createContact(row, index + 1, content, id));
+  const numbers = options.legacyNumberingPreview ? rows.map((_, index) => index + 1)
+    : templateContactNumbers(rows.map(row => row.number));
+  const contacts = rows.map((row, index) => createContact(row, numbers[index]!, content, id));
   const snapshot: ComponentTemplateMaterializedSnapshot = freezeSnapshot({
     templateId: template.templateId,
     templateVersion: template.version,
@@ -144,6 +149,7 @@ export function createConnectorInstanceFromComponentTemplateV3(
     },
     libraryBinding: Object.freeze({
       mode: "template",
+      ...(options.legacyNumberingPreview ? {} : {contactNumbering: "source-v1" as const}),
       templateId: template.templateId,
       templateVersion: template.version,
       versionSha256: template.versionSha256,

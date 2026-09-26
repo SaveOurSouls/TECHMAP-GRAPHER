@@ -33,7 +33,7 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
       return { connector: createConnectorInstanceFromComponentTemplateV3({
         templateId: "00000000-0000-4000-8000-000000000001", version: 1, versionSha256: "0".repeat(64),
         code: code || "Серия", name: name || "Компонент", articleBindings: content.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })), content, assets,
-      }, { id: "library-preview", designation: "XS1", e4Position: { x: 0, y: 0 }, articleVariantId: articleId }), error: null };
+      }, { legacyNumberingPreview: true, id: "library-preview", designation: "XS1", e4Position: { x: 0, y: 0 }, articleVariantId: articleId }), error: null };
     } catch (error) { return { connector: null, error: error instanceof Error ? error.message : "Не удалось построить таблицу." }; }
   }, [content, articleId, assets, code, name]);
   const authoringRows = articleId && table.articles.some(article => article.articleVariantId === articleId) ? materializeE4ConnectorArticle(table, articleId).rows : [];

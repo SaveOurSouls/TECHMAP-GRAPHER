@@ -179,6 +179,7 @@ export function buildComponentTemplateViewInstances(
         assets: snapshot.assets,
         content: snapshot.content,
       }, {
+        legacyNumberingPreview: binding.contactNumbering === undefined,
         id: connector.id,
         designation: connector.designation,
         articleVariantId: binding.articleVariantId,
@@ -186,8 +187,11 @@ export function buildComponentTemplateViewInstances(
         drawingPosition: connector.positions.drawing,
         layerIds: connector.layerIds,
       });
+      const sortedContacts = (contacts: typeof binding.snapshot.contacts) =>
+        [...contacts].sort((a,b)=>a.logicalContactId.localeCompare(b.logicalContactId));
       const exactMaterialization = materialized.libraryBinding?.mode === "template" &&
-        JSON.stringify(binding.snapshot) === JSON.stringify(materialized.libraryBinding.snapshot);
+        JSON.stringify({...binding.snapshot,contacts:sortedContacts(binding.snapshot.contacts)}) ===
+        JSON.stringify({...materialized.libraryBinding.snapshot,contacts:sortedContacts(materialized.libraryBinding.snapshot.contacts)});
       if (!exactMaterialization) return [];
     } catch {
       return [];

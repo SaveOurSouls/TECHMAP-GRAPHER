@@ -1846,6 +1846,6 @@ it.each([15,90,22.5,-180])("preserves the drawing centre, IDs and other views at
  expect(result.positions.drawing.y+30*Math.sin(a)+20*Math.cos(a)).toBeCloseTo(center.y);
  expect(result.positions.e4).toEqual(connector.positions.e4);
  expect(result.contacts).toEqual(connector.contacts);expect(result.libraryBinding).toEqual(connector.libraryBinding);
- expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(rotated.present)))).toEqual(rotated.present);
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(rotated.present)))).toEqual({...rotated.present, connectors: rotated.present.connectors.map(c=>({...c,libraryBinding:{...c.libraryBinding,contactNumbering:"source-v1"}}))});
  expect(undoEditorCommand(rotated).present).toEqual(doc);
 });

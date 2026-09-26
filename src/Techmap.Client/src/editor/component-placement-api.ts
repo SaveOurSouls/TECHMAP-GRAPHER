@@ -14,6 +14,7 @@ export function componentPlacementRequest(
 ): PlaceComponentRequest {
   const binding = instance.libraryBinding;
   if (binding?.mode !== "template") throw new Error("Нет привязки к библиотечному шаблону.");
+  if (binding.contactNumbering !== "source-v1") throw new Error("Перед размещением проверьте исходные номера контактов в библиотеке.");
   validateConnectorLibraryMetadata(instance);
   return {
     commandId, expectedRevision, placementId: instance.id,

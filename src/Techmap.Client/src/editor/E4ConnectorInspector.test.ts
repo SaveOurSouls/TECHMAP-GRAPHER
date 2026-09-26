@@ -386,7 +386,7 @@ describe("purpose column in E4", () => {
       document = applyEditorCommand(document, { type: "update-contact", connectorId: connector.id, contactId: connector.contacts[0]!.id, nameOverride });
       const restored = parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
       expect(connectorContactName(restored.connectors[0]!, restored.connectors[0]!.contacts[0]!)).toBe(nameOverride);
-      expect(restored.connectors[0]!.libraryBinding).toEqual(connector.libraryBinding);
+      expect(restored.connectors[0]!.libraryBinding).toEqual({...connector.libraryBinding,contactNumbering:"source-v1"});
       const scene = designToScene(document, "e4");
       expect(JSON.parse(scene[0]!.metadata!.rows as string)[0].name).toBe(nameOverride);
     }

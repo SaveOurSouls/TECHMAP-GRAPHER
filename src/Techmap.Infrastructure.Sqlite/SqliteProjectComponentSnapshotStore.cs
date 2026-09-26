@@ -239,6 +239,7 @@ public sealed class SqliteProjectComponentSnapshotStore(
         RequireExactString(
             boundArticle, "articleKey", article.ArticleKey,
             "instance.libraryBinding.article.articleKey");
+        TemplateContactNumberingValidator.ValidateInstance(instance);
     }
 
     private static void RequireExactUuid(

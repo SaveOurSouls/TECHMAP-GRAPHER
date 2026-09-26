@@ -1,3 +1,11 @@
+import {createElement} from "react";
+import {renderToStaticMarkup} from "react-dom/server";
+import {E4ConnectorInspector} from "./E4ConnectorInspector";
+import {createWire,applyEditorCommand} from "./commands";
+import {designToScene} from "./HarnessDesignEditor";
+import {connectorContactPosition} from "./model";
+import {connectionEndLabel} from "./drawing-documents";
+import {templateContactNumberingWarning} from "./template-contact-numbering";
 import { describe, expect, it } from "vitest";
 import {
   addBasicNodeV2,
@@ -195,7 +203,7 @@ describe("component template placement", () => {
     table.seriesDefaults.push({
       rowId: "real-v5-row",
       values: {
-        number: "A1", name: "FIRST E4 ROW", circuitText: "E4-CIRCUIT",
+        number: "10", name: "FIRST E4 ROW", circuitText: "E4-CIRCUIT",
         contactTypeGroupId: null, standardTerminalArticleKey: null,
       },
     });
@@ -212,11 +220,11 @@ describe("component template placement", () => {
     expect(placed.contacts).toHaveLength(1);
     expect(placed.contacts[0]).toMatchObject({
       logicalContactId: "real-v5-row",
-      number: 1,
+      number: 10,
       circuit: "E4-CIRCUIT",
     });
     expect(placed.libraryBinding?.mode === "template" && placed.libraryBinding.snapshot.contacts[0])
-      .toMatchObject({ sourceNumber: "A1", name: "FIRST E4 ROW" });
+      .toMatchObject({ sourceNumber: "10", name: "FIRST E4 ROW" });
   });
 
   it("materializes v4 E4 table values and remaps another article on stable series rows", () => {
@@ -450,5 +458,77 @@ describe("editable template contact purpose", () => {
       expect(placed.partNumber).toBe("XH-2");
     }
     expect(connectorContactName(placed, placed.contacts[0]!)).toBe("Сигнал");
+  });
+});
+
+
+describe("M-05A source contact numbering", () => {
+  function numberedTemplate(numbers = ["10", "20"]) {
+    const template=fixture(2);
+    const content=upgradeTemplateContentV4ToV5(upgradeTemplateContentV3ToV4(template.content as TemplateContentV3).content).content;
+    content.e4ConnectorTable.seriesDefaults.forEach((row,index)=>{row.values.number=numbers[index]!;});
+    return {...template,content};
+  }
+  const place=(template=numberedTemplate(),id="J1",legacyNumberingPreview=false)=>createConnectorInstanceFromComponentTemplateV3(template,{
+    id,designation:id,articleVariantId:template.content.articleVariants.at(-1)!.id,e4Position:{x:id==="J1"?0:600,y:0},legacyNumberingPreview,
+  });
+
+  it("keeps 10/20 in placement, E4, drawing labels and pinned snapshots after save/reopen",()=>{
+    const template=numberedTemplate(),a=place(template),b=place(template,"J2");
+    const wire=createWire("wire-10-20",{connectorId:a.id,contactId:a.contacts[0]!.id},{connectorId:b.id,contactId:b.contacts[1]!.id});
+    const doc=parseHarnessDesignDocument(JSON.parse(JSON.stringify(applyEditorCommand({...createEmptyHarnessDesign(),connectors:[a,b]},{type:"add-wire",wire}))));
+    expect(doc.connectors.map(c=>c.contacts.map(contact=>contact.number))).toEqual([[10,20],[10,20]]);
+    expect(componentPlacementRequest(a,0,"command").instance.libraryBinding).toMatchObject({contactNumbering:"source-v1"});
+    expect(doc.wires[0]!.from).toEqual(wire.from);expect(doc.wires[0]!.to).toEqual(wire.to);
+    const e4=designToScene(doc,"e4").find(o=>o.id===a.id)!;
+    expect(JSON.parse(e4.metadata!.rows!).map((row:{number:number})=>row.number)).toEqual([10,20]);
+    expect(connectionEndLabel(doc,wire.from)).toContain("10");expect(connectionEndLabel(doc,wire.to)).toContain("20");
+    for(const view of ["e4","drawing"] as const)expect(connectorContactPosition(doc.connectors[0]!,a.contacts[0]!.id,view)).toEqual(connectorContactPosition(a,a.contacts[0]!.id,view));
+    const html=renderToStaticMarkup(createElement(E4ConnectorInspector,{connector:doc.connectors[0]!,disabled:false,mode:"canvas",onCommand:()=>{}}));
+    expect(html).toContain(">10<");expect(html).toContain(">20<");
+    expect(doc.connectors[0]!.libraryBinding).toEqual(a.libraryBinding);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+  });
+
+  it("restores legacy numbers atomically without moving contacts or reconnecting wires",()=>{
+    const template=numberedTemplate(),a=place(template,"J1",true),b=place(template,"J2",true);
+    const wire=createWire("legacy-wire",{connectorId:a.id,contactId:a.contacts[0]!.id},{connectorId:b.id,contactId:b.contacts[1]!.id});
+    const legacy=applyEditorCommand({...createEmptyHarnessDesign(),connectors:[a,b]},{type:"add-wire",wire});
+    const before=JSON.stringify(legacy),restored=parseHarnessDesignDocument(legacy);
+    expect(restored.connectors[0]!.contacts.map(c=>c.number)).toEqual([10,20]);
+    expect(restored.connectors[0]!.contacts.map(c=>c.id)).toEqual(a.contacts.map(c=>c.id));
+    expect(restored.wires[0]!.from).toEqual(wire.from);expect(restored.wires[0]!.to).toEqual(wire.to);
+    expect(restored.connectors[0]!.positions).toEqual(a.positions);
+    expect(restored.connectors[0]!.libraryBinding).toMatchObject({contactNumbering:"source-v1",snapshot:(a.libraryBinding?.mode === "template" ? a.libraryBinding.snapshot : {})});
+    expect(JSON.stringify(legacy)).toBe(before);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(restored)))).toEqual(restored);
+  });
+
+  it.each([["A1","20"],["01","1"],["0","20"],["301","20"],["1.5","20"],["1e1","20"]])("rejects ambiguous or unsupported new numbers %s/%s without ordinal fallback",(a,b)=>{
+    const template=numberedTemplate([a,b]);
+    expect(()=>place(template)).toThrow(/Номер контакта|номера контактов/);
+    const legacy=place(template,"J1",true);
+    const restored=parseHarnessDesignDocument({...createEmptyHarnessDesign(),connectors:[legacy]});
+    expect(restored.connectors[0]!.contacts.map(c=>c.number)).toEqual([1,2]);
+    expect(templateContactNumberingWarning(restored.connectors[0]!)).toContain("Сохранена прежняя нумерация");
+    expect(()=>componentPlacementRequest(legacy,0,"command")).toThrow(/исходные номера/);
+  });
+
+  it.each([false,true])("matches source numbers by logical ID when snapshot order changes (legacy %s)",legacy=>{
+    const connector=place(numberedTemplate(),"J1",legacy);
+    const binding=connector.libraryBinding!;
+    if(binding.mode!=="template") throw new Error("expected template binding");
+    const reordered={...binding,snapshot:{...binding.snapshot,contacts:[...binding.snapshot.contacts].reverse()}};
+    const restored=parseHarnessDesignDocument({...createEmptyHarnessDesign(),connectors:[{...connector,libraryBinding:reordered}]});
+    expect(restored.connectors[0]!.contacts.map(contact=>contact.number)).toEqual([10,20]);
+  });
+
+  it("rejects tampered numbered instances and unknown contract versions",()=>{
+    const connector=place();
+    const doc=()=>JSON.parse(JSON.stringify({...createEmptyHarnessDesign(),connectors:[connector]}));
+    const wrong=doc();wrong.connectors[0].contacts[0].number=1;
+    expect(()=>parseHarnessDesignDocument(wrong)).toThrow(/Контакты не соответствуют/);
+    const future=doc();future.connectors[0].libraryBinding.contactNumbering="source-v2";
+    expect(()=>parseHarnessDesignDocument(future)).toThrow(/Неизвестная версия/);
   });
 });

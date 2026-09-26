@@ -1,3 +1,4 @@
+import {templateContactNumberingWarning} from "./template-contact-numbering";
 import { useEffect, useRef, useState } from "react";
 import type { EditorCommand } from "./commands";
 import {
@@ -416,6 +417,7 @@ export function E4ConnectorInspector({
             }
           }}
         >
+        {!templateAuthoring && templateContactNumberingWarning(connector) && <InfoHint>{templateContactNumberingWarning(connector)}</InfoHint>}
         <datalist id={`terminal-articles-${connector.id}`}>
           {terminalArticles.map((terminal) => <option key={terminal} value={terminal} />)}
         </datalist>
@@ -682,6 +684,7 @@ export function E4ConnectorInspector({
 
   return (
     <section className="e4-connector-inspector" aria-label={`Соединитель ${connector.designation}`}>
+      {templateContactNumberingWarning(connector) && <p role="alert">{templateContactNumberingWarning(connector)}</p>}
       <header className="e4ci-header">
         <div><span className="e4ci-eyebrow">Схема Э4 · соединитель</span><strong>{connector.designation}</strong></div>
         <button

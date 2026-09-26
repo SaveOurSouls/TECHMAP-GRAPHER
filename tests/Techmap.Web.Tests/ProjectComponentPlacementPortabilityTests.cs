@@ -327,11 +327,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
         {
             ["id"] = ContactId(placementId, logicalContactId),
             ["logicalContactId"] = logicalContactId.ToString("D"),
-            ["number"] = 1,
+            ["number"] = 10,
+        }, new JsonObject
+        {
+            ["id"] = ContactId(placementId, logicalContactId) + ":second",
+            ["logicalContactId"] = logicalContactId.ToString("D") + ":second",
+            ["number"] = 20,
         }),
         ["libraryBinding"] = new JsonObject
         {
             ["mode"] = "template",
+            ["contactNumbering"] = "source-v1",
             ["templateId"] = template.TemplateId.ToString("D"),
             ["templateVersion"] = template.Version,
             ["versionSha256"] = template.VersionSha256,
@@ -345,6 +351,9 @@ public sealed class ProjectComponentPlacementPortabilityTests
                 ["articleVariantId"] = articleVariantId.ToString("D"),
                 ["article"] = Article(article),
                 ["logicalContactId"] = logicalContactId.ToString("D"),
+                ["contacts"] = new JsonArray(
+                    new JsonObject { ["logicalContactId"] = logicalContactId.ToString("D"), ["sourceNumber"] = "10" },
+                    new JsonObject { ["logicalContactId"] = logicalContactId.ToString("D") + ":second", ["sourceNumber"] = "20" }),
             },
         },
     }.ToJsonString();
@@ -437,6 +446,12 @@ public sealed class ProjectComponentPlacementPortabilityTests
             using var instance = JsonDocument.Parse(placement.InstanceJson);
             Assert.True(JsonElement.DeepEquals(connector, instance.RootElement));
             var binding = connector.GetProperty("libraryBinding");
+            Assert.Equal("source-v1", binding.GetProperty("contactNumbering").GetString());
+            Assert.Equal(new[] { 10, 20 }, connector.GetProperty("contacts").EnumerateArray()
+                .Select(contact => contact.GetProperty("number").GetInt32()));
+            foreach (var contact in connector.GetProperty("contacts").EnumerateArray())
+                Assert.Equal($"{placement.PlacementId:D}:contact:{contact.GetProperty("logicalContactId").GetString()}",
+                    contact.GetProperty("id").GetString());
             Assert.Equal(source.TemplateId.ToString("D"), binding.GetProperty("templateId").GetString());
             Assert.Equal(source.VersionSha256, binding.GetProperty("versionSha256").GetString());
             Assert.Equal(source.ArticleVariantId.ToString("D"), binding.GetProperty("articleVariantId").GetString());

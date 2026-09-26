@@ -289,6 +289,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
                     "content");
             }
 
+            TemplateContactNumberingValidator.ValidateDesign(root);
             HarnessPhysicalTopologyValidator.Validate(root);
             HarnessDrawingDocumentsValidator.Validate(root);
             HarnessE4RowOrderValidator.Validate(root);
