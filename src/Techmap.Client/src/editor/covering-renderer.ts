@@ -1,4 +1,4 @@
-import {textureOverlay} from "./texture-tint";
+import {materialTexture} from "./texture-tint";
 import {drawCatalogHatch} from "../hatching";
 import {drawThreadBand} from "./thread-band-renderer";
 import { drawVolumeSurface } from "./drawing-volume";
@@ -77,7 +77,7 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
       // The polygon is the opaque background layer. The material image is
       // always an alpha texture so its light/empty pixels reveal that fill;
       // this keeps background and thread/braid colour independently editable.
-      const tile=textureOverlay(image,style.textureTint);
+      const tile=materialTexture(image,style.textureTint,context,style.textureScale);
       const pattern=context.createPattern(tile,"repeat");
       if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.textureRotation).scale(.5*style.textureScale*64/tile.width));context.save();context.fillStyle=pattern;context.fill();context.restore();}
     }

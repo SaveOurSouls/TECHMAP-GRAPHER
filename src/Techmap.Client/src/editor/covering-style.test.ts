@@ -57,7 +57,7 @@ it("renders fill, texture, hatch and outline independently with separate transfo
   const stop=warmCoveringTextures(vi.fn());
   drawCoveringSurface(ctx,coveringScene(fixture())[0]!,false);stop();
   expect(fills).toEqual(["#ffffff",...patterns]);
-  expect(transforms.map(m=>[m.angle,m.size])).toEqual([[-30,2.5*32/512],[60,6/32]]);
+  expect(transforms.map(m=>[m.angle,m.size])).toEqual([[-30,2.5*32/1024],[60,6/32]]);
   expect(state.strokeStyle).toBe("#0000ff");
   fills.length=0;transforms.length=0;
   const d=fixture();d.physicalTopology.coverings=[{...cover,style:{...style,texture:"none",hatch:"none"}}];
