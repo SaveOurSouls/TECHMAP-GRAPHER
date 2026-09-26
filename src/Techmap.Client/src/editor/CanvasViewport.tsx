@@ -62,6 +62,7 @@ import {
   type CableSheathGeometry,
 } from "./cable-sheath-geometry";
 import type { CableInstance } from "./model";
+import { railCatchDistance, railDistance, railParameter, snapRailEnd } from "./position-rail";
 
 export interface CanvasViewportProps {
   readonly drawingSnapEnabled?:boolean;
@@ -83,6 +84,7 @@ export interface CanvasViewportProps {
   readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode,auxiliary?:boolean)=>void;
+  readonly onPositionRailCreate?:(start:EditorPoint,end:EditorPoint,leaderIds:readonly string[])=>void;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
@@ -892,6 +894,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
   if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>{const curve=drawingRouteHitPoints(path,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance);});
   if (object.kind === "physical-covering" && object.metadata?.surfaces) return coveringHit(object,point,tolerance)!==null;
@@ -1491,6 +1494,10 @@ export function hitTestEditorScene(
   const node = [...paintOrder].reverse().find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
   if (node) return node.id;
   if (view === "drawing") {
+    const position=[...paintOrder].reverse().find(o=>(o.kind==="position-leader"||o.kind==="leader-anchor"||o.kind==="rail-handle")&&containsPoint(o,point,tolerance,view));
+    if(position)return position.id;
+    const rail=[...paintOrder].reverse().find(o=>o.kind==="position-rail"&&containsPoint(o,point,tolerance,view));
+    if(rail)return rail.id;
     const contact = hitTestConnectorContact(paintOrder, layers, point, zoom, view);
     if (contact) return contact.connectorId;
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
@@ -1835,6 +1842,12 @@ export function drawEditorSceneObject(
     if(a&&b){context.strokeStyle=object.color;context.lineWidth=(selected?2:1)*scale;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();context.beginPath();context.arc(b.x,b.y,radius,0,Math.PI*2);context.fillStyle="#fff";context.fill();context.stroke();context.fillStyle=object.color;context.textAlign="center";context.textBaseline="middle";context.font=`${12*scale}px Arial`;context.fillText(object.label,b.x,b.y,radius*1.6);}
     context.restore();return;
   }
+  if(object.kind==="position-rail") {
+    const a=object.points?.[0],b=object.points?.[1];
+    if(a&&b){context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=selected?2:1;context.setLineDash([9,5,2,5]);context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke();}
+    context.restore();return;
+  }
+  if(object.kind==="rail-handle") {const radius=object.width/2;context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+radius,object.y+radius,radius,0,Math.PI*2);context.fill();context.restore();return;}
   if(object.kind==="leader-anchor") {const radius=object.width/2;context.fillStyle=selected?"#1179ac":object.color;context.beginPath();context.arc(object.x+radius,object.y+radius,radius,0,Math.PI*2);context.fill();context.restore();return;}
   if(object.kind==="physical-covering") {drawCoveringSurface(context,object,selected);context.restore();return;}
   if(object.kind==="physical-segment"){
@@ -2644,7 +2657,7 @@ export function CanvasViewport({
   e4Overlays,
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
-  overlay,onDimensionCreate,
+  overlay,onDimensionCreate,onPositionRailCreate,
   diagnosticOverlay,
   inlineEditor,
   onCameraChange,
@@ -2690,8 +2703,10 @@ export function CanvasViewport({
     return {...instance,drawingPlacements:[...(instance.drawingPlacements??[]).filter(p=>p.drawingId!==change.drawingId),{...previous,...("scale" in change?{scale:change.scale}:{offset:change.offset})}]};
   });
   const [dimensionStart,setDimensionStart]=useState<{wireId:string;index:number;point:EditorPoint;pointCount:number}[]>([]);
+  const [railDraft,setRailDraft]=useState<{start:EditorPoint;end:EditorPoint;leaderIds:readonly string[]}|null>(null);
   const [dimensionMessage,setDimensionMessage]=useState("");
   useEffect(()=>{setDimensionStart([]);setDimensionMessage("");},[tool,view]);
+  useEffect(()=>{setRailDraft(null);},[tool,view]);
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
@@ -2896,6 +2911,16 @@ export function CanvasViewport({
       const selectable=objects.filter(o=>layers.some(l=>l.id===o.layerId&&!l.locked));
       onObjectPick(hitTestEditorScene(selectable,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl));
       return;
+    }
+    if(event.button===0&&view==="drawing"&&tool==="position-rail"){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      if(!railDraft){setRailDraft({start:point,end:point,leaderIds:[]});return;}
+      const end=snapRailEnd(railDraft.start,point);
+      if(Math.hypot(end.x-railDraft.start.x,end.y-railDraft.start.y)>=24){
+        const ids=[...new Set([...railDraft.leaderIds,...objects.filter(o=>o.kind==="position-leader"&&railParameter({start:railDraft.start,end, id:"preview", leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})>=0&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})<=1&&railDistance({start:railDraft.start,end},{x:o.x+o.width/2,y:o.y+o.height/2})<=railCatchDistance/camera.zoom).map(o=>o.id)])];
+        onPositionRailCreate?.(railDraft.start,end,ids);
+      }
+      setRailDraft(null);return;
     }
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
@@ -3174,7 +3199,7 @@ export function CanvasViewport({
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
-      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",
@@ -3195,6 +3220,12 @@ export function CanvasViewport({
   const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
   const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>pointToSegmentDistance(point,{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth})<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(railDraft&&view==="drawing"&&tool==="position-rail"){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),end=snapRailEnd(railDraft.start,point);
+      const ids=objects.filter(o=>o.kind==="position-leader"&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})>=0&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})<=1&&railDistance({start:railDraft.start,end},{x:o.x+o.width/2,y:o.y+o.height/2})<=railCatchDistance/camera.zoom).map(o=>o.id);
+      setRailDraft(previous=>previous?{...previous,end,leaderIds:ids}:null);
+      return;
+    }
     const drag = dragRef.current;
     if(!drag&&!physicalMenu&&view==="drawing"&&tool==="select"){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),id=hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
@@ -3562,6 +3593,7 @@ export function CanvasViewport({
         }}
       />
       {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><polyline points={physicalGuide.map(p=>`${p.x*camera.zoom+camera.offsetX},${p.y*camera.zoom+camera.offsetY}`).join(" ")} fill="none" stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
+      {railDraft&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Предпросмотр линии позиций"><line x1={railDraft.start.x*camera.zoom+camera.offsetX} y1={railDraft.start.y*camera.zoom+camera.offsetY} x2={railDraft.end.x*camera.zoom+camera.offsetX} y2={railDraft.end.y*camera.zoom+camera.offsetY} stroke="#1179ac" strokeWidth="2" strokeDasharray="9 5 2 5"/><circle cx={railDraft.start.x*camera.zoom+camera.offsetX} cy={railDraft.start.y*camera.zoom+camera.offsetY} r="4" fill="#1179ac"/></svg>}
       {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{
         const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
         const drawings=view==="e4"?projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width??object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible):[];
@@ -3571,7 +3603,8 @@ export function CanvasViewport({
       })}
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
-        <span>{tool === "wire"
+        <span>{tool === "position-rail" ? railDraft ? `Нанизано позиций: ${railDraft.leaderIds.length}. Второй щелчок закрепит линию` : "Первый щелчок задаёт начало линии позиций"
+          : tool === "wire"
           ? physicalStart ? "Выберите узел или общий выход для завершения канала" : wireReconnect ? "Выберите новый контакт для конца провода"
             : wireStart ? "Выберите второй контакт"
               : "Выберите два контакта; конец выбранного провода можно переподключить"

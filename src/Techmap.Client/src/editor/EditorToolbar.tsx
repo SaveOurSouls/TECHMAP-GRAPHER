@@ -10,6 +10,7 @@ interface ToolDefinition {
 }
 
 const tools: readonly ToolDefinition[] = [
+  { id: "position-rail", label: "Привязка позиций", shortcut: "R", glyph: "┄", views: ["drawing"] },
   { id: "dimension-auxiliary", label: "Вспомогательный размер", shortcut: "", glyph: "↔", views: ["drawing"] },
   { id: "select", label: "Выбор", shortcut: "V", glyph: "↖", views: ["e4", "drawing"] },
   { id: "pan", label: "Перемещение поля", shortcut: "H", glyph: "✋", views: ["e4", "drawing"] },
