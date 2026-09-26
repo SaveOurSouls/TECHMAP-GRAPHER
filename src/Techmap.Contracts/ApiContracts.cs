@@ -153,7 +153,8 @@ public sealed record AttachmentValidationResponse(Guid AttachmentId, string Stat
 public sealed record PutHarnessDesignRequest(
     long? ExpectedRevision,
     int SchemaVersion,
-    JsonElement Content);
+    JsonElement Content,
+    int? WriterContractVersion = null);
 
 public sealed record HarnessDesignResponse(
     Guid HarnessId,

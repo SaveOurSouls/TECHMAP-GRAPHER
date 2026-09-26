@@ -23,6 +23,10 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("harness design API", () => {
+  it("preserves the writer contract and rejects unsupported future documents", () => {
+    expect(parseHarnessDesignDocument({ ...content, requiredWriterContractVersion: 1 }).requiredWriterContractVersion).toBe(1);
+    expect(() => parseHarnessDesignDocument({ ...content, requiredWriterContractVersion: 2 })).toThrow(/новая версия/);
+  });
   it("loads the shared E4 and drawing document", async () => {
     const fetcher = vi.fn(async () => response({ harnessId, schemaVersion: 1, revision: 0, content, updatedUtc: "2026-09-13T00:00:00Z" }));
     const api = createHarnessDesignApi(config, session, fetcher);
@@ -40,7 +44,7 @@ describe("harness design API", () => {
     expect(fetcher).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       method: "PUT",
       headers: expect.objectContaining({ "X-Techmap-CSRF": session.csrfNonce }),
-      body: JSON.stringify({ expectedRevision: 3, schemaVersion: 1, content }),
+      body: JSON.stringify({ expectedRevision: 3, schemaVersion: 1, writerContractVersion: 1, content }),
     }));
   });
 

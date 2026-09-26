@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Techmap.Application;
 using Techmap.Domain;
 
@@ -24,7 +25,8 @@ public sealed class SqliteHarnessDesignDocumentStore(
         HarnessIdentity harnessId,
         long expectedRevision,
         int schemaVersion,
-        string contentJson)
+        string contentJson,
+        int? writerContractVersion = null)
     {
         ValidateIdentity(projectId, harnessId);
         if (expectedRevision < 0)
@@ -42,11 +44,28 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "schemaVersion");
         }
 
+        if (writerContractVersion is not (null or 1))
+            throw Invalid("unsupported_design_writer_contract", "The supported design writer contract is 1.", "writerContractVersion");
         var canonicalJson = ValidateContent(contentJson, schemaVersion);
+        if (writerContractVersion == 1)
+        {
+            var markedContent = JsonNode.Parse(canonicalJson)!.AsObject();
+            markedContent["requiredWriterContractVersion"] = 1;
+            canonicalJson = ValidateContent(markedContent.ToJsonString(), schemaVersion);
+        }
         var now = CanonicalUtc(timeProvider.GetUtcNow());
         return storage.ExecuteInTransaction(unitOfWork =>
         {
             EnsureHarness(unitOfWork, projectId, harnessId);
+            var before = Read(unitOfWork, projectId, harnessId);
+            using var previous = JsonDocument.Parse(before.ContentJson);
+            using var incoming = JsonDocument.Parse(canonicalJson);
+            var requiredWriter = Math.Max(ElectricalGraphValidator.RequiredWriterContract(previous.RootElement),
+                ElectricalGraphValidator.RequiredWriterContract(incoming.RootElement));
+            if (requiredWriter > (writerContractVersion ?? 0))
+                throw new HarnessDesignDocumentException("design_writer_upgrade_required",
+                    "This document requires design writer contract 1. Update the client before saving.",
+                    "writerContractVersion", before.Revision);
             using var update = unitOfWork.CreateCommand(
                 """
                 UPDATE harness_design_documents
@@ -296,6 +315,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
             ValidateDrawingPlacements(root);
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);
+            ElectricalGraphValidator.Validate(root);
 
             return root.GetRawText();
         }

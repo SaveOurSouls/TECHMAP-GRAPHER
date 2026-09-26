@@ -574,6 +574,14 @@ public sealed class SqliteProjectComponentSnapshotStore(
                 string.Equals(existing["id"]?.GetValue<string>(), instanceId, StringComparison.Ordinal)))
             throw Invalid("component_instance_id_conflict", "The component instance ID is already used in this harness.", "instance.id");
         connectors.Add(instance.DeepClone());
+        using (var candidate = JsonDocument.Parse(root.ToJsonString()))
+        {
+            try { ElectricalGraphValidator.Validate(candidate.RootElement); }
+            catch (HarnessDesignDocumentException error)
+            {
+                throw new ProjectComponentSnapshotException(error.Code, error.Message, error.Field, innerException: error);
+            }
+        }
         var nextContent = CanonicalObject(root.ToJsonString(), SqliteHarnessDesignDocumentStore.MaximumContentBytes, "content");
         using var command = unitOfWork.CreateCommand(
             """

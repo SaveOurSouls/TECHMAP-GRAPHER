@@ -1373,6 +1373,8 @@ public sealed class SqliteProjectCatalog : IProjectCatalog, IProjectVersionCatal
                 designJson = design.ExecuteScalar() as string
                     ?? throw new InvalidDataException("A copied harness design document is missing.");
             }
+            using (var sourceDesign = JsonDocument.Parse(designJson))
+                ElectricalGraphValidator.Validate(sourceDesign.RootElement);
             var remapped = ProjectComponentPlacementRemapper.RemapHarnessDesign(designJson, placementIdMap);
             using (var design = unitOfWork.CreateCommand(
                        "UPDATE harness_design_documents SET content_json = $content WHERE harness_id = $harnessId;"))

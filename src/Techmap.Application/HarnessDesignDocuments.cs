@@ -19,7 +19,8 @@ public interface IHarnessDesignDocumentStore
         HarnessIdentity harnessId,
         long expectedRevision,
         int schemaVersion,
-        string contentJson);
+        string contentJson,
+        int? writerContractVersion = null);
 }
 
 public sealed class HarnessDesignDocumentException : Exception

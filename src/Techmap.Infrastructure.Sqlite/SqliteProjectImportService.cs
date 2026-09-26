@@ -1242,6 +1242,7 @@ public sealed class SqliteProjectImportService : IProjectImportService
 
         if (parsedSchemaVersion != design.SchemaVersion) return false;
         try {
+            ElectricalGraphValidator.Validate(design.Content);
             HarnessStripProfileValidator.Validate(design.Content);
             SqliteHarnessDesignDocumentStore.ValidateCableInstances(design.Content);
             HarnessE4RowOrderValidator.Validate(design.Content);

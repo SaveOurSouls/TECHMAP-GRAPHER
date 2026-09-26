@@ -75,7 +75,7 @@ export function createHarnessDesignApi(
       return request(resource(projectId, harnessId), {
         method: "PUT",
         headers,
-        body: JSON.stringify({ expectedRevision, schemaVersion: 1, content: validatedContent }),
+        body: JSON.stringify({ expectedRevision, schemaVersion: 1, writerContractVersion: 1, content: validatedContent }),
       });
     },
   };

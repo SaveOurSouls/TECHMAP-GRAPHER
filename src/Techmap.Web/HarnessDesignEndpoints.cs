@@ -91,7 +91,8 @@ public static class HarnessDesignEndpoints
                     new HarnessIdentity(harnessId),
                     request.ExpectedRevision.Value,
                     request.SchemaVersion,
-                    contentJson)));
+                    contentJson,
+                    request.WriterContractVersion)));
             }));
     }
 
@@ -160,7 +161,7 @@ public static class HarnessDesignEndpoints
         var status = error.Code switch
         {
             "project_not_found" or "harness_not_found" => StatusCodes.Status404NotFound,
-            "design_revision_conflict" => StatusCodes.Status409Conflict,
+            "design_revision_conflict" or "design_writer_upgrade_required" => StatusCodes.Status409Conflict,
             "design_content_too_large" => StatusCodes.Status413PayloadTooLarge,
             _ => StatusCodes.Status400BadRequest,
         };

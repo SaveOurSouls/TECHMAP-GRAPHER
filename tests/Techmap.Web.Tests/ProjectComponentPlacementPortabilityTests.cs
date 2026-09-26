@@ -26,16 +26,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
     }
 
     [Theory]
-    [InlineData(4)]
-    [InlineData(5)]
-    public async Task Export_import_remaps_component_ids_but_preserves_wire_cable_and_template_identity(int schemaVersion)
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    [InlineData(5, true)]
+    public async Task Export_import_remaps_component_ids_but_preserves_wire_cable_and_template_identity(int schemaVersion, bool protectedGraph)
     {
         using var fixture = Fixture.Create();
         SourceGraph source;
         await using (var sourceLease = DataRootLease.Acquire(fixture.SourceDataRoot))
         {
             using var sourceStorage = SqliteStorage.Open(sourceLease.CanonicalPath);
-            source = CreateSourceGraph(sourceStorage, schemaVersion);
+            source = CreateSourceGraph(sourceStorage, schemaVersion, protectedGraph);
             await new SqliteProjectExportService(sourceLease, sourceStorage).ExportAsync(
                 new ProjectExportRequest(source.ProjectId, fixture.ArchivePath, "0.4.0-m3.01"),
                 TestContext.Current.CancellationToken);
@@ -50,6 +51,17 @@ public sealed class ProjectComponentPlacementPortabilityTests
         var importedHarness = Assert.Single(importedProject.Harnesses);
 
         AssertPortableGraph(destinationStorage, importedProject.ProjectId, importedHarness.HarnessId, source);
+        if (protectedGraph)
+        {
+            var store = new SqliteHarnessDesignDocumentStore(destinationStorage, TimeProvider.System);
+            var design = store.Get(importedProject.ProjectId, importedHarness.HarnessId);
+            Assert.Equal(1, JsonNode.Parse(design.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+            Assert.Equal("design_writer_upgrade_required", Assert.Throws<HarnessDesignDocumentException>(() =>
+                store.Put(importedProject.ProjectId, importedHarness.HarnessId, design.Revision, 1, design.ContentJson)).Code);
+            var copied = new SqliteProjectCatalog(destinationStorage).CopyProject(importedProject.ProjectId);
+            var copyDesign = store.Get(copied.ProjectId, Assert.Single(copied.Harnesses).HarnessId);
+            Assert.Equal(1, JsonNode.Parse(copyDesign.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+        }
     }
 
     [Fact]
@@ -206,7 +218,7 @@ public sealed class ProjectComponentPlacementPortabilityTests
             Path.Combine(fixture.Root, "backups"), "0.45.1-m4-65"), TestContext.Current.CancellationToken));
     }
 
-    private static SourceGraph CreateSourceGraph(SqliteStorage storage, int schemaVersion = 3)
+    private static SourceGraph CreateSourceGraph(SqliteStorage storage, int schemaVersion = 3, bool protectedGraph = false)
     {
         var projects = new SqliteProjectCatalog(storage);
         var project = projects.CreateProject(new CreateProjectCommand(
@@ -302,8 +314,13 @@ public sealed class ProjectComponentPlacementPortabilityTests
             ["endCorrectionToMm"] = 2.009m,
             ["cutRoundingStepMm"] = 0.005m,
         });
+        if (protectedGraph)
+        {
+            content["wires"]![1]!["from"] = new JsonObject { ["connectorId"] = firstId.ToString("D"), ["contactId"] = ContactId(firstId, firstLogicalId) + ":second" };
+            content["wires"]![1]!["to"] = new JsonObject { ["connectorId"] = secondId.ToString("D"), ["contactId"] = ContactId(secondId, secondLogicalId) + ":second" };
+        }
         _ = designs.Put(project.ProjectId, harness.HarnessId, 2,
-            SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString());
+            SqliteHarnessDesignDocumentStore.CurrentContentSchemaVersion, content.ToJsonString(), protectedGraph ? 1 : null);
 
         return new SourceGraph(
             project.ProjectId, harness.HarnessId, [firstId, secondId],

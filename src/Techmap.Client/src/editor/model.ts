@@ -543,6 +543,8 @@ export interface HarnessDesignDocument {
   readonly drawingDocuments?: DrawingDocuments;
   readonly physicalTopology?: PhysicalTopology;
   readonly schemaVersion: 1;
+  /** Minimum writer contract required to safely preserve this document. */
+  readonly requiredWriterContractVersion?: 1;
   /** User-created wire colors retained by this harness even when temporarily unused. */
   readonly customWireColors?: readonly string[];
   readonly connectors: readonly ConnectorInstance[];
@@ -704,6 +706,9 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
 
 export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocument {
   const record = requireRecord(value, "Сервер вернул повреждённый документ жгута.");
+  if (record.requiredWriterContractVersion !== undefined && record.requiredWriterContractVersion !== 1) {
+    throw new Error("Для этого документа требуется более новая версия приложения.");
+  }
   if (record.schemaVersion !== 1 || !Array.isArray(record.connectors) || !Array.isArray(record.wires)) {
     throw new Error("Версия или состав документа жгута не поддерживаются.");
   }
@@ -711,6 +716,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   const views = requireRecord(record.views, "Представления документа жгута заданы неверно.");
   let document: HarnessDesignDocument = {
     schemaVersion: 1,
+    ...(record.requiredWriterContractVersion === 1 ? { requiredWriterContractVersion: 1 as const } : {}),
     customWireColors: parseCustomWireColors(record.customWireColors),
     connectors: record.connectors.map(parseConnector),
     wires: wireValues.map(parseWire),
