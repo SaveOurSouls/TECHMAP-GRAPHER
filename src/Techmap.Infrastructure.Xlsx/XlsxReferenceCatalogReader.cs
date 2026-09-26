@@ -61,7 +61,8 @@ public sealed record XlsxCatalogMapping(
     XlsxLayerArrayMapping? LayerArray = null,
     IReadOnlyList<string>? BoundaryColumns = null,
     bool DetectSheetByColumns = false,
-    bool ImportAllColumns = false);
+    bool ImportAllColumns = false,
+    int? KeyColumnIndex = null);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -178,6 +179,7 @@ public sealed class XlsxReferenceCatalogReader
             writer.WriteBoolean("preserveDuplicateRows", mapping.PreserveDuplicateRows);
             if (mapping.DetectSheetByColumns) writer.WriteBoolean("detectSheetByColumns", true);
             if (mapping.ImportAllColumns) writer.WriteBoolean("importAllColumns", true);
+            if (mapping.KeyColumnIndex is int keyColumnIndex) writer.WriteNumber("keyColumnIndex", keyColumnIndex);
             writer.WritePropertyName("boundaryColumns");
             if (mapping.BoundaryColumns is null) writer.WriteNullValue();
             else
@@ -354,7 +356,9 @@ public sealed class XlsxReferenceCatalogReader
                     .Select(item => item.Cells).SingleOrDefault();
                 if (row is null) return false;
                 var found = ResolveHeaders(row, sheets[index].Name, mapping.HeaderRow, []);
-                return requiredHeaders.All(found.ContainsKey);
+                return requiredHeaders.All(found.ContainsKey) &&
+                    (mapping.KeyColumnIndex is null ||
+                     found.TryGetValue(NormalizeHeader(mapping.KeyColumn), out var anchor) && anchor.ColumnIndex == mapping.KeyColumnIndex);
             }).ToArray();
             if (matches.Length != 1)
                 throw new XlsxImportException("xlsx_profile_sheet_ambiguous", matches.Length == 0
@@ -392,6 +396,12 @@ public sealed class XlsxReferenceCatalogReader
                 $"Не найден обязательный столбец «{mapping.KeyColumn}».",
                 field: mapping.KeyColumn,
                 location: Location(sheets[selectedIndex].Name, mapping.HeaderRow)));
+        }
+        else if (mapping.KeyColumnIndex is int expectedIndex && keyColumn.ColumnIndex != expectedIndex)
+        {
+            AddDiagnostic(diagnostics, Error("xlsx_required_column_missing",
+                $"Столбец «{mapping.KeyColumn}» должен находиться в {ColumnName(expectedIndex)}{mapping.HeaderRow}.",
+                field: mapping.KeyColumn, location: Location(selectedSheetName, mapping.HeaderRow)));
         }
         var compositeKeyColumns = new List<HeaderCell>();
         foreach (var sourceColumn in mapping.CompositeKeyColumns ?? [])
@@ -1269,7 +1279,8 @@ public sealed class XlsxReferenceCatalogReader
             string.IsNullOrWhiteSpace(mapping.EntityType) || mapping.EntityType.Length > 128 ||
             string.IsNullOrWhiteSpace(mapping.KeyColumn) || mapping.KeyColumn.Length > 256 ||
             mapping.SheetName is { Length: > 31 } ||
-            mapping.ProfileId is { Length: > 128 })
+            mapping.ProfileId is { Length: > 128 } ||
+            mapping.KeyColumnIndex is < 1 or > 16384)
         {
             throw new XlsxImportException("xlsx_mapping_invalid", "Параметры сопоставления XLSX недопустимы.");
         }

@@ -675,7 +675,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         )}
 
         {inputMode === "google-sheets" ? (
-          <p className="reference-state">{googleSheetsProfileId === "technology.wires" ? "Все колонки строки 3 базы проводов; данные со строки 4. Лист определяется по заголовкам Марка, Core, Сечение C, Pair, Сечение P." : googleSheetsProfileId ? "Выбранный справочник будет проверен и сохранён." : `Все ${profiles?.length ?? 7} подготовленных таблиц будут проверены и сохранены за одно действие.`} Результат появится в журнале слева.</p>
+          <p className="reference-state">{googleSheetsProfileId === "technology.wires" ? "Лист базы проводов определяется по E3 = «Марка». Все колонки строки 3 и варианты марки сохраняются; данные со строки 4." : googleSheetsProfileId ? "Выбранный справочник будет проверен и сохранён." : `Все ${profiles?.length ?? 7} подготовленных таблиц будут проверены и сохранены за одно действие.`} Результат появится в журнале слева.</p>
         ) : <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
           <div className="xlsx-profile-heading">
             <div>

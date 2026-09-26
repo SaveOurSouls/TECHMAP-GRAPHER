@@ -10,16 +10,16 @@ public sealed class XlsxReferenceCatalogReaderTests
     public async Task Wire_profile_detects_row_three_and_preserves_all_columns_and_duplicate_variants()
     {
         var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Любое имя").WithHeaderRow(3)
-            .WithHeaders("Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто")
-            .AddRow("TEST", "1C", "0,35", "", "", "0007", "красный", null, null)
-            .AddRow("", "", "", "", "", "", "", "", "")
-            .AddRow("TEST", "1C", "0,35", "", "", "0008", "синий", "15", null)
-            .AddRow("TEST", "3C", "0,5", "2P", "0,22", "0009", "", "20", null)
-            .WithFormula("H4", "2*5", "10").Build();
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто")
+            .AddRow(null, null, null, null, "TEST", "1C", "0,35", "", "", "0007", "красный", null, null)
+            .AddRow(null, null, null, null, "", "", "", "", "", "", "", "", "")
+            .AddRow(null, null, null, null, "TEST", "1C", "0,35", "", "", "0008", "синий", "15", null)
+            .AddRow(null, null, null, null, "TEST", "3C", "0,5", "2P", "0,22", "0009", "", "20", null)
+            .WithFormula("L4", "2*5", "10").Build();
         var preview = await PreviewAsync(bytes, XlsxKnownProfiles.Get("technology.wires").Mapping);
         Assert.True(preview.Validation.IsValid, string.Join("; ", preview.Validation.Diagnostics.Select(d => d.Message)));
         Assert.Equal("Любое имя", preview.SelectedSheet);
-        Assert.Equal(9, preview.Columns.Count);
+        Assert.Equal(13, preview.Columns.Count);
         Assert.Equal(3, preview.RecordCount);
         Assert.Equal(3, preview.Records.Select(r => r.SourceKey).Distinct().Count());
         Assert.Equal("TEST", preview.Records[0].Payload.GetProperty("Марка").GetString());
@@ -27,7 +27,7 @@ public sealed class XlsxReferenceCatalogReaderTests
         Assert.Equal(10, preview.Records[0].Payload.GetProperty("Цена").GetInt32());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, preview.Records[0].Payload.GetProperty("Пусто").ValueKind);
         Assert.Equal("2P", preview.Records[2].Payload.GetProperty("Pair").GetString());
-        Assert.Equal(new[] { "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто" },
+        Assert.Equal(new[] { "Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто" },
             System.Text.Json.JsonSerializer.Deserialize<string[]>(preview.Records[0].Payload.GetProperty("_techmapColumnOrder").GetString()!));
     }
 
@@ -40,12 +40,32 @@ public sealed class XlsxReferenceCatalogReaderTests
     }
 
     [Fact]
+    public async Task Wire_profile_requires_mark_in_E3_but_not_core_or_section_columns()
+    {
+        var profile = XlsxKnownProfiles.Get("technology.wires").Mapping;
+        var bytes = new XlsxTestFixtureBuilder().WithHeaderRow(3)
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Цвет")
+            .AddRow(null, null, null, null, "МГТФ", "красный")
+            .AddRow(null, null, null, null, "МГТФ", "синий").Build();
+        var preview = await PreviewAsync(bytes, profile);
+        Assert.True(preview.Validation.IsValid);
+        Assert.Equal(2, preview.RecordCount);
+        Assert.NotEqual(preview.Records[0].SourceKey, preview.Records[1].SourceKey);
+
+        var shifted = new XlsxTestFixtureBuilder().WithHeaderRow(3)
+            .WithHeaders("Марка", "Код", "Тип", "Группа", "Примечание")
+            .AddRow("МГТФ", null, null, null, null).Build();
+        var error = await Assert.ThrowsAsync<XlsxImportException>(() => PreviewAsync(shifted, profile));
+        Assert.Equal("xlsx_profile_sheet_ambiguous", error.Code);
+    }
+
+    [Fact]
     public async Task Wire_profile_uses_cached_formula_sections_in_both_key_and_payload()
     {
         var bytes = new XlsxTestFixtureBuilder().WithHeaderRow(3)
-            .WithHeaders("Марка", "Core", "Сечение C", "Pair", "Сечение P")
-            .AddRow("TEST", "1C", null, "", "")
-            .WithFormula("C4", "1/2", "0.5").Build();
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P")
+            .AddRow(null, null, null, null, "TEST", "1C", null, "", "")
+            .WithFormula("G4", "1/2", "0.5").Build();
         var preview = await PreviewAsync(bytes, XlsxKnownProfiles.Get("technology.wires").Mapping);
         Assert.True(preview.Validation.IsValid);
         Assert.Equal(0.5m, preview.Records[0].Payload.GetProperty("Сечение C").GetDecimal());
@@ -55,15 +75,15 @@ public sealed class XlsxReferenceCatalogReaderTests
     public async Task Wire_profile_preserves_duplicate_headers_and_source_errors_and_skips_notes_without_a_mark()
     {
         var bytes = new XlsxTestFixtureBuilder().WithHeaderRow(3)
-            .WithHeaders("Марка", "Core", "Сечение C", "Pair", "Сечение P", "Жесткость", "Дубликат", "Цена")
-            .WithDuplicateHeader(6, "Жесткость").WithError("H4", "#REF!")
-            .AddRow("TEST", "1C", "30", "", "", "Гибкий", "Другое", "#REF!")
-            .AddRow(null, null, null, null, null, "ПАМЯТКА", null, null).Build();
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Жесткость", "Дубликат", "Цена")
+            .WithDuplicateHeader(10, "Жесткость").WithError("L4", "#REF!")
+            .AddRow(null, null, null, null, "TEST", "1C", "30", "", "", "Гибкий", "Другое", "#REF!")
+            .AddRow(null, null, null, null, null, null, null, null, null, "ПАМЯТКА", null, null).Build();
         var preview = await PreviewAsync(bytes, XlsxKnownProfiles.Get("technology.wires").Mapping);
         Assert.True(preview.Validation.IsValid);
         var record = Assert.Single(preview.Records);
         Assert.Equal("Гибкий", record.Payload.GetProperty("Жесткость").GetString());
-        Assert.Equal("Другое", record.Payload.GetProperty("Жесткость [G]").GetString());
+        Assert.Equal("Другое", record.Payload.GetProperty("Жесткость [K]").GetString());
         Assert.Equal("#REF!", record.Payload.GetProperty("Цена").GetString());
         Assert.Contains(preview.Validation.Diagnostics, d => d.Code == "xlsx_duplicate_header_preserved");
         Assert.Contains(preview.Validation.Diagnostics, d => d.Code == "xlsx_unkeyed_rows_skipped");

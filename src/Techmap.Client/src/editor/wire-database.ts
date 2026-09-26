@@ -1,6 +1,7 @@
 import { catalogOuterDiameter } from "./drawing-thickness";
 import type { ReferenceCatalogSearchRecord } from "../reference-catalog-api";
 import { builtInWireReferences } from "./wire-reference-catalog";
+import type { WireMaterialBinding } from "./model";
 
 export interface WireDatabaseOption {
   readonly id: string;
@@ -10,6 +11,8 @@ export interface WireDatabaseOption {
   readonly label: string;
   readonly detail: string;
   readonly searchText?: string;
+  readonly color?: string;
+  readonly materialBinding?: WireMaterialBinding;
 }
 
 function text(value: unknown): string {
@@ -40,10 +43,18 @@ export function formatWireSection(payload: Readonly<Record<string, unknown>>): s
     || sectionC || field(payload, "sectionMm2", "Сечение", "section", "awg", "AWG");
 }
 
-export function wireDatabaseOption(record: ReferenceCatalogSearchRecord): WireDatabaseOption {
+export function wireDatabaseOption(record: ReferenceCatalogSearchRecord, snapshot?: { readonly snapshotId: string; readonly snapshotSha256: string }): WireDatabaseOption {
   const mark = field(record.payload, "Марка", "mark", "name", "Название", "series", "Серия") || record.sourceKey;
   const section = formatWireSection(record.payload);
-  return { id: record.recordId, diameterMm:catalogOuterDiameter(record.payload), mark, section, label: [mark, section].filter(Boolean).join(" · "),
+  const color = field(record.payload, "Цвет", "color", "Color");
+  const diameterMm = catalogOuterDiameter(record.payload);
+  return { id: record.recordId, diameterMm, mark, section, color, label: [mark, section].filter(Boolean).join(" · "),
+    ...(snapshot && record.entityType === "wire" ? { materialBinding: {
+      sourceId: "technology-wires", snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.snapshotSha256,
+      recordId: record.recordId, entityType: "wire" as const, sourceKey: record.sourceKey,
+      displayName: [mark, section].filter(Boolean).join(" · "),
+      ...(diameterMm === undefined ? {} : { outerDiameterMm: diameterMm }),
+    } } : {}),
     detail: ["Артикул провода", "Артикул", "Цвет", "Производитель", "Категория"]
       .map(key => text(record.payload[key]) ? `${key}: ${text(record.payload[key])}` : "").filter(Boolean).join(" · "),
     searchText: Object.values(record.payload).map(text).join(" ") };

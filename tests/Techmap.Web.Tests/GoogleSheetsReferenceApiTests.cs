@@ -26,8 +26,8 @@ public sealed class GoogleSheetsReferenceApiTests
     public async Task Selected_wire_profile_publishes_all_row_three_columns_without_syncing_other_sources()
     {
         var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Провода").WithHeaderRow(3)
-            .WithHeaders("Марка", "Core", "Сечение C", "Pair", "Сечение P", "Производитель")
-            .AddRow("TEST", "3C", "0,5", "2P", "0,22", "Factory").Build();
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Производитель")
+            .AddRow(null, null, null, null, "TEST", "3C", "0,5", "2P", "0,22", "Factory").Build();
         var downloader = new QueueDownloader(new GoogleSheetsWorkbookDownload(bytes, SafeFileName));
         await using var factory = CreateFactory(downloader);
         using var client = CreateLocalClient(factory);

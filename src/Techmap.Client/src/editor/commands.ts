@@ -74,7 +74,7 @@ export type EditorCommand =
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
-  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly materialBinding?: WireMaterialBinding | null; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
@@ -498,6 +498,8 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           ...((command.wire!==undefined||command.wireSection!==undefined||command.wireDiameterMm!==undefined)?{wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:{}),
           wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
           ...(command.wireSection === undefined ? {} : { wireSection: normalizeValue(command.wireSection, "Сечение провода") }),
+          materialBinding: command.materialBinding === undefined && command.wire === undefined && command.wireSection === undefined
+            ? contact.materialBinding : command.materialBinding ?? undefined,
           color: command.color === undefined ? contact.color : normalizeValue(command.color, "Цвет провода контакта"),
           secondaryColor: command.secondaryColor === undefined
             ? contact.secondaryColor ?? ""
@@ -512,9 +514,17 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const synchronized = command.color === undefined && command.secondaryColor === undefined
         ? updated
         : syncDirectWireColors(updated, command.connectorId, command.contactId);
+      const materialChanged = command.materialBinding !== undefined || command.wire !== undefined || command.wireSection !== undefined;
+      const contactMaterial = contactAtEndpoint(synchronized, { connectorId: command.connectorId, contactId: command.contactId })?.materialBinding;
+      const withMaterial = materialChanged ? {
+        ...synchronized,
+        wires: synchronized.wires.map(wire => [wire.from, wire.to].some(endpoint =>
+          sameConnectorEndpoint(endpoint, command.connectorId, command.contactId))
+          ? { ...wire, materialBinding: contactMaterial } : wire),
+      } : synchronized;
       const diameterChanged=command.wireDiameterMm!==undefined||command.wire!==undefined||command.wireSection!==undefined;
       const endpoints=document.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId&&e.contactId===command.contactId)).flatMap(w=>[w.from,w.to]);
-      const sized=diameterChanged?{...synchronized,connectors:synchronized.connectors.map(c=>({...c,contacts:c.contacts.map(p=>endpoints.some(e=>e.connectorId===c.id&&e.contactId===p.id)?{...p,wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:p)}))}:synchronized;
+      const sized=diameterChanged?{...withMaterial,connectors:withMaterial.connectors.map(c=>({...c,contacts:c.contacts.map(p=>endpoints.some(e=>e.connectorId===c.id&&e.contactId===p.id)?{...p,wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:p)}))}:withMaterial;
       return rememberCustomWireColors(sized, [command.color ?? "", command.secondaryColor ?? ""]);
     }
     case "reset-contact-color-auto":
@@ -672,8 +682,12 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if (document.wires.some((item) => item.id === command.wire.id)) {
         throw new Error("Провод с таким ID уже существует.");
       }
+      const selectedMaterial = contactAtEndpoint(document, command.wire.from)?.materialBinding ??
+        contactAtEndpoint(document, command.wire.to)?.materialBinding;
+      const newWire = command.wire.materialBinding || !selectedMaterial
+        ? command.wire : { ...command.wire, materialBinding: selectedMaterial };
       let added = addWireToEndpointJunctions(
-        { ...document, wires: [...document.wires, command.wire] }, command.wire);
+        { ...document, wires: [...document.wires, newWire] }, newWire);
       if (command.targetWireId !== undefined) {
         const junctionEndpoint = [command.wire.from, command.wire.to].find(isJunctionEndpoint);
         if (!junctionEndpoint) throw new Error("Новая ветвь должна завершаться в узле целевого провода.");

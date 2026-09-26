@@ -235,6 +235,8 @@ export interface ConnectorContact {
   readonly wire: string;
   readonly wireSection?: string;
   readonly wireDiameterMm?: number;
+  /** Published wire variant selected in the E4 contact table. */
+  readonly materialBinding?: WireMaterialBinding;
   readonly color: string;
   /** Empty or missing means that the wire has one insulation color. */
   readonly secondaryColor?: string;
@@ -1156,6 +1158,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       wire: optionalString(contact.wire, "Провод контакта"),
       ...(contact.wireDiameterMm === undefined ? {} : {wireDiameterMm:parseOuterDiameter(contact.wireDiameterMm)}),
       ...(contact.wireSection === undefined ? {} : { wireSection: optionalString(contact.wireSection, "Сечение провода") }),
+      ...(contact.materialBinding === undefined ? {} : { materialBinding: parseWireMaterialBinding(contact.materialBinding) }),
       color: optionalString(contact.color, "Цвет провода контакта"),
       secondaryColor: optionalString(contact.secondaryColor, "Второй цвет провода контакта"),
       ...(contact.colorMode === undefined ? {} : { colorMode: parseContactColorMode(contact.colorMode) }),

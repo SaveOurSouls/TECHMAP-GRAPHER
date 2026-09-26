@@ -442,10 +442,10 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
     setMessage("Поиск в базе проводов…");
     const timer = window.setTimeout(() => {
       void api.searchCatalog("technology-wires", { text: query.trim() || null, exactSourceKey: null,
-        entityTypes: ["wire", "cable"], filters: [], filterLogic: "all", sort: query.trim() ? "relevance" : "source-key-asc",
+        entityTypes: ["wire"], filters: [], filterLogic: "all", sort: query.trim() ? "relevance" : "source-key-asc",
         pageSize: 50, cursor: null }, controller.signal).then(page => {
         if (controller.signal.aborted) return;
-        setOptions(page.items.map(wireDatabaseOption));
+        setOptions(page.items.map(item => wireDatabaseOption(item, page)));
         setMessage(page.items.length === 0 ? "Совпадений в базе нет. Можно ввести марку и сечение вручную." : page.nextCursor ? "Показаны первые 50 вариантов. Уточните поиск." : null);
       }).catch(error => {
         if (controller.signal.aborted) return;

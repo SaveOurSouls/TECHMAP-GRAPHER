@@ -27,7 +27,31 @@ describe("wire database", () => {
     expect(red.mark).toBe("TEST");
     expect(red.section).toBe("0,35");
     expect(red.detail).toContain("Артикул: 0007");
+    expect(red.color).toBe("красный");
     expect(filterWireOptions([red, blue], "TEST 0.35 красный")).toEqual([red]);
+  });
+  it("pins a selected E4 variant to its published record and carries it to a new wire", () => {
+    const option = wireDatabaseOption({ recordId: "b".repeat(64), sourceLocation: null, entityType: "wire", sourceKey: "МГТФ #1",
+      payload: { Марка: "МГТФ", "Сечение C": "0,35", Core: "1C" } },
+    { snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64) });
+    const first = createBuiltInConnectorInstance("catalog-connector-free", {
+      id: "x1", designation: "X1", e4Position: { x: 0, y: 0 }, freeContactCount: 1,
+    });
+    const second = createBuiltInConnectorInstance("catalog-connector-free", {
+      id: "x2", designation: "X2", e4Position: { x: 500, y: 0 }, freeContactCount: 1,
+    });
+    const base = { ...createEmptyHarnessDesign(), connectors: [first, second] };
+    const selected = executeEditorCommand(createEditorHistory(base), { type: "update-contact", connectorId: first.id,
+      contactId: first.contacts[0]!.id, wire: option.mark, wireSection: option.section, materialBinding: option.materialBinding });
+    const wire = createWire("w1", { connectorId: first.id, contactId: first.contacts[0]!.id },
+      { connectorId: second.id, contactId: second.contacts[0]!.id });
+    const connected = executeEditorCommand(selected, { type: "add-wire", wire });
+    expect(connected.present.wires[0]!.materialBinding).toEqual(option.materialBinding);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(connected.present))).wires[0]!.materialBinding).toEqual(option.materialBinding);
+    const changed = executeEditorCommand(connected, { type: "update-contact", connectorId: first.id,
+      contactId: first.contacts[0]!.id, wireSection: "0,5", materialBinding: null });
+    expect(changed.present.wires[0]!.materialBinding).toBeUndefined();
+    expect(undoEditorCommand(changed).present.wires[0]!.materialBinding).toEqual(option.materialBinding);
   });
   it("roundtrips both fields, renders them on canvas and undoes the selection together", () => {
     const connector = createBuiltInConnectorInstance("catalog-connector-free", {

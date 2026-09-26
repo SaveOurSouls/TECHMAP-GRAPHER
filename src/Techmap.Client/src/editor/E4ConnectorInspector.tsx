@@ -353,7 +353,7 @@ export function E4ConnectorInspector({
     setNewFieldLabel("");
   };
 
-  const updateContact = (contact: ConnectorInstance["contacts"][number], patch: Omit<Partial<typeof contact>, "wireDiameterMm"> & { wireDiameterMm?: number | null }) => {
+  const updateContact = (contact: ConnectorInstance["contacts"][number], patch: Omit<Partial<typeof contact>, "wireDiameterMm" | "materialBinding"> & { wireDiameterMm?: number | null; materialBinding?: ConnectorContact["materialBinding"] | null }) => {
     onCommand({
       type: "update-contact",
       connectorId: connector.id,
@@ -366,6 +366,7 @@ export function E4ConnectorInspector({
       wire: patch.wire,
       wireSection: patch.wireSection,
       wireDiameterMm: patch.wireDiameterMm,
+      materialBinding: patch.materialBinding,
       color: patch.color,
       secondaryColor: patch.secondaryColor,
       connectionStatus: patch.connectionStatus,
@@ -546,7 +547,8 @@ export function E4ConnectorInspector({
                     onChange={event => {
                       const section = event.target.value;
                       const option = wireOptions.find(item => item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
-                      updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null });
+                      updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null, materialBinding: option?.materialBinding ?? null,
+                        ...(option?.color ? { color: option.color } : {}) });
                     }}
                   ><option value="">—</option>{sectionChoices.map(section => <option key={section} value={section}>{section}</option>)}</select>
                   : column.id === "wire" ? <div className="e4cce-wire-picker">
@@ -578,7 +580,8 @@ export function E4ConnectorInspector({
                           key={wire.id}
                           onPointerDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            updateContact(contact, { wire: wire.mark, wireSection: wire.section, wireDiameterMm:wire.diameterMm });
+                            updateContact(contact, { wire: wire.mark, wireSection: wire.section, wireDiameterMm:wire.diameterMm, materialBinding: wire.materialBinding ?? null,
+                              ...(wire.color ? { color: wire.color } : {}) });
                             setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
                           title={wire.detail}

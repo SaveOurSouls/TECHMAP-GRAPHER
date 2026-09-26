@@ -59,7 +59,8 @@ function ConnectionWirePicker({
       const connector = document.connectors.find(item => item.id === end.connectorId);
       if (!connector?.contacts.some(contact => contact.id === end.contactId)) continue;
       onCommand({ type: "update-contact", connectorId: end.connectorId, contactId: end.contactId,
-        wire: option.mark, wireSection: "", wireDiameterMm: null });
+        wire: option.mark, wireSection: "", wireDiameterMm: null, materialBinding: null,
+        ...(option.color ? { color: option.color } : {}) });
     }
     setQuery(option.mark);
     setOpen(false);
@@ -98,7 +99,9 @@ function ConnectionSectionPicker({ document, wire, options, disabled, onCommand 
       for (const end of [wire.from, wire.to]) {
         if (!end.connectorId || !end.contactId) continue;
         onCommand({ type: "update-contact", connectorId: end.connectorId, contactId: end.contactId,
-          wire: mark, wireSection: section, wireDiameterMm: option?.diameterMm ?? null });
+          wire: mark, wireSection: section, wireDiameterMm: option?.diameterMm ?? null,
+          materialBinding: option?.materialBinding ?? null,
+          ...(option?.color ? { color: option.color } : {}) });
       }
     }}><option value="">—</option>{sections.map(section => <option key={section} value={section}>{section}</option>)}</select>;
 }

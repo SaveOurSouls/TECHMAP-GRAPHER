@@ -35,12 +35,12 @@ public static class XlsxKnownProfiles
     private static XlsxKnownProfile CreateWires()
     {
         const string id = "technology.wires";
-        return new XlsxKnownProfile(id, "Провода — все колонки строки 3", "technology-wires",
-            "Автоопределение по заголовкам", "wire", "составной ключ",
-            "Все колонки строки 3, данные со строки 4. Марки, жилы, пары и сечения сохраняются без потери вариантов.",
+        return new XlsxKnownProfile(id, "Провода — Марка в E3", "technology-wires",
+            "Автоопределение по E3", "wire", "Марка",
+            "Марка в E3 определяет лист. Все колонки строки 3 и варианты марки сохраняются; данные со строки 4.",
             new XlsxCatalogMapping(null, 3, 4, "wire", "Марка",
                 IgnoreUnmappedFormulas: true, ProfileId: id,
-                CompositeKeyColumns: ["Марка", "Core", "Сечение C", "Pair", "Сечение P"],
+                CompositeKeyColumns: ["Марка"], KeyColumnIndex: 5,
                 PreserveDuplicateRows: true, DetectSheetByColumns: true, ImportAllColumns: true));
     }
 
