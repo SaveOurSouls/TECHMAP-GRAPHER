@@ -276,6 +276,8 @@ builder.Services.AddSingleton<IAttachmentContentStore>(_ =>
 builder.Services.AddSingleton<IProjectAttachmentCatalog, SqliteProjectAttachmentCatalog>();
 builder.Services.AddSingleton<IPinnedCharacteristicStore, SqlitePinnedCharacteristicStore>();
 builder.Services.AddSingleton<IHarnessDesignDocumentStore, SqliteHarnessDesignDocumentStore>();
+builder.Services.AddSingleton(services => new HarnessDesignRecoveryJournal(dataRoot,
+    services.GetRequiredService<IHarnessDesignDocumentStore>()));
 builder.Services.AddSingleton<IHarnessCutListService, HarnessCutListService>();
 builder.Services.AddSingleton<IComponentTemplateStore, SqliteComponentTemplateStore>();
 builder.Services.AddSingleton<IGlobalMaterialLibrary, SqliteGlobalMaterialLibrary>();
@@ -430,6 +432,7 @@ app.MapPost("/api/v1/browser-lifecycle", async (
 app.MapProjectEndpoints();
 app.MapProjectDataEndpoints();
 app.MapHarnessDesignEndpoints();
+app.MapHarnessDesignRecoveryEndpoints();
 app.MapHarnessCutListEndpoints();
 app.MapComponentTemplateEndpoints();
 app.MapGlobalMaterialEndpoints();

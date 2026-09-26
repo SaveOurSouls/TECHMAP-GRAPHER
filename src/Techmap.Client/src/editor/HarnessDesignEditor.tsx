@@ -43,10 +43,12 @@ import {
 } from "./design-api";
 import { DesignSaveCoordinator } from "./design-save-coordinator";
 import {
+  browserRecoveryStorage,
   readHarnessDesignRecoveryDraft,
   removeHarnessDesignRecoveryDraft,
   writeHarnessDesignRecoveryDraft,
 } from "./design-recovery-draft";
+import { createDesignRecoveryApi, DesignRecoverySession } from "./design-recovery-api";
 import {
   createComponentPlacementApi,
   componentPlacementRequest,
@@ -675,6 +677,10 @@ export function HarnessDesignEditor({
   onViewChange,
 }: HarnessDesignEditorProps) {
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
+  const recoveryApi = useMemo(() => createDesignRecoveryApi(config, session), [config, session]);
+  const recoverySession = useMemo(() => new DesignRecoverySession(recoveryApi, projectId, harnessId), [recoveryApi, projectId, harnessId]);
+  const [recoveryError, setRecoveryError] = useState("");
+  const recoveryBusy = useRef(false);
   const componentTemplateApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const componentPlacementApi = useMemo(
     () => componentPlacementApiOverride ?? createComponentPlacementApi(config, session),
@@ -711,10 +717,14 @@ export function HarnessDesignEditor({
     readonly mode?: import("./physical-editing").PhysicalDragMode;
   } | null>(null);
   const [message, setMessage] = useState("Загружаем документ жгута…");
-  const [recoveryDraft, setRecoveryDraft] = useState<{
+  const [recoveryDrafts, setRecoveryDrafts] = useState<readonly {
+    readonly id: string;
+    readonly sequence?: number;
     readonly content: HarnessDesignDocument;
     readonly baseRevision: number;
-  } | null>(null);
+    readonly serverContent?: unknown;
+    readonly serverRevision?: number;
+  }[]>([]);
   const [componentSnapshotsByPlacement, setComponentSnapshotsByPlacement] =
     useState<ProjectComponentSnapshotLookup>(() => new Map());
   const [componentGraphMessage, setComponentGraphMessage] = useState("");
@@ -779,9 +789,14 @@ export function HarnessDesignEditor({
     setComponentSnapshotsByPlacement(new Map());
     setComponentGraphMessage("");
     setMessage("Загружаем документ жгута…");
-    setRecoveryDraft(null);
+    setRecoveryDrafts([]);
+    setRecoveryError("");
     setSaveState("saved");
-    const designRequest = api.get(projectId, harnessId).then((loaded) => {
+    const journalRequest = recoveryApi.list(projectId, harnessId).catch(() => {
+      if (generation === loadGeneration.current) setRecoveryError("Аварийный журнал недоступен. Восстановление после смены порта не гарантировано; сохраните копию перед закрытием.");
+      return [];
+    });
+    const designRequest = Promise.all([api.get(projectId, harnessId), journalRequest]).then(([loaded, journal]) => {
       if (generation !== loadGeneration.current) return;
       if (initialReveal?.projectId === projectId && initialReveal.harnessId === harnessId) {
         const found = resolveHarnessSelection(buildHarnessSelectionIndex(loaded.content), [initialReveal.objectId]);
@@ -790,23 +805,32 @@ export function HarnessDesignEditor({
       }
       const savedJson = JSON.stringify(loaded.content);
       let recoveryMessage = loaded.recoveryWarning ?? "";
-      const draft = readHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+      const candidates: typeof recoveryDrafts[number][] = [];
+      for (const item of journal) {
+        try {
+          const parsed = parseRecoverableHarnessDesignContent(item.content).content;
+          candidates.push({ id: item.draftId, sequence: item.sequence, content: parsed,
+            baseRevision: item.baseRevision, serverContent: item.serverContent, serverRevision: item.serverRevision });
+        } catch { setRecoveryError("Одна из аварийных копий повреждена и сохранена на диске без изменений."); }
+      }
+      const draft = readHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
       if (draft) {
         try {
           const recoveredDraft = parseRecoverableHarnessDesignContent(draft.content);
           if (JSON.stringify(recoveredDraft.content) !== savedJson) {
-            setRecoveryDraft({ content: recoveredDraft.content, baseRevision: draft.baseRevision });
+            if (!candidates.some(c => JSON.stringify(c.content) === JSON.stringify(recoveredDraft.content))) candidates.unshift({ id: "browser", content: recoveredDraft.content, baseRevision: draft.baseRevision, serverContent: loaded.content, serverRevision: loaded.revision });
             const revisionWarning = draft.baseRevision === loaded.revision
               ? ""
               : ` Черновик создан от ревизии ${draft.baseRevision}, на сервере уже ревизия ${loaded.revision}; после восстановления внимательно проверьте изменения.`;
             recoveryMessage = `Найдены несохранённые изменения этого жгута. Серверный документ открыт без изменений; восстановите черновик кнопкой ниже.${revisionWarning}`;
           } else {
-            removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+            removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
           }
         } catch {
           recoveryMessage = `${recoveryMessage ? `${recoveryMessage} ` : ""}Найден локальный черновик, но он повреждён и не применён.`;
         }
       }
+      setRecoveryDrafts(candidates);
       setResource(loaded);
       setHistory(createEditorHistory(loaded.content));
       savedJsonRef.current = savedJson;
@@ -823,7 +847,7 @@ export function HarnessDesignEditor({
       loadGeneration.current += 1;
       componentGraphRequestGeneration.current += 1;
     };
-  }, [api, harnessId, projectId, refreshComponentGraph]);
+  }, [api, harnessId, projectId, recoveryApi, refreshComponentGraph]);
 
   const saveOnce = useCallback(async (): Promise<boolean> => {
       savingRef.current = true;
@@ -845,7 +869,8 @@ export function HarnessDesignEditor({
           historyRef.current = acknowledgedHistory;
           setHistory(acknowledgedHistory);
           setSaveState("saved");
-          if (!recoveryDraft) removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
+          if (!recoveryDrafts.some(d => d.id === "browser")) removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
+          void recoverySession.clear().catch(() => setRecoveryError("Документ сохранён, но очистка аварийной копии не выполнена. Копия сохранена для проверки."));
         } else {
           setSaveState("changed");
         }
@@ -858,7 +883,7 @@ export function HarnessDesignEditor({
       } finally {
         savingRef.current = false;
       }
-  }, [api, harnessId, projectId, recoveryDraft]);
+  }, [api, harnessId, projectId, recoveryDrafts, recoverySession]);
 
   const flushSave = useCallback((): Promise<boolean> => {
     if (!saveCoordinatorRef.current) {
@@ -878,19 +903,30 @@ export function HarnessDesignEditor({
       return;
     }
     const baseRevision = resourceRef.current?.revision;
-    if (baseRevision !== undefined && !recoveryDraft) {
-      writeHarnessDesignRecoveryDraft(
-        window.localStorage,
+    const recoveryGeneration = loadGeneration.current;
+    if (baseRevision !== undefined) {
+      const localWritten = !recoveryDrafts.some(d => d.id === "browser") && writeHarnessDesignRecoveryDraft(
+        browserRecoveryStorage(),
         projectId,
         harnessId,
         baseRevision,
         history.present,
       );
+      if (!localWritten) setRecoveryError("Локальная аварийная копия недоступна или содержит прежний конфликт. Ожидается запись серверного журнала; не закрывайте редактор.");
+      void recoverySession.write(baseRevision, history.present).then(() => {
+        if (recoveryGeneration !== loadGeneration.current) return;
+        setRecoveryError(localWritten ? "" : "Аварийная копия записана на сервере. Резервная запись в браузере недоступна.");
+      }).catch(() => {
+        if (recoveryGeneration !== loadGeneration.current) return;
+        setRecoveryError(localWritten
+          ? "Серверный аварийный журнал не записан. Копия есть только в этом браузере и на этом порту; сохраните документ перед закрытием."
+          : "Аварийная копия не записана ни в браузере, ни на сервере. Не закрывайте редактор; сохраните документ или скачайте копию.");
+      });
     }
     setSaveState("changed");
     const timer = window.setTimeout(() => void flushSave(), 650);
     return () => window.clearTimeout(timer);
-  }, [flushSave, harnessId, history, projectId, recoveryDraft]);
+  }, [flushSave, harnessId, history, projectId, recoveryDrafts, recoverySession]);
 
   useEffect(() => {
     if (!history) return;
@@ -1574,21 +1610,55 @@ export function HarnessDesignEditor({
           {routingIssues.map((issue) => <div key={issue.wireId}>{issue.wireId}: {issue.message}</div>)}
         </InfoHint>
       </div>}
-      {recoveryDraft && <div className="he-recovery-draft" role="alert">
-        <span>Есть несохранённый локальный черновик от ревизии {recoveryDraft.baseRevision}. Серверный документ не заменён.</span>
+      {recoveryError && <div className="he-save-message" role="alert">{recoveryError}
         <button type="button" onClick={() => {
-          const next = createEditorHistory(recoveryDraft.content);
-          historyRef.current = next;
-          setHistory(next);
-          setRecoveryDraft(null);
-          setMessage("Локальный черновик восстановлен. Сохраняем его на сервере…");
-        }}>Восстановить</button>
-        <button type="button" onClick={() => {
-          removeHarnessDesignRecoveryDraft(window.localStorage, projectId, harnessId);
-          setRecoveryDraft(null);
-          setMessage("");
-        }}>Оставить серверную версию</button>
+          const url = URL.createObjectURL(new Blob([JSON.stringify(history.present, null, 2)], { type: "application/json" }));
+          const link = document.createElement("a"); link.href = url; link.download = `harness-${harnessId}-recovery.json`; link.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}>Скачать текущую копию</button>
       </div>}
+      {recoveryDrafts.map(draft => <div key={draft.id} className="he-recovery-draft" role="alert">
+        <span>Аварийная копия от ревизии {draft.baseRevision}. Текущий серверный документ не заменён.</span>
+        <button type="button" onClick={() => void (async () => {
+          if (recoveryBusy.current) return;
+          recoveryBusy.current = true;
+          const beforeRestore = historyRef.current;
+          const generation = loadGeneration.current;
+          try {
+            if (beforeRestore && JSON.stringify(beforeRestore.present) !== savedJsonRef.current) {
+              // The current editor can itself contain unsaved edits when another copy is selected.
+              await recoveryApi.put(projectId, harnessId, crypto.randomUUID(), 1,
+                resourceRef.current?.revision ?? 0, beforeRestore.present);
+            }
+            // Archive both alternatives before applying the recovery copy.
+            await recoveryApi.put(projectId, harnessId, crypto.randomUUID(), 1, draft.baseRevision, draft.content);
+            if (generation !== loadGeneration.current) return;
+            if (historyRef.current !== beforeRestore) {
+              setRecoveryError("Во время подготовки восстановления документ изменился. Обе копии сохранены; повторите восстановление после завершения изменений.");
+              return;
+            }
+            recoverySession.preserve();
+            const next = createEditorHistory(draft.content);
+            historyRef.current = next; setHistory(next);
+            setRecoveryDrafts(current => current.filter(item => item.id !== draft.id));
+            if (draft.id === "browser") removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
+            setMessage("Аварийная копия восстановлена; исходная и серверная версии сохранены в журнале.");
+          } catch { setRecoveryError("Восстановление отменено: не удалось сохранить обе конфликтующие копии в журнале."); }
+          finally { recoveryBusy.current = false; }
+        })()}>Восстановить</button>
+        <button type="button" onClick={() => {
+          const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" }));
+          const link = document.createElement("a"); link.href = url; link.download = `harness-${harnessId}-conflict.json`; link.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}>Скачать обе версии</button>
+        <button type="button" onClick={() => void (async () => {
+          try {
+            if (draft.id === "browser") removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
+            else await recoveryApi.remove(projectId, harnessId, draft.id, draft.sequence!);
+            setRecoveryDrafts(current => current.filter(item => item.id !== draft.id));
+          } catch { setRecoveryError("Копия изменилась или журнал недоступен. Аварийная копия не удалена."); }
+        })()}>Удалить эту аварийную копию</button>
+      </div>)}
       {view==="drawing" && drawingDocument.connectors.some(c=>c.libraryBinding?.mode==="template"&&materializedConnectorIds.has(c.id)&&componentTemplateViewInstances.some(i=>i.objectId===c.id&&projectComponentTemplateView(i,"drawing",{x:0,y:0})?.commands.length)&&c.libraryBinding.snapshot.contacts.some(p=>!p.representations.some(r=>r.viewKind==="drawing"))) && <div className="he-save-message" role="alert">В рисунке не заданы точки части контактов. Откройте рисунок артикула в библиотеке, свяжите контакты с колонкой № либо задайте общий выход для чертежа и обновите компонент.</div>}
       {componentGraphIntegrityMessage && <ComponentGraphErrorAlert
         message={componentGraphIntegrityMessage}

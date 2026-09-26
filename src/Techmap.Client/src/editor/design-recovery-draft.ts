@@ -2,6 +2,18 @@ import type { HarnessDesignDocument } from "./model";
 
 const draftVersion = 1 as const;
 
+/** Accessing localStorage itself can throw in restricted browser profiles. */
+export function browserRecoveryStorage(getStorage: () => Storage = () => window.localStorage): Pick<Storage, "getItem" | "setItem" | "removeItem"> {
+  try { return getStorage(); }
+  catch {
+    return {
+      getItem: () => { throw new Error("Browser storage unavailable"); },
+      setItem: () => { throw new Error("Browser storage unavailable"); },
+      removeItem: () => { throw new Error("Browser storage unavailable"); },
+    };
+  }
+}
+
 export interface HarnessDesignRecoveryDraft {
   readonly version: typeof draftVersion;
   readonly projectId: string;

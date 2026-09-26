@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyHarnessDesign } from "./model";
 import {
+  browserRecoveryStorage,
   readHarnessDesignRecoveryDraft,
   removeHarnessDesignRecoveryDraft,
   writeHarnessDesignRecoveryDraft,
@@ -14,6 +15,11 @@ class MemoryStorage {
 }
 
 describe("harness design recovery draft", () => {
+  it("handles an exception from the browser localStorage getter as a visible write failure", () => {
+    const storage = browserRecoveryStorage(() => { throw new Error("SecurityError"); });
+    expect(writeHarnessDesignRecoveryDraft(storage, "project", "harness", 0, createEmptyHarnessDesign())).toBe(false);
+    expect(readHarnessDesignRecoveryDraft(storage, "project", "harness")).toBeNull();
+  });
   it("keeps an unacknowledged full document and removes it only after acknowledgement", () => {
     const storage = new MemoryStorage();
     const content = createEmptyHarnessDesign();
