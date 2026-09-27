@@ -95,7 +95,8 @@ public sealed class ReferenceCatalogApiTests
             TestContext.Current.CancellationToken);
         var sources = await sourcesResponse.Content.ReadFromJsonAsync<ReferenceCatalogSourceSummaryResponse[]>(
             TestContext.Current.CancellationToken);
-        var source = Assert.Single(sources!);
+        var source = Assert.Single(sources!, item => item.SourceId == "technology-database");
+        Assert.Contains(sources!, item => item.SourceId == "technology-wires" && item.RecordCount == 260);
         Assert.Equal(HttpStatusCode.OK, sourcesResponse.StatusCode);
         Assert.Equal("technology-database", source.SourceId);
         Assert.Equal("xlsx", source.SourceKind);
