@@ -20,6 +20,7 @@ interface Placement {
   readonly end: number;
   readonly reverse: boolean;
   readonly offset: number;
+  readonly bodyOffset?: Point;
   readonly depth: number;
   readonly leafCount: number;
   readonly groupOffsets: ReadonlyMap<string, number>;
@@ -47,6 +48,7 @@ function parentCoating(document:HarnessDesignDocument,id:string):string|undefine
  const contains=(parent:typeof child)=>child.spans.every(span=>parent.spans.some(other=>
   other.segmentId===span.segmentId&&other.from<=span.from+1e-7&&other.to>=span.to-1e-7));
  const parent=coverings.filter(c=>c.id!==id&&c.bundle&&JSON.stringify([c.bundle.mode,c.bundle.members])===members&&
+   (c.bundle.bodyOffset?.x??0)===(child.bundle?.bodyOffset?.x??0)&&(c.bundle.bodyOffset?.y??0)===(child.bundle?.bodyOffset?.y??0)&&
    contains(c)&&c.spans.reduce((n,s)=>n+s.to-s.from,0)>child.spans.reduce((n,s)=>n+s.to-s.from,0)+1e-7)
   .sort((a,b)=>a.spans.reduce((n,s)=>n+s.to-s.from,0)-b.spans.reduce((n,s)=>n+s.to-s.from,0))[0]?.id;
  if(!cached){cached=new Map();coatingParentCache.set(document,cached);}cached.set(id,parent);
@@ -146,7 +148,7 @@ function projections(document: HarnessDesignDocument): ReadonlyMap<string, Proje
           const source = routes.get(id)!, previous = result.get(id);
           const additions = intervals.map(interval => ({ coveringId: covering.id, coatingIds, transitionStart:covering.bundle!.transitionStart, transitionEnd:covering.bundle!.transitionEnd,
             transitionBendStart:covering.bundle!.transitionBendStart, transitionBendEnd:covering.bundle!.transitionBendEnd, ancestors: ancestors(covering.id), axis, chain: member,
-            ...interval, reverse, offset: own.offset, depth: own.depth, leafCount: section.leafOffsets.size, groupOffsets }));
+            ...interval, reverse, offset: own.offset, bodyOffset:covering.bundle!.bodyOffset, depth: own.depth, leafCount: section.leafOffsets.size, groupOffsets }));
           result.set(id, { source: source.samples, length: source.length, placements: [...previous?.placements ?? [], ...additions] });
         }
       }
@@ -208,14 +210,18 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
    const current=all.get(id)!;
    const key=JSON.stringify([id,local,before?.coveringId,before?.start,before?.end]);
    const cached=memo.get(key);if(cached)return cached;
-   let result=at(current.source,local);
+   const ownOffset=coveringId?document.physicalTopology?.coverings?.find(c=>c.id===coveringId)?.bundle?.bodyOffset:undefined;
+   const source=at(current.source,local);
+   let result=ownOffset?{x:source.x+ownOffset.x,y:source.y+ownOffset.y}:source;
    for (const placement of current.placements) {
     if(before&&(placement.leafCount>before.leafCount||placement.leafCount===before.leafCount&&placement.coveringId.localeCompare(before.coveringId)>=0))break;
     if (!eligible(placement, coveringId, document)) continue;
     const t = chainFraction(placement, id, local), blend = weight(placement, t);
     if (!blend) continue;
     const offset = coveringId && placement.groupOffsets.has(coveringId) ? placement.groupOffsets.get(coveringId)! : placement.offset;
+    const body=placement.bodyOffset??{x:0,y:0};
     const target=offsetAt(placement.axis.samples,t,offset);
+    const shiftedTarget={x:target.x+body.x,y:target.y+body.y};
     if((radius>0||placement.transitionBendStart||placement.transitionBendEnd)&&(t<placement.start||t>placement.end)){
       const entering=t<placement.start,edge=entering?placement.start:placement.end;
       const outer=entering?Math.max(0,edge-transition(placement)):Math.min(1,edge+transition(placement,"end"));
@@ -223,14 +229,15 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
       while(index<placement.chain.ids.length-1&&station>placement.chain.lengths[index]!){station-=placement.chain.lengths[index]!;index++;}
       const sourcePoint=projected(placement.chain.ids[index]!,station/(placement.chain.lengths[index]||1),placement);
       const edgePoint=offsetAt(placement.axis.samples,edge,offset);
+      const shiftedEdge={x:edgePoint.x+body.x,y:edgePoint.y+body.y};
       const a=at(placement.axis.samples,Math.max(0,edge-.00001)),b=at(placement.axis.samples,Math.min(1,edge+.00001));
       const progress=entering?(t-outer)/(edge-outer):(t-edge)/(outer-edge);
       const smooth=16*progress*progress*(1-progress)*(1-progress);
       const bend=entering?placement.transitionBendStart:placement.transitionBendEnd;
-      const baseline=entering?bundleTransitionPoint(sourcePoint,edgePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius)
-        :bundleTransitionPoint(edgePoint,sourcePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius);
+      const baseline=entering?bundleTransitionPoint(sourcePoint,shiftedEdge,{x:b.x-a.x,y:b.y-a.y},progress,radius)
+        :bundleTransitionPoint(shiftedEdge,sourcePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius);
       result=bend?{x:baseline.x+bend.x*smooth,y:baseline.y+bend.y*smooth}:baseline;
-    }else result = mix(result, target, blend);
+    }else result = mix(result, shiftedTarget, blend);
    }
    memo.set(key,result);return result;
   }
@@ -339,7 +346,8 @@ export function pipeBundleTransitionHandles(document:HarnessDesignDocument,cover
    const a=at(p.axis.samples,Math.max(0,value-.00001)),b=at(p.axis.samples,Math.min(1,value+.00001)),length=distance(a,b)||1;
    const tangent={x:(b.x-a.x)/length,y:(b.y-a.y)/length};
    const bend=side==="start"?covering.bundle.transitionBendStart:covering.bundle.transitionBendEnd;
-   const base=at(p.axis.samples,value);
+   const axisPoint=at(p.axis.samples,value),offset=p.bodyOffset??{x:0,y:0};
+   const base={x:axisPoint.x+offset.x,y:axisPoint.y+offset.y};
    const point=bend?{x:base.x+bend.x,y:base.y+bend.y}:base;
    const part=side==="start"?"transition-from":"transition-to",key=`${part}:${point.x.toFixed(6)}:${point.y.toFixed(6)}`;
    if(seen.has(key))continue; seen.add(key);

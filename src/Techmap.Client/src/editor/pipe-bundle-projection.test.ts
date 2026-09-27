@@ -242,8 +242,9 @@ it("follows a moved sleeve and recreates the same display after JSON without sto
   const doc=parallel(),t=doc.physicalTopology!;
   const moved=moveCovering(doc,"group",0,"body",{x:200,y:0},{x:260,y:0})!;
   const next={...doc,physicalTopology:{...t,coverings:[moved]}};
-  expect(moved.spans[0]!.from).toBeCloseTo(.4);
-  expect(projectPipeBundlePoint(next,"s1",.4,{x:240,y:100})).toEqual({x:240,y:5});
+  expect(moved.spans).toEqual(t.coverings![0]!.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:60,y:0});
+  expect(projectPipeBundlePoint(next,"s1",.4,{x:240,y:100})).toEqual({x:300,y:5});
   expect(projectPipeBundlePoint(next,"s1",.2,{x:120,y:100})).toEqual({x:120,y:100});
   expect(pipeBundleDisplaySamples(JSON.parse(JSON.stringify(next)),"s1")).toEqual(pipeBundleDisplaySamples(next,"s1"));
   expect(next.physicalTopology.segments).toBe(t.segments);
@@ -289,9 +290,9 @@ it("moves a partially overlapping outer sleeve without moving the inner bounds o
   // returns to its own centre outside the outer's transition zone.
   const shell=coveringScene(next).find(c=>c.id==='group')!.paths![0]!;
   expect(shell[0]).toEqual({x:120,y:0});
-  expect(shell.at(-1)).toEqual({x:360,y:-5});
+  expect(shell.at(-1)).toEqual({x:420,y:-5});
   expect(projectPipeBundlePoint(next,'s1',.3,{x:180,y:100})).toEqual({x:180,y:5});
-  expect(projectPipeBundlePoint(next,'s1',.55,{x:330,y:100})).toEqual({x:330,y:0});
+  expect(projectPipeBundlePoint(next,'s1',.55,{x:330,y:100})).toEqual({x:390,y:0});
   const reordered={...next,physicalTopology:{...next.physicalTopology,coverings:[inner,moved]}};
   expect(pipeBundleDisplaySamples(reordered,'s1')).toEqual(pipeBundleDisplaySamples(next,'s1'));
   expect(next.physicalTopology.coverings[1]).toBe(inner);

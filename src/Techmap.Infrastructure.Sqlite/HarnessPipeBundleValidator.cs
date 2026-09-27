@@ -30,6 +30,9 @@ internal static class HarnessPipeBundleValidator
                 Text(bundle, "mode") is not ("flat" or "round") || !bundle.TryGetProperty("members", out var members) ||
                 members.ValueKind != JsonValueKind.Array || members.GetArrayLength() is < 2 or > MaximumMembers) throw Invalid();
             foreach(var key in new[]{"transitionStart","transitionEnd"})if(bundle.TryGetProperty(key,out var extent)&&(extent.ValueKind!=JsonValueKind.Number||!extent.TryGetDouble(out var number)||!double.IsFinite(number)||number<.001||number>.5))throw Invalid();
+            foreach(var key in new[]{"transitionBendStart","transitionBendEnd","bodyOffset"})if(bundle.TryGetProperty(key,out var point)&&(
+                point.ValueKind!=JsonValueKind.Object||!point.TryGetProperty("x",out var x)||!point.TryGetProperty("y",out var y)||
+                !x.TryGetDouble(out var px)||!y.TryGetDouble(out var py)||!double.IsFinite(px)||!double.IsFinite(py)||Math.Abs(px)>10000||Math.Abs(py)>10000))throw Invalid();
             active.Add(id);
             var leaves = new HashSet<string>(StringComparer.Ordinal);
             var height = 1;

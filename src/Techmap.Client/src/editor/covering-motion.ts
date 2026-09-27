@@ -60,13 +60,19 @@ function spansForRanges(document:HarnessDesignDocument,covering:PhysicalCovering
   }));
 }
 
-/** Translate a bundle sleeve in one longitudinal parameter space. Crossing a
- * split redistributes spans instead of stretching just the fragment under the
- * pointer. The command still owns one covering and one undo transaction. */
+/** Move a common sleeve freely while keeping its support intervals as stable
+ * membership anchors. Only exposed end grips edit those intervals. */
 export function moveBundleCovering(document:HarnessDesignDocument,covering:PhysicalCovering,spanIndex:number,
   part:"from"|"to"|"body",start:Point,point:Point,tolerance:number):PhysicalCovering|null {
   if(!covering.bundle)return null;
   const original=covering.spans[spanIndex];if(!original)return null;
+  if(part==='body'){
+    const dx=point.x-start.x,dy=point.y-start.y;
+    if(Math.hypot(dx,dy)<1e-8)return covering;
+    const offset=covering.bundle.bodyOffset??{x:0,y:0};
+    const limit=(value:number)=>Math.max(-10000,Math.min(10000,value));
+    return {...covering,bundle:{...covering.bundle,bodyOffset:{x:limit(offset.x+dx),y:limit(offset.y+dy)}}};
+  }
   const paths=pipeBundlePaths(covering,document.physicalTopology!.coverings??[]);
   const path=paths.find(ids=>ids.includes(original.segmentId));if(!path)return null;
   const supported=paths.filter(ids=>covering.spans.some(s=>ids.includes(s.segmentId)));
@@ -86,7 +92,7 @@ export function moveBundleCovering(document:HarnessDesignDocument,covering:Physi
     const edge=current.before+(part==='from'?span.from:span.to)*current.length;
     const selected=axis.intervals.findIndex(r=>edge>=r.from-1e-7&&edge<=r.to+1e-7);
     const edits=oriented.map(({axis:a,direction})=>{
-      const localPart=part==='body'?part:direction===1?part:part==='from'?'to':'from';
+      const localPart=direction===1?part:part==='from'?'to':'from';
       // Disjoint intervals retain their order along the common axis, including
       // when an independent support was authored in the opposite direction.
       const index=direction===1?selected:a.intervals.length-1-selected;
@@ -94,50 +100,38 @@ export function moveBundleCovering(document:HarnessDesignDocument,covering:Physi
     });
     let lower=-Infinity,upper=Infinity;
     for(const {axis:a,direction,localPart,index,ranges} of edits){
-      let lo=(a.min-ranges[0]!.from)/a.length,hi=(a.max-ranges.at(-1)!.to)/a.length;
-      if(localPart!=='body'){
-        const range=ranges[index];if(!range)continue;
-        const minimum=Math.min(a.length*.001,(range.to-range.from)/4);
-        const start=localPart==='from'?(ranges[index-1]?.to??a.min):range.from+minimum;
-        const end=localPart==='from'?range.to-minimum:(ranges[index+1]?.from??a.max);
-        lo=(start-range[localPart])/a.length;hi=(end-range[localPart])/a.length;
-      }
+      const range=ranges[index];if(!range)continue;
+      const minimum=Math.min(a.length*.001,(range.to-range.from)/4);
+      const start=localPart==='from'?(ranges[index-1]?.to??a.min):range.from+minimum;
+      const end=localPart==='from'?range.to-minimum:(ranges[index+1]?.from??a.max);
+      const lo=(start-range[localPart])/a.length,hi=(end-range[localPart])/a.length;
       lower=Math.max(lower,direction===1?lo:-hi);upper=Math.min(upper,direction===1?hi:-lo);
     }
     let shift=Math.max(lower,Math.min(upper,delta/axis.length));
-    if(part!=='body'){
-      const target=edge+shift*axis.length;
-      const anchor=axis.parts.flatMap(p=>[p.before,p.before+p.length]).find(d=>
-        Math.abs(d-target)<=tolerance&&(d-edge)/axis.length>=lower&&(d-edge)/axis.length<=upper);
-      if(anchor!==undefined)shift=(anchor-edge)/axis.length;
-    }
+    const target=edge+shift*axis.length;
+    const anchor=axis.parts.flatMap(p=>[p.before,p.before+p.length]).find(d=>
+      Math.abs(d-target)<=tolerance&&(d-edge)/axis.length>=lower&&(d-edge)/axis.length<=upper);
+    if(anchor!==undefined)shift=(anchor-edge)/axis.length;
     if(Math.abs(shift)<1e-8)return covering;
     for(const edit of edits){
       const offset=shift*edit.axis.length*edit.direction;
-      if(edit.localPart==='body')edit.ranges=edit.ranges.map(r=>({from:r.from+offset,to:r.to+offset}));
-      else if(edit.ranges[edit.index])edit.ranges[edit.index]![edit.localPart]+=offset;
+      if(edit.ranges[edit.index])edit.ranges[edit.index]![edit.localPart]+=offset;
     }
-    const spans=edits.flatMap(({axis,ranges})=>spansForRanges(document,covering,axis,ranges,part!=='body'));
+    const spans=edits.flatMap(({axis,ranges})=>spansForRanges(document,covering,axis,ranges,true));
     return {...covering,spans};
   }
   const current=axis.parts.find(p=>p.id===original.segmentId)!,span=resolvedCoveringSpan(document,original);
-  let ranges=axis.intervals.map(r=>({...r}));
-  if(part==='body'){
-    const shift=Math.max(axis.min-ranges[0]!.from,Math.min(axis.max-ranges.at(-1)!.to,delta));
-    if(Math.abs(shift)<1e-8)return covering;
-    ranges=ranges.map(r=>({from:r.from+shift,to:r.to+shift}));
-  }else{
-    const edge=current.before+(part==='from'?span.from:span.to)*current.length;
-    const range=ranges.find(r=>edge>=r.from-1e-7&&edge<=r.to+1e-7);if(!range)return null;
-    const index=ranges.indexOf(range),minimum=Math.min(current.length*.001,(range.to-range.from)/4);
-    const lo=part==='from'?(ranges[index-1]?.to??axis.min):range.from+minimum;
-    const hi=part==='from'?range.to-minimum:(ranges[index+1]?.from??axis.max);
-    let target=Math.max(lo,Math.min(hi,edge+delta));
-    const anchor=axis.parts.flatMap(p=>[p.before,p.before+p.length]).find(d=>d>=lo&&d<=hi&&Math.abs(d-target)<=tolerance);
-    if(anchor!==undefined)target=anchor;
-    if(part==='from')range.from=target;else range.to=target;
-  }
-  const spans=spansForRanges(document,covering,axis,ranges,part!=='body');
+  const ranges=axis.intervals.map(r=>({...r}));
+  const edge=current.before+(part==='from'?span.from:span.to)*current.length;
+  const range=ranges.find(r=>edge>=r.from-1e-7&&edge<=r.to+1e-7);if(!range)return null;
+  const index=ranges.indexOf(range),minimum=Math.min(current.length*.001,(range.to-range.from)/4);
+  const lo=part==='from'?(ranges[index-1]?.to??axis.min):range.from+minimum;
+  const hi=part==='from'?range.to-minimum:(ranges[index+1]?.from??axis.max);
+  let target=Math.max(lo,Math.min(hi,edge+delta));
+  const closestAnchor=axis.parts.flatMap(p=>[p.before,p.before+p.length]).find(d=>d>=lo&&d<=hi&&Math.abs(d-target)<=tolerance);
+  if(closestAnchor!==undefined)target=closestAnchor;
+  if(part==='from')range.from=target;else range.to=target;
+  const spans=spansForRanges(document,covering,axis,ranges,true);
   return {...covering,spans:[...covering.spans.filter(s=>!path.includes(s.segmentId)),...spans]};
 }
 

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createEmptyHarnessDesign, type HarnessDesignDocument } from "./model";
+import { createEmptyHarnessDesign, parseHarnessDesignDocument, type HarnessDesignDocument } from "./model";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 import { coveringScene, moveCovering } from "./covering-layout";
 import { pipeBundleDisplaySamples, unprojectPipeBundlePoint } from "./pipe-bundle-projection";
@@ -19,10 +19,11 @@ function fixture():HarnessDesignDocument {
       bundle:{mode:'flat',members:[{kind:'segment',id:'s0',continuationIds:['s1']},{kind:'segment',id:'s2'}]}}]}};
 }
 
-it('moves the whole sleeve across a split from either fragment and undoes once',()=>{
+it('moves the whole sleeve freely from either fragment and undoes once',()=>{
   const doc=fixture(),c=doc.physicalTopology!.coverings![0]!,before=JSON.stringify(doc);
   const moved=moveCovering(doc,c.id,0,'body',{x:240,y:0},{x:300,y:0})!;
-  expect(moved.spans).toEqual([{segmentId:'s0',from:.4,to:1},{segmentId:'s1',from:0,to:.8}]);
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:60,y:0});
   expect(moveCovering(doc,c.id,1,'body',{x:360,y:0},{x:420,y:0})).toEqual(moved);
   expect(moved.lengthMm).toBe(200);
   const history=executeEditorCommand(createEditorHistory(doc),{type:'set-physical-topology',topology:{...doc.physicalTopology!,coverings:[moved]}});
@@ -30,15 +31,34 @@ it('moves the whole sleeve across a split from either fragment and undoes once',
   expect(JSON.stringify(doc)).toBe(before);
 });
 
-it('crosses a fragment boundary completely, reconstructs spans on return and clamps as one body',()=>{
+it('moves a grouped sleeve laterally without forcing it back onto the supporting pipe',()=>{
+  const doc=fixture(),c=doc.physicalTopology!.coverings![0]!;
+  const moved=moveCovering(doc,c.id,0,'body',{x:240,y:0},{x:240,y:45})!;
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:0,y:45});
+  const next={...doc,physicalTopology:{...doc.physicalTopology!,coverings:[moved]}};
+  const sleeve=coveringScene(next).find(item=>item.id===c.id)!;
+  expect(sleeve.paths?.[0]?.some(point=>point.y>40)).toBe(true);
+  const wires=pipeBundleDisplaySamples(next,'s2')!;
+  expect(wires[0]?.point.y).toBeCloseTo(100);
+  expect(wires.some(sample=>sample.point.y<90)).toBe(true);
+  expect(wires.some(sample=>sample.point.y>40&&sample.point.y<60)).toBe(true);
+  const saved=parseHarnessDesignDocument(JSON.parse(JSON.stringify(next)));
+  expect(saved.physicalTopology?.coverings?.[0]?.bundle?.bodyOffset).toEqual({x:0,y:45});
+  expect(pipeBundleDisplaySamples(saved,'s2')).toEqual(wires);
+});
+
+it('moves beyond a fragment boundary without changing the covered supports',()=>{
   const doc=fixture(),t=doc.physicalTopology!,c={...t.coverings![0]!,spans:[{segmentId:'s0',from:.5,to:.9}]};
   const initial={...doc,physicalTopology:{...t,coverings:[c]}};
   const moved=moveCovering(initial,c.id,0,'body',{x:180,y:0},{x:480,y:0})!;
-  expect(moved.spans).toEqual([{segmentId:'s1',from:.5,to:.9}]);
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:300,y:0});
   const next={...doc,physicalTopology:{...t,coverings:[moved]}};
-  expect(moveCovering(next,c.id,0,'body',{x:480,y:0},{x:180,y:0})!.spans).toEqual(c.spans);
-  const clamped=moveCovering(initial,c.id,0,'body',{x:180,y:0},{x:900,y:0})!;
-  expect(clamped.spans).toEqual([{segmentId:'s1',from:.6,to:1}]);
+  expect(moveCovering(next,c.id,0,'body',{x:480,y:0},{x:180,y:0})!.bundle?.bodyOffset).toEqual({x:0,y:0});
+  const distant=moveCovering(initial,c.id,0,'body',{x:180,y:0},{x:900,y:0})!;
+  expect(distant.spans).toEqual(c.spans);
+  expect(distant.bundle?.bodyOffset).toEqual({x:720,y:0});
 });
 
 it('resizes the outer edge across a split and exposes no internal grip',()=>{
@@ -75,23 +95,21 @@ it('connects an existing node at the projected station without mutating the save
   expect(doc.physicalTopology!.segments.find(s=>s.id==='s2')!.path.points).toEqual([]);
 });
 
-it('moves all independent supports by one fraction, clamped by the first boundary reached',()=>{
+it('moves all independent supports with the sleeve without changing their intervals',()=>{
   const base=fixture(),t=base.physicalTopology!,c={...t.coverings![0]!,spans:[...t.coverings![0]!.spans,{segmentId:'s2',from:.4,to:.9}]};
   const doc={...base,physicalTopology:{...t,coverings:[c]}};
   const moved=moveCovering(doc,c.id,0,'body',{x:180,y:0},{x:300,y:0})!;
-  expect(moved.spans.find(s=>s.segmentId==='s0')!.from).toBeCloseTo(.4);
-  expect(moved.spans.find(s=>s.segmentId==='s1')!.to).toBeCloseTo(.8);
-  expect(moved.spans.find(s=>s.segmentId==='s2')!.from).toBeCloseTo(.5);
-  expect(moved.spans.find(s=>s.segmentId==='s2')!.to).toBe(1);
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:120,y:0});
   expect(moved.lengthMm).toBe(c.lengthMm);
 });
 
-it('moves a reversed support towards the same world end',()=>{
+it('keeps a reversed support anchored while moving the sleeve',()=>{
   const base=fixture(),t=base.physicalTopology!,c={...t.coverings![0]!,spans:[...t.coverings![0]!.spans,{segmentId:'s2',from:.2,to:.8}]};
   const doc={...base,physicalTopology:{...t,segments:t.segments.map(s=>s.id==='s2'?{...s,from:s.to,to:s.from}:s),coverings:[c]}};
   const moved=moveCovering(doc,c.id,0,'body',{x:180,y:0},{x:240,y:0})!;
-  expect(moved.spans.find(s=>s.segmentId==='s2')!.from).toBeCloseTo(.1);
-  expect(moved.spans.find(s=>s.segmentId==='s2')!.to).toBeCloseTo(.7);
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:60,y:0});
 });
 
 function unequalSupports():HarnessDesignDocument {
@@ -130,13 +148,11 @@ it('clamps a shared edge at the first support boundary and preserves the opposit
   expect(resized.spans[0]!.from).toBe(.2);
 });
 
-it('moves different-length supports proportionally without changing their interval lengths',()=>{
+it('moves different-length supports without changing their interval lengths',()=>{
   const doc=unequalSupports(),c=doc.physicalTopology!.coverings![0]!;
   const moved=moveCovering(doc,c.id,0,'body',{x:180,y:0},{x:240,y:0},0)!;
-  expect(moved.spans[0]!.from).toBeCloseTo(.4);
-  expect(moved.spans[1]!.to).toBeCloseTo(.8);
-  expect(moved.spans[2]!.from).toBeCloseTo(.1);
-  expect(moved.spans[2]!.to).toBeCloseTo(.8);
+  expect(moved.spans).toEqual(c.spans);
+  expect(moved.bundle?.bodyOffset).toEqual({x:60,y:0});
   expect((moved.spans[2]!.to-moved.spans[2]!.from)*1200).toBeCloseTo(840);
 });
 

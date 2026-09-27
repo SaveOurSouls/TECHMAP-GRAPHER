@@ -1,5 +1,6 @@
 import type { PhysicalCovering } from "./physical-coverings";
 import type { BundlePackingMode } from "./pipe-bundle-packing";
+import type { Point } from "./model";
 
 export type PipeBundleMember =
   | { readonly kind: "segment"; readonly id: string; readonly continuationIds?: readonly string[] }
@@ -12,6 +13,8 @@ export interface PipeBundle {
   /** Shared bend offset of every entering member, in drawing coordinates. */
   readonly transitionBendStart?: {readonly x:number;readonly y:number};
   readonly transitionBendEnd?: {readonly x:number;readonly y:number};
+  /** Free translation of the common sleeve axis in drawing coordinates. */
+  readonly bodyOffset?: Point;
   readonly members: readonly PipeBundleMember[];
 }
 export const maximumBundleMembers = 128;
@@ -22,7 +25,7 @@ export const maximumBundleDepth = 16;
 export function pipeBundleCoatingKey(c:PhysicalCovering):string {
  return JSON.stringify([c.bundle?.mode,c.bundle?.members.map(m=>m.kind==="segment"?[m.kind,m.id,m.continuationIds??[]]:[m.kind,m.id]),
   [...c.spans].sort((a,b)=>a.segmentId.localeCompare(b.segmentId)||a.from-b.from||a.to-b.to)
-   .map(s=>[s.segmentId,s.from,s.to,s.fromAnchor,s.toAnchor])]);
+   .map(s=>[s.segmentId,s.from,s.to,s.fromAnchor,s.toAnchor]),c.bundle?.bodyOffset?.x??0,c.bundle?.bodyOffset?.y??0]);
 }
 
 /** Split fragments are consecutive lengths of one cross-section, not extra disks. */
@@ -63,7 +66,7 @@ export function resolvePipeBundles(coverings: readonly PhysicalCovering[], segme
       bundle.mode !== "flat" && bundle.mode !== "round" || !Array.isArray(bundle.members) ||
       bundle.members.length < 2 || bundle.members.length > maximumBundleMembers) return fail();
     if([bundle.transitionStart,bundle.transitionEnd].some(n=>n!==undefined&&(!Number.isFinite(n)||n<.001||n>.5)))return fail();
-    if([bundle.transitionBendStart,bundle.transitionBendEnd].some(p=>p!==undefined&&
+    if([bundle.transitionBendStart,bundle.transitionBendEnd,bundle.bodyOffset].some(p=>p!==undefined&&
       (!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||Math.abs(p.x)>10000||Math.abs(p.y)>10000)))return fail();
     active.add(id);
     const leaves: string[] = [], seen = new Set<string>();

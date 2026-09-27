@@ -24,6 +24,15 @@ public sealed class HarnessPipeBundleTests
     """)!.AsObject();
     private static void Validate(JsonObject root)
     { using var json = JsonDocument.Parse(root.ToJsonString()); HarnessPhysicalTopologyValidator.Validate(json.RootElement); }
+    [Fact] public void Accepts_free_sleeve_offset_and_rejects_invalid_coordinates()
+    {
+        var root=Fixture();var c=Cover("c",Member("s0"),Member("s1"));
+        c["bundle"]!["bodyOffset"]=new JsonObject { ["x"] = 250, ["y"] = -40 };
+        root["physicalTopology"]!["coverings"]=new JsonArray(c);
+        Validate(root);
+        c["bundle"]!["bodyOffset"]=new JsonObject { ["x"] = 10001, ["y"] = 0 };
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Theory]
     [InlineData(0.001)][InlineData(0.13)][InlineData(0.5)]
     public void Accepts_adjustable_transition_extent(double extent)
