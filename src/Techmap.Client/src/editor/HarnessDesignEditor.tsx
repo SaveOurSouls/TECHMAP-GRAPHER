@@ -2,6 +2,7 @@ import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-cov
 import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { physicalTopologyScene } from "./physical-scene";
+import { volumeShadingEligible } from "./volume-shading";
 import { hasPipeBundleProjection, unprojectPipeBundleEdit, unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
 import { physicalEditablePoints } from "./physical-editing";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
@@ -445,6 +446,8 @@ export function designToScene(
     const stripProfileDisplayWarning = view === "drawing"
       ? wireStripProfileDisplayWarning(points, wire.stripProfiles)
       : null;
+    const singlePipeRoute = view === "drawing" ? document.physicalTopology?.routes.find(route => route.wireId === wire.id && route.steps.length === 1) : undefined;
+    const localVolume = singlePipeRoute ? document.physicalTopology?.segments.find(segment => segment.id === singlePipeRoute.steps[0]!.segmentId)?.volumeShading : undefined;
     return [{
       id: wire.id,
       layerId: wire.layerIds[view],
@@ -460,6 +463,7 @@ export function designToScene(
       ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
+        ...(localVolume !== undefined ? { volumeShading: String(localVolume) } : {}),
         drawingWidth:String(drawingWireWidth(document,wire)),
         physicalRoute: String(!!physicalPoints),
         routeMissing: String(view === "drawing" && !physicalPoints && wire.drawingRoute.length === 0),
@@ -1066,13 +1070,7 @@ export function HarnessDesignEditor({
     .filter(i => projectComponentTemplateView(i, "drawing", {x:0,y:0})?.commands.length).map(i => i.objectId) : []),
     [view, componentTemplateViewInstances]);
   const volumeEligible = useMemo(() => {
-    if (!history?.present.physicalTopology) return false;
-    const topology = history.present.physicalTopology;
-    const densePipe = topology.segments.some(segment => topology.routes.filter(route =>
-      route.steps.some(step => step.segmentId === segment.id)).length > 3);
-    const groupedPipes = topology.segments.length >= 2 || (topology.coverings ?? []).some(covering =>
-      covering.bundle?.members.length !== undefined && covering.bundle.members.length >= 2);
-    return densePipe || groupedPipes;
+    return history ? volumeShadingEligible(history.present) : false;
   }, [history?.present]);
 
   const run = useCallback((command: EditorCommand): boolean => {
@@ -1730,7 +1728,7 @@ export function HarnessDesignEditor({
         harnessId={harnessId}
         harnessDesignation={harnessDesignation}
         view={view}
-        objects={withCoveringTextureUrls(scene,textureAssets.urls).map(object => (object.kind === "wire" || object.kind === "physical-segment" || object.kind === "physical-covering") ? {...object,metadata:{...object.metadata,volumeShading:String(history.present.drawingDocuments?.volumeShading !== false)}} : object)}
+        objects={withCoveringTextureUrls(scene,textureAssets.urls).map(object => (object.kind === "wire" || object.kind === "physical-segment" || object.kind === "physical-covering") ? {...object,metadata:{...object.metadata,volumeShading:object.metadata?.volumeShading??String(history.present.drawingDocuments?.volumeShading !== false)}} : object)}
         layers={layers}
         catalogItems={catalog.items}
         catalogSources={catalog.sources}

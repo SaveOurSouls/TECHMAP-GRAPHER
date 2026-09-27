@@ -128,6 +128,7 @@ export function connectPhysicalNodeToSegment(
       width: segment.width,
       color: segment.color,
       showWires: segment.showWires,
+      volumeShading: segment.volumeShading,
     }],
   };
 }
@@ -167,5 +168,5 @@ export function branchPhysicalSegment(document:HarnessDesignDocument,segmentId:s
  const target=document.connectors.filter(c=>targets.has(c.id)).sort((x,y)=>Math.hypot(x.positions.drawing.x-hit.point.x,x.positions.drawing.y-hit.point.y)-Math.hypot(y.positions.drawing.x-hit.point.x,y.positions.drawing.y-hit.point.y))[0];
  const sign=target&&(-dy*(target.positions.drawing.x-hit.point.x)+dx*(target.positions.drawing.y-hit.point.y))<0?-1:1;
  const tip={x:hit.point.x-sign*dy/length*80,y:hit.point.y+sign*dx/length*80};
- return {...split,nodes:[...split.nodes,{id:ids.tip,position:tip}],segments:[...split.segments,{id:ids.branch,from:ids.junction,to:ids.tip,path: { kind: "routed" as const, points: [] },width:segment.width,color:segment.color,showWires:segment.showWires}]};
+ return {...split,nodes:[...split.nodes,{id:ids.tip,position:tip}],segments:[...split.segments,{id:ids.branch,from:ids.junction,to:ids.tip,path: { kind: "routed" as const, points: [] },width:segment.width,color:segment.color,showWires:segment.showWires,volumeShading:segment.volumeShading}]};
 }

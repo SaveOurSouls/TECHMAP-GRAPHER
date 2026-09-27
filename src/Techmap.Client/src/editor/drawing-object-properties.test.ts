@@ -32,6 +32,18 @@ it("edits a pipe through its existing command without exposing unrelated pipe ro
   expect(changed.wires).toEqual(d.wires);
   expect(elements(tree).some(e=>e.type==="table")).toBe(false);
 });
+it("shows a volume mode toggle for a standalone pipe",()=>{
+  const d=physicalFixture(),command=vi.fn<(command:EditorCommand)=>boolean>(()=>true);
+  const markup=renderToStaticMarkup(createElement(DrawingObjectProperties,{document:d,objectId:"S0",selectedIds:["S0"],instances:[],onCommand:command,onSelect:vi.fn()}));
+  expect(markup).toContain('aria-label="Объёмный режим пайпа"');
+  const tree=PhysicalTopologyPanel({mode:"object",document:d,selectedId:"S0",selectedIds:["S0"],onSelect:vi.fn(),onChange:topology=>command({type:"set-physical-topology",topology})});
+  const toggle=elements(tree).find(e=>e.props["aria-label"]==="Объёмный режим пайпа")!;
+  expect(toggle.props.checked).toBe(true);
+  toggle.props.onChange({target:{checked:false}});
+  const change=command.mock.calls[0]![0];
+  expect(change.type).toBe("set-physical-topology");
+  if(change.type==="set-physical-topology")expect(change.topology.segments.find(s=>s.id==="S0")!.volumeShading).toBe(false);
+});
 it("moves only the chosen coating behind the others",()=>{
   const d=physicalFixture(),cover=(id:string)=>({id,name:id,width:0,color:"#123456",lengthMm:null,spans:[{segmentId:"S0",from:0,to:1}]});
   const t={...d.physicalTopology!,coverings:[cover("a"),cover("b"),cover("c")]};let changed=t;

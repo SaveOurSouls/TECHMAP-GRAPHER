@@ -34,7 +34,8 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       midpoints,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
-    ...(document.drawingDocuments?.volumeShading === false ? { metadata: { volumeShading: "false" } } : {}),
+    ...((segment.volumeShading !== undefined || document.drawingDocuments?.volumeShading === false)
+      ? { metadata: { volumeShading: String(segment.volumeShading ?? false) } } : {}),
     };
   });
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {
