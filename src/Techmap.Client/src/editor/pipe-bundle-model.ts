@@ -9,6 +9,9 @@ export type PipeBundleMember =
 export interface PipeBundle {
   readonly mode: BundlePackingMode;
   readonly transitionStart?:number; readonly transitionEnd?:number;
+  /** Shared bend offset of every entering member, in drawing coordinates. */
+  readonly transitionBendStart?: {readonly x:number;readonly y:number};
+  readonly transitionBendEnd?: {readonly x:number;readonly y:number};
   readonly members: readonly PipeBundleMember[];
 }
 export const maximumBundleMembers = 128;
@@ -60,6 +63,8 @@ export function resolvePipeBundles(coverings: readonly PhysicalCovering[], segme
       bundle.mode !== "flat" && bundle.mode !== "round" || !Array.isArray(bundle.members) ||
       bundle.members.length < 2 || bundle.members.length > maximumBundleMembers) return fail();
     if([bundle.transitionStart,bundle.transitionEnd].some(n=>n!==undefined&&(!Number.isFinite(n)||n<.001||n>.5)))return fail();
+    if([bundle.transitionBendStart,bundle.transitionBendEnd].some(p=>p!==undefined&&
+      (!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||Math.abs(p.x)>10000||Math.abs(p.y)>10000)))return fail();
     active.add(id);
     const leaves: string[] = [], seen = new Set<string>();
     let height = 1;

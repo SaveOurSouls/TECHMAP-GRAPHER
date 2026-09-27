@@ -93,9 +93,14 @@ export function moveCovering(document:HarnessDesignDocument,id:string,spanIndex:
  if(part==="transition-from"||part==="transition-to"){
   if(!c.bundle)return null;
   const grip=pipeBundleTransitionHandles(document,c.id).find(h=>h.part===part&&h.spanIndex===spanIndex);if(!grip)return null;
-  const dx=point.x-start.x,dy=point.y-start.y,change=(dx*grip.tangent.x+dy*grip.tangent.y)/grip.axisLength;
-  const key=part==="transition-from"?"transitionStart":"transitionEnd";
-  return {...c,bundle:{...c.bundle,[key]:Math.max(.001,Math.min(.5,grip.fraction+(part==="transition-from"?-change:change)))}};
+  const key=part==="transition-from"?"transitionBendStart":"transitionBendEnd";
+  const previous=c.bundle[key]??{x:0,y:0};
+  const dx=point.x-start.x,dy=point.y-start.y,along=dx*grip.tangent.x+dy*grip.tangent.y;
+  const normal=dx*grip.normal.x+dy*grip.normal.y;
+  const lengthKey=part==="transition-from"?"transitionStart":"transitionEnd";
+  const length=Math.max(.001,Math.min(.5,grip.fraction+(part==="transition-from"?-along:along)/grip.axisLength));
+  return {...c,bundle:{...c.bundle,[lengthKey]:length,
+    [key]:{x:previous.x+normal*grip.normal.x,y:previous.y+normal*grip.normal.y}}};
  }
  const bundleMove=moveBundleCovering(document,c,spanIndex,part,start,point,tolerance);if(bundleMove)return bundleMove;
  const route=coveringRoute(document,original.segmentId);if(!route)return null;

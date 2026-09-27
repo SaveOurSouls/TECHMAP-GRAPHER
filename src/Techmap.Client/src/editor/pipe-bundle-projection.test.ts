@@ -65,6 +65,32 @@ it("keeps a coating over a bundle on the same axis when its convergence handle m
  expect(JSON.parse(scene.find(c=>c.id==="overlay")!.metadata!.coveringHandles!).filter((h:{part:string})=>h.part.startsWith("transition-"))).toHaveLength(0);
 });
 
+it("does not create a second convergence when a short coating is placed over a bundle",()=>{
+ const base=parallel(),inner=base.physicalTopology!.coverings![0]!;
+ const overlay=standardCoveringOver(base,inner,"Оплётка","overlay",{x:300,y:0});
+ expect(overlay.spans[0]!.to-overlay.spans[0]!.from).toBeLessThan(inner.spans[0]!.to-inner.spans[0]!.from);
+ const layered={...base,physicalTopology:{...base.physicalTopology!,coverings:[inner,overlay]}};
+ expect(pipeBundleDisplaySamples(layered,"s1")).toEqual(pipeBundleDisplaySamples(base,"s1"));
+ const coating=coveringScene(layered).find(item=>item.id==="overlay")!;
+ expect(coating.paths?.[0]?.length).toBeGreaterThan(1);
+ expect(coating.paths?.[0]?.every(point=>Number.isFinite(point.x)&&Number.isFinite(point.y))).toBe(true);
+});
+
+it("moves one shared exit control vertically for every member",()=>{
+ const base=parallel(),cover=base.physicalTopology!.coverings![0]!;
+ const handle=pipeBundleTransitionHandles(base,"group").find(item=>item.part==="transition-from")!;
+ const moved=moveCovering(base,"group",handle.spanIndex,"transition-from",handle.point,
+   {x:handle.point.x,y:handle.point.y+30})!;
+ expect(moved.bundle?.transitionBendStart?.y).toBeCloseTo(30);
+ const document={...base,physicalTopology:{...base.physicalTopology!,coverings:[moved]}};
+ for(const id of ["s0","s1"]){
+  const before=pipeBundleDisplaySamples(base,id)!,after=pipeBundleDisplaySamples(document,id)!;
+  const middle=before.findIndex(point=>Math.abs(point.fraction-.26)<.005);
+  expect(middle).toBeGreaterThan(0);
+  expect(after[middle]!.point.y-before[middle]!.point.y).toBeGreaterThan(0);
+ }
+});
+
 it("deduplicates transition handles and keeps a bent shared axis finite",()=>{
  const base=parallel(),topology=base.physicalTopology!;
  const segments=topology.segments.map(s=>s.id==="s0"
@@ -74,7 +100,7 @@ it("deduplicates transition handles and keeps a bent shared axis finite",()=>{
      :s);
  const doc={...base,drawingDocuments:{...base.drawingDocuments!,bendRadius:18},physicalTopology:{...topology,segments}};
  const samples=pipeBundleDisplaySamples(doc,"s0")!,handles=pipeBundleTransitionHandles(doc,"group");
- expect(handles).toHaveLength(4);
+ expect(handles).toHaveLength(2);
  expect(samples.every(s=>Number.isFinite(s.point.x)&&Number.isFinite(s.point.y))).toBe(true);
  expect(samples[0]!.point).toEqual({x:0,y:0});
  expect(samples.at(-1)!.point).toEqual({x:600,y:0});

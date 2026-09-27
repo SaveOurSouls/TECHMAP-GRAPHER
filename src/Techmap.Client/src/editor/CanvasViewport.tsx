@@ -1896,14 +1896,15 @@ export function drawEditorSceneObject(
   }
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&object.points&&object.points.length>=4){
     const points=object.points,p=points[1]!,q=points.at(-2)!,line=points.slice(1,-1);
-    context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?2:1;
+    const scale=Math.max(.25,Math.min(4,Number(object.metadata.dimensionScale??1)||1));
+    context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=(selected?2:1)*scale;
     context.setLineDash(object.metadata.auxiliary==="true"?[4,3]:[]);context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.stroke();
     for(const [point,next,dot] of [[p,line[1]!,object.metadata.dotStart],[q,line.at(-2)!,object.metadata.dotEnd]] as const){
-      context.beginPath();if(dot==="true")context.arc(point.x,point.y,2.5,0,Math.PI*2);
-      else {const len=Math.hypot(next.x-point.x,next.y-point.y)||1,dx=(next.x-point.x)/len,dy=(next.y-point.y)/len;context.moveTo(point.x,point.y);context.lineTo(point.x+dx*8-dy*3,point.y+dy*8+dx*3);context.lineTo(point.x+dx*8+dy*3,point.y+dy*8-dx*3);context.closePath();}context.fill();
+      context.beginPath();if(dot==="true")context.arc(point.x,point.y,2.5*scale,0,Math.PI*2);
+      else {const len=Math.hypot(next.x-point.x,next.y-point.y)||1,dx=(next.x-point.x)/len,dy=(next.y-point.y)/len;context.moveTo(point.x,point.y);context.lineTo(point.x+dx*8*scale-dy*3*scale,point.y+dy*8*scale+dx*3*scale);context.lineTo(point.x+dx*8*scale+dy*3*scale,point.y+dy*8*scale-dx*3*scale);context.closePath();}context.fill();
     }
     const mid=Math.floor((line.length-1)/2),a=line[mid]!,b=line[mid+1]!,angle=Math.atan2(b.y-a.y,b.x-a.x);
-    context.translate((a.x+b.x)/2,(a.y+b.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font="600 12px Inter, Arial, sans-serif";context.textAlign="center";context.fillText(object.label,0,-7);context.restore();return;
+    context.translate((a.x+b.x)/2,(a.y+b.y)/2);context.rotate(angle>Math.PI/2||angle< -Math.PI/2?angle+Math.PI:angle);context.font=`600 ${12*scale}px Inter, Arial, sans-serif`;context.textAlign="center";context.fillText(object.label,0,-7*scale);context.restore();return;
   }
   if (object.kind === "specification-item") {
     context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle="#fff";context.lineWidth=selected?3:1.5;
@@ -3210,8 +3211,8 @@ export function CanvasViewport({
           objectX: object.x,
           objectY: object.y,
           mode:event.shiftKey?"adjacent":"carry",
-          anchors:view==="drawing"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
-          routeAnchors:view==='drawing'?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
+          anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
+          routeAnchors:view==='drawing'&&object.metadata?.bundleMember!=="true"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
         };
       }
     }

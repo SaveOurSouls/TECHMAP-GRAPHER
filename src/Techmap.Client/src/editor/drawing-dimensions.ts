@@ -146,7 +146,7 @@ export function drawingDimensionScene(document:HarnessDesignDocument,_wires:read
    return Math.abs(dx*line.y-dy*line.x)<1e-5*Math.max(1,Math.hypot(dx,dy)*Math.hypot(line.x,line.y))&&[a,b].some(q=>Math.hypot(p.x-q.x,p.y-q.y)<.01);
   }));
   const source=explicit.find(d=>d.id===item.id);
-  return {...item,metadata:{...item.metadata,dotStart:String(dots[0]),dotEnd:String(dots[1]),...(source?.auxiliary?{auxiliary:"true"}:{})}};
+  return {...item,metadata:{...item.metadata,dimensionScale:String(document.drawingDocuments?.dimensionScale??1),dotStart:String(dots[0]),dotEnd:String(dots[1]),...(source?.auxiliary?{auxiliary:"true"}:{})}};
  });
 }
 export function moveDrawingDimension(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters):DrawingDocuments|null {

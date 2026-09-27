@@ -104,8 +104,33 @@ export function standardCovering(document:HarnessDesignDocument,segmentId:string
 /** Creates a second protective layer over the exact interval(s) of an existing
  * layer. Context actions intentionally keep the source spans and anchors, so
  * adding a sleeve on top does not require an uncovered pipe hit. */
-export function standardCoveringOver(document:HarnessDesignDocument,source:PhysicalCovering,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
- return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:source.spans.map(span=>({...span})),...(source.bundle?{bundle:{...source.bundle,members:source.bundle.members.map(m=>({...m}))}}:{})},document.drawingDocuments?.coveringLibrary);
+export function standardCoveringOver(document:HarnessDesignDocument,source:PhysicalCovering,name:typeof standardCoveringKinds[number],id:string,point?:Point):PhysicalCovering {
+ let spans:readonly CoveringSpan[]=source.spans.map(span=>({...span}));
+ if(point){
+  const candidates=source.spans.flatMap(span=>{
+   const route=coveringRoute(document,span.segmentId);if(!route)return [];
+   const resolved=resolvedCoveringSpan(document,span);
+   const covered=trimPolyline(route.points,(route.before+resolved.from*route.length)/route.total,
+     (route.before+resolved.to*route.length)/route.total);
+   if(covered.length<2)return [];
+   const projected=projectOntoPolyline(covered,point);
+   return [{span,route,resolved,distance:projected.distance,at:resolved.from+(resolved.to-resolved.from)*projected.fraction}];
+  });
+  const selected=candidates.sort((a,b)=>a.distance-b.distance)[0];
+  if(selected){
+   const sourceLength=source.spans.reduce((sum,span)=>{
+    const route=coveringRoute(document,span.segmentId),bounds=resolvedCoveringSpan(document,span);
+    return sum+(route?Math.max(0,bounds.to-bounds.from)*route.length:0);
+   },0);
+   const minimum=document.drawingDocuments?.minimumCoveringOverlapPx??100;
+   const interval=Math.min((selected.resolved.to-selected.resolved.from)*selected.route.length,
+     Math.max(sourceLength*.05,minimum));
+   const half=interval/selected.route.length/2;
+   const from=Math.max(selected.resolved.from,Math.min(selected.at-half,selected.resolved.to-2*half));
+   spans=[{segmentId:selected.span.segmentId,from,to:from+2*half}];
+  }
+ }
+ return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans,...(source.bundle?{bundle:{...source.bundle,members:source.bundle.members.map(m=>({...m}))}}:{})},document.drawingDocuments?.coveringLibrary);
 }
 
 export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {

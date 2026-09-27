@@ -73,6 +73,15 @@ describe("pipe dimensions",()=>{
 });
 
 describe("covering surfaces and editing",()=>{
+ it("makes an overlay a short local sleeve at the picked point",()=>{
+  const d=covered([sleeve({id:"base",spans:[{segmentId:"S0",from:0,to:1}]})]);
+  const next=standardCoveringOver(d,d.physicalTopology!.coverings![0]! ,"Оплётка","overlay",{x:300,y:60});
+  const span=next.spans[0]!;
+  expect(span.from).toBeGreaterThan(0);expect(span.to).toBeLessThan(1);
+  const route=coveringRoute(d,"S0")!;
+  expect((span.to-span.from)*route.length).toBeGreaterThanOrEqual(99.99);
+  expect((span.to-span.from)*route.length).toBeLessThanOrEqual(Math.max(route.length*.05,100)+1e-6);
+ });
  it("creates a second covering from the existing span when the pipe is already covered",()=>{
   const d=covered([sleeve({id:"base",spans:[{segmentId:"S0",from:.2,to:.7,fromAnchor:0,toAnchor:1}]})]);
   const next=standardCoveringOver(d,d.physicalTopology!.coverings![0]! ,"Оплётка","overlay");

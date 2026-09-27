@@ -6,7 +6,7 @@ import { drawingPipeWidth } from "./drawing-thickness";
 import { defaultLayerIds } from "./model";
 import { physicalEditablePoints } from "./physical-editing";
 import { drawingBendRadius } from "./drawing-route-path";
-import { pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
+import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
 
 /** One boundary between physical topology and presentation. */
 export function physicalTopologyScene(document: HarnessDesignDocument): EditorSceneObject[] {
@@ -42,7 +42,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     return { id: node.id, kind: "physical-node", label: node.connectorId ? "Выход" : `Узел ${i + 1}`,
       layerId: defaultLayerIds.connectionPoints, x: point.x - 5, y: point.y - 5, width: 10, height: 10,
       color: node.connectorId ? "#f59e0b" : "#1179ac",
-      metadata: { nodeRole: node.connectorId ? "connector-exit" : "junction" },
+      metadata: { nodeRole: node.connectorId ? "connector-exit" : "junction",
+        bundleMember: String(topology.segments.some(segment =>
+          (segment.from === node.id || segment.to === node.id) && hasPipeBundleProjection(document,segment.id))) },
       port: { connectorId: node.connectorId, direction: physicalNodeDirection(document, node) } };
   });
   return [...segments.sort((a,b)=>pipeBundleDepth(document,a.id)-pipeBundleDepth(document,b.id)), ...nodes];

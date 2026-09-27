@@ -999,12 +999,15 @@ export function HarnessDesignEditor({
   const [thicknessPreview,setThicknessPreview]=useState<number|null>(null);
   const [bendRadiusPreview,setBendRadiusPreview]=useState<number|null>(null);
   const [leaderScalePreview,setLeaderScalePreview]=useState<number|null>(null);
+  const [dimensionScalePreview,setDimensionScalePreview]=useState<number|null>(null);
+  const [minimumOverlapPreview,setMinimumOverlapPreview]=useState<number|null>(null);
   const [coveringRatioPreview,setCoveringRatioPreview]=useState<number|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number};mode?:import("./physical-editing").PhysicalDragMode;insert?:boolean}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
     if(bendRadiusPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius:bendRadiusPreview}},error:null};
     if(leaderScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale:leaderScalePreview}},error:null};
+    if(dimensionScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale:dimensionScalePreview}},error:null};
     if(coveringRatioPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio:coveringRatioPreview}},error:null};
     if(coveringPreview&&history.present.physicalTopology)return {document:{...history.present,physicalTopology:{...history.present.physicalTopology,coverings:history.present.physicalTopology.coverings?.map(c=>c.id===coveringPreview.id?coveringPreview:c)}},error:null};
     if(thicknessPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale:thicknessPreview}},error:null};
@@ -1053,7 +1056,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, leaderScalePreview, bendRadiusPreview, coveringRatioPreview]);
+  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, leaderScalePreview, dimensionScalePreview, bendRadiusPreview, coveringRatioPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1061,6 +1064,15 @@ export function HarnessDesignEditor({
   const drawingTemplateIds = useMemo(() => new Set(view === "drawing" ? componentTemplateViewInstances
     .filter(i => projectComponentTemplateView(i, "drawing", {x:0,y:0})?.commands.length).map(i => i.objectId) : []),
     [view, componentTemplateViewInstances]);
+  const volumeEligible = useMemo(() => {
+    if (!history?.present.physicalTopology) return false;
+    const topology = history.present.physicalTopology;
+    const densePipe = topology.segments.some(segment => topology.routes.filter(route =>
+      route.steps.some(step => step.segmentId === segment.id)).length > 3);
+    const groupedPipes = topology.segments.length >= 2 || (topology.coverings ?? []).some(covering =>
+      covering.bundle?.members.length !== undefined && covering.bundle.members.length >= 2);
+    return densePipe || groupedPipes;
+  }, [history?.present]);
 
   const run = useCallback((command: EditorCommand): boolean => {
     if (placementBusyRef.current || pendingPlacementRef.current) return false;
@@ -1738,9 +1750,11 @@ export function HarnessDesignEditor({
           <DrawingRangeControl label="Диаметры 1:" unit="" digits={1} accessibleLabel="Соотношение диаметров оболочек" min={1.1} max={4} step={.1} value={coveringRatioPreview??history.present.drawingDocuments?.coveringDiameterRatio??2} onPreview={setCoveringRatioPreview} onCommit={coveringDiameterRatio=>{if(coveringDiameterRatio!==(history.present.drawingDocuments?.coveringDiameterRatio??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio}});}} hint="Глобальное правило 1:x для соседних оболочек. При увеличении ширины переходы сохраняют форму; локальные ширины и материал не меняются."/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
           <DrawingRangeControl label="Позиции" accessibleLabel="Масштаб позиционных обозначений" min={.25} max={4} step={.05} value={leaderScalePreview??history.present.drawingDocuments?.leaderScale??1} onPreview={setLeaderScalePreview} onCommit={leaderScale=>{if(leaderScale!==(history.present.drawingDocuments?.leaderScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale}});}} hint="Размер кружков, номеров и точек выносок. Ручное положение сохраняется. Escape отменяет изменение; отпускание ползунка сохраняет его одним шагом отмены."/>
+          <DrawingRangeControl label="Размеры ×" accessibleLabel="Масштаб размерных обозначений" min={.25} max={4} step={.05} value={dimensionScalePreview??history.present.drawingDocuments?.dimensionScale??1} onPreview={setDimensionScalePreview} onCommit={dimensionScale=>{if(dimensionScale!==(history.present.drawingDocuments?.dimensionScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale}});}} hint="Общий размер текста, стрелок, точек и линий размеров. Значения длин и привязки не меняются."/>
+          <DrawingRangeControl label="Мин. нахлёст" accessibleLabel="Минимальная длина новой оболочки поверх оболочки" min={20} max={500} step={5} digits={0} unit="px" value={minimumOverlapPreview??history.present.drawingDocuments?.minimumCoveringOverlapPx??100} onPreview={setMinimumOverlapPreview} onCommit={minimumCoveringOverlapPx=>{if(minimumCoveringOverlapPx!==(history.present.drawingDocuments?.minimumCoveringOverlapPx??100))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),minimumCoveringOverlapPx}});}} hint="Новая оболочка занимает 5% длины нижней, но не меньше заданного значения; если нижняя короче, покрывается доступный участок."/>
           <label>Размеры<select aria-label="Общее направление размеров" value={history.present.drawingDocuments?.dimensionMode??"aligned"} onChange={e=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionMode:e.target.value as import("./drawing-dimensions").DimensionMode}})}><option value="aligned">Между концами</option><option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option></select></label>
           <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}>Отобразить размеры</button>
-          <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}>Объёмный свет</button>
+          <button type="button" className="ui-control" disabled={!volumeEligible} aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}>Объёмный свет</button>
           <InfoHint>Затемнение краёв и светлая середина пайпов, проводов и покрытий. Сохраняется для этого чертежа; отключение не меняет материалы, цвета и размеры.</InfoHint>
         </>}{view==="drawing"&&<button type="button" className="ui-control" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}>Добавить позиции</button>}{(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} disabled={kind==="cut"&&!routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").ready} title={kind==="cut"?routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").message:undefined} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}</>}
         drawingWindows={camera=><DrawingTableWindows sourceFingerprint={resource.sourceFingerprint} wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
@@ -1889,7 +1903,7 @@ export function HarnessDesignEditor({
         onPhysicalNodeConnectToSegment={(fromNodeId,segmentId,point)=>{const t=history.present.physicalTopology;if(!t)return;try{const ids={junction:crypto.randomUUID(),segment:crypto.randomUUID(),continuation:crypto.randomUUID()};const topology=routePhysicalWires(history.present,connectPhysicalNodeToSegment(history.present,fromNodeId,segmentId,unprojectPipeBundlePoint(history.present,segmentId,point),ids));if(run({type:"set-physical-topology",topology})){setSelectedObjectId(ids.segment);setSelectedObjectIds([ids.segment]);}}catch(error){setMessage(error instanceof Error?error.message:"Не удалось присоединить точку к пайпу.");}}}
         onPhysicalContextAction={(segmentId,point,action,target="segment")=>{
           const t=history.present.physicalTopology;if(!t)return;
-          point=unprojectPipeBundlePoint(history.present,segmentId,point);
+          if(target!=="covering")point=unprojectPipeBundlePoint(history.present,segmentId,point);
           if(action==="remove-pipe"){
             if(run({type:"remove-physical-segment",segmentId})){setSelectedObjectId(null);setSelectedObjectIds([]);}
             return;
@@ -1901,7 +1915,7 @@ export function HarnessDesignEditor({
           }
           const source=target==="covering"?t.coverings?.find(c=>c.id===segmentId):undefined;
           if(target==="covering"&&!source)return;
-          const covering=source?standardCoveringOver(history.present,source,action,crypto.randomUUID()):standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
+          const covering=source?standardCoveringOver(history.present,source,action,crypto.randomUUID(),point):standardCovering(history.present,segmentId,point,action,crypto.randomUUID());
           if(run({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],covering]}})){setSelectedObjectId(covering.id);setSelectedObjectIds([covering.id]);}
         }}
         onObjectMovePreview={previewObjectMove}

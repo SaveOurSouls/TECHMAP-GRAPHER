@@ -27,7 +27,7 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly physicalScale?:number; readonly leaderScale?:number; readonly dimensionScale?:number; readonly minimumCoveringOverlapPx?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -144,6 +144,8 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   if(d.coveringLibrary!==undefined)validateCoveringLibrary(d.coveringLibrary);
   if(d.bendRadius!==undefined&&(typeof d.bendRadius!=="number"||!Number.isFinite(d.bendRadius)||d.bendRadius<0||d.bendRadius>200))return fail();
   if(d.leaderScale!==undefined&&(typeof d.leaderScale!=="number"||!Number.isFinite(d.leaderScale)||d.leaderScale<.25||d.leaderScale>4))return fail();
+  if(d.dimensionScale!==undefined&&(!Number.isFinite(d.dimensionScale)||d.dimensionScale<.25||d.dimensionScale>4))return fail();
+  if(d.minimumCoveringOverlapPx!==undefined&&(!Number.isFinite(d.minimumCoveringOverlapPx)||d.minimumCoveringOverlapPx<20||d.minimumCoveringOverlapPx>500))return fail();
   if(d.physicalScale!==undefined&&(!Number.isFinite(d.physicalScale)||d.physicalScale<.2||d.physicalScale>8)||d.coveringDiameterRatio!==undefined&&(!Number.isFinite(d.coveringDiameterRatio)||d.coveringDiameterRatio<1.1||d.coveringDiameterRatio>4)||d.showDimensions!==undefined&&typeof d.showDimensions!=="boolean"||d.volumeShading!==undefined&&typeof d.volumeShading!=="boolean")return fail();
   if(!Array.isArray(d.tables)||d.tables.length>20||!Array.isArray(d.leaders)||d.leaders.length>10000||d.rails!==undefined&&(!Array.isArray(d.rails)||d.rails.length>10000)||!Array.isArray(d.bomOrder)||d.bomOrder.length>50000)return fail();
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
@@ -156,7 +158,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle)||(l.anchorLocal!==undefined&&!point(l.anchorLocal))||(l.hidden!==undefined&&typeof l.hidden!=="boolean"))return fail();
   const claimed=new Set<string>(),leaderIds=new Set(d.leaders.map(l=>l.id));
   for(const rail of d.rails??[]){
-    if(!rail||!text(rail.id)||ids.has(rail.id)||ids.has(`${rail.id}:start`)||ids.has(`${rail.id}:end`)||!point(rail.start)||!point(rail.end)||rail.start.x!==rail.end.x&&rail.start.y!==rail.end.y||Math.hypot(rail.end.x-rail.start.x,rail.end.y-rail.start.y)<24||!Array.isArray(rail.leaderIds)||rail.leaderIds.length>d.leaders.length)return fail();
+    if(!rail||!text(rail.id)||ids.has(rail.id)||ids.has(`${rail.id}:start`)||ids.has(`${rail.id}:end`)||!point(rail.start)||!point(rail.end)||Math.hypot(rail.end.x-rail.start.x,rail.end.y-rail.start.y)<24||!Array.isArray(rail.leaderIds)||rail.leaderIds.length>d.leaders.length)return fail();
     ids.add(rail.id);ids.add(`${rail.id}:start`);ids.add(`${rail.id}:end`);
     for(const leaderId of rail.leaderIds){if(!leaderIds.has(leaderId)||claimed.has(leaderId))return fail();claimed.add(leaderId);}
   }

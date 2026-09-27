@@ -5,8 +5,8 @@ export const railCatchDistance = 18;
 export const railReleaseDistance = 30;
 
 export function snapRailEnd(start: Point, cursor: Point): Point {
-  const dx = cursor.x - start.x, dy = cursor.y - start.y;
-  return Math.abs(dx) >= Math.abs(dy) ? { x: cursor.x, y: start.y } : { x: start.x, y: cursor.y };
+  void start;
+  return cursor;
 }
 
 export function railDistance(rail: Pick<PositionRail, "start" | "end">, point: Point): number {
@@ -18,8 +18,9 @@ export function railDistance(rail: Pick<PositionRail, "start" | "end">, point: P
 }
 
 export function railParameter(rail: PositionRail, point: Point): number {
-  const length = rail.end.x - rail.start.x || rail.end.y - rail.start.y;
-  return length ? Math.max(0, Math.min(1, ((rail.end.x - rail.start.x ? point.x - rail.start.x : point.y - rail.start.y) / length))) : 0;
+  const dx = rail.end.x - rail.start.x, dy = rail.end.y - rail.start.y;
+  const length2 = dx * dx + dy * dy;
+  return length2 ? Math.max(0, Math.min(1, ((point.x - rail.start.x) * dx + (point.y - rail.start.y) * dy) / length2)) : 0;
 }
 
 export function distributeRail(d: DrawingDocuments, rail: PositionRail): DrawingDocuments {
@@ -51,7 +52,7 @@ export function movePositionRail(d: DrawingDocuments, id: string, point: Point):
   } else {
     const center = { x: point.x + 5, y: point.y + 5 };
     const other = suffix === "start" ? rail.end : rail.start;
-    const snapped = rail.start.y === rail.end.y ? { x: center.x, y: other.y } : { x: other.x, y: center.y };
+    const snapped = center;
     if (Math.hypot(snapped.x - other.x, snapped.y - other.y) < 24) return d;
     next = { ...rail, [suffix]: snapped };
   }
