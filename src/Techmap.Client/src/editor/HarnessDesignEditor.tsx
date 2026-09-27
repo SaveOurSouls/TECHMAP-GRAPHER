@@ -681,6 +681,7 @@ export function HarnessDesignEditor({
   const recoveryApi = useMemo(() => createDesignRecoveryApi(config, session), [config, session]);
   const recoverySession = useMemo(() => new DesignRecoverySession(recoveryApi, projectId, harnessId), [recoveryApi, projectId, harnessId]);
   const [recoveryError, setRecoveryError] = useState("");
+  const recoveryCleanupWarning = "Документ сохранён, но очистка аварийной копии не выполнена. Копия сохранена для проверки.";
   const recoveryBusy = useRef(false);
   const componentTemplateApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const componentPlacementApi = useMemo(
@@ -810,6 +811,14 @@ export function HarnessDesignEditor({
       for (const item of journal) {
         try {
           const parsed = parseRecoverableHarnessDesignContent(item.content).content;
+          if (JSON.stringify(parsed) === savedJson) {
+            // The server has acknowledged these exact contents. Older clients
+            // could leave this journal behind when their DELETE URL was rejected.
+            void recoveryApi.remove(projectId, harnessId, item.draftId, item.sequence).catch(() => {
+              if (generation === loadGeneration.current) setRecoveryError(recoveryCleanupWarning);
+            });
+            continue;
+          }
           candidates.push({ id: item.draftId, sequence: item.sequence, content: parsed,
             baseRevision: item.baseRevision, serverContent: item.serverContent, serverRevision: item.serverRevision });
         } catch { setRecoveryError("Одна из аварийных копий повреждена и сохранена на диске без изменений."); }
@@ -871,7 +880,13 @@ export function HarnessDesignEditor({
           setHistory(acknowledgedHistory);
           setSaveState("saved");
           if (!recoveryDrafts.some(d => d.id === "browser")) removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
-          void recoverySession.clear().catch(() => setRecoveryError("Документ сохранён, но очистка аварийной копии не выполнена. Копия сохранена для проверки."));
+          const generation = loadGeneration.current;
+          void recoverySession.clear().then(() => {
+            if (generation === loadGeneration.current)
+              setRecoveryError(current => current === recoveryCleanupWarning ? "" : current);
+          }).catch(() => {
+            if (generation === loadGeneration.current) setRecoveryError(recoveryCleanupWarning);
+          });
         } else {
           setSaveState("changed");
         }

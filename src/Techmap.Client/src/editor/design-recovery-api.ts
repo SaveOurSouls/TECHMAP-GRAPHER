@@ -16,8 +16,9 @@ export function createDesignRecoveryApi(config: RuntimeConfig, session: LocalSes
   const headers = createMutationHeaders(session);
   const path = (project: string, harness: string) =>
     `projects/${encodeURIComponent(project)}/harnesses/${encodeURIComponent(harness)}/design/recovery`;
-  async function request(project: string, harness: string, suffix = "", init: RequestInit = {}) {
-    const response = await fetcher(buildApiUrl(config, path(project, harness) + suffix), {
+  async function request(project: string, harness: string, suffix = "", init: RequestInit = {}, query?: URLSearchParams) {
+    const url = buildApiUrl(config, path(project, harness) + suffix);
+    const response = await fetcher(query ? `${url}?${query}` : url, {
       credentials: "same-origin", cache: "no-store", ...init,
     });
     if (!response.ok) throw new Error("Не удалось записать или прочитать аварийный журнал на сервере. Сохраните копию документа перед закрытием.");
@@ -30,7 +31,8 @@ export function createDesignRecoveryApi(config: RuntimeConfig, session: LocalSes
       await request(project, harness, `/${id}`, { method: "PUT", headers, body: JSON.stringify({ sequence, baseRevision, content }) });
     },
     remove: async (project: string, harness: string, id: string, sequence: number) => {
-      await request(project, harness, `/${id}?sequence=${sequence}`, { method: "DELETE", headers });
+      await request(project, harness, `/${id}`, { method: "DELETE", headers },
+        new URLSearchParams({ sequence: String(sequence) }));
     },
   };
 }

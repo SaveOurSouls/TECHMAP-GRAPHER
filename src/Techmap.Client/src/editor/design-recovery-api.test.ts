@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { DesignRecoverySession } from "./design-recovery-api";
+import { createDesignRecoveryApi, DesignRecoverySession } from "./design-recovery-api";
 import { createEmptyHarnessDesign } from "./model";
+
+it("sends recovery deletion with the sequence as a query after validating the API path", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ ok: true });
+  const api = createDesignRecoveryApi({
+    configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "test",
+    apiVersion: "1", schemaVersion: "1",
+  }, { csrfNonce: "csrf", instanceId: "instance" }, fetcher);
+  await api.remove("project", "harness", "draft", 7);
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/v1/projects/project/harnesses/harness/design/recovery/draft?sequence=7",
+    expect.objectContaining({ method: "DELETE", headers: expect.objectContaining({ "X-Techmap-CSRF": "csrf" }) }),
+  );
+});
 
 describe("server recovery session", () => {
   it("serializes writes and deletes only the acknowledged generation", async () => {

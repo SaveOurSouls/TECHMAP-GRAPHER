@@ -88,6 +88,16 @@ public sealed class HarnessDesignRecoveryTests
             Assert.Equal(id, copy.DraftId); Assert.Equal("local-draft", copy.Content.GetProperty("name").GetString());
             var live = (await client.GetFromJsonAsync<HarnessDesignResponse>(Route(projectId, harnessId), TestContext.Current.CancellationToken))!;
             Assert.Equal(0, live.Revision); Assert.True(JsonElement.DeepEquals(live.Content, copy.ServerContent));
+            using (var delete = new HttpRequestMessage(HttpMethod.Delete, Route(projectId, harnessId) + $"/recovery/{id}?sequence=1"))
+            {
+                delete.Headers.TryAddWithoutValidation("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));
+                delete.Headers.TryAddWithoutValidation(LocalHttpSession.CsrfHeaderName, csrf);
+                delete.Content = new StringContent("", System.Text.Encoding.UTF8, "application/json");
+                using var deleted = await client.SendAsync(delete, TestContext.Current.CancellationToken);
+                Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+            }
+            using var rewritten = await Send(client, HttpMethod.Put, Route(projectId, harnessId) + $"/recovery/{id}", new PutHarnessDesignRecoveryRequest(1, 0, Content("local-draft")), csrf);
+            Assert.Equal(HttpStatusCode.OK, rewritten.StatusCode);
             using var missingCsrf = await client.PutAsJsonAsync(Route(projectId, harnessId) + $"/recovery/{Guid.NewGuid()}", new PutHarnessDesignRecoveryRequest(1, 0, Content("denied")), TestContext.Current.CancellationToken);
             Assert.False(missingCsrf.IsSuccessStatusCode);
             var directory = Path.Combine(root, "recovery", projectId.ToString("D"), harnessId.ToString("D"));
