@@ -74,6 +74,7 @@ import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, Harn
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { CableSelectionPanel } from "./CableSelectionPanel";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
+import { resolveConnectedWireMaterials } from "./resolve-wire-materials";
 import { collectE4Diagnostics } from "./e4-diagnostics";
 import {
   builtInConnectorSeries,
@@ -744,10 +745,26 @@ export function HarnessDesignEditor({
   const pendingPlacementRef = useRef<PendingComponentPlacement | null>(null);
   const [placementBusy, setPlacementBusy] = useState(false);
   const [placementPending, setPlacementPending] = useState(false);
+  const materialResolutionGeneration = useRef<number | null>(null);
 
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { resourceRef.current = resource; }, [resource]);
   useEffect(() => setView(initialView), [initialView]);
+
+  // Library presets contain mark and section text but older documents do not
+  // contain the published record ID. Resolve that text once the active wire
+  // snapshot is available, then update the connected conductor and both ends
+  // in a single undo step.
+  useEffect(() => {
+    if (!history || wireLookup.databaseOptions.length === 0 || placementBusy || placementPending ||
+        materialResolutionGeneration.current === loadGeneration.current) return;
+    materialResolutionGeneration.current = loadGeneration.current;
+    const resolved = resolveConnectedWireMaterials(history.present, wireLookup.databaseOptions);
+    if (resolved === history.present) return;
+    const next = { past: [...history.past, history.present].slice(-100), present: resolved, future: [] };
+    historyRef.current = next;
+    setHistory(next);
+  }, [history, placementBusy, placementPending, wireLookup.databaseOptions]);
 
   const refreshComponentGraph = useCallback(async (editorGeneration: number): Promise<void> => {
     const requestGeneration = ++componentGraphRequestGeneration.current;
@@ -1062,7 +1079,9 @@ export function HarnessDesignEditor({
       return false;
     }
     try {
-      const next = executeEditorCommand(current, command);
+      let next = executeEditorCommand(current, command);
+      if (command.type === "add-wire" && wireLookup.databaseOptions.length) next = { ...next,
+        present: resolveConnectedWireMaterials(next.present, wireLookup.databaseOptions) };
       historyRef.current = next;
       setHistory(next);
       setMessage("");
@@ -1071,7 +1090,7 @@ export function HarnessDesignEditor({
       setMessage(error instanceof Error ? error.message : "Не удалось изменить документ жгута.");
       return false;
     }
-  }, [prepareCoverings]);
+  }, [prepareCoverings, wireLookup.databaseOptions]);
 
   const initializedExits = useRef(new Set<string>());
   useEffect(() => {

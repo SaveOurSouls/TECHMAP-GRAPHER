@@ -525,7 +525,12 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const diameterChanged=command.wireDiameterMm!==undefined||command.wire!==undefined||command.wireSection!==undefined;
       const endpoints=document.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId&&e.contactId===command.contactId)).flatMap(w=>[w.from,w.to]);
       const sized=diameterChanged?{...withMaterial,connectors:withMaterial.connectors.map(c=>({...c,contacts:c.contacts.map(p=>endpoints.some(e=>e.connectorId===c.id&&e.contactId===p.id)?{...p,wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:p)}))}:withMaterial;
-      return rememberCustomWireColors(sized, [command.color ?? "", command.secondaryColor ?? ""]);
+      const linked = materialChanged
+        ? syncContactWireMaterial(sized, command.connectorId, command.contactId) : sized;
+      const rerouted = linked === sized ? linked : rerouteE4WireBatch(linked,
+        linked.wires.filter(wire => [wire.from, wire.to].some(endpoint =>
+          sameConnectorEndpoint(endpoint, command.connectorId, command.contactId))).map(wire => wire.id));
+      return rememberCustomWireColors(rerouted, [command.color ?? "", command.secondaryColor ?? ""]);
     }
     case "reset-contact-color-auto":
       return resetContactColorToAutomatic(document, command.connectorId, command.contactId);
@@ -698,9 +703,15 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       catch { addedAndRouted = rerouteE4WireBatch(added, added.wires.filter(w=>w.id===command.wire.id || w.e4RouteMode!=="manual").map(w=>w.id)); }
       validateWireGroups(addedAndRouted);
       const normalized = normalizeJunctionCircuits(addedAndRouted);
-      return command.wire.colorSource
-        ? syncDirectWireColors(normalized, command.wire.colorSource.connectorId, command.wire.colorSource.contactId)
+      const sourceEndpoint = [newWire.from, newWire.to].find(endpoint => contactAtEndpoint(normalized, endpoint)?.materialBinding)
+        ?? [newWire.from, newWire.to].find(endpoint => contactAtEndpoint(normalized, endpoint)?.wire.trim());
+      const linked = sourceEndpoint
+        ? syncContactWireMaterial(normalized, sourceEndpoint.connectorId, sourceEndpoint.contactId, newWire.materialBinding)
         : normalized;
+      const withMaterial = linked === normalized ? linked : rerouteE4WireBatch(linked, [newWire.id]);
+      return command.wire.colorSource
+        ? syncDirectWireColors(withMaterial, command.wire.colorSource.connectorId, command.wire.colorSource.contactId)
+        : withMaterial;
     case "remove-wire": {
       const attachedWireIds = screenAttachmentWireIds(document, [command.wireId]);
       const changed = {
@@ -733,6 +744,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           return updated;
         }, "Провод не найден."),
       };
+      if (command.materialBinding === null) {
+        const wire = changed.wires.find(item => item.id === command.wireId)!;
+        return normalizeJunctionCircuits({ ...changed, connectors: changed.connectors.map(connector => ({
+          ...connector, contacts: connector.contacts.map(contact => [wire.from, wire.to].some(endpoint =>
+            sameConnectorEndpoint(endpoint, connector.id, contact.id))
+            ? { ...contact, materialBinding: undefined } : contact),
+        })) });
+      }
       return normalizeJunctionCircuits(changed);
     }
     case "set-wire-strip-profile":
@@ -1062,6 +1081,36 @@ function syncDirectWireColors(
   return changed ? { ...document, connectors, wires } : document;
 }
 
+/** Keep the two contact rows and their direct conductor on one material. */
+function syncContactWireMaterial(
+  document: HarnessDesignDocument,
+  connectorId: string,
+  contactId: string,
+  materialOverride?: WireMaterialBinding,
+): HarnessDesignDocument {
+  const source = contactAtEndpoint(document, { connectorId, contactId });
+  if (!source) return document;
+  if (!document.wires.some(wire => [wire.from, wire.to].some(endpoint =>
+    sameConnectorEndpoint(endpoint, connectorId, contactId)))) return document;
+  const material = materialOverride ?? source.materialBinding;
+  let connectors = document.connectors;
+  const wires = document.wires.map(wire => {
+    if (![wire.from, wire.to].some(endpoint => sameConnectorEndpoint(endpoint, connectorId, contactId))) return wire;
+    const opposite = sameConnectorEndpoint(wire.from, connectorId, contactId) ? wire.to : wire.from;
+    if (!isJunctionEndpoint(opposite) && !isScreenEndpoint(opposite)) {
+      connectors = connectors.map(connector => connector.id !== opposite.connectorId ? connector : {
+        ...connector,
+        contacts: connector.contacts.map(contact => contact.id !== opposite.contactId ? contact : {
+          ...contact, wire: source.wire, wireSection: source.wireSection,
+          wireDiameterMm: source.wireDiameterMm, materialBinding: material,
+        }),
+      });
+    }
+    return { ...wire, materialBinding: material };
+  });
+  return { ...document, connectors, wires };
+}
+
 function resetContactColorToAutomatic(
   document: HarnessDesignDocument,
   connectorId: string,
@@ -1332,6 +1381,7 @@ function normalizeContact(
     terminalArticle: normalizeValue(contact.terminalArticle, "Артикул терминала"),
     wire: normalizeValue(contact.wire, "Провод контакта"),
     ...(contact.wireSection === undefined ? {} : { wireSection: normalizeValue(contact.wireSection, "Сечение провода") }),
+    ...(contact.materialBinding === undefined ? {} : { materialBinding: contact.materialBinding }),
     color: normalizeValue(contact.color, "Цвет провода контакта"),
     secondaryColor: normalizeValue(contact.secondaryColor ?? "", "Второй цвет провода контакта"),
     colorMode: contact.colorMode === "auto" || contact.colorMode === "manual"

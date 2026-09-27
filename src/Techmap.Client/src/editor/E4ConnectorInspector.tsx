@@ -26,6 +26,7 @@ import { terminalArticleLabel } from "./terminal-article-label";
 import { InfoHint } from "../InfoHint";
 import { AnchoredPopover } from "../AnchoredPopover";
 import { builtInWireOptions, filterWireOptions, type WireDatabaseOption } from "./wire-database";
+import { uniqueWireMaterialOption } from "./resolve-wire-materials";
 
 export interface E4ConnectorInspectorProps {
   readonly templateAuthoring?: {
@@ -546,7 +547,8 @@ export function E4ConnectorInspector({
                     title={contact.wire.trim() ? "Сечения выбранной марки провода" : "Сначала выберите марку провода"}
                     onChange={event => {
                       const section = event.target.value;
-                      const option = wireOptions.find(item => item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
+                      const option = uniqueWireMaterialOption({ ...contact, wireSection: section }, wireOptions)
+                        ?? wireOptions.find(item => !item.materialBinding && item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
                       updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null, materialBinding: option?.materialBinding ?? null,
                         ...(option?.color ? { color: option.color } : {}) });
                     }}

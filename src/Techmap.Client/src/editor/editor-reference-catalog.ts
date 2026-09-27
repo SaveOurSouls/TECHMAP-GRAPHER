@@ -41,7 +41,7 @@ const componentLibrarySource: EditorCatalogSource = {
 };
 
 export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
-  { id: "technology-wires", label: "Провода", description: "База проводов: все колонки строки 3", entityTypes: ["wire", "cable"], accent: "#356c88" },
+  { id: "technology-wires", label: "Провода", description: "Каталог проводов E3:AJ: марка и комплексное сечение", entityTypes: ["wire", "cable"], accent: "#356c88" },
   { id:"technology-protection", catalogSourceId:"technology-database", label:"Защита", description:"Защитные покрытия из опубликованного справочника: тип protective-covering", entityTypes:["protective-covering"], accent:"#758087" },
   {
     id: "technology-database",
@@ -434,7 +434,21 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
   const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const [query, setQuery] = useState<string | null>(null);
   const [options, setOptions] = useState<readonly WireDatabaseOption[]>(builtInWireOptions);
+  const [databaseOptions, setDatabaseOptions] = useState<readonly WireDatabaseOption[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api.getActive("technology-wires").then(snapshot => {
+      if (controller.signal.aborted || !snapshot) return;
+      const next = snapshot.records.filter(record => record.entityType === "wire")
+        .map(record => wireDatabaseOption(record, { snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256 }));
+      setDatabaseOptions(next);
+      setOptions(next.length ? next : builtInWireOptions);
+    }).catch(() => {
+      if (!controller.signal.aborted) setDatabaseOptions([]);
+    });
+    return () => controller.abort();
+  }, [api]);
   useEffect(() => {
     if (query === null) return;
     const controller = new AbortController();
@@ -457,7 +471,7 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
     }, 220);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [api, query]);
-  return { options, message, search: setQuery };
+  return { options, databaseOptions, message, search: setQuery };
 }
 
 export function useEditorReferenceCatalog(
