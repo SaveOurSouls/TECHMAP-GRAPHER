@@ -1090,7 +1090,7 @@ export function HarnessDesignEditor({
       setMessage(error instanceof Error ? error.message : "Не удалось изменить документ жгута.");
       return false;
     }
-  }, [prepareCoverings, wireLookup.databaseOptions]);
+  }, [prepareCoverings]);
 
   const initializedExits = useRef(new Set<string>());
   useEffect(() => {
@@ -1794,7 +1794,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
-            wireOptions={wireLookup.options} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
+            wireOptions={wireLookup.options} wireMaterialOptions={wireLookup.databaseOptions} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
@@ -1823,7 +1823,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
-            wireOptions={wireLookup.options} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
+            wireOptions={wireLookup.options} wireMaterialOptions={wireLookup.databaseOptions} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}

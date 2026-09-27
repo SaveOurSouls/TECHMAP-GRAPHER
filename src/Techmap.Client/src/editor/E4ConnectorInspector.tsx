@@ -53,6 +53,7 @@ export interface E4ConnectorInspectorProps {
   readonly terminalArticles?: readonly string[];
   readonly onTerminalSearch?: (query: string) => void;
   readonly wireOptions?: readonly WireDatabaseOption[];
+  readonly wireMaterialOptions?: readonly WireDatabaseOption[];
   readonly wireLookupMessage?: string | null;
   readonly onWireSearch?: (query: string) => void;
   readonly wireColors?: readonly WireColorReference[];
@@ -281,6 +282,7 @@ export function E4ConnectorInspector({
   terminalArticles = [],
   onTerminalSearch,
   wireOptions = builtInWireOptions,
+  wireMaterialOptions,
   wireLookupMessage,
   onWireSearch,
   wireColors,
@@ -547,7 +549,7 @@ export function E4ConnectorInspector({
                     title={contact.wire.trim() ? "Сечения выбранной марки провода" : "Сначала выберите марку провода"}
                     onChange={event => {
                       const section = event.target.value;
-                      const option = uniqueWireMaterialOption({ ...contact, wireSection: section }, wireOptions)
+                      const option = uniqueWireMaterialOption({ ...contact, wireSection: section }, wireMaterialOptions ?? wireOptions)
                         ?? wireOptions.find(item => !item.materialBinding && item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
                       updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null, materialBinding: option?.materialBinding ?? null,
                         ...(option?.color ? { color: option.color } : {}) });
