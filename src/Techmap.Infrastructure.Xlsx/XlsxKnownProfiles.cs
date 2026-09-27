@@ -35,13 +35,14 @@ public static class XlsxKnownProfiles
     private static XlsxKnownProfile CreateWires()
     {
         const string id = "technology.wires";
-        return new XlsxKnownProfile(id, "Провода — Марка в E3", "technology-wires",
+        return new XlsxKnownProfile(id, "Каталог проводов — E3:AJ", "technology-wires",
             "Автоопределение по E3", "wire", "Марка",
-            "Марка в E3 определяет лист. Все колонки строки 3 и варианты марки сохраняются; данные со строки 4.",
+            "Марка в E3 определяет лист. Заголовки и отдельные колонки E:AJ сохраняются в исходном порядке; данные со строки 4.",
             new XlsxCatalogMapping(null, 3, 4, "wire", "Марка",
                 IgnoreUnmappedFormulas: true, ProfileId: id,
                 CompositeKeyColumns: ["Марка"], KeyColumnIndex: 5,
-                PreserveDuplicateRows: true, DetectSheetByColumns: true, ImportAllColumns: true));
+                PreserveDuplicateRows: true, DetectSheetByColumns: true, ImportAllColumns: true,
+                FirstColumnIndex: 5, LastColumnIndex: 36));
     }
 
     private static XlsxKnownProfile CreateOperations()

@@ -296,7 +296,8 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       setSourcesError(null);
       setEditableSourceId((current) => preferredSourceId && result.some((source) => source.sourceId === preferredSourceId)
         ? preferredSourceId
-        : result.some((source) => source.sourceId === current) ? current : result[0]?.sourceId ?? "");
+        : result.some((source) => source.sourceId === current) ? current
+          : result.find((source) => source.sourceId === "technology-wires")?.sourceId ?? result[0]?.sourceId ?? "");
     } catch (error) {
       setSources([]);
       setSourcesError(errorText(error));
@@ -313,7 +314,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
       setProfileError(null);
       setSelectedProfileId((current) => result.some((profile) => profile.profileId === current)
         ? current
-        : result[0]?.profileId ?? "");
+        : result.find((profile) => profile.profileId === "technology.wires")?.profileId ?? result[0]?.profileId ?? "");
     }).catch((error: unknown) => {
       if (cancelled) return;
       setProfiles([]);
@@ -514,7 +515,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         const completed = sync.profiles.filter((profile) => profile.status !== "failed");
         const failed = sync.profiles.filter((profile) => profile.status === "failed");
         const terminal = completed.find((profile) => profile.profileId === "technology.terminals");
-        const selected = terminal ?? completed[0];
+        const selected = completed.find((profile) => profile.profileId === "technology.wires") ?? terminal ?? completed[0];
         await loadSources(selected?.sourceId);
         if (selected) {
           setEditableSourceId(selected.sourceId);
@@ -675,7 +676,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
         )}
 
         {inputMode === "google-sheets" ? (
-          <p className="reference-state">{googleSheetsProfileId === "technology.wires" ? "Лист базы проводов определяется по E3 = «Марка». Все колонки строки 3 и варианты марки сохраняются; данные со строки 4." : googleSheetsProfileId ? "Выбранный справочник будет проверен и сохранён." : `Все ${profiles?.length ?? 7} подготовленных таблиц будут проверены и сохранены за одно действие.`} Результат появится в журнале слева.</p>
+          <p className="reference-state">{googleSheetsProfileId === "technology.wires" ? "Каталог проводов E3:AJ: заголовки строки 3, данные со строки 4. Колонки марки и состава сечения сохраняются отдельно." : googleSheetsProfileId ? "Выбранный справочник будет проверен и сохранён." : `Все ${profiles?.length ?? 7} подготовленных таблиц будут проверены и сохранены за одно действие.`} Результат появится в журнале слева.</p>
         ) : <section className="xlsx-profile-section" aria-labelledby="xlsx-profile-heading">
           <div className="xlsx-profile-heading">
             <div>

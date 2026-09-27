@@ -28,18 +28,21 @@ function field(payload: Readonly<Record<string, unknown>>, ...keys: string[]): s
   return "";
 }
 
-/** Keeps the source units and count suffixes; only a single core omits its count. */
+/** Presentation only: F/G and H/I stay separate in the reference payload.
+ * 1C is a mounting stranded wire; its count is omitted only without a second group. */
 export function formatWireSection(payload: Readonly<Record<string, unknown>>): string {
   const core = field(payload, "Core");
   const sectionC = field(payload, "Сечение C", "Сечение С");
   const pair = field(payload, "Pair");
   const sectionP = field(payload, "Сечение P", "Сечение Р");
-  if (/^1[сc]$/iu.test(core.replace(/\s/g, ""))) return sectionC;
   const part = (count: string, section: string) => {
     if (!section || !count || /^(?:0(?:[cpср])?|[-—])$/iu.test(count)) return "";
-    return `${count} x ${section}`;
+    return `${count}x${section}`;
   };
-  return [part(core, sectionC), part(pair, sectionP)].filter(Boolean).join(" / ")
+  const secondGroup = part(pair, sectionP);
+  const firstGroup = /^1[сc]$/iu.test(core.replace(/\s/g, "")) && !secondGroup
+    ? sectionC : part(core, sectionC);
+  return [firstGroup, secondGroup].filter(Boolean).join(" | ")
     || sectionC || field(payload, "sectionMm2", "Сечение", "section", "awg", "AWG");
 }
 
@@ -55,8 +58,11 @@ export function wireDatabaseOption(record: ReferenceCatalogSearchRecord, snapsho
       displayName: [mark, section].filter(Boolean).join(" · "),
       ...(diameterMm === undefined ? {} : { outerDiameterMm: diameterMm }),
     } } : {}),
-    detail: ["Артикул провода", "Артикул", "Цвет", "Производитель", "Категория"]
-      .map(key => text(record.payload[key]) ? `${key}: ${text(record.payload[key])}` : "").filter(Boolean).join(" · "),
+    detail: [
+      /^1[сc]$/iu.test(field(record.payload, "Core").replace(/\s/g, "")) ? "монтажный многожильный провод" : "",
+      ...["Артикул провода", "Артикул", "Цвет", "Производитель", "Категория"]
+        .map(key => text(record.payload[key]) ? `${key}: ${text(record.payload[key])}` : ""),
+    ].filter(Boolean).join(" · "),
     searchText: Object.values(record.payload).map(text).join(" ") };
 }
 

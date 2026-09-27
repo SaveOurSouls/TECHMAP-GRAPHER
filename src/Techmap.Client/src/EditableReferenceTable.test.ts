@@ -74,6 +74,23 @@ describe("editable reference table", () => {
     expect(editableReferenceRequest(draft, null).records[0]?.payload).toEqual(imported.records[0]!.payload);
   });
 
+  it("restores worksheet row order and saves the four section columns independently", () => {
+    const payload = { Марка: "UL2725", Core: "2C", "Сечение C": 28, Pair: "1P", "Сечение P": 28,
+      _techmapColumnOrder: '["Марка","Core","Сечение C","Pair","Сечение P"]' };
+    const imported = { ...snapshot, sourceId: "technology-wires", records: [
+      { ...snapshot.records[0]!, entityType: "wire", sourceKey: "UL2725 #10", payload, sourceLocation: "'Провода'!190" },
+      { ...snapshot.records[0]!, entityType: "wire", sourceKey: "UL2725 #2", payload, sourceLocation: "'Провода'!181" },
+    ] };
+    const draft = editableReferenceDraft(imported);
+    expect(draft.columns.map(referenceColumnLabel)).toEqual(["Марка", "Core", "Сечение C", "Pair", "Сечение P"]);
+    expect(draft.rows.map(row => row.sourceLocation)).toEqual(["'Провода'!181", "'Провода'!190"]);
+    const request = editableReferenceRequest(draft, imported.snapshotId);
+    expect(request.records[0]?.payload).toEqual(payload);
+    const column = draft.columns.find(column => column.name === "Сечение P")!;
+    const edited = { ...draft, rows: [{ ...draft.rows[0]!, values: { ...draft.rows[0]!.values, [column.id]: "0,22" } }, draft.rows[1]!] };
+    expect(editableReferenceRequest(edited, null).records[0]?.payload).toMatchObject({ Core: "2C", "Сечение C": 28, Pair: "1P", "Сечение P": "0,22" });
+  });
+
   it("converts an imported snapshot into editable text columns and keeps source links", () => {
     const draft = editableReferenceDraft(snapshot);
     expect(draft.sourceUri).toBe("https://example.test/catalog");

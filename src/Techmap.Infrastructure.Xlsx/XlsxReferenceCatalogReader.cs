@@ -62,7 +62,9 @@ public sealed record XlsxCatalogMapping(
     IReadOnlyList<string>? BoundaryColumns = null,
     bool DetectSheetByColumns = false,
     bool ImportAllColumns = false,
-    int? KeyColumnIndex = null);
+    int? KeyColumnIndex = null,
+    int? FirstColumnIndex = null,
+    int? LastColumnIndex = null);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -180,6 +182,8 @@ public sealed class XlsxReferenceCatalogReader
             if (mapping.DetectSheetByColumns) writer.WriteBoolean("detectSheetByColumns", true);
             if (mapping.ImportAllColumns) writer.WriteBoolean("importAllColumns", true);
             if (mapping.KeyColumnIndex is int keyColumnIndex) writer.WriteNumber("keyColumnIndex", keyColumnIndex);
+            if (mapping.FirstColumnIndex is int firstColumnIndex) writer.WriteNumber("firstColumnIndex", firstColumnIndex);
+            if (mapping.LastColumnIndex is int lastColumnIndex) writer.WriteNumber("lastColumnIndex", lastColumnIndex);
             writer.WritePropertyName("boundaryColumns");
             if (mapping.BoundaryColumns is null) writer.WriteNullValue();
             else
@@ -355,7 +359,7 @@ public sealed class XlsxReferenceCatalogReader
                 var row = EnumerateRows(part, sharedStrings, sheets[index].Name, mapping.HeaderRow, mapping.HeaderRow, cancellationToken)
                     .Select(item => item.Cells).SingleOrDefault();
                 if (row is null) return false;
-                var found = ResolveHeaders(row, sheets[index].Name, mapping.HeaderRow, []);
+                var found = ResolveHeaders(row, sheets[index].Name, mapping.HeaderRow, [], mapping.ImportAllColumns, mapping.FirstColumnIndex, mapping.LastColumnIndex);
                 return requiredHeaders.All(found.ContainsKey) &&
                     (mapping.KeyColumnIndex is null ||
                      found.TryGetValue(NormalizeHeader(mapping.KeyColumn), out var anchor) && anchor.ColumnIndex == mapping.KeyColumnIndex);
@@ -387,7 +391,7 @@ public sealed class XlsxReferenceCatalogReader
         }
 
         var diagnostics = new List<ReferenceCatalogDiagnosticInput>();
-        var headers = ResolveHeaders(headerRow, selectedSheetName, mapping.HeaderRow, diagnostics, mapping.ImportAllColumns);
+        var headers = ResolveHeaders(headerRow, selectedSheetName, mapping.HeaderRow, diagnostics, mapping.ImportAllColumns, mapping.FirstColumnIndex, mapping.LastColumnIndex);
         var normalizedKey = NormalizeHeader(mapping.KeyColumn);
         if (!headers.TryGetValue(normalizedKey, out var keyColumn))
         {
@@ -477,7 +481,7 @@ public sealed class XlsxReferenceCatalogReader
             var rowNumber = parsedRow.RowNumber;
             var cells = parsedRow.Cells;
             cancellationToken.ThrowIfCancellationRequested();
-            if (mapping.ImportAllColumns && cells.Values.All(cell => string.IsNullOrWhiteSpace(cell.Text))) continue;
+            if (mapping.ImportAllColumns && cells.Where(item => InColumnRange(item.Key, mapping)).All(item => string.IsNullOrWhiteSpace(item.Value.Text))) continue;
             if (mapping.StopAtFirstMissingKey && keyColumn is not null &&
                 !HasBoundaryValue(cells, boundaryColumns.Count > 0 ? boundaryColumns : [keyColumn]))
                 break;
@@ -487,7 +491,7 @@ public sealed class XlsxReferenceCatalogReader
             var rowLocation = Location(sheets[selectedIndex].Name, rowNumber);
             foreach (var (column, formulaCell) in cells.Where(item =>
                          item.Value.State == ParsedCellState.Formula &&
-                         !consumedColumns.Contains(item.Key) &&
+                         !consumedColumns.Contains(item.Key) && InColumnRange(item.Key, mapping) &&
                          !mapping.IgnoreUnmappedFormulas))
             {
                 AddDiagnostic(diagnostics, Error(
@@ -729,11 +733,15 @@ public sealed class XlsxReferenceCatalogReader
         string sheetName,
         uint headerRow,
         ICollection<ReferenceCatalogDiagnosticInput> diagnostics,
-        bool preserveDuplicateHeaders = false)
+        bool preserveDuplicateHeaders = false,
+        int? firstColumnIndex = null,
+        int? lastColumnIndex = null)
     {
         var result = new Dictionary<string, HeaderCell>(StringComparer.Ordinal);
         foreach (var (column, cell) in row.OrderBy(item => item.Key))
         {
+            if (firstColumnIndex is int first && column < first || lastColumnIndex is int last && column > last)
+                continue;
             if (cell.State == ParsedCellState.Formula)
             {
                 AddDiagnostic(diagnostics, Error("xlsx_formula_not_allowed", "Заголовок не может быть формулой.", location: cell.Reference));
@@ -1280,7 +1288,10 @@ public sealed class XlsxReferenceCatalogReader
             string.IsNullOrWhiteSpace(mapping.KeyColumn) || mapping.KeyColumn.Length > 256 ||
             mapping.SheetName is { Length: > 31 } ||
             mapping.ProfileId is { Length: > 128 } ||
-            mapping.KeyColumnIndex is < 1 or > 16384)
+            mapping.KeyColumnIndex is < 1 or > 16384 ||
+            mapping.FirstColumnIndex is < 1 or > 16384 ||
+            mapping.LastColumnIndex is < 1 or > 16384 ||
+            mapping.FirstColumnIndex is int firstColumn && mapping.LastColumnIndex is int lastColumn && firstColumn > lastColumn)
         {
             throw new XlsxImportException("xlsx_mapping_invalid", "Параметры сопоставления XLSX недопустимы.");
         }
@@ -1332,6 +1343,10 @@ public sealed class XlsxReferenceCatalogReader
 
     private static string Location(string sheetName, string cellReference) =>
         $"'{sheetName.Replace("'", "''", StringComparison.Ordinal)}'!{cellReference}";
+
+    private static bool InColumnRange(int column, XlsxCatalogMapping mapping) =>
+        (mapping.FirstColumnIndex is not int first || column >= first) &&
+        (mapping.LastColumnIndex is not int last || column <= last);
 
     private static string CellReference(int column, uint row) => $"{ColumnName(column)}{row}";
 

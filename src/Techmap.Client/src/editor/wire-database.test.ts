@@ -9,13 +9,14 @@ import { getE4ConnectorLayout } from "./CanvasViewport";
 
 describe("wire database", () => {
   it.each(["1C", "1С", " 1 с "])("shows only the core section for %s", Core => {
-    expect(formatWireSection({ Core, "Сечение C": "0,35", Pair: "2P", "Сечение P": "0,12" })).toBe("0,35");
+    expect(formatWireSection({ Core, "Сечение C": "0,35" })).toBe("0,35");
   });
   it("combines core and pair sections without adding assumed units", () => {
-    expect(formatWireSection({ Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22" })).toBe("3C x 0,5 / 2P x 0,22");
-    expect(formatWireSection({ Core: "2С", "Сечение C": "24AWG" })).toBe("2С x 24AWG");
-    expect(formatWireSection({ Core: "0C", Pair: "2P", "Сечение P": 0.12 })).toBe("2P x 0,12");
-    expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3C x 0,5");
+    expect(formatWireSection({ Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22" })).toBe("3Cx0,5 | 2Px0,22");
+    expect(formatWireSection({ Core: "1C", "Сечение C": "30", Pair: "1E", "Сечение P": "28" })).toBe("1Cx30 | 1Ex28");
+    expect(formatWireSection({ Core: "2С", "Сечение C": "24AWG" })).toBe("2Сx24AWG");
+    expect(formatWireSection({ Core: "0C", Pair: "2P", "Сечение P": 0.12 })).toBe("2Px0,12");
+    expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3Cx0,5");
   });
   it("keeps variants searchable by all imported characteristics", () => {
     const red = wireDatabaseOption({ recordId: "red", sourceLocation: null, entityType: "wire", sourceKey: "key1", payload: {
@@ -27,6 +28,7 @@ describe("wire database", () => {
     expect(red.mark).toBe("TEST");
     expect(red.section).toBe("0,35");
     expect(red.detail).toContain("Артикул: 0007");
+    expect(red.detail).toContain("монтажный многожильный провод");
     expect(red.color).toBe("красный");
     expect(filterWireOptions([red, blue], "TEST 0.35 красный")).toEqual([red]);
   });

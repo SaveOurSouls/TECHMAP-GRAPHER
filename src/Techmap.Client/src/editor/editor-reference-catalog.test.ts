@@ -26,7 +26,7 @@ describe("editor reference catalog", () => {
     const item = referenceRecordToEditorCatalogItem(source("technology-wires"), record("wire", "internal-key", {
       Марка: "TEST", Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22",
     }));
-    expect(item.title).toBe("TEST · 3C x 0,5 / 2P x 0,22");
+    expect(item.title).toBe("TEST · 3Cx0,5 | 2Px0,22");
     expect(item.referenceDisplayName).toBe(item.title);
     expect(item.sourceKey).toBe("internal-key");
   });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { referenceTableProfiles } from "./reference-table-profiles";
+import { InfoHint } from "./InfoHint";
 import type {
   EditableReferenceRecord,
   PublishEditableReferenceTableRequest,
@@ -88,14 +89,14 @@ function visibleKey(entityType: string, key: string): string {
   return match ? key.slice(match[0].length, match[0].length + Number(match[1])) : key;
 }
 
-export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null): EditableReferenceDraft {
+export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null, sourceId = snapshot?.sourceId ?? ""): EditableReferenceDraft {
   const links = fieldLinks(snapshot);
-  const profile = referenceTableProfiles[snapshot?.sourceId ?? ""];
+  const profile = referenceTableProfiles[sourceId];
   const payloadNames = [...new Set(snapshot?.records.flatMap(record => Object.keys(record.payload)) ?? [])]
     .filter(name => !name.startsWith("_techmap") && !(profile && name === "layers"));
   const storedOrder = storedColumnOrder(snapshot);
-  const ordered = storedOrder.length ? storedOrder : snapshot?.sourceId === "technology-wires"
-    ? ["Марка", "Core", "Сечение C", "Pair", "Сечение P"].filter(name => payloadNames.includes(name)) : [];
+  const ordered = storedOrder.length ? storedOrder : sourceId === "technology-wires"
+    ? ["Марка", "Core", "Сечение C", "Pair", "Сечение P"].filter(name => !snapshot?.records.length || payloadNames.includes(name)) : [];
   const names = [...new Set([
     ...ordered,
     ...(profile?.columns.map(column => column.name) ?? []),
@@ -109,7 +110,13 @@ export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null
   }
   const columns = names.map(name => ({ id: crypto.randomUUID(), name, sourceColumn: links[name] ?? "",
     label: profile?.columns.find(column => column.name === name)?.label ?? (name === sourceKeyField ? "Код" : name) }));
-  const rows = (snapshot?.records ?? []).map((record) => ({
+  // Snapshot storage sorts keys canonically; show wire rows in worksheet order.
+  const records = [...(snapshot?.records ?? [])];
+  if (sourceId === "technology-wires") records.sort((a, b) => {
+    const row = (location: string | null) => Number(location?.match(/!(\d+)$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
+    return row(a.sourceLocation) - row(b.sourceLocation);
+  });
+  const rows = records.map((record) => ({
     id: crypto.randomUUID(),
     entityType: record.entityType,
     sourceKey: record.sourceKey,
@@ -195,19 +202,20 @@ export function editableReferenceRequest(
 }
 
 export function EditableReferenceTable({ sourceId, displayName, snapshot, disabled, onSave }: EditableReferenceTableProps) {
-  const [draft, setDraft] = useState(() => editableReferenceDraft(snapshot));
+  const [draft, setDraft] = useState(() => editableReferenceDraft(snapshot, sourceId));
   const [newFieldName, setNewFieldName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   useEffect(() => {
-    setDraft(editableReferenceDraft(snapshot));
+    setDraft(editableReferenceDraft(snapshot, sourceId));
     setError(null);
     setAddingColumn(false);
     setNewFieldName("");
   }, [snapshot, sourceId]);
   const blocked = disabled || saving;
-  const title = displayName ?? referenceTableProfiles[sourceId]?.title ?? (sourceId === "technology-wires" ? "Провода" : sourceId || "Справочник");
+  const title = sourceId === "technology-wires" ? "Каталог проводов E3:AJ"
+    : displayName ?? referenceTableProfiles[sourceId]?.title ?? (sourceId || "Справочник");
 
   const addField = () => {
     const name = newFieldName.trim();
@@ -249,11 +257,12 @@ export function EditableReferenceTable({ sourceId, displayName, snapshot, disabl
     </div>
     <div className="editable-reference-actions">
       <span>Нажмите на ячейку, чтобы изменить значение</span>
+      {sourceId === "technology-wires" && <InfoHint>Каталог проводов: отдельные колонки E:AJ, заголовки из строки 3. Core (F) и Сечение C (G) — первая группа; Pair (H) и Сечение P (I) — вторая. 1C означает монтажный многожильный провод. В редакторах сечение собирается как FxG | HxI, а в базе колонки сохраняются отдельно.</InfoHint>}
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setAddingColumn(!addingColumn)} aria-expanded={addingColumn}>Добавить столбец</button>
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setDraft({
         ...draft,
         rows: [...draft.rows, {
-          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? referenceTableProfiles[sourceId]?.entityType ?? "generic-record",
+          id: crypto.randomUUID(), entityType: draft.rows[0]?.entityType ?? referenceTableProfiles[sourceId]?.entityType ?? (sourceId === "technology-wires" ? "wire" : "generic-record"),
           sourceKey: crypto.randomUUID(), values: {}, originalValues: {},
         }],
       })}>Добавить строку</button>

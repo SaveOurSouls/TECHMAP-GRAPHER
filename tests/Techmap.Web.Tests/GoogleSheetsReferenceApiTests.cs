@@ -23,7 +23,7 @@ public sealed class GoogleSheetsReferenceApiTests
         "google-sheet-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.xlsx";
 
     [Fact]
-    public async Task Selected_wire_profile_publishes_all_row_three_columns_without_syncing_other_sources()
+    public async Task Selected_wire_profile_publishes_E_to_AJ_columns_without_syncing_other_sources()
     {
         var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Провода").WithHeaderRow(3)
             .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Производитель")

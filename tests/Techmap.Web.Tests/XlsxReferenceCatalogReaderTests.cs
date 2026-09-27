@@ -7,27 +7,31 @@ namespace Techmap.Web.Tests;
 public sealed class XlsxReferenceCatalogReaderTests
 {
     [Fact]
-    public async Task Wire_profile_detects_row_three_and_preserves_all_columns_and_duplicate_variants()
+    public async Task Wire_profile_detects_row_three_and_preserves_E_to_AJ_columns_and_duplicate_variants()
     {
+        string[] headers = ["Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P",
+            .. Enumerable.Range(10, 27).Select(index => $"Поле {index}"), "Вне диапазона"];
         var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Любое имя").WithHeaderRow(3)
-            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто")
+            .WithHeaders(headers)
             .AddRow(null, null, null, null, "TEST", "1C", "0,35", "", "", "0007", "красный", null, null)
             .AddRow(null, null, null, null, "", "", "", "", "", "", "", "", "")
             .AddRow(null, null, null, null, "TEST", "1C", "0,35", "", "", "0008", "синий", "15", null)
             .AddRow(null, null, null, null, "TEST", "3C", "0,5", "2P", "0,22", "0009", "", "20", null)
-            .WithFormula("L4", "2*5", "10").Build();
+            .WithFormula("L4", "2*5", "10")
+            .WithFormula("AK4", "1+1", "2").Build();
         var preview = await PreviewAsync(bytes, XlsxKnownProfiles.Get("technology.wires").Mapping);
         Assert.True(preview.Validation.IsValid, string.Join("; ", preview.Validation.Diagnostics.Select(d => d.Message)));
         Assert.Equal("Любое имя", preview.SelectedSheet);
-        Assert.Equal(13, preview.Columns.Count);
+        Assert.Equal(32, preview.Columns.Count);
         Assert.Equal(3, preview.RecordCount);
         Assert.Equal(3, preview.Records.Select(r => r.SourceKey).Distinct().Count());
         Assert.Equal("TEST", preview.Records[0].Payload.GetProperty("Марка").GetString());
-        Assert.Equal("0007", preview.Records[0].Payload.GetProperty("Артикул").GetString());
-        Assert.Equal(10, preview.Records[0].Payload.GetProperty("Цена").GetInt32());
-        Assert.Equal(System.Text.Json.JsonValueKind.Null, preview.Records[0].Payload.GetProperty("Пусто").ValueKind);
+        Assert.Equal("0007", preview.Records[0].Payload.GetProperty("Поле 10").GetString());
+        Assert.Equal(10, preview.Records[0].Payload.GetProperty("Поле 12").GetInt32());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, preview.Records[0].Payload.GetProperty("Поле 13").ValueKind);
+        Assert.False(preview.Records[0].Payload.TryGetProperty("Вне диапазона", out _));
         Assert.Equal("2P", preview.Records[2].Payload.GetProperty("Pair").GetString());
-        Assert.Equal(new[] { "Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Артикул", "Цвет", "Цена", "Пусто" },
+        Assert.Equal(headers.Skip(4).Take(32),
             System.Text.Json.JsonSerializer.Deserialize<string[]>(preview.Records[0].Payload.GetProperty("_techmapColumnOrder").GetString()!));
     }
 
