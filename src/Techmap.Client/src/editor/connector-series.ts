@@ -138,6 +138,7 @@ export function selectConnectorSeriesArticle(
           : "",
         wire: previous?.wire ?? "",
         ...(previous?.wireSection === undefined ? {} : { wireSection: previous.wireSection }),
+        ...(previous?.materialBinding === undefined ? {} : { materialBinding: previous.materialBinding }),
         color: previous?.color ?? "",
         secondaryColor: previous?.secondaryColor ?? "",
         connectionStatus: previous?.connectionStatus ?? "available",

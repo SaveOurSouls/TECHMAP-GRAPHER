@@ -72,4 +72,15 @@ describe("connected wire material resolution", () => {
     const resolved = resolveConnectedWireMaterials(base, [option]);
     expect(resolved.connectors[2]).toEqual(isolated);
   });
+
+  it("repairs a connected wire after a component replacement removed the contact binding", () => {
+    const initial = resolveConnectedWireMaterials(connected(), [option]);
+    const replaced = { ...initial, connectors: initial.connectors.map(connector => ({
+      ...connector, contacts: connector.contacts.map(contact => ({ ...contact, materialBinding: undefined })),
+    })) };
+    const repaired = resolveConnectedWireMaterials(replaced, [option]);
+    expect(repaired.wires[0]?.materialBinding).toEqual(binding);
+    expect(repaired.connectors.flatMap(connector => connector.contacts).filter(contact => contact.wire)
+      .every(contact => contact.materialBinding?.recordId === binding.recordId)).toBe(true);
+  });
 });

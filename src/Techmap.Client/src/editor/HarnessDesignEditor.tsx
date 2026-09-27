@@ -17,7 +17,7 @@ import { DrawingTableWindows } from "./DrawingTableWindows";
 import { drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
-import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation } from "./drawing-documents";
+import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments } from "./drawing-documents";
 import { type PhysicalCovering, coveringMaterial, standardCovering, standardCoveringOver } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
@@ -859,7 +859,7 @@ export function HarnessDesignEditor({
       }
       setRecoveryDrafts(candidates);
       setResource(loaded);
-      setHistory(createEditorHistory(loaded.content));
+      setHistory(createEditorHistory(reconcileDrawingDocuments(loaded.content, loaded.content)));
       savedJsonRef.current = savedJson;
       setMessage(recoveryMessage);
     }).catch((error: unknown) => {
@@ -1093,7 +1093,11 @@ export function HarnessDesignEditor({
     }
     try {
       let next = executeEditorCommand(current, command);
-      if (command.type === "add-wire" && wireLookup.databaseOptions.length) next = { ...next,
+      // Component/article replacement and E4 edits can change the contact text
+      // without creating a new wire. Reconcile the connected conductor on every
+      // command while the active wire snapshot is available.
+      if (wireLookup.databaseOptions.length && ["update-contact", "add-wire", "apply-template-article",
+          "apply-connector-article", "reconnect-wire"].includes(command.type)) next = { ...next,
         present: resolveConnectedWireMaterials(next.present, wireLookup.databaseOptions) };
       historyRef.current = next;
       setHistory(next);

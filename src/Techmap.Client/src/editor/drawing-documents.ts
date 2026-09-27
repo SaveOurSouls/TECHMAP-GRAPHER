@@ -34,6 +34,56 @@ export interface BomRow {
   readonly amount: number | null; readonly unit: "шт." | "м" | "г" | "кг" | "л"; readonly note: string;
   readonly objectIds: readonly string[]; readonly sourceIdentity: string;
 }
+
+/** Remove stale annotation references after an object or BOM row changes.
+ * Leaders are keyed by stable object IDs; their row key is a projection and
+ * must follow a replacement component instead of becoming a red orphan. */
+export function reconcileDrawingDocuments(previous: HarnessDesignDocument, next: HarnessDesignDocument): HarnessDesignDocument {
+  const docs = next.drawingDocuments;
+  if (!docs) return next;
+  if (!docs.leaders.length && !docs.bomOrder.length && !Object.keys(docs.bomText ?? {}).length &&
+      !(docs.rails ?? []).some(rail => rail.leaderIds.length)) return next;
+  const oldDocs = previous.drawingDocuments;
+  const oldRows = oldDocs ? buildDrawingBom(previous) : [];
+  const newRows = buildDrawingBom(next);
+  const remap = new Map<string, string>();
+  const rowFamily = (key: string): string => {
+    const kind = JSON.parse(key)[0] as string;
+    if (["free", "series", "connector"].includes(kind)) return "connector";
+    if (["material", "material-unpinned"].includes(kind)) return "material";
+    if (["terminal", "terminal-unpinned"].includes(kind)) return "terminal";
+    if (["protection", "protection-unpinned"].includes(kind)) return "protection";
+    return kind;
+  };
+  for (const oldRow of oldRows) {
+    if (newRows.some(row => row.key === oldRow.key)) continue;
+    const family = rowFamily(oldRow.key);
+    const candidates = newRows.filter(row => rowFamily(row.key) === family &&
+      row.objectIds.some(id => oldRow.objectIds.includes(id)));
+    if (candidates.length === 1) remap.set(oldRow.key, candidates[0]!.key);
+  }
+  const validRows = new Set(newRows.map(row => row.key));
+  const leaders = docs.leaders.flatMap(leader => {
+    const rowKey = remap.get(leader.rowKey) ?? leader.rowKey;
+    const row = newRows.find(candidate => candidate.key === rowKey && candidate.objectIds.includes(leader.objectId));
+    const objectExists = drawingObjectOrigin(next, leader.objectId) !== null;
+    return objectExists && row ? [{ ...leader, rowKey }] : [];
+  });
+  const leaderIds = new Set(leaders.map(leader => leader.id));
+  const rails = docs.rails?.map(rail => ({ ...rail, leaderIds: rail.leaderIds.filter(id => leaderIds.has(id)) }))
+    .filter((rail, index) => rail.leaderIds.length > 0 || docs.rails![index]!.leaderIds.length === 0);
+  const bomOrder = docs.bomOrder.map(key => remap.get(key) ?? key).filter(key => validRows.has(key));
+  const bomText = docs.bomText ? Object.fromEntries(Object.entries(docs.bomText).reduce<[string, NonNullable<DrawingDocuments["bomText"]>[string]][]>((items, [key, value]) => {
+    const nextKey = remap.get(key) ?? key;
+    if (validRows.has(nextKey)) items.push([nextKey, value]);
+    return items;
+  }, [])) : undefined;
+  if (leaders.length === docs.leaders.length && leaders.every((leader, index) => leader.rowKey === docs.leaders[index]!.rowKey) &&
+      bomOrder.length === docs.bomOrder.length && bomOrder.every((key, index) => key === docs.bomOrder[index]) &&
+      (!rails || rails.length === docs.rails?.length && rails.every((rail, index) => rail.leaderIds.length === docs.rails![index]!.leaderIds.length)) &&
+      (!bomText || Object.keys(bomText).length === Object.keys(docs.bomText ?? {}).length && ![...remap.keys()].some(key => key in (docs.bomText ?? {})))) return next;
+  return { ...next, drawingDocuments: { ...docs, leaders, ...(rails ? { rails } : {}), bomOrder, ...(bomText ? { bomText } : {}) } };
+}
 const keyOf = (...values: unknown[]) => JSON.stringify(values);
 const materialKey = (kind: string, binding: {sourceId:string;snapshotId:string;snapshotSha256:string;recordId:string;sourceKey:string}) => keyOf(kind,binding.sourceId,binding.snapshotId,binding.snapshotSha256,binding.recordId,binding.sourceKey);
 
@@ -158,9 +208,11 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   for(const l of d.leaders)if(!text(l.objectId)||!text(l.rowKey,4096)||!point(l.anchorOffset)||!point(l.circle)||(l.anchorLocal!==undefined&&!point(l.anchorLocal))||(l.hidden!==undefined&&typeof l.hidden!=="boolean"))return fail();
   const claimed=new Set<string>(),leaderIds=new Set(d.leaders.map(l=>l.id));
   for(const rail of d.rails??[]){
-    if(!rail||!text(rail.id)||ids.has(rail.id)||ids.has(`${rail.id}:start`)||ids.has(`${rail.id}:end`)||!point(rail.start)||!point(rail.end)||Math.hypot(rail.end.x-rail.start.x,rail.end.y-rail.start.y)<24||!Array.isArray(rail.leaderIds)||rail.leaderIds.length>d.leaders.length)return fail();
+    if(!rail||!text(rail.id)||ids.has(rail.id)||ids.has(`${rail.id}:start`)||ids.has(`${rail.id}:end`)||!point(rail.start)||!point(rail.end)||Math.hypot(rail.end.x-rail.start.x,rail.end.y-rail.start.y)<24||!Array.isArray(rail.leaderIds)||rail.leaderIds.length>10000)return fail();
     ids.add(rail.id);ids.add(`${rail.id}:start`);ids.add(`${rail.id}:end`);
-    for(const leaderId of rail.leaderIds){if(!leaderIds.has(leaderId)||claimed.has(leaderId))return fail();claimed.add(leaderId);}
+    // A deleted component may leave an old leader ID in a persisted rail. It
+    // is safe to drop that membership; the leader itself is reconciled below.
+    for(const leaderId of rail.leaderIds){if(!leaderIds.has(leaderId))continue;if(claimed.has(leaderId))return fail();claimed.add(leaderId);}
   }
   if(new Set(d.bomOrder).size!==d.bomOrder.length||d.bomOrder.some(k=>!text(k,4096)))return fail();
   if(d.bomText!==undefined){if(!d.bomText||typeof d.bomText!=="object"||Array.isArray(d.bomText)||Object.keys(d.bomText).length>50000)return fail();for(const [key,edit] of Object.entries(d.bomText)){if(!text(key,4096)||!edit||typeof edit!=="object"||Array.isArray(edit)||Object.entries(edit).some(([k,v])=>!["index","designation","name","note"].includes(k)||typeof v!=="string"||v.length>4096))return fail();}}

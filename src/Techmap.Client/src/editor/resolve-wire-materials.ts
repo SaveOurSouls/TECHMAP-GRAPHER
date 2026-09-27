@@ -33,18 +33,26 @@ export function resolveConnectedWireMaterials(
 ): HarnessDesignDocument {
   let next = document;
   for (const wire of document.wires) {
-    if (wire.materialBinding) continue;
     const from = contactAt(next, wire.from);
     const to = contactAt(next, wire.to);
-    const sources = [from, to].filter((contact): contact is ConnectorContact => Boolean(contact));
+    const sources = [from, to].filter((contact): contact is ConnectorContact => Boolean(contact && contact.wire.trim() && contact.wireSection?.trim()));
     for (const source of sources) {
       const opposite = source === from ? to : from;
-      const binding = source.materialBinding;
-      const option = binding ? undefined : uniqueWireMaterialOption(source, options);
-      const materialBinding = binding ?? option?.materialBinding;
-      if (!materialBinding) continue;
-      if (opposite && (opposite.wire.trim() && key(opposite.wire) !== key(source.wire) ||
-          opposite.wireSection?.trim() && key(opposite.wireSection) !== key(source.wireSection ?? ""))) continue;
+      // A replaced component can lose its contact binding while the wire
+      // retains it. Reattach only when the catalog still confirms the same
+      // mark and section; a different free-text value must not inherit it.
+      const option = source.materialBinding ? undefined : uniqueWireMaterialOption(source, options);
+      const candidate = source.materialBinding ?? option?.materialBinding;
+      if (!candidate) continue;
+      if (wire.materialBinding && wire.materialBinding.recordId !== candidate.recordId) continue;
+      // An already pinned conductor keeps its original published snapshot.
+      const materialBinding = wire.materialBinding ?? candidate;
+      if (opposite && opposite.materialBinding &&
+          opposite.materialBinding.recordId !== materialBinding.recordId) continue;
+      if (wire.materialBinding?.recordId === materialBinding.recordId &&
+          source.materialBinding?.recordId === materialBinding.recordId &&
+          (!opposite || opposite.materialBinding?.recordId === materialBinding.recordId &&
+            key(opposite.wire) === key(source.wire) && key(opposite.wireSection ?? "") === key(source.wireSection ?? ""))) break;
       const sourceEndpoint = source === from ? wire.from : wire.to;
       if (isJunctionEndpoint(sourceEndpoint) || isScreenEndpoint(sourceEndpoint)) continue;
       next = applyEditorCommand(next, {

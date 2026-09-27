@@ -2,7 +2,7 @@ import type {CoveringLibrary} from "./covering-library";
 import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength, segmentDimensionKey, type DimensionMode } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
-import { validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
+import { reconcileDrawingDocuments, validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
@@ -199,7 +199,8 @@ export function applyEditorCommand(
   command: EditorCommand,
 ): HarnessDesignDocument {
   if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId&&!d.auxiliary)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
-  return reconcileDrawingDimensions(document,refreshAutomaticPhysicalRoutes(document,prunePhysicalTopology(applyCommand(document, command))));
+  const changed = reconcileDrawingDimensions(document, refreshAutomaticPhysicalRoutes(document, prunePhysicalTopology(applyCommand(document, command))));
+  return reconcileDrawingDocuments(document, changed);
 }
 
 function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {

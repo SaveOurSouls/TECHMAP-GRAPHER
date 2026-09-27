@@ -216,6 +216,7 @@ export function rematerializeComponentTemplateConnectorArticle(
         terminalArticle: terminalAllowed ? old.terminalArticle : contact.terminalArticle,
         wire: old.wire,
         wireSection: old.wireSection,
+        materialBinding: old.materialBinding,
         color: old.color,
         secondaryColor: old.secondaryColor,
         connectionStatus: old.connectionStatus,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation, connectionEndLabel } from "./drawing-documents";
+import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation, connectionEndLabel, reconcileDrawingDocuments } from "./drawing-documents";
 import { applyEditorCommand } from "./commands";
 import { createJunctionEndpoint, createScreenEndpoint, parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
@@ -82,6 +82,15 @@ describe("drawing tables and position leaders",()=>{
     expect(JSON.parse(drawingDocumentScene(h.present)[0]!.metadata!.headers!)).toEqual(["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]);
     expect(drawingDocumentScene({...h.present,connectors:[]}).find(o=>o.id==="L")!.label).toBe("?");
     expect(()=>parseHarnessDesignDocument({...h.present,drawingDocuments:{...documents,tables:[{...documents.tables[0],position:{x:NaN,y:0}}]}})).toThrow();
+  });
+
+  it("drops orphan leaders and rail memberships after a component replacement",()=>{
+    const before=physicalFixture(), row=buildDrawingBom(before)[0]!;
+    const docs={...emptyDrawingDocuments(), leaders:[{id:"stale",objectId:"A",rowKey:row.key,anchorOffset:{x:0,y:0},circle:{x:10,y:10}}], rails:[{id:"rail",start:{x:0,y:0},end:{x:100,y:100},leaderIds:["stale"]}], bomOrder:[row.key]};
+    const after={...before,connectors:before.connectors.filter(c=>c.id!=="A"),drawingDocuments:docs};
+    const repaired=reconcileDrawingDocuments(before,after);
+    expect(repaired.drawingDocuments?.leaders).toEqual([]);
+    expect(repaired.drawingDocuments?.rails).toEqual([]);
   });
   it("keeps floating coordinates in drawing space and docking independent of camera",()=>{
     const table={id:"cut",kind:"cut" as const,position:{x:100,y:200}};
