@@ -234,7 +234,7 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
       const progress=entering?(t-outer)/(edge-outer):(t-edge)/(outer-edge);
       const bend=entering?placement.transitionBendStart:placement.transitionBendEnd;
       result=entering?bundleTransitionPoint(sourcePoint,shiftedEdge,{x:b.x-a.x,y:b.y-a.y},progress,radius,bend)
-        :bundleTransitionPoint(shiftedEdge,sourcePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius,bend);
+        :bundleTransitionPoint(sourcePoint,shiftedEdge,{x:a.x-b.x,y:a.y-b.y},1-progress,radius,bend);
     }else result = mix(result, shiftedTarget, blend);
    }
    memo.set(key,result);return result;
