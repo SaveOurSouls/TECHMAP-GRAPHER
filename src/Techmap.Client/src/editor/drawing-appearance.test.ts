@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
 import { catalogOuterDiameter, drawingReferenceDiameter, drawingWireWidth, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
-import { coveringScene, moveCovering, wireExitPath } from "./covering-layout";
+import { coveringScene, moveCovering, offsetPolyline, wireExitPath } from "./covering-layout";
 import { coveringHit, coveringGrips, coveringSurfaces } from "./covering-renderer";
 import { coveringMeasuredLength, coveringRoute, standardCoveringOver, type PhysicalCovering } from "./physical-coverings";
 import { drawingDimensionScene, dimensionTargetPoints, moveDrawingDimension, setPipeIntervalLength, toggleDrawingDimensions } from "./drawing-dimensions";
@@ -16,6 +16,13 @@ function straight():HarnessDesignDocument {
 }
 const sleeve=(patch:Partial<PhysicalCovering>={}):PhysicalCovering=>({id:"cover",name:"Термоусадка",kind:"heat-shrink",width:20,color:"#556677",lengthMm:null,lengthMode:"auto",spans:[{segmentId:"S0",from:.1,to:.8}],...patch});
 const covered=(c:PhysicalCovering[]= [sleeve()])=>{const d=straight();return {...d,physicalTopology:{...d.physicalTopology!,coverings:c}};};
+
+describe("covering offsets",()=>{
+ it("caps sharp transition miters instead of producing long spikes",()=>{
+  const points=offsetPolyline([{x:0,y:0},{x:10,y:10},{x:20,y:0}],[20,20,20]);
+  expect(Math.hypot(points[1]!.x-10,points[1]!.y-10)).toBeLessThanOrEqual(30);
+ });
+});
 
 describe("relative drawing scale",()=>{
  it("reads Russian diameter columns with outer diameter precedence and decimal commas",()=>{

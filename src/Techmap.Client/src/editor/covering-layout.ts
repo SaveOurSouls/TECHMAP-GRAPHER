@@ -12,14 +12,17 @@ import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
 export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
-/** Mitered edges are shared by the filled surface and endpoint grips. */
+/** Offset edges are shared by the filled surface and endpoint grips. A sharp
+ * transition can otherwise create a long miter spike when the covering is
+ * wide; the cap turns that corner into a short bevel while preserving the
+ * authored centreline and all endpoint positions. */
 export function offsetPolyline(points:readonly Point[],offsets:readonly number[]):Point[] {
  return points.map((p,i)=>{
   const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!;
   const before=Math.hypot(p.x-a.x,p.y-a.y),after=Math.hypot(b.x-p.x,b.y-p.y);
   const u=before?{x:-(p.y-a.y)/before,y:(p.x-a.x)/before}:null,v=after?{x:-(b.y-p.y)/after,y:(b.x-p.x)/after}:null;
   const n=u&&v?{x:u.x+v.x,y:u.y+v.y}:u??v??{x:0,y:1},len=Math.hypot(n.x,n.y)||1;
-  const normal={x:n.x/len,y:n.y/len},factor=u&&v?1/Math.max(.25,normal.x*v.x+normal.y*v.y):1;
+  const normal={x:n.x/len,y:n.y/len},factor=u&&v?Math.min(1.5,1/Math.max(.25,normal.x*v.x+normal.y*v.y)):1;
   return {x:p.x+normal.x*offsets[i]!*factor,y:p.y+normal.y*offsets[i]!*factor};
  });
 }

@@ -76,6 +76,13 @@ it("does not create a second convergence when a short coating is placed over a b
  expect(coating.paths?.[0]?.every(point=>Number.isFinite(point.x)&&Number.isFinite(point.y))).toBe(true);
 });
 
+it("uses the configured minimum when a short coating is placed over a bundle",()=>{
+ const base=parallel(),inner=base.physicalTopology!.coverings![0]!;
+ const document={...base,drawingDocuments:{...base.drawingDocuments!,minimumCoveringOverlapPx:20}};
+ const overlay=standardCoveringOver(document,inner,"Оплётка","overlay",{x:300,y:0});
+ expect((overlay.spans[0]!.to-overlay.spans[0]!.from)*600).toBeCloseTo(20);
+});
+
 it("moves one shared exit control vertically for every member",()=>{
  const base=parallel(),cover=base.physicalTopology!.coverings![0]!;
  const handle=pipeBundleTransitionHandles(base,"group").find(item=>item.part==="transition-from")!;
