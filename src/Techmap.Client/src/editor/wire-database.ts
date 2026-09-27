@@ -72,8 +72,29 @@ export const builtInWireOptions: readonly WireDatabaseOption[] = builtInWireRefe
   label: wire.designation, detail: "Встроенный справочник",
 }));
 
-export function filterWireOptions(options: readonly WireDatabaseOption[], query: string): readonly WireDatabaseOption[] {
+export function filterWireOptions(options: readonly WireDatabaseOption[], query: string, section = ""): readonly WireDatabaseOption[] {
   const normalize = (value: string) => value.toLocaleLowerCase("ru").replace(/[.,]/g, ".");
   const tokens = normalize(query).split(/\s+/).filter(Boolean);
-  return options.filter(option => tokens.every(token => normalize(`${option.label} ${option.detail} ${option.searchText ?? ""}`).includes(token)));
+  const sectionKey = normalizeWireChoice(section);
+  return options.filter(option => (!sectionKey || normalizeWireChoice(option.section) === sectionKey) &&
+    tokens.every(token => normalize(`${option.label} ${option.detail} ${option.searchText ?? ""}`).includes(token)));
+}
+
+/** Values used by the two dependent wire selectors. Keep the complete
+ * catalog rows separate: the editor only combines them for display. */
+export function normalizeWireChoice(value: string): string {
+  return value.trim().toLocaleLowerCase("ru-RU").replace(/ё/g, "е").replace(/[.,]/g, ".").replace(/\s+/g, "");
+}
+
+export function wireSectionChoices(
+  options: readonly WireDatabaseOption[],
+  mark: string,
+  current = "",
+): readonly string[] {
+  const normalizedMark = normalizeWireChoice(mark);
+  const choices = options
+    .filter(option => !normalizedMark || normalizeWireChoice(option.mark) === normalizedMark)
+    .map(option => option.section.trim())
+    .filter(Boolean);
+  return [...new Set([current.trim(), ...choices].filter(Boolean))];
 }

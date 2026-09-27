@@ -71,13 +71,6 @@ export const remoteEditorCatalogSources: readonly RemoteCatalogSource[] = [
     entityTypes: ["coax-termination"],
     accent: "#6d5b78",
   },
-  {
-    id: "technology-awg-reference",
-    label: "Провода AWG",
-    description: "Сечения и диаметры проводов из СПР.КАБ",
-    entityTypes: ["awg-reference"],
-    accent: "#356c88",
-  },
 ];
 
 export const editorCatalogSources: readonly EditorCatalogSource[] = [
@@ -273,6 +266,8 @@ export function referenceRecordToEditorCatalogItem(
     }
     if (coaxTerminationCandidate?.state === "incomplete") details.push("данные неполные");
   } else if (record.entityType === "awg-reference") {
+    // Read-only rendering for old snapshots; this source is hidden from new
+    // imports and selection.
     const section = firstValue(payload, "sectionMm2");
     const conductor = firstValue(payload, "conductorDiameterMm");
     if (section) details.push(`${section} мм²`);
@@ -439,13 +434,23 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
   useEffect(() => {
     const controller = new AbortController();
     void api.getActive("technology-wires").then(snapshot => {
-      if (controller.signal.aborted || !snapshot) return;
+      if (controller.signal.aborted) return;
+      if (!snapshot) {
+        setDatabaseOptions([]);
+        setOptions(builtInWireOptions);
+        setMessage("Каталог проводов E3:AJ ещё не загружен. Откройте «Справочники» → «Подключить базу проводов».");
+        return;
+      }
       const next = snapshot.records.filter(record => record.entityType === "wire")
         .map(record => wireDatabaseOption(record, { snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256 }));
       setDatabaseOptions(next);
       setOptions(next.length ? next : builtInWireOptions);
+      setMessage(next.length ? null : "Каталог проводов пуст. Загрузите лист «Провода», диапазон E3:AJ.");
     }).catch(() => {
-      if (!controller.signal.aborted) setDatabaseOptions([]);
+      if (!controller.signal.aborted) {
+        setDatabaseOptions([]);
+        setMessage("Не удалось прочитать каталог проводов. Проверьте справочник в разделе «Справочники».");
+      }
     });
     return () => controller.abort();
   }, [api]);

@@ -212,6 +212,8 @@ public sealed class XlsxReferenceApiTests
             item.ProfileId == "technology.operations" &&
             item.SourceId == "technology-operations" &&
             item.SheetName == "БД.ОП");
+        Assert.Contains(profiles!, item => item.ProfileId == "technology.wires" && item.SourceId == "technology-wires");
+        Assert.DoesNotContain(profiles!, item => item.ProfileId == "technology.awg-reference");
 
         var bytes = XlsxTestFixtureBuilder.MinimalValidWorkbook();
         var request = new XlsxProfilePreviewRequest(

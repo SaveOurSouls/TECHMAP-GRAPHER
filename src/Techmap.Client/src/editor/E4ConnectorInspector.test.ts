@@ -129,6 +129,25 @@ describe("E4 connector inline editing", () => {
     expect(updateWireQueryState(initial, "missing", null)).toBe(initial);
   });
 
+  it("offers all sections for a mark even when the current search page is narrower", () => {
+    const connector = createBuiltInConnectorInstance("catalog-connector-free", {
+      id: "wire-choices", designation: "X1", e4Position: { x: 0, y: 0 }, freeContactCount: 1,
+    });
+    const selected = { ...connector, contacts: connector.contacts.map(contact => ({ ...contact, wire: "МГТФ", wireSection: "0,35" })) };
+    const options = [
+      { id: "one", mark: "МГТФ", section: "0,35", label: "МГТФ · 0,35", detail: "" },
+      { id: "two", mark: "МГТФ", section: "0,5", label: "МГТФ · 0,5", detail: "" },
+      { id: "three", mark: "НВ-4", section: "0,35", label: "НВ-4 · 0,35", detail: "" },
+    ];
+    const markup = renderToStaticMarkup(createElement(E4ConnectorInspector, {
+      connector: selected, disabled: false, editing: true, mode: "canvas", onCommand: vi.fn(),
+      wireOptions: options.slice(0, 1), wireMaterialOptions: options,
+    }));
+    const sections = selectMarkup(markup, "Сечение, контакт 1");
+    expect(sections).toContain('value="0,5"');
+    expect(sections).not.toContain('value="1,0"');
+  });
+
   it("keeps mono and two-color swatches deterministic", () => {
     expect(wireColorSwatchBackground("красный", "", builtInWireColors)).toBe("#D32F2F");
     expect(wireColorSwatchBackground("красный", "черный", builtInWireColors)).toBe(

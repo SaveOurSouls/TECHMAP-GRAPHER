@@ -13,7 +13,7 @@ import type { WireDatabaseOption } from "../editor/wire-database";
 const labels = { number: "№", contactType: "Тип", circuit: "Цепь", terminal: "Терминал", wire: "Марка", wireSection: "Сечение", color: "Цвет" };
 
 export function E4ArticlePreview({ content, table, articleId, assets, code, name, disabled, onChange, onTableChange, wireLookup }: {
-  readonly wireLookup?: { readonly options: readonly WireDatabaseOption[]; readonly message: string | null; readonly search: (query: string) => void };
+  readonly wireLookup?: { readonly options: readonly WireDatabaseOption[]; readonly databaseOptions: readonly WireDatabaseOption[]; readonly message: string | null; readonly search: (query: string) => void };
   readonly content: TemplateContentV5;
   readonly table: E4ConnectorSeriesTable;
   readonly articleId: string | null;
@@ -106,7 +106,7 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
     {preview.error && <p role="alert">{preview.error}</p>}
     {preview.connector && <div className="library-e4-preview-scroll"><div style={{ width: connectorE4TableGeometry(preview.connector).width }}>
         <E4ConnectorInspector connector={preview.connector} mode="canvas" disabled={disabled} editing={!disabled} onCommand={command} onEditingChange={() => {}}
-          wireOptions={wireLookup?.options} wireLookupMessage={wireLookup?.message} onWireSearch={wireLookup?.search}
+          wireOptions={wireLookup?.options} wireMaterialOptions={wireLookup?.databaseOptions} wireLookupMessage={wireLookup?.message} onWireSearch={wireLookup?.search}
           templateAuthoring={{ groups: table.contactTypeGroups, names: authoringNames, numbers: authoringNumbers, showName, onNameVisibilityChange: toggleName,
             onNumberChange: (contactId, value) => {
               const row = authoringRows.find(item => `library-preview:contact:${item.seriesRowId}` === contactId);

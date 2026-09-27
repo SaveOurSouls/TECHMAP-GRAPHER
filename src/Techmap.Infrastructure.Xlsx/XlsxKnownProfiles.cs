@@ -19,7 +19,6 @@ public static class XlsxKnownProfiles
         CreateTerminals(),
         CreateCoaxTerminations(),
         CreateCoaxCableDimensions(),
-        CreateAwgReference(),
         CreateWires(),
     ];
 
@@ -28,7 +27,10 @@ public static class XlsxKnownProfiles
     public static XlsxKnownProfile Get(string profileId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
+        // Keep direct imports of older workbooks readable, but no longer offer
+        // the AWG diameter table as a selectable reference database.
         return Profiles.SingleOrDefault(profile => string.Equals(profile.Id, profileId, StringComparison.Ordinal))
+               ?? (profileId == "technology.awg-reference" ? CreateAwgReference() : null)
                ?? throw new XlsxImportException("xlsx_profile_not_found", "Неизвестный профиль импорта XLSX.");
     }
 

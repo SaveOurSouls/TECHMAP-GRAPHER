@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWireSection, wireDatabaseOption, filterWireOptions } from "./wire-database";
+import { formatWireSection, wireDatabaseOption, filterWireOptions, wireSectionChoices } from "./wire-database";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { createEmptyHarnessDesign, parseHarnessDesignDocument, connectorContactPosition, createOrthogonalE4Route, wireEndpointE4Anchor } from "./model";
 import { createWire } from "./commands";
@@ -31,6 +31,20 @@ describe("wire database", () => {
     expect(red.detail).toContain("монтажный многожильный провод");
     expect(red.color).toBe("красный");
     expect(filterWireOptions([red, blue], "TEST 0.35 красный")).toEqual([red]);
+  });
+  it("filters marks and complex sections in both directions using the full catalog", () => {
+    const options = [
+      { id: "a", mark: "МГТФ", section: "0,35", label: "МГТФ · 0,35", detail: "" },
+      { id: "b", mark: "МГТФ", section: "0,5", label: "МГТФ · 0,5", detail: "" },
+      { id: "c", mark: "НВ-4", section: "0,35", label: "НВ-4 · 0,35", detail: "" },
+      { id: "d", mark: "UL2725", section: "3Cx0,5 | 2Px0,22", label: "UL2725", detail: "" },
+      { id: "e", mark: "UL2725", section: "3Cx0,5 | 1Px0,22", label: "UL2725", detail: "" },
+    ];
+    expect(filterWireOptions(options, "", "0.35").map(option => option.mark)).toEqual(["МГТФ", "НВ-4"]);
+    expect(wireSectionChoices(options, "МГТФ")).toEqual(["0,35", "0,5"]);
+    expect(wireSectionChoices(options, "UL2725")).toEqual(["3Cx0,5 | 2Px0,22", "3Cx0,5 | 1Px0,22"]);
+    expect(filterWireOptions(options, "", "3Cx0.5 | 2Px0.22").map(option => option.mark)).toEqual(["UL2725"]);
+    expect(wireSectionChoices(options, "МГТФ", "устаревшее")).toContain("устаревшее");
   });
   it("pins a selected E4 variant to its published record and carries it to a new wire", () => {
     const option = wireDatabaseOption({ recordId: "b".repeat(64), sourceLocation: null, entityType: "wire", sourceKey: "МГТФ #1",

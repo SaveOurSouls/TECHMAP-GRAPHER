@@ -9,12 +9,16 @@ import {
   normalizeCoaxTerminationCatalogCandidate,
   referenceRecordToEditorCatalogItem,
   remoteEditorCatalogSources,
+  editorCatalogSources,
 } from "./editor-reference-catalog";
 
 function source(id: string) {
   const result = remoteEditorCatalogSources.find((item) => item.id === id);
-  if (!result) throw new Error(`missing test source ${id}`);
-  return result;
+  if (result) return result;
+  if (id === "technology-awg-reference") return {
+    id, label: "legacy", description: "legacy", entityTypes: ["awg-reference"], accent: "#356c88",
+  };
+  throw new Error(`missing test source ${id}`);
 }
 
 function record(entityType: string, sourceKey: string, payload: Readonly<Record<string, unknown>>): ReferenceCatalogSearchRecord {
@@ -22,6 +26,10 @@ function record(entityType: string, sourceKey: string, payload: Readonly<Record<
 }
 
 describe("editor reference catalog", () => {
+  it("hides the old AWG diameter database and exposes the wire catalog", () => {
+    expect(editorCatalogSources.some(source => source.id === "technology-awg-reference")).toBe(false);
+    expect(editorCatalogSources.some(source => source.id === "technology-wires")).toBe(true);
+  });
   it("shows the wire database mark and section in the catalog and pinned material name", () => {
     const item = referenceRecordToEditorCatalogItem(source("technology-wires"), record("wire", "internal-key", {
       Марка: "TEST", Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22",

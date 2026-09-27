@@ -292,12 +292,13 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const loadSources = useCallback(async (preferredSourceId?: string) => {
     try {
       const result = await api.listSources();
-      setSources(result);
+      const visibleSources = result.filter(source => source.sourceId !== "technology-awg-reference");
+      setSources(visibleSources);
       setSourcesError(null);
-      setEditableSourceId((current) => preferredSourceId && result.some((source) => source.sourceId === preferredSourceId)
+      setEditableSourceId((current) => preferredSourceId && visibleSources.some((source) => source.sourceId === preferredSourceId)
         ? preferredSourceId
-        : result.some((source) => source.sourceId === current) ? current
-          : result.find((source) => source.sourceId === "technology-wires")?.sourceId ?? result[0]?.sourceId ?? "");
+        : visibleSources.some((source) => source.sourceId === current) ? current
+          : visibleSources.find((source) => source.sourceId === "technology-wires")?.sourceId ?? visibleSources[0]?.sourceId ?? "");
     } catch (error) {
       setSources([]);
       setSourcesError(errorText(error));

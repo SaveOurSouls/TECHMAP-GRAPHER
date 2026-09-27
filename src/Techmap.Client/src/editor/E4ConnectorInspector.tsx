@@ -25,7 +25,7 @@ import "./e4-connector-inspector.css";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { InfoHint } from "../InfoHint";
 import { AnchoredPopover } from "../AnchoredPopover";
-import { builtInWireOptions, filterWireOptions, type WireDatabaseOption } from "./wire-database";
+import { builtInWireOptions, filterWireOptions, normalizeWireChoice, wireSectionChoices, type WireDatabaseOption } from "./wire-database";
 import { uniqueWireMaterialOption } from "./resolve-wire-materials";
 
 export interface E4ConnectorInspectorProps {
@@ -78,15 +78,6 @@ function normalizedColorKey(value: string): string {
 function colorHex(value: string, choices: readonly WireColorReference[]): string {
   if (/^#[0-9a-f]{6}$/i.test(value.trim())) return value.trim();
   return choices.find((choice) => normalizedColorKey(choice.name) === normalizedColorKey(value))?.hex ?? "#D9E2E7";
-}
-
-function wireSectionChoices(options: readonly WireDatabaseOption[], mark: string, current: string): readonly string[] {
-  const normalized = mark.trim().toLocaleLowerCase("ru-RU");
-  const choices = options
-    .filter(option => !normalized || option.mark.trim().toLocaleLowerCase("ru-RU") === normalized)
-    .map(option => option.section.trim())
-    .filter(Boolean);
-  return [...new Set([current.trim(), ...choices].filter(Boolean))];
 }
 
 export function wireColorSwatchBackground(
@@ -507,7 +498,8 @@ export function E4ConnectorInspector({
                   const lockedByLibraryTitle = isTemplate
                     ? "Номер и тип заданы закреплённым шаблоном"
                     : "Номер и тип заданы артикулом серии";
-                  const sectionChoices = wireSectionChoices(wireOptions, contact.wire, contact.wireSection ?? "");
+                  const materialChoices = wireMaterialOptions?.length ? wireMaterialOptions : wireOptions;
+                  const sectionChoices = wireSectionChoices(materialChoices, contact.wire, contact.wireSection ?? "");
                   const input = templateAuthoring && column.id === "number" ? <TemplateNameCell
                     label={`Номер, контакт ${contact.number}`} value={templateAuthoring.numbers[contact.id] ?? ""} disabled={disabled}
                     onCommit={value => templateAuthoring.onNumberChange(contact.id, value)} />
@@ -546,11 +538,11 @@ export function E4ConnectorInspector({
                     </select>
                   ) : column.id === "wireSection" ? <select
                     aria-label={`Сечение, контакт ${contact.number}`} value={value} disabled={cellDisabled || !canvasEditing}
-                    title={contact.wire.trim() ? "Сечения выбранной марки провода" : "Сначала выберите марку провода"}
+                    title={contact.wire.trim() ? "Сечения выбранной марки провода" : "Выберите сечение, чтобы отфильтровать марки проводов"}
                     onChange={event => {
                       const section = event.target.value;
-                      const option = uniqueWireMaterialOption({ ...contact, wireSection: section }, wireMaterialOptions ?? wireOptions)
-                        ?? wireOptions.find(item => !item.materialBinding && item.mark.trim().toLocaleLowerCase("ru-RU") === contact.wire.trim().toLocaleLowerCase("ru-RU") && item.section === section);
+                      const option = uniqueWireMaterialOption({ ...contact, wireSection: section }, materialChoices)
+                        ?? materialChoices.find(item => !item.materialBinding && normalizeWireChoice(item.mark) === normalizeWireChoice(contact.wire) && normalizeWireChoice(item.section) === normalizeWireChoice(section));
                       updateContact(contact, { wireSection: section, wireDiameterMm: option?.diameterMm ?? null, materialBinding: option?.materialBinding ?? null,
                         ...(option?.color ? { color: option.color } : {}) });
                     }}
@@ -564,7 +556,9 @@ export function E4ConnectorInspector({
                       autoComplete="off"
                       onChange={(event) => {
                         const query = event.currentTarget.value;
-                        updateContact(contact, { wire: query, wireSection: "", wireDiameterMm: null });
+                        // Typing a mark keeps a section chosen first. The list below
+                        // offers only rows that contain this exact pair.
+                        updateContact(contact, { wire: query, wireSection: contact.wireSection ?? "", wireDiameterMm: null, materialBinding: null });
                         setWireQueries((current) => updateWireQueryState(current, contact.id, query));
                         onWireSearch?.(query);
                       }}
@@ -578,7 +572,7 @@ export function E4ConnectorInspector({
                     />
                     {wireQueries[contact.id] !== undefined && <AnchoredPopover className="e4cce-wire-suggestions" role="listbox" label={`Подсказки проводов, контакт ${contact.number}`} open onClose={() => setWireQueries(current => updateWireQueryState(current, contact.id, null))}>
                       {wireLookupMessage && <small role="status">{wireLookupMessage}</small>}
-                      {filterWireOptions(wireOptions, wireQueries[contact.id] ?? "")
+                      {filterWireOptions(materialChoices, wireQueries[contact.id] ?? "", contact.wireSection ?? "")
                         .map((wire) => <button
                           type="button"
                           key={wire.id}
