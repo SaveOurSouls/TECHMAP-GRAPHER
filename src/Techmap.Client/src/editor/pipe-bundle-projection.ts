@@ -222,7 +222,7 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
     const body=placement.bodyOffset??{x:0,y:0};
     const target=offsetAt(placement.axis.samples,t,offset);
     const shiftedTarget={x:target.x+body.x,y:target.y+body.y};
-    if((radius>0||placement.transitionBendStart||placement.transitionBendEnd)&&(t<placement.start||t>placement.end)){
+    if(t<placement.start||t>placement.end){
       const entering=t<placement.start,edge=entering?placement.start:placement.end;
       const outer=entering?Math.max(0,edge-transition(placement)):Math.min(1,edge+transition(placement,"end"));
       let station=(placement.reverse?1-outer:outer)*placement.chain.length,index=0;
@@ -232,11 +232,9 @@ function rawProjectedPoint(document: HarnessDesignDocument, segmentId: string, f
       const shiftedEdge={x:edgePoint.x+body.x,y:edgePoint.y+body.y};
       const a=at(placement.axis.samples,Math.max(0,edge-.00001)),b=at(placement.axis.samples,Math.min(1,edge+.00001));
       const progress=entering?(t-outer)/(edge-outer):(t-edge)/(outer-edge);
-      const smooth=16*progress*progress*(1-progress)*(1-progress);
       const bend=entering?placement.transitionBendStart:placement.transitionBendEnd;
-      const baseline=entering?bundleTransitionPoint(sourcePoint,shiftedEdge,{x:b.x-a.x,y:b.y-a.y},progress,radius)
-        :bundleTransitionPoint(shiftedEdge,sourcePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius);
-      result=bend?{x:baseline.x+bend.x*smooth,y:baseline.y+bend.y*smooth}:baseline;
+      result=entering?bundleTransitionPoint(sourcePoint,shiftedEdge,{x:b.x-a.x,y:b.y-a.y},progress,radius,bend)
+        :bundleTransitionPoint(shiftedEdge,sourcePoint,{x:b.x-a.x,y:b.y-a.y},progress,radius,bend);
     }else result = mix(result, shiftedTarget, blend);
    }
    memo.set(key,result);return result;
