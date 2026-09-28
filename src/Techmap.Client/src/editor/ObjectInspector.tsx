@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { calculateWireStripSteps, type WireEndStripProfiles, type WireStripProfileBinding } from "./model";
 import { builtInWireColors } from "./wire-reference-catalog";
+import { WireDatabasePicker } from "./WireDatabasePicker";
+import type { WireDatabaseOption } from "./wire-database";
 
 export interface ObjectInspectorProps {
   readonly view: HarnessEditorView;
@@ -12,6 +14,8 @@ export interface ObjectInspectorProps {
     patch: Partial<Pick<EditorSceneObject, "label" | "x" | "y" | "color" | "metadata">>,
   ) => void;
   readonly onWireMaterialClear?: (wireId: string) => void;
+  readonly wireMaterialOptions?: readonly WireDatabaseOption[];
+  readonly onWireMaterialSelect?: (wireId:string,option:WireDatabaseOption)=>void;
   readonly wireStripProfiles?: WireEndStripProfiles;
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
@@ -143,6 +147,8 @@ export function ObjectInspector({
   disabled,
   onChange,
   onWireMaterialClear,
+  wireMaterialOptions,
+  onWireMaterialSelect,
   wireStripProfiles,
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
@@ -189,6 +195,9 @@ export function ObjectInspector({
           <small>Выберите провод или кабель в нижнем справочнике двойным щелчком.</small>
         </>}
       </section>}
+      {selectedObject.kind === "wire" && wireMaterialOptions && onWireMaterialSelect && <WireDatabasePicker
+        options={wireMaterialOptions} currentMark={selectedObject.metadata?.wireMark} currentRecordId={selectedObject.metadata?.materialRecordId}
+        disabled={disabled} onSelect={option=>onWireMaterialSelect(selectedObject.id,option)}/>}
       {selectedObject.kind === "wire" && view === "drawing" && (
         <>
           <WireStripProfilePanel

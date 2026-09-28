@@ -25,7 +25,7 @@ import "./e4-connector-inspector.css";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { InfoHint } from "../InfoHint";
 import { AnchoredPopover } from "../AnchoredPopover";
-import { builtInWireOptions, filterWireOptions, normalizeWireChoice, wireSectionChoices, type WireDatabaseOption } from "./wire-database";
+import { builtInWireOptions, filterWireOptions, normalizeWireChoice, wireMarkChoices, wireSectionChoices, type WireDatabaseOption } from "./wire-database";
 import { uniqueWireMaterialOption } from "./resolve-wire-materials";
 
 export interface E4ConnectorInspectorProps {
@@ -572,18 +572,18 @@ export function E4ConnectorInspector({
                     />
                     {wireQueries[contact.id] !== undefined && <AnchoredPopover className="e4cce-wire-suggestions" role="listbox" label={`Подсказки проводов, контакт ${contact.number}`} open onClose={() => setWireQueries(current => updateWireQueryState(current, contact.id, null))}>
                       {wireLookupMessage && <small role="status">{wireLookupMessage}</small>}
-                      {filterWireOptions(materialChoices, wireQueries[contact.id] ?? "", contact.wireSection ?? "")
-                        .map((wire) => <button
+                      {wireMarkChoices(materialChoices, wireQueries[contact.id] ?? "", contact.wireSection ?? "")
+                        .map((mark) => <button
                           type="button"
-                          key={wire.id}
+                          key={mark}
                           onPointerDown={(event) => event.preventDefault()}
                           onClick={() => {
-                            updateContact(contact, { wire: wire.mark, wireSection: wire.section, wireDiameterMm:wire.diameterMm, materialBinding: wire.materialBinding ?? null,
-                              ...(wire.color ? { color: wire.color } : {}) });
+                            const option = uniqueWireMaterialOption({ ...contact, wire: mark }, materialChoices);
+                            updateContact(contact, { wire: mark, wireSection: contact.wireSection ?? "", wireDiameterMm:option?.diameterMm ?? null,
+                              materialBinding: option?.materialBinding ?? null });
                             setWireQueries((current) => updateWireQueryState(current, contact.id, null));
                           }}
-                          title={wire.detail}
-                        >{wire.label}{wire.detail && <small>{wire.detail}</small>}</button>)}
+                        >{mark}</button>)}
                     </AnchoredPopover>}
                   </div> : <input
                     type={column.id === "number" ? "number" : "text"}

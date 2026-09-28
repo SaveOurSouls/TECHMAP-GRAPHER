@@ -80,6 +80,12 @@ export function filterWireOptions(options: readonly WireDatabaseOption[], query:
     tokens.every(token => normalize(`${option.label} ${option.detail} ${option.searchText ?? ""}`).includes(token)));
 }
 
+/** A mark is offered once; its section remains a separate choice. */
+export function wireMarkChoices(options: readonly WireDatabaseOption[], query: string, section = ""): readonly string[] {
+  return [...new Map(filterWireOptions(options, query, section)
+    .map(option => [normalizeWireChoice(option.mark), option.mark] as const)).values()];
+}
+
 /** Values used by the two dependent wire selectors. Keep the complete
  * catalog rows separate: the editor only combines them for display. */
 export function normalizeWireChoice(value: string): string {

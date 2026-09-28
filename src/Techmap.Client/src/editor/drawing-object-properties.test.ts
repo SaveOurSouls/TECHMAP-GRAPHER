@@ -60,6 +60,15 @@ it("keeps selected wires for manual routes and creates a sleeve for all selected
   const changed=applyEditorCommand(d,command.mock.calls[0]![0]);
   expect(changed.physicalTopology!.coverings![0]!.spans.map(s=>s.segmentId)).toEqual(["S0","S2"]);
 });
+it("shows the published wire database in selected wire properties",()=>{
+  const d=physicalFixture(),binding={sourceId:"technology-wires",snapshotId:"11111111-1111-4111-8111-111111111111",
+    snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire" as const,sourceKey:"МГТФ #1",displayName:"МГТФ · 0,35"};
+  const markup=renderToStaticMarkup(createElement(DrawingObjectProperties,{document:d,objectId:"W1",selectedIds:["W1"],instances:[],onCommand:vi.fn(),onSelect:vi.fn(),
+    wireMaterialOptions:[{id:binding.recordId,mark:"МГТФ",section:"0,35",label:binding.displayName,detail:"",materialBinding:binding}]}));
+  expect(markup).toContain('aria-label="Марка материала провода"');
+  expect(markup).toContain('value="МГТФ"');
+  expect(markup).toContain('aria-label="Позиция материала провода"');
+});
 it("does not enable library drawing commands for a free connector",()=>{
   const tree=DrawingObjectProperties({document:physicalFixture(),objectId:"A",selectedIds:["A"],instances:[],onCommand:vi.fn(),onSelect:vi.fn()});
   expect(elements(tree).filter(e=>typeof e.props.onChange==="function").every(e=>e.props.disabled===true)).toBe(true);

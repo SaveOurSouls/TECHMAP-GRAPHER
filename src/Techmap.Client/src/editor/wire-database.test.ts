@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWireSection, wireDatabaseOption, filterWireOptions, wireSectionChoices } from "./wire-database";
+import { formatWireSection, wireDatabaseOption, filterWireOptions, wireMarkChoices, wireSectionChoices } from "./wire-database";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { createEmptyHarnessDesign, parseHarnessDesignDocument, connectorContactPosition, createOrthogonalE4Route, wireEndpointE4Anchor } from "./model";
 import { createWire } from "./commands";
@@ -42,6 +42,8 @@ describe("wire database", () => {
     ];
     expect(filterWireOptions(options, "", "0.35").map(option => option.mark)).toEqual(["МГТФ", "НВ-4"]);
     expect(wireSectionChoices(options, "МГТФ")).toEqual(["0,35", "0,5"]);
+    expect(wireMarkChoices(options, "")).toEqual(["МГТФ", "НВ-4", "UL2725"]);
+    expect(wireMarkChoices(options, "", "0,35")).toEqual(["МГТФ", "НВ-4"]);
     expect(wireSectionChoices(options, "UL2725")).toEqual(["3Cx0,5 | 2Px0,22", "3Cx0,5 | 1Px0,22"]);
     expect(filterWireOptions(options, "", "3Cx0.5 | 2Px0.22").map(option => option.mark)).toEqual(["UL2725"]);
     expect(wireSectionChoices(options, "МГТФ", "устаревшее")).toContain("устаревшее");

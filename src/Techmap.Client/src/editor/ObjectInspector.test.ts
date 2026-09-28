@@ -126,6 +126,19 @@ describe("wire object inspector", () => {
     expect(markup).toContain("нижнем справочнике");
   });
 
+  it("offers mark and exact database position when an E4 wire is selected", () => {
+    const markup=renderToStaticMarkup(createElement(ObjectInspector,{
+      view:"e4",selectedObject:wireObject({}),disabled:false,onChange:vi.fn(),
+      wireMaterialOptions:[{id:"position",mark:"МГТФ",section:"0,35",label:"МГТФ · 0,35",detail:"",
+        materialBinding:{sourceId:"technology-wires",snapshotId:"11111111-1111-4111-8111-111111111111",
+          snapshotSha256:"a".repeat(64),recordId:"position",entityType:"wire",sourceKey:"МГТФ",displayName:"МГТФ · 0,35"}}],
+      onWireMaterialSelect:vi.fn(),
+    }));
+    expect(markup).toContain('aria-label="Марка материала провода"');
+    expect(markup).toContain('value="МГТФ"');
+    expect(markup).toContain('aria-label="Позиция материала провода"');
+  });
+
   it("shows separate drawing strip profiles and calculated step lengths", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "drawing",

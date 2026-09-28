@@ -37,6 +37,13 @@ describe("connected wire material resolution", () => {
     expect(resolveConnectedWireMaterials(connected(), [{ ...option, id: "duplicate" }, option])).toEqual(connected());
   });
 
+  it("uses mark and section even when the catalog contains several variants of the same mark", () => {
+    const wider={...option,id:"wide",section:"30AWG",materialBinding:{...binding,recordId:"c".repeat(64)}};
+    const resolved=resolveConnectedWireMaterials(connected(),[wider,option]);
+    expect(resolved.wires[0]?.materialBinding).toEqual(binding);
+    expect(resolved.connectors[1]?.contacts[0]).toMatchObject({wire:"UL1001",wireSection:"26AWG",materialBinding:binding});
+  });
+
   it("changes both ends in one contact command and clears the old binding on manual edit", () => {
     const initial = connected();
     const selected = applyEditorCommand(initial, { type: "update-contact", connectorId: "x1",

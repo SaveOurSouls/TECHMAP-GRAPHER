@@ -475,6 +475,10 @@ export function designToScene(
         cutLengthMm: cutLength.cutLengthMm === null ? "" : String(cutLength.cutLengthMm),
         materialStatus: cutLength.materialConsumptionMm === null ? "excluded" : "included",
         materialSourceKey: wire.materialBinding?.sourceKey ?? "",
+        materialRecordId: wire.materialBinding?.recordId ?? "",
+        wireMark: [wire.from,wire.to].flatMap(end=>"connectorId" in end
+          ? document.connectors.find(connector=>connector.id===end.connectorId)?.contacts.filter(contact=>contact.id===end.contactId)??[] : [])
+          .find(contact=>contact.wire.trim())?.wire??"",
         materialDisplayName: wire.materialBinding?.displayName ?? "",
         materialEntityType: wire.materialBinding?.entityType ?? "",
         e4LabelPosition: String(wire.e4LabelPosition ?? 0.5),
@@ -1367,7 +1371,17 @@ export function HarnessDesignEditor({
         : null;
       const result = wireMaterialUpdateFromCatalogItem(item, selectedWireId);
       if (!result.ok) setMessage(result.error);
-      else run(result.command);
+      else {
+        const option=wireLookup.databaseOptions.find(candidate=>candidate.id===item.recordId);
+        const selected=history.present.wires.find(wire=>wire.id===selectedWireId);
+        const endpoint=selected&&[selected.from,selected.to].find(end=>"connectorId" in end);
+        if(option?.materialBinding&&endpoint&&"connectorId" in endpoint)run({
+          type:"update-contact",connectorId:endpoint.connectorId,contactId:endpoint.contactId,
+          wire:option.mark,wireSection:option.section,wireDiameterMm:option.diameterMm??null,
+          materialBinding:option.materialBinding,...(option.color?{color:option.color}:{}),
+        });
+        else run(result.command);
+      }
       return;
     }
     if (item.placement !== "connector") return;
@@ -1744,7 +1758,7 @@ export function HarnessDesignEditor({
         onObjectPickCancel={()=>setPipeBundleDraft(null)}
         revealRequest={revealRequest}
         objectProperties={view==="drawing"?id=>
-          <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
+          <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} wireMaterialOptions={wireLookup.databaseOptions} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setPipeBundleDraft(beginPipeBundle(topology,bundleId));}}/>:undefined}
         documentActions={<>{view==="drawing"&&<>
           {pipeBundleDraft&&history.present.physicalTopology&&<PipeBundleEditor topology={history.present.physicalTopology} draft={pipeBundleDraft} onChange={setPipeBundleDraft} onCancel={()=>setPipeBundleDraft(null)} onSave={()=>{try{const topology=pipeBundleDraftTopology(history.present.physicalTopology!,pipeBundleDraft);if(run({type:'set-physical-topology',topology}))setPipeBundleDraft(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
@@ -1879,6 +1893,16 @@ export function HarnessDesignEditor({
         onCatalogLoadMore={catalog.loadMore}
         onCatalogRetry={catalog.retry}
         onWireMaterialClear={(wireId) => run({ type: "update-wire", wireId, materialBinding: null })}
+        wireMaterialOptions={wireLookup.databaseOptions}
+        onWireMaterialSelect={(wireId,option)=>{
+          if(!option.materialBinding)return;
+          const wire=history.present.wires.find(item=>item.id===wireId);
+          const end=wire&&[wire.from,wire.to].find(endpoint=>"connectorId" in endpoint);
+          if(end&&"connectorId" in end)run({type:"update-contact",connectorId:end.connectorId,contactId:end.contactId,
+            wire:option.mark,wireSection:option.section,wireDiameterMm:option.diameterMm??null,
+            materialBinding:option.materialBinding,...(option.color?{color:option.color}:{})});
+          else run({type:"update-wire",wireId,materialBinding:option.materialBinding});
+        }}
         selectedWireStripProfiles={selectedObjectIds.length === 1
           ? history.present.wires.find((wire) => wire.id === selectedObjectIds[0])?.stripProfiles
           : undefined}

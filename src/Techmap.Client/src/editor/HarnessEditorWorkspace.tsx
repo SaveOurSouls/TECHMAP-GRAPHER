@@ -16,6 +16,7 @@ import type {
   ResolveComponentTemplateAssetUrl,
 } from "./component-template-view-renderer";
 import { CatalogDock } from "./CatalogDock";
+import type { WireDatabaseOption } from "./wire-database";
 import { fitEditorCameraToBounds, zoomEditorCameraAt, type EditorViewportSize } from "./editor-camera";
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type {
@@ -122,6 +123,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCatalogLoadMore?: () => void;
   readonly onCatalogRetry?: () => void;
   readonly onWireMaterialClear?: (wireId: string) => void;
+  readonly wireMaterialOptions?: readonly WireDatabaseOption[];
+  readonly onWireMaterialSelect?: (wireId:string,option:WireDatabaseOption)=>void;
   readonly selectedWireStripProfiles?: WireEndStripProfiles;
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
@@ -259,6 +262,8 @@ export function HarnessEditorWorkspace({
   onCatalogLoadMore,
   onCatalogRetry,
   onWireMaterialClear,
+  wireMaterialOptions,
+  onWireMaterialSelect,
   selectedWireStripProfiles,
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
@@ -623,6 +628,8 @@ export function HarnessEditorWorkspace({
                   disabled={selectedLayer?.locked === true}
                   onChange={(objectId, patch) => changeObjects(updateEditorObject(objects, objectId, patch))}
                   onWireMaterialClear={onWireMaterialClear}
+                  wireMaterialOptions={wireMaterialOptions}
+                  onWireMaterialSelect={onWireMaterialSelect}
                   wireStripProfiles={selectedWireStripProfiles}
                   activeWireStripEnd={activeWireStripEnd}
                   onActiveWireStripEndChange={onActiveWireStripEndChange}
