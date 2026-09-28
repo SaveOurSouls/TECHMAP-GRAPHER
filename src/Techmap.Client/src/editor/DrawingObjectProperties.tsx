@@ -17,7 +17,7 @@ function WireMaterialPicker({document,wireId,options,onCommand}: {document:Harne
   const wire=document.wires.find(item=>item.id===wireId)!;
   const contact=[wire.from,wire.to].flatMap(end=>"connectorId" in end
     ? document.connectors.find(item=>item.id===end.connectorId)?.contacts.filter(item=>item.id===end.contactId)??[] : []).find(item=>item.wire.trim());
-  return <WireDatabasePicker options={options} currentMark={contact?.wire} currentRecordId={wire.materialBinding?.recordId} onSelect={option=>{
+  return <WireDatabasePicker key={wireId} options={options} currentMark={contact?.wire} currentRecordId={wire.materialBinding?.recordId} onSelect={option=>{
       if(!option.materialBinding)return;
       const end=[wire.from,wire.to].find(endpoint=>"connectorId" in endpoint);
       if(end&&"connectorId" in end)onCommand({type:"update-contact",connectorId:end.connectorId,contactId:end.contactId,

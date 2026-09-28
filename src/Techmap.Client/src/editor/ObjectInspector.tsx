@@ -196,6 +196,7 @@ export function ObjectInspector({
         </>}
       </section>}
       {selectedObject.kind === "wire" && wireMaterialOptions && onWireMaterialSelect && <WireDatabasePicker
+        key={selectedObject.id}
         options={wireMaterialOptions} currentMark={selectedObject.metadata?.wireMark} currentRecordId={selectedObject.metadata?.materialRecordId}
         disabled={disabled} onSelect={option=>onWireMaterialSelect(selectedObject.id,option)}/>}
       {selectedObject.kind === "wire" && view === "drawing" && (
