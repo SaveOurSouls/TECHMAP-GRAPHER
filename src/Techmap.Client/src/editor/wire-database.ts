@@ -75,8 +75,8 @@ export const builtInWireOptions: readonly WireDatabaseOption[] = builtInWireRefe
 export function filterWireOptions(options: readonly WireDatabaseOption[], query: string, section = ""): readonly WireDatabaseOption[] {
   const normalize = (value: string) => value.toLocaleLowerCase("ru").replace(/[.,]/g, ".");
   const tokens = normalize(query).split(/\s+/).filter(Boolean);
-  const sectionKey = normalizeWireChoice(section);
-  return options.filter(option => (!sectionKey || normalizeWireChoice(option.section) === sectionKey) &&
+  const sectionKey = normalizeWireSectionChoice(section);
+  return options.filter(option => (!sectionKey || normalizeWireSectionChoice(option.section) === sectionKey) &&
     tokens.every(token => normalize(`${option.label} ${option.detail} ${option.searchText ?? ""}`).includes(token)));
 }
 
@@ -90,6 +90,12 @@ export function wireMarkChoices(options: readonly WireDatabaseOption[], query: s
  * catalog rows separate: the editor only combines them for display. */
 export function normalizeWireChoice(value: string): string {
   return value.trim().toLocaleLowerCase("ru-RU").replace(/ё/g, "е").replace(/[.,]/g, ".").replace(/\s+/g, "");
+}
+
+/** Unit labels on old contact presets do not change the imported size value.
+ * No conversion between AWG and square millimetres is performed. */
+export function normalizeWireSectionChoice(value: string): string {
+  return normalizeWireChoice(value).replace(/awg|мм[²2]|mm[²2]/g, "");
 }
 
 export function wireSectionChoices(

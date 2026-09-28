@@ -1,6 +1,7 @@
 import { applyEditorCommand } from "./commands";
 import { isJunctionEndpoint, isScreenEndpoint, type ConnectorContact, type HarnessDesignDocument, type WireEndpoint } from "./model";
 import type { WireDatabaseOption } from "./wire-database";
+import { normalizeWireSectionChoice } from "./wire-database";
 
 function contactAt(document: HarnessDesignDocument, endpoint: WireEndpoint): ConnectorContact | undefined {
   if (isJunctionEndpoint(endpoint) || isScreenEndpoint(endpoint)) return undefined;
@@ -19,7 +20,7 @@ export function uniqueWireMaterialOption(
 ): WireDatabaseOption | undefined {
   if (!contact.wire.trim() || !contact.wireSection?.trim()) return undefined;
   const candidates = options.filter(option => option.materialBinding &&
-    key(option.mark) === key(contact.wire) && key(option.section) === key(contact.wireSection ?? ""));
+    key(option.mark) === key(contact.wire) && normalizeWireSectionChoice(option.section) === normalizeWireSectionChoice(contact.wireSection ?? ""));
   if (candidates.length === 1) return candidates[0];
   if (!contact.color.trim()) return undefined;
   const colored = candidates.filter(option => option.color && key(option.color) === key(contact.color));

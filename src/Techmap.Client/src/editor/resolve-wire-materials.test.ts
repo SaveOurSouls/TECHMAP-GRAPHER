@@ -44,6 +44,13 @@ describe("connected wire material resolution", () => {
     expect(resolved.connectors[1]?.contacts[0]).toMatchObject({wire:"UL1001",wireSection:"26AWG",materialBinding:binding});
   });
 
+  it("resolves an AWG contact preset against numeric E3:AJ section values", () => {
+    const imported={...option,section:"26"};
+    const resolved=resolveConnectedWireMaterials(connected(),[imported]);
+    expect(resolved.wires[0]?.materialBinding).toEqual(binding);
+    expect(uniqueWireMaterialOption(connected().connectors[0]!.contacts[0]!,[{...imported,section:"24"}])).toBeUndefined();
+  });
+
   it("changes both ends in one contact command and clears the old binding on manual edit", () => {
     const initial = connected();
     const selected = applyEditorCommand(initial, { type: "update-contact", connectorId: "x1",
