@@ -9,6 +9,8 @@ import { coveringPaths, coveringMeasuredLength } from "./physical-coverings";
 import { physicalNodePoint } from "./physical-ports";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { movePositionLeaderOnRails, movePositionRail } from "./position-rail";
+import { connectionTableColumnLabels, getConnectionTableSettings, type ConnectionTableColumnId } from "./connection-table-settings";
+import { builtInWireColors, resolveWireColorHex } from "./wire-reference-catalog";
 export { createPositionRail } from "./position-rail";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
@@ -156,6 +158,45 @@ export function connectionEndLabel(document: HarnessDesignDocument, end: WireEnd
   return `${connector}:${contact?.number ?? "Контакт"}`;
 }
 
+/** Operator-facing endpoint label for the connection table, including the
+ * selected connector article while retaining the positional designation. */
+export function connectionTableEndLabel(document: HarnessDesignDocument, end: WireEndpoint): string {
+  if (end.junctionId || end.screenId) return connectionEndLabel(document, end);
+  const connector = document.connectors.find(item => item.id === end.connectorId);
+  const contact = connector?.contacts.find(item => item.id === end.contactId);
+  const article = connector?.partNumber?.trim();
+  const designation = connector ? `${connector.designation}${article ? ` (${article})` : ""}` : "Соединитель";
+  return `${designation}:${contact?.number ?? "Контакт"}`;
+}
+
+export function connectionWireColor(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): { readonly label: string; readonly hex: string } {
+  const contacts = [wire.from, wire.to].flatMap(end => {
+    if (!("connectorId" in end)) return [];
+    const connector = document.connectors.find(item => item.id === end.connectorId);
+    return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
+  });
+  const primary = contacts.find(contact => contact.color.trim())?.color.trim() ?? wire.color;
+  const secondary = contacts.find(contact => contact.secondaryColor?.trim())?.secondaryColor?.trim();
+  const name = (value: string) => builtInWireColors.find(color => color.hex.toLocaleLowerCase() === value.toLocaleLowerCase())?.name ?? value;
+  return { label: [name(primary), secondary ? name(secondary) : ""].filter(Boolean).join(" / ") || "—", hex: resolveWireColorHex(primary, builtInWireColors, wire.color || "#D9E2E7") };
+}
+
+function connectionTableValue(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number], id: ConnectionTableColumnId, index: number): string {
+  if (id === "index") return `W${index + 1}`;
+  if (id === "mark") return connectionWireMark(document, wire) || "—";
+  if (id === "section") return connectionWireSection(document, wire) || "—";
+  if (id === "marking") return wire.circuit || "—";
+  if (id === "from") return connectionTableEndLabel(document, wire.from);
+  if (id === "to") return connectionTableEndLabel(document, wire.to);
+  if (id === "color") return connectionWireColor(document, wire).label;
+  if (id === "length") return wire.lengthMm === null ? "—" : String(wire.lengthMm);
+  return document.physicalTopology?.routes.find(route => route.wireId === wire.id)?.steps.length ? "Задан" : "Не задан";
+}
+
+export function connectionTableColumns(): readonly { readonly id: ConnectionTableColumnId; readonly label: string }[] {
+  return getConnectionTableSettings().columns.filter(column => column.visible).map(column => ({ id: column.id, label: connectionTableColumnLabels[column.id] }));
+}
+
 export function connectionWireMark(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
   const contacts = [wire.from, wire.to].flatMap(end => {
     if (!("connectorId" in end)) return [];
@@ -227,9 +268,10 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
   const d=document.drawingDocuments;if(!d)return [];
   const rows=buildDrawingBom(document,quantity);
   const tables:EditorSceneObject[]=d.tables.filter(t=>t.kind!=="cut" && !t.dock).map(t=>{
-    const headers=t.kind==="bom"?["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]:["Провод","Сечение","A","B","Цепь","Материал","Маршрут"];
-    const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.index,r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map(w=>[connectionWireMark(document,w)||`W${document.wires.indexOf(w)+1}`,connectionWireSection(document,w)||"—",connectionEndLabel(document,w.from),connectionEndLabel(document,w.to),w.circuit,w.materialBinding?.displayName ?? "—",document.physicalTopology?.routes.some(r=>r.wireId===w.id)?"Задан":"Не задан"]);
-    const widths=t.kind==="bom"?[45,130,140,240,95,200]:[140,90,130,130,110,160,100];
+    const connectionColumns = connectionTableColumns();
+    const headers=t.kind==="bom"?["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]:connectionColumns.map(column => column.label);
+    const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.index,r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map((w,index)=>connectionColumns.map(column => connectionTableValue(document,w,column.id,index)));
+    const widths=t.kind==="bom"?[45,130,140,240,95,200]:connectionColumns.map(column => column.id === "from" || column.id === "to" ? 180 : column.id === "color" ? 100 : column.id === "marking" ? 120 : 100);
     return {id:t.id,kind:"drawing-table",layerId:"dimensions",label:t.kind==="bom"?`Спецификация · ${quantity} жгут(а)`:"Таблица соединений",x:t.position.x,y:t.position.y,width:widths.reduce((a,b)=>a+b,0),height:52+values.length*32,color:"#365568",metadata:{rowObjectIds:JSON.stringify(t.kind==="bom"?rows.map(r=>r.objectIds):document.wires.map(w=>[w.id])),headers:JSON.stringify(headers),rows:JSON.stringify(values),widths:JSON.stringify(widths)}};
   });
   const scale=d.leaderScale??1,radius=12*scale,anchorRadius=4*scale;
