@@ -1,3 +1,21 @@
+# Пакет 30.09.2026 — после завершения чатов
+
+В срез входят коммиты `b311847`, `09f082c`, `e70850b`, `8c1cd7c`, `201b6d5`,
+`e26962d`, `1cf2b54` и ранее зафиксированные изменения до `a64b4ee`.
+
+Windows x64 ZIP `0.63.8-m5-07-review`:
+`artifacts/m5-07-final-20260929/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`.
+Размер: **55 229 059 байт**. SHA-256:
+`1854E1316C56D250F50250BDC93200FA3515062FE8BE606F64E76F1C7578B241`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 154 frontend-файла,
+1496 клиентских тестов, TypeScript/Vite build, 1022 Release .NET-теста,
+self-contained win-x64 publish, манифест и `verify-package.ps1`. Проверка
+`test-portable-package.ps1` подтвердила семь portable-режимов из ASCII-пути
+`C:\Temp`. Прямой запуск из исходного пути с кириллицей может получить
+`UnauthorizedAccessException` при проверке ACL sandbox-средой; содержимое ZIP
+проверено из ASCII-пути. Пакет локальный и в Git не включается.
+
 # Пакет 29.09.2026 — исправление повторного recovery-предупреждения
 
 В срез входит коммит `2ba1562` (`Fix repeated harness recovery warning after restore`).
