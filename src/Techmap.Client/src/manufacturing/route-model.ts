@@ -14,7 +14,14 @@ export interface RouteRow {
   readonly photos?: readonly { readonly sha256: string; readonly name: string }[];
   readonly id: string;
   readonly kind: "semiFinished" | "assembly";
+  /** Human-facing storage/transfer index for the semi-finished product. */
+  readonly index?: string;
   readonly title: string;
+  /** Quantity to manufacture and safety stock for this stage. */
+  readonly quantity?: number;
+  readonly reserve?: number;
+  /** Planned time for one route row, in minutes. */
+  readonly operationTimeMinutes?: number;
   readonly comment: string;
   readonly sourceObjects: readonly RouteSourceRef[];
   readonly dependsOn: readonly string[];
@@ -81,7 +88,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
   let refCount = 0;
   const rows = array(v.rows, 1000).map(candidate => {
     const r = object(candidate), p = object(r.presentation);
-    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
+    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
     exact(p, ["backgroundOpacity", "objects"]);
     if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < .1 || p.backgroundOpacity > .5) return fail();
     const sourceObjects = array(r.sourceObjects, 10000).map(parseRef);
@@ -104,7 +111,15 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     const terminalRequirements = r.terminalRequirements === undefined ? undefined : array(r.terminalRequirements, 10000).map(parseTerminalRequirement);
     refCount += (terminalRequirements?.length ?? 0) + array(r.dependsOn, 1000).length;
     if (terminalRequirements && (new Set(terminalRequirements.map(item => `${item.wireId}:${item.end}`)).size !== terminalRequirements.length || terminalRequirements.some(item => !sourceObjects.some(ref => ref.kind === "wire" && ref.id === item.wireId)))) return fail();
-    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], title: text(r.title, 512), comment: text(r.comment, 4000, true), sourceObjects, dependsOn: array(r.dependsOn, 1000).map(id => text(id, 128)), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
+    const index = r.index === undefined ? undefined : text(r.index, 128, true);
+    const optionalNumber = (value: unknown): number | undefined => value === undefined ? undefined : (typeof value === "number" && Number.isFinite(value) ? value : fail());
+    const quantity = optionalNumber(r.quantity);
+    const reserve = optionalNumber(r.reserve);
+    const operationTimeMinutes = optionalNumber(r.operationTimeMinutes);
+    for (const [value, minimum] of [[quantity, 1], [reserve, 0], [operationTimeMinutes, 0]] as const) {
+      if (value !== undefined && (value < minimum || value > 1e9 || Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-4)) return fail();
+    }
+    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn: array(r.dependsOn, 1000).map(id => text(id, 128)), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
   });
   if (refCount > 10000) return fail();
   const byId = new Map(rows.map(row => [row.id, row]));

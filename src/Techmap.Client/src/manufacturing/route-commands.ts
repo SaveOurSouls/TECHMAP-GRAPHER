@@ -6,11 +6,11 @@ const validate = (route: ManufacturingRoute): ManufacturingRoute => parseManufac
 const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
 
 /** Initial generation only; opening an existing route must preserve manually authored rows. */
-export function generateRoute(document: HarnessDesignDocument, sourceSha256: string): ManufacturingRoute {
+export function generateRoute(document: HarnessDesignDocument, sourceSha256: string, quantity = 1): ManufacturingRoute {
   return validate({
     contractVersion: 1, source: { fingerprintVersion: 1, sha256: sourceSha256 }, status: "draft",
     rows: buildRouteSourceItems(document).filter(item => item.ref.kind !== "connector").map((item, index) => ({
-      id: `source-${index + 1}`, kind: "semiFinished", title: item.title, comment: "", sourceObjects: [item.ref], dependsOn: [], operations: [], prepared: false,
+      id: `source-${index + 1}`, kind: "semiFinished", index: `ПФ-${String(index + 1).padStart(2, "0")}`, title: item.title, quantity, reserve: 0, operationTimeMinutes: 0, comment: "", sourceObjects: [item.ref], dependsOn: [], operations: [], prepared: false,
       presentation: { backgroundOpacity: .25, objects: [] },
     })),
   });
@@ -41,7 +41,8 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
     objects.set(key, item);
   }
   const merged: RouteRow = {
-    id: newId, kind: "semiFinished", title: selected.map(row => row.title).join(" + ").slice(0, 512),
+    id: newId, kind: "semiFinished", ...(selected[0]?.index === undefined ? {} : { index: selected[0].index }), title: selected.map(row => row.title).join(" + ").slice(0, 512),
+    quantity: Math.max(1, selected.reduce((max, row) => Math.max(max, row.quantity ?? 0), 0)), reserve: selected.reduce((sum, row) => sum + (row.reserve ?? 0), 0), operationTimeMinutes: selected.reduce((sum, row) => sum + (row.operationTimeMinutes ?? 0), 0),
     comment: selected.map(row => row.comment).filter(Boolean).join("\n\n"),
     sourceObjects: selected.flatMap(row => row.sourceObjects),
     dependsOn: unique(selected.flatMap(row => row.dependsOn).filter(id => !selection.has(id))),
@@ -64,7 +65,7 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
 export function addAssemblyRow(route: ManufacturingRoute, id: string, title: string, sourceRefs: readonly RouteSourceRef[], dependsOn: readonly string[]): ManufacturingRoute {
   const original = validate(route);
   return validate({ ...original, status: "draft", rows: [...original.rows, {
-    id, kind: "assembly", title, comment: "", sourceObjects: sourceRefs, dependsOn, operations: [],
+    id, kind: "assembly", index: `СБ-${String(original.rows.length + 1).padStart(2, "0")}`, title, quantity: 1, reserve: 0, operationTimeMinutes: 0, comment: "", sourceObjects: sourceRefs, dependsOn, operations: [],
     presentation: { backgroundOpacity: .25, objects: [] }, prepared: false,
   }] });
 }

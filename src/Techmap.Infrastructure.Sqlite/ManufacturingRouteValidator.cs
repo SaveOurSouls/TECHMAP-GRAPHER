@@ -31,6 +31,10 @@ internal static class ManufacturingRouteValidator
             var rowKeys = new[] { "id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared" };
             if (row.ValueKind == JsonValueKind.Object)
             {
+                if (row.TryGetProperty("index", out _)) rowKeys = [..rowKeys, "index"];
+                if (row.TryGetProperty("quantity", out _)) rowKeys = [..rowKeys, "quantity"];
+                if (row.TryGetProperty("reserve", out _)) rowKeys = [..rowKeys, "reserve"];
+                if (row.TryGetProperty("operationTimeMinutes", out _)) rowKeys = [..rowKeys, "operationTimeMinutes"];
                 if (row.TryGetProperty("photos", out _)) rowKeys = [..rowKeys, "photos"];
                 if (row.TryGetProperty("terminalRequirements", out _)) rowKeys = [..rowKeys, "terminalRequirements"];
             }
@@ -39,6 +43,10 @@ internal static class ManufacturingRouteValidator
             if (!rows.TryAdd(id, (row, path))) throw Invalid("Manufacturing route row IDs must be unique.", path + ".id");
             var kind = Text(row, "kind", path + ".kind", 32);
             if (kind is not ("semiFinished" or "assembly")) throw Invalid("Invalid manufacturing route row kind.", path + ".kind");
+            if (row.TryGetProperty("index", out var index) && (index.ValueKind != JsonValueKind.String || index.GetString()!.Length > 128)) throw Invalid("Invalid route row index.", path + ".index");
+            ValidateOptionalNonNegative(row, "quantity", path, positive: true);
+            ValidateOptionalNonNegative(row, "reserve", path, positive: false);
+            ValidateOptionalNonNegative(row, "operationTimeMinutes", path, positive: false);
             _ = Text(row, "title", path + ".title", 512);
             _ = TextAllowEmpty(row, "comment", path + ".comment", 4000);
             var refs = ValidateSourceObjects(row.GetProperty("sourceObjects"), path + ".sourceObjects", ref referenceCount);
@@ -269,6 +277,12 @@ internal static class ManufacturingRouteValidator
     private static IEnumerable<string> TextArray(JsonElement owner, string property, string path, int max) { var array = Array(owner, property, path, max); var seen = new HashSet<string>(); foreach (var item in array.EnumerateArray()) { var text = String(item, path, 128); if (!seen.Add(text)) throw Invalid("Duplicate dependency.", path); yield return text; } }
     private static bool Int(JsonElement owner, string property, string path, int min, int max) => owner.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) && number >= min && number <= max;
     private static double Number(JsonElement owner, string property, string path) => owner.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ? number : throw Invalid("Expected a finite number.", path + "." + property);
+    private static void ValidateOptionalNonNegative(JsonElement owner, string property, string path, bool positive)
+    {
+        if (!owner.TryGetProperty(property, out var value)) return;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var number) || !double.IsFinite(number) || number < (positive ? 1 : 0) || number > 1_000_000_000 || Math.Abs(number * 1000 - Math.Round(number * 1000)) > 1e-6)
+            throw Invalid($"{property} must be a {(positive ? "positive" : "nonnegative")} finite number.", path + "." + property);
+    }
     private static string Text(JsonElement owner, string property, string path, int max) => owner.TryGetProperty(property, out var value) ? String(value, path + "." + property, max) : throw Invalid("Expected non-empty text.", path + "." + property);
     private static string TextAllowEmpty(JsonElement owner, string property, string path, int max) { if (!owner.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.String || value.GetString()!.Length > max) throw Invalid("Expected bounded text.", path); return value.GetString()!; }
     private static string String(JsonElement value, string path, int max = 1024) => value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 and <= 1024 } text && text.Length <= max && !string.IsNullOrWhiteSpace(text) ? text : throw Invalid("Expected non-empty text.", path);
