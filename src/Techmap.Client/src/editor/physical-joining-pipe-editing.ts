@@ -3,6 +3,23 @@ import type {PhysicalTopology} from "./physical-topology-model";
 import type {PhysicalDragMode} from "./physical-editing";
 import {joiningPipePoints} from "./physical-joining-pipes";
 
+/** Move the complete OP geometry while preserving its authored shape and
+ * member transition handles. The electrical graph and member references stay
+ * unchanged; only the common pipe's presentation axis moves. */
+export function moveJoiningPipe(t:PhysicalTopology,id:string,delta:Point):PhysicalTopology {
+  if(!Number.isFinite(delta.x)||!Number.isFinite(delta.y)||(!delta.x&&!delta.y))return t;
+  return {...t,joiningPipes:t.joiningPipes?.map(pipe=>pipe.id!==id?pipe:{
+    ...pipe,
+    start:{x:pipe.start.x+delta.x,y:pipe.start.y+delta.y},
+    end:{x:pipe.end.x+delta.x,y:pipe.end.y+delta.y},
+    path:{...pipe.path,points:pipe.path.points.map(point=>({x:point.x+delta.x,y:point.y+delta.y}))},
+    members:pipe.members.map(member=>({...member,
+      ...(member.enterBend?{enterBend:{x:member.enterBend.x+delta.x,y:member.enterBend.y+delta.y}}:{}),
+      ...(member.exitBend?{exitBend:{x:member.exitBend.x+delta.x,y:member.exitBend.y+delta.y}}:{}),
+    })),
+  })};
+}
+
 /** Authored points only; derived member bends never become editable OP vertices. */
 export function editJoiningPipeBend(document:HarnessDesignDocument,id:string,index:number,point:Point,mode:PhysicalDragMode,insert=false,remove=false):PhysicalTopology {
   const t=document.physicalTopology!,pipe=t.joiningPipes?.find(p=>p.id===id);if(!pipe)return t;

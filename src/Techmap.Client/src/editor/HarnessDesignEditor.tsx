@@ -1077,6 +1077,10 @@ export function HarnessDesignEditor({
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point,drawingPerimeters);
       if(annotation)return {document:{...history.present,drawingDocuments:annotation},error:null};
       const topology = history.present.physicalTopology;
+      const joiningPipe=topology?.joiningPipes?.find(pipe=>pipe.id===movePreview.objectId);
+      if(joiningPipe){
+        return {document:applyEditorCommand(history.present,{type:"move-joining-pipe",pipeId:joiningPipe.id,delta:movePreview.point}),error:null};
+      }
       const opEndpoint=joiningPipeEndpoint(topology,movePreview.objectId);
       if(opEndpoint){
         return {document:applyEditorCommand(history.present,{type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:movePreview.point.x+5,y:movePreview.point.y+5}}),error:null};
@@ -1976,6 +1980,8 @@ export function HarnessDesignEditor({
           const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters);
           if(annotation){run({type:"set-drawing-documents",documents:annotation});return;}
           const topology = history.present.physicalTopology;
+          const joiningPipe=topology?.joiningPipes?.find(pipe=>pipe.id===objectId);
+          if(joiningPipe){run({type:"move-joining-pipe",pipeId:joiningPipe.id,delta:point});return;}
           const opEndpoint=joiningPipeEndpoint(topology,objectId);
           if(opEndpoint){run({type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:point.x+5,y:point.y+5}});return;}
           const node = topology?.nodes.find(n => n.id === objectId);

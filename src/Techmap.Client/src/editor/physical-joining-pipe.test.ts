@@ -2,7 +2,7 @@ import {describe,expect,it} from "vitest";
 import {createEmptyHarnessDesign,type HarnessDesignDocument} from "./model";
 import {createJoiningPipe,joiningPipePoints} from "./physical-joining-pipes";
 import {joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
-import {editJoiningPipeBend} from "./physical-joining-pipe-editing";
+import {editJoiningPipeBend,moveJoiningPipe} from "./physical-joining-pipe-editing";
 import {parsePhysicalTopology} from "./physical-topology-validation";
 import {coveringScene} from "./covering-layout";
 import {removePhysicalSegment} from "./physical-topology";
@@ -63,6 +63,13 @@ it("endpoints move freely in both axes and preserve connectors, routes and membe
  const a=projectJoiningPipePoint(moved,"p0",.4,{x:240,y:0}),b=projectJoiningPipePoint(moved,"p0",.6,{x:360,y:0});
  expect((b.y-a.y)/(b.x-a.x)).toBeCloseTo(60/250,6);
  for(const id of ["p0","p1"]){const path=joiningPipeDisplaySamples(moved,id)!;expect(path[0]!.point).toEqual({x:0,y:id==="p0"?0:100});expect(path.at(-1)!.point).toEqual({x:600,y:id==="p0"?0:100});}
+});
+it("moves the complete OP axis and authored transition bends together",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),withBend={...op,members:op.members.map((member,index)=>index===1?{...member,enterBend:{x:140,y:20},exitBend:{x:460,y:20}}:member),path:{kind:"polyline" as const,points:[{x:300,y:40}]}};
+ const base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[withBend]}},moved=moveJoiningPipe(base.physicalTopology!,"op",{x:25,y:-12}),next=moved.joiningPipes![0]!;
+ expect(next.start).toEqual({x:205,y:-12});expect(next.end).toEqual({x:445,y:-12});expect(next.path.points).toEqual([{x:325,y:28}]);
+ expect(next.members[1]!.enterBend).toEqual({x:165,y:8});expect(next.members[1]!.exitBend).toEqual({x:485,y:8});
+ expect(moved.segments).toBe(base.physicalTopology!.segments);
 });
 it("keeps projected members inside a covering when the OP bends",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[{id:"cover",name:"Термоусадка",width:0,color:"#334455",lengthMm:null,spans:[{segmentId:"op",from:0,to:1}]}]}};

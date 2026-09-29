@@ -155,8 +155,10 @@ export function projectJoiningPipePoint(document:HarnessDesignDocument,id:string
 export function joiningPipeProjectionStops(document:HarnessDesignDocument,id:string):number[] {
   const p=placements(document).get(id);if(!p)return [];
   const m=p.member;
+  const transitionStops=(from:number,to:number)=>Array.from({length:9},(_,index)=>from+(to-from)*index/8);
   return [...p.source.map(s=>s.fraction),...p.enter.map(s=>p.low+s.fraction*(m.from-p.low)),
-    ...p.axis.map(s=>m.from+s.fraction*(m.to-m.from)),...p.exit.map(s=>m.to+s.fraction*(p.high-m.to))]
+    ...transitionStops(p.low,m.from),...p.axis.map(s=>m.from+s.fraction*(m.to-m.from)),
+    ...transitionStops(m.to,p.high),...p.exit.map(s=>m.to+s.fraction*(p.high-m.to))]
     .map(t=>localFraction(p,t)).filter(t=>t>=0&&t<=1);
 }
 export function joiningPipeTransitionHandles(document:HarnessDesignDocument,id:string):readonly {fraction:number;point:Point;memberIndex:number;side:"enter"|"exit"}[] {

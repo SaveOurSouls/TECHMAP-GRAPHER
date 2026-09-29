@@ -1853,6 +1853,10 @@ export function drawEditorSceneObject(
   if(object.kind==="physical-covering") {drawCoveringSurface(context,object,selected);context.restore();return;}
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
+    // A regular П is a protective channel around its conductors. Keep it
+    // translucent so the wire lanes remain inspectable; the common ОП stays
+    // opaque and therefore reads as the outer hierarchy layer.
+    if(object.pipe?.role!=="joining-pipe")context.globalAlpha*=.72;
     traceDrawingRoute(context,points,object.routeRadius);
     if(selected){context.strokeStyle="#1179ac";context.lineWidth=object.width+2;context.stroke();}
     context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
@@ -2541,7 +2545,13 @@ export function redrawCanvas(
         context.save();context.globalAlpha=.35;context.fillStyle="#1179ac";context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fill();context.restore();
       }
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
-      points.forEach((p,i)=>{if(object.pipe?.controlledHandles?.includes(i-1))return;context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
+      points.forEach((p,i)=>{
+        const controlled=object.pipe?.controlledHandles?.includes(i-1)===true;
+        const transition=object.kind==="physical-segment"&&object.pipe?.joiningTransitionHandles?.some(handle=>handle.index===i-1)===true;
+        context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:transition?5.5:controlled?4:5)/camera.zoom,0,Math.PI*2);
+        context.fillStyle=object.kind==="physical-node"?object.color:controlled?"#7bb9cb":"#fff";context.fill();context.stroke();
+        if(object.kind==="physical-segment"&&i>0&&i<points.length-1&&!controlled){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}
+      });
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
       context.restore();
     }
@@ -3201,7 +3211,7 @@ export function CanvasViewport({
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
-      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle" || object.kind === "physical-segment" && object.pipe?.role === "joining-pipe") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",
@@ -3212,8 +3222,8 @@ export function CanvasViewport({
           objectX: object.x,
           objectY: object.y,
           mode:event.shiftKey?"adjacent":"carry",
-          anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
-          routeAnchors:view==='drawing'&&object.metadata?.bundleMember!=="true"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
+          anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
+          routeAnchors:view==='drawing'&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
         };
       }
     }

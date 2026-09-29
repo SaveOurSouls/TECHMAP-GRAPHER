@@ -6,7 +6,7 @@ import { reconcileDrawingDocuments, validateDrawingDocuments, type DrawingDocume
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
-import {editJoiningPipeBend,removeJoiningPipe} from "./physical-joining-pipe-editing";
+import {editJoiningPipeBend,moveJoiningPipe,removeJoiningPipe} from "./physical-joining-pipe-editing";
 import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, materializePhysicalPath, type PhysicalDragMode } from "./physical-editing";
 import { physicalNodeLocalPoint } from "./physical-ports";
 import { refreshAutomaticPhysicalRoutes } from "./physical-wire-routing";
@@ -67,6 +67,7 @@ export type EditorCommand =
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology; readonly coveringLibrary?:CoveringLibrary }
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "edit-joining-pipe-bend"; readonly pipeId:string; readonly index:number; readonly position:Point; readonly mode:PhysicalDragMode; readonly insert?:boolean; readonly remove?:boolean }
+  | { readonly type: "move-joining-pipe"; readonly pipeId:string; readonly delta:Point }
   | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean }
   | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly volumeShading?:boolean }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
@@ -253,6 +254,11 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
       if(!document.physicalTopology)return document;
       return {...document,physicalTopology:parsePhysicalTopology(editJoiningPipeBend(document,command.pipeId,command.index,command.position,command.mode,command.insert,command.remove),document)};
+    }
+    case "move-joining-pipe": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
+      const t=document.physicalTopology;if(!t)return document;
+      return {...document,physicalTopology:parsePhysicalTopology(moveJoiningPipe(t,command.pipeId,command.delta),document)};
     }
     case "update-joining-pipe-member-bend": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");

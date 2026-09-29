@@ -89,6 +89,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires",
     x: 0, y: 0, width: drawingPipeWidth(document, segment), height: 0,
     color: segment.color ?? "#aebfc9", points: display?.map(s => s.point) ?? physicalSegmentPoints(document, segment),
+    // Keep the global bend regulator active for the sampled member route; the
+    // added transition stations prevent the rounding helper from collapsing a
+    // long exit into one artificial corner.
     routeRadius:joiningPipeDisplaySamples(document,segment.id) ? drawingBendRadius(document) : display ? 0 : drawingBendRadius(document),
     pipe: {
       fromNodeId: segment.from,
