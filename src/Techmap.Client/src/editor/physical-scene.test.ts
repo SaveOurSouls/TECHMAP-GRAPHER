@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { physicalTopologyScene, pipeSceneControls, pipeSceneHandles, pipeSceneWireIds } from "./physical-scene";
+import { orderPhysicalScene, physicalSceneStackOrder, physicalTopologyScene, pipeSceneControls, pipeSceneHandles, pipeSceneWireIds } from "./physical-scene";
 import { physicalFixture } from "./physical-topology-fixture";
 import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geometry";
 import { physicalNodeDirection } from "./physical-ports";
@@ -53,4 +53,12 @@ it("resolves typed port directions at the same scene boundary",()=>{
   expect(object.port).toEqual({connectorId:node.connectorId,direction:physicalNodeDirection(doc,node)});
   expect(object.metadata?.nodeRole).toBe(node.connectorId ? "connector-exit" : "junction");
  }
+});
+
+it("orders drawing objects from wires to pipes to common pipes and nested common pipes",()=>{
+ const doc=physicalFixture(),inner={id:"op-inner",kind:"physical-segment" as const,layerId:"wires",label:"ОП1",x:0,y:0,width:0,height:0,color:"#000000",pipe:{role:"joining-pipe" as const,handles:[],controls:[],wireIds:[]}},outer={id:"op-outer",kind:"physical-segment" as const,layerId:"wires",label:"ОП2",x:0,y:0,width:0,height:0,color:"#000000",pipe:{role:"joining-pipe" as const,handles:[],controls:[],wireIds:[]}},pipe={id:"S0",kind:"physical-segment" as const,layerId:"wires",label:"П",x:0,y:0,width:0,height:0,color:"#000000",pipe:{handles:[],controls:[],wireIds:[]}},wire={id:"W1",kind:"wire" as const,layerId:"wires",label:"Провод",x:0,y:0,width:0,height:0,color:"#000000"},cover={id:"cover",kind:"physical-covering" as const,layerId:"wires",label:"Оболочка",x:0,y:0,width:0,height:0,color:"#000000"};
+ const topology={...doc.physicalTopology!,joiningPipes:[{id:"op-inner",start:{x:0,y:0},end:{x:10,y:0},path:{kind:"polyline" as const,points:[]},members:[{segmentIds:["S0"],from:0,to:1,reverse:false}],mode:"flat" as const},{id:"op-outer",start:{x:0,y:0},end:{x:10,y:0},path:{kind:"polyline" as const,points:[]},members:[{segmentIds:["op-inner"],from:0,to:1,reverse:false}],mode:"flat" as const}],coverings:[{id:"cover",name:"Оболочка",width:10,color:"#000000",lengthMm:null,spans:[{segmentId:"S0",from:0,to:1}]}]};
+ const layered={...doc,physicalTopology:topology},ordered=orderPhysicalScene(layered,[outer,pipe,wire,inner,cover]);
+ expect(ordered.map(object=>object.id)).toEqual(["W1","S0","cover","op-inner","op-outer"]);
+ expect(physicalSceneStackOrder(layered,outer)).toBeGreaterThan(physicalSceneStackOrder(layered,inner));
 });

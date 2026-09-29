@@ -8,8 +8,35 @@ import { physicalEditablePoints } from "./physical-editing";
 import { drawingBendRadius } from "./drawing-route-path";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
 import { joiningPipePoints, joiningPipeEndpointId } from "./physical-joining-pipes";
-import { joiningPipeDisplaySamples,joiningPipeTransitionHandles,joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
+import { joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
 import {projectOntoPolyline} from "./physical-coverings";
+
+function joiningPipeDepth(document:HarnessDesignDocument,id:string,visited= new Set<string>()):number {
+  const pipe=document.physicalTopology?.joiningPipes?.find(item=>item.id===id);
+  if(!pipe||visited.has(id))return 0;
+  const next=new Set(visited);next.add(id);
+  const children=pipe.members.flatMap(member=>member.segmentIds.filter(segmentId=>document.physicalTopology?.joiningPipes?.some(item=>item.id===segmentId)));
+  return children.length ? 1+Math.max(...children.map(child=>joiningPipeDepth(document,child,next))) : 0;
+}
+
+/** Stack order inside the drawing wires layer. The numeric bands leave room
+ * for nested OPs and coverings while keeping the electrical wire at the base. */
+export function physicalSceneStackOrder(document:HarnessDesignDocument,object:EditorSceneObject):number {
+  if(object.kind==="wire")return 0;
+  if(object.kind==="physical-segment"){
+    return object.pipe?.role==="joining-pipe" ? 200+joiningPipeDepth(document,object.id)*100 : 100;
+  }
+  if(object.kind==="physical-covering"){
+    const covering=document.physicalTopology?.coverings?.find(item=>item.id===object.id);
+    const joiningDepths=covering?.spans.flatMap(span=>document.physicalTopology?.joiningPipes?.filter(pipe=>pipe.id===span.segmentId).map(pipe=>joiningPipeDepth(document,pipe.id))??[])??[];
+    return joiningDepths.length ? 250+Math.max(...joiningDepths)*100 : 150;
+  }
+  return 0;
+}
+
+export function orderPhysicalScene(document:HarnessDesignDocument,objects:readonly EditorSceneObject[]):EditorSceneObject[] {
+  return objects.map((object,index)=>({object,index})).sort((a,b)=>physicalSceneStackOrder(document,a.object)-physicalSceneStackOrder(document,b.object)||a.index-b.index).map(item=>item.object);
+}
 
 /** One boundary between physical topology and presentation. */
 export function physicalTopologyScene(document: HarnessDesignDocument): EditorSceneObject[] {
@@ -21,17 +48,43 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const controls = projectPipeBundleControls(document, segment.id, physicalSegmentControls(document, segment));
     const editable = projectPipeBundleControls(document, segment.id, physicalEditablePoints(document, segment));
     const authored = physicalEditablePoints(document, segment);
-    const midpoints = projectPipeBundleControls(document, segment.id, authored.slice(1).map((p,i)=>({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})));
     const display = pipeBundleDisplaySamples(document, segment.id);
     const route=physicalSegmentPoints(document,segment);
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
-    const transitionHandles=joiningPipeTransitionHandles(document,segment.id);
-    const authoredHandles=editable.slice(1,-1).map((point,index)=>({fraction:projectOntoPolyline(route,point).fraction,point,authoredIndex:index+1}));
-    const mergedHandles=[...authoredHandles,...transitionHandles.map(handle=>({fraction:handle.fraction,point:handle.point,transition:handle}))].sort((a,b)=>a.fraction-b.fraction);
+    const generatedControls=joiningPipeMemberControls(document,segment.id);
+    type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;connection?:boolean;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
+    const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>({fraction:projectOntoPolyline(route,point).fraction,point,authoredIndex:index+1,controlled:controlled(point)}));
+    const generated:SceneControl[]=generatedControls?.map(control=>({fraction:control.fraction,point:control.point,controlled:control.controlled,connection:control.connection,transition:control.transition}))??[];
+    const mergedHandles:SceneControl[]=[...authoredHandles,...generated].sort((a,b)=>a.fraction-b.fraction)
+      .reduce<SceneControl[]>((handles,handle)=>{
+        const previous=handles.at(-1);
+        if(previous&&Math.abs(handle.fraction-previous.fraction)<=1e-7&&
+           (previous.authoredIndex===undefined||handle.authoredIndex===undefined)){
+          // The visible member route has one station per fraction. If an
+          // authored bend lands on an OP boundary, the generated OP station
+          // owns it and prevents a zero-length artificial kink.
+          if(handle.authoredIndex===undefined)handles[handles.length-1]=handle;
+          return handles;
+        }
+        handles.push(handle);return handles;
+      },[]);
     const handles=mergedHandles.map(handle=>handle.point);
-    const authoredHandleIndices=mergedHandles.map(handle=>"authoredIndex" in handle?handle.authoredIndex:-1);
-    const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>"transition" in handle?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
-    const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>"authoredIndex" in handle&&controlled(authored[handle.authoredIndex]!)?[index]:[]);
+    const authoredHandleIndices=mergedHandles.map(handle=>handle.authoredIndex??-1);
+    const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>handle.transition?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
+    const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>handle.controlled?[index]:[]);
+    const routeControls:SceneControl[]=[{fraction:0,point:editable[0]!,controlled:false},...mergedHandles,{fraction:1,point:editable.at(-1)!,controlled:false}];
+    const midpoints=generatedControls
+      ? routeControls.slice(1).map((point,index)=>({x:(point.point.x-routeControls[index]!.point.x)/2+routeControls[index]!.point.x,y:(point.point.y-routeControls[index]!.point.y)/2+routeControls[index]!.point.y}))
+      : projectPipeBundleControls(document, segment.id, authored.slice(1).map((p,i)=>({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})));
+    const controlledMidpoints=generatedControls
+      ? routeControls.slice(1).flatMap((point,index)=>point.controlled&&routeControls[index]!.controlled?[index]:[])
+      : authored.slice(1).flatMap((p,i)=>controlled({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})?[i]:[]);
+    const joiningTransitionMidpoints=generatedControls
+      ? routeControls.slice(1).flatMap((point,index)=>{
+          const transition=point.transition??routeControls[index]!.transition;
+          return transition&&!(point.transition&&routeControls[index]!.transition)?[{index,memberIndex:transition.memberIndex,side:transition.side}]:[];
+        })
+      : [];
     return {
     id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires",
     x: 0, y: 0, width: drawingPipeWidth(document, segment), height: 0,
@@ -46,8 +99,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       authoredHandleIndices,
       midpoints,
       controlledHandles:controlledHandleIndices,
-      controlledMidpoints:authored.slice(1).flatMap((p,i)=>controlled({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})?[i]:[]),
+      controlledMidpoints,
       joiningTransitionHandles:joiningTransitionHandleData,
+      joiningTransitionMidpoints,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
     ...((segment.volumeShading !== undefined || document.drawingDocuments?.volumeShading === false)
@@ -78,7 +132,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     return {id:joiningPipeEndpointId(p.id,side),kind:"physical-node",label:`ОП${i+1} · ${side==="from"?"начало":"конец"}`,layerId:defaultLayerIds.connectionPoints,
       x:point.x-5,y:point.y-5,width:10,height:10,color:"#8555ad",metadata:{joiningPipe:p.id,bundleMember:"true"},port:{direction:null}};
   }));
-  return [...joining,...segments.sort((a,b)=>pipeBundleDepth(document,a.id)-pipeBundleDepth(document,b.id)), ...nodes,...joiningEnds];
+  return [...segments.sort((a,b)=>pipeBundleDepth(document,a.id)-pipeBundleDepth(document,b.id)), ...joining.sort((a,b)=>joiningPipeDepth(document,a.id)-joiningPipeDepth(document,b.id)), ...nodes,...joiningEnds];
 }
 
 export function pipeSceneControls(object: EditorSceneObject): readonly EditorPoint[] {

@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {createEmptyHarnessDesign,type HarnessDesignDocument} from "./model";
 import {createJoiningPipe,joiningPipePoints} from "./physical-joining-pipes";
-import {joiningPipeDisplaySamples,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
+import {joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
 import {editJoiningPipeBend} from "./physical-joining-pipe-editing";
 import {parsePhysicalTopology} from "./physical-topology-validation";
 import {coveringScene} from "./covering-layout";
@@ -87,6 +87,19 @@ it("exposes joining transitions as authored member handles",()=>{
  expect(restored.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
 });
 
+it("builds each member transition as connection to bend to connection with usable midpoints",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+ const controls=joiningPipeMemberControls(base,"p1")!;
+ expect(controls).toHaveLength(6);
+ expect(controls.filter(control=>control.connection)).toHaveLength(4);
+ expect(controls.filter(control=>control.transition)).toHaveLength(2);
+ expect(controls.map(control=>control.transition?.side)).toEqual([undefined,"enter",undefined,undefined,"exit",undefined]);
+ expect(controls.every((control,index)=>index===0||control.fraction>controls[index-1]!.fraction)).toBe(true);
+ const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
+ expect(member.pipe?.joiningTransitionMidpoints).toHaveLength(4);
+ expect(pipeMidpoints(member)).toEqual(expect.arrayContaining(member.pipe!.joiningTransitionMidpoints!.map(handle=>expect.objectContaining({index:handle.index}))));
+});
+
 it("reversed pipes follow the OP direction with fixed endpoints",()=>{
  const d=fixture(),reversed={...d,physicalTopology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>s.id==="p1"?{...s,from:s.to,to:s.from}:s)}};
  const op=createJoiningPipe(reversed,[["p0"],["p1"]],"op"),next={...reversed,physicalTopology:{...reversed.physicalTopology,joiningPipes:[op]}};
@@ -151,6 +164,8 @@ it("draft creation, cancellation, selection and deletion keep the electrical gra
  expect(pipe.pipe!.role).toBe("joining-pipe");expect(scene.filter(o=>o.metadata?.joiningPipe===chosen.id)).toHaveLength(2);
  const layers=next.views.drawing.layers.map(l=>({id:l.id,label:l.name,visible:l.visible,locked:l.locked}));
  expect(hitTestEditorScene(scene,layers,{x:250,y:0},1,"drawing")).toBe(chosen.id);
- expect(pipeMidpoints(scene.find(o=>o.id==="p1")!)).toHaveLength(0);
+ const memberMidpoints=pipeMidpoints(scene.find(o=>o.id==="p1")!);
+ expect(memberMidpoints.length).toBeGreaterThan(0);
+ expect(scene.find(o=>o.id==="p1")!.pipe?.joiningTransitionMidpoints).toHaveLength(4);
  const removed=applyEditorCommand(next,{type:"remove-physical-segment",segmentId:chosen.id});expect(removed.physicalTopology!.joiningPipes).toEqual([]);expect(removed.physicalTopology!.segments).toEqual(t.segments);
 });

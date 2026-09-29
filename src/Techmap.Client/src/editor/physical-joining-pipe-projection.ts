@@ -8,6 +8,13 @@ import { joiningPipePoints, joiningMemberPoints } from "./physical-joining-pipes
 import { packPipeBundle } from "./pipe-bundle-packing";
 
 export interface JoiningPipeSample { readonly fraction:number; readonly point:Point }
+export interface JoiningPipeMemberControl {
+ readonly fraction:number;
+ readonly point:Point;
+ readonly controlled:boolean;
+ readonly transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"};
+ readonly connection?:boolean;
+}
 const mix=(a:Point,b:Point,t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
 function at(samples:readonly JoiningPipeSample[],fraction:number):Point {
   if(fraction<=samples[0]!.fraction)return samples[0]!.point;
@@ -54,6 +61,7 @@ function offsetSamples(axis:readonly JoiningPipeSample[],offset:number):JoiningP
 interface Placement {
   readonly source:readonly JoiningPipeSample[];
   readonly axis:readonly JoiningPipeSample[];
+  readonly axisControls:readonly JoiningPipeSample[];
   readonly enter:readonly JoiningPipeSample[];
   readonly exit:readonly JoiningPipeSample[];
   readonly member:JoiningPipeMember;
@@ -70,8 +78,10 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
     const axis=sample(joiningPipePoints(pipe),drawingBendRadius(document)),packed=joiningPipePacking(document,pipe);
     for(const [i,member] of pipe.members.entries()){
       const source=sample(joiningMemberPoints(document,member.segmentIds));
-      const lane=offsetSamples(axis,packed.members[i]!.offset);
+      const rawAxis=sample(joiningPipePoints(pipe));
+      const lane=offsetSamples(axis,packed.members[i]!.offset),rawLane=offsetSamples(rawAxis,packed.members[i]!.offset);
       const oriented=member.reverse?[...lane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):lane;
+      const axisControls=member.reverse?[...rawLane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):rawLane;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
       const low=member.from/2,high=(1+member.to)/2;
       const shoulder=(edge:Point,next:Point,outer:Point):Point=>{
@@ -85,13 +95,47 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const enter=sample([outerA,enterBend,a]);
       const exit=sample([b,exitBend,outerB]);
       let before=0;
-      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend});before+=lengths[j]!;});
+      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend});before+=lengths[j]!;});
     }
   }
   cache.set(document,result);return result;
 }
 function chainFraction(p:Placement,fraction:number) {return (p.before+fraction*p.length)/(p.total||1);}
 function localFraction(p:Placement,fraction:number) {return (fraction*p.total-p.before)/(p.length||1);}
+function transitionControlCandidates(p:Placement):readonly {fraction:number;point:Point;controlled:boolean;transition?:JoiningPipeMemberControl["transition"];connection?:boolean}[] {
+ const m=p.member;
+ const enterBendFraction=p.low+(m.from-p.low)*(p.enter[1]?.fraction??.5);
+ const exitBendFraction=m.to+(p.high-m.to)*(p.exit[1]?.fraction??.5);
+ const candidates=[
+   {fraction:p.low,point:p.enter[0]!.point,controlled:true,connection:true},
+   {fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}},
+   {fraction:m.from,point:p.axisControls[0]!.point,controlled:true,connection:true},
+   ...p.axisControls.slice(1,-1).map(sample=>({fraction:m.from+sample.fraction*(m.to-m.from),point:sample.point,controlled:true})),
+   {fraction:m.to,point:p.axisControls.at(-1)!.point,controlled:true,connection:true},
+   {fraction:exitBendFraction,point:p.exitBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"exit" as const}},
+   {fraction:p.high,point:p.exit.at(-1)!.point,controlled:true,connection:true},
+ ];
+ return candidates;
+}
+/** Generated transition controls are explicit in the visible route. Connection
+ * controls are owned by the OP; only the bend controls are editable on a member. */
+export function joiningPipeMemberControls(document:HarnessDesignDocument,id:string):readonly JoiningPipeMemberControl[]|undefined {
+ const p=placements(document).get(id);if(!p)return undefined;
+ const start=p.before/(p.total||1),end=(p.before+p.length)/(p.total||1),epsilon=1e-7;
+ const generated=transitionControlCandidates(p).filter(control=>control.fraction>=start-epsilon&&control.fraction<=end+epsilon)
+   .map(control=>({...control,fraction:Math.max(0,Math.min(1,localFraction(p,control.fraction)))}));
+ // A very short member or a split exactly at an OP boundary can put two
+ // generated stations at the same fraction. Keep the OP-owned connection
+ // station and drop the zero-length transition instead of drawing a kink.
+ return generated.reduce<JoiningPipeMemberControl[]>((controls,control)=>{
+   const previous=controls.at(-1);
+   if(previous&&Math.abs(control.fraction-previous.fraction)<=epsilon){
+     if(control.connection||!previous.connection)controls[controls.length-1]=control;
+     return controls;
+   }
+   controls.push(control);return controls;
+ },[]);
+}
 export function hasJoiningPipeProjection(document:HarnessDesignDocument,id:string) {return placements(document).has(id);}
 export function joiningPipeControlsMemberStation(document:HarnessDesignDocument,id:string,fraction:number) {
   const p=placements(document).get(id);if(!p)return false;
