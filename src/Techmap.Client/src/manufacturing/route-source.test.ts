@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign, normalizeCableInstance, type HarnessDesignDocument, type WireMaterialBinding, type WireStripProfileBinding } from "../editor/model";
-import { buildRouteSourceItems } from "./route-source";
+import { buildRouteSourceItems, routeSourceDesignation } from "./route-source";
 
 const material: WireMaterialBinding = { sourceId: "wires", snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), entityType: "wire", sourceKey: "MGT-0.35", displayName: "МГТФ 0,35" };
 const stripping: WireStripProfileBinding = { ...material, entityType: "coax-termination", sourceKey: "strip-1", displayName: "Разделка 1", layers: [{ index: 1, diameterMm: 0.6, stripLengthMm: 5.125 }] };
@@ -62,5 +62,12 @@ describe("manufacturing route source", () => {
     const item = buildRouteSourceItems({ ...source, wires: [junctionWire] })[0]!;
     expect(item).toMatchObject({ title: "Узел → X2:30 · Circuit 0", lengthMm: null, terminalFrom: "", terminalTo: "B-0", material: "", section: "", color: "#123456" });
     expect(buildRouteSourceItems(createEmptyHarnessDesign())).toEqual([]);
+  });
+
+  it("formats catalogue articles and complex wire sections without inventing units", () => {
+    const items = buildRouteSourceItems(fixture());
+    expect(routeSourceDesignation(items[0]!)).toContain("МГТФ 0,35 · арт. MGT-0.35");
+    expect(routeSourceDesignation({ ...items[0]!, material: "UL1061 28AWG", materialArticle: "UL1061", section: "28AWG" })).toContain("арт. UL1061");
+    expect(routeSourceDesignation({ ...items[0]!, material: "Кабель 3Cx0,5 | 2Px0,22", materialArticle: "CAB-1", section: "3Cx0,5 | 2Px0,22" })).not.toContain("мм²");
   });
 });
