@@ -14,6 +14,8 @@ import {migrateJoiningPipes} from "./physical-joining-pipes";
 import {beginJoiningPipe,toggleJoiningPipeMember,joiningPipeDraftTopology} from "./JoiningPipeEditor";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
 import {hitTestEditorScene,pipeMidpoints} from "./CanvasViewport";
+import {coveringHit} from "./covering-renderer";
+import {drawingRouteCommands} from "./drawing-route-path";
 
 function fixture():HarnessDesignDocument {
  const d=createEmptyHarnessDesign();
@@ -34,7 +36,7 @@ describe("joining pipe hierarchy",()=>{
   expect(joiningPipeWidth(next,op)).toBeGreaterThan(0);
   expect(joiningPipePoints(op)).toEqual([{x:180,y:0},{x:420,y:0}]);
  });
- it("moves an OP bend without changing members or electrical routes",()=>{
+it("moves an OP bend without changing members or electrical routes",()=>{
   const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
   const moved={...base,physicalTopology:editJoiningPipeBend(base,"op",0,{x:300,y:80},"adjacent",true)};
   expect(moved.physicalTopology!.joiningPipes![0]!.path.points).toEqual([{x:300,y:80}]);
@@ -62,6 +64,12 @@ it("endpoints move freely in both axes and preserve connectors, routes and membe
  expect((b.y-a.y)/(b.x-a.x)).toBeCloseTo(60/250,6);
  for(const id of ["p0","p1"]){const path=joiningPipeDisplaySamples(moved,id)!;expect(path[0]!.point).toEqual({x:0,y:id==="p0"?0:100});expect(path.at(-1)!.point).toEqual({x:600,y:id==="p0"?0:100});}
 });
+it("keeps projected members inside a covering when the OP bends",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[{id:"cover",name:"Термоусадка",width:0,color:"#334455",lengthMm:null,spans:[{segmentId:"op",from:0,to:1}]}]}};
+ const bent=applyEditorCommand(base,{type:"edit-joining-pipe-bend",pipeId:"op",index:0,position:{x:300,y:220},mode:"adjacent",insert:true});
+ const shell=coveringScene(bent).find(object=>object.id==="cover")!,path=joiningPipeDisplaySamples(bent,"p0")!;
+ expect(path.filter(sample=>sample.fraction>=.3&&sample.fraction<=.7).every(sample=>coveringHit(shell,sample.point,1e-6)!==null)).toBe(true);
+});
 
 it("exposes joining transitions as authored member handles",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
@@ -71,6 +79,7 @@ it("exposes joining transitions as authored member handles",()=>{
  expect(member.pipe?.joiningTransitionHandles).toHaveLength(2);
  for(const transition of transitions)expect(member.pipe?.handles).toContainEqual(transition.point);
  expect(member.routeRadius).toBeGreaterThan(0);
+ expect(drawingRouteCommands(member.points!,member.routeRadius).some(command=>command.kind==="arc")).toBe(true);
  const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:0,side:"enter",position:{x:150,y:-40}});
  expect(moved.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
  expect(joiningPipeDisplaySamples(moved,"p0")!.some(sample=>Math.hypot(sample.point.x-150,sample.point.y+40)<1e-6)).toBe(true);

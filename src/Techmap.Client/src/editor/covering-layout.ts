@@ -3,16 +3,33 @@ import type { EditorSceneObject } from "./editor-types";
 import type { HarnessDesignDocument, Point } from "./model";
 import { coveringControlFractions, coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline, type PhysicalCovering } from "./physical-coverings";
 import { coveringDiameterRatio, drawingPhysicalScale, drawingPipeWidth, segmentWireLanes } from "./drawing-thickness";
-import { drawingBendRadius, drawingRouteSection } from "./drawing-route-path";
+import { drawingBendRadius, drawingRouteSamples, drawingRouteSection } from "./drawing-route-path";
 import { pipeBundleSections } from "./pipe-bundle-section";
 import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
-import {joiningPipeWidth} from "./physical-joining-pipe-projection";
+import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe-projection";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
 export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
+/** Round generated OP→P transitions after projection. The source route is
+ * rounded before projection, but the shoulder points are created afterwards;
+ * sampling this visible control polygon applies the same radius regulator to
+ * those shoulders as to authored pipe bends. */
+function roundProjectedCenterline(points:readonly Point[],distances:readonly number[],radius:number):readonly {point:Point;distance:number}[] {
+ if(points.length<3||radius<=0)return points.map((point,index)=>({point,distance:distances[index]!}));
+ const controlDistances:number[]=[];let control=0;
+ points.forEach((point,index)=>{if(index)control+=Math.hypot(point.x-points[index-1]!.x,point.y-points[index-1]!.y);controlDistances.push(control);});
+ const sourceAt=(value:number)=>{
+  const index=controlDistances.findIndex(distance=>distance>=value);if(index<0)return distances.at(-1)!;
+  if(index===0)return distances[0]!;
+  const a=controlDistances[index-1]!,b=controlDistances[index]!,t=(value-a)/(b-a||1);
+  return distances[index-1]!+(distances[index]!-distances[index-1]!)*t;
+ };
+ return drawingRouteSamples(points,radius).map(sample=>({point:sample.point,distance:sourceAt(sample.distance)}));
+}
+
 /** Offset edges are shared by the filled surface and endpoint grips. A sharp
  * transition can otherwise create a long miter spike when the covering is
  * wide; the cap turns that corner into a short bevel while preserving the
@@ -76,9 +93,13 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const profile=fitted.map(p=>({...p,halfWidth:p.halfWidth+growth/Math.pow(diameterRatio,levels.indexOf(p.halfWidth))}));
    ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
    const stops=[...profile.map(p=>route.before+p.at),...[...coveringControlFractions(document,s.segmentId),...pipeBundleProjectionStops(document,s.segmentId,covering.id)].map(f=>route.before+f*route.length)];
-   const display=drawingRouteSection(route.points,drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
-   const centerline=display.map(p=>projectPipeBundlePoint(document,s.segmentId,(p.distance-route.before)/route.length,p.point,covering.id));if(centerline.length<2)continue;
-   const widths=display.map(s=>profileHalfWidth(profile,s.distance-route.before));
+   const display=drawingRouteSection(route.points,hasJoiningPipeProjection(document,s.segmentId)?0:drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
+   const projected=display.map(p=>projectPipeBundlePoint(document,s.segmentId,(p.distance-route.before)/route.length,p.point,covering.id));
+   const visible=hasJoiningPipeProjection(document,s.segmentId)
+     ? roundProjectedCenterline(projected,display.map(p=>p.distance),drawingBendRadius(document))
+     : projected.map((point,index)=>({point,distance:display[index]!.distance}));
+   const centerline=visible.map(sample=>sample.point);if(centerline.length<2)continue;
+   const widths=visible.map(sample=>profileHalfWidth(profile,sample.distance-route.before));
    for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
    surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex,

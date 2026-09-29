@@ -1,6 +1,7 @@
 import type { HarnessDesignDocument, Point } from "./model";
 import type { JoiningPipeMember, PhysicalJoiningPipe } from "./physical-topology-model";
 import { drawingPhysicalScale, drawingPipeWidth } from "./drawing-thickness";
+import { drawingBendRadius, drawingRouteSamples } from "./drawing-route-path";
 import { pathLength } from "./physical-coverings";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { joiningPipePoints, joiningMemberPoints } from "./physical-joining-pipes";
@@ -13,12 +14,10 @@ function at(samples:readonly JoiningPipeSample[],fraction:number):Point {
   const i=samples.findIndex(s=>s.fraction>=fraction);if(i<0)return samples.at(-1)!.point;
   const a=samples[i-1]!,b=samples[i]!;return mix(a.point,b.point,(fraction-a.fraction)/(b.fraction-a.fraction||1));
 }
-function sample(points:readonly Point[]):JoiningPipeSample[] {
+function sample(points:readonly Point[],radius=0):JoiningPipeSample[] {
   const length=pathLength(points);let distance=0;
-  return points.map((point,index)=>{
-    if(index)distance+=Math.hypot(point.x-points[index-1]!.x,point.y-points[index-1]!.y);
-    return {fraction:length?distance/length:0,point};
-  });
+  if(radius>0)return drawingRouteSamples(points,radius).map(route=>({fraction:length?route.distance/length:0,point:route.point}));
+  return points.map((point,index)=>{if(index)distance+=Math.hypot(point.x-points[index-1]!.x,point.y-points[index-1]!.y);return {fraction:length?distance/length:0,point};});
 }
 export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe) {
   const scale=drawingPhysicalScale(document),t=document.physicalTopology!;
@@ -29,7 +28,14 @@ export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJ
   }))})),pipe.mode);
 }
 export function joiningPipeWidth(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe):number {
-  return Math.max((pipe.width??0)*drawingPhysicalScale(document),joiningPipePacking(document,pipe).width+drawingPhysicalScale(document));
+  const scale=drawingPhysicalScale(document),packing=joiningPipePacking(document,pipe),axis=sample(joiningPipePoints(pipe));
+  // The centreline lanes are offset around OP corners. Include the largest
+  // offset envelope in the shell width so a bent member stays inside it.
+  const envelope=packing.members.reduce((maximum,member)=>{
+    const lane=offsetSamples(axis,member.offset);
+    return Math.max(maximum,...lane.map((sample,index)=>Math.hypot(sample.point.x-axis[index]!.point.x,sample.point.y-axis[index]!.point.y)+member.diameter/2));
+  },0);
+  return Math.max((pipe.width??0)*scale,packing.width+scale,envelope*2+scale);
 }
 // Parallel offsets use the same bend stations, including sharp corners. Capped
 // miters keep a tight turn finite; the OP remains the authoritative centreline.
@@ -39,7 +45,9 @@ function offsetSamples(axis:readonly JoiningPipeSample[],offset:number):JoiningP
     const la=Math.hypot(p.x-a.x,p.y-a.y),lb=Math.hypot(b.x-p.x,b.y-p.y);
     const u=la?{x:-(p.y-a.y)/la,y:(p.x-a.x)/la}:null,v=lb?{x:-(b.y-p.y)/lb,y:(b.x-p.x)/lb}:null;
     const n=u&&v?{x:u.x+v.x,y:u.y+v.y}:u??v??{x:0,y:1},l=Math.hypot(n.x,n.y)||1;
-    const normal={x:n.x/l,y:n.y/l},factor=u&&v?Math.min(2,1/Math.max(.5,normal.x*v.x+normal.y*v.y)):1;
+    // Keep the same capped miter as the covering surface.  A wider miter on
+    // a member lane would let the pipe leave the common shell at an OP bend.
+    const normal={x:n.x/l,y:n.y/l},factor=u&&v?Math.min(1.5,1/Math.max(.25,normal.x*v.x+normal.y*v.y)):1;
     return {fraction:s.fraction,point:{x:p.x+normal.x*offset*factor,y:p.y+normal.y*offset*factor}};
   });
 }
@@ -59,7 +67,7 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
   const known=cache.get(document);if(known)return known;
   const result=new Map<string,Placement>(),t=document.physicalTopology;
   for(const pipe of t?.joiningPipes??[]){
-    const axis=sample(joiningPipePoints(pipe)),packed=joiningPipePacking(document,pipe);
+    const axis=sample(joiningPipePoints(pipe),drawingBendRadius(document)),packed=joiningPipePacking(document,pipe);
     for(const [i,member] of pipe.members.entries()){
       const source=sample(joiningMemberPoints(document,member.segmentIds));
       const lane=offsetSamples(axis,packed.members[i]!.offset);
