@@ -7,6 +7,7 @@
         28
       ],
       "outer_diameter_mm": 1.88,
+      "projection_segments": 2,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -17,6 +18,7 @@
         24
       ],
       "outer_diameter_mm": 2.413,
+      "projection_segments": 3,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -28,6 +30,7 @@
         22
       ],
       "outer_diameter_mm": 3.031,
+      "projection_segments": 4,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -40,6 +43,7 @@
         24
       ],
       "outer_diameter_mm": 3.748,
+      "projection_segments": 5,
       "tangent_min_gap_mm": -0.0
     }
   ],
@@ -51,6 +55,7 @@
         28
       ],
       "outer_diameter_mm": 1.88,
+      "projection_segments": 2,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -61,6 +66,7 @@
         24
       ],
       "outer_diameter_mm": 2.413,
+      "projection_segments": 3,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -72,6 +78,7 @@
         22
       ],
       "outer_diameter_mm": 3.031,
+      "projection_segments": 4,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -84,6 +91,7 @@
         24
       ],
       "outer_diameter_mm": 3.748,
+      "projection_segments": 5,
       "tangent_min_gap_mm": -0.0
     }
   ],
@@ -95,6 +103,7 @@
         28
       ],
       "outer_diameter_mm": 1.88,
+      "projection_segments": 2,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -105,6 +114,7 @@
         24
       ],
       "outer_diameter_mm": 2.413,
+      "projection_segments": 3,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -116,6 +126,7 @@
         22
       ],
       "outer_diameter_mm": 3.031,
+      "projection_segments": 4,
       "tangent_min_gap_mm": -0.0
     },
     {
@@ -128,6 +139,7 @@
         24
       ],
       "outer_diameter_mm": 3.748,
+      "projection_segments": 5,
       "tangent_min_gap_mm": -0.0
     }
   ]

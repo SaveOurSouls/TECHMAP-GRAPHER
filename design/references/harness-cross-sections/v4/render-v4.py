@@ -33,7 +33,22 @@ def pack(ws):
    rr=radius(ux+dx,uy+dy)
    if rr<cand[2]: cand=(ux+dx,uy+dy,rr)
   ux,uy,best=cand; step*=.55
- return list(zip(p,rs,ws)),(ux,uy,best)
+ base=list(zip(p,rs,ws))
+ # Rotate the same tangent packing to maximize visible first-hit segments.
+ best_choice=None
+ for deg in range(0,180,2):
+  a=math.radians(deg); ca,sa=math.cos(a),math.sin(a)
+  rp=[]
+  for (px,py),r,w in base:
+   rp.append(((px*ca-py*sa,px*sa+py*ca),r,w))
+  rox=ux*ca-uy*sa; roy=ux*sa+uy*ca
+  try:
+   seg=projection_segments(rp,(rox,roy,best))
+   uniq=len(set(idx for idx,_,_ in seg)); score=(uniq,-len(seg),-deg)
+  except NameError:
+   score=(0,0,-deg)
+  if best_choice is None or score>best_choice[0]: best_choice=(score,rp,(rox,roy,best))
+ return best_choice[1],best_choice[2]
 def tx(d,x,y,s,f=SM,c='#263b40',anchor='la'): d.text((x,y),s,font=f,fill=c,anchor=anchor)
 def arrow(d,x1,y,x2): d.line((x1,y,x2-22,y),fill='black',width=12); d.polygon([(x2,y),(x2-28,y-22),(x2-28,y+22)],fill='black')
 def draw_pack(d,cx,cy,ws,kind):
@@ -48,18 +63,52 @@ def draw_pack(d,cx,cy,ws,kind):
   px=cx+(x-ox)*scale; py=cy+(y-oy)*scale; rr=r*scale
   d.ellipse((px-rr,py-rr,px+rr,py+rr),fill=COL[i],outline='black',width=4)
   d.ellipse((px-rr+13,py-rr+13,px+rr-13,py+rr-13),fill='white')
-def side(d,x,y,w,ws,kind):
- n=len(ws); gap=3; band=30; total=n*band+(n-1)*gap; top=y+52-total/2
- if kind=='bare': d.rounded_rectangle((x-8,top-8,x+w+8,top+total+8),8,fill='black')
- elif kind=='nylon': d.rounded_rectangle((x-12,top-12,x+w+12,top+total+12),8,fill='#bce8e9',outline='black',width=7); d.rounded_rectangle((x-4,top-4,x+w+4,top+total+4),5,fill='white',outline='#1b9eaa',width=4)
- else: d.rounded_rectangle((x-14,top-14,x+w+14,top+total+14),8,fill='#f6d48e',outline='black',width=8); d.rounded_rectangle((x-7,top-7,x+w+7,top+total+7),5,fill='#bce8e9',outline='#1b9eaa',width=5)
- for i,wg in enumerate(ws):
-  yy=top+i*(band+gap); d.rounded_rectangle((x,yy,x+w,yy+band),5,fill=COL[i],outline='black',width=3); d.rectangle((x+13,yy+10,x+w-13,yy+band-10),fill='white')
+def projection_segments(items, outer):
+ # Ray cast from left to right through the cross-section. For each scanline
+ # perpendicular to the viewing direction, keep only the first wire hit.
+ ox, oy, _ = outer
+ samples=260
+ y0=oy-outer[2]; y1=oy+outer[2]
+ visible=[]
+ for k in range(samples):
+  sy=y0+(k+0.5)*(y1-y0)/samples
+  hits=[]
+  for idx,((cx,cy),r,w) in enumerate(items):
+   dy=sy-cy
+   if abs(dy)<=r:
+    xleft=cx-math.sqrt(max(0.0,r*r-dy*dy))
+    hits.append((xleft,idx))
+  visible.append(min(hits)[1] if hits else None)
+ seg=[]; cur=None; first=0
+ for k,val in enumerate(visible+[None]):
+  if val!=cur:
+   if cur is not None: seg.append((cur,first,k))
+   cur=val; first=k
+ return seg
+
+def side(d,x,y,w,ws,kind,items,outer):
+ # Orthographic projection generated from first-hit ray casting.
+ _,_,R=outer; h=max(86,int(2*R*33)); top=y+52-h/2
+ if kind=='bare':
+  d.rounded_rectangle((x-8,top-8,x+w+8,top+h+8),8,fill='black')
+ elif kind=='nylon':
+  d.rounded_rectangle((x-12,top-12,x+w+12,top+h+12),8,fill='#bce8e9',outline='black',width=7)
+  d.rounded_rectangle((x-4,top-4,x+w+4,top+h+4),5,fill='white',outline='#1b9eaa',width=4)
+ else:
+  d.rounded_rectangle((x-14,top-14,x+w+14,top+h+14),8,fill='#f6d48e',outline='black',width=8)
+  d.rounded_rectangle((x-7,top-7,x+w+7,top+h+7),5,fill='#bce8e9',outline='#1b9eaa',width=5)
+ segments=projection_segments(items,outer)
+ for idx,a,b in segments:
+  yy1=top+a*h/260; yy2=top+b*h/260
+  if yy2-yy1<6: continue
+  d.rounded_rectangle((x,yy1,x+w,yy2),5,fill=COL[idx],outline='black',width=3)
+  inset=min(13,max(2,(yy2-yy1)*.22)); inset=min(inset,(yy2-yy1)/2-1)
+  d.rectangle((x+inset,yy1+inset*.65,x+w-inset,yy2-inset*.65),fill='white')
 def render(kind,name,title):
  im=Image.new('RGB',(W,H),'white'); d=ImageDraw.Draw(im); d.rounded_rectangle((40,36,W-40,H-36),20,outline='#d5dde0',width=2); tx(d,78,65,title,TITLE); tx(d,78,106,'Стрелка задаёт направление вида; окружности упакованы в минимальный внешний контур.',SM,'#6a777c')
  measures=[]
  for i,ws in enumerate(SETS):
-  y=230+i*185; arrow(d,80,y,190); draw_pack(d,315,y,ws,kind); side(d,575,y,760,ws,kind); tx(d,470,y-10,f'{len(ws)}',ROW,'#183238','mm'); tx(d,1365,y-10,f'{len(ws)} провод'+('' if len(ws)==1 else 'а'),SM,'#6a777c','lm'); items,(ox,oy,R)=pack(ws); measures.append({'count':len(ws),'awg':ws,'outer_diameter_mm':round(2*R,3),'tangent_min_gap_mm':round(min(math.hypot(items[i][0][0]-items[j][0][0],items[i][0][1]-items[j][0][1])-items[i][1]-items[j][1] for i in range(len(items)) for j in range(i)),6)})
+  y=230+i*185; arrow(d,80,y,190); items,outer=pack(ws); draw_pack(d,315,y,ws,kind); side(d,575,y,760,ws,kind,items,outer); tx(d,470,y-10,f'{len(ws)}',ROW,'#183238','mm'); tx(d,1365,y-10,f'{len(ws)} провод'+('' if len(ws)==1 else 'а'),SM,'#6a777c','lm'); items,(ox,oy,R)=pack(ws); segments=projection_segments(items,(ox,oy,R)); measures.append({'count':len(ws),'awg':ws,'outer_diameter_mm':round(2*R,3),'projection_segments':len(segments),'tangent_min_gap_mm':round(min(math.hypot(items[i][0][0]-items[j][0][0],items[i][0][1]-items[j][0][1])-items[i][1]-items[j][1] for i in range(len(items)) for j in range(i)),6)})
  tx(d,78,982,'Критерий: соседние окружности касаются; весь набор вписан в минимальную внешнюю окружность.',SM,'#6a777c'); im.save(OUT/name); return measures
 allm={}
 allm['bare']=render('bare','01-packed-reference-bare.png','UL1061 · плотная упаковка без оболочки')
@@ -67,3 +116,5 @@ allm['nylon']=render('nylon','02-packed-reference-nylon.png','UL1061 · плот
 allm['heat']=render('heat','03-packed-reference-nylon-heatshrink.png','UL1061 · плотная упаковка под нейлонкой и термоусадкой')
 (OUT/'packing-metrics.json').write_text(json.dumps(allm,ensure_ascii=False,indent=2),encoding='utf-8')
 print('ok')
+
+
