@@ -15,6 +15,10 @@ export interface WireDatabaseOption {
   readonly materialBinding?: WireMaterialBinding;
 }
 
+export function isSelectableWirePayload(payload: Readonly<Record<string, unknown>>): boolean {
+  return Boolean(formatWireSection(payload));
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim()
     : typeof value === "number" && Number.isFinite(value) ? String(value).replace(".", ",") : "";

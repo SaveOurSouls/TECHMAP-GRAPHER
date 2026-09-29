@@ -28,8 +28,17 @@ public sealed class WireCatalogSeedTests
         Assert.Equal(260, catalog.Records.Count);
         Assert.All(catalog.Records, row =>
         {
-            Assert.Equal("wire", row.EntityType);
-            Assert.False(string.IsNullOrWhiteSpace(row.Payload.GetProperty("Марка").GetString()));
+            Assert.Contains(row.EntityType, new[] { "wire", "wire-category" });
+            if (row.EntityType == "wire-category")
+            {
+                Assert.Equal(JsonValueKind.Null, row.Payload.GetProperty("Марка").ValueKind);
+                Assert.False(string.IsNullOrWhiteSpace(row.Payload.GetProperty("Категория группы").GetString()));
+            }
+            else
+            {
+                Assert.False(string.IsNullOrWhiteSpace(row.Payload.GetProperty("Марка").GetString()));
+                Assert.False(string.IsNullOrWhiteSpace(row.Payload.GetProperty("Категория группы").GetString()));
+            }
             foreach (var field in new[] { "Core", "Сечение C", "Pair", "Сечение P" })
                 Assert.True(row.Payload.TryGetProperty(field, out _), field);
         });

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Techmap.Application;
 using Techmap.Domain;
+using Techmap.Infrastructure.Xlsx;
 
 namespace Techmap.Web;
 
@@ -37,9 +38,14 @@ public static class WireCatalogSeed
             row.GetProperty("sourceKey").GetString()!,
             row.GetProperty("payload").Clone(),
             row.GetProperty("sourceLocation").GetString())).ToArray();
-        if (records.Any(record => record.EntityType != "wire" ||
-            !record.Payload.TryGetProperty("Марка", out var mark) ||
-            mark.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(mark.GetString())))
+        records = WireCatalogRowClassifier.Classify(records).ToArray();
+        if (records.Any(record => record.EntityType is not ("wire" or "wire-category") ||
+            (record.EntityType == "wire" &&
+             (!record.Payload.TryGetProperty("Марка", out var mark) ||
+              mark.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(mark.GetString()))) ||
+            (record.EntityType == "wire-category" &&
+             (!record.Payload.TryGetProperty("Категория группы", out var category) ||
+              category.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(category.GetString())))))
             throw new InvalidDataException("The bundled E3:AJ wire catalog contains invalid rows.");
 
         var fingerprint = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(content)) + ";profile:technology.wires";

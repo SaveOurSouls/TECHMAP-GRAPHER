@@ -96,7 +96,7 @@ export function editableReferenceDraft(snapshot: ReferenceCatalogSnapshot | null
     .filter(name => !name.startsWith("_techmap") && !(profile && name === "layers"));
   const storedOrder = storedColumnOrder(snapshot);
   const ordered = storedOrder.length ? storedOrder : sourceId === "technology-wires"
-    ? ["Марка", "Core", "Сечение C", "Pair", "Сечение P"].filter(name => !snapshot?.records.length || payloadNames.includes(name)) : [];
+    ? ["Марка", "Категория группы", "Core", "Сечение C", "Pair", "Сечение P"].filter(name => !snapshot?.records.length || payloadNames.includes(name)) : [];
   const names = [...new Set([
     ...ordered,
     ...(profile?.columns.map(column => column.name) ?? []),
@@ -257,7 +257,7 @@ export function EditableReferenceTable({ sourceId, displayName, snapshot, disabl
     </div>
     <div className="editable-reference-actions">
       <span>Нажмите на ячейку, чтобы изменить значение</span>
-      {sourceId === "technology-wires" && <InfoHint>Каталог проводов: отдельные колонки E:AJ, заголовки из строки 3. Core (F) и Сечение C (G) — первая группа; Pair (H) и Сечение P (I) — вторая. 1C означает монтажный многожильный провод. В редакторах сечение собирается как FxG | HxI, а в базе колонки сохраняются отдельно.</InfoHint>}
+      {sourceId === "technology-wires" && <InfoHint>Каталог проводов: отдельные колонки E:AJ, заголовки из строки 3. Категория группы вынесена из строк-разделителей и используется для фильтрации; такие строки не попадают в выбор материала. Core (F) и Сечение C (G) — первая группа; Pair (H) и Сечение P (I) — вторая. 1C означает монтажный многожильный провод. В редакторах сечение собирается как FxG | HxI, а в базе колонки сохраняются отдельно.</InfoHint>}
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setAddingColumn(!addingColumn)} aria-expanded={addingColumn}>Добавить столбец</button>
       <button type="button" className="secondary-action" disabled={blocked} onClick={() => setDraft({
         ...draft,

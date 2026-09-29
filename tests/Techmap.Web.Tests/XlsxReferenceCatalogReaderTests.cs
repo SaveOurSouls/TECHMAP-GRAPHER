@@ -44,6 +44,25 @@ public sealed class XlsxReferenceCatalogReaderTests
     }
 
     [Fact]
+    public async Task Wire_profile_moves_section_labels_to_category_records_and_preserves_group_on_wires()
+    {
+        var bytes = new XlsxTestFixtureBuilder().WithHeaderRow(3)
+            .WithHeaders("Код", "Тип", "Группа", "Примечание", "Марка", "Core", "Сечение C", "Pair", "Сечение P", "Категория")
+            .AddRow(null, null, null, null, "Монтажный провод", null, null, null, null, null)
+            .AddRow(null, null, null, null, "UL1007", "1C", "30", null, null, "PVC провод")
+            .Build();
+        var preview = await PreviewAsync(bytes, XlsxKnownProfiles.Get("technology.wires").Mapping, "technology-wires");
+        Assert.True(preview.Validation.IsValid, string.Join("; ", preview.Validation.Diagnostics.Select(d => d.Message)));
+        var category = Assert.Single(preview.Validation.Snapshot!.Records, item => item.EntityType == "wire-category");
+        Assert.Equal("Монтажный провод", category.Payload.GetProperty("Категория").GetString());
+        Assert.Equal("Монтажный провод", category.Payload.GetProperty("Категория группы").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, category.Payload.GetProperty("Марка").ValueKind);
+        var wire = Assert.Single(preview.Validation.Snapshot.Records, item => item.EntityType == "wire");
+        Assert.Equal("Монтажный провод", wire.Payload.GetProperty("Категория группы").GetString());
+        Assert.Equal("PVC провод", wire.Payload.GetProperty("Категория").GetString());
+    }
+
+    [Fact]
     public async Task Wire_profile_requires_mark_in_E3_but_not_core_or_section_columns()
     {
         var profile = XlsxKnownProfiles.Get("technology.wires").Mapping;
@@ -496,11 +515,11 @@ public sealed class XlsxReferenceCatalogReaderTests
         EntityType: "terminal",
         KeyColumn: "RecordKey");
 
-    private static Task<XlsxCatalogPreview> PreviewAsync(byte[] bytes, XlsxCatalogMapping? mapping = null) =>
+    private static Task<XlsxCatalogPreview> PreviewAsync(byte[] bytes, XlsxCatalogMapping? mapping = null, string sourceId = "technology-database") =>
         new XlsxReferenceCatalogReader().PreviewAsync(
             new MemoryStream(bytes, writable: false),
             "catalog.xlsx",
-            "technology-database",
+            sourceId,
             mapping ?? DefaultMapping(),
             new ReferenceCatalogSnapshotIdentity(Guid.Parse("10000000-0000-0000-0000-000000000001")),
             new DateTimeOffset(2026, 9, 12, 18, 0, 0, TimeSpan.Zero),

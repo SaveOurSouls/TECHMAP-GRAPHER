@@ -687,6 +687,9 @@ public sealed class XlsxReferenceCatalogReader
             }
         }
 
+        if (string.Equals(sourceId, "technology-wires", StringComparison.Ordinal))
+            records = WireCatalogRowClassifier.Classify(records).ToList();
+
         var draft = ReferenceCatalogDraft.Create(
             snapshotId,
             sourceId,

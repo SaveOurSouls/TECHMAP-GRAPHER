@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWireSection, wireDatabaseOption, filterWireOptions, wireMarkChoices, wireSectionChoices } from "./wire-database";
+import { formatWireSection, wireDatabaseOption, filterWireOptions, wireMarkChoices, wireSectionChoices, isSelectableWirePayload } from "./wire-database";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { createEmptyHarnessDesign, parseHarnessDesignDocument, connectorContactPosition, createOrthogonalE4Route, wireEndpointE4Anchor } from "./model";
 import { createWire } from "./commands";
@@ -16,7 +16,9 @@ describe("wire database", () => {
     expect(formatWireSection({ Core: "1C", "Сечение C": "30", Pair: "1E", "Сечение P": "28" })).toBe("1Cx30 | 1Ex28");
     expect(formatWireSection({ Core: "2С", "Сечение C": "24AWG" })).toBe("2Сx24AWG");
     expect(formatWireSection({ Core: "0C", Pair: "2P", "Сечение P": 0.12 })).toBe("2Px0,12");
-    expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3Cx0,5");
+  expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3Cx0,5");
+  expect(isSelectableWirePayload({ Марка: "Монтажный провод" })).toBe(false);
+  expect(isSelectableWirePayload({ Марка: "UL1007", Core: "1C", "Сечение C": 30 })).toBe(true);
   });
   it("keeps variants searchable by all imported characteristics", () => {
     const red = wireDatabaseOption({ recordId: "red", sourceLocation: null, entityType: "wire", sourceKey: "key1", payload: {

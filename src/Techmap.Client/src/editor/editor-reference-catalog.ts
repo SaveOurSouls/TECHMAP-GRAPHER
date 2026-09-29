@@ -13,7 +13,7 @@ import {
 } from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
 import { normalizeWireStripProfileBinding } from "./model";
-import { wireDatabaseOption, formatWireSection, builtInWireOptions, type WireDatabaseOption } from "./wire-database";
+import { wireDatabaseOption, formatWireSection, builtInWireOptions, isSelectableWirePayload, type WireDatabaseOption } from "./wire-database";
 import type {
   CoaxTerminationCatalogCandidate,
   CoaxTerminationCatalogDiagnostic,
@@ -441,7 +441,7 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
         setMessage("Каталог проводов E3:AJ ещё не загружен. Откройте «Справочники» → «Подключить базу проводов».");
         return;
       }
-      const next = snapshot.records.filter(record => record.entityType === "wire")
+      const next = snapshot.records.filter(record => record.entityType === "wire" && isSelectableWirePayload(record.payload))
         .map(record => wireDatabaseOption(record, { snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256 }));
       setDatabaseOptions(next);
       setOptions(next.length ? next : builtInWireOptions);
@@ -464,7 +464,7 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
         entityTypes: ["wire"], filters: [], filterLogic: "all", sort: query.trim() ? "relevance" : "source-key-asc",
         pageSize: 50, cursor: null }, controller.signal).then(page => {
         if (controller.signal.aborted) return;
-        setOptions(page.items.map(item => wireDatabaseOption(item, page)));
+        setOptions(page.items.filter(item => isSelectableWirePayload(item.payload)).map(item => wireDatabaseOption(item, page)));
         setMessage(page.items.length === 0 ? "Совпадений в базе нет. Можно ввести марку и сечение вручную." : page.nextCursor ? "Показаны первые 50 вариантов. Уточните поиск." : null);
       }).catch(error => {
         if (controller.signal.aborted) return;
