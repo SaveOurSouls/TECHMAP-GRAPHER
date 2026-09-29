@@ -646,7 +646,7 @@ export function App({ config, session }: AppProps) {
   }, [selectedHarness]);
 
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route") {
-    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={() => setEditorOpen(false)} />;
+    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={() => setEditorOpen(false)} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} />;
   }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab !== "route") {
     return (
@@ -664,6 +664,11 @@ export function App({ config, session }: AppProps) {
           current,
           selectedHarness.harnessId,
           view,
+        ))}
+        onRouteRequest={() => setActiveHarnessTabs((current) => rememberHarnessTab(
+          current,
+          selectedHarness.harnessId,
+          "route",
         ))}
       />
     );

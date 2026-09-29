@@ -113,6 +113,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly saveState?: EditorSaveState;
   readonly onSaveRequest?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
+  /** Opens the manufacturing route document from the editor header. */
+  readonly onRouteRequest?: () => void;
   readonly onObjectsChange?: (objects: readonly EditorSceneObject[]) => void;
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
   readonly onSelectedObjectChange?: (objectId: string | null) => void;
@@ -300,6 +302,7 @@ export function HarnessEditorWorkspace({
   diagnostics = [],
   previewMessage,
   onClose,
+  onRouteRequest,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
   const [tool, setTool] = useState<EditorTool>("select");
@@ -311,6 +314,8 @@ export function HarnessEditorWorkspace({
   const [viewportSize, setViewportSize] = useState<EditorViewportSize>({ width: 860, height: 560 });
   const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">("properties");
   const [catalogExpanded, setCatalogExpanded] = useState(true);
+  const [utilityPanelOpen, setUtilityPanelOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
+  const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
 
   const view = controlledView ?? localView;
   useEffect(() => {
@@ -522,18 +527,9 @@ export function HarnessEditorWorkspace({
         <div className="he-view-tabs" role="tablist" aria-label="Представление жгута">
           <button type="button" role="tab" aria-selected={view === "e4"} className={view === "e4" ? "active" : ""} onClick={() => changeView("e4")}>Схема Э4</button>
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
+          {onRouteRequest && <button type="button" role="tab" aria-selected={false} className="he-route-tab" onClick={onRouteRequest}>Маршрут</button>}
         </div>
-        <div className="he-view-options">
-          {(
-            <button
-              className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"}
-              type="button"
-              aria-pressed={drawingSnapEnabled}
-              onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}
-            >Шаг 15°</button>
-          )}
-          <InfoHint>Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°.</InfoHint>
-        </div>
+        <button className="he-inspector-toggle" type="button" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) setUtilityPanelOpen(false); }}>Свойства и слои</button>
         <button
           className={`he-save-state ${saveState}`}
           type="button"
@@ -545,8 +541,20 @@ export function HarnessEditorWorkspace({
         </button>
       </header>
 
-      <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""}`}>
-        <nav className="he-document-nav" aria-label="Документы жгута">{documentActions}</nav>
+      <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""} ${utilityPanelOpen ? "he-utility-open" : "he-utility-closed"} ${inspectorOpen ? "he-inspector-open" : "he-inspector-closed"}`}>
+        <aside className={`he-utility-panel ${utilityPanelOpen ? "open" : "closed"}`} aria-label="Параметры и документы">
+          <button className="he-utility-toggle" type="button" title={utilityPanelOpen ? "Скрыть панель" : "Показать параметры и документы"} onClick={() => { setUtilityPanelOpen(value => !value); if (window.innerWidth <= 1100) setInspectorOpen(false); }} aria-expanded={utilityPanelOpen} aria-controls="he-utility-content">
+            <span aria-hidden="true">{utilityPanelOpen ? "‹" : "›"}</span>
+            <span>{utilityPanelOpen ? "Скрыть панель" : "Параметры"}</span>
+          </button>
+          <div className="he-utility-content" id="he-utility-content" hidden={!utilityPanelOpen}>
+            <div className="he-view-options">
+              <button className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"} type="button" aria-pressed={drawingSnapEnabled} onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}>Шаг 15°</button>
+              <InfoHint>Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°.</InfoHint>
+            </div>
+            {documentActions}
+          </div>
+        </aside>
         <EditorToolbar
           view={view}
           activeTool={tool}
@@ -613,7 +621,7 @@ export function HarnessEditorWorkspace({
           {previewMessage || cableSheathWarning}
         </div>}
 
-        <aside className="he-right-panel" aria-label="Настройки редактора">
+        <aside className="he-right-panel" aria-label="Настройки редактора" hidden={!inspectorOpen}>
           <div className="he-inspector-tabs" role="tablist" aria-label="Панель объекта">
             <button type="button" role="tab" aria-selected={inspectorTab === "properties"} className={inspectorTab === "properties" ? "active" : ""} onClick={() => setInspectorTab("properties")}>Свойства</button>
             <button type="button" role="tab" aria-selected={inspectorTab === "layers"} className={inspectorTab === "layers" ? "active" : ""} onClick={() => setInspectorTab("layers")}>Слои <span>{layers.length}</span></button>
