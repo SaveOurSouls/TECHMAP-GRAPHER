@@ -34,6 +34,11 @@ export function createDesignRecoveryApi(config: RuntimeConfig, session: LocalSes
       await request(project, harness, `/${id}`, { method: "DELETE", headers },
         new URLSearchParams({ sequence: String(sequence) }));
     },
+    removeMany: async (project: string, harness: string, drafts: readonly Pick<ServerRecoveryDraft, "draftId" | "sequence">[]) => {
+      for (const draft of drafts) await request(project, harness, `/${draft.draftId}`, { method: "DELETE", headers },
+        new URLSearchParams({ sequence: String(draft.sequence) }));
+      return drafts.map(draft => draft.draftId);
+    },
   };
 }
 
@@ -42,7 +47,7 @@ export class DesignRecoverySession {
   private tail: Promise<void> = Promise.resolve();
   private sequence = 0;
   private id = crypto.randomUUID();
-  constructor(private readonly api: ReturnType<typeof createDesignRecoveryApi>,
+  constructor(private readonly api: Pick<ReturnType<typeof createDesignRecoveryApi>, "put" | "remove">,
     private readonly project: string, private readonly harness: string) {}
 
   write(baseRevision: number, content: HarnessDesignDocument): Promise<void> {

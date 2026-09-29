@@ -52,7 +52,7 @@ import {
   removeHarnessDesignRecoveryDraft,
   writeHarnessDesignRecoveryDraft,
 } from "./design-recovery-draft";
-import { createDesignRecoveryApi, DesignRecoverySession } from "./design-recovery-api";
+import { createDesignRecoveryApi, DesignRecoverySession, type ServerRecoveryDraft } from "./design-recovery-api";
 import {
   createComponentPlacementApi,
   componentPlacementRequest,
@@ -695,6 +695,7 @@ export function HarnessDesignEditor({
   const [recoveryError, setRecoveryError] = useState("");
   const recoveryCleanupWarning = "Документ сохранён, но очистка аварийной копии не выполнена. Копия сохранена для проверки.";
   const recoveryBusy = useRef(false);
+  const recoveryArchives = useRef<Pick<ServerRecoveryDraft, "draftId" | "sequence">[]>([]);
   const componentTemplateApi = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
   const componentPlacementApi = useMemo(
     () => componentPlacementApiOverride ?? createComponentPlacementApi(config, session),
@@ -821,6 +822,7 @@ export function HarnessDesignEditor({
     setMessage("Загружаем документ жгута…");
     setRecoveryDrafts([]);
     setRecoveryError("");
+    recoveryArchives.current = [];
     setSaveState("saved");
     const journalRequest = recoveryApi.list(projectId, harnessId).catch(() => {
       if (generation === loadGeneration.current) setRecoveryError("Аварийный журнал недоступен. Восстановление после смены порта не гарантировано; сохраните копию перед закрытием.");
@@ -909,9 +911,13 @@ export function HarnessDesignEditor({
           setSaveState("saved");
           if (!recoveryDrafts.some(d => d.id === "browser")) removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
           const generation = loadGeneration.current;
-          void recoverySession.clear().then(() => {
-            if (generation === loadGeneration.current)
+          const archivedAtSave = recoveryArchives.current.slice();
+          void recoverySession.clear().then(() => recoveryApi.removeMany(projectId, harnessId, archivedAtSave)).then((removedIds) => {
+            recoveryArchives.current = recoveryArchives.current.filter(draft => !removedIds.includes(draft.draftId));
+            if (generation === loadGeneration.current) {
+              setRecoveryDrafts(current => current.filter(draft => !removedIds.includes(draft.id)));
               setRecoveryError(current => current === recoveryCleanupWarning ? "" : current);
+            }
           }).catch(() => {
             if (generation === loadGeneration.current) setRecoveryError(recoveryCleanupWarning);
           });
@@ -927,7 +933,7 @@ export function HarnessDesignEditor({
       } finally {
         savingRef.current = false;
       }
-  }, [api, harnessId, projectId, recoveryDrafts, recoverySession]);
+  }, [api, harnessId, projectId, recoveryApi, recoveryDrafts, recoverySession]);
 
   const flushSave = useCallback((): Promise<boolean> => {
     if (!saveCoordinatorRef.current) {
@@ -1711,19 +1717,25 @@ export function HarnessDesignEditor({
           const beforeRestore = historyRef.current;
           const generation = loadGeneration.current;
           try {
+            const archived: Pick<ServerRecoveryDraft, "draftId" | "sequence">[] = [];
             if (beforeRestore && JSON.stringify(beforeRestore.present) !== savedJsonRef.current) {
               // The current editor can itself contain unsaved edits when another copy is selected.
-              await recoveryApi.put(projectId, harnessId, crypto.randomUUID(), 1,
+              const draftId = crypto.randomUUID();
+              await recoveryApi.put(projectId, harnessId, draftId, 1,
                 resourceRef.current?.revision ?? 0, beforeRestore.present);
+              archived.push({ draftId, sequence: 1 });
             }
             // Archive both alternatives before applying the recovery copy.
-            await recoveryApi.put(projectId, harnessId, crypto.randomUUID(), 1, draft.baseRevision, draft.content);
+            const draftId = crypto.randomUUID();
+            await recoveryApi.put(projectId, harnessId, draftId, 1, draft.baseRevision, draft.content);
+            archived.push({ draftId, sequence: 1 });
             if (generation !== loadGeneration.current) return;
             if (historyRef.current !== beforeRestore) {
               setRecoveryError("Во время подготовки восстановления документ изменился. Обе копии сохранены; повторите восстановление после завершения изменений.");
               return;
             }
             recoverySession.preserve();
+            recoveryArchives.current.push(...archived);
             const next = createEditorHistory(migrateJoiningPipes(draft.content));
             historyRef.current = next; setHistory(next);
             setRecoveryDrafts(current => current.filter(item => item.id !== draft.id));

@@ -15,6 +15,25 @@ it("sends recovery deletion with the sequence as a query after validating the AP
   );
 });
 
+it("removes only recovery copies explicitly archived by the restore action", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ ok: true });
+  const api = createDesignRecoveryApi({
+    configVersion: 1, basePath: "/", apiBasePath: "/api/v1/", appVersion: "test",
+    apiVersion: "1", schemaVersion: "1",
+  }, { csrfNonce: "csrf", instanceId: "instance" }, fetcher);
+  await expect(api.removeMany("project", "harness", [
+    { draftId: "old", sequence: 2 }, { draftId: "current", sequence: 4 },
+  ])).resolves.toEqual(["old", "current"]);
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/v1/projects/project/harnesses/harness/design/recovery/old?sequence=2",
+    expect.objectContaining({ method: "DELETE" }),
+  );
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/v1/projects/project/harnesses/harness/design/recovery/current?sequence=4",
+    expect.objectContaining({ method: "DELETE" }),
+  );
+});
+
 describe("server recovery session", () => {
   it("serializes writes and deletes only the acknowledged generation", async () => {
     let release!: () => void;
