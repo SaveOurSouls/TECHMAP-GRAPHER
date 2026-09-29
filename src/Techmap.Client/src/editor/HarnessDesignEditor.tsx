@@ -37,6 +37,7 @@ import { InfoHint } from "../InfoHint";
 import { drawingBendRadius } from "./drawing-route-path";
 import { DrawingObjectProperties } from "./DrawingObjectProperties";
 import { JoiningPipeEditor, type JoiningPipeDraft, beginJoiningPipe, joiningPipeDraftTopology, joiningPipeDraftHighlights, toggleJoiningPipeMember } from "./JoiningPipeEditor";
+import { DocumentIcon } from "./DocumentIcon";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
@@ -127,6 +128,7 @@ export interface HarnessDesignEditorProps {
   readonly componentPlacementApiOverride?: ReturnType<typeof createComponentPlacementApi>;
   readonly onClose?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
+  readonly onRouteRequest?: () => void;
 }
 
 export type ProjectComponentSnapshotLookup = ReadonlyMap<string, ProjectComponentSnapshotResource>;
@@ -692,7 +694,10 @@ export function HarnessDesignEditor({
   componentPlacementApiOverride,
   onClose,
   onViewChange,
+  onRouteRequest,
 }: HarnessDesignEditorProps) {
+  // Subscribe the scene projection as well as the left-panel editor to the
+  // global preference, so a column change is visible immediately on the field.
   const connectionTableSettings = useConnectionTableSettings();
   const api = useMemo(() => apiOverride ?? createHarnessDesignApi(config, session), [apiOverride, config, session]);
   const recoveryApi = useMemo(() => createDesignRecoveryApi(config, session), [config, session]);
@@ -1805,7 +1810,10 @@ export function HarnessDesignEditor({
         objectProperties={view==="drawing"?id=>
           <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} wireMaterialOptions={wireLookup.databaseOptions} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
-        documentActions={<>{view === "e4" && <ConnectionTableSettings />}{view==="drawing"&&<>
+        documentActions={<>
+          {view === "e4" && <ConnectionTableSettings />}
+          {view === "drawing" && <section className="he-utility-section he-controls-section" aria-labelledby="he-controls-heading">
+            <h3 id="he-controls-heading">Настройки чертежа</h3>
           {joiningPipeDraft&&history.present.physicalTopology&&<JoiningPipeEditor document={history.present} draft={joiningPipeDraft} onChange={setJoiningPipeDraft} onCancel={()=>setJoiningPipeDraft(null)} onSave={()=>{try{const topology=joiningPipeDraftTopology(history.present,joiningPipeDraft);if(run({type:'set-physical-topology',topology})){setSelectedObjectId(joiningPipeDraft.id);setSelectedObjectIds([joiningPipeDraft.id]);setJoiningPipeDraft(null);}}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
           <button type="button" className="ui-control" onClick={()=>setMaterialSettings(true)}>Материалы</button>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
@@ -1818,7 +1826,13 @@ export function HarnessDesignEditor({
           <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}>Отобразить размеры</button>
           <button type="button" className="ui-control" disabled={!volumeEligible} aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}>Объёмный свет</button>
           <InfoHint>Затемнение краёв и светлая середина пайпов, проводов и покрытий. Сохраняется для этого чертежа; отключение не меняет материалы, цвета и размеры.</InfoHint>
-        </>}{view==="drawing"&&<button type="button" className="ui-control" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}>Добавить позиции</button>}{(view==="drawing"?["connections","bom","cut"] as const:["connections"] as const).map(kind=><button type="button" className="ui-control" key={kind} disabled={kind==="cut"&&!routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").ready} title={kind==="cut"?routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").message:undefined} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}</>}
+        </section>}
+          <section className="he-utility-section he-documents-section" aria-labelledby="he-documents-heading">
+            <h3 id="he-documents-heading">Документы</h3>
+            {view === "drawing" && <button type="button" className="ui-control he-document-action" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}><span className="he-doc-icon"><DocumentIcon kind="positions" /></span>Добавить позиции</button>}
+            {(["connections","cut","bom"] as const).map(kind=><button type="button" className="ui-control he-document-action" key={kind} disabled={kind==="cut"&&!routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").ready} title={kind==="cut"?routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").message:undefined} onClick={()=>{if(kind!=="connections"&&view!=="drawing"){setView("drawing");onViewChange?.("drawing");}const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}><span className="he-doc-icon"><DocumentIcon kind={kind} /></span>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}
+          </section>
+        </>}
         drawingWindows={camera=><DrawingTableWindows connectionTableSettings={connectionTableSettings} sourceFingerprint={resource.sourceFingerprint} wireOptions={wireLookup.options} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
         onDimensionCreate={(wireId,from,to,pointCount,mode,auxiliary)=>{
           const wire=history.present.wires.find(w=>w.id===wireId),segment=history.present.physicalTopology?.segments.find(s=>s.id===wireId);if(!wire&&!segment)return;
@@ -1926,6 +1940,9 @@ export function HarnessDesignEditor({
           setView(nextView);
           onViewChange?.(nextView);
         }}
+        onRouteRequest={onRouteRequest ? async () => {
+          if (await flushSave()) onRouteRequest();
+        } : undefined}
         onSelectedObjectChange={(objectId) => {
           setRelatedSourceIds([]);
           setSelectedObjectId(objectId);
