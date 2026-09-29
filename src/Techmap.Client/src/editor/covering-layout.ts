@@ -8,6 +8,7 @@ import { pipeBundleSections } from "./pipe-bundle-section";
 import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
+import {joiningPipeWidth} from "./physical-joining-pipe-projection";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
@@ -49,10 +50,10 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
   const bundleAxis=covering.bundle?pipeBundleAxisPath(covering,sourceCoverings):undefined;
   for(const [spanIndex,original] of covering.spans.entries()){
    if(bundleAxis&&!bundleAxis.includes(original.segmentId))continue;
-   const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId);if(!route||!segment)continue;
+   const s=resolvedCoveringSpan(document,original),route=coveringRoute(document,s.segmentId),segment=topology.segments.find(p=>p.id===s.segmentId),joining=topology.joiningPipes?.find(p=>p.id===s.segmentId);if(!route||!segment&&!joining)continue;
    const from=Math.max(route.min,s.from),to=Math.min(route.max,s.to);if(from>=to)continue;
    const groupedWidth=bundleSections.get(covering.id)?.width;
-   const pipeWidth=groupedWidth??drawingPipeWidth(document,segment),lanes=segmentWireLanes(document,segment.id);
+   const pipeWidth=groupedWidth??(segment?drawingPipeWidth(document,segment):joiningPipeWidth(document,joining!)),lanes=segment?segmentWireLanes(document,segment.id):[];
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const halfAt=(fraction:number):number=>{
     if(groupedWidth!==undefined)return groupedWidth/2;

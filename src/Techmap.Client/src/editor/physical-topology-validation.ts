@@ -3,6 +3,7 @@ import type { PhysicalTopology, PhysicalDirection } from "./physical-topology-mo
 import { validateCoverings } from "./physical-coverings";
 import { readPhysicalSegmentPath } from "./physical-path-codec";
 import { validatePipeContinuations } from "./pipe-bundle-model";
+import { validateJoiningPipes } from "./physical-joining-pipe-validation";
 
 export function parsePhysicalTopology(value: unknown, document: HarnessDesignDocument): PhysicalTopology | undefined {
   if (value === undefined) return undefined;
@@ -54,9 +55,11 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     if(from.wireIds&&!from.wireIds.includes(r.wireId)||to.wireIds&&!to.wireIds.includes(r.wireId))return fail();
     if (from.connectorId && from.connectorId !== w.from.connectorId || to.connectorId && to.connectorId !== w.to.connectorId) return fail();
   }
-  validateCoverings(t.coverings, new Set(t.segments.map(s => s.id)), ids);
+  validateJoiningPipes(t,ids);
+  const joiningIds = new Set((t.joiningPipes??[]).map(p=>p.id));
+  validateCoverings(t.coverings, new Set([...t.segments.map(s => s.id),...joiningIds]), ids);
   validatePipeContinuations(t.coverings??[],t.segments);
-  for(const c of t.coverings??[])for(const span of c.spans){const count=t.segments.find(s=>s.id===span.segmentId)!.path.points.length+2;
+  for(const c of t.coverings??[])for(const span of c.spans){const count=(t.segments.find(s=>s.id===span.segmentId)??t.joiningPipes?.find(s=>s.id===span.segmentId))!.path.points.length+2;
     if([span.fromAnchor,span.toAnchor].some(i=>i!==undefined&&i>=count)||span.fromAnchor!==undefined&&span.toAnchor!==undefined&&span.fromAnchor>=span.toAnchor)return fail();}
   return t;
 }

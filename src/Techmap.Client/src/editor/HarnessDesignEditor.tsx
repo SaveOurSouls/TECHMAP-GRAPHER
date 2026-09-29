@@ -25,6 +25,8 @@ import { routePhysicalWires } from "./physical-wire-routing";
 import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
 import { ensureConnectorExits, branchPhysicalSegment, connectPhysicalNodeToSegment } from "./physical-topology";
 import { physicalNodePoint } from "./physical-ports";
+import { joiningPipeEndpoint, migrateJoiningPipes } from "./physical-joining-pipes";
+
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -33,7 +35,7 @@ import { applyEditorCommand, createWire, e4RoutingIssues, type EditorCommand } f
 import { InfoHint } from "../InfoHint";
 import { drawingBendRadius } from "./drawing-route-path";
 import { DrawingObjectProperties } from "./DrawingObjectProperties";
-import { PipeBundleEditor, type PipeBundleDraft, beginPipeBundle, pipeBundleDraftTopology, pipeBundleDraftHighlights, togglePipeBundleMember } from "./PipeBundleEditor";
+import { JoiningPipeEditor, type JoiningPipeDraft, beginJoiningPipe, joiningPipeDraftTopology, joiningPipeDraftHighlights, toggleJoiningPipeMember } from "./JoiningPipeEditor";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
@@ -288,6 +290,7 @@ export function selectedEditorDeletionCommands(
 ): readonly EditorCommand[] {
   const selectedIds = new Set(selectedObjectIds);
   return [
+    ...document.physicalTopology?.joiningPipes?.filter(p=>selectedIds.has(p.id)).map((p):EditorCommand=>({type:"remove-physical-segment",segmentId:p.id}))??[],
     ...(document.drawingDocuments && (document.drawingDocuments.specificationItems?.some(i=>selectedIds.has(i.id))||document.drawingDocuments.tables.some(t=>selectedIds.has(t.id))||document.drawingDocuments.leaders.some(l=>selectedIds.has(l.id)||selectedIds.has(`${l.id}:anchor`))||(document.drawingDocuments.rails??[]).some(r=>selectedIds.has(r.id)||selectedIds.has(`${r.id}:start`)||selectedIds.has(`${r.id}:end`))) ? [{type:"set-drawing-documents" as const,documents:{...document.drawingDocuments,specificationItems:document.drawingDocuments.specificationItems?.filter(i=>!selectedIds.has(i.id)),tables:document.drawingDocuments.tables.filter(t=>!selectedIds.has(t.id)),leaders:document.drawingDocuments.leaders.filter(l=>!selectedIds.has(l.id)&&!selectedIds.has(`${l.id}:anchor`)),rails:(document.drawingDocuments.rails??[]).filter(r=>!selectedIds.has(r.id)&&!selectedIds.has(`${r.id}:start`)&&!selectedIds.has(`${r.id}:end`))}}] : []),
     ...document.wires
       .filter((wire) => selectedIds.has(wire.id))
@@ -711,7 +714,7 @@ export function HarnessDesignEditor({
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
   const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
   const [wholeNet, setWholeNet] = useState(false);
-  const [pipeBundleDraft, setPipeBundleDraft] = useState<PipeBundleDraft | null>(null);
+  const [joiningPipeDraft, setJoiningPipeDraft] = useState<JoiningPipeDraft | null>(null);
   const [revealRequest, setRevealRequest] = useState<{token: number; objectIds: readonly string[]} | undefined>();
   const selectionIndex = useMemo(() => history ? buildHarnessSelectionIndex(history.present) : null, [history?.present]);
   const related = useMemo(() => selectionIndex ? resolveHarnessSelection(selectionIndex, relatedSourceIds.length ? relatedSourceIds : selectedObjectIds, wholeNet) : {wireIds: [], componentIds: [], rowIds: [], unresolvedIds: []}, [selectionIndex, relatedSourceIds, selectedObjectIds, wholeNet]);
@@ -867,7 +870,7 @@ export function HarnessDesignEditor({
       }
       setRecoveryDrafts(candidates);
       setResource(loaded);
-      setHistory(createEditorHistory(reconcileDrawingDocuments(loaded.content, loaded.content)));
+      setHistory(createEditorHistory(reconcileDrawingDocuments(loaded.content, migrateJoiningPipes(loaded.content))));
       savedJsonRef.current = savedJson;
       setMessage(recoveryMessage);
     }).catch((error: unknown) => {
@@ -982,6 +985,7 @@ export function HarnessDesignEditor({
       ...history.present.physicalTopology?.coverings?.map(c => c.id) ?? [],
       ...history.present.physicalTopology?.nodes.map(n => n.id) ?? [],
       ...history.present.physicalTopology?.segments.map(n => n.id) ?? [],
+      ...history.present.physicalTopology?.joiningPipes?.flatMap(p=>[p.id,`${p.id}:from`,`${p.id}:to`])??[],
     ]);
     const normalized = normalizeEditorSelection(selectedObjectIds, selectedObjectId, availableObjectIds);
     if (normalized.primaryObjectId !== selectedObjectId) setSelectedObjectId(normalized.primaryObjectId);
@@ -1026,6 +1030,10 @@ export function HarnessDesignEditor({
     }
     if(pipePreview&&history.present.physicalTopology) {
       try{const segment=history.present.physicalTopology.segments.find(s=>s.id===pipePreview.id)!;
+        const op=history.present.physicalTopology.joiningPipes?.find(p=>p.id===pipePreview.id);
+        if(op){
+          return {document:applyEditorCommand(history.present,{type:"edit-joining-pipe-bend",pipeId:op.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};
+        }
         const points=physicalEditablePoints(history.present,segment),i=pipePreview.index+1;
         const original=pipePreview.insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
         const position=unprojectPipeBundleEdit(history.present,pipePreview.id,original,pipePreview.point);
@@ -1037,6 +1045,10 @@ export function HarnessDesignEditor({
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point,drawingPerimeters);
       if(annotation)return {document:{...history.present,drawingDocuments:annotation},error:null};
       const topology = history.present.physicalTopology;
+      const opEndpoint=joiningPipeEndpoint(topology,movePreview.objectId);
+      if(opEndpoint){
+        return {document:applyEditorCommand(history.present,{type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:movePreview.point.x+5,y:movePreview.point.y+5}}),error:null};
+      }
       const node = topology?.nodes.find(n => n.id === movePreview.objectId);
       if (node && topology) {
         const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
@@ -1178,7 +1190,7 @@ export function HarnessDesignEditor({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if(pipeBundleDraft){if(event.key==='Escape'){event.preventDefault();setPipeBundleDraft(null);}return;}
+      if(joiningPipeDraft){if(event.key==='Escape'){event.preventDefault();setJoiningPipeDraft(null);}return;}
       if (placementBusyRef.current || pendingPlacementRef.current) return;
       if (event.key === "Escape" && editingObjectId) {
         event.preventDefault();
@@ -1211,7 +1223,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [editingObjectId, run, selectedObjectIds,pipeBundleDraft]);
+  }, [editingObjectId, run, selectedObjectIds,joiningPipeDraft]);
 
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
@@ -1703,7 +1715,7 @@ export function HarnessDesignEditor({
               return;
             }
             recoverySession.preserve();
-            const next = createEditorHistory(draft.content);
+            const next = createEditorHistory(migrateJoiningPipes(draft.content));
             historyRef.current = next; setHistory(next);
             setRecoveryDrafts(current => current.filter(item => item.id !== draft.id));
             if (draft.id === "browser") removeHarnessDesignRecoveryDraft(browserRecoveryStorage(), projectId, harnessId);
@@ -1753,15 +1765,15 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
-        highlightedObjectIds={pipeBundleDraft&&history.present.physicalTopology?pipeBundleDraftHighlights(history.present.physicalTopology,pipeBundleDraft):[...related.wireIds,...related.componentIds,...relatedSourceIds]}
-        onObjectPick={view==='drawing'&&pipeBundleDraft?id=>{if(id&&history.present.physicalTopology)setPipeBundleDraft(togglePipeBundleMember(history.present.physicalTopology,pipeBundleDraft,id));}:undefined}
-        onObjectPickCancel={()=>setPipeBundleDraft(null)}
+        highlightedObjectIds={joiningPipeDraft&&history.present.physicalTopology?joiningPipeDraftHighlights(history.present,joiningPipeDraft):[...related.wireIds,...related.componentIds,...relatedSourceIds]}
+        onObjectPick={view==='drawing'&&joiningPipeDraft?id=>{if(id&&history.present.physicalTopology)setJoiningPipeDraft(toggleJoiningPipeMember(history.present,joiningPipeDraft,id));}:undefined}
+        onObjectPickCancel={()=>setJoiningPipeDraft(null)}
         revealRequest={revealRequest}
         objectProperties={view==="drawing"?id=>
           <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} wireMaterialOptions={wireLookup.databaseOptions} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
-            onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setPipeBundleDraft(beginPipeBundle(topology,bundleId));}}/>:undefined}
+            onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
         documentActions={<>{view==="drawing"&&<>
-          {pipeBundleDraft&&history.present.physicalTopology&&<PipeBundleEditor topology={history.present.physicalTopology} draft={pipeBundleDraft} onChange={setPipeBundleDraft} onCancel={()=>setPipeBundleDraft(null)} onSave={()=>{try{const topology=pipeBundleDraftTopology(history.present.physicalTopology!,pipeBundleDraft);if(run({type:'set-physical-topology',topology}))setPipeBundleDraft(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
+          {joiningPipeDraft&&history.present.physicalTopology&&<JoiningPipeEditor document={history.present} draft={joiningPipeDraft} onChange={setJoiningPipeDraft} onCancel={()=>setJoiningPipeDraft(null)} onSave={()=>{try{const topology=joiningPipeDraftTopology(history.present,joiningPipeDraft);if(run({type:'set-physical-topology',topology})){setSelectedObjectId(joiningPipeDraft.id);setSelectedObjectIds([joiningPipeDraft.id]);setJoiningPipeDraft(null);}}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
           <button type="button" className="ui-control" onClick={()=>setMaterialSettings(true)}>Материалы</button>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
           <DrawingRangeControl label="Диаметры 1:" unit="" digits={1} accessibleLabel="Соотношение диаметров оболочек" min={1.1} max={4} step={.1} value={coveringRatioPreview??history.present.drawingDocuments?.coveringDiameterRatio??2} onPreview={setCoveringRatioPreview} onCommit={coveringDiameterRatio=>{if(coveringDiameterRatio!==(history.present.drawingDocuments?.coveringDiameterRatio??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio}});}} hint="Глобальное правило 1:x для соседних оболочек. При увеличении ширины переходы сохраняют форму; локальные ширины и материал не меняются."/>
@@ -1811,7 +1823,7 @@ export function HarnessDesignEditor({
         onSaveRequest={() => void flushSave()}
         onDrawingScale={(connectorId,drawingId,scale)=>run({type:"set-drawing-placement",connectorId,drawingId,scale})}
         onDrawingMove={(connectorId,drawingId,offset)=>run({type:"set-drawing-placement",connectorId,drawingId,offset})}
-        propertyInspector={selectedObjectId && (history.present.drawingDocuments?.specificationItems?.some(i=>i.id===selectedObjectId) || history.present.drawingDocuments?.dimensions?.some(d=>d.id===selectedObjectId) || history.present.drawingDocuments?.tables.some(t=>t.id===selectedObjectId) || history.present.drawingDocuments?.leaders.some(l=>l.id===selectedObjectId||`${l.id}:anchor`===selectedObjectId) || history.present.drawingDocuments?.rails?.some(r=>selectedObjectId===r.id||selectedObjectId===`${r.id}:start`||selectedObjectId===`${r.id}:end`) || history.present.physicalTopology?.coverings?.some(c=>c.id===selectedObjectId) || history.present.physicalTopology?.nodes.some(n=>n.id===selectedObjectId) || history.present.physicalTopology?.segments.some(s=>s.id===selectedObjectId)) ? <></> : selectedConnector ? (<>
+        propertyInspector={selectedObjectId && (history.present.drawingDocuments?.specificationItems?.some(i=>i.id===selectedObjectId) || history.present.drawingDocuments?.dimensions?.some(d=>d.id===selectedObjectId) || history.present.drawingDocuments?.tables.some(t=>t.id===selectedObjectId) || history.present.drawingDocuments?.leaders.some(l=>l.id===selectedObjectId||`${l.id}:anchor`===selectedObjectId) || history.present.drawingDocuments?.rails?.some(r=>selectedObjectId===r.id||selectedObjectId===`${r.id}:start`||selectedObjectId===`${r.id}:end`) || history.present.physicalTopology?.coverings?.some(c=>c.id===selectedObjectId) || history.present.physicalTopology?.nodes.some(n=>n.id===selectedObjectId) || history.present.physicalTopology?.segments.some(s=>s.id===selectedObjectId) || history.present.physicalTopology?.joiningPipes?.some(p=>p.id===selectedObjectId)) ? <></> : selectedConnector ? (<>
           {view==="e4" && (()=>{
             const instance=componentTemplateViewInstances.find(i=>i.objectId===selectedConnector.id);
             const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];
@@ -1876,7 +1888,7 @@ export function HarnessDesignEditor({
         }))]}
         previewMessage={previewResult.error}
         onViewChange={(nextView) => {
-          setPipeBundleDraft(null);
+          setJoiningPipeDraft(null);
           setEditingObjectId(null);
           setView(nextView);
           onViewChange?.(nextView);
@@ -1914,6 +1926,8 @@ export function HarnessDesignEditor({
           const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters);
           if(annotation){run({type:"set-drawing-documents",documents:annotation});return;}
           const topology = history.present.physicalTopology;
+          const opEndpoint=joiningPipeEndpoint(topology,objectId);
+          if(opEndpoint){run({type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:point.x+5,y:point.y+5}});return;}
           const node = topology?.nodes.find(n => n.id === objectId);
           if (topology && node) { const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
             run({type:"move-physical-node",nodeId:node.id,position:{x:point.x+5+original.x-display.x,y:point.y+5+original.y-display.y},mode}); }
@@ -2087,10 +2101,12 @@ export function HarnessDesignEditor({
             run({ type: "remove-screen", screenId: screen.id });
           }
         }}
-        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.physicalTopology?.segments.some(s=>s.id===id))?{id,index,point,mode,insert}:null)}
+        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.physicalTopology?.segments.some(s=>s.id===id)||history.present.physicalTopology?.joiningPipes?.some(p=>p.id===id))?{id,index,point,mode,insert}:null)}
         onWireRoutePointMove={(wireId, routeIndex, point, mode="carry", insert=false) => {
           if(view==="e4"){run({type:"edit-e4-bend",wireId,index:routeIndex,position:point,mode,insert});return;}
           const topology = history.present.physicalTopology;
+          const op=topology?.joiningPipes?.find(p=>p.id===wireId);
+          if(op){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:point,mode,insert});return;}
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) { const points=physicalEditablePoints(history.present,segment),i=routeIndex+1;
             const original=insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
@@ -2102,6 +2118,7 @@ export function HarnessDesignEditor({
         }}
         onWireRoutePointRemove={(wireId, routeIndex) => {
           const topology = history.present.physicalTopology;
+          if(topology?.joiningPipes?.some(p=>p.id===wireId)){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:{x:0,y:0},mode:"adjacent",remove:true});return;}
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) { run({type:"remove-physical-bend",segmentId:wireId,index:routeIndex}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);

@@ -943,6 +943,7 @@ export function hitTestWireRoutePoint(
   const tolerance = 10 / zoom;
   let nearest: number | null = null, distance = tolerance;
   for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
+    if(object.pipe?.controlledHandles?.includes(pointIndex-1))continue;
     const candidate = points[pointIndex]!;
     const delta = Math.hypot(point.x - candidate.x, point.y - candidate.y);
     if (delta <= distance) { nearest = pointIndex - 1; distance = delta; }
@@ -952,7 +953,7 @@ export function hitTestWireRoutePoint(
 
 export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
   if(object.kind!=="physical-segment")return [];
-  if(object.pipe?.midpoints)return object.pipe.midpoints.map((point,index)=>({point,index}));
+  if(object.pipe?.midpoints)return object.pipe.midpoints.flatMap((point,index)=>object.pipe?.controlledMidpoints?.includes(index)?[]:[{point,index}]);
   const points=[object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
   return points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+points[i]!.x)/2,y:(p.y+points[i]!.y)/2}}));
 }
@@ -1502,7 +1503,7 @@ export function hitTestEditorScene(
     if (contact) return contact.connectorId;
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
     if(annotation)return annotation.id;
-    const pipe = [...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
+    const pipe = paintOrder.find(o=>o.pipe?.role==="joining-pipe"&&containsPoint(o,point,tolerance,view))??[...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
     if (pipe) return pipe.id;
   }
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
@@ -2540,7 +2541,7 @@ export function redrawCanvas(
         context.save();context.globalAlpha=.35;context.fillStyle="#1179ac";context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fill();context.restore();
       }
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
-      points.forEach((p,i)=>{context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
+      points.forEach((p,i)=>{if(object.pipe?.controlledHandles?.includes(i-1))return;context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:5)/camera.zoom,0,Math.PI*2);context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();if(object.kind==="physical-segment"&&i>0&&i<points.length-1){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}});
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
       context.restore();
     }
@@ -2925,7 +2926,7 @@ export function CanvasViewport({
     }
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
-      const node=objects.find(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      const node=objects.find(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
       if(node){
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current={kind:"physical-node-connect",pointerId:event.pointerId,fromNodeId:node.id,clientX:event.clientX,clientY:event.clientY,moved:false};
@@ -2942,7 +2943,7 @@ export function CanvasViewport({
     }
     if(event.button===0&&view==="drawing"&&tool==="select"&&!event.ctrlKey&&!event.shiftKey&&onCoveringDrag){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),grip=gripAt(point);
-      const pipeGrip=objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
+      const pipeGrip=objects.some(o=>o.metadata?.joiningPipe&&o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view))||objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
       const cover=[...objects].reverse().find(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&coveringHit(o,point,4/camera.zoom)!==null);
       if((grip?.part.startsWith("transition-")||!pipeGrip)&&(grip||cover)){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
         setHoverGrip(null);
@@ -3141,7 +3142,7 @@ export function CanvasViewport({
         }
       }
       if (view === "drawing") {
-        const pipes=objects.filter(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked));
+        const pipes=objects.filter(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).sort((a,b)=>Number(b.pipe?.role==="joining-pipe")-Number(a.pipe?.role==="joining-pipe"));
         const nodeHit=objects.some(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible)&&containsPoint(o,worldPoint,7/camera.zoom,view));
         const corner=nodeHit?undefined:pipes.map(o=>({o,index:hitTestWireRoutePoint(o,worldPoint,camera.zoom)})).find(h=>h.index!==null);
         const middle=corner||nodeHit?undefined:pipes.flatMap(o=>pipeMidpoints(o).map(h=>({...h,o}))).find(h=>Math.hypot(h.point.x-worldPoint.x,h.point.y-worldPoint.y)<=7/camera.zoom);
@@ -3239,8 +3240,8 @@ export function CanvasViewport({
       if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) drag.moved=true;
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const source=objects.find(o=>o.id===drag.fromNodeId&&o.kind==="physical-node");
-      const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
-      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
+      const target=objects.find(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&o.pipe?.role!=="joining-pipe"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
       const segmentPoint=targetSegment?projectOntoPolyline(targetSegment.points??[],point).point:null;
       setPhysicalNodePreview({from:source?{x:source.x+5,y:source.y+5}:point,to:target?{x:target.x+5,y:target.y+5}:segmentPoint??point});
       return;
@@ -3290,8 +3291,8 @@ export function CanvasViewport({
     if(dragRef.current?.kind==="physical-node-connect") {
       const drag=dragRef.current;
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
-      const target=objects.find(o=>o.kind==="physical-node"&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
-      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
+      const target=objects.find(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&o.id!==drag.fromNodeId&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,8/camera.zoom,view));
+      const targetSegment=target?undefined:objects.find(o=>o.kind==="physical-segment"&&o.pipe?.role!=="joining-pipe"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view));
       const moved=drag.moved||inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY);
       if(moved&&target) {
         onPhysicalNodesConnect?.(drag.fromNodeId,target.id);
@@ -3623,7 +3624,7 @@ export function CanvasViewport({
         {physicalMenu.wires ? <><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).length===0&&<span>Нет назначенных проводов</span>}</> : <>
           {objectProperties?.(physicalMenu.id)}
           {!objectProperties&&onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&o.kind==="physical-segment")&&<button type="button" className="ui-control" onClick={()=>{onPhysicalContextAction(physicalMenu.id,physicalMenu.point,"remove-pipe");setPhysicalMenu(null);}}>Удалить пайп</button>}
-          {physicalMenu.node ? onPhysicalNodesConnect&&<button type="button" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&(o.kind==="physical-segment"||o.kind==="physical-covering"))&&<details className="he-covering-actions"><summary>Оболочки и ответвление</summary><div className="he-context-actions">{([...(objects.find(o=>o.id===physicalMenu.id)?.kind==="physical-segment"?["branch" as const]:[]),...standardCoveringKinds] as const).map(action=><button type="button" className="ui-control" key={action} onClick={()=>{const target=objects.find(o=>o.id===physicalMenu.id);onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action,target?.kind==="physical-covering"?"covering":"segment");setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}</div></details>}
+          {physicalMenu.node ? onPhysicalNodesConnect&&<button type="button" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&(o.kind==="physical-segment"||o.kind==="physical-covering"))&&<details className="he-covering-actions"><summary>Оболочки и ответвление</summary><div className="he-context-actions">{([...(objects.find(o=>o.id===physicalMenu.id)?.kind==="physical-segment"&&objects.find(o=>o.id===physicalMenu.id)?.pipe?.role!=="joining-pipe"?["branch" as const]:[]),...standardCoveringKinds] as const).map(action=><button type="button" className="ui-control" key={action} onClick={()=>{const target=objects.find(o=>o.id===physicalMenu.id);onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action,target?.kind==="physical-covering"?"covering":"segment");setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}</div></details>}
         </>}
       </CanvasObjectPopover>}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}

@@ -13,6 +13,7 @@ import { resolveWireColorHex } from "./wire-reference-catalog";
 import type { WireDatabaseOption } from "./wire-database";
 import { WireDatabasePicker } from "./WireDatabasePicker";
 
+
 function WireMaterialPicker({document,wireId,options,onCommand}: {document:HarnessDesignDocument;wireId:string;options:readonly WireDatabaseOption[];onCommand:(command:EditorCommand)=>boolean}) {
   const wire=document.wires.find(item=>item.id===wireId)!;
   const contact=[wire.from,wire.to].flatMap(end=>"connectorId" in end
@@ -35,7 +36,7 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
   wireMaterialOptions?:readonly WireDatabaseOption[];
 }) {
   const t=document.physicalTopology,connector=document.connectors.find(c=>c.id===objectId),wire=document.wires.find(w=>w.id===objectId);
-  const topology=t&&(t.nodes.some(n=>n.id===objectId)||t.segments.some(s=>s.id===objectId)||wire);
+  const joining=t?.joiningPipes?.find(p=>p.id===objectId), topology=t&&(t.nodes.some(n=>n.id===objectId)||t.segments.some(s=>s.id===objectId)||!!joining||wire);
   const cover=t?.coverings?.some(c=>c.id===objectId);
   return <>
     {connector&&<section className="he-context-fields" aria-label="Рисунок соединителя">
@@ -59,8 +60,15 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
       const segments=t.segments.filter(s=>s.id===objectId||selectedIds.includes(s.id)),id=crypto.randomUUID();
       if(onCommand({type:"set-physical-topology",topology:{...t,coverings:[...t.coverings??[],applyCoveringPreference({id,name:"Оболочка",kind:"braid",width:0,color:"#84959f",lengthMm:null,spans:segments.map(s=>({segmentId:s.id,from:0,to:1}))},document.drawingDocuments?.coveringLibrary)]}}))onSelect(id);
     }}>Оболочка на выделенные пайпы</button>}
+    {joining&&<section className="he-context-fields" aria-label="Свойства объединяющего пайпа">
+      <strong>ОП</strong><label>Ширина<DraftNumberInput aria-label="Ширина объединяющего пайпа" min={0} max={10000000} step="any" immediate value={joining.width??0} onValueChange={width=>onCommand({type:"update-joining-pipe",pipeId:joining.id,width})}/></label>
+      <label>Цвет<input aria-label="Цвет объединяющего пайпа" type="color" value={joining.color??"#aebfc9"} onChange={e=>onCommand({type:"update-joining-pipe",pipeId:joining.id,color:e.target.value})}/></label>
+      <label>Укладка<select aria-label="Укладка объединяющего пайпа" value={joining.mode} onChange={e=>onCommand({type:"update-joining-pipe",pipeId:joining.id,mode:e.target.value as "flat"|"round"})}><option value="flat">Плоская</option><option value="round">Объёмная</option></select></label>
+      <label><input type="checkbox" checked={joining.volumeShading??document.drawingDocuments?.volumeShading!==false} onChange={e=>onCommand({type:"update-joining-pipe",pipeId:joining.id,volumeShading:e.target.checked})}/>Объёмный режим</label>
+      <button type="button" className="ui-control" onClick={()=>onCommand({type:"remove-physical-segment",segmentId:joining.id})}>Удалить ОП</button>
+    </section>}
     {t?.segments.some(s=>s.id===objectId)&&<button type="button" className="ui-control" onClick={()=>onCommand({type:"remove-physical-segment",segmentId:objectId})}>Удалить пайп</button>}
-    {cover&&onBundleEdit&&<button type="button" className="ui-control" onClick={()=>onBundleEdit(objectId)}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h4l4 5h4M2 13h4l4-5M2 8h12" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg> Объединить</button>}
+    {(cover||joining||t?.segments.some(s=>s.id===objectId))&&onBundleEdit&&<button type="button" className="ui-control" onClick={()=>onBundleEdit(objectId)}><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h4l4 5h4M2 13h4l4-5M2 8h12" fill="none" stroke="currentColor" strokeWidth="1.5"/></svg> Объединить</button>}
     {cover&&t&&<PhysicalCoveringsPanel compact document={document} topology={t} selectedIds={[objectId]} onChange={topology=>onCommand({type:"set-physical-topology",topology})} onReveal={onSelect}/>}
   </>;
 }

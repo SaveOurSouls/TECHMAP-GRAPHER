@@ -10,12 +10,29 @@ export type PhysicalPath =
   | { readonly kind: "routed"; readonly points: readonly Point[] }
   | { readonly kind: "polyline"; readonly points: readonly Point[] };
 export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly path: PhysicalPath; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly volumeShading?:boolean; readonly specificationItemId?:string }
+/** A first-class common pipe (ОП). It owns its axis; member segments are
+ * projected onto it for presentation while their electrical routes remain
+ * unchanged. */
+export interface JoiningPipeMember {
+  /** Consecutive fragments of one pipe after an explicit split. */
+  readonly segmentIds: readonly string[];
+  readonly from: number; readonly to: number; readonly reverse: boolean;
+}
+export interface PhysicalJoiningPipe {
+  readonly id: string;
+  readonly start: Point; readonly end: Point;
+  readonly path: PhysicalPath;
+  readonly members: readonly JoiningPipeMember[];
+  readonly mode: "flat" | "round";
+  readonly width?: number; readonly color?: string; readonly volumeShading?: boolean;
+}
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
 export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[]; readonly automatic?:boolean }
 export interface PhysicalTopology {
   readonly coverings?: readonly PhysicalCovering[];
   readonly nodes: readonly PhysicalNode[];
   readonly segments: readonly PhysicalSegment[];
+  readonly joiningPipes?: readonly PhysicalJoiningPipe[];
   readonly routes: readonly PhysicalRoute[];
   readonly snap: boolean;
 }

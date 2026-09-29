@@ -8,8 +8,10 @@ import { prunePipeBundles } from "./pipe-bundle-editing";
 import type { HarnessDesignDocument, Point } from "./model";
 
 import { emptyPhysicalTopology, type PhysicalDirection, type PhysicalNode, type PhysicalSegment, type PhysicalTopology } from "./physical-topology-model";
+export { joiningPipePoints, createJoiningPipe, migrateJoiningPipes } from "./physical-joining-pipes";
+import {pruneJoiningPipes} from "./physical-joining-pipes";
 export { emptyPhysicalTopology } from "./physical-topology-model";
-export type { PhysicalDirection, PhysicalNode, PhysicalSegment, PhysicalStep, PhysicalRoute, PhysicalTopology } from "./physical-topology-model";
+export type { PhysicalDirection, PhysicalNode, PhysicalSegment, PhysicalStep, PhysicalRoute, PhysicalTopology, PhysicalJoiningPipe, JoiningPipeMember } from "./physical-topology-model";
 
 /** One persistent exit per connector; existing exits and routes are never replaced. */
 export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalTopology {
@@ -50,11 +52,11 @@ export function removePhysicalSegment(document: HarnessDesignDocument, segmentId
   // A route that used the deleted pipe is no longer a continuous physical path;
   // drop it completely so the remaining steps cannot point at a detached node.
   const routes = topology.routes.filter(route => !route.steps.some(step => step.segmentId === segmentId));
-  const coverings = prunePipeBundles(topology.coverings,segments);
+  const coverings = prunePipeBundles(topology.coverings,segments,topology.joiningPipes?.map(p=>p.id));
   const referenced = new Set(segments.flatMap(segment => [segment.from, segment.to]));
   const nodes = topology.nodes.filter(node => node.connectorId || referenced.has(node.id) ||
     node.id !== removed.from && node.id !== removed.to);
-  return { ...topology, nodes, segments, routes, coverings };
+  return pruneJoiningPipes({ ...topology, nodes, segments, routes, coverings });
 }
 
 export function insertPhysicalBend(document: HarnessDesignDocument, segment: PhysicalSegment, point: Point): PhysicalSegment {
@@ -81,7 +83,7 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   if (bendIndex < 1 || bendIndex >= points.length - 1) throw new Error("Выберите существующий перегиб участка.");
   const at = points[bendIndex]!, next = points[bendIndex + 1]!, vector = { x: next.x - at.x, y: next.y - at.y };
   const direction: PhysicalDirection = Math.abs(vector.x) >= Math.abs(vector.y) ? (vector.x >= 0 ? "right" : "left") : (vector.y >= 0 ? "down" : "up");
-  return { ...t, coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: at, direction }],
+  return { ...t, joiningPipes:t.joiningPipes?.map(p=>({...p,members:p.members.map(m=>({...m,segmentIds:m.segmentIds.flatMap(id=>id===segmentId?[id,nextId]:[id])}))})), coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: at, direction }],
       segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, path: { kind: "polyline" as const, points: points.slice(1, bendIndex) },  } : item),
       { ...s, id: nextId, from: nodeId, to: s.to, path: { kind: "polyline" as const, points: points.slice(bendIndex + 1, -1) },  }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse
@@ -147,7 +149,7 @@ export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessD
     const b = nodes.find(n => n.id === (r.steps.at(-1)!.reverse ? last.from : last.to))?.connectorId;
     return (!a || a === wire.from.connectorId) && (!b || b === wire.to.connectorId);
   });
-  return { ...document, physicalTopology: { ...t, nodes, segments, routes, coverings: prunePipeBundles(t.coverings,segments) } };
+  return { ...document, physicalTopology: pruneJoiningPipes({ ...t, nodes, segments, routes, coverings: prunePipeBundles(t.coverings,segments,t.joiningPipes?.map(p=>p.id)) }) };
 }
 
 /** Split the exact clicked span, preserve existing legs, then add a perpendicular branch handle. */

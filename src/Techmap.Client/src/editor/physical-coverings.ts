@@ -6,6 +6,7 @@ import { validCoveringStyle, type CoveringStyle } from "./covering-style";
 import {applyCoveringPreference} from "./covering-library";
 import {resolvePipeBundles,type PipeBundle} from "./pipe-bundle-model";
 import {splitPipeBundleMembers} from "./pipe-bundle-editing";
+import { joiningPipePoints } from "./physical-joining-pipes";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -95,8 +96,7 @@ export function projectOntoPolyline(points:readonly Point[],point:Point){
  return best;
 }
 export function standardCovering(document:HarnessDesignDocument,segmentId:string,point:Point,name:typeof standardCoveringKinds[number],id:string):PhysicalCovering {
- const segment=document.physicalTopology!.segments.find(s=>s.id===segmentId)!;
- const points=physicalSegmentPoints(document,segment),length=pathLength(points);
+ const points=coveringRoute(document,segmentId)?.core??[],length=pathLength(points);
  const at=length?projectOntoDrawingRoute(points,drawingBendRadius(document),point)/length:0;
  return applyCoveringPreference({id,name,kind:coveringKind({name}),lengthMode:"auto",width:0,color:name==="Металлическая плетёнка"?"#73838d":name==="Термоусадка"?"#424c53":"#b19c77",lengthMm:null,spans:[{segmentId,from:Math.max(0,at-.1),to:Math.min(1,at+.1)}]},document.drawingDocuments?.coveringLibrary);
 }
@@ -139,7 +139,9 @@ export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {
 
 /** The tails extend the same pipe parameter space towards the connector contacts. */
 export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
- const t=document.physicalTopology,s=t?.segments.find(s=>s.id===segmentId);if(!t||!s)return null;
+ const t=document.physicalTopology,joining=t?.joiningPipes?.find(p=>p.id===segmentId);
+ if(joining){const points=joiningPipePoints(joining),length=pathLength(points);return length<1e-7?null:{points,core:points,length,before:0,after:0,total:length,min:0,max:1};}
+ const s=t?.segments.find(s=>s.id===segmentId);if(!t||!s)return null;
  const core=physicalSegmentPoints(document,s),length=pathLength(core);if(length<1e-7)return null;
  const tail=(nodeId:string)=>{
   const node=t.nodes.find(n=>n.id===nodeId)!;if(!node.connectorId)return null;
@@ -152,9 +154,10 @@ export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
 }
 
 export function coveringControlFractions(document:HarnessDesignDocument,segmentId:string):number[] {
- const s=document.physicalTopology?.segments.find(s=>s.id===segmentId);if(!s)return [];
- const points=physicalSegmentPoints(document,s);
- return physicalSegmentControls(document,s).map(p=>projectOntoPolyline(points,p).fraction);
+ const s=document.physicalTopology?.segments.find(s=>s.id===segmentId);
+ if(s){const points=physicalSegmentPoints(document,s);return physicalSegmentControls(document,s).map(p=>projectOntoPolyline(points,p).fraction);}
+ const joining=document.physicalTopology?.joiningPipes?.find(p=>p.id===segmentId);if(!joining)return [];
+ const points=joiningPipePoints(joining);return points.map(p=>projectOntoPolyline(points,p).fraction);
 }
 export function resolvedCoveringSpan(document:HarnessDesignDocument,s:CoveringSpan):CoveringSpan {
  const fractions=coveringControlFractions(document,s.segmentId);

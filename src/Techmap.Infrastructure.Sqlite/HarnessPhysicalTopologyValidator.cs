@@ -85,6 +85,7 @@ internal static class HarnessPhysicalTopologyValidator
             if(segment.TryGetProperty("specificationItemId",out _))_=Text(segment,"specificationItemId");
             segments.Add(id, (from, to));
         }
+        var joiningPipes=HarnessJoiningPipeValidator.Validate(t,segments,ids);
         if (t.TryGetProperty("coverings", out _))
         {
             foreach (var covering in Array(t, "coverings", 10000).EnumerateArray())
@@ -106,9 +107,9 @@ internal static class HarnessPhysicalTopologyValidator
                 var members=new HashSet<string>(StringComparer.Ordinal);
                 foreach(var span in spans.EnumerateArray())
                 {
-                    var id=Text(span,"segmentId"); if(!segments.ContainsKey(id) || !members.Add(id)) throw Invalid();
+                    var id=Text(span,"segmentId"); if(!segments.ContainsKey(id)&&!joiningPipes.ContainsKey(id) || !members.Add(id)) throw Invalid();
                     var from=Number(span,"from"); var to=Number(span,"to"); if(from < -10000 || to > 10001 || from>=to) throw Invalid();
-                    var count=AuthoredPoints(t.GetProperty("segments").EnumerateArray().First(s=>Text(s,"id")==id)).GetArrayLength()+2;
+                    var count=AuthoredPoints(joiningPipes.TryGetValue(id,out var joining)?joining:t.GetProperty("segments").EnumerateArray().First(s=>Text(s,"id")==id)).GetArrayLength()+2;
                     int? startAnchor=null,endAnchor=null;
                     foreach(var key in new[]{"fromAnchor","toAnchor"})if(span.TryGetProperty(key,out var anchor)){
                         if(anchor.ValueKind!=JsonValueKind.Number||!anchor.TryGetInt32(out var index)||index<0||index>=count)throw Invalid();

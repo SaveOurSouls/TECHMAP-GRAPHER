@@ -4,7 +4,7 @@ import {pipeMemberSegments, type PipeBundleMember} from "./pipe-bundle-model";
 
 /** Resolve deletions from the inside out. Never leave an unsavable dangling group.
  * A broken longitudinal member leaves the group; its surviving pipes stay in the document. */
-export function prunePipeBundles(coverings: readonly PhysicalCovering[] | undefined, segments: readonly PhysicalSegment[]): readonly PhysicalCovering[] | undefined {
+export function prunePipeBundles(coverings: readonly PhysicalCovering[] | undefined, segments: readonly PhysicalSegment[], additionalIds:readonly string[]=[]): readonly PhysicalCovering[] | undefined {
   if (!coverings) return undefined;
   const byId=new Map(coverings.map(c=>[c.id,c])), pipes=new Map(segments.map(s=>[s.id,s]));
   const done=new Map<string,PhysicalCovering|null>(), active=new Set<string>();
@@ -26,7 +26,7 @@ export function prunePipeBundles(coverings: readonly PhysicalCovering[] | undefi
       }
     }
     const leaves=(ms:readonly PipeBundleMember[]):string[]=>ms.flatMap(m=>m.kind==="segment"?[...pipeMemberSegments(m)]:leaves(visit(m.id)?.bundle?.members??[]));
-    const allowed=c.bundle?new Set(leaves(members)):new Set(pipes.keys());
+    const allowed=c.bundle?new Set(leaves(members)):new Set([...pipes.keys(),...additionalIds]);
     const spans=c.spans.filter(s=>allowed.has(s.segmentId));
     const result=spans.length?{...c,spans,...(c.bundle?{bundle:members.length>=2?{...c.bundle,members}:undefined}:{})}:null;
     active.delete(id);done.set(id,result);resolvedMembers.set(id,members);return result;

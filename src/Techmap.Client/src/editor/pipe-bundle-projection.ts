@@ -5,6 +5,7 @@ import { pathLength, projectOntoPolyline, resolvedCoveringSpan } from "./physica
 import { drawingBendRadius, drawingRouteSamples } from "./drawing-route-path";
 import { pipeMemberSegments, pipeBundleAxisPath, pipeBundleCoatingKey, type PipeBundleMember } from "./pipe-bundle-model";
 import { pipeBundleSections } from "./pipe-bundle-section";
+import {hasJoiningPipeProjection,joiningPipeDisplaySamples,joiningPipeProjectionStops,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
 
 interface Sample { readonly fraction: number; readonly point: Point }
 interface Chain { readonly ids: readonly string[]; readonly lengths: readonly number[]; readonly length: number; readonly samples: readonly Sample[] }
@@ -180,6 +181,7 @@ function eligible(p: Placement, coveringId?: string, document?:HarnessDesignDocu
 }
 
 export function hasPipeBundleProjection(document: HarnessDesignDocument, segmentId: string): boolean {
+  if(hasJoiningPipeProjection(document,segmentId))return true;
   if(projections(document).has(segmentId))return true;
   const segment=document.physicalTopology?.segments.find(s=>s.id===segmentId);
   return !!segment&&(nodeDisplacements(document).has(segment.from)||nodeDisplacements(document).has(segment.to));
@@ -192,6 +194,7 @@ export function pipeBundleDepth(document:HarnessDesignDocument,segmentId:string)
 /** Sampling stations include sleeve edges and axis bends even on straight pipes.
  * Fractions refer to the original segment, including after a split. */
 export function pipeBundleProjectionStops(document: HarnessDesignDocument, segmentId: string, coveringId?: string): number[] {
+  if(hasJoiningPipeProjection(document,segmentId))return joiningPipeProjectionStops(document,segmentId);
   const projection = projections(document).get(segmentId); if (!projection) return [];
   return [...new Set(projection.placements.filter(p => eligible(p, coveringId, document)).flatMap(p =>
     [p.start - transition(p), p.start-transition(p)/2, Math.max(.001, p.start), Math.min(.999, p.end), p.end+transition(p,"end")/2, p.end + transition(p,"end"), ...p.axis.samples.map(s => s.fraction),
@@ -249,6 +252,15 @@ function nodeDisplacements(document:HarnessDesignDocument):ReadonlyMap<string,Po
   const cached=nodeCache.get(document);if(cached)return cached;
   const candidates=new Map<string,Point[]>(),result=new Map<string,Point>();
   for(const segment of document.physicalTopology?.segments??[]){
+    const joining=joiningPipeDisplaySamples(document,segment.id);
+    if(joining){
+      const raw=physicalSegmentPoints(document,segment);
+      for(const [nodeId,point,projected] of [[segment.from,raw[0]!,joining[0]!.point],[segment.to,raw.at(-1)!,joining.at(-1)!.point]] as const){
+        const delta={x:projected.x-point.x,y:projected.y-point.y};
+        if(Math.hypot(delta.x,delta.y)>1e-7)candidates.set(nodeId,[...candidates.get(nodeId)??[],delta]);
+      }
+      continue;
+    }
     const projection=projections(document).get(segment.id);if(!projection)continue;
     for(const [nodeId,fraction] of [[segment.from,0],[segment.to,1]] as const){
       const point=at(projection.source,fraction),projected=rawProjectedPoint(document,segment.id,fraction,point);
@@ -265,6 +277,7 @@ export function pipeBundleNodePoint(document:HarnessDesignDocument,nodeId:string
 }
 
 export function projectPipeBundlePoint(document:HarnessDesignDocument,segmentId:string,fraction:number,point:Point,coveringId?:string):Point{
+  if(hasJoiningPipeProjection(document,segmentId))return projectJoiningPipePoint(document,segmentId,fraction,point);
   const projected=rawProjectedPoint(document,segmentId,fraction,point,coveringId);
   if(coveringId)return projected;
   const segment=document.physicalTopology?.segments.find(s=>s.id===segmentId);if(!segment)return projected;
@@ -280,6 +293,7 @@ export function projectPipeBundlePoint(document:HarnessDesignDocument,segmentId:
 
 /** Consumers use radius=0: samples already contain circular tangent joins. */
 export function pipeBundleDisplaySamples(document: HarnessDesignDocument, segmentId: string): readonly Sample[] | undefined {
+  const joining=joiningPipeDisplaySamples(document,segmentId);if(joining)return joining;
   let samples = displayCache.get(document);
   if (!samples) { samples = new Map(); displayCache.set(document, samples); }
   if (samples.has(segmentId)) return samples.get(segmentId);

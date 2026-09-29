@@ -26,6 +26,10 @@ export interface PhysicalPipeSceneData {
   readonly controls: readonly EditorPoint[];
   readonly handles: readonly EditorPoint[];
   readonly wireIds: readonly string[];
+  readonly role?: "pipe" | "joining-pipe";
+  readonly memberSegmentIds?: readonly string[];
+  readonly controlledHandles?: readonly number[];
+  readonly controlledMidpoints?: readonly number[];
 }
 export interface PhysicalPortSceneData {
   readonly connectorId?: string;

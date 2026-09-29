@@ -14,6 +14,20 @@ namespace Techmap.Web.Tests;
 public sealed class HarnessDesignApiTests
 {
     private const string Origin = "http://127.0.0.1:18762";
+    [Fact]
+    public async Task Joining_pipe_and_coating_round_trip_and_reject_duplicate_members()
+    {
+        await using var factory=new TechmapWebApplicationFactory();using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=HarnessJoiningPipeTests.Fixture();var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        content["physicalTopology"]!["joiningPipes"]![0]!["members"]![1]!["segmentIds"]=new JsonArray("p0");
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),new PutHarnessDesignRequest(1,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
+    }
 
     [Theory]
     [InlineData("width")]
