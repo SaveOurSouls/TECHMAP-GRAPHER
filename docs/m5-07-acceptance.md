@@ -1,3 +1,20 @@
+# Пакет 29.09.2026 — исправление повторного recovery-предупреждения
+
+В срез входит коммит `2ba1562` (`Fix repeated harness recovery warning after restore`).
+
+Windows x64 ZIP `0.63.8-m5-07-review`:
+`artifacts/m5-07-recovery-fix-20260929/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`.
+Размер: **55 212 538 байт**. SHA-256:
+`A1950CCF8DBA9DB30C28C40BF0CDEED63C5A680F5930D82C949F34D3850E745F`.
+
+`scripts/build-package.ps1` завершился успешно: 1481 frontend-тест,
+TypeScript/Vite build, 1021 Release .NET-тест, win-x64 self-contained publish,
+манифест и `verify-package.ps1`. `test-portable-package.ps1` подтвердил семь
+режимов из ASCII-пути `C:\Temp`. Прямой запуск из исходного пути с кириллицей
+в имени пользователя воспроизводит `UnauthorizedAccessException` до публикации
+адреса сервера; это ограничение окружения Windows, а не ошибка содержимого ZIP.
+Пакет локальный и в Git не включается.
+
 # M5-01–07 — передача на приёмку
 
 Дата свежего пакета: 29.09.2026. В срез вошли коммиты `f4cf223`, `feb351e`,
