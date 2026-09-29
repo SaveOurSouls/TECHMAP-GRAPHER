@@ -1,0 +1,134 @@
+{
+  "bare": [
+    {
+      "count": 2,
+      "awg": [
+        30,
+        28
+      ],
+      "outer_diameter_mm": 1.88,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 3,
+      "awg": [
+        26,
+        30,
+        24
+      ],
+      "outer_diameter_mm": 2.413,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 4,
+      "awg": [
+        30,
+        28,
+        24,
+        22
+      ],
+      "outer_diameter_mm": 3.031,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 5,
+      "awg": [
+        20,
+        30,
+        26,
+        28,
+        24
+      ],
+      "outer_diameter_mm": 3.748,
+      "tangent_min_gap_mm": -0.0
+    }
+  ],
+  "nylon": [
+    {
+      "count": 2,
+      "awg": [
+        30,
+        28
+      ],
+      "outer_diameter_mm": 1.88,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 3,
+      "awg": [
+        26,
+        30,
+        24
+      ],
+      "outer_diameter_mm": 2.413,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 4,
+      "awg": [
+        30,
+        28,
+        24,
+        22
+      ],
+      "outer_diameter_mm": 3.031,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 5,
+      "awg": [
+        20,
+        30,
+        26,
+        28,
+        24
+      ],
+      "outer_diameter_mm": 3.748,
+      "tangent_min_gap_mm": -0.0
+    }
+  ],
+  "heat": [
+    {
+      "count": 2,
+      "awg": [
+        30,
+        28
+      ],
+      "outer_diameter_mm": 1.88,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 3,
+      "awg": [
+        26,
+        30,
+        24
+      ],
+      "outer_diameter_mm": 2.413,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 4,
+      "awg": [
+        30,
+        28,
+        24,
+        22
+      ],
+      "outer_diameter_mm": 3.031,
+      "tangent_min_gap_mm": -0.0
+    },
+    {
+      "count": 5,
+      "awg": [
+        20,
+        30,
+        26,
+        28,
+        24
+      ],
+      "outer_diameter_mm": 3.748,
+      "tangent_min_gap_mm": -0.0
+    }
+  ]
+}
