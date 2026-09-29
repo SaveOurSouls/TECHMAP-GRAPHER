@@ -1,6 +1,5 @@
 import type { HarnessDesignDocument, Point } from "./model";
 import type { JoiningPipeMember, PhysicalJoiningPipe } from "./physical-topology-model";
-import { drawingBendRadius, drawingRouteSamples } from "./drawing-route-path";
 import { drawingPhysicalScale, drawingPipeWidth } from "./drawing-thickness";
 import { pathLength } from "./physical-coverings";
 import { physicalSegmentPoints } from "./physical-geometry";
@@ -14,9 +13,12 @@ function at(samples:readonly JoiningPipeSample[],fraction:number):Point {
   const i=samples.findIndex(s=>s.fraction>=fraction);if(i<0)return samples.at(-1)!.point;
   const a=samples[i-1]!,b=samples[i]!;return mix(a.point,b.point,(fraction-a.fraction)/(b.fraction-a.fraction||1));
 }
-function sample(points:readonly Point[],radius:number):JoiningPipeSample[] {
-  const length=pathLength(points);
-  return drawingRouteSamples(points,radius).map(s=>({fraction:length?s.distance/length:0,point:s.point}));
+function sample(points:readonly Point[]):JoiningPipeSample[] {
+  const length=pathLength(points);let distance=0;
+  return points.map((point,index)=>{
+    if(index)distance+=Math.hypot(point.x-points[index-1]!.x,point.y-points[index-1]!.y);
+    return {fraction:length?distance/length:0,point};
+  });
 }
 export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe) {
   const scale=drawingPhysicalScale(document),t=document.physicalTopology!;
@@ -49,15 +51,17 @@ interface Placement {
   readonly member:JoiningPipeMember;
   readonly before:number; readonly length:number; readonly total:number;
   readonly low:number; readonly high:number;
+  readonly memberIndex:number;
+  readonly enterBend:Point; readonly exitBend:Point;
 }
 const cache=new WeakMap<HarnessDesignDocument,ReadonlyMap<string,Placement>>();
 function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement> {
   const known=cache.get(document);if(known)return known;
-  const result=new Map<string,Placement>(),t=document.physicalTopology,radius=drawingBendRadius(document);
+  const result=new Map<string,Placement>(),t=document.physicalTopology;
   for(const pipe of t?.joiningPipes??[]){
-    const axis=sample(joiningPipePoints(pipe),radius),packed=joiningPipePacking(document,pipe);
+    const axis=sample(joiningPipePoints(pipe)),packed=joiningPipePacking(document,pipe);
     for(const [i,member] of pipe.members.entries()){
-      const source=sample(joiningMemberPoints(document,member.segmentIds),radius);
+      const source=sample(joiningMemberPoints(document,member.segmentIds));
       const lane=offsetSamples(axis,packed.members[i]!.offset);
       const oriented=member.reverse?[...lane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):lane;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
@@ -68,10 +72,12 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
         return {x:edge.x-dx/len*lead,y:edge.y-dy/len*lead};
       };
       const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=at(source,low),outerB=at(source,high);
-      const enter=sample([outerA,shoulder(a,oriented[1]!.point,outerA),a],radius);
-      const exit=sample([b,shoulder(b,oriented.at(-2)!.point,outerB),outerB],radius);
+      const enterBend=member.enterBend??shoulder(a,oriented[1]!.point,outerA);
+      const exitBend=member.exitBend??shoulder(b,oriented.at(-2)!.point,outerB);
+      const enter=sample([outerA,enterBend,a]);
+      const exit=sample([b,exitBend,outerB]);
       let before=0;
-      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,enter,exit,member,before,length:lengths[j]!,total,low,high});before+=lengths[j]!;});
+      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend});before+=lengths[j]!;});
     }
   }
   cache.set(document,result);return result;
@@ -100,6 +106,15 @@ export function joiningPipeProjectionStops(document:HarnessDesignDocument,id:str
   return [...p.source.map(s=>s.fraction),...p.enter.map(s=>p.low+s.fraction*(m.from-p.low)),
     ...p.axis.map(s=>m.from+s.fraction*(m.to-m.from)),...p.exit.map(s=>m.to+s.fraction*(p.high-m.to))]
     .map(t=>localFraction(p,t)).filter(t=>t>=0&&t<=1);
+}
+export function joiningPipeTransitionHandles(document:HarnessDesignDocument,id:string):readonly {fraction:number;point:Point;memberIndex:number;side:"enter"|"exit"}[] {
+  const p=placements(document).get(id);if(!p)return [];
+  const m=p.member;
+  const handles: {fraction:number;point:Point;memberIndex:number;side:"enter"|"exit"}[]=[
+    {fraction:localFraction(p,p.low+(m.from-p.low)*p.enter[1]!.fraction),point:p.enterBend,memberIndex:p.memberIndex,side:"enter"},
+    {fraction:localFraction(p,m.to+(p.high-m.to)*p.exit[1]!.fraction),point:p.exitBend,memberIndex:p.memberIndex,side:"exit"},
+  ];
+  return handles.filter(handle=>handle.fraction>0&&handle.fraction<1);
 }
 const displayCache=new WeakMap<HarnessDesignDocument,Map<string,readonly JoiningPipeSample[]>>();
 export function joiningPipeDisplaySamples(document:HarnessDesignDocument,id:string):readonly JoiningPipeSample[]|undefined {

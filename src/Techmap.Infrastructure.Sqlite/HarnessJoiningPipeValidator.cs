@@ -36,6 +36,7 @@ internal static class HarnessJoiningPipeValidator
             {
                 var from=Number(member,"from");var to=Number(member,"to");
                 if(from<=0||to>=1||from>=to||!member.TryGetProperty("reverse",out var reverse)||reverse.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
+                foreach(var key in new[]{"enterBend","exitBend"})if(member.TryGetProperty(key,out var bend))Point(bend);
                 if(!member.TryGetProperty("segmentIds",out var leaves)||leaves.ValueKind!=JsonValueKind.Array||leaves.GetArrayLength() is <1 or >128)throw Invalid();
                 string? previous=null;var visited=new HashSet<string>(StringComparer.Ordinal);
                 foreach(var leaf in leaves.EnumerateArray())

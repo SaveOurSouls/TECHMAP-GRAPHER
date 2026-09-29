@@ -1032,7 +1032,16 @@ export function HarnessDesignEditor({
       try{const segment=history.present.physicalTopology.segments.find(s=>s.id===pipePreview.id)!;
         const op=history.present.physicalTopology.joiningPipes?.find(p=>p.id===pipePreview.id);
         if(op){
+          const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===pipePreview.id);
+          const transition=!pipePreview.insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===pipePreview.index);
+          if(transition)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:op.id,memberIndex:transition.memberIndex,side:transition.side,position:pipePreview.point}),error:null};
           return {document:applyEditorCommand(history.present,{type:"edit-joining-pipe-bend",pipeId:op.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};
+        }
+        const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===pipePreview.id);
+        const transition=!pipePreview.insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===pipePreview.index);
+        if(transition){
+          const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[transition.memberIndex]?.segmentIds.includes(pipePreview.id));
+          if(memberPipe)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:transition.memberIndex,side:transition.side,position:pipePreview.point}),error:null};
         }
         const points=physicalEditablePoints(history.present,segment),i=pipePreview.index+1;
         const original=pipePreview.insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
@@ -2108,9 +2117,13 @@ export function HarnessDesignEditor({
           const op=topology?.joiningPipes?.find(p=>p.id===wireId);
           if(op){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:point,mode,insert});return;}
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { const points=physicalEditablePoints(history.present,segment),i=routeIndex+1;
+          if (topology && segment) { const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===wireId);
+            const transition=!insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===routeIndex);
+            if(transition){const pipe=topology.joiningPipes?.find(p=>p.members[transition.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-bend",pipeId:pipe.id,memberIndex:transition.memberIndex,side:transition.side,position:point});return;}
+            const authoredIndex=insert?routeIndex+1:sceneObject?.pipe?.authoredHandleIndices?.[routeIndex];if(authoredIndex===-1)return;
+            const points=physicalEditablePoints(history.present,segment),i=(authoredIndex??routeIndex+1);
             const original=insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
-            run({type:"edit-physical-bend",segmentId:wireId,index:routeIndex,position:unprojectPipeBundleEdit(history.present,wireId,original,point),mode,insert}); return; }
+            run({type:"edit-physical-bend",segmentId:wireId,index:i-1,position:unprojectPipeBundleEdit(history.present,wireId,original,point),mode,insert}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);
@@ -2120,7 +2133,11 @@ export function HarnessDesignEditor({
           const topology = history.present.physicalTopology;
           if(topology?.joiningPipes?.some(p=>p.id===wireId)){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:{x:0,y:0},mode:"adjacent",remove:true});return;}
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { run({type:"remove-physical-bend",segmentId:wireId,index:routeIndex}); return; }
+          if (topology && segment) { const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===wireId);
+            const transition=sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===routeIndex);
+            if(transition){const pipe=topology.joiningPipes?.find(p=>p.members[transition.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-bend",pipeId:pipe.id,memberIndex:transition.memberIndex,side:transition.side,clear:true});return;}
+            const authoredIndex=sceneObject?.pipe?.authoredHandleIndices?.[routeIndex];if(authoredIndex===-1)return;
+            run({type:"remove-physical-bend",segmentId:wireId,index:(authoredIndex??routeIndex+1)-1}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           run({ type: "set-wire-route", wireId, route: wire.drawingRoute.filter((_, index) => index !== routeIndex) });

@@ -67,6 +67,7 @@ export type EditorCommand =
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology; readonly coveringLibrary?:CoveringLibrary }
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "edit-joining-pipe-bend"; readonly pipeId:string; readonly index:number; readonly position:Point; readonly mode:PhysicalDragMode; readonly insert?:boolean; readonly remove?:boolean }
+  | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean }
   | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly volumeShading?:boolean }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
@@ -252,6 +253,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
       if(!document.physicalTopology)return document;
       return {...document,physicalTopology:parsePhysicalTopology(editJoiningPipeBend(document,command.pipeId,command.index,command.position,command.mode,command.insert,command.remove),document)};
+    }
+    case "update-joining-pipe-member-bend": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
+      const t=document.physicalTopology;if(!t)return document;
+      const pipe=t.joiningPipes?.find(p=>p.id===command.pipeId);if(!pipe||!pipe.members[command.memberIndex])return document;
+      if(!command.clear&&(!command.position||!Number.isFinite(command.position.x)||!Number.isFinite(command.position.y)))throw new Error("Некорректное положение ручки перехода.");
+      const members=pipe.members.map((member,index)=>index!==command.memberIndex?member:{...member,...(command.side==="enter"?{enterBend:command.clear?undefined:command.position}:{exitBend:command.clear?undefined:command.position})});
+      return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,members}:p)},document)};
     }
     case "update-joining-pipe": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");

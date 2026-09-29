@@ -8,7 +8,7 @@ import { physicalEditablePoints } from "./physical-editing";
 import { drawingBendRadius } from "./drawing-route-path";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
 import { joiningPipePoints, joiningPipeEndpointId } from "./physical-joining-pipes";
-import { joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
+import { joiningPipeDisplaySamples,joiningPipeTransitionHandles,joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
 import {projectOntoPolyline} from "./physical-coverings";
 
 /** One boundary between physical topology and presentation. */
@@ -25,20 +25,29 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const display = pipeBundleDisplaySamples(document, segment.id);
     const route=physicalSegmentPoints(document,segment);
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
+    const transitionHandles=joiningPipeTransitionHandles(document,segment.id);
+    const authoredHandles=editable.slice(1,-1).map((point,index)=>({fraction:projectOntoPolyline(route,point).fraction,point,authoredIndex:index+1}));
+    const mergedHandles=[...authoredHandles,...transitionHandles.map(handle=>({fraction:handle.fraction,point:handle.point,transition:handle}))].sort((a,b)=>a.fraction-b.fraction);
+    const handles=mergedHandles.map(handle=>handle.point);
+    const authoredHandleIndices=mergedHandles.map(handle=>"authoredIndex" in handle?handle.authoredIndex:-1);
+    const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>"transition" in handle?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
+    const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>"authoredIndex" in handle&&controlled(authored[handle.authoredIndex]!)?[index]:[]);
     return {
     id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires",
     x: 0, y: 0, width: drawingPipeWidth(document, segment), height: 0,
     color: segment.color ?? "#aebfc9", points: display?.map(s => s.point) ?? physicalSegmentPoints(document, segment),
-    routeRadius:display ? 0 : drawingBendRadius(document),
+    routeRadius:joiningPipeDisplaySamples(document,segment.id) ? drawingBendRadius(document) : display ? 0 : drawingBendRadius(document),
     pipe: {
       fromNodeId: segment.from,
       toNodeId: segment.to,
       authoredPoints: authored,
       controls: controls,
-      handles: editable.slice(1,-1),
+      handles,
+      authoredHandleIndices,
       midpoints,
-      controlledHandles:authored.slice(1,-1).flatMap((p,i)=>controlled(p)?[i]:[]),
+      controlledHandles:controlledHandleIndices,
       controlledMidpoints:authored.slice(1).flatMap((p,i)=>controlled({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})?[i]:[]),
+      joiningTransitionHandles:joiningTransitionHandleData,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
     ...((segment.volumeShading !== undefined || document.drawingDocuments?.volumeShading === false)

@@ -30,6 +30,8 @@ export interface PhysicalPipeSceneData {
   readonly memberSegmentIds?: readonly string[];
   readonly controlledHandles?: readonly number[];
   readonly controlledMidpoints?: readonly number[];
+  readonly authoredHandleIndices?: readonly number[];
+  readonly joiningTransitionHandles?: readonly {readonly index:number;readonly memberIndex:number;readonly side:"enter"|"exit"}[];
 }
 export interface PhysicalPortSceneData {
   readonly connectorId?: string;

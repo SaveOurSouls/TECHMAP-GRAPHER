@@ -17,6 +17,9 @@ export interface JoiningPipeMember {
   /** Consecutive fragments of one pipe after an explicit split. */
   readonly segmentIds: readonly string[];
   readonly from: number; readonly to: number; readonly reverse: boolean;
+  /** Optional authored transition handles; omitted handles follow the OP axis. */
+  readonly enterBend?: Point;
+  readonly exitBend?: Point;
 }
 export interface PhysicalJoiningPipe {
   readonly id: string;

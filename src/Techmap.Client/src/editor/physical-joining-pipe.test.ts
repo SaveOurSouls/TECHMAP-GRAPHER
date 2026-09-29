@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {createEmptyHarnessDesign,type HarnessDesignDocument} from "./model";
 import {createJoiningPipe,joiningPipePoints} from "./physical-joining-pipes";
-import {joiningPipeDisplaySamples,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
+import {joiningPipeDisplaySamples,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
 import {editJoiningPipeBend} from "./physical-joining-pipe-editing";
 import {parsePhysicalTopology} from "./physical-topology-validation";
 import {coveringScene} from "./covering-layout";
@@ -61,6 +61,21 @@ it("endpoints move freely in both axes and preserve connectors, routes and membe
  const a=projectJoiningPipePoint(moved,"p0",.4,{x:240,y:0}),b=projectJoiningPipePoint(moved,"p0",.6,{x:360,y:0});
  expect((b.y-a.y)/(b.x-a.x)).toBeCloseTo(60/250,6);
  for(const id of ["p0","p1"]){const path=joiningPipeDisplaySamples(moved,id)!;expect(path[0]!.point).toEqual({x:0,y:id==="p0"?0:100});expect(path.at(-1)!.point).toEqual({x:600,y:id==="p0"?0:100});}
+});
+
+it("exposes joining transitions as authored member handles",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+ const transitions=joiningPipeTransitionHandles(base,"p0");
+ expect(transitions).toHaveLength(2);
+ const member=physicalTopologyScene(base).find(object=>object.id==="p0")!;
+ expect(member.pipe?.joiningTransitionHandles).toHaveLength(2);
+ for(const transition of transitions)expect(member.pipe?.handles).toContainEqual(transition.point);
+ expect(member.routeRadius).toBeGreaterThan(0);
+ const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:0,side:"enter",position:{x:150,y:-40}});
+ expect(moved.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
+ expect(joiningPipeDisplaySamples(moved,"p0")!.some(sample=>Math.hypot(sample.point.x-150,sample.point.y+40)<1e-6)).toBe(true);
+ const restored=parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved)));
+ expect(restored.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
 });
 
 it("reversed pipes follow the OP direction with fixed endpoints",()=>{
