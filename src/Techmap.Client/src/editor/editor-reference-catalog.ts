@@ -456,6 +456,11 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
   }, [api]);
   useEffect(() => {
     if (query === null) return;
+    if (!query.trim()) {
+      setOptions(databaseOptions.length ? databaseOptions : builtInWireOptions);
+      setMessage(null);
+      return;
+    }
     const controller = new AbortController();
     setOptions([]);
     setMessage("Поиск в базе проводов…");
@@ -475,7 +480,7 @@ export function useWireDatabaseLookup(config: RuntimeConfig, session: LocalSessi
       });
     }, 220);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [api, query]);
+  }, [api, databaseOptions, query]);
   return { options, databaseOptions, message, search: setQuery };
 }
 

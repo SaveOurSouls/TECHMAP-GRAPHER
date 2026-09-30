@@ -45,6 +45,21 @@ describe("connection table", () => {
     expect(markup).toContain("желтый </td>");
   });
 
+  it("marks a scheme color that is absent from the wire catalog", () => {
+    const base = physicalFixture();
+    const document = {
+      ...base,
+      connectors: base.connectors.map(connector => connector.id === "A"
+        ? { ...connector, contacts: connector.contacts.map(contact => contact.id === "A:contact:1" ? { ...contact, color: "мятный" } : contact) }
+        : connector),
+    };
+    const markup = renderToStaticMarkup(createElement(DrawingDocumentsPanel, {
+      document, mode: "connections", quantity: 1, selectedId: null, selectedIds: [],
+      onChange: vi.fn(), onCommand: vi.fn(), onReveal: vi.fn(), wireOptions: [],
+    }));
+    expect(markup).toContain("мятный (в базе не найден)");
+  });
+
   it("keeps column visibility and order as a shared preference", () => {
     const original = getConnectionTableSettings();
     try {

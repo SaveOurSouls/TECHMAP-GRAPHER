@@ -641,3 +641,22 @@
   .he-table-window>header { flex-wrap:wrap; gap:4px; }
   .he-table-window>header strong { font-size:11px; }
 }
+
+/* Connection/BOM tables use the cell as the sizing grid; controls fill their cell. */
+.he-document-table tbody tr.is-related { background: inherit; box-shadow: none; }
+.he-connections-table table { table-layout: fixed; width: 100%; min-width: 920px; }
+.he-connections-table th, .he-connections-table td { overflow: hidden; text-overflow: ellipsis; }
+.he-connections-table [data-column="index"] { width: 9%; }
+.he-connections-table [data-column="mark"] { width: 11%; }
+.he-connections-table [data-column="section"] { width: 9%; }
+.he-connections-table [data-column="marking"] { width: 12%; }
+.he-connections-table [data-column="from"], .he-connections-table [data-column="to"] { width: 15%; }
+.he-connections-table [data-column="color"] { width: 10%; }
+.he-connections-table [data-column="length"] { width: 9%; }
+.he-connections-table [data-column="route"] { width: 10%; }
+.he-connections-table input, .he-connections-table select,
+.he-connections-table .he-connection-wire-picker, .he-connections-table .he-connection-wire-picker > input { box-sizing: border-box; width: 100% !important; min-width: 0; max-width: none; }
+.he-document-table table[aria-label="Спецификация"] { table-layout: fixed; width: 100%; min-width: 720px; }
+.he-document-table table[aria-label="Спецификация"] input { box-sizing: border-box; width: 100% !important; min-width: 0; max-width: none; }
+.he-connection-wire-suggestions { max-height: 240px !important; overflow-y: scroll !important; scrollbar-gutter: stable; }
+.he-connection-suggestion-count { display: block; padding: 5px 8px; border-bottom: 1px solid #dce8ed; background: #f5fafb; color: #607985; font-size: 10px; white-space: nowrap; }
