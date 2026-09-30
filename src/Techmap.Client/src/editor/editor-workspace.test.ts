@@ -740,7 +740,7 @@ describe("harness editor workspace", () => {
     expect(pairLayout.motifs.slice(1).every((motif, index) =>
       motif.center > pairLayout.motifs[index]!.center)).toBe(true);
     expect(hitTestE4DifferentialPair([pair], wires, { x: 60, y: 50 }, 1)?.wireIds).toEqual(["h1", "h2"]);
-    expect(hitTestE4DifferentialPair([pair], wires, { x: 30, y: 50 }, 1_000)).toBeNull();
+    expect(hitTestE4DifferentialPair([pair], wires, { x: 20, y: 50 }, 1_000)).toBeNull();
     expect(getE4DifferentialPairLayout({
       id: "dp", wireIds: ["h1", "h2"], step: 25, amplitude: 6, variant: 2,
     }, wires)).toMatchObject({ variant: 2, crossMinimum: 40, crossMaximum: 60 });
