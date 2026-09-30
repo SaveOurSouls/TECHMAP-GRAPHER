@@ -1,5 +1,11 @@
 # Текущий проверенный срез — 30.09.2026
 
+Код: `3a3f00c8fb564a658ccd06e9a80803604033a45b` поверх `3b2225a25be15efebcb0b17b09bfafd9832d011f`; версия пакета `0.63.10-m5-07-review`.
+
+ZIP: `artifacts/m5-07-20260930-ctrl-snap-main/TECHMAP-GRAPHER-0.63.10-m5-07-review-win-x64.zip`, 55 238 119 байт, SHA-256 `E12443A114E867C22FAD5D7CD194EB740AFC6EDE19535CBEFD98BF73AACA337A`.
+
+Проверки: 1513 клиентских тестов, TypeScript/Vite, 1044 Release .NET-теста, self-contained publish, манифест 209 файлов и 7 portable-режимов. Ручная UI-приёмка не выполнена; REQ-036/037 открыты.
+
 Код: `27d7c5e9d4284b6ea2f0dabea2ca089523442d26`; версия пакета зафиксирована
 коммитом `9a09608` как `0.63.9-m5-07-review`.
 Линии привязки позиций входят через `fd6a4b8` и `b8e5d1e`; ветка
