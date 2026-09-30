@@ -2,6 +2,7 @@
 
 - Статус: принято
 - Источник: найдено в коде (`model.ts`, `commands.ts`, `HarnessDesignDocument`)
+- Связанные требования: REQ-008, REQ-010, REQ-011
 
 ## Решение
 

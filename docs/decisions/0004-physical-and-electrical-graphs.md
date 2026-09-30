@@ -2,6 +2,7 @@
 
 - Статус: принято
 - Источник: найдено в коде (`physical-topology-*`, endpoint/junction commands) и M4 docs
+- Связанные требования: REQ-009
 
 ## Решение
 

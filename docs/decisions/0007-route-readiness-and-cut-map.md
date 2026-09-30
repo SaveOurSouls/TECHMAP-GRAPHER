@@ -2,6 +2,7 @@
 
 - Статус: принято для M5
 - Источник: найдено в коде (`route-cut-readiness.ts`, `HarnessCutListEndpoints.cs`) и `docs/m5-route-plan.md`
+- Связанные требования: REQ-018, REQ-019
 
 ## Решение
 

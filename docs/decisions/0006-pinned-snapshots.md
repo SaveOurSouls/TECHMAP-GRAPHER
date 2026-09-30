@@ -2,6 +2,7 @@
 
 - Статус: принято
 - Источник: найдено в коде (`ReferenceCatalog*`, `ComponentTemplate*`, pinned snapshot stores)
+- Связанные требования: REQ-005, REQ-006
 
 ## Решение
 

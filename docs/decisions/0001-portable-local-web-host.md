@@ -2,6 +2,7 @@
 
 - Статус: принято
 - Источник: найдено в коде (`Program.cs`, `ServerOptions.cs`, `BrowserLauncher.cs`)
+- Связанные требования: REQ-001, REQ-021, REQ-022
 
 ## Контекст
 

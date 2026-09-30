@@ -2,6 +2,7 @@
 
 - Статус: принято
 - Источник: найдено в коде (`SqliteStorage*`, `HarnessDesignRecoveryJournal`, `Program.cs`)
+- Связанные требования: REQ-023, REQ-024
 
 ## Решение
 
