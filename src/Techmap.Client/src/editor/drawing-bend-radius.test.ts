@@ -10,6 +10,7 @@ import { coveringScene,moveCovering } from "./covering-layout";
 import { standardCovering } from "./physical-coverings";
 import { coveringSurfaces,coveringGrips,coveringHit } from "./covering-renderer";
 import { drawingObjectPerimeter } from "./drawing-object-perimeter";
+import { createJoiningPipe } from "./physical-joining-pipes";
 
 function fixture():HarnessDesignDocument {
   const d=physicalFixture();return {...d,physicalTopology:{snap:false,nodes:[{id:"from",position:{x:0,y:0}},{id:"to",position:{x:100,y:100}}],segments:[{id:"pipe",from:"from",to:"to",path:{kind:"polyline",points:[{x:100,y:0}]},width:2}],routes:[],coverings:[{id:"cover",name:"Sleeve",width:3,color:"#334455",lengthMm:200,spans:[{segmentId:"pipe",from:.4,to:.6}]}]}};
@@ -41,6 +42,20 @@ it.each([0,40,200])("uses document radius %s for rendering, selection and sleeve
   expect(Math.hypot(anchor.x-100,anchor.y)).toBeGreaterThan(bendRadius?5:0);
 });
 it("defaults legacy documents to 24",()=>expect(drawingBendRadius(fixture())).toBe(24));
+it("keeps the global radius on a wire projected through an OP and its connector tails",()=>{
+  const base=fixture(),t=base.physicalTopology!;
+  const topology={...t,nodes:[...t.nodes,{id:"otherFrom",position:{x:0,y:100}},{id:"otherTo",position:{x:100,y:200}}],
+    segments:[...t.segments,{id:"other",from:"otherFrom",to:"otherTo",path:{kind:"polyline" as const,points:[{x:100,y:100}]}}],
+    routes:[{wireId:base.wires[0]!.id,steps:[{segmentId:"pipe",reverse:false}]}]};
+  const source={...base,physicalTopology:topology},op=createJoiningPipe(source,[["pipe"],["other"]],"op");
+  const doc={...source,physicalTopology:{...topology,joiningPipes:[op]},drawingDocuments:{...emptyDrawingDocuments(),bendRadius:48}};
+  const wire=designToScene(doc,"drawing").find(o=>o.id===base.wires[0]!.id)!;
+  expect(wire.routeRadius).toBe(48);
+  expect(wire.paths?.some(path=>path.length>3)).toBe(true);
+  const arcTo=vi.fn(),ctx=new Proxy({arcTo},{get:(o,p)=>Reflect.get(o,p)??vi.fn()}) as unknown as CanvasRenderingContext2D;
+  drawEditorSceneObject(ctx,wire,false,"drawing");
+  expect(arcTo).toHaveBeenCalled();
+});
 it("creates and drags a sleeve on the visible arc using authored parameters",()=>{
   const d=fixture(),doc={...d,drawingDocuments:{...emptyDrawingDocuments(),bendRadius:40}};
   const points=[{x:0,y:0},{x:100,y:0},{x:100,y:100}];

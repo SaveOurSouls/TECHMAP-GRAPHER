@@ -943,7 +943,7 @@ export function hitTestWireRoutePoint(
   const tolerance = 10 / zoom;
   let nearest: number | null = null, distance = tolerance;
   for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
-    if(object.pipe?.controlledHandles?.includes(pointIndex-1))continue;
+    if(object.pipe?.controlledHandles?.includes(pointIndex-1)&&!object.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===pointIndex-1))continue;
     const candidate = points[pointIndex]!;
     const delta = Math.hypot(point.x - candidate.x, point.y - candidate.y);
     if (delta <= distance) { nearest = pointIndex - 1; distance = delta; }
@@ -1853,10 +1853,7 @@ export function drawEditorSceneObject(
   if(object.kind==="physical-covering") {drawCoveringSurface(context,object,selected);context.restore();return;}
   if(object.kind==="physical-segment"){
     const points=object.points??[];context.lineJoin="round";context.lineCap="round";
-    // A regular П is a protective channel around its conductors. Keep it
-    // translucent so the wire lanes remain inspectable; the common ОП stays
-    // opaque and therefore reads as the outer hierarchy layer.
-    if(object.pipe?.role!=="joining-pipe")context.globalAlpha*=.72;
+    context.globalAlpha*=Math.max(0,Math.min(1,Number(object.metadata?.opacity??(object.pipe?.role==="joining-pipe"?1:.72))));
     traceDrawingRoute(context,points,object.routeRadius);
     if(selected){context.strokeStyle="#1179ac";context.lineWidth=object.width+2;context.stroke();}
     context.strokeStyle=object.color;context.lineWidth=object.width;context.stroke();
@@ -2549,7 +2546,8 @@ export function redrawCanvas(
         const controlled=object.pipe?.controlledHandles?.includes(i-1)===true;
         const transition=object.kind==="physical-segment"&&object.pipe?.joiningTransitionHandles?.some(handle=>handle.index===i-1)===true;
         context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:transition?5.5:controlled?4:5)/camera.zoom,0,Math.PI*2);
-        context.fillStyle=object.kind==="physical-node"?object.color:controlled?"#7bb9cb":"#fff";context.fill();context.stroke();
+        const draggableBoundary=object.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===i-1)===true;
+        context.fillStyle=object.kind==="physical-node"?object.color:controlled&&!draggableBoundary?"#7bb9cb":"#fff";context.fill();context.stroke();
         if(object.kind==="physical-segment"&&i>0&&i<points.length-1&&!controlled){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}
       });
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
@@ -3162,7 +3160,7 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?.joiningTransitionHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===index)?[]:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point)};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?.joiningTransitionHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===index)?[]:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point)};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);

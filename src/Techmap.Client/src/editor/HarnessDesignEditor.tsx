@@ -3,7 +3,7 @@ import {CoveringMaterialSettings} from "./CoveringMaterialSettings";
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { orderPhysicalScene, physicalTopologyScene } from "./physical-scene";
 import { volumeShadingEligible } from "./volume-shading";
-import { hasPipeBundleProjection, unprojectPipeBundleEdit, unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
+import { unprojectPipeBundleEdit, unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
 import { physicalEditablePoints } from "./physical-editing";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
 import { projectOntoPolyline } from "./physical-coverings";
@@ -467,7 +467,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:document.physicalTopology?.routes.find(r=>r.wireId===wire.id)?.steps.some(s=>hasPipeBundleProjection(document,s.segmentId))?0:drawingBendRadius(document)} : {}),
+      ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
       ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
@@ -1055,6 +1055,8 @@ export function HarnessDesignEditor({
         }
         const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===pipePreview.id);
         const transition=!pipePreview.insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===pipePreview.index);
+        const boundary=!pipePreview.insert&&sceneObject?.pipe?.joiningBoundaryHandles?.find(handle=>handle.index===pipePreview.index);
+        if(boundary){const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(pipePreview.id));if(memberPipe)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-boundary",pipeId:memberPipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[pipePreview.index]!,position:pipePreview.point}),error:null};}
         const generatedMidpoint=pipePreview.insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===pipePreview.index);
         if(generatedMidpoint){
           const source=unprojectPipeBundlePoint(history.present,pipePreview.id,pipePreview.point);
@@ -2166,6 +2168,8 @@ export function HarnessDesignEditor({
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) { const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===wireId);
             const transition=!insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===routeIndex);
+            const boundary=!insert&&sceneObject?.pipe?.joiningBoundaryHandles?.find(handle=>handle.index===routeIndex);
+            if(boundary){const pipe=topology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-boundary",pipeId:pipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[routeIndex]!,position:point});return;}
             const generatedMidpoint=insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===routeIndex);
             if(generatedMidpoint){
               const source=unprojectPipeBundlePoint(history.present,wireId,point),points=physicalEditablePoints(history.present,segment),station=projectOntoPolyline(points,source);

@@ -29,7 +29,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
 
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
-    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<0||s.width>1e7)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.volumeShading!==undefined&&typeof s.volumeShading!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
+    if(s.width!==undefined&&(!Number.isFinite(s.width)||s.width<0||s.width>1e7)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.opacity!==undefined&&(!Number.isFinite(s.opacity)||s.opacity<0||s.opacity>1)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.volumeShading!==undefined&&typeof s.volumeShading!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
     if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to)) return fail();
   }
   const wireIds = new Set<string>();

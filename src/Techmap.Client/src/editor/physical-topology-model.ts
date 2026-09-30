@@ -9,7 +9,7 @@ export interface PhysicalNode { readonly id: string; readonly position: Point; r
 export type PhysicalPath =
   | { readonly kind: "routed"; readonly points: readonly Point[] }
   | { readonly kind: "polyline"; readonly points: readonly Point[] };
-export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly path: PhysicalPath; readonly width?:number; readonly color?:string; readonly showWires?:boolean; readonly volumeShading?:boolean; readonly specificationItemId?:string }
+export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly path: PhysicalPath; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly showWires?:boolean; readonly volumeShading?:boolean; readonly specificationItemId?:string }
 /** A first-class common pipe (ОП). It owns its axis; member segments are
  * projected onto it for presentation while their electrical routes remain
  * unchanged. */
@@ -20,6 +20,8 @@ export interface JoiningPipeMember {
   /** Optional authored transition handles; omitted handles follow the OP axis. */
   readonly enterBend?: Point;
   readonly exitBend?: Point;
+  readonly enterOuter?: Point;
+  readonly exitOuter?: Point;
 }
 export interface PhysicalJoiningPipe {
   readonly id: string;
@@ -27,7 +29,7 @@ export interface PhysicalJoiningPipe {
   readonly path: PhysicalPath;
   readonly members: readonly JoiningPipeMember[];
   readonly mode: "flat" | "round";
-  readonly width?: number; readonly color?: string; readonly volumeShading?: boolean;
+  readonly width?: number; readonly color?: string; readonly opacity?:number; readonly volumeShading?: boolean;
 }
 export interface PhysicalStep { readonly segmentId: string; readonly reverse: boolean }
 export interface PhysicalRoute { readonly wireId: string; readonly steps: readonly PhysicalStep[]; readonly automatic?:boolean }

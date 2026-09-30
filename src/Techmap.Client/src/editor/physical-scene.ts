@@ -52,9 +52,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const route=physicalSegmentPoints(document,segment);
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
     const generatedControls=joiningPipeMemberControls(document,segment.id);
-    type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;connection?:boolean;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
+    type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;connection?:boolean;boundary?:"outerEnter"|"axisEnter"|"axisExit"|"outerExit";memberIndex?:number;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
     const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>({fraction:projectOntoPolyline(route,point).fraction,point,authoredIndex:index+1,controlled:controlled(point)}));
-    const generated:SceneControl[]=generatedControls?.map(control=>({fraction:control.fraction,point:control.point,controlled:control.controlled,connection:control.connection,transition:control.transition}))??[];
+    const generated:SceneControl[]=generatedControls?.map(control=>({fraction:control.fraction,point:control.point,controlled:control.controlled,connection:control.connection,boundary:control.boundary,memberIndex:control.memberIndex,transition:control.transition}))??[];
     const mergedHandles:SceneControl[]=[...authoredHandles,...generated].sort((a,b)=>a.fraction-b.fraction)
       .reduce<SceneControl[]>((handles,handle)=>{
         const previous=handles.at(-1);
@@ -71,6 +71,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const handles=mergedHandles.map(handle=>handle.point);
     const authoredHandleIndices=mergedHandles.map(handle=>handle.authoredIndex??-1);
     const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>handle.transition?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
+    const joiningBoundaryHandleData=mergedHandles.flatMap((handle,index)=>handle.boundary?[{index,memberIndex:handle.memberIndex!,boundary:handle.boundary}]:[]);
     const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>handle.controlled?[index]:[]);
     const routeControls:SceneControl[]=[{fraction:0,point:editable[0]!,controlled:false},...mergedHandles,{fraction:1,point:editable.at(-1)!,controlled:false}];
     const midpoints=generatedControls
@@ -89,9 +90,8 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     id: segment.id, kind: "physical-segment", label: `S${i + 1}`, layerId: "wires",
     x: 0, y: 0, width: drawingPipeWidth(document, segment), height: 0,
     color: segment.color ?? "#aebfc9", points: display?.map(s => s.point) ?? physicalSegmentPoints(document, segment),
-    // Keep the global bend regulator active for the sampled member route; the
-    // added transition stations prevent the rounding helper from collapsing a
-    // long exit into one artificial corner.
+    // The transition contains its authored corner and no extra collinear
+    // stations, so the global radius can round the full adjacent legs.
     routeRadius:joiningPipeDisplaySamples(document,segment.id) ? drawingBendRadius(document) : display ? 0 : drawingBendRadius(document),
     pipe: {
       fromNodeId: segment.from,
@@ -104,11 +104,12 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       controlledHandles:controlledHandleIndices,
       controlledMidpoints,
       joiningTransitionHandles:joiningTransitionHandleData,
+      joiningBoundaryHandles:joiningBoundaryHandleData,
       joiningTransitionMidpoints,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
-    ...((segment.volumeShading !== undefined || document.drawingDocuments?.volumeShading === false)
-      ? { metadata: { volumeShading: String(segment.volumeShading ?? false) } } : {}),
+    ...((segment.opacity!==undefined||segment.volumeShading!==undefined||document.drawingDocuments?.volumeShading===false)
+      ? {metadata:{...(segment.opacity!==undefined?{opacity:String(segment.opacity)}:{}),volumeShading:String(segment.volumeShading??false)}} : {}),
     };
   });
   const joining: EditorSceneObject[] = (topology.joiningPipes??[]).map((pipe,i)=>{
@@ -118,7 +119,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const wireIds=[...new Set(pipe.members.flatMap(m=>m.segmentIds).flatMap(id=>topology.routes.filter(route=>route.steps.some(step=>step.segmentId===id)).map(route=>route.wireId)))];
     return {id:pipe.id,kind:"physical-segment" as const,label:`ОП${i+1}`,layerId:"wires",x:0,y:0,width:joiningPipeWidth(document,pipe),height:0,color:pipe.color??"#aebfc9",points:display,paths:[display],routeRadius:drawingBendRadius(document),
       pipe:{role:"joining-pipe" as const,authoredPoints:authored,fromNodeId:joiningPipeEndpointId(pipe.id,"from"),toNodeId:joiningPipeEndpointId(pipe.id,"to"),controls,handles,midpoints,wireIds,memberSegmentIds:pipe.members.flatMap(m=>m.segmentIds)},
-      metadata:{joiningPipe:"true",volumeShading:String(pipe.volumeShading??document.drawingDocuments?.volumeShading!==false)}};
+      metadata:{joiningPipe:"true",opacity:String(pipe.opacity??1),volumeShading:String(pipe.volumeShading??document.drawingDocuments?.volumeShading!==false)}};
   });
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {
     const point = pipeBundleNodePoint(document,node.id,physicalNodePoint(document, node));

@@ -13,7 +13,7 @@ import {parseHarnessDesignDocument} from "./model";
 import {migrateJoiningPipes} from "./physical-joining-pipes";
 import {beginJoiningPipe,toggleJoiningPipeMember,joiningPipeDraftTopology} from "./JoiningPipeEditor";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
-import {hitTestEditorScene,pipeMidpoints} from "./CanvasViewport";
+import {hitTestEditorScene,hitTestWireRoutePoint,pipeMidpoints} from "./CanvasViewport";
 import {coveringHit} from "./covering-renderer";
 import {drawingRouteCommands} from "./drawing-route-path";
 
@@ -105,6 +105,21 @@ it("builds each member transition as connection to bend to connection with usabl
  const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
  expect(member.pipe?.joiningTransitionMidpoints).toHaveLength(4);
  expect(pipeMidpoints(member)).toEqual(expect.arrayContaining(member.pipe!.joiningTransitionMidpoints!.map(handle=>expect.objectContaining({index:handle.index}))));
+});
+
+it("lets the white boundary grips move the member transition and the OP end",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+ const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
+ const outer=member.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!;
+ const outerPoint=member.pipe!.handles[outer.index]!;
+ expect(hitTestWireRoutePoint(member,outerPoint,1)).toBe(outer.index);
+ const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:outer.boundary,origin:outerPoint,position:{x:outerPoint.x+20,y:outerPoint.y+30}});
+ expect(moved.physicalTopology!.joiningPipes![0]!.members[1]!.enterOuter).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
+ expect(joiningPipeMemberControls(moved,"p1")!.find(control=>control.boundary==="outerEnter")!.point).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
+ const axis=member.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="axisEnter")!,axisPoint=member.pipe!.handles[axis.index]!;
+ const shifted=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:axis.memberIndex,boundary:axis.boundary,origin:axisPoint,position:{x:axisPoint.x+15,y:axisPoint.y-10}});
+ expect(shifted.physicalTopology!.joiningPipes![0]!.start).toEqual({x:op.start.x+15,y:op.start.y-10});
+ expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved))).physicalTopology!.joiningPipes![0]!.members[1]!.enterOuter).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
 });
 
 it("reversed pipes follow the OP direction with fixed endpoints",()=>{

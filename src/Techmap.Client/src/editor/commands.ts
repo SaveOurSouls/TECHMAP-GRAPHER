@@ -69,7 +69,8 @@ export type EditorCommand =
   | { readonly type: "edit-joining-pipe-bend"; readonly pipeId:string; readonly index:number; readonly position:Point; readonly mode:PhysicalDragMode; readonly insert?:boolean; readonly remove?:boolean }
   | { readonly type: "move-joining-pipe"; readonly pipeId:string; readonly delta:Point }
   | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean }
-  | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly volumeShading?:boolean }
+  | { readonly type: "update-joining-pipe-member-boundary"; readonly pipeId:string; readonly memberIndex:number; readonly boundary:"outerEnter"|"axisEnter"|"axisExit"|"outerExit"; readonly origin:Point; readonly position:Point }
+  | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly volumeShading?:boolean }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
@@ -268,12 +269,26 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const members=pipe.members.map((member,index)=>index!==command.memberIndex?member:{...member,...(command.side==="enter"?{enterBend:command.clear?undefined:command.position}:{exitBend:command.clear?undefined:command.position})});
       return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,members}:p)},document)};
     }
+    case "update-joining-pipe-member-boundary": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
+      const t=document.physicalTopology,pipe=t?.joiningPipes?.find(p=>p.id===command.pipeId);if(!t||!pipe||!pipe.members[command.memberIndex])return document;
+      if(!Number.isFinite(command.position.x)||!Number.isFinite(command.position.y))throw new Error("Некорректное положение точки перегиба.");
+      const {boundary,position,origin}=command;
+      if(boundary==="axisEnter"||boundary==="axisExit"){
+        const key=boundary==="axisEnter"?"start":"end",delta={x:position.x-origin.x,y:position.y-origin.y};
+        const changed={...pipe,[key]:{x:pipe[key].x+delta.x,y:pipe[key].y+delta.y}};
+        return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?changed:p)},document)};
+      }
+      const key=boundary==="outerEnter"?"enterOuter":"exitOuter";
+      const members=pipe.members.map((member,index)=>index===command.memberIndex?{...member,[key]:position}:member);
+      return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,members}:p)},document)};
+    }
     case "update-joining-pipe": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
       const t=document.physicalTopology;if(!t)return document;
       const next=t.joiningPipes?.map(p=>{
         if(p.id!==command.pipeId)return p;
-        return {...p,...(command.start!==undefined?{start:command.start}:{}),...(command.end!==undefined?{end:command.end}:{}),...(command.mode!==undefined?{mode:command.mode}:{}),...(command.width!==undefined?{width:command.width}:{}),...(command.color!==undefined?{color:command.color}:{}),...(command.volumeShading!==undefined?{volumeShading:command.volumeShading}:{})};
+        return {...p,...(command.start!==undefined?{start:command.start}:{}),...(command.end!==undefined?{end:command.end}:{}),...(command.mode!==undefined?{mode:command.mode}:{}),...(command.width!==undefined?{width:command.width}:{}),...(command.color!==undefined?{color:command.color}:{}),...(command.opacity!==undefined?{opacity:command.opacity}:{}),...(command.volumeShading!==undefined?{volumeShading:command.volumeShading}:{})};
       });
       return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:next},document)};
     }
