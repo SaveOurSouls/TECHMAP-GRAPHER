@@ -13,7 +13,7 @@ import {parseHarnessDesignDocument} from "./model";
 import {migrateJoiningPipes} from "./physical-joining-pipes";
 import {beginJoiningPipe,toggleJoiningPipeMember,joiningPipeDraftTopology} from "./JoiningPipeEditor";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
-import {hitTestEditorScene,hitTestWireRoutePoint,pipeMidpoints} from "./CanvasViewport";
+import {hitTestEditorScene,hitTestWireRoutePoint,numberedPipeBendHandles,pipeMidpoints} from "./CanvasViewport";
 import {coveringHit} from "./covering-renderer";
 import {drawingRouteCommands} from "./drawing-route-path";
 
@@ -92,6 +92,33 @@ it("exposes joining transitions as authored member handles",()=>{
  expect(joiningPipeDisplaySamples(moved,"p0")!.some(sample=>Math.hypot(sample.point.x-150,sample.point.y+40)<1e-6)).toBe(true);
  const restored=parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved)));
  expect(restored.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
+});
+
+it("numbers, deletes, restores and recreates a member transition like a normal bend",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+ const original=physicalTopologyScene(base).find(object=>object.id==="p1")!;
+ const enter=original.pipe!.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
+ const transitionPoint=original.pipe!.handles[enter.index]!;
+ expect(hitTestWireRoutePoint(original,transitionPoint,1)).toBe(enter.index);
+ expect(numberedPipeBendHandles(original)).toContain(enter.index);
+ expect(numberedPipeBendHandles(original).indexOf(enter.index)+1).toBe(1);
+ expect(numberedPipeBendHandles(original)).not.toContain(original.pipe!.joiningBoundaryHandles![0]!.index);
+ const history=executeEditorCommand(createEditorHistory(base),{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:enter.memberIndex,side:"enter",clear:true});
+ const removed=history.present,member=physicalTopologyScene(removed).find(object=>object.id==="p1")!;
+ expect(removed.physicalTopology!.joiningPipes![0]!.members[enter.memberIndex]!.enterBend).toBeNull();
+ expect(member.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="enter")).toBe(false);
+ expect(member.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="exit")).toBe(true);
+ expect(numberedPipeBendHandles(member)).toHaveLength(1);
+ expect(joiningPipeDisplaySamples(removed,"p1")!.length).toBeLessThan(joiningPipeDisplaySamples(base,"p1")!.length);
+ const loaded=parseHarnessDesignDocument(JSON.parse(JSON.stringify(removed)));
+ expect(loaded.physicalTopology!.joiningPipes![0]!.members[enter.memberIndex]!.enterBend).toBeNull();
+ expect(undoEditorCommand(history).present).toBe(base);
+ const midpoint=member.pipe!.joiningTransitionMidpoints!.find(handle=>handle.side==="enter")!;
+ expect(pipeMidpoints(member).some(handle=>handle.index===midpoint.index)).toBe(true);
+ const recreated=applyEditorCommand(removed,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:enter.memberIndex,side:"enter",position:{x:150,y:75}});
+ expect(physicalTopologyScene(recreated).find(object=>object.id==="p1")!.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="enter")).toBe(true);
+ expect(recreated.physicalTopology!.segments).toEqual(base.physicalTopology!.segments);
+ expect(recreated.physicalTopology!.routes).toEqual(base.physicalTopology!.routes);
 });
 
 it("builds each member transition as connection to bend to connection with usable midpoints",()=>{

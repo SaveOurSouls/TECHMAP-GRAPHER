@@ -78,11 +78,17 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       ? routeControls.slice(1).map((point,index)=>({x:(point.point.x-routeControls[index]!.point.x)/2+routeControls[index]!.point.x,y:(point.point.y-routeControls[index]!.point.y)/2+routeControls[index]!.point.y}))
       : projectPipeBundleControls(document, segment.id, authored.slice(1).map((p,i)=>({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})));
     const controlledMidpoints=generatedControls
-      ? routeControls.slice(1).flatMap((point,index)=>point.controlled&&routeControls[index]!.controlled?[index]:[])
+      ? routeControls.slice(1).flatMap((point,index)=>{
+          const previous=routeControls[index]!;
+          const removedTransition=previous.boundary==="outerEnter"&&point.boundary==="axisEnter"||previous.boundary==="axisExit"&&point.boundary==="outerExit";
+          return point.controlled&&previous.controlled&&!removedTransition?[index]:[];
+        })
       : authored.slice(1).flatMap((p,i)=>controlled({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})?[i]:[]);
     const joiningTransitionMidpoints=generatedControls
       ? routeControls.slice(1).flatMap((point,index)=>{
-          const transition=point.transition??routeControls[index]!.transition;
+          const previous=routeControls[index]!;
+          const directSide=previous.boundary==="outerEnter"&&point.boundary==="axisEnter"?"enter":previous.boundary==="axisExit"&&point.boundary==="outerExit"?"exit":undefined;
+          const transition=point.transition??previous.transition??(directSide?{memberIndex:point.memberIndex!,side:directSide}:undefined);
           return transition&&!(point.transition&&routeControls[index]!.transition)?[{index,memberIndex:transition.memberIndex,side:transition.side}]:[];
         })
       : [];

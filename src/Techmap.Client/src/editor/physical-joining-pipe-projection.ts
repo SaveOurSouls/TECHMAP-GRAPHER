@@ -70,7 +70,7 @@ interface Placement {
   readonly before:number; readonly length:number; readonly total:number;
   readonly low:number; readonly high:number;
   readonly memberIndex:number;
-  readonly enterBend:Point; readonly exitBend:Point;
+  readonly enterBend:Point|null; readonly exitBend:Point|null;
 }
 const cache=new WeakMap<HarnessDesignDocument,ReadonlyMap<string,Placement>>();
 function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement> {
@@ -92,10 +92,10 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
         return {x:edge.x-dx/len*lead,y:edge.y-dy/len*lead};
       };
       const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(source,low),outerB=member.exitOuter??at(source,high);
-      const enterBend=member.enterBend??shoulder(a,oriented[1]!.point,outerA);
-      const exitBend=member.exitBend??shoulder(b,oriented.at(-2)!.point,outerB);
-      const enter=sample([outerA,enterBend,a]);
-      const exit=sample([b,exitBend,outerB]);
+      const enterBend=member.enterBend===undefined?shoulder(a,oriented[1]!.point,outerA):member.enterBend;
+      const exitBend=member.exitBend===undefined?shoulder(b,oriented.at(-2)!.point,outerB):member.exitBend;
+      const enter=sample(enterBend===null?[outerA,a]:[outerA,enterBend,a]);
+      const exit=sample(exitBend===null?[b,outerB]:[b,exitBend,outerB]);
       let before=0;
       member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend});before+=lengths[j]!;});
     }
@@ -110,11 +110,11 @@ function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberCont
  const exitBendFraction=m.to+(p.high-m.to)*(p.exit[1]?.fraction??.5);
  const candidates:JoiningPipeMemberControl[]=[
    {fraction:p.low,point:p.enter[0]!.point,controlled:true,connection:true,boundary:"outerEnter",memberIndex:p.memberIndex},
-   {fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}},
+   ...(p.enterBend===null?[]:[{fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}}]),
    {fraction:m.from,point:p.axisControls[0]!.point,controlled:true,connection:true,boundary:"axisEnter",memberIndex:p.memberIndex},
    ...p.axisControls.slice(1,-1).map(sample=>({fraction:m.from+sample.fraction*(m.to-m.from),point:sample.point,controlled:true})),
    {fraction:m.to,point:p.axisControls.at(-1)!.point,controlled:true,connection:true,boundary:"axisExit",memberIndex:p.memberIndex},
-   {fraction:exitBendFraction,point:p.exitBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"exit" as const}},
+   ...(p.exitBend===null?[]:[{fraction:exitBendFraction,point:p.exitBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"exit" as const}}]),
    {fraction:p.high,point:p.exit.at(-1)!.point,controlled:true,connection:true,boundary:"outerExit",memberIndex:p.memberIndex},
  ];
  return candidates;
@@ -167,8 +167,8 @@ export function joiningPipeTransitionHandles(document:HarnessDesignDocument,id:s
   const p=placements(document).get(id);if(!p)return [];
   const m=p.member;
   const handles: {fraction:number;point:Point;memberIndex:number;side:"enter"|"exit"}[]=[
-    {fraction:localFraction(p,p.low+(m.from-p.low)*p.enter[1]!.fraction),point:p.enterBend,memberIndex:p.memberIndex,side:"enter"},
-    {fraction:localFraction(p,m.to+(p.high-m.to)*p.exit[1]!.fraction),point:p.exitBend,memberIndex:p.memberIndex,side:"exit"},
+    ...(p.enterBend===null?[]:[{fraction:localFraction(p,p.low+(m.from-p.low)*p.enter[1]!.fraction),point:p.enterBend,memberIndex:p.memberIndex,side:"enter" as const}]),
+    ...(p.exitBend===null?[]:[{fraction:localFraction(p,m.to+(p.high-m.to)*p.exit[1]!.fraction),point:p.exitBend,memberIndex:p.memberIndex,side:"exit" as const}]),
   ];
   return handles.filter(handle=>handle.fraction>0&&handle.fraction<1);
 }

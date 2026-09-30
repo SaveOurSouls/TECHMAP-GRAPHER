@@ -1062,6 +1062,10 @@ export function HarnessDesignEditor({
         if(boundary){const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(pipePreview.id));if(memberPipe)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-boundary",pipeId:memberPipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[pipePreview.index]!,position:pipePreview.point}),error:null};}
         const generatedMidpoint=pipePreview.insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===pipePreview.index);
         if(generatedMidpoint){
+          const midpoint=sceneObject!.pipe!.joiningTransitionMidpoints!.find(handle=>handle.index===pipePreview.index)!;
+          const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[midpoint.memberIndex]?.segmentIds.includes(pipePreview.id));
+          if(memberPipe?.members[midpoint.memberIndex]?.[midpoint.side==="enter"?"enterBend":"exitBend"]===null)
+            return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:midpoint.memberIndex,side:midpoint.side,position:pipePreview.point}),error:null};
           const source=unprojectPipeBundlePoint(history.present,pipePreview.id,pipePreview.point);
           const points=physicalEditablePoints(history.present,segment),station=projectOntoPolyline(points,source);
           const position=unprojectPipeBundleEdit(history.present,pipePreview.id,source,pipePreview.point);
@@ -2174,8 +2178,12 @@ export function HarnessDesignEditor({
             const transition=!insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===routeIndex);
             const boundary=!insert&&sceneObject?.pipe?.joiningBoundaryHandles?.find(handle=>handle.index===routeIndex);
             if(boundary){const pipe=topology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-boundary",pipeId:pipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[routeIndex]!,position:point});return;}
-            const generatedMidpoint=insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===routeIndex);
+            const generatedMidpoint=insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.find(handle=>handle.index===routeIndex);
             if(generatedMidpoint){
+              const memberPipe=topology.joiningPipes?.find(p=>p.members[generatedMidpoint.memberIndex]?.segmentIds.includes(wireId));
+              if(memberPipe?.members[generatedMidpoint.memberIndex]?.[generatedMidpoint.side==="enter"?"enterBend":"exitBend"]===null){
+                run({type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:generatedMidpoint.memberIndex,side:generatedMidpoint.side,position:point});return;
+              }
               const source=unprojectPipeBundlePoint(history.present,wireId,point),points=physicalEditablePoints(history.present,segment),station=projectOntoPolyline(points,source);
               run({type:"edit-physical-bend",segmentId:wireId,index:station.index-1,position:unprojectPipeBundleEdit(history.present,wireId,source,point),mode,insert:true}); return;
             }

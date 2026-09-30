@@ -266,7 +266,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const t=document.physicalTopology;if(!t)return document;
       const pipe=t.joiningPipes?.find(p=>p.id===command.pipeId);if(!pipe||!pipe.members[command.memberIndex])return document;
       if(!command.clear&&(!command.position||!Number.isFinite(command.position.x)||!Number.isFinite(command.position.y)))throw new Error("Некорректное положение ручки перехода.");
-      const members=pipe.members.map((member,index)=>index!==command.memberIndex?member:{...member,...(command.side==="enter"?{enterBend:command.clear?undefined:command.position}:{exitBend:command.clear?undefined:command.position})});
+      const members=pipe.members.map((member,index)=>index!==command.memberIndex?member:{...member,...(command.side==="enter"?{enterBend:command.clear?null:command.position}:{exitBend:command.clear?null:command.position})});
       return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,members}:p)},document)};
     }
     case "update-joining-pipe-member-boundary": {

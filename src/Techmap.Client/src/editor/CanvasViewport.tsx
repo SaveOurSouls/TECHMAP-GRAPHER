@@ -953,6 +953,12 @@ export function hitTestWireRoutePoint(
   return nearest;
 }
 
+/** Visible member bends share the same consecutive numbering as authored bends. */
+export function numberedPipeBendHandles(object:EditorSceneObject):readonly number[] {
+  if(object.kind!=="physical-segment")return [];
+  return pipeSceneHandles(object).flatMap((_,index)=>object.pipe?.controlledHandles?.includes(index)?[]:[index]);
+}
+
 export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
   if(object.kind!=="physical-segment")return [];
   if(object.pipe?.midpoints)return object.pipe.midpoints.flatMap((point,index)=>object.pipe?.controlledMidpoints?.includes(index)?[]:[{point,index}]);
@@ -2543,6 +2549,7 @@ export function redrawCanvas(
     for (const object of objectsInPaintOrder(objects,layers)) {
       if (object.kind !== "physical-node" && object.kind !== "physical-segment") continue;
       const points: EditorPoint[] = object.kind === "physical-node" ? [{x:object.x+5,y:object.y+5}] : [object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
+      const bendHandles=object.kind==="physical-segment"?numberedPipeBendHandles(object):[];
       if(object.kind==="physical-segment")for(const {point:p} of pipeMidpoints(object)){
         context.save();context.globalAlpha=.35;context.fillStyle="#1179ac";context.beginPath();context.arc(p.x,p.y,4/camera.zoom,0,Math.PI*2);context.fill();context.restore();
       }
@@ -2553,7 +2560,8 @@ export function redrawCanvas(
         context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:transition?5.5:controlled?4:5)/camera.zoom,0,Math.PI*2);
         const draggableBoundary=object.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===i-1)===true;
         context.fillStyle=object.kind==="physical-node"?object.color:controlled&&!draggableBoundary?"#7bb9cb":"#fff";context.fill();context.stroke();
-        if(object.kind==="physical-segment"&&i>0&&i<points.length-1&&!controlled){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(i),p.x+8/camera.zoom,p.y-8/camera.zoom);}
+        const bendNumber=bendHandles.indexOf(i-1)+1;
+        if(bendNumber>0){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(bendNumber),p.x+8/camera.zoom,p.y-8/camera.zoom);}
       });
       if(object.kind==="physical-node"){const vector = object.port?.direction;if(vector){const length=12/camera.zoom,c={x:points[0]!.x+vector.x*length,y:points[0]!.y+vector.y*length};context.beginPath();context.moveTo(points[0]!.x,points[0]!.y);context.lineTo(c.x,c.y);context.stroke();context.beginPath();context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom-vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom+vector.x*3/camera.zoom);context.moveTo(c.x,c.y);context.lineTo(c.x-vector.x*4/camera.zoom+vector.y*3/camera.zoom,c.y-vector.y*4/camera.zoom-vector.x*3/camera.zoom);context.stroke();}}
       context.restore();
