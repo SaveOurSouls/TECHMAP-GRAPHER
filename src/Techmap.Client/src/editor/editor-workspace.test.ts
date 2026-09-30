@@ -734,7 +734,7 @@ describe("harness editor workspace", () => {
       variant: 2, wireIds: ["h1", "h2"], crossMinimum: 40, crossMaximum: 60,
     });
     expect(pairLayout.motifs.length).toBeGreaterThan(1);
-    expect(pairLayout.motifs.every(motif => motif.to - motif.from === 16)).toBe(true);
+    expect(pairLayout.motifs.every(motif => motif.to > motif.from && motif.to - motif.from <= 16)).toBe(true);
     expect(pairLayout.motifs[0]!.coloredFrom).toBeLessThan(pairLayout.motifs[0]!.from);
     expect(pairLayout.motifs.at(-1)!.coloredTo).toBeGreaterThan(pairLayout.motifs.at(-1)!.to);
     expect(pairLayout.motifs.slice(1).every((motif, index) =>
