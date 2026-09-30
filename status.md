@@ -1,5 +1,24 @@
 # Текущий проверенный срез — 30.09.2026
 
+Код: `27d7c5e9d4284b6ea2f0dabea2ca089523442d26`; версия пакета зафиксирована
+коммитом `9a09608` как `0.63.9-m5-07-review`.
+Линии привязки позиций входят через `fd6a4b8` и `b8e5d1e`; ветка
+`codex/position-rail` (`ad33b10`) была устаревшим ответвлением и не требовала
+повторного cherry-pick.
+
+ZIP:
+`artifacts/m5-07-20260930-position-rails-v639/TECHMAP-GRAPHER-0.63.9-m5-07-review-win-x64.zip`,
+57 007 184 байта, SHA-256
+`A413D68E0E367A1DB8DCCFD74835DCFB6B4B53142583ECCDF20D060171A6DD3C`.
+Проверки: 1510 клиентских тестов, TypeScript/Vite build, 1041 Release .NET-тест,
+self-contained win-x64 publish, манифест (209 файлов) и 7 portable-режимов из
+`C:\Temp\TECHMAP-portable-20260930-v639`.
+
+Ограничения: запуск из исходного пути с кириллицей может завершиться
+`UnauthorizedAccessException` при чтении ACL; ручная UI-приёмка не выполнялась.
+
+## Предыдущий проверенный срез — 30.09.2026
+
 Код: `27d7c5e9d4284b6ea2f0dabea2ca089523442d26`.
 Собран и проверен ZIP версии `0.63.8-m5-07-review` из
 `artifacts/m5-07-20260930-global-opacity/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`:
