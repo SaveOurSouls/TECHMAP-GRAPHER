@@ -41,6 +41,17 @@ it("clips the oblique decoration away from connector bounds",()=>{
  }
 });
 
+it("keeps a pair on a compact E4 row pitch when routed lanes are far apart",()=>{
+ const wideObjects:EditorSceneObject[]= [
+  {id:"top",kind:"wire",layerId:"wires",label:"TOP",x:0,y:0,width:0,height:0,color:"#f00",points:[{x:0,y:20},{x:500,y:20}]},
+  {id:"bottom",kind:"wire",layerId:"wires",label:"BOTTOM",x:0,y:0,width:0,height:0,color:"#00f",points:[{x:0,y:180},{x:500,y:180}]},
+ ];
+ const layout=getE4DifferentialPairLayout({id:"compact",wireIds:["top","bottom"],step:25,amplitude:7,variant:2},wideObjects)!;
+ expect(layout.crossMaximum-layout.crossMinimum).toBe(24);
+ expect((layout.crossMinimum+layout.crossMaximum)/2).toBe(100);
+ expect(layout.motifs.length).toBeGreaterThan(1);
+});
+
 it("creates and serializes a pair with a diagonal main section and directed contact leads",()=>{
  const a=createConnector("a","A",2,{x:0,y:0}),b=createConnector("b","B",2,{x:1000,y:200});
  const wires=[1,2].map(n=>({...createWire("w"+n,{connectorId:"a",contactId:"a:contact:"+n},{connectorId:"b",contactId:"b:contact:"+n}),e4Route:[{x:700,y:40+n*24},{x:900,y:240+n*24}],e4RouteMode:"manual" as const}));

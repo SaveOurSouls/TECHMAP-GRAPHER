@@ -35,6 +35,7 @@ import type {
 import {
   connectorE4FooterWidth,
   connectorE4TableColumnWidth,
+  connectorE4TableMetrics,
   e4ScreenAlongSize,
 } from "./model";
 import { getE4WireLabelLayout, projectPointToE4WireLabelPosition } from "./e4-wire-label";
@@ -641,7 +642,22 @@ export function getE4DifferentialPairLayout(
     const x=Math.min(...corners.map(p=>p.x)),y=Math.min(...corners.map(p=>p.y));
     return {x,y,width:Math.max(...corners.map(p=>p.x))-x,height:Math.max(...corners.map(p=>p.y))-y};
   });
-  const span = clearDecorationSpans([common], tables, 10,
+  // A routed pair can temporarily have a very wide common span when its
+  // contacts are connected in different rows.  The differential-pair mark is
+  // a presentation layer, so keep its two lanes at one E4 table row pitch
+  // instead of reproducing that detour in every X motif.  Preserve a smaller
+  // authored separation (and the amplitude fallback for coincident paths).
+  const rawCrossGap = Math.abs(common.crossMaximum - common.crossMinimum);
+  const crossGap = rawCrossGap > 1e-6
+    ? Math.min(rawCrossGap, connectorE4TableMetrics.rowHeight)
+    : Math.max(group.amplitude * 2, 1);
+  const compactCrossCenter = (common.crossMinimum + common.crossMaximum) / 2;
+  const compactCommon: E4ParallelSpan = {
+    ...common,
+    crossMinimum: compactCrossCenter - crossGap / 2,
+    crossMaximum: compactCrossCenter + crossGap / 2,
+  };
+  const span = clearDecorationSpans([compactCommon], tables, 10,
     item => Math.max(group.amplitude * 2, item.crossMaximum - item.crossMinimum))
     .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
   if (!span) return null;

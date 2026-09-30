@@ -817,10 +817,10 @@ describe("harness editor workspace", () => {
       fromY: stroke.points[0]!.y,
       toY: stroke.points.at(-1)!.y,
     }))).toEqual([
-      { color: "#c000c0", fromY: 40, toY: 80 },
-      { color: "#0044cc", fromY: 80, toY: 40 },
-      { color: "#c000c0", fromY: 80, toY: 40 },
-      { color: "#0044cc", fromY: 40, toY: 80 },
+      { color: "#c000c0", fromY: 72, toY: 48 },
+      { color: "#0044cc", fromY: 48, toY: 72 },
+      { color: "#c000c0", fromY: 48, toY: 72 },
+      { color: "#0044cc", fromY: 72, toY: 48 },
     ]);
     expect(strokes.some(stroke => stroke.color === "#0077bb")).toBe(false);
   });
