@@ -1988,9 +1988,11 @@ export function drawEditorSceneObject(
     context.strokeStyle = selected ? "#087bb4" : object.color;
     context.lineWidth = selected ? 3 : 2;
     context.stroke();
-    context.fillStyle = "#17384b";
-    context.font = "700 13px Inter, Arial, sans-serif";
-    context.fillText(object.label, object.x + 12, object.y + 22);
+    if(view!=="drawing"){
+      context.fillStyle = "#17384b";
+      context.font = "700 13px Inter, Arial, sans-serif";
+      context.fillText(object.label, object.x + 12, object.y + 22);
+    }
     context.fillStyle = object.color;
     const materializedPoints = getMaterializedConnectorContactPoints(object);
     const points = legacyConnectorContactPoints(object);
@@ -2292,6 +2294,12 @@ function expandSceneBounds(
   };
 }
 
+/** The index stays outside the projected library drawing, including rotations. */
+export function drawingConnectorIndexLabel(object:EditorSceneObject,bounds:EditorSceneBounds) {
+  const text=object.label.trim(),x=bounds.minX+5,y=bounds.minY-8;
+  return {text,x,y,minX:x,minY:y-15,maxX:x+Math.max(28,text.length*8),maxY:y+3};
+}
+
 /** Returns world-space bounds for everything painted in the current view. */
 export function getEditorSceneBounds(
   objects: readonly EditorSceneObject[],
@@ -2340,6 +2348,10 @@ export function getEditorSceneBounds(
     const projection = instance
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
+    if(view==="drawing"&&object.kind==="connector"&&object.label.trim()){
+      const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
+      bounds=expandSceneBounds(bounds,label.minX,label.minY,label.maxX,label.maxY);
+    }
     if (projection) {
       bounds = expandSceneBounds(
         bounds,
@@ -2601,12 +2613,23 @@ export function redrawCanvas(
     }
     context.restore();
   }
-  // Contact marks are a final interaction pass, including unselected connectors.
+  // Contact marks and drawing indexes are a final interaction pass.
   // No wire, sleeve, picture, table or E4 overlay can paint over them.
   for (const object of objectsInPaintOrder(objects, layers, view)) {
     if (object.kind !== "connector") continue;
     drawConnectorContactOverrides(context, object, view, true);
     if (selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context, object, view, camera.zoom);
+  }
+  if(view==="drawing"){
+    context.save();context.fillStyle="#17384b";context.font="700 13px Inter, Arial, sans-serif";
+    for(const object of objectsInPaintOrder(objects,layers,view)){
+      if(object.kind!=="connector"||!object.label.trim())continue;
+      const instance=componentViews.get(object.id);
+      const projection=instance?projectComponentTemplateView(instance,"drawing",{x:object.x,y:object.y},resolveComponentTemplateAssetUrl):null;
+      const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
+      context.fillText(label.text,label.x,label.y);
+    }
+    context.restore();
   }
   context.restore();
 }

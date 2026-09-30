@@ -4,7 +4,7 @@ import {createJoiningPipe,joiningPipePoints} from "./physical-joining-pipes";
 import {joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
 import {editJoiningPipeBend,moveJoiningPipe} from "./physical-joining-pipe-editing";
 import {parsePhysicalTopology} from "./physical-topology-validation";
-import {coveringScene} from "./covering-layout";
+import {coveringScene,moveCovering} from "./covering-layout";
 import {removePhysicalSegment} from "./physical-topology";
 import {splitPhysicalSegment} from "./physical-topology";
 import {physicalTopologyScene} from "./physical-scene";
@@ -15,6 +15,8 @@ import {beginJoiningPipe,toggleJoiningPipeMember,joiningPipeDraftTopology} from 
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
 import {hitTestEditorScene,hitTestWireRoutePoint,numberedPipeBendHandles,pipeMidpoints} from "./CanvasViewport";
 import {coveringHit} from "./covering-renderer";
+import {coveringGrips} from "./covering-renderer";
+import {coveringRoute} from "./physical-coverings";
 import {drawingRouteCommands} from "./drawing-route-path";
 
 function fixture():HarnessDesignDocument {
@@ -46,8 +48,32 @@ it("moves an OP bend without changing members or electrical routes",()=>{
  });
  it("allows a covering to target OP and survives JSON validation",()=>{
   const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),next={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[{id:"cover",name:"Термоусадка",width:0,color:"#334455",lengthMm:null,spans:[{segmentId:"op",from:0,to:1}]}]}};
-  expect(coveringScene(next).find(c=>c.id==="cover")!.paths![0]).toEqual(joiningPipePoints(op));
+  const path=coveringScene(next).find(c=>c.id==="cover")!.paths![0]!;
+  expect(path[0]!.x).toBeCloseTo(op.start.x);expect(path.at(-1)!.x).toBeCloseTo(op.end.x);
   const loaded=JSON.parse(JSON.stringify(next));expect(parsePhysicalTopology(loaded.physicalTopology,loaded)!.joiningPipes![0]!.id).toBe("op");
+ });
+ it("slides an OP covering past its end and encloses outgoing member pipes",()=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+  const cover={id:"sleeve",name:"Термоусадка",width:0,color:"#334455",lengthMm:null,spans:[{segmentId:"op",from:.1,to:.9}]};
+  const base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[cover]}};
+  const route=coveringRoute(base,"op")!;
+  expect(route.min).toBeLessThan(0);expect(route.max).toBeGreaterThan(1);
+  expect(route.points[0]!.x).toBeLessThan(op.start.x);
+  const grip=coveringGrips(coveringScene(base).find(object=>object.id==="sleeve")!).find(handle=>handle.part==="from")!;
+  const moved=moveCovering(base,"sleeve",0,"from",grip.point,{x:75,y:50},0)!;
+  expect(moved.spans[0]!.from).toBeLessThan(0);
+  const endGrip=coveringGrips(coveringScene(base).find(object=>object.id==="sleeve")!).find(handle=>handle.part==="to")!;
+  expect(moveCovering(base,"sleeve",0,"to",endGrip.point,{x:525,y:50},0)!.spans[0]!.to).toBeGreaterThan(1);
+  const slid=moveCovering(base,"sleeve",0,"body",{x:300,y:0},{x:90,y:50},0)!;
+  expect(slid.spans[0]!.from).toBeLessThan(0);
+  const next={...base,physicalTopology:{...base.physicalTopology,coverings:[moved]}},shell=coveringScene(next).find(object=>object.id==="sleeve")!;
+  expect(shell.paths![0]![0]!.x).toBeLessThan(op.start.x);
+  expect(coveringHit(shell,projectJoiningPipePoint(base,"p0",110/600,{x:110,y:0}),1)).not.toBeNull();
+  expect(coveringHit(shell,projectJoiningPipePoint(base,"p1",110/600,{x:110,y:100}),1)).not.toBeNull();
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(next))).physicalTopology!.coverings![0]!.spans).toEqual(moved.spans);
+  const bent=applyEditorCommand(next,{type:"edit-joining-pipe-bend",pipeId:"op",index:0,position:{x:300,y:90},mode:"adjacent",insert:true});
+  expect(coveringScene(bent).find(object=>object.id==="sleeve")!.paths).not.toEqual(shell.paths);
+  expect(bent.physicalTopology!.routes).toEqual(base.physicalTopology!.routes);
  });
  it("removes an OP when fewer than two member pipes remain",()=>{
   const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),next={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};

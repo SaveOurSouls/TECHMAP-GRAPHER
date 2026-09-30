@@ -16,7 +16,7 @@ import {
   projectComponentTemplateView,
   type ComponentTemplateViewInstance,
 } from "./component-template-view-renderer";
-import { getEditorSceneBounds, hitTestEditorScene } from "./CanvasViewport";
+import { drawingConnectorIndexLabel, getEditorSceneBounds, hitTestEditorScene, redrawCanvas } from "./CanvasViewport";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
 
 let nextId = 1;
@@ -473,6 +473,25 @@ it("rotates drawing bounds, hit testing and geometry together",()=>{
  const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
  expect(hitTestEditorScene([object],layers,{x:92,y:209},1,"drawing",[rotated])).toBe(instance.objectId);
  expect(hitTestEditorScene([object],layers,{x:200,y:270},1,"drawing",[rotated])).toBeNull();
+});
+
+it("draws the connector index outside a rotated library picture after the picture",()=>{
+ const {content,instance}=fixture(),view=content.views[1]!;view.layers[0]!.nodes.push(rectangle(view.layers[0]!.id));
+ const rotated={...instance,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},rotationDegrees:90}]};
+ const object:EditorSceneObject={id:instance.objectId,kind:"connector",x:100,y:200,width:118,height:80,layerId:"connectors",label:"XS1",color:"#123456"};
+ const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
+ const projection=projectComponentTemplateView(rotated,"drawing",{x:object.x,y:object.y})!;
+ const expected=drawingConnectorIndexLabel(object,projection.bounds);
+ vi.stubGlobal("window",{devicePixelRatio:1});
+ const calls:{method:string;args:unknown[]}[]=[],state:Record<string,unknown>={getTransform:()=>({a:1,b:0,c:0,d:1,e:0,f:0})};
+ const context=new Proxy(state,{get(target,key:string){if(key in target)return target[key];return (...args:unknown[])=>{calls.push({method:key,args});};}}) as unknown as CanvasRenderingContext2D;
+ const canvas={width:300,height:200,clientWidth:300,clientHeight:200,getContext:()=>context} as unknown as HTMLCanvasElement;
+ redrawCanvas(canvas,"drawing",{zoom:1,offsetX:0,offsetY:0},[object],layers,new Set(),[],undefined,undefined,[rotated]);
+ const label=[...calls].reverse().find(call=>call.method==="fillText"&&call.args[0]==="XS1")!;
+ expect(label.args).toEqual(["XS1",expected.x,expected.y]);
+ expect(calls.findIndex(call=>call.method==="fillText"&&call.args[0]==="XS1")).toBeGreaterThan(calls.findIndex(call=>call.method==="quadraticCurveTo"));
+ expect(getEditorSceneBounds([object],layers,"drawing",undefined,[rotated])!.minY).toBeLessThan(projection.bounds.minY);
+ vi.unstubAllGlobals();
 });
 
 

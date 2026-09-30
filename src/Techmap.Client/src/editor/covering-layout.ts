@@ -75,7 +75,16 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const halfAt=(fraction:number):number=>{
     if(groupedWidth!==undefined)return groupedWidth/2;
     let width=pipeWidth;
-    if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=bundle;
+    if(joining&&route.envelope.length){
+     const distance=route.before+fraction*route.length;
+     const nextIndex=route.envelope.findIndex(sample=>sample.at>=distance);
+     const beforeSample=route.envelope[Math.max(0,nextIndex<0?route.envelope.length-1:nextIndex-1)]!;
+     const afterSample=route.envelope[nextIndex<0?route.envelope.length-1:nextIndex]!;
+     const t=Math.max(0,Math.min(1,(distance-beforeSample.at)/(afterSample.at-beforeSample.at||1)));
+     const spread=beforeSample.spread+(afterSample.spread-beforeSample.spread)*t;
+     width=Math.max(width,2*spread+scale);
+    }
+    if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=joining?Math.max(width,bundle):bundle;
     // Array order is the physical stacking order; any lower surface remains enclosed.
     for(const lower of coverings.slice(0,order)) {
      if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;}))
@@ -83,7 +92,7 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     }
     return (width+.5*scale)/2;
    };
-   const boundaries=[0,1,...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
+   const boundaries=[0,1,...route.envelope.map(sample=>(sample.at-route.before)/route.length),...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
    const baseProfile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
    const fitted=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
    // The width field controls the largest diameter. Every smaller diameter

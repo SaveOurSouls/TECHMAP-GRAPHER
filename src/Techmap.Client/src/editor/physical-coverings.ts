@@ -7,6 +7,8 @@ import {applyCoveringPreference} from "./covering-library";
 import {resolvePipeBundles,type PipeBundle} from "./pipe-bundle-model";
 import {splitPipeBundleMembers} from "./pipe-bundle-editing";
 import { joiningPipePoints } from "./physical-joining-pipes";
+import { joiningPipeDisplaySamples } from "./physical-joining-pipe-projection";
+import type { JoiningPipeMember, PhysicalJoiningPipe } from "./physical-topology-model";
 
 export interface CoveringMaterial {
   readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
@@ -138,9 +140,62 @@ export function coveringKind(c:{name:string;kind?:CoveringKind}):CoveringKind {
 }
 
 /** The tails extend the same pipe parameter space towards the connector contacts. */
+function joiningMemberCoveringSamples(document:HarnessDesignDocument,member:JoiningPipeMember):readonly {fraction:number;point:Point}[] {
+ const segments=member.segmentIds.map(id=>document.physicalTopology?.segments.find(s=>s.id===id));
+ const lengths=segments.map(segment=>segment?pathLength(physicalSegmentPoints(document,segment)):0),total=lengths.reduce((sum,length)=>sum+length,0);
+ if(total<1e-7)return [];
+ let before=0;
+ const samples=member.segmentIds.flatMap((id,index)=>{
+  const length=lengths[index]!,points=joiningPipeDisplaySamples(document,id)??[];
+  const result=points.map(sample=>({fraction:(before+sample.fraction*length)/total,point:sample.point}));
+  before+=length;return index?result.slice(1):result;
+ });
+ return member.reverse?samples.reverse().map(sample=>({fraction:1-sample.fraction,point:sample.point})):samples;
+}
+
+function pointAtFraction(samples:readonly {fraction:number;point:Point}[],fraction:number):Point {
+ if(fraction<=samples[0]!.fraction)return samples[0]!.point;
+ for(let index=1;index<samples.length;index++){
+  const next=samples[index]!;if(fraction>next.fraction)continue;
+  const previous=samples[index-1]!,t=(fraction-previous.fraction)/(next.fraction-previous.fraction||1);
+  return {x:previous.point.x+(next.point.x-previous.point.x)*t,y:previous.point.y+(next.point.y-previous.point.y)*t};
+ }
+ return samples.at(-1)!.point;
+}
+
+function joiningCoveringTail(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe,side:"from"|"to") {
+ const members=pipe.members.map(member=>({member,samples:joiningMemberCoveringSamples(document,member),start:member.reverse?1-member.to:member.from,end:member.reverse?1-member.from:member.to}));
+ if(members.some(member=>member.samples.length<2))return [{point:side==="from"?pipe.start:pipe.end,spread:0}];
+ const positions=members.map(({samples,start,end})=>{
+  const boundary=side==="from"?start:end,range=side==="from"?start:1-end;
+  return {samples,boundary,range};
+ });
+ const stops=new Set<number>([0,1]);
+ for(const {samples,boundary,range} of positions)if(range>1e-7)for(const sample of samples){
+  const u=side==="from"?sample.fraction/range:(sample.fraction-boundary)/range;
+  if(u>0&&u<1)stops.add(u);
+ }
+ for(let index=1;index<8;index++)stops.add(index/8);
+ return [...stops].sort((a,b)=>a-b).map(u=>{
+  const memberPoints=positions.map(({samples,boundary,range})=>pointAtFraction(samples,side==="from"?u*range:boundary+u*range));
+  const mean={x:memberPoints.reduce((sum,p)=>sum+p.x,0)/memberPoints.length,y:memberPoints.reduce((sum,p)=>sum+p.y,0)/memberPoints.length};
+  const point=side==="from"&&u===1?pipe.start:side==="to"&&u===0?pipe.end:mean;
+  return {point,spread:Math.max(...memberPoints.map(p=>Math.hypot(p.x-point.x,p.y-point.y)))};
+ });
+}
+
 export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
  const t=document.physicalTopology,joining=t?.joiningPipes?.find(p=>p.id===segmentId);
- if(joining){const points=joiningPipePoints(joining),length=pathLength(points);return length<1e-7?null:{points,core:points,length,before:0,after:0,total:length,min:0,max:1};}
+ if(joining){
+  const core=joiningPipePoints(joining),length=pathLength(core);if(length<1e-7)return null;
+  const enter=joiningCoveringTail(document,joining,"from"),exit=joiningCoveringTail(document,joining,"to");
+  const before=pathLength(enter.map(sample=>sample.point)),after=pathLength(exit.map(sample=>sample.point)),total=before+length+after;
+  const points=[...enter.slice(0,-1).map(sample=>sample.point),...core,...exit.slice(1).map(sample=>sample.point)];
+  const envelope:{at:number;spread:number}[]=[];
+  let distance=0;enter.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-enter[index-1]!.point.x,sample.point.y-enter[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread});});
+  distance=before+length;exit.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-exit[index-1]!.point.x,sample.point.y-exit[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread});});
+  return {points,core,length,before,after,total,min:-before/length,max:1+after/length,envelope};
+ }
  const s=t?.segments.find(s=>s.id===segmentId);if(!t||!s)return null;
  const core=physicalSegmentPoints(document,s),length=pathLength(core);if(length<1e-7)return null;
  const tail=(nodeId:string)=>{
@@ -150,7 +205,7 @@ export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
   return points.length?{x:points.reduce((n,p)=>n+p.x,0)/points.length,y:points.reduce((n,p)=>n+p.y,0)/points.length}:physicalNodePoint(document,node);
  };
  const a=tail(s.from),b=tail(s.to),before=a?Math.hypot(a.x-core[0]!.x,a.y-core[0]!.y):0,after=b?Math.hypot(b.x-core.at(-1)!.x,b.y-core.at(-1)!.y):0;
- return {points:[...(a?[a]:[]),...core,...(b?[b]:[])],core,length,before,after,total:before+length+after,min:-before/length,max:1+after/length};
+ return {points:[...(a?[a]:[]),...core,...(b?[b]:[])],core,length,before,after,total:before+length+after,min:-before/length,max:1+after/length,envelope:[]};
 }
 
 export function coveringControlFractions(document:HarnessDesignDocument,segmentId:string):number[] {

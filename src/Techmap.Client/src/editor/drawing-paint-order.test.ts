@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { hitTestEditorScene, objectsInPaintOrder, redrawCanvas } from "./CanvasViewport";
+import { drawingConnectorIndexLabel, getEditorSceneBounds, hitTestEditorScene, objectsInPaintOrder, redrawCanvas } from "./CanvasViewport";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
 
 const layers: EditorLayer[] = [
@@ -46,7 +46,10 @@ it("paints unselected contact marks after an overlapping wire and table in the a
   const wireStroke = operations.findIndex(o => o.method === "stroke" && o.color === "#ff0000");
   const tablePaint = operations.findIndex(o => o.method === "fillText" && o.args[0] === "TABLE");
   const connectorFill = operations.findIndex(o => o.method === "fillText" && o.args[0] === "X1");
-  expect(connectorFill).toBeLessThan(wireStroke);
+  expect(connectorFill).toBeGreaterThan(wireStroke);
+  expect(operations[connectorFill]!.args).toEqual(["X1",5,-8]);
+  expect(drawingConnectorIndexLabel(connector,{minX:20,minY:30,maxX:80,maxY:70})).toMatchObject({text:"X1",x:25,y:22});
+  expect(getEditorSceneBounds([connector],layers,"drawing")!.minY).toBe(-23);
   expect(lastContact).toBeGreaterThan(wireStroke);
   expect(lastContact).toBeGreaterThan(tablePaint);
   expect(operations.slice(lastContact + 1).filter(o => o.method === "fill")).toEqual([{ method: "fill", args: [], color: "#123456" }]);
