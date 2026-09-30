@@ -535,6 +535,8 @@ describe("harness design scene adapter", () => {
     const angleDegrees = Math.atan2(snapped.y, snapped.x) * 180 / Math.PI;
     expect(angleDegrees).toBeCloseTo(15, 8);
     expect(snapRoutePoint({ x: 0, y: 0 }, { x: 100, y: 23 }, false)).toEqual({ x: 100, y: 23 });
+    const ctrlSnapped = snapRoutePoint({ x: 0, y: 0 }, { x: 100, y: 50 }, true, Math.PI / 6);
+    expect(Math.atan2(ctrlSnapped.y, ctrlSnapped.x) / (Math.PI / 6)).toBeCloseTo(1, 6);
   });
 
   it("passes the persisted E4 table fields and mirrored geometry to the canvas scene", () => {

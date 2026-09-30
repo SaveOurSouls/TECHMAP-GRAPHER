@@ -676,13 +676,13 @@ export function snapRoutePoint(
   start: { readonly x: number; readonly y: number },
   point: { readonly x: number; readonly y: number },
   enabled: boolean,
+  angleStep = Math.PI / 12,
 ) {
   if (!enabled) return point;
   const dx = point.x - start.x;
   const dy = point.y - start.y;
   const distance = Math.hypot(dx, dy);
-  const step = Math.PI / 12;
-  const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+  const angle = Math.round(Math.atan2(dy, dx) / angleStep) * angleStep;
   return { x: start.x + Math.cos(angle) * distance, y: start.y + Math.sin(angle) * distance };
 }
 
@@ -735,7 +735,6 @@ export function HarnessDesignEditor({
   const [activeWireStripEnd, setActiveWireStripEnd] = useState<"from" | "to">("from");
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<EditorSaveState>("saved");
-  const [drawingSnapEnabled, setDrawingSnapEnabled] = useState(true);
   const [e4Detached, setE4Detached] = useState(false);
   const [refreshingTerminals, setRefreshingTerminals] = useState(false);
   const [uiFailureNonce, setUiFailureNonce] = useState(0);
@@ -1628,7 +1627,7 @@ export function HarnessDesignEditor({
     }
   };
 
-  const addRoutePoint = (point: { readonly x: number; readonly y: number }) => {
+  const addRoutePoint = (point: { readonly x: number; readonly y: number }, ctrlKey = false) => {
     if (view !== "drawing" || !selectedObjectId) return;
     const topology = history.present.physicalTopology;
     const segment = topology?.segments.find(s => s.id === selectedObjectId);
@@ -1639,7 +1638,7 @@ export function HarnessDesignEditor({
     const start = wire.drawingRoute.at(-1) ?? renderedWire?.points?.[0] ??
       findWireEndpoint(history.present, wire.from, "drawing");
     if (!start) return;
-    const next = snapRoutePoint(start, point, drawingSnapEnabled);
+    const next = snapRoutePoint(start, point, ctrlKey, Math.PI / 6);
     run({ type: "set-wire-route", wireId: wire.id, route: [...wire.drawingRoute, next] });
   };
 
@@ -2213,8 +2212,6 @@ export function HarnessDesignEditor({
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           run({ type: "set-wire-route", wireId, route: wire.drawingRoute.filter((_, index) => index !== routeIndex) });
         }}
-        drawingSnapEnabled={history.present.physicalTopology?.snap ?? drawingSnapEnabled}
-        onDrawingSnapChange={enabled => { setDrawingSnapEnabled(enabled); if (history.present.physicalTopology) run({type:"set-physical-topology",topology:{...history.present.physicalTopology,snap:enabled}}); }}
         onCanvasDoubleClick={addRoutePoint}
         onObjectsChange={(objects) => {
           const selected = selectedObjectId ? objects.find((item) => item.id === selectedObjectId) : null;

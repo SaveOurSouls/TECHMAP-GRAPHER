@@ -146,6 +146,11 @@ it("snaps horizontal, vertical and diagonal guides and supports a free mode",()=
  }
  expect(snapPhysicalPoint({x:17,y:13},[anchor],false,3).point).toEqual({x:17,y:13});
 });
+it("uses a 30-degree grid only when the Ctrl snap step is requested",()=>{
+ const snapped=snapPhysicalPoint({x:100,y:50},[{x:0,y:0}],true,0,Math.PI/6).point;
+ expect(Math.atan2(snapped.y,snapped.x)/(Math.PI/6)).toBeCloseTo(1,6);
+ expect(snapPhysicalPoint({x:100,y:50},[{x:0,y:0}],false,0,Math.PI/6).point).toEqual({x:100,y:50});
+});
 it("updates automatic routes after geometry and dimensions change while retaining manual assignments",()=>{
  const base=physicalFixture();
  const t={...base.physicalTopology!,segments:[...base.physicalTopology!.segments,{id:"direct",from:"NA",to:"NB",path:{kind:"polyline" as const,points:[]}}],routes:[]};

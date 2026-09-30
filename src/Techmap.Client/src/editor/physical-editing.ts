@@ -23,17 +23,18 @@ export function materializePhysicalPath(document:HarnessDesignDocument,id:string
   return replacePath(document,segment,points,anchorMap(document,segment,points));
 }
 
-/** Snap the dragged point to a visible 0/45/90 guide; otherwise use 15° when enabled. */
-export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number) {
+/** Snap the dragged point to the requested angular directions. */
+export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,angleStep=Math.PI/12) {
   if(!enabled||!anchors.length)return {point,guide:undefined as readonly Point[]|undefined};
   let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
-  for(const a of anchors)for(const angle of [0,Math.PI/4,Math.PI/2,3*Math.PI/4]) {
+  for(const a of anchors)for(let i=0;i<Math.round((Math.PI*2)/angleStep);i++) {
+    const angle=i*angleStep;
     const u={x:Math.cos(angle),y:Math.sin(angle)},length=(point.x-a.x)*u.x+(point.y-a.y)*u.y;
     const p={x:a.x+u.x*length,y:a.y+u.y*length},distance=Math.hypot(p.x-point.x,p.y-point.y);
     if(distance<=tolerance&&(!best||distance<best.distance))best={point:p,guide:[a,p],distance};
   }
   if(best)return best;
-  const a=anchors[0]!,angle=Math.round(Math.atan2(point.y-a.y,point.x-a.x)/(Math.PI/12))*Math.PI/12;
+  const a=anchors[0]!,angle=Math.round(Math.atan2(point.y-a.y,point.x-a.x)/angleStep)*angleStep;
   const length=Math.hypot(point.x-a.x,point.y-a.y);
   return {point:{x:a.x+Math.cos(angle)*length,y:a.y+Math.sin(angle)*length},guide:undefined};
 }
@@ -54,13 +55,13 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
   });
 }
 
-/** Intersect 15° direction families and validate every changing shoulder.
+/** Intersect angular direction families and validate every changing shoulder.
  * Collinear supports retain continuous motion along the line. */
-export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point) {
+export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12) {
   const unique=anchors.filter((a,i)=>anchors.findIndex(b=>near(a,b))===i);
-  if(!enabled||unique.length<2)return snapPhysicalPoint(point,unique,enabled,tolerance);
+  if(!enabled||unique.length<2)return snapPhysicalPoint(point,unique,enabled,tolerance,angleStep);
   const a=unique[0]!;
-  const directions=Array.from({length:12},(_,i)=>({x:Math.cos(i*Math.PI/12),y:Math.sin(i*Math.PI/12)}));
+  const directions=Array.from({length:Math.round((Math.PI*2)/angleStep)},(_,i)=>({x:Math.cos(i*angleStep),y:Math.sin(i*angleStep)}));
   let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
   const add=(p:Point)=>{
     if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
@@ -77,7 +78,7 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
       if(Math.abs(dx*u.y-dy*u.x)<1e-7){const t=(point.x-a.x)*u.x+(point.y-a.y)*u.y;add({x:a.x+t*u.x,y:a.y+t*u.y});}
     }else{const t=(dx*v.y-dy*v.x)/denominator;add({x:a.x+t*u.x,y:a.y+t*u.y});}
   }
-  // Several fixed shoulders may admit no common 15-degree point. Keep the
+  // Several fixed shoulders may admit no common angular point. Keep the
   // original position instead of silently violating one connected route.
   return best??{point:fallback??point,guide:undefined};
 }

@@ -65,7 +65,6 @@ import type { CableInstance } from "./model";
 import { railCatchDistance, railDistance, railParameter, snapRailEnd } from "./position-rail";
 
 export interface CanvasViewportProps {
-  readonly drawingSnapEnabled?:boolean;
   readonly view: HarnessEditorView;
   readonly tool: EditorTool;
   readonly camera: EditorCamera;
@@ -134,7 +133,7 @@ export interface CanvasViewportProps {
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
   readonly onPhysicalNodeConnectToSegment?: (fromNodeId:string,segmentId:string,point:EditorPoint)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction,target?:PhysicalContextTarget)=>void;
-  readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
+  readonly onCanvasDoubleClick?: (point: EditorPoint, ctrlKey?: boolean) => void;
   readonly onCatalogDrop: (itemId: string, point: EditorPoint) => void;
 }
 
@@ -2743,7 +2742,7 @@ export function CanvasViewport({
   onWireRoutePointRemove,
   onObjectEditRequest,
   onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
-  onCatalogDrop, drawingSnapEnabled=true,
+  onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2938,13 +2937,13 @@ export function CanvasViewport({
     return { x: clientX - (bounds?.left ?? 0), y: clientY - (bounds?.top ?? 0) };
   };
 
-  const snappedObjectDestination = (objectId: string, destination: EditorPoint): EditorPoint => {
+  const snappedObjectDestination = (objectId: string, destination: EditorPoint, snapEnabled = false): EditorPoint => {
     if (view !== "e4") {
       setConnectorAlignmentGuides({});
       const drag=dragRef.current;
       const result=drag?.kind==='object'&&drag.routeAnchors?.length
-        ?snapBendPoint(destination,drag.routeAnchors,drawingSnapEnabled,7/camera.zoom,{x:drag.objectX,y:drag.objectY})
-        :snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],drawingSnapEnabled,7/camera.zoom);
+        ?snapBendPoint(destination,drag.routeAnchors,snapEnabled,7/camera.zoom,{x:drag.objectX,y:drag.objectY},Math.PI/6)
+        :snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],snapEnabled,7/camera.zoom,Math.PI/6);
       setPhysicalGuide(result.guide);
       return result.point;
     }
@@ -3319,7 +3318,7 @@ export function CanvasViewport({
         event.clientX - drag.clientX,
         event.clientY - drag.clientY,
         camera.zoom,
-      ));
+      ), event.ctrlKey);
       if (onObjectMovePreview) onObjectMovePreview(drag.objectId, destination,drag.mode);
       else setInlineDragOffset({
         x: (destination.x - drag.objectX) * camera.zoom,
@@ -3327,7 +3326,7 @@ export function CanvasViewport({
       });
     } else if (drag.kind === "wire-route") {
       if(!inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY))return;
-      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],drawingSnapEnabled,7/camera.zoom);
+      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],event.ctrlKey,7/camera.zoom,undefined,Math.PI/6);
       setPhysicalGuide(result.guide);
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,result.point,drag.mode,drag.insert);
     } else if (drag.kind === "e4-wire-label") {
@@ -3381,6 +3380,7 @@ export function CanvasViewport({
         onObjectMove?.(drag.objectId, snappedObjectDestination(
           drag.objectId,
           inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
+          event.ctrlKey,
         ),drag.mode);
       }
       onObjectMovePreview?.(drag.objectId, null);
@@ -3393,7 +3393,7 @@ export function CanvasViewport({
       if(drag.insert||moved) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, moved?snapBendPoint({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
-      },drag.anchors??[],drawingSnapEnabled,7/camera.zoom).point:drag.point,drag.mode,drag.insert);
+      },drag.anchors??[],event.ctrlKey,7/camera.zoom,undefined,Math.PI/6).point:drag.point,drag.mode,drag.insert);
       setPhysicalGuide(undefined);
     } else if (dragRef.current?.kind === "e4-wire-segment") {
       const drag = dragRef.current;
@@ -3511,7 +3511,7 @@ export function CanvasViewport({
       }
     }
     if(layers.some(l=>l.locked&&objects.some(o=>o.id===selectedObjectId&&o.layerId===l.id)))return;
-    onCanvasDoubleClick?.(point);
+    onCanvasDoubleClick?.(point, event.ctrlKey);
   };
 
   const inlinePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -3566,6 +3566,7 @@ export function CanvasViewport({
       onObjectMove?.(drag.objectId, snappedObjectDestination(
         drag.objectId,
         inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
+        event.ctrlKey,
       ),drag.mode);
     }
     onObjectMovePreview?.(drag.objectId, null);
@@ -3604,7 +3605,7 @@ export function CanvasViewport({
       deltaX,
       deltaY,
       camera.zoom,
-    ));
+    ), event.ctrlKey);
     if (onObjectMovePreview) {
       setInlineDragOffset(null);
       onObjectMovePreview(drag.objectId, destination,drag.mode);

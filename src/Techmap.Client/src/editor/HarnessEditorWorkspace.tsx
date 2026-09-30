@@ -178,12 +178,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null, mode?:PhysicalDragMode, insert?:boolean)=>void;
   readonly onWireRoutePointMove?: (wireId: string, routeIndex: number, point: EditorPoint, mode?:PhysicalDragMode, insert?:boolean) => void;
   readonly onWireRoutePointRemove?: (wireId: string, routeIndex: number) => void;
-  readonly drawingSnapEnabled?: boolean;
-  readonly onDrawingSnapChange?: (enabled: boolean) => void;
   readonly onPhysicalNodesConnect?: (from:string,to:string)=>void;
   readonly onPhysicalNodeConnectToSegment?: (fromNodeId:string,segmentId:string,point:EditorPoint)=>void;
   readonly onPhysicalContextAction?: (segmentId:string,point:EditorPoint,action:PhysicalContextAction,target?:PhysicalContextTarget)=>void;
-  readonly onCanvasDoubleClick?: (point: EditorPoint) => void;
+  readonly onCanvasDoubleClick?: (point: EditorPoint, ctrlKey?: boolean) => void;
   readonly propertyInspector?: ReactNode;
   readonly canvasEditor?: ReactNode;
   readonly diagnostics?: readonly {
@@ -295,8 +293,6 @@ export function HarnessEditorWorkspace({
   onE4Reroute,
   onWireRoutePointMove, onWireRoutePointPreview,
   onWireRoutePointRemove,
-  drawingSnapEnabled = true,
-  onDrawingSnapChange,
   onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
   propertyInspector,
   canvasEditor,
@@ -550,8 +546,7 @@ export function HarnessEditorWorkspace({
           </button>
           <div className="he-utility-content" id="he-utility-content" hidden={!utilityPanelOpen}>
             <div className="he-view-options">
-              <button className={drawingSnapEnabled ? "he-angle-snap active" : "he-angle-snap"} type="button" aria-pressed={drawingSnapEnabled} onClick={() => onDrawingSnapChange?.(!drawingSnapEnabled)}>Шаг 15°</button>
-              <InfoHint>Привязки 0/45/90° и шаг 15° при переносе точек. Выключите для свободного угла. Автоматический пайп сохраняет прямые выходы и приоритет 45°.</InfoHint>
+              <InfoHint>Перемещайте точки свободно. Удерживайте Ctrl для привязки к углам с шагом 30°. Shift меняет редактирование соседних плеч; Ctrl и Shift можно удерживать вместе.</InfoHint>
             </div>
             {documentActions}
           </div>
@@ -608,7 +603,6 @@ export function HarnessEditorWorkspace({
           onE4ScreenPositionChange={onE4ScreenPositionChange}
           onWireToolRequest={() => setTool("wire")}
           onWireRoutePointPreview={onWireRoutePointPreview}
-          drawingSnapEnabled={drawingSnapEnabled}
           onWireRoutePointMove={onWireRoutePointMove}
           onWireRoutePointRemove={onWireRoutePointRemove}
           onCanvasDoubleClick={onCanvasDoubleClick}
