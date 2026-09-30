@@ -1,3 +1,27 @@
+# Пакет 30.09.2026 — исправление объединяющего пайпа
+
+Срез кода: `5fe0f2a758503548e2f9e2dce1c404b2755380bb` (`Restore joining pipe drag and visible transition controls`). Предыдущий ZIP от 30.09.2026 этот коммит не содержит.
+
+Windows x64 ZIP `0.63.8-m5-07-review`:
+`artifacts/m5-07-20260930-joining-pipe/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`.
+Размер: **55 230 041 байт**. SHA-256:
+`E4B7FAC9E8461AB4F11B8C51625DD56C8031F1A164445179A4B1298C8BE0A136`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 154 клиентских файла
+тестов, 1497 клиентских тестов, TypeScript/Vite build, 1022 Release .NET-теста,
+self-contained win-x64 publish. `verify-package.ps1` проверил 209 файлов
+манифеста; ZIP содержит 212 записей, включая служебные каталоги.
+`test-portable-package.ps1` подтвердил семь portable-режимов после распаковки в
+`C:\Temp\TECHMAP-portable-20260930-joining-pipe`, в том числе из каталога с
+кириллицей и пробелом.
+
+Прямой portable-прогон из исходного пути репозитория завершился до публикации
+`TECHMAP_HOST_URL` (сообщение `Techmap.Server.exe exited before publishing
+TECHMAP_HOST_URL`); причины завершения этот прогон не сообщил. Исторические
+прогоны из того же пути фиксировали `UnauthorizedAccessException`. Пакет
+проверен из ASCII-пути; ручная визуальная приёмка интерфейса не выполнялась.
+ZIP локальный и не включается в Git.
+
 # Пакет 30.09.2026 — после завершения чатов
 
 В срез входят коммиты `b311847`, `09f082c`, `e70850b`, `8c1cd7c`, `201b6d5`,
