@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
-import { addDrawingPositions, setDrawingPositionVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation, connectionEndLabel, reconcileDrawingDocuments } from "./drawing-documents";
+import { addDrawingPositions, setDrawingPositionVisibility, setDrawingPositionsVisibility, buildDrawingBom, drawingDocumentScene, emptyDrawingDocuments, moveDrawingAnnotation, connectionEndLabel, reconcileDrawingDocuments } from "./drawing-documents";
 import { applyEditorCommand } from "./commands";
 import { createJunctionEndpoint, createScreenEndpoint, parseHarnessDesignDocument, type WireMaterialBinding } from "./model";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
@@ -167,6 +167,18 @@ it("shows and hides every designation of a shared position together without losi
  const again=setDrawingPositionVisibility({...doc,drawingDocuments:hidden},row.key,true);
  expect(again.leaders.map(l=>l.circle)).toEqual(visible.leaders.map(l=>l.circle));
  expect(again.leaders.every(l=>!l.hidden)).toBe(true);
+});
+
+it("toggles all position annotations together and restores missing positions",()=>{
+ const doc=physicalFixture();
+ const visible=setDrawingPositionsVisibility(doc,true);
+ expect(visible.leaders.length).toBeGreaterThan(0);
+ const hidden=setDrawingPositionsVisibility({...doc,drawingDocuments:visible},false);
+ expect(hidden.leaders.every(l=>l.hidden)).toBe(true);
+ expect(drawingDocumentScene({...doc,drawingDocuments:hidden}).filter(o=>o.kind==="position-leader")).toHaveLength(0);
+ const shown=setDrawingPositionsVisibility({...doc,drawingDocuments:hidden},true);
+ expect(shown.leaders.map(l=>l.circle)).toEqual(visible.leaders.map(l=>l.circle));
+ expect(shown.leaders.every(l=>!l.hidden)).toBe(true);
 });
 
 it.each([{hidden:"yes"},{anchorLocal:{x:null,y:1}},{anchorLocal:{x:1e8,y:0}}])("rejects invalid persisted leader attachment %j",patch=>{

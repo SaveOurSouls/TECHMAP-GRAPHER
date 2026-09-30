@@ -333,3 +333,11 @@ export function setDrawingPositionVisibility(document:HarnessDesignDocument,rowK
   const d=visible?addDrawingPositions(document,perimeters,[rowKey]):document.drawingDocuments??emptyDrawingDocuments();
   return {...d,leaders:d.leaders.map(l=>l.rowKey===rowKey?{...l,hidden:!visible}:l)};
 }
+
+/** Toggle every position annotation as one persisted drawing setting. Showing
+ * positions also materializes missing leaders, so the toolbar action works on
+ * an empty document and remains idempotent after a partial/manual placement. */
+export function setDrawingPositionsVisibility(document:HarnessDesignDocument,visible:boolean,perimeters?:DrawingPerimeters):DrawingDocuments {
+  const d=visible?addDrawingPositions(document,perimeters):document.drawingDocuments??emptyDrawingDocuments();
+  return {...d,leaders:d.leaders.map(l=>({...l,hidden:!visible}))};
+}

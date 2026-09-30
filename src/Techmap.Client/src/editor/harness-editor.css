@@ -163,6 +163,9 @@
 .he-document-action { width: 100%; min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-color: #c7dbe3; background: #fff; color: #255d72; font-size: 10px; font-weight: 700; text-align: left; }
 .he-document-action:hover:not(:disabled) { border-color: #79b7c9; background: #eef9fb; }
 .he-document-action:disabled { opacity: .5; }
+.he-document-toggle[aria-pressed="true"], .he-control-action[aria-pressed="true"] { border-color: #79b7c9; background: #eef9fb; color: #0d6985; }
+.he-control-action { display: flex; align-items: center; gap: 8px; text-align: left; }
+.he-control-action .he-doc-icon { flex: 0 0 21px; }
 .he-doc-icon { width: 21px; height: 21px; display: grid; place-items: center; border-radius: 5px; background: #e4f3f6; color: #087e9c; font-size: 13px; font-weight: 800; }
 
 .he-toolbar {

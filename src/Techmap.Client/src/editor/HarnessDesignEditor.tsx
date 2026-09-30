@@ -18,7 +18,7 @@ import { DrawingTableWindows } from "./DrawingTableWindows";
 import { drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
-import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments } from "./drawing-documents";
+import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments, setDrawingPositionsVisibility } from "./drawing-documents";
 import { type PhysicalCovering, coveringMaterial, standardCovering, standardCoveringOver } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
@@ -1720,6 +1720,8 @@ export function HarnessDesignEditor({
     }
   };
 
+  const positionsVisible = !!history?.present.drawingDocuments?.leaders.some(leader => !leader.hidden);
+
   return (
     <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
       {message && <div className="he-save-message" role="alert">{message.startsWith("Схема открыта в безопасном режиме")
@@ -1835,13 +1837,14 @@ export function HarnessDesignEditor({
           <DrawingRangeControl label="Размеры ×" accessibleLabel="Масштаб размерных обозначений" min={.25} max={4} step={.05} value={dimensionScalePreview??history.present.drawingDocuments?.dimensionScale??1} onPreview={setDimensionScalePreview} onCommit={dimensionScale=>{if(dimensionScale!==(history.present.drawingDocuments?.dimensionScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale}});}} hint="Общий размер текста, стрелок, точек и линий размеров. Значения длин и привязки не меняются."/>
           <DrawingRangeControl label="Мин. нахлёст" accessibleLabel="Минимальная длина новой оболочки поверх оболочки" min={20} max={500} step={5} digits={0} unit="px" value={minimumOverlapPreview??history.present.drawingDocuments?.minimumCoveringOverlapPx??100} onPreview={setMinimumOverlapPreview} onCommit={minimumCoveringOverlapPx=>{if(minimumCoveringOverlapPx!==(history.present.drawingDocuments?.minimumCoveringOverlapPx??100))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),minimumCoveringOverlapPx}});}} hint="Новая оболочка занимает 5% длины нижней, но не меньше заданного значения; если нижняя короче, покрывается доступный участок."/>
           <label>Размеры<select aria-label="Общее направление размеров" value={history.present.drawingDocuments?.dimensionMode??"aligned"} onChange={e=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionMode:e.target.value as import("./drawing-dimensions").DimensionMode}})}><option value="aligned">Между концами</option><option value="horizontal">Горизонтально</option><option value="vertical">Вертикально</option><option value="path">Вдоль пайпа</option></select></label>
-          <button type="button" className="ui-control" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}>Отобразить размеры</button>
-          <button type="button" className="ui-control" disabled={!volumeEligible} aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}>Объёмный свет</button>
+          <button type="button" className="ui-control he-control-action" aria-pressed={history.present.drawingDocuments?.showDimensions??!!history.present.drawingDocuments?.dimensions?.length} onClick={()=>run({type:"set-drawing-documents",documents:toggleDrawingDimensions(history.present)})}><span className="he-doc-icon"><DocumentIcon kind="dimensions" /></span>Отобразить размеры</button>
+          <button type="button" className="ui-control he-control-action" disabled={!volumeEligible} aria-pressed={history.present.drawingDocuments?.volumeShading!==false} onClick={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};run({type:"set-drawing-documents",documents:{...documents,volumeShading:documents.volumeShading===false}})}}><span className="he-doc-icon"><DocumentIcon kind="volume" /></span>Объёмный свет</button>
           <InfoHint>Затемнение краёв и светлая середина пайпов, проводов и покрытий. Сохраняется для этого чертежа; отключение не меняет материалы, цвета и размеры.</InfoHint>
         </section>}
           <section className="he-utility-section he-documents-section" aria-labelledby="he-documents-heading">
             <h3 id="he-documents-heading">Документы</h3>
             {view === "drawing" && <button type="button" className="ui-control he-document-action" onClick={()=>run({type:"set-drawing-documents",documents:addDrawingPositions(history.present,drawingPerimeters)})}><span className="he-doc-icon"><DocumentIcon kind="positions" /></span>Добавить позиции</button>}
+            {view === "drawing" && <button type="button" className="ui-control he-document-action he-document-toggle" aria-pressed={positionsVisible} aria-label={positionsVisible?"Скрыть позиции":"Показать позиции"} title={positionsVisible?"Скрыть позиции на чертеже":"Показать позиции на чертеже"} onClick={()=>run({type:"set-drawing-documents",documents:setDrawingPositionsVisibility(history.present,!positionsVisible,drawingPerimeters)})}><span className="he-doc-icon"><DocumentIcon kind="visibility" visible={positionsVisible} /></span>Позиции</button>}
             {(["connections","cut","bom"] as const).map(kind=><button type="button" className="ui-control he-document-action" key={kind} disabled={kind==="cut"&&!routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").ready} title={kind==="cut"?routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").message:undefined} onClick={()=>{if(kind!=="connections"&&view!=="drawing"){setView("drawing");onViewChange?.("drawing");}const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}><span className="he-doc-icon"><DocumentIcon kind={kind} /></span>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}
           </section>
         </>}
