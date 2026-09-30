@@ -662,10 +662,10 @@ export function getE4DifferentialPairLayout(
     .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
   if (!span) return null;
   const available = span.end - span.start;
-  // A stored pitch describes the pair, while the on-screen crossover is only
-  // a motif. Leave a substantial straight run around every motif so the two
-  // conductors remain individually readable in a dense harness.
-  const visualStep = Math.max(40, group.step * 2);
+  // Keep the visible pitch at the smallest readable E4 increment. The stored
+  // physical pitch may be larger, but it must not make a long common span look
+  // like a handful of stretched loops.
+  const visualStep = Math.max(connectorE4TableMetrics.rowHeight, group.step);
   const count = Math.max(1, Math.floor(available / visualStep));
   const spacing = available / count;
   const motifLength = Math.min(16, Math.max(8, spacing * 0.3));
