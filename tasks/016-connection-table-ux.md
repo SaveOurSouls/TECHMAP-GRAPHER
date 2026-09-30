@@ -35,7 +35,7 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: `af07dde` (`fix: refine connection table editing UI`), отправлен в `origin`.
+- Коммит кода/документации: `af07dde` (`fix: refine connection table editing UI`) и `6074d24` (`fix: use full wire catalog for color checks`), отправлены в `origin`.
 - Проверки и даты: 30.09.2026 — TypeScript клиента; полный Vitest клиента: 156 файлов, 1514 тестов; Vite production build; `git diff --check`.
 - Ограничения и открытые вопросы: загрузка каталога по API и ручной UI-сценарий зависят от данных пользовательского проекта; ZIP собирает другой агент из этого коммита.
 - Решение владельца о приёмке: —
