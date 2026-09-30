@@ -9,7 +9,7 @@ export interface PhysicalNode { readonly id: string; readonly position: Point; r
 export type PhysicalPath =
   | { readonly kind: "routed"; readonly points: readonly Point[] }
   | { readonly kind: "polyline"; readonly points: readonly Point[] };
-export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly path: PhysicalPath; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly showWires?:boolean; readonly volumeShading?:boolean; readonly specificationItemId?:string }
+export interface PhysicalSegment { readonly id: string; readonly from: string; readonly to: string; readonly path: PhysicalPath; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly showWires?:boolean; readonly volumeShading?:boolean; readonly specificationItemId?:string }
 /** A first-class common pipe (ОП). It owns its axis; member segments are
  * projected onto it for presentation while their electrical routes remain
  * unchanged. */

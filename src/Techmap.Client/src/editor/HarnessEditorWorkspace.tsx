@@ -101,6 +101,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly selectedObjectId?: string | null;
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
+  readonly foregroundWireIds?: readonly string[];
   readonly relationPanel?: ReactNode | ((tool:EditorTool,onToolChange:(tool:EditorTool)=>void)=>ReactNode);
   readonly onPipeIntervalSelect?:(id:string,from:number,to:number)=>void;
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
@@ -249,7 +250,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onPipeIntervalSelect,onCoveringDrag,
+  highlightedObjectIds = [], foregroundWireIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onPipeIntervalSelect,onCoveringDrag,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -574,6 +575,7 @@ export function HarnessEditorWorkspace({
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
           highlightedObjectIds={highlightedObjectIds}
+          foregroundWireIds={foregroundWireIds}
           cables={cables}
           e4Overlays={e4Overlays}
           componentTemplateViewInstances={componentTemplateViewInstances}

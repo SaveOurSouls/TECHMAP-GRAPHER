@@ -49,11 +49,11 @@ it("shows a volume mode toggle for a standalone pipe",()=>{
   expect(markup).toContain('aria-label="Объёмный режим пайпа"');
   const tree=PhysicalTopologyPanel({mode:"object",document:d,selectedId:"S0",selectedIds:["S0"],onSelect:vi.fn(),onChange:topology=>command({type:"set-physical-topology",topology})});
   const toggle=elements(tree).find(e=>e.props["aria-label"]==="Объёмный режим пайпа")!;
-  expect(toggle.props.checked).toBe(true);
-  toggle.props.onChange({target:{checked:false}});
+  expect(toggle.props.checked).toBe(false);
+  toggle.props.onChange({target:{checked:true}});
   const change=command.mock.calls[0]![0];
   expect(change.type).toBe("set-physical-topology");
-  if(change.type==="set-physical-topology")expect(change.topology.segments.find(s=>s.id==="S0")!.volumeShading).toBe(false);
+  if(change.type==="set-physical-topology")expect(change.topology.segments.find(s=>s.id==="S0")!.mode).toBe("round");
 });
 it("moves only the chosen coating behind the others",()=>{
   const d=physicalFixture(),cover=(id:string)=>({id,name:id,width:0,color:"#123456",lengthMm:null,spans:[{segmentId:"S0",from:0,to:1}]});

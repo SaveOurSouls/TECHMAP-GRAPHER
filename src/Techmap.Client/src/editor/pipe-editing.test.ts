@@ -34,12 +34,15 @@ describe('pipe editing regressions M4-70',()=>{
   expect(next.wires).toEqual(d.wires);expect(next.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
   expect(physicalWirePoints(next,'W1',{x:0,y:0},{x:1,y:1})).not.toEqual(physicalWirePoints(d,'W1',{x:0,y:0},{x:1,y:1}));
  });
- it('selects the pipe over contained wires and exposes only its assigned wire identities',()=>{
+ it('selects a visible wire by its stripe and the pipe at its edge',()=>{
   const d=physicalFixture(),scene=designToScene(d,'drawing'),pipe=scene.find(o=>o.id==='S0')!;
   const points=pipe.points!,p={x:(points[0]!.x+points[1]!.x)/2,y:(points[0]!.y+points[1]!.y)/2};
-  expect(hitTestEditorScene(scene,layers,p,10,'drawing')).toBe('S0');
+  expect(pipe.pipe!.wireIds).toContain(hitTestEditorScene(scene,layers,p,10,'drawing'));
+  const dx=points[1]!.x-points[0]!.x,dy=points[1]!.y-points[0]!.y,length=Math.hypot(dx,dy);
+  const edge={x:p.x-dy/length*(pipe.width/2+.6),y:p.y+dx/length*(pipe.width/2+.6)};
+  expect(hitTestEditorScene(scene,layers,edge,10,'drawing')).toBe('S0');
   expect(pipe.pipe!.wireIds).toEqual(['W1','W2']);
-  const wire={...scene.find(o=>o.id==='W1')!,metadata:{},points:pipe.points};
+  const wire={...scene.find(o=>o.id==='W1')!,metadata:{},points:pipe.points,visibleWireStrokes:undefined};
   expect(hitTestEditorScene([pipe,wire],layers,p,10,'drawing')).toBe('S0');
  });
 });

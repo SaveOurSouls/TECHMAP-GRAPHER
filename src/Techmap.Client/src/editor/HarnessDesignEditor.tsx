@@ -23,7 +23,7 @@ import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDraw
 import { type PhysicalCovering, coveringMaterial, standardCovering, standardCoveringOver } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
-import { physicalWireDisplayPaths, physicalWirePoints } from "./physical-wire-geometry";
+import { physicalWireDisplay, physicalWirePoints } from "./physical-wire-geometry";
 import { ensureConnectorExits, branchPhysicalSegment, connectPhysicalNodeToSegment } from "./physical-topology";
 import { physicalNodePoint } from "./physical-ports";
 import { joiningPipeEndpoint, migrateJoiningPipes } from "./physical-joining-pipes";
@@ -447,6 +447,9 @@ export function designToScene(
     const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds,drawingConnectorIds);
     if (!start || !end) return [];
     const physicalPoints = view === "drawing" ? physicalWirePoints(document, wire.id, start, end) : null;
+    const wireDisplay = view === "drawing" && physicalPoints ? physicalWireDisplay(document,wire.id,start,end) : undefined;
+    const roundRoute = wireDisplay && document.physicalTopology?.routes.find(route=>route.wireId===wire.id)?.steps.some(step=>document.physicalTopology?.segments.find(segment=>segment.id===step.segmentId)?.mode==="round");
+    const wireWidth = drawingWireWidth(document,wire);
     const points = view === "drawing" ? physicalPoints ?? [start, ...wire.drawingRoute, end] : [start, ...wire.e4Route, end];
     const fromAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.from) : null;
     const toAnchor = view === "e4" ? wireEndpointE4Anchor(document, wire.to) : null;
@@ -468,11 +471,11 @@ export function designToScene(
       color: wire.color,
       points,
       ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
-      ...(view === "drawing" && physicalPoints ? {paths:physicalWireDisplayPaths(document,wire.id,start,end)} : {}),
+      ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
         ...(localVolume !== undefined ? { volumeShading: String(localVolume) } : {}),
-        drawingWidth:String(drawingWireWidth(document,wire)),
+        drawingWidth:String(wireWidth),
         physicalRoute: String(!!physicalPoints),
         routeMissing: String(view === "drawing" && !physicalPoints && wire.drawingRoute.length === 0),
         lengthKnown: String(cutLength.isComplete),
@@ -1810,6 +1813,7 @@ export function HarnessDesignEditor({
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
         highlightedObjectIds={joiningPipeDraft&&history.present.physicalTopology?joiningPipeDraftHighlights(history.present,joiningPipeDraft):[...related.wireIds,...related.componentIds,...relatedSourceIds]}
+        foregroundWireIds={relatedSourceIds.length?related.wireIds:selectedObjectIds.filter(id=>history.present.wires.some(wire=>wire.id===id))}
         onObjectPick={view==='drawing'&&joiningPipeDraft?id=>{if(id&&history.present.physicalTopology)setJoiningPipeDraft(toggleJoiningPipeMember(history.present,joiningPipeDraft,id));}:undefined}
         onObjectPickCancel={()=>setJoiningPipeDraft(null)}
         revealRequest={revealRequest}

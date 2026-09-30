@@ -1,6 +1,6 @@
 import type { HarnessDesignDocument, Point } from "./model";
 import { physicalSegmentPoints, physicalContactTail } from "./physical-geometry";
-import { segmentWireLanes } from "./drawing-thickness";
+import { drawingWireWidth, segmentWireLanes, segmentWireProjection } from "./drawing-thickness";
 import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline } from "./physical-coverings";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples } from "./pipe-bundle-projection";
 import { drawingBendRadius, drawingRouteHitPoints } from "./drawing-route-path";
@@ -40,17 +40,30 @@ function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
   if(current.length)result.push(current);
   return result;
 }
-export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
+export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number }
+export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[] }
+export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):PhysicalWireDisplay|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
  const paths:(Point[]|null)[]=[];
+ const allPaths:Point[][]=[];
+ const visibleStrokes:VisibleWireStroke[]=[];
+ const wire=document.wires.find(w=>w.id===wireId)!;
+ const wireWidth=drawingWireWidth(document,wire);
  const projected=route.steps.some(step=>hasPipeBundleProjection(document,step.segmentId));
  for(const step of route.steps){
   const segment=t.segments.find(s=>s.id===step.segmentId)!;
-  if(segment.showWires===false){paths.push(null);continue;}
   const offset=segmentWireLanes(document,segment.id).find(l=>l.id===wireId)?.offset??0;
   const points=pipeBundleDisplaySamples(document,segment.id)?.map(s=>s.point)??(projected?drawingRouteHitPoints(physicalSegmentPoints(document,segment),drawingBendRadius(document)):physicalSegmentPoints(document,segment));
   const lane=offsetPolyline(points,points.map(()=>offset));
-  if(step.reverse)lane.reverse();paths.push(lane);
+  if(step.reverse)lane.reverse();allPaths.push(lane);
+  if(segment.showWires===false){paths.push(null);continue;}
+  paths.push(lane);
+  const projection=segmentWireProjection(document,segment.id);
+  for(const strip of projection.strips.filter(strip=>strip.id===wireId)){
+   const projected=offsetPolyline(points,points.map(()=>strip.offset));
+   if(step.reverse)projected.reverse();
+   visibleStrokes.push({points:projected,width:strip.width});
+  }
  }
  const first=route.steps[0]!,last=route.steps.at(-1)!;
  const a=physicalSegmentPoints(document,t.segments.find(s=>s.id===first.segmentId)!);
@@ -67,7 +80,6 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
   const tail=physicalContactTail(document,node,contactId,contact,nodeSide==="from"?lane[0]!:lane.at(-1)!);
   return nodeSide==="from"?[...tail.slice(0,-1),...lane]:[...lane,...tail.reverse().slice(1)];
  };
- const wire=document.wires.find(w=>w.id===wireId)!;
  const fromNode=t.nodes.find(n=>n.id===(first.reverse?t.segments.find(s=>s.id===first.segmentId)!.to:t.segments.find(s=>s.id===first.segmentId)!.from))!;
  const toNode=t.nodes.find(n=>n.id===(last.reverse?t.segments.find(s=>s.id===last.segmentId)!.from:t.segments.find(s=>s.id===last.segmentId)!.to))!;
  const fromTail=wireExitPath(document,first.segmentId,first.reverse?"to":"from",wireId,wire.from.contactId,start);
@@ -76,5 +88,10 @@ export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:s
  const endPath=toTail?(last.reverse?toTail.reverse():toTail):physicalContactTail(document,toNode,wire.to.contactId,end,to).reverse();
  const routePaths=[startPath,...paths,endPath];
  const joined=joinDisplayPaths(routePaths);
- return joined;
+ if(startPath.length>1)visibleStrokes.push({points:startPath,width:wireWidth});
+ if(endPath.length>1)visibleStrokes.push({points:endPath,width:wireWidth});
+ return {paths:joined,selectionPaths:joinDisplayPaths([startPath,...allPaths,endPath]),visibleStrokes};
+}
+export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
+ return physicalWireDisplay(document,wireId,start,end)?.paths;
 }

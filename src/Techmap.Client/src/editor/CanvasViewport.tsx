@@ -74,6 +74,7 @@ export interface CanvasViewportProps {
   readonly selectedObjectId: string | null;
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
+  readonly foregroundWireIds?: readonly string[];
   readonly cables?: readonly CableInstance[];
   readonly e4Overlays?: E4SceneOverlays;
   /** Exact project snapshots keyed to connector scene-object ids. */
@@ -896,6 +897,7 @@ function containsPoint(
 ): boolean {
   if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
+  if(view==="drawing"&&object.kind==="wire"&&object.visibleWireStrokes)return object.visibleWireStrokes.some(stroke=>{const curve=drawingRouteHitPoints(stroke.points,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=stroke.width/2+Math.min(tolerance,2));});
   if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>{const curve=drawingRouteHitPoints(path,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance);});
   if (object.kind === "physical-covering" && object.metadata?.surfaces) return coveringHit(object,point,tolerance)!==null;
   if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => {const curve=drawingRouteHitPoints(path,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance+object.width/2);});
@@ -1501,6 +1503,8 @@ export function hitTestEditorScene(
     if(rail)return rail.id;
     const contact = hitTestConnectorContact(paintOrder, layers, point, zoom, view);
     if (contact) return contact.connectorId;
+    const visibleWire=[...paintOrder].reverse().find(o=>o.kind==="wire"&&!!o.visibleWireStrokes&&containsPoint(o,point,tolerance,view));
+    if(visibleWire)return visibleWire.id;
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
     if(annotation)return annotation.id;
     const pipe = paintOrder.find(o=>o.pipe?.role==="joining-pipe"&&containsPoint(o,point,tolerance,view))??[...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
@@ -1863,7 +1867,7 @@ export function drawEditorSceneObject(
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
-    for(const path of object.paths){traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,selected?lineWidth+1:lineWidth);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,lineWidth);}
+    for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth}))){traceDrawingRoute(context,stroke.points,object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
     drawWireStripProfiles(context, object, selected);
     context.restore();return;
   }
@@ -2464,6 +2468,7 @@ export function redrawCanvas(
   componentTemplateImageCache = new ComponentTemplateImageCache(),
   highlightedObjectIds: readonly string[] = [],
   physicalNodePreview?: { readonly from: EditorPoint; readonly to: EditorPoint } | null,
+  foregroundWireIds:readonly string[] = [],
 ) {
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -2572,6 +2577,22 @@ export function redrawCanvas(
       context.restore();
     }
   }
+  // A selected electrical wire is the complete route, including conductors
+  // hidden by the first-hit projection. Draw it after every pipe and sleeve.
+  if(view==="drawing")for(const object of objectsInPaintOrder(objects,layers,view)){
+    if(object.kind!=="wire"||!foregroundWireIds.includes(object.id))continue;
+    context.save();context.lineCap="round";context.lineJoin="round";
+    const width=Number(object.metadata?.drawingWidth??2.5);
+    for(const path of object.paths??[object.points??[]]){
+      if(path.length<2)continue;
+      traceDrawingRoute(context,path,object.routeRadius);
+      context.strokeStyle="#fff";context.lineWidth=width+6/Math.max(.5,camera.zoom);context.stroke();
+      traceDrawingRoute(context,path,object.routeRadius);
+      context.strokeStyle="#cf5e00";context.lineWidth=width+3/Math.max(.5,camera.zoom);context.stroke();
+      traceDrawingRoute(context,path,object.routeRadius);strokeE4Wire(context,object.color,width);
+    }
+    context.restore();
+  }
   // Contact marks are a final interaction pass, including unselected connectors.
   // No wire, sleeve, picture, table or E4 overlay can paint over them.
   for (const object of objectsInPaintOrder(objects, layers, view)) {
@@ -2663,6 +2684,7 @@ export function CanvasViewport({
   selectedObjectId,
   selectedObjectIds,
   highlightedObjectIds = [],
+  foregroundWireIds = [],
   cables = [],
   e4Overlays,
   componentTemplateViewInstances = [],
@@ -2807,6 +2829,7 @@ export function CanvasViewport({
         componentTemplateImageCacheRef.current!,
         highlightedObjectIds,
         physicalNodePreview,
+        foregroundWireIds,
       );
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
@@ -2823,7 +2846,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [highlightedObjectIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
+  }, [highlightedObjectIds, foregroundWireIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
 
   useEffect(() => {
     const frame = frameRef.current;

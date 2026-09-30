@@ -28,6 +28,19 @@ public sealed class HarnessDrawingAppearanceTests
         var root=Fixture();root["drawingDocuments"]!["volumeShading"]=JsonNode.Parse(value);
         Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
     }
+    [Theory]
+    [InlineData("flat")][InlineData("round")]
+    public void Accepts_pipe_projection_mode(string mode)
+    {
+        var root=Fixture();root["physicalTopology"]!["segments"]![0]!["mode"]=mode;Validate(root);
+    }
+    [Theory]
+    [InlineData("volume")][InlineData("null")][InlineData("0")]
+    public void Rejects_invalid_pipe_projection_mode(string value)
+    {
+        var root=Fixture();root["physicalTopology"]!["segments"]![0]!["mode"]=JsonNode.Parse(value is "null" or "0" ? value : $"\"{value}\"");
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     private static JsonObject Fixture()=>JsonNode.Parse("""
       {"connectors":[{"id":"A","contacts":[{"wireDiameterMm":1.2}]}],"wires":[],"drawingDocuments":{"tables":[],"leaders":[],"bomOrder":[],"physicalScale":1.5,"showDimensions":true,
        "dimensions":[{"id":"D","segmentId":"S","from":0,"to":1,"pointCount":2,"routeKey":"[\"S\",\"N1\",\"N2\",0]","mode":"path","offset":40,"lengthMm":150}]},
