@@ -109,7 +109,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
     ...((segment.opacity!==undefined||segment.volumeShading!==undefined||document.drawingDocuments?.volumeShading===false)
-      ? {metadata:{...(segment.opacity!==undefined?{opacity:String(segment.opacity)}:{}),volumeShading:String(segment.volumeShading??false)}} : {}),
+      ? {metadata:{...(segment.opacity!==undefined?{opacity:String(segment.opacity)}:{}),volumeShading:String(segment.volumeShading??document.drawingDocuments?.volumeShading!==false)}} : {}),
     };
   });
   const joining: EditorSceneObject[] = (topology.joiningPipes??[]).map((pipe,i)=>{

@@ -30,6 +30,7 @@ internal static class HarnessJoiningPipeValidator
             if(Text(pipe,"mode") is not ("flat" or "round"))throw Invalid();
             if(pipe.TryGetProperty("width",out _)){var width=Number(pipe,"width");if(width<0||width>1e7)throw Invalid();}
             if(pipe.TryGetProperty("color",out _)){var c=Text(pipe,"color");if(c.Length!=7||c[0]!='#'||c[1..].Any(ch=>!Uri.IsHexDigit(ch)))throw Invalid();}
+            if(pipe.TryGetProperty("opacity",out _)){var opacity=Number(pipe,"opacity");if(opacity<0||opacity>1)throw Invalid();}
             if(pipe.TryGetProperty("volumeShading",out var shade)&&shade.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
             if(!pipe.TryGetProperty("members",out var members)||members.ValueKind!=JsonValueKind.Array||members.GetArrayLength() is <2 or >128)throw Invalid();
             foreach(var member in members.EnumerateArray())

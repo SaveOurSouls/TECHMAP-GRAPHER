@@ -81,6 +81,7 @@ internal static class HarnessPhysicalTopologyValidator
             foreach (var p in AuthoredPoints(segment).EnumerateArray()) Point(p);
             if(segment.TryGetProperty("width",out _)){var width=Number(segment,"width");if(width<0||width>10000000)throw Invalid();}
             if(segment.TryGetProperty("color",out _)){var color=Text(segment,"color");if(color.Length!=7||color[0]!='#'||color[1..].Any(c=>!Uri.IsHexDigit(c)))throw Invalid();}
+            if(segment.TryGetProperty("opacity",out _)){var opacity=Number(segment,"opacity");if(opacity<0||opacity>1)throw Invalid();}
             if(segment.TryGetProperty("mode",out _) && Text(segment,"mode") is not ("flat" or "round"))throw Invalid();
             if(segment.TryGetProperty("showWires",out _))_=Boolean(segment,"showWires");
             if(segment.TryGetProperty("specificationItemId",out _))_=Text(segment,"specificationItemId");

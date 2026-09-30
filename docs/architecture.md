@@ -50,6 +50,17 @@ SQLite разбит на поколения; указатель current generati
 
 Физический граф (nodes, segments, joining pipes, coverings) не смешивается с электрическими endpoint/junction связями. Представления ссылаются на стабильные ID; координаты и масштаб могут отличаться между Э4 и чертежом. **Источник: найдено в коде** (`model.ts`, `commands.ts`, `physical-topology-*`, `drawing-*`).
 
+### Прозрачность П и ОП (REQ-027)
+
+`PhysicalSegment.opacity` и `PhysicalJoiningPipe.opacity` — независимые значения
+от 0 до 1 в `HarnessDesignDocument.physicalTopology`. Панели свойств записывают
+их через `set-physical-topology` и `update-joining-pipe`; клиентский и серверный
+валидаторы проверяют диапазон при загрузке и сохранении. `physicalTopologyScene`
+передаёт значения в `EditorSceneObject.metadata`, а `CanvasViewport` применяет
+их как `globalAlpha` только во время рисования соответствующего П или ОП.
+Отсутствующее поле оставляет прежние значения по умолчанию: П — 0,72, ОП — 1.
+Подробные критерии и проверка: [карточка 013](../tasks/013-pipe-opacity.md).
+
 ## Manufacturing и связанные виды
 
 Manufacturing route-модули получают источники из сохранённого design document, строят строки маршрута и выполняют readiness/rebase проверки. Операции, терминалы, материалы и фотографии являются ссылками или вложениями проекта, а не независимыми копиями исходных физических объектов. Cut-list endpoint повторно проверяет readiness на сервере. **Источник: найдено в коде** (`manufacturing/*`, `HarnessCutListEndpoints.cs`).

@@ -17,6 +17,25 @@ public sealed class HarnessJoiningPipeTests
     private static void Validate(JsonObject value){using var json=JsonDocument.Parse(value.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_independent_axis_and_coating(){Validate(Fixture());}
     [Theory]
+    [InlineData(0, 1)][InlineData(1, 0)][InlineData(.35, .8)]
+    public void Accepts_independent_pipe_and_joining_pipe_opacity(double pipeOpacity,double joiningOpacity)
+    {
+        var root=Fixture();var topology=root["physicalTopology"]!;
+        topology["segments"]![0]!["opacity"]=pipeOpacity;
+        topology["joiningPipes"]![0]!["opacity"]=joiningOpacity;
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("\"0.5\"")][InlineData("-0.1")][InlineData("1.1")]
+    public void Rejects_invalid_opacity_on_either_pipe_kind(string value)
+    {
+        foreach(var collection in new[]{"segments","joiningPipes"})
+        {
+            var root=Fixture();root["physicalTopology"]![collection]![0]!["opacity"]=JsonNode.Parse(value);
+            Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+        }
+    }
+    [Theory]
     [InlineData("duplicate")][InlineData("missing")][InlineData("owner")][InlineData("range")][InlineData("axis")][InlineData("id")][InlineData("endpointId")][InlineData("anchor")][InlineData("wireRoute")]
     [InlineData("collapsed")][InlineData("legacy")][InlineData("cycle")]
     public void Rejects_invalid_joining_pipe(string mutation)
