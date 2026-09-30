@@ -1,3 +1,16 @@
+# Пакет 30.09.2026 — выбор П/ОП, точки перехода и общая прозрачность
+
+Срез кода: `27d7c5e9d4284b6ea2f0dabea2ca089523442d26` (`Fix pipe selection, transition grips, and global opacity`). После предыдущего ZIP вошёл этот коммит; пакет собран только из зафиксированного кода.
+
+Windows x64 ZIP версии `0.63.8-m5-07-review`:
+`artifacts/m5-07-20260930-global-opacity/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`.
+Размер: **55 237 552 байта**. SHA-256:
+`13795EE65E59587D5B1F718F2E1DADCF7E6BB6D126948D86D9AF92E44D92CBA3`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 1510 клиентских тестов, TypeScript/Vite build, 1041 Release .NET-тест, self-contained win-x64 publish. `verify-package.ps1` проверил 209 файлов манифеста; ZIP содержит 212 записей, включая служебные каталоги. Все семь режимов `test-portable-package.ps1` прошли после распаковки в `C:\Temp\TECHMAP-portable-20260930-global-opacity`, включая каталог с кириллицей и пробелом.
+
+Дополнительный запуск того же ZIP из исходного пути репозитория остановился до публикации `TECHMAP_HOST_URL`: `UnauthorizedAccessException` при чтении ACL в `LocalInstanceRecord.OpenRecordStore`. Поэтому запуск из этого пути не подтверждён; проверка из `C:\Temp` успешна. Ручная приёмка интерфейса на пользовательском чертеже не выполнялась. ZIP локальный, в Git не включается.
+
 # Пакет 30.09.2026 — покрытия ОП и индексы соединителей
 
 Срез кода: `a9146118e27720d1185a580255d2a27e337e0c2a`. После предыдущего ZIP
