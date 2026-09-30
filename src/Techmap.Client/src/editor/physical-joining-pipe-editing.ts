@@ -1,7 +1,29 @@
 import type {HarnessDesignDocument,Point} from "./model";
-import type {PhysicalTopology} from "./physical-topology-model";
+import type {PhysicalJoiningPipe,PhysicalTopology} from "./physical-topology-model";
 import type {PhysicalDragMode} from "./physical-editing";
 import {joiningPipePoints} from "./physical-joining-pipes";
+
+const rotate=(point:Point,oldOrigin:Point,newOrigin:Point,from:Point,to:Point):Point=>{
+  const a=Math.atan2(from.y,from.x),b=Math.atan2(to.y,to.x),angle=b-a;
+  const dx=point.x-oldOrigin.x,dy=point.y-oldOrigin.y,c=Math.cos(angle),s=Math.sin(angle);
+  return {x:newOrigin.x+dx*c-dy*s,y:newOrigin.y+dx*s+dy*c};
+};
+const tangent=(points:readonly Point[],side:"enter"|"exit")=>{
+  const a=side==="enter"?points[0]!:points.at(-2)!,b=side==="enter"?points[1]!:points.at(-1)!;
+  const length=Math.hypot(b.x-a.x,b.y-a.y)||1;return {x:(b.x-a.x)/length,y:(b.y-a.y)/length};
+};
+/** An OP bend changes the direction of its member lanes. Explicit member
+ * transition bends are authored in that lane's local frame, so rotate them
+ * with the corresponding OP endpoint instead of leaving a stale, invisible
+ * control point behind the new contour. */
+export function remapJoiningPipeMemberBends(before:PhysicalJoiningPipe,after:PhysicalJoiningPipe) {
+  const oldAxis=joiningPipePoints(before),newAxis=joiningPipePoints(after);
+  return before.members.map(member=>({
+    ...member,
+    ...(member.enterBend&&{enterBend:rotate(member.enterBend,oldAxis[0]!,newAxis[0]!,tangent(oldAxis,"enter"),tangent(newAxis,"enter"))}),
+    ...(member.exitBend&&{exitBend:rotate(member.exitBend,oldAxis.at(-1)!,newAxis.at(-1)!,tangent(oldAxis,"exit"),tangent(newAxis,"exit"))}),
+  }));
+}
 
 /** Move the complete OP geometry while preserving its authored shape and
  * member transition handles. The electrical graph and member references stay
@@ -37,7 +59,12 @@ export function editJoiningPipeBend(document:HarnessDesignDocument,id:string,ind
     const anchor=(a:number|undefined)=>a===undefined?undefined:remove?(a===index+1?undefined:a>index+1?a-1:a):insert&&a>index?a+1:a;
     return {...s,fromAnchor:anchor(s.fromAnchor),toAnchor:anchor(s.toAnchor)};
   })}));
-  return {...t,coverings,joiningPipes:t.joiningPipes?.map(p=>p.id===id?{...p,path:{kind:"polyline",points}}:p)};
+  const joiningPipes=t.joiningPipes?.map(p=>{
+    if(p.id!==id)return p;
+    const next={...p,path:{kind:"polyline" as const,points}};
+    return {...next,members:remapJoiningPipeMemberBends(p,next)};
+  });
+  return {...t,coverings,joiningPipes};
 }
 export function removeJoiningPipe(t:PhysicalTopology,id:string):PhysicalTopology {
   return {...t,joiningPipes:t.joiningPipes?.filter(p=>p.id!==id),coverings:t.coverings?.flatMap(c=>{

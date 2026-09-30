@@ -81,9 +81,13 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
     for(const [i,member] of pipe.members.entries()){
       const source=sample(joiningMemberPoints(document,member.segmentIds));
       const rawAxis=sample(joiningPipePoints(pipe));
-      const lane=offsetSamples(axis,packed.members[i]!.offset),rawLane=offsetSamples(rawAxis,packed.members[i]!.offset);
+      const lane=offsetSamples(axis,packed.members[i]!.offset);
       const oriented=member.reverse?[...lane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):lane;
-      const axisControls=member.reverse?[...rawLane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):rawLane;
+      // The painted OP uses the rounded axis. Project its authored stations
+      // onto that same lane so a member handle never floats away from the
+      // visible contour when the OP has a corner.
+      const axisControlsBase=rawAxis.map(s=>({fraction:s.fraction,point:at(lane,s.fraction)}));
+      const axisControls=member.reverse?[...axisControlsBase].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):axisControlsBase;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
       const low=member.from/2,high=(1+member.to)/2;
       const shoulder=(edge:Point,next:Point,outer:Point):Point=>{
@@ -109,13 +113,16 @@ function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberCont
  const enterBendFraction=p.low+(m.from-p.low)*(p.enter[1]?.fraction??.5);
  const exitBendFraction=m.to+(p.high-m.to)*(p.exit[1]?.fraction??.5);
  const candidates:JoiningPipeMemberControl[]=[
-   {fraction:p.low,point:p.enter[0]!.point,controlled:true,connection:true,boundary:"outerEnter",memberIndex:p.memberIndex},
+   // The outer station is the first real transition corner on the member
+   // route. Keep it visible and numbered; OP axis stations remain controlled
+   // by the common pipe itself.
+   {fraction:p.low,point:p.enter[0]!.point,controlled:false,connection:true,boundary:"outerEnter",memberIndex:p.memberIndex},
    ...(p.enterBend===null?[]:[{fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}}]),
    {fraction:m.from,point:p.axisControls[0]!.point,controlled:true,connection:true,boundary:"axisEnter",memberIndex:p.memberIndex},
    ...p.axisControls.slice(1,-1).map(sample=>({fraction:m.from+sample.fraction*(m.to-m.from),point:sample.point,controlled:true})),
    {fraction:m.to,point:p.axisControls.at(-1)!.point,controlled:true,connection:true,boundary:"axisExit",memberIndex:p.memberIndex},
    ...(p.exitBend===null?[]:[{fraction:exitBendFraction,point:p.exitBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"exit" as const}}]),
-   {fraction:p.high,point:p.exit.at(-1)!.point,controlled:true,connection:true,boundary:"outerExit",memberIndex:p.memberIndex},
+   {fraction:p.high,point:p.exit.at(-1)!.point,controlled:false,connection:true,boundary:"outerExit",memberIndex:p.memberIndex},
  ];
  return candidates;
 }

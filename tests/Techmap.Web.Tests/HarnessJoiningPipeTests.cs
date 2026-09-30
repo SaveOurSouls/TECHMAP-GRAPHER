@@ -16,6 +16,22 @@ public sealed class HarnessJoiningPipeTests
     """)!.AsObject();
     private static void Validate(JsonObject value){using var json=JsonDocument.Parse(value.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_independent_axis_and_coating(){Validate(Fixture());}
+    [Fact] public void Accepts_removed_transition_bends_and_authored_outer_stations()
+    {
+        var root=Fixture();var member=root["physicalTopology"]!["joiningPipes"]![0]!["members"]![0]!;
+        member["enterBend"]=null;
+        member["exitBend"]=null;
+        member["enterOuter"]=new JsonObject{["x"]=120,["y"]=20};
+        member["exitOuter"]=new JsonObject{["x"]=500,["y"]=40};
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("enterOuter")][InlineData("exitOuter")]
+    public void Rejects_invalid_outer_station(string key)
+    {
+        var root=Fixture();root["physicalTopology"]!["joiningPipes"]![0]!["members"]![0]![key]=JsonNode.Parse("null");
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Theory]
     [InlineData(0, 1)][InlineData(1, 0)][InlineData(.35, .8)]
     public void Accepts_independent_pipe_and_joining_pipe_opacity(double pipeOpacity,double joiningOpacity)

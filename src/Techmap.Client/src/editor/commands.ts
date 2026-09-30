@@ -6,7 +6,7 @@ import { reconcileDrawingDocuments, validateDrawingDocuments, type DrawingDocume
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
 import { type PhysicalTopology } from "./physical-topology-model";
-import {editJoiningPipeBend,moveJoiningPipe,removeJoiningPipe} from "./physical-joining-pipe-editing";
+import {editJoiningPipeBend,moveJoiningPipe,removeJoiningPipe,remapJoiningPipeMemberBends} from "./physical-joining-pipe-editing";
 import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, materializePhysicalPath, type PhysicalDragMode } from "./physical-editing";
 import { physicalNodeLocalPoint } from "./physical-ports";
 import { refreshAutomaticPhysicalRoutes } from "./physical-wire-routing";
@@ -277,7 +277,8 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(boundary==="axisEnter"||boundary==="axisExit"){
         const key=boundary==="axisEnter"?"start":"end",delta={x:position.x-origin.x,y:position.y-origin.y};
         const changed={...pipe,[key]:{x:pipe[key].x+delta.x,y:pipe[key].y+delta.y}};
-        return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?changed:p)},document)};
+        const remapped={...changed,members:remapJoiningPipeMemberBends(pipe,changed)};
+        return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?remapped:p)},document)};
       }
       const key=boundary==="outerEnter"?"enterOuter":"exitOuter";
       const members=pipe.members.map((member,index)=>index===command.memberIndex?{...member,[key]:position}:member);
@@ -288,7 +289,8 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const t=document.physicalTopology;if(!t)return document;
       const next=t.joiningPipes?.map(p=>{
         if(p.id!==command.pipeId)return p;
-        return {...p,...(command.start!==undefined?{start:command.start}:{}),...(command.end!==undefined?{end:command.end}:{}),...(command.mode!==undefined?{mode:command.mode}:{}),...(command.width!==undefined?{width:command.width}:{}),...(command.color!==undefined?{color:command.color}:{}),...(command.opacity!==undefined?{opacity:command.opacity}:{}),...(command.volumeShading!==undefined?{volumeShading:command.volumeShading}:{})};
+        const changed={...p,...(command.start!==undefined?{start:command.start}:{}),...(command.end!==undefined?{end:command.end}:{}),...(command.mode!==undefined?{mode:command.mode}:{}),...(command.width!==undefined?{width:command.width}:{}),...(command.color!==undefined?{color:command.color}:{}),...(command.opacity!==undefined?{opacity:command.opacity}:{}),...(command.volumeShading!==undefined?{volumeShading:command.volumeShading}:{})};
+        return command.start!==undefined||command.end!==undefined?{...changed,members:remapJoiningPipeMemberBends(p,changed)}:changed;
       });
       return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:next},document)};
     }
