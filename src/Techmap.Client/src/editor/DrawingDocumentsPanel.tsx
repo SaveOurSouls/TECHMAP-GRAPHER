@@ -110,12 +110,12 @@ function ConnectionSectionPicker({ document, wire, options, disabled, onCommand 
     }}><option value="">—</option>{sections.map(section => <option key={section} value={section}>{section}</option>)}</select>;
 }
 
-export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"], wireOptions = builtInWireOptions, onWireSearch,sourceFingerprint,unsaved=false,connectionTableSettings}: {
+export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,onChange,onCommand,onReveal,mode="controls", perimeters, readOnly=false, availableKinds=["bom","connections","cut"], wireOptions = builtInWireOptions, wireDatabaseOptions, onWireSearch,sourceFingerprint,unsaved=false,connectionTableSettings}: {
   sourceFingerprint?:string;unsaved?:boolean;perimeters?:DrawingPerimeters;readOnly?:boolean;availableKinds?:readonly ("bom"|"connections"|"cut")[];
   connectionTableSettings?: ConnectionTableSettings;
   mode?:"controls"|"bom"|"connections";document:HarnessDesignDocument;quantity:number;selectedId:string|null;selectedIds:readonly string[];
   onChange:(d:DrawingDocuments)=>boolean;onCommand:(c:EditorCommand)=>boolean;onReveal:(ids:readonly string[])=>void;
-  wireOptions?: readonly WireDatabaseOption[]; onWireSearch?: (query: string) => void;
+  wireOptions?: readonly WireDatabaseOption[]; wireDatabaseOptions?: readonly WireDatabaseOption[]; onWireSearch?: (query: string) => void;
 }) {
   const cutReady=routeCutReadiness(document,sourceFingerprint,unsaved);
   const [filter,setFilter]=useState("");
@@ -124,6 +124,7 @@ export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,
   const liveConnectionSettings = useConnectionTableSettings();
   const connectionSettings = connectionTableSettings ?? liveConnectionSettings;
   const connectionColumns = connectionSettings.columns.filter(column => column.visible);
+  const colorCatalogOptions = wireDatabaseOptions ?? wireOptions;
   const databaseColors = (wire: HarnessDesignDocument["wires"][number]) => {
     const color = connectionWireColor(document, wire);
     const hasSchemeColor = [wire.from, wire.to].some(end => "connectorId" in end &&
@@ -135,7 +136,7 @@ export function DrawingDocumentsPanel({document,quantity,selectedId,selectedIds,
     const primaryLabel = color.label.split(" / ")[0]!.trim();
     const primaryHex = color.hex.toLocaleUpperCase();
     const found = builtInWireColors.some(reference => reference.hex.toLocaleUpperCase() === primaryHex ||
-      normalizeWireChoice(reference.name) === normalizeWireChoice(primaryLabel)) || wireOptions.some(option => {
+      normalizeWireChoice(reference.name) === normalizeWireChoice(primaryLabel)) || colorCatalogOptions.some(option => {
       if (normalizeWireChoice(option.mark) !== normalizeWireChoice(mark) ||
           normalizeWireSectionChoice(option.section) !== normalizeWireSectionChoice(section) || !option.color) return false;
       const optionHex = resolveWireColorHex(option.color, builtInWireColors, "").toLocaleUpperCase();
