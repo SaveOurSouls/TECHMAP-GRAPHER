@@ -31,6 +31,7 @@ internal static class HarnessDrawingDocumentsValidator
         if(d.TryGetProperty("bendRadius",out var radius)&&(radius.ValueKind!=JsonValueKind.Number||!radius.TryGetDouble(out var radiusValue)||!double.IsFinite(radiusValue)||radiusValue<0||radiusValue>200))throw Invalid();
         if(d.TryGetProperty("leaderScale",out var leaderScale)&&(leaderScale.ValueKind!=JsonValueKind.Number||!leaderScale.TryGetDouble(out var leaderFactor)||!double.IsFinite(leaderFactor)||leaderFactor<.25||leaderFactor>4))throw Invalid();
         if(d.TryGetProperty("physicalScale",out var scale)&&(scale.ValueKind!=JsonValueKind.Number||!scale.TryGetDouble(out var factor)||!double.IsFinite(factor)||factor<.2||factor>8))throw Invalid();
+        if(d.TryGetProperty("pipeOpacity",out var pipeOpacity)&&(pipeOpacity.ValueKind!=JsonValueKind.Number||!pipeOpacity.TryGetDouble(out var alpha)||!double.IsFinite(alpha)||alpha<0||alpha>1))throw Invalid();
         if(d.TryGetProperty("coveringDiameterRatio",out var ratio)&&(ratio.ValueKind!=JsonValueKind.Number||!ratio.TryGetDouble(out var ratioValue)||!double.IsFinite(ratioValue)||ratioValue<1.1||ratioValue>4))throw Invalid();
         if(d.TryGetProperty("showDimensions",out var visible)&&visible.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
         if(d.TryGetProperty("volumeShading",out var shading)&&shading.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();

@@ -114,8 +114,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       joiningTransitionMidpoints,
       wireIds: topology.routes.filter(route => route.steps.some(step => step.segmentId === segment.id)).map(route => route.wireId),
     },
-    ...((segment.opacity!==undefined||segment.volumeShading!==undefined||document.drawingDocuments?.volumeShading===false)
-      ? {metadata:{...(segment.opacity!==undefined?{opacity:String(segment.opacity)}:{}),volumeShading:String(segment.volumeShading??document.drawingDocuments?.volumeShading!==false)}} : {}),
+    metadata:{opacity:String(document.drawingDocuments?.pipeOpacity??.72),volumeShading:String(segment.volumeShading??document.drawingDocuments?.volumeShading!==false)},
     };
   });
   const joining: EditorSceneObject[] = (topology.joiningPipes??[]).map((pipe,i)=>{
@@ -125,7 +124,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const wireIds=[...new Set(pipe.members.flatMap(m=>m.segmentIds).flatMap(id=>topology.routes.filter(route=>route.steps.some(step=>step.segmentId===id)).map(route=>route.wireId)))];
     return {id:pipe.id,kind:"physical-segment" as const,label:`ОП${i+1}`,layerId:"wires",x:0,y:0,width:joiningPipeWidth(document,pipe),height:0,color:pipe.color??"#aebfc9",points:display,paths:[display],routeRadius:drawingBendRadius(document),
       pipe:{role:"joining-pipe" as const,authoredPoints:authored,fromNodeId:joiningPipeEndpointId(pipe.id,"from"),toNodeId:joiningPipeEndpointId(pipe.id,"to"),controls,handles,midpoints,wireIds,memberSegmentIds:pipe.members.flatMap(m=>m.segmentIds)},
-      metadata:{joiningPipe:"true",opacity:String(pipe.opacity??1),volumeShading:String(pipe.volumeShading??document.drawingDocuments?.volumeShading!==false)}};
+      metadata:{joiningPipe:"true",opacity:String(document.drawingDocuments?.pipeOpacity??.72),volumeShading:String(pipe.volumeShading??document.drawingDocuments?.volumeShading!==false)}};
   });
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {
     const point = pipeBundleNodePoint(document,node.id,physicalNodePoint(document, node));

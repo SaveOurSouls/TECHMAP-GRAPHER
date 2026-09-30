@@ -13,7 +13,7 @@ it("carries author controls, rendered route and wire identity independently with
   expect(pipe.points).toEqual(physicalSegmentPoints(doc,segment));
   expect(pipeSceneControls(pipe)).toEqual(physicalSegmentControls(doc,segment));
   expect(pipeSceneHandles(pipe)).toEqual(segment.path.points.length?segment.path.points:pipe.points!.slice(1,-1));
-  expect(pipe.metadata).toBeUndefined();
+  expect(pipe.metadata?.opacity).toBe("0.72");
   for(const [i,p] of segment.path.points.entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
   if(!segment.path.points.length)for(const [i,p] of pipe.points!.slice(1,-1).entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
  }

@@ -29,6 +29,14 @@ public sealed class HarnessDrawingAppearanceTests
         Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
     }
     [Theory]
+    [InlineData(0)][InlineData(.4)][InlineData(1)]
+    public void Accepts_pipe_opacity(double opacity)
+    {var root=Fixture();root["drawingDocuments"]!["pipeOpacity"]=opacity;Validate(root);}
+    [Theory]
+    [InlineData("-0.01")][InlineData("1.01")][InlineData("null")][InlineData("\"0.4\"")]
+    public void Rejects_invalid_pipe_opacity(string value)
+    {var root=Fixture();root["drawingDocuments"]!["pipeOpacity"]=JsonNode.Parse(value);Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));}
+    [Theory]
     [InlineData("flat")][InlineData("round")]
     public void Accepts_pipe_projection_mode(string mode)
     {

@@ -160,12 +160,12 @@ it("builds each member transition as connection to bend to connection with usabl
  expect(pipeMidpoints(member)).toEqual(expect.arrayContaining(member.pipe!.joiningTransitionMidpoints!.map(handle=>expect.objectContaining({index:handle.index}))));
 });
 
-it("lets the white boundary grips move the member transition and the OP end",()=>{
+it("keeps boundary stations out of bend hit targets while preserving their geometry",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
  const outer=member.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!;
  const outerPoint=member.pipe!.handles[outer.index]!;
- expect(hitTestWireRoutePoint(member,outerPoint,1)).toBe(outer.index);
+ expect(hitTestWireRoutePoint(member,outerPoint,1)).toBeNull();
  const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:outer.boundary,origin:outerPoint,position:{x:outerPoint.x+20,y:outerPoint.y+30}});
  expect(moved.physicalTopology!.joiningPipes![0]!.members[1]!.enterOuter).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
  expect(joiningPipeMemberControls(moved,"p1")!.find(control=>control.boundary==="outerEnter")!.point).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});

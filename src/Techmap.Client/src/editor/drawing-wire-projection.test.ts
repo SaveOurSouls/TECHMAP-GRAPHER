@@ -56,7 +56,7 @@ it("keeps the complete route for selection while clicking only a visible conduct
  const layers:EditorLayer[]=[{id:"wires",label:"Wires",visible:true,locked:false}];
  const wire:EditorSceneObject={id:strip.id,kind:"wire",layerId:"wires",label:"",x:0,y:0,width:0,height:0,color:"#aa0000",points:display.paths[0],paths:display.paths,visibleWireStrokes:display.visibleStrokes,metadata:{physicalRoute:"true",drawingWidth:"2.5"}};
  const pipe:EditorSceneObject={id:"S0",kind:"physical-segment",layerId:"wires",label:"",x:0,y:0,width:20,height:0,color:"#888888",points:stroke.points,paths:[stroke.points],pipe:{role:"pipe",controls:[],handles:[],wireIds:[strip.id]}};
- expect(hitTestEditorScene([wire,pipe],layers,point,10,"drawing")).toBe(strip.id);
+ expect(hitTestEditorScene([wire,pipe],layers,point,10,"drawing")).toBe("S0");
 });
 
 it("draws a selected hidden route above the pipe and sheath until selection clears",()=>{

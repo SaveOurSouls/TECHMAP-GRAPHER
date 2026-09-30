@@ -52,13 +52,7 @@ SQLite разбит на поколения; указатель current generati
 
 ### Прозрачность П и ОП (REQ-027)
 
-`PhysicalSegment.opacity` и `PhysicalJoiningPipe.opacity` — независимые значения
-от 0 до 1 в `HarnessDesignDocument.physicalTopology`. Панели свойств записывают
-их через `set-physical-topology` и `update-joining-pipe`; клиентский и серверный
-валидаторы проверяют диапазон при загрузке и сохранении. `physicalTopologyScene`
-передаёт значения в `EditorSceneObject.metadata`, а `CanvasViewport` применяет
-их как `globalAlpha` только во время рисования соответствующего П или ОП.
-Отсутствующее поле оставляет прежние значения по умолчанию: П — 0,72, ОП — 1.
+`drawingDocuments.pipeOpacity` — единое значение прозрачности П и ОП от 0 до 1. Левая панель чертежа сохраняет его через `set-drawing-documents`; свойства отдельных трубок локальный ползунок не показывают. Старые `PhysicalSegment.opacity` и `PhysicalJoiningPipe.opacity` принимаются при загрузке для совместимости. `physicalTopologyScene` передаёт итог в `EditorSceneObject.metadata`, а `CanvasViewport` применяет его только при рисовании.
 Подробные критерии и проверка: [карточка 013](../tasks/013-pipe-opacity.md).
 
 ## Manufacturing и связанные виды

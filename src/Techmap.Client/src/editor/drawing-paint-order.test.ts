@@ -15,6 +15,13 @@ const wire: EditorSceneObject = {
   id: "W1", kind: "wire", layerId: "wire", label: "", color: "#ff0000",
   x: 0, y: 0, width: 0, height: 0, points: [{ x: 20, y: 20 }, { x: 120, y: 20 }],
 };
+const pipe: EditorSceneObject = {
+  id: "P1", kind: "physical-segment", layerId: "wire", label: "P1", color: "#aebfc9",
+  x: 0, y: 0, width: 20, height: 0, points: [{ x: 20, y: 20 }, { x: 120, y: 20 }], paths: [[{ x: 20, y: 20 }, { x: 120, y: 20 }]],
+};
+const joiningPipe: EditorSceneObject = {
+  ...pipe, id: "OP1", label: "OP1", pipe: { role: "joining-pipe", authoredPoints: pipe.points!, controls: pipe.points!, handles: [], midpoints: [], wireIds: [] },
+};
 afterEach(() => vi.unstubAllGlobals());
 
 it("keeps drawing pictures below wires after either layer order, without changing E4", () => {
@@ -53,4 +60,10 @@ it("paints unselected contact marks after an overlapping wire and table in the a
   expect(lastContact).toBeGreaterThan(wireStroke);
   expect(lastContact).toBeGreaterThan(tablePaint);
   expect(operations.slice(lastContact + 1).filter(o => o.method === "fill")).toEqual([{ method: "fill", args: [], color: "#123456" }]);
+});
+
+it("selects a physical pipe before its covered wire, while leaving an uncovered wire selectable", () => {
+  expect(hitTestEditorScene([wire, pipe], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("P1");
+  expect(hitTestEditorScene([wire, joiningPipe], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("OP1");
+  expect(hitTestEditorScene([wire], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("W1");
 });

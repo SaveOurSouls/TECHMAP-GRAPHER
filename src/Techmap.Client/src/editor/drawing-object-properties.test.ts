@@ -32,16 +32,14 @@ it("edits a pipe through its existing command without exposing unrelated pipe ro
   expect(changed.wires).toEqual(d.wires);
   expect(elements(tree).some(e=>e.type==="table")).toBe(false);
 });
-it("stores independent transparency for a pipe and a joining pipe",()=>{
+it("keeps pipe transparency out of individual pipe properties",()=>{
   const d=physicalFixture();let changed=d;
   const tree=PhysicalTopologyPanel({mode:"object",document:d,selectedId:"S0",selectedIds:["S0"],onSelect:vi.fn(),onChange:topology=>{changed=applyEditorCommand(d,{type:"set-physical-topology",topology});return true;}});
-  elements(tree).find(e=>e.props["aria-label"]==="Прозрачность пайпа")!.props.onChange({target:{value:"40"}});
-  expect(changed.physicalTopology!.segments.find(s=>s.id==="S0")!.opacity).toBe(.6);
+  expect(elements(tree).some(e=>e.props["aria-label"]==="Прозрачность пайпа")).toBe(false);
   const t={...d.physicalTopology!,joiningPipes:[{id:"op",start:{x:0,y:0},end:{x:100,y:0},path:{kind:"polyline" as const,points:[]},members:[{segmentIds:["S0"],from:.2,to:.8,reverse:false},{segmentIds:["S1"],from:.2,to:.8,reverse:false}],mode:"flat" as const}]};
   const opDoc={...d,physicalTopology:t};
   const opTree=DrawingObjectProperties({document:opDoc,objectId:"op",selectedIds:["op"],instances:[],onCommand:command=>{changed=applyEditorCommand(opDoc,command);return true;},onSelect:vi.fn()});
-  elements(opTree).find(e=>e.props["aria-label"]==="Прозрачность объединяющего пайпа")!.props.onChange({target:{value:"25"}});
-  expect(changed.physicalTopology!.joiningPipes![0]!.opacity).toBe(.75);
+  expect(elements(opTree).some(e=>e.props["aria-label"]==="Прозрачность объединяющего пайпа")).toBe(false);
 });
 it("shows a volume mode toggle for a standalone pipe",()=>{
   const d=physicalFixture(),command=vi.fn<(command:EditorCommand)=>boolean>(()=>true);

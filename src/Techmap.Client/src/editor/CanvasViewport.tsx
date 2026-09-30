@@ -945,7 +945,7 @@ export function hitTestWireRoutePoint(
   const tolerance = 10 / zoom;
   let nearest: number | null = null, distance = tolerance;
   for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
-    if(object.pipe?.controlledHandles?.includes(pointIndex-1)&&!object.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===pointIndex-1))continue;
+    if(object.pipe?.controlledHandles?.includes(pointIndex-1))continue;
     const candidate = points[pointIndex]!;
     const delta = Math.hypot(point.x - candidate.x, point.y - candidate.y);
     if (delta <= distance) { nearest = pointIndex - 1; distance = delta; }
@@ -1509,12 +1509,12 @@ export function hitTestEditorScene(
     if(rail)return rail.id;
     const contact = hitTestConnectorContact(paintOrder, layers, point, zoom, view);
     if (contact) return contact.connectorId;
-    const visibleWire=[...paintOrder].reverse().find(o=>o.kind==="wire"&&!!o.visibleWireStrokes&&containsPoint(o,point,tolerance,view));
-    if(visibleWire)return visibleWire.id;
     const annotation=[...paintOrder].reverse().find(o=>(o.kind==="dimension"||o.kind==="physical-covering"||o.kind==="drawing-table")&&containsPoint(o,point,tolerance,view));
     if(annotation)return annotation.id;
-    const pipe = paintOrder.find(o=>o.pipe?.role==="joining-pipe"&&containsPoint(o,point,tolerance,view))??[...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
+    const pipe = [...paintOrder].reverse().find(o => o.kind === "physical-segment" && containsPoint(o, point, tolerance, view));
     if (pipe) return pipe.id;
+    const visibleWire=[...paintOrder].reverse().find(o=>o.kind==="wire"&&!!o.visibleWireStrokes&&containsPoint(o,point,tolerance,view));
+    if(visibleWire)return visibleWire.id;
   }
   for (let index = paintOrder.length - 1; index >= 0; index -= 1) {
     const object = paintOrder[index];
@@ -2568,10 +2568,11 @@ export function redrawCanvas(
       context.save(); context.lineWidth=2/camera.zoom; context.strokeStyle="#006f99";
       points.forEach((p,i)=>{
         const controlled=object.pipe?.controlledHandles?.includes(i-1)===true;
+        // OP boundary stations shape the projected route, but are not bends.
+        if(object.kind==="physical-segment"&&controlled) return;
         const transition=object.kind==="physical-segment"&&object.pipe?.joiningTransitionHandles?.some(handle=>handle.index===i-1)===true;
         context.beginPath();context.arc(p.x,p.y,(object.kind==="physical-node"?6:transition?5.5:controlled?4:5)/camera.zoom,0,Math.PI*2);
-        const draggableBoundary=object.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===i-1)===true;
-        context.fillStyle=object.kind==="physical-node"?object.color:controlled&&!draggableBoundary?"#7bb9cb":"#fff";context.fill();context.stroke();
+        context.fillStyle=object.kind==="physical-node"?object.color:"#fff";context.fill();context.stroke();
         const bendNumber=bendHandles.indexOf(i-1)+1;
         if(bendNumber>0){context.font=`${10/camera.zoom}px Arial`;context.fillStyle="#17485d";context.fillText(String(bendNumber),p.x+8/camera.zoom,p.y-8/camera.zoom);}
       });
