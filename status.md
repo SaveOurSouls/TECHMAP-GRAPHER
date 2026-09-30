@@ -1,5 +1,23 @@
 # Текущий проверенный срез — 30.09.2026
 
+Проверенный кодовый срез: `4bc54e0`; версия и сборочный `HEAD` зафиксированы
+коммитом `69fc699` (`0.63.11-m5-07-review`). В текущий `HEAD` входят и
+проверены как предки коммиты Дизайна интерфейса (`c0f7948`, `4bc54e0`), Э4
+(`4cddd3d`, `67f6223`, `9499ccb`, `7c0adde`), таблиц (`af07dde`, `9eb942b`)
+и привязок (`3b2225a`, `c978b86`, `b5ca745`).
+
+ZIP: `artifacts/m5-07-20260930-ui-e4-table-bindings/TECHMAP-GRAPHER-0.63.11-m5-07-review-win-x64.zip`, 55 238 449 байт, SHA-256
+`951803B5720F55A7726A0B2A90B4ED9073424D5D026C35193D82BDA52E073FD8`.
+
+Проверки: 1516 клиентских тестов, TypeScript/Vite production build, 1044
+Release .NET-теста, self-contained publish, `verify-package.ps1` (212 файлов
+манифеста) и все 7 portable-режимов из
+`C:\Temp\TECHMAP-portable-20260930-ui-e4-table-bindings`. Ручная UI-приёмка не
+выполнялась; запуск прямо из исходной папки с кириллицей ограничен
+`UnauthorizedAccessException` при чтении ACL.
+
+# Текущий проверенный срез — 30.09.2026
+
 Код: `3a3f00c8fb564a658ccd06e9a80803604033a45b` поверх `3b2225a25be15efebcb0b17b09bfafd9832d011f`; версия пакета `0.63.10-m5-07-review`.
 
 ZIP: `artifacts/m5-07-20260930-ctrl-snap-main/TECHMAP-GRAPHER-0.63.10-m5-07-review-win-x64.zip`, 55 238 119 байт, SHA-256 `E12443A114E867C22FAD5D7CD194EB740AFC6EDE19535CBEFD98BF73AACA337A`.

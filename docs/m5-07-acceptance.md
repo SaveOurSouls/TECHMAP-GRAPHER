@@ -1,3 +1,40 @@
+# Пакет 30.09.2026 — Дизайн интерфейса, Э4, таблицы и привязки
+
+Проверенный кодовый срез: `4bc54e0` (`Record position toggle verification`).
+Версия и состав сборки зафиксированы коммитом `69fc699` (`chore: bump package
+version for ui e4 table slice`), текущий `HEAD` — `69fc699a469292e0f450c6da16b6421d09b486df`.
+
+Проверены предки текущего `HEAD` из связанных чатов:
+
+- Дизайн интерфейса: `c0f7948`, `4bc54e0`;
+- Э4: `4cddd3d`, `67f6223`, `9499ccb`, `7c0adde`;
+- Таблицы соединений: `af07dde`, `9eb942b`;
+- Привязки: `3b2225a`, `c978b86`, `b5ca745`.
+
+Для всех перечисленных коммитов `git merge-base --is-ancestor` подтвердил
+вхождение в собираемый `HEAD`.
+
+Windows x64 ZIP версии `0.63.11-m5-07-review`:
+`artifacts/m5-07-20260930-ui-e4-table-bindings/TECHMAP-GRAPHER-0.63.11-m5-07-review-win-x64.zip`.
+Размер: **55 238 449 байт**. SHA-256:
+`951803B5720F55A7726A0B2A90B4ED9073424D5D026C35193D82BDA52E073FD8`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 1516 клиентских
+тестов, TypeScript/Vite production build, 1044 Release .NET-теста и
+self-contained win-x64 publish. `verify-package.ps1` подтвердил 212 файлов
+манифеста; архив содержит 215 ZIP-записей, включая служебные каталоги.
+
+`test-portable-package.ps1` подтвердил все семь portable-режимов из
+`C:\Temp\TECHMAP-portable-20260930-ui-e4-table-bindings`, включая каталог с
+кириллицей и пробелами. Прямой запуск из рабочей папки с кириллицей получает
+`UnauthorizedAccessException` при чтении ACL в `LocalInstanceRecord.OpenRecordStore`;
+это ограничение окружения, а не содержимого ZIP. Повреждённый пакет корректно
+отклоняется с `Package file size mismatch`, а `verify-package.ps1` проходит.
+
+Ручная UI-приёмка пользовательского чертежа не выполнялась. ZIP локальный и в
+Git не включается; старый `TECHMAP-GRAPHER-current-2026-09-29.zip` остаётся
+неотслеживаемым файлом и не входит в поставку.
+
 # Пакет 30.09.2026 — Ctrl/Shift, линии привязки и исправления ОП
 
 Кодовый срез: `3a3f00c8fb564a658ccd06e9a80803604033a45b` (`fix(joining-pipes): keep transition bends on visible OP contour`) поверх `3b2225a25be15efebcb0b17b09bfafd9832d011f` (`fix(drawing): use Ctrl for 30-degree snapping`). Линии привязки позиций входят через предков `fd6a4b8` и `b8e5d1e`; отдельная ветка `ad33b10` не является предком, но её функциональность уже была перенесена в сборочную ветку.
