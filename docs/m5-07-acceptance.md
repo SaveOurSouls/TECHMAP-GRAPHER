@@ -1,3 +1,27 @@
+# Пакет 30.09.2026 — прозрачность и точки перехода П/ОП
+
+Срез кода: `3ca8c8a7676740abdad29234fd86639ceee1503b`. После предыдущего ZIP
+вошли `46318db` (проверка прозрачности П/ОП) и `3ca8c8a` (удаляемые,
+пронумерованные точки перехода).
+
+Windows x64 ZIP `0.63.8-m5-07-review`:
+`artifacts/m5-07-20260930-transition-bends/TECHMAP-GRAPHER-0.63.8-m5-07-review-win-x64.zip`.
+Размер: **55 234 861 байт**. SHA-256:
+`23F975C270066813BDDED57F2626D740C09ADC950062EF7909FD174CDF96B7F9`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 156 клиентских файлов
+тестов, 1507 клиентских тестов, TypeScript/Vite build, 1034 Release .NET-теста,
+self-contained win-x64 publish. `verify-package.ps1` подтвердил 209 файлов
+манифеста; ZIP содержит 212 записей, включая служебные каталоги. Все семь
+режимов `test-portable-package.ps1` прошли из
+`C:\Temp\TECHMAP-portable-20260930-transition-bends`, включая каталог с
+кириллицей и пробелом.
+
+Прямой portable-запуск из исходного пути репозитория завершился до публикации
+`TECHMAP_HOST_URL`; в `root.stderr.log` записано
+`TECHMAP_STARTUP_ERROR=UnauthorizedAccessException`. Ручная приёмка на
+пользовательском чертеже не выполнялась. ZIP локальный, в Git не включается.
+
 # Пакет 30.09.2026 — круглые пайпы и видимость проводов
 
 Срез кода: `ab40ddaf644c2b21977fd72241bc6efa082ba8e7`. После предыдущего ZIP
