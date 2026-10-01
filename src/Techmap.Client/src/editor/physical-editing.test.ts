@@ -178,6 +178,13 @@ it("keeps a bend on its active shoulder while pointer crosses distant intersecti
  }
  expect(points.at(-1)!.y).toBeCloseTo(76,6);
 });
+it("reaches a horizontal OP shoulder from below with Ctrl",()=>{
+ const anchors=[{x:0,y:0},{x:600,y:100}];
+ const state:BendSnapState={};
+ const result=[80,60,40,20,0,-20].map(y=>snapBendPoint({x:300,y},anchors,true,7,undefined,Math.PI/6,state).point);
+ expect(result[4]!.y).toBeCloseTo(0);
+ expect(result[4]!.x).toBeGreaterThan(300);
+});
 it("updates automatic routes after geometry and dimensions change while retaining manual assignments",()=>{
  const base=physicalFixture();
  const t={...base.physicalTopology!,segments:[...base.physicalTopology!.segments,{id:"direct",from:"NA",to:"NB",path:{kind:"polyline" as const,points:[]}}],routes:[]};

@@ -164,6 +164,27 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
   // continuous drag and waits for the next valid intersection.
   const maxJump=Math.max(32,tolerance*8);
   const nearPointer=!!candidate&&candidate.distance<=maxJump;
+  if(unique.length===2&&Math.abs(angleStep-Math.PI/6)<1e-9&&Math.abs(unique[0]!.y-unique[1]!.y)>1e-7){
+    const [start,end]=unique,dx=end!.x-start!.x;
+    // A horizontal shoulder from either anchor intersects a 30° shoulder
+    // from the other. Offer that exact station while the pointer enters its
+    // horizontal attraction band, including when approached from below.
+    for(const anchor of [start!,end!]){
+      const other=anchor===start?end!:start!;
+      for(const slope of [Math.tan(angleStep),-Math.tan(angleStep)]){
+        const x=other.x+(anchor.y-other.y)/slope;
+        if((x-start!.x)*dx<0||(x-end!.x)*dx>0)continue;
+        const horizontal={x,y:anchor.y};
+        if(Math.abs(point.y-horizontal.y)>Math.max(tolerance*3,20))continue;
+        const horizontalDistance=Math.hypot(point.x-x,point.y-anchor.y);
+        if(horizontalDistance>maxJump*3)continue;
+        if(candidate&&horizontalDistance>candidate.distance+Math.max(tolerance*3,20))continue;
+        state.active=unique.map(a=>({anchor:a,direction:directionFor(a,horizontal,directions,angleStep)}));
+        state.previous=horizontal;
+        return {point:horizontal,guide:[anchor,horizontal]};
+      }
+    }
+  }
   if(candidate&&forward&&(jump<=maxJump||nearPointer)){
     state.active=candidate.active;
     state.previous=candidate.point;
