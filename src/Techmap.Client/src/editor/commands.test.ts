@@ -1816,9 +1816,9 @@ it("C6 keeps a manually dragged E4 wire editable when a pinned neighbour owns it
  const moved=applyEditorCommand(document,{type:"set-e4-wire-route",wireId:"w1",route:[
   {x:648,y:64},{x:740,y:64},{x:740,y:80},{x:900,y:80},{x:900,y:64},{x:976,y:64},
  ]});
- expect(moved.wires.find(wire=>wire.id==="w1")?.e4Route[2]?.y).toBe(80);
+ expect(moved.wires.find(wire=>wire.id==="w1")?.e4Route[2]?.y).not.toBe(80);
  expect(moved.wires.map(wire=>[wire.from,wire.to])).toEqual(document.wires.map(wire=>[wire.from,wire.to]));
- expect(e4RoutingIssues(moved).length).toBeGreaterThan(0);
+ expect(e4RoutingIssues(moved)).toEqual([]);
 });
 
 it("C3 and C7 plan real automatic pair routes at 24 units for the full horizontal run",()=>{

@@ -1548,7 +1548,7 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   const start = wireEndpointE4Anchor(document, wire.from);
   const end = wireEndpointE4Anchor(document, wire.to);
   if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
-  const copy = route.map((point) => ({ ...point }));
+  const copy = route.map(point=>({...point}));
   validateE4Polyline(start, copy, end);
   // A manually moved wire owns the space first. Rebuild automatic neighbours
   // around it so two wires do not deadlock each other as mutual obstacles.
@@ -1572,15 +1572,13 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   const repairedEnd = wireEndpointE4Anchor(repaired, repairedWire.to);
   if (!repairedStart || !repairedEnd) throw new Error("Точки подключения маршрута Э4 не найдены.");
   try {
-    validateE4Route(
-      [repairedStart.position, ...repairedWire.e4Route, repairedEnd.position],
-      createE4RoutingRequest(repaired, repairedWire, wireId),
-    );
+    validateE4Route([repairedStart.position, ...repairedWire.e4Route, repairedEnd.position],
+      createE4RoutingRequest(repaired, repairedWire, wireId));
   } catch (error) {
-    // A manual drag owns its geometry. If all neighbouring wires are pinned,
-    // a temporary clearance conflict must remain editable and diagnosable;
-    // it must not turn the drag into an unhandled command failure.
     if (!(error instanceof Error) || !/зазор|пересеч|clearance/i.test(error.message)) throw error;
+    const adjusted = nearestValidE4Route(document, wireId, copy);
+    if (!adjusted) throw new Error("Рядом с выбранной позицией нет допустимого маршрута Э4 с нужным зазором.");
+    repaired = adjusted;
   }
   for (const junction of repaired.junctions.filter((item) => item.wireIds.includes(wireId))) validateJunctionAgainstWires(repaired, junction);
   validateWireGroups(repaired);
@@ -1877,6 +1875,34 @@ function repairE4JunctionBranches(document:HarnessDesignDocument,wireIds:Readonl
   validateE4WireIds(changed,pending);
   return changed;
 }
+
+function nearestValidE4Route(document: HarnessDesignDocument, wireId: string, preferred: readonly Point[]): HarnessDesignDocument | null {
+  const wire = findWire(document, wireId);
+  const start = wireEndpointE4Anchor(document, wire.from);
+  const end = wireEndpointE4Anchor(document, wire.to);
+  if (!start || !end) return null;
+  const displacement = [0, 8, -8, 16, -16, 24, -24, 32, -32, 48, -48, 64, -64, 96, -96];
+  const full = [start.position, ...preferred, end.position];
+  const longest = full.slice(1).map((point, index) => ({index,length:Math.abs(point.x-full[index]!.x),horizontal:point.y===full[index]!.y}))
+    .filter(item => item.horizontal && item.index>0 && item.index<full.length-2)
+    .sort((left,right)=>right.length-left.length)[0];
+  const bodyY = longest === undefined ? null : full[longest.index]!.y;
+  const candidates = displacement.map(delta => preferred.map((point, index) =>
+    bodyY !== null && point.y===bodyY && index>0 && index<preferred.length-1
+      ? {x:point.x,y:point.y+delta} : {...point}));
+  candidates.push([...wire.e4Route]);
+  for (const route of candidates) {
+    try {
+      validateE4Polyline(start, route, end);
+      const candidate = { ...document, wires: document.wires.map(item => item.id === wireId
+        ? { ...item, e4Route: route, e4RouteMode: "manual" as const } : item) };
+      validateE4Route([start.position, ...route, end.position], createE4RoutingRequest(candidate, wire, wireId));
+      return candidate;
+    } catch { /* Move to the next nearest legal body position. */ }
+  }
+  return null;
+}
+
 
 function rerouteWireE4ThroughJunctions(
   document: HarnessDesignDocument,
