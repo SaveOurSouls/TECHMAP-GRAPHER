@@ -17,6 +17,8 @@ import {
 } from "./reference-catalog-api";
 import type { RuntimeConfig } from "./runtime-config";
 import { EditableReferenceTable } from "./EditableReferenceTable";
+import { WireBlankCatalogEditor } from "./WireBlankCatalogEditor";
+import { wireBlankSourceId } from "./WireBlankCatalog";
 
 interface ReferenceImportPanelProps {
   readonly config: RuntimeConfig;
@@ -840,7 +842,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
               aria-pressed={source.sourceId === activeSourceId}
               disabled={busy !== null}
               onClick={() => setEditableSourceId(source.sourceId)}
-            ><strong>{profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
+            ><strong>{source.sourceId === wireBlankSourceId ? "Полуфабрикаты провода" : profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
               <em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
           </div>
           <form className="reference-new-source" onSubmit={(event) => {
@@ -871,7 +873,19 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
           {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
           {activeSourceId && !activeError && active !== undefined && <>
-            <EditableReferenceTable
+            {activeSourceId === wireBlankSourceId ? <WireBlankCatalogEditor snapshot={active} disabled={busy !== null} onSave={async (request) => {
+              setBusy("publish");
+              try {
+                const publication = await api.publishEditableTable(activeSourceId, request);
+                setActive(publication.snapshot);
+                await loadSources(publication.snapshot.sourceId);
+                setNotice({ tone: "success", text: publication.status === "unchanged" ? "Изменений в справочнике нет." : `Справочник сохранён: ${publication.snapshot.records.length} записей.` });
+              } catch (error) {
+                const message = errorText(error);
+                setNotice({ tone: "error", text: message });
+                throw new Error(message);
+              } finally { setBusy(null); }
+            }} /> : <EditableReferenceTable
               sourceId={activeSourceId}
               displayName={profiles?.find(profile => profile.sourceId === activeSourceId)?.displayName}
               snapshot={active}
@@ -893,7 +907,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
                   setBusy(null);
                 }
               }}
-            />
+            />}
           </>}
         </div>
       </section>

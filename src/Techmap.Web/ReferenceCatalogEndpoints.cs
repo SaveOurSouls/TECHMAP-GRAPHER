@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Techmap.Application;
 using Techmap.Contracts;
 using Techmap.Domain;
@@ -118,6 +120,7 @@ public static class ReferenceCatalogEndpoints
             ValidateReferenceCatalogRequest request) => Execute(() =>
         {
             RejectRequestSize(request.Records, request.Diagnostics, request.SourceKind, request.VersionFingerprint);
+            ValidateWireBlankRecords(sourceId, request.Records!);
             var validation = BuildValidation(
                 sourceId,
                 request.ContractVersion,
@@ -145,6 +148,7 @@ public static class ReferenceCatalogEndpoints
             IReferenceCatalogSnapshotStore store) => Execute(() =>
         {
             RejectRequestSize(request.Records, request.Diagnostics, request.SourceKind, request.VersionFingerprint);
+            ValidateWireBlankRecords(sourceId, request.Records!);
             if (request.ExpectedValidationSha256 is null || request.AcknowledgedWarningIds is null)
             {
                 throw new ReferenceCatalogApiException(
@@ -303,6 +307,39 @@ public static class ReferenceCatalogEndpoints
             throw new ReferenceCatalogApiException(
                 "catalog_snapshot_limit_exceeded",
                 "The reference candidate exceeds the record or diagnostic limit.");
+        }
+    }
+
+    private static void ValidateWireBlankRecords(string sourceId, IReadOnlyList<ReferenceCatalogRecordInputRequest> records)
+    {
+        if (!string.Equals(sourceId, WireBlankCatalogSeed.SourceId, StringComparison.Ordinal)) return;
+        var indices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in records)
+        {
+            if (record.EntityType != "wire-blank" || string.IsNullOrWhiteSpace(record.SourceKey) || !indices.Add(record.SourceKey.Trim()))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Индекс полуфабриката должен быть уникальным и непустым.");
+            var payload = record.Payload;
+            if (payload.ValueKind != JsonValueKind.Object ||
+                !payload.TryGetProperty("title", out var title) || title.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(title.GetString()) || !titles.Add(title.GetString()!.Trim()))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Название полуфабриката должно быть уникальным и непустым.");
+            if (!payload.TryGetProperty("index", out var index) || index.ValueKind != JsonValueKind.String || index.GetString() != record.SourceKey)
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Индекс полуфабриката не совпадает с ключом записи.");
+            if (!payload.TryGetProperty("color", out var color) || color.ValueKind != JsonValueKind.String ||
+                !Regex.IsMatch(color.GetString() ?? "", "^#[0-9a-fA-F]{6}$"))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Цвет полуфабриката должен быть в формате #RRGGBB.");
+            foreach (var field in new[] { "start", "end" })
+            {
+                if (!payload.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String ||
+                    !new[] { "cut", "copper", "tin", "terminal", "sealed", "sealed-pin" }.Contains(value.GetString(), StringComparer.Ordinal))
+                    throw new ReferenceCatalogApiException("catalog_payload_invalid", $"Исполнение «{field}» полуфабриката не поддерживается.");
+            }
+            if (payload.TryGetProperty("photoDataUrl", out var photo) && photo.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Фото полуфабриката должно быть PNG.");
+            if (payload.TryGetProperty("photoDataUrl", out photo) && photo.ValueKind == JsonValueKind.String &&
+                (photo.GetString()!.Length > 1_400_000 || !Regex.IsMatch(photo.GetString()!, "^data:image/png;base64,[a-zA-Z0-9+/]+={0,2}$")))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Фото полуфабриката должно быть PNG размером до 1 МиБ.");
         }
     }
 

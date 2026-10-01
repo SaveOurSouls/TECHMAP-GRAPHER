@@ -14,6 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="WireCatalogE3Aj.json.gz" LogicalName="Techmap.Web.WireCatalogE3Aj.json.gz" />
+    <EmbeddedResource Include="../Techmap.Client/public/route-wire-illustrations/manifest.json" LogicalName="Techmap.Web.RouteWireIllustrationsManifest.json" />
   </ItemGroup>
   <ItemGroup>
     <!-- Test/build outputs can be created below a project by an overridden
