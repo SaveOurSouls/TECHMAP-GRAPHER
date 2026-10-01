@@ -2,7 +2,7 @@ export { parsePhysicalTopology } from "./physical-topology-validation";
 export { physicalWirePoints, physicalWireDisplayPaths } from "./physical-wire-geometry";
 export { routePhysicalWires } from "./physical-wire-routing";
 import { physicalSegmentControls, physicalSegmentPoints } from "./physical-geometry";
-export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints, physicalNodeDirection, physicalNodeContactDirection, automaticPipeRoute } from "./physical-geometry";
+export { physicalSegmentControls, physicalNodePoint, physicalNodeLocalPoint, constrainedPolyline, physicalSegmentPoints, physicalNodeDirection, physicalNodeFacingDirection, physicalNodeContactDirection, automaticPipeRoute } from "./physical-geometry";
 import { splitCoveringSpans, pathLength, projectOntoPolyline } from "./physical-coverings";
 import { prunePipeBundles } from "./pipe-bundle-editing";
 import type { HarnessDesignDocument, Point } from "./model";

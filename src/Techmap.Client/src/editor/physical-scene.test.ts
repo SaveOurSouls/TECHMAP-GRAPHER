@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { orderPhysicalScene, physicalSceneStackOrder, physicalTopologyScene, pipeSceneControls, pipeSceneHandles, pipeSceneWireIds } from "./physical-scene";
 import { physicalFixture } from "./physical-topology-fixture";
 import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geometry";
-import { physicalNodeDirection } from "./physical-ports";
+import { physicalNodeFacingDirection } from "./physical-ports";
 import { hitTestWireRoutePoint, objectsInPaintOrder } from "./CanvasViewport";
 import { defaultLayerIds, parseHarnessDesignDocument } from "./model";
 
@@ -50,7 +50,7 @@ it("resolves typed port directions at the same scene boundary",()=>{
  const scene=physicalTopologyScene(doc);
  for(const node of doc.physicalTopology.nodes){
   const object=scene.find(o=>o.id===node.id)!;
-  expect(object.port).toEqual({connectorId:node.connectorId,direction:physicalNodeDirection(doc,node)});
+  expect(object.port).toEqual({connectorId:node.connectorId,direction:physicalNodeFacingDirection(doc,node)});
   expect(object.metadata?.nodeRole).toBe(node.connectorId ? "connector-exit" : "junction");
  }
 });

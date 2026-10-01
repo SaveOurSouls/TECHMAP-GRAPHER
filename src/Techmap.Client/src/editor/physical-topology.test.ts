@@ -1,8 +1,8 @@
 import { physicalFixture } from "./physical-topology-fixture";
 import { describe, expect, it } from "vitest";
 import { applyEditorCommand } from "./commands";
-import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
-import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, connectPhysicalNodeToSegment, type PhysicalTopology } from "./physical-topology";
+import { connectorContactPosition, createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, parseHarnessDesignDocument } from "./model";
+import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNodeDirection, physicalNodeFacingDirection, physicalNodeContactDirection, physicalWireDisplayPaths, physicalSegmentPoints, physicalWirePoints, splitPhysicalSegment, removePhysicalSegment, connectPhysicalNodeToSegment, type PhysicalTopology } from "./physical-topology";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
@@ -103,6 +103,23 @@ describe("physical topology", () => {
     const d = applyEditorCommand(physicalFixture(), { type: "remove-wire", wireId: "W1" });
     expect(d.physicalTopology!.routes.map(r => r.wireId)).toEqual(["W2", "W3"]);
     expect(() => parseHarnessDesignDocument(d)).not.toThrow();
+  });
+  it("faces an exit toward its connected contacts on both sides and rotates with the connector",()=>{
+    const base=physicalFixture(),node=base.physicalTopology!.nodes[0]!;
+    const atLeft={...base,physicalTopology:{...base.physicalTopology!,nodes:base.physicalTopology!.nodes.map(n=>n.id===node.id?{...n,position:{x:-30,y:40},direction:"left" as const}:n)}};
+    expect(physicalNodeDirection(atLeft,atLeft.physicalTopology.nodes[0]!)!.x).toBeCloseTo(-1);
+    expect(physicalNodeFacingDirection(atLeft,atLeft.physicalTopology.nodes[0]!)!.x).toBeGreaterThan(0);
+    const atRight={...base,physicalTopology:{...base.physicalTopology!,nodes:base.physicalTopology!.nodes.map(n=>n.id===node.id?{...n,position:{x:170,y:40},direction:"right" as const}:n)}};
+    expect(physicalNodeFacingDirection(atRight,atRight.physicalTopology.nodes[0]!)!.x).toBeLessThan(0);
+    const rotated={...atLeft,connectors:atLeft.connectors.map(c=>c.id===node.connectorId?{...c,drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:1,rotationDegrees:90}]}:c)};
+    const facing=physicalNodeFacingDirection(rotated,rotated.physicalTopology.nodes[0]!)!;
+    const exitPoint=physicalNodePoint(rotated,rotated.physicalTopology.nodes[0]!);
+    const contactPoints=rotated.connectors[0]!.contacts.map(contact=>connectorContactPosition(rotated.connectors[0]!,contact.id,"drawing")!);
+    const center=contactPoints.reduce((sum,point)=>({x:sum.x+point.x/contactPoints.length,y:sum.y+point.y/contactPoints.length}),{x:0,y:0});
+    const expected={x:center.x-exitPoint.x,y:center.y-exitPoint.y};
+    expect(facing.x).toBeCloseTo(expected.x/Math.hypot(expected.x,expected.y));
+    expect(facing.y).toBeCloseTo(expected.y/Math.hypot(expected.x,expected.y));
+    expect(physicalNodeFacingDirection(base,base.physicalTopology!.nodes.find(n=>n.id==="J")!)).toBeNull();
   });
   it("removes a pipe, its authored bends, protection spans and orphan junction", () => {
     const d = physicalFixture();

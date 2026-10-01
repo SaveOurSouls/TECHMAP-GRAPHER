@@ -234,4 +234,7 @@ it("rotates drawing endpoints and scene contact markers by the same angle, leavi
  const marker=JSON.parse(scene[0]!.metadata!.materializedContactPoints!)[0];
  expect(marker.x+rotated.positions.drawing.x).toBeCloseTo(after.position.x);
  expect(marker.y+rotated.positions.drawing.y).toBeCloseTo(after.position.y);
+ expect(after.direction).toBe(marker.direction);
+ const halfTurn={...original,drawingPlacements:[{drawingId:"view:drawing",visible:true,offset:{x:0,y:0},scale:1,rotationDegrees:180}]};
+ expect(materializedContactWorldRepresentation(halfTurn,id,"drawing")!.direction).toBe("down");
 });

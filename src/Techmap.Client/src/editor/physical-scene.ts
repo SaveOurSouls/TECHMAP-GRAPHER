@@ -1,7 +1,7 @@
 import type { HarnessDesignDocument } from "./model";
 import type { EditorPoint, EditorSceneObject } from "./editor-types";
 import { physicalSegmentControls, physicalSegmentPoints } from "./physical-geometry";
-import { physicalNodePoint, physicalNodeDirection } from "./physical-ports";
+import { physicalNodePoint, physicalNodeFacingDirection } from "./physical-ports";
 import { drawingPipeWidth } from "./drawing-thickness";
 import { defaultLayerIds } from "./model";
 import { physicalEditablePoints } from "./physical-editing";
@@ -134,7 +134,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       metadata: { nodeRole: node.connectorId ? "connector-exit" : "junction",
         bundleMember: String(topology.segments.some(segment =>
           (segment.from === node.id || segment.to === node.id) && hasPipeBundleProjection(document,segment.id))) },
-      port: { connectorId: node.connectorId, direction: physicalNodeDirection(document, node) } };
+      port: { connectorId: node.connectorId, direction: physicalNodeFacingDirection(document, node) } };
   });
   const joiningEnds:EditorSceneObject[]=(topology.joiningPipes??[]).flatMap((p,i)=>(["from","to"] as const).map(side=>{
     const point=side==="from"?p.start:p.end;

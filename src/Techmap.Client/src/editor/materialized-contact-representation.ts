@@ -1,4 +1,4 @@
-import { drawingLocalPoint } from "./drawing-scale";
+import { drawingLocalDirection, drawingLocalPoint } from "./drawing-scale";
 import type {
   ComponentTemplateContactRepresentationSnapshot,
   ComponentTemplateContactSnapshot,
@@ -70,7 +70,9 @@ export function materializedContactWorldRepresentation(
       x: origin.x + local.x,
       y: origin.y + local.y,
     },
-    direction: representation.direction,
+    direction: viewKind === "drawing"
+      ? drawingLocalDirection(representation.direction, connector.drawingPlacements)
+      : representation.direction,
     representation,
   };
 }

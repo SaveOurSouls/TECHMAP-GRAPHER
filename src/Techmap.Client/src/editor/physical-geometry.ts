@@ -1,8 +1,8 @@
 import type { HarnessDesignDocument, Point } from "./model";
 import type { PhysicalNode, PhysicalSegment } from "./physical-topology-model";
-import { physicalNodePoint, physicalNodeDirection, physicalNodeContactDirection } from "./physical-ports";
+import { physicalNodePoint, physicalNodeDirection, physicalNodeFacingDirection, physicalNodeContactDirection } from "./physical-ports";
 import { automaticPipeRoute, computePipeRoute, directionTowards, type PipeRouteInput } from "./pipe-routing";
-export { physicalNodePoint, physicalNodeLocalPoint, physicalNodeDirection, physicalNodeContactDirection } from "./physical-ports";
+export { physicalNodePoint, physicalNodeLocalPoint, physicalNodeDirection, physicalNodeFacingDirection, physicalNodeContactDirection } from "./physical-ports";
 export { automaticPipeRoute, constrainedPolyline } from "./pipe-routing";
 
 export function physicalSegmentControls(document: HarnessDesignDocument, segment: PhysicalSegment): Point[] {

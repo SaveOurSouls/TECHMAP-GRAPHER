@@ -15,7 +15,7 @@ import { projectComponentTemplateView } from "./component-template-view-renderer
 import { materializePlacementRows } from "./component-template-placement";
 import { routeCutReadiness } from "../manufacturing/route-cut-readiness";
 import { DrawingTableWindows } from "./DrawingTableWindows";
-import { drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
+import { drawingLocalDirection, drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments, setDrawingPositionsVisibility } from "./drawing-documents";
@@ -387,7 +387,9 @@ export function designToScene(
         const representation = selectMaterializedContactRepresentation(connector, contact.id, view);
         return representation ? {
           ...(view==="drawing"?drawingLocalPoint(representation,connector.drawingPlacements):{x:representation.x,y:representation.y}),
-          direction: representation.direction,
+          direction: view === "drawing"
+            ? drawingLocalDirection(representation.direction, connector.drawingPlacements)
+            : representation.direction,
           status: contact.connectionStatus,
         } : null;
       });
