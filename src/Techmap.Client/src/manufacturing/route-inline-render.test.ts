@@ -5,7 +5,7 @@ import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { generateRoute } from "./route-commands";
+import { addAssemblyRow, generateRoute } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
 import { RouteRowInline } from "./ManufacturingRoutePanel";
 
@@ -45,5 +45,31 @@ describe("inline route row", () => {
     }));
     expect(markup).toContain("SXH-002T-P0.6");
     expect(markup).not.toContain(key);
+  });
+
+  it("shows a clickable operation field and a 0–100 harness background control", () => {
+    const document = createEmptyHarnessDesign();
+    const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
+    const row = { ...route.rows[0]!, operations: [{ id: "op", mode: "assembly" as const, note: "", binding: null }] };
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", row, route, document, sources: [], ordinal: 1,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).toContain('aria-label="Операция 1: не выбрана"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('min="0" max="100" step="1"');
+  });
+
+  it("shows an empty assembly as a drop target and only its saved fragment", () => {
+    const document = createEmptyHarnessDesign();
+    const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", row: route.rows[0]!, route, document, sources: [], ordinal: 1,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).toContain("Состав сборки");
+    expect(markup).toContain("Перетащите карточку сюда");
+    expect(markup).toContain("Изменить фрагмент");
+    expect(markup).toContain("Откройте режим рисунка и сохраните фрагмент сборки");
   });
 });
