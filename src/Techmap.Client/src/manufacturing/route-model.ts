@@ -9,6 +9,10 @@ export interface RouteOperation {
   readonly mode: typeof routeOperationModes[number];
   readonly note: string;
 }
+/** One visible, removable input line in an assembly row. */
+export type RouteAssemblyInput =
+  | { readonly id: string; readonly kind: "source"; readonly ref: RouteSourceRef }
+  | { readonly id: string; readonly kind: "row"; readonly rowId: string };
 export interface RouteRow {
   readonly terminalRequirements?: readonly RouteTerminalRequirement[];
   readonly photos?: readonly { readonly sha256: string; readonly name: string }[];
@@ -25,6 +29,8 @@ export interface RouteRow {
   readonly comment: string;
   readonly sourceObjects: readonly RouteSourceRef[];
   readonly dependsOn: readonly string[];
+  /** Optional for routes saved before assembly input lines were introduced. */
+  readonly assemblyInputs?: readonly RouteAssemblyInput[];
   readonly operations: readonly RouteOperation[];
   readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[] };
   readonly prepared: boolean;
@@ -50,6 +56,18 @@ function parseRef(value: unknown): RouteSourceRef {
   exact(v, ["kind", "id"]);
   if (!["wire", "cable", "covering", "connector"].includes(String(v.kind))) return fail();
   return { kind: v.kind as RouteSourceRef["kind"], id: text(v.id, 128) };
+}
+function parseAssemblyInput(value: unknown): RouteAssemblyInput {
+  const input = object(value);
+  if (input.kind === "source") {
+    exact(input, ["id", "kind", "ref"]);
+    return { id: text(input.id, 128), kind: "source", ref: parseRef(input.ref) };
+  }
+  if (input.kind === "row") {
+    exact(input, ["id", "kind", "rowId"]);
+    return { id: text(input.id, 128), kind: "row", rowId: text(input.rowId, 128) };
+  }
+  return fail();
 }
 function parseOperation(value: unknown): RouteOperation {
   const v = object(value);
@@ -88,10 +106,20 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
   let refCount = 0;
   const rows = array(v.rows, 1000).map(candidate => {
     const r = object(candidate), p = object(r.presentation);
-    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
+    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
     exact(p, ["backgroundOpacity", "objects"]);
-    if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < .1 || p.backgroundOpacity > .5) return fail();
+    if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < 0 || p.backgroundOpacity > 1) return fail();
     const sourceObjects = array(r.sourceObjects, 10000).map(parseRef);
+    const dependsOn = array(r.dependsOn, 1000).map(id => text(id, 128));
+    const assemblyInputs = r.assemblyInputs === undefined ? undefined : array(r.assemblyInputs, 10000).map(parseAssemblyInput);
+    if (assemblyInputs) {
+      if (r.kind !== "assembly" || new Set(assemblyInputs.map(input => input.id)).size !== assemblyInputs.length) return fail();
+      const inputSources = assemblyInputs.filter(input => input.kind === "source").map(input => refKey(input.ref));
+      const inputRows = assemblyInputs.filter(input => input.kind === "row").map(input => input.rowId);
+      if (inputSources.length !== sourceObjects.length || inputRows.length !== dependsOn.length ||
+        new Set(inputSources).size !== inputSources.length || new Set(inputRows).size !== inputRows.length ||
+        inputSources.some(key => !sourceObjects.some(ref => refKey(ref) === key)) || inputRows.some(id => !dependsOn.includes(id))) return fail();
+    }
     const objects = array(p.objects, 10000).map(candidate => {
       const o = object(candidate);
       exact(o, ["ref", "points", "hidden"]);
@@ -109,7 +137,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     const photos = r.photos === undefined ? undefined : array(r.photos, 16).map(candidate => { const photo = object(candidate); exact(photo, ["sha256", "name"]); return { sha256: hash(photo.sha256), name: text(photo.name, 255) }; });
     if (photos && new Set(photos.map(photo => photo.sha256)).size !== photos.length) return fail();
     const terminalRequirements = r.terminalRequirements === undefined ? undefined : array(r.terminalRequirements, 10000).map(parseTerminalRequirement);
-    refCount += (terminalRequirements?.length ?? 0) + array(r.dependsOn, 1000).length;
+    refCount += (terminalRequirements?.length ?? 0) + dependsOn.length;
     if (terminalRequirements && (new Set(terminalRequirements.map(item => `${item.wireId}:${item.end}`)).size !== terminalRequirements.length || terminalRequirements.some(item => !sourceObjects.some(ref => ref.kind === "wire" && ref.id === item.wireId)))) return fail();
     const index = r.index === undefined ? undefined : text(r.index, 128, true);
     const optionalNumber = (value: unknown): number | undefined => value === undefined ? undefined : (typeof value === "number" && Number.isFinite(value) ? value : fail());
@@ -119,7 +147,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     for (const [value, minimum] of [[quantity, 1], [reserve, 0], [operationTimeMinutes, 0]] as const) {
       if (value !== undefined && (value < minimum || value > 1e9 || Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-4)) return fail();
     }
-    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn: array(r.dependsOn, 1000).map(id => text(id, 128)), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
+    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
   });
   if (refCount > 10000) return fail();
   const byId = new Map(rows.map(row => [row.id, row]));
@@ -158,6 +186,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
   };
   rows.forEach(row => visit(row.id));
   if (v.status === "completed" && (!rows.length || rows.some(row => !row.prepared || !row.operations.length || row.operations.some(op => !op.binding)))) return fail();
+  if (v.status === "completed" && !rows.some(row => row.sourceObjects.length)) return fail();
   if (v.status === "completed" && !rows.some(row => {
     if (row.kind !== "assembly") return false;
     const ancestors = new Set<string>();

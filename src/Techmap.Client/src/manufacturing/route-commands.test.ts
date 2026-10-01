@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
-import { addAssemblyRow, generateRoute, mergeRouteRows, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
+import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteRow } from "./route-model";
 
 const sha = "a".repeat(64);
@@ -87,6 +87,54 @@ describe("manufacturing route commands", () => {
     expect(() => addAssemblyRow(assembled, "duplicate", "Повтор", [{ kind: "wire", id: "a" }], ["assembly"])).toThrow();
     expect(() => addAssemblyRow(assembled, "orphan", "Ошибка", [], ["absent"])).toThrow();
   });
+  it("creates an empty assembly and adds one input line per action while preserving the DAG", () => {
+    const original = route(row("a"), row("b"));
+    const empty = addAssemblyRow(original, "assembly", "Сборка", [], []);
+    expect(empty.rows.at(-1)?.assemblyInputs).toEqual([]);
+    expect(routeRowComposition(empty, "assembly")).toEqual([]);
+    const withRawSelection = addAssemblyInput(empty, "assembly", { id: "input-1", kind: "source", ref: { kind: "wire", id: "a" } });
+    expect(withRawSelection.rows.at(-1)?.assemblyInputs).toEqual([{ id: "input-1", kind: "row", rowId: "a" }]);
+    expect(withRawSelection.rows.at(-1)?.dependsOn).toEqual(["a"]);
+    const withBlank = addAssemblyInput(withRawSelection, "assembly", { id: "input-2", kind: "row", rowId: "b" });
+    expect(withBlank.rows.at(-1)?.assemblyInputs).toHaveLength(2);
+    expect(routeRowComposition(withBlank, "assembly").map(ref => ref.id)).toEqual(["a", "b"]);
+    expect(() => addAssemblyInput(withBlank, "assembly", { id: "input-3", kind: "source", ref: { kind: "wire", id: "a" } })).toThrow("уже добавлен");
+    expect(() => addAssemblyInput(withBlank, "assembly", { id: "input-3", kind: "row", rowId: "assembly" })).toThrow();
+    const withConnector = addAssemblyInput(withBlank, "assembly", { id: "input-3", kind: "source", ref: { kind: "connector", id: "x1" } });
+    expect(withConnector.rows.at(-1)?.assemblyInputs?.at(-1)).toEqual({ id: "input-3", kind: "source", ref: { kind: "connector", id: "x1" } });
+    expect(routeRowComposition(withConnector, "assembly").map(ref => ref.id)).toEqual(["a", "b", "x1"]);
+    expect(JSON.stringify(original)).toBe(JSON.stringify(route(row("a"), row("b"))));
+  });
+  it("rewrites an assembly input when its producing semi-finished rows are merged", () => {
+    const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);
+    const merged = mergeRouteRows(original, ["a", "b"], "combined");
+    expect(merged.rows.at(-1)?.dependsOn).toEqual(["combined"]);
+    expect(merged.rows.at(-1)?.assemblyInputs).toEqual([{ id: "row-1", kind: "row", rowId: "combined" }]);
+  });
+  it("removes one input and invalidates descendants and saved shapes outside their composition", () => {
+    const original = route(row("a"), row("b"));
+    const withAssembly = addAssemblyInput(addAssemblyInput(addAssemblyRow(original, "assembly", "Сборка", [], []), "assembly", { id: "a-in", kind: "row", rowId: "a" }), "assembly", { id: "b-in", kind: "row", rowId: "b" });
+    const withDrawing = updateRouteRow(withAssembly, "assembly", { prepared: true, presentation: { backgroundOpacity: 1, objects: [
+      { ref: { kind: "wire", id: "a" }, points: [{ x: 1, y: 2 }], hidden: false },
+      { ref: { kind: "wire", id: "b" }, points: [{ x: 3, y: 4 }], hidden: false },
+    ] } });
+    const child = addAssemblyRow(withDrawing, "child", "Сборка 2", [], ["assembly"]);
+    const removed = removeAssemblyInput(child, "assembly", "b-in");
+    expect(removed.rows.find(item => item.id === "assembly")?.dependsOn).toEqual(["a"]);
+    expect(removed.rows.find(item => item.id === "assembly")?.presentation.objects.map(item => item.ref.id)).toEqual(["a"]);
+    expect(removed.rows.find(item => item.id === "assembly")?.prepared).toBe(false);
+    expect(routeRowComposition(removed, "child").map(ref => ref.id)).toEqual(["a"]);
+    expect(() => removeAssemblyInput(removed, "assembly", "missing")).toThrow();
+  });
+  it("copies inherited geometry by stable ID without sharing points or changing source rows", () => {
+    const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);
+    const saved = JSON.stringify(original);
+    const copy = copyAssemblyPresentation(original, "assembly");
+    expect(copy.objects.map(item => item.ref.id)).toEqual(["a", "b"]);
+    (copy.objects[0]!.points as { x: number; y: number }[])[0]!.x = 99;
+    expect(original.rows[0]!.presentation.objects[0]!.points[0]!.x).toBe(10);
+    expect(JSON.stringify(original)).toBe(saved);
+  });
   it("updates immutably, invalidates dependent rows and rejects invalid edits", () => {
     const original = route(row("a"), row("b", ["a"]), row("other"));
     const updated = updateRouteRow(original, "a", { comment: "changed" });
@@ -94,7 +142,7 @@ describe("manufacturing route commands", () => {
     expect(original.rows[0]!.comment).toBe("comment a");
     expect(updateRouteRow(updated, "a", { prepared: true }).rows.map(r => r.prepared)).toEqual([true, false, true]);
     expect(() => updateRouteRow(original, "a", { dependsOn: ["b"] })).toThrow();
-    expect(() => updateRouteRow(original, "a", { presentation: { backgroundOpacity: 1, objects: [] } })).toThrow();
+    expect(() => updateRouteRow(original, "a", { presentation: { backgroundOpacity: 1.1, objects: [] } })).toThrow();
     expect(() => updateRouteRow(original, "missing", { comment: "lost" })).toThrow();
   });
 });

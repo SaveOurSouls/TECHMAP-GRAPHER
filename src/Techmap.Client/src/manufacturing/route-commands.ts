@@ -1,6 +1,6 @@
 import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceRef } from "./route-source";
-import { parseManufacturingRoute, type ManufacturingRoute, type RouteRow } from "./route-model";
+import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteAssemblyInput, type RouteRow } from "./route-model";
 
 const validate = (route: ManufacturingRoute): ManufacturingRoute => parseManufacturingRoute(route)!;
 const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
@@ -57,7 +57,11 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
       if (inserted) return [];
       inserted = true; return [merged];
     }
-    return [{ ...row, dependsOn: unique(row.dependsOn.map(id => selection.has(id) ? newId : id)) }];
+    const dependsOn = unique(row.dependsOn.map(id => selection.has(id) ? newId : id));
+    const assemblyInputs = row.assemblyInputs?.filter((input, index, inputs) => input.kind !== "row" ||
+      inputs.findIndex(other => other.kind === "row" && (selection.has(other.rowId) ? newId : other.rowId) === (selection.has(input.rowId) ? newId : input.rowId)) === index)
+      .map(input => input.kind === "row" && selection.has(input.rowId) ? { ...input, rowId: newId } : input);
+    return [{ ...row, dependsOn, ...(assemblyInputs ? { assemblyInputs } : {}) }];
   });
   return validate({ ...original, status: "draft", rows: invalidateDescendants(rows, new Set([newId])) });
 }
@@ -66,8 +70,88 @@ export function addAssemblyRow(route: ManufacturingRoute, id: string, title: str
   const original = validate(route);
   return validate({ ...original, status: "draft", rows: [...original.rows, {
     id, kind: "assembly", index: `СБ-${String(original.rows.length + 1).padStart(2, "0")}`, title, quantity: 1, reserve: 0, operationTimeMinutes: 0, comment: "", sourceObjects: sourceRefs, dependsOn, operations: [],
-    presentation: { backgroundOpacity: .25, objects: [] }, prepared: false,
+    assemblyInputs: [
+      ...sourceRefs.map((ref, index) => ({ id: `source-${index + 1}`, kind: "source" as const, ref })),
+      ...dependsOn.map((rowId, index) => ({ id: `row-${index + 1}`, kind: "row" as const, rowId })),
+    ], presentation: { backgroundOpacity: .25, objects: [] }, prepared: false,
   }] });
+}
+
+function inputLines(row: RouteRow): RouteAssemblyInput[] {
+  return row.assemblyInputs ? [...row.assemblyInputs] : [
+    ...row.sourceObjects.map((ref, index) => ({ id: `source-${index + 1}`, kind: "source" as const, ref })),
+    ...row.dependsOn.map((rowId, index) => ({ id: `row-${index + 1}`, kind: "row" as const, rowId })),
+  ];
+}
+
+/** Adds one addressable input line. A semi-finished row becomes a DAG edge, never a duplicate source. */
+export function addAssemblyInput(route: ManufacturingRoute, assemblyId: string, input: RouteAssemblyInput): ManufacturingRoute {
+  const original = validate(route);
+  const row = original.rows.find(candidate => candidate.id === assemblyId);
+  if (!row || row.kind !== "assembly") throw new Error("Строка сборки не найдена.");
+  const inputs = inputLines(row);
+  if (inputs.some(item => item.id === input.id)) throw new Error("ID входа сборки уже существует.");
+  let savedInput: RouteAssemblyInput = input;
+  if (input.kind === "source") {
+    // Generated routes already have a producing row for each drawing object.
+    // Keep the palette action, but persist a DAG edge instead of introducing the source twice.
+    const producer = original.rows.find(candidate => candidate.id !== assemblyId && candidate.sourceObjects.some(ref => ref.kind === input.ref.kind && ref.id === input.ref.id));
+    if (producer) savedInput = { id: input.id, kind: "row", rowId: producer.id };
+  }
+  if (savedInput.kind === "row" && inputs.some(item => item.kind === "row" && item.rowId === savedInput.rowId)) {
+    throw new Error("Полуфабрикат уже добавлен в сборку.");
+  }
+  const updated: RouteRow = {
+    ...row, assemblyInputs: [...inputs, savedInput],
+    sourceObjects: savedInput.kind === "source" ? [...row.sourceObjects, savedInput.ref] : row.sourceObjects,
+    dependsOn: savedInput.kind === "row" ? [...row.dependsOn, savedInput.rowId] : row.dependsOn,
+  };
+  return updateRouteRow(original, assemblyId, updated);
+}
+
+/** Removes precisely one input line and any saved shapes no longer in this stage's composition. */
+export function removeAssemblyInput(route: ManufacturingRoute, assemblyId: string, inputId: string): ManufacturingRoute {
+  const original = validate(route);
+  const row = original.rows.find(candidate => candidate.id === assemblyId);
+  if (!row || row.kind !== "assembly") throw new Error("Строка сборки не найдена.");
+  const inputs = inputLines(row), removed = inputs.find(input => input.id === inputId);
+  if (!removed) throw new Error("Вход сборки не найден.");
+  const nextRow: RouteRow = {
+    ...row, assemblyInputs: inputs.filter(input => input.id !== inputId),
+    sourceObjects: removed.kind === "source" ? row.sourceObjects.filter(ref => ref.kind !== removed.ref.kind || ref.id !== removed.ref.id) : row.sourceObjects,
+    dependsOn: removed.kind === "row" ? row.dependsOn.filter(id => id !== removed.rowId) : row.dependsOn,
+  };
+  const next = { ...original, status: "draft" as const, rows: original.rows.map(candidate => candidate.id === assemblyId ? nextRow : candidate) };
+  const rows = next.rows.map(candidate => {
+    const composed = new Set(routeRowComposition(next, candidate.id).map(ref => `${ref.kind}:${ref.id}`));
+    return { ...candidate,
+      presentation: { ...candidate.presentation, objects: candidate.presentation.objects.filter(item => composed.has(`${item.ref.kind}:${item.ref.id}`)) },
+      ...(candidate.terminalRequirements ? { terminalRequirements: candidate.terminalRequirements.filter(item => composed.has(`wire:${item.wireId}`)) } : {}),
+    };
+  });
+  return validate({ ...next, rows: invalidateDescendants(rows, new Set([assemblyId])) });
+}
+
+/** Independent working copy of inherited shapes. Source-only shapes are supplied by the drawing document. */
+export function copyAssemblyPresentation(route: ManufacturingRoute, assemblyId: string): RouteRow["presentation"] {
+  const original = validate(route);
+  const row = original.rows.find(candidate => candidate.id === assemblyId);
+  if (!row || row.kind !== "assembly") throw new Error("Строка сборки не найдена.");
+  if (routeRowPresentationConflicts(original, assemblyId).length)
+    throw new Error("У родителей разные рисунки общего объекта. Выберите геометрию в сборке.");
+  const byId = new Map(original.rows.map(candidate => [candidate.id, candidate]));
+  const objects = new Map<string, RouteRow["presentation"]["objects"][number]>(), visited = new Set<string>();
+  const visit = (id: string): void => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const current = byId.get(id)!;
+    current.dependsOn.forEach(visit);
+    current.presentation.objects.forEach(item => objects.set(`${item.ref.kind}:${item.ref.id}`, {
+      ref: { ...item.ref }, points: item.points.map(point => ({ ...point })), hidden: item.hidden,
+    }));
+  };
+  visit(assemblyId);
+  return { backgroundOpacity: row.presentation.backgroundOpacity, objects: [...objects.values()] };
 }
 
 export function updateRouteRow(route: ManufacturingRoute, id: string, patch: Partial<Omit<RouteRow, "id">>): ManufacturingRoute {

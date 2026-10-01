@@ -50,8 +50,22 @@ describe("manufacturing route contract", () => {
     expect(() => route([], "completed")).toThrow();
     expect(() => route([{ ...row("a"), operations: [{ id: "op", binding, mode: "cut", note: "" }] }], "completed")).toThrow();
   });
-  it("rejects unsupported route versions and out-of-range opacity", () => {
-    expect(() => route([{ ...row("a"), presentation: { backgroundOpacity: .05, objects: [] } }])).toThrow();
+  it("keeps old opacity values and accepts the full 0 to 100 percent range", () => {
+    for (const backgroundOpacity of [0, .1, .25, .5, 1]) {
+      expect(route([{ ...row("a"), presentation: { backgroundOpacity, objects: [] } }])?.rows[0]?.presentation.backgroundOpacity).toBe(backgroundOpacity);
+    }
+    for (const backgroundOpacity of [-.01, 1.01, NaN]) {
+      expect(() => route([{ ...row("a"), presentation: { backgroundOpacity, objects: [] } }])).toThrow();
+    }
+  });
+  it("preserves independently addressable assembly inputs and rejects drift from dependency lists", () => {
+    const assembly = { ...row("assembly", ["a"], []), kind: "assembly", assemblyInputs: [{ id: "input-a", kind: "row", rowId: "a" }] };
+    expect(route([row("a"), assembly])?.rows[1]?.assemblyInputs).toEqual(assembly.assemblyInputs);
+    expect(() => route([row("a"), { ...assembly, assemblyInputs: [] }])).toThrow();
+    expect(() => route([row("a"), { ...assembly, assemblyInputs: [assembly.assemblyInputs[0], assembly.assemblyInputs[0]] }])).toThrow();
+    expect(() => route([{ ...row("a"), assemblyInputs: [] }])).toThrow();
+  });
+  it("rejects unsupported route versions", () => {
     const parsed = route([row("a")])!;
     expect(() => parseManufacturingRoute({ ...parsed, contractVersion: 2 })).toThrow();
     expect(() => parseManufacturingRoute({ ...parsed, source: { ...parsed.source, fingerprintVersion: 2 } })).toThrow();
