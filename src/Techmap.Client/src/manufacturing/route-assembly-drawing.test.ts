@@ -45,7 +45,10 @@ describe("assembly drawing copy", () => {
     expect(draft.objects[1]!.hidden).toBe(true);
     const fragment = assemblyDrawingFragment(draft);
     expect(fragment.backgroundOpacity).toBe(1);
-    expect(fragment.objects).toEqual([{ ref: wire.ref, points: [{ x: 10, y: 20 }, { x: 30, y: 40 }], hidden: false }]);
+    expect(fragment.objects).toEqual([
+      { ref: wire.ref, points: [{ x: 10, y: 20 }, { x: 30, y: 40 }], hidden: false },
+      { ref: connector.ref, points: [{ x: 50, y: 60 }], hidden: true },
+    ]);
     expect(previous.presentation.objects).toHaveLength(2);
   });
 

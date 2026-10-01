@@ -76,12 +76,16 @@ export function createAssemblyDrawingDraft(
   return { backgroundOpacity: clamp(row.presentation.backgroundOpacity, 0, 1), objects };
 }
 
-/** The route preview receives only the authored fragment, never the context layer. */
+/**
+ * Commit the authored fragment while retaining hidden flags. The normal route
+ * preview must filter hidden objects; retaining them here lets the editor
+ * reopen an isolation choice without silently re-adding that component.
+ */
 export function assemblyDrawingFragment(presentation: AssemblyDrawingPresentation): AssemblyDrawingPresentation {
   return {
     backgroundOpacity: presentation.backgroundOpacity,
-    objects: presentation.objects.filter(object => !object.hidden).map(object => ({
-      ...object, points: object.points.map(point => ({ ...point })), hidden: false,
+    objects: presentation.objects.map(object => ({
+      ...object, points: object.points.map(point => ({ ...point })),
     })),
   };
 }
