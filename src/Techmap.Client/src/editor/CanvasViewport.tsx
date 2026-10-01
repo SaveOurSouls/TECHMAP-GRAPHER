@@ -2,7 +2,7 @@ import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
-import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, pipeBendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
+import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, pipeBendSnapAnchors, joiningPipeEndpointSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -3316,7 +3316,7 @@ export function CanvasViewport({
           objectX: object.x,
           objectY: object.y,
           mode:event.shiftKey?"adjacent":"carry",
-          anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
+          anchors:view==="drawing"&&object.metadata?.joiningPipe?joiningPipeEndpointSnapAnchors(objects,object):view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
           routeAnchors:view==='drawing'&&!object.metadata?.joiningPipe&&(object.kind==="physical-node"||object.metadata?.bundleMember!=="true")&&object.pipe?.role!=="joining-pipe"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
           snapState:{},
         };

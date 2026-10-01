@@ -18,7 +18,7 @@ import {coveringHit} from "./covering-renderer";
 import {coveringGrips} from "./covering-renderer";
 import {coveringRoute} from "./physical-coverings";
 import {drawingRouteCommands} from "./drawing-route-path";
-import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,snapBendPoint} from "./physical-editing";
+import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,joiningPipeEndpointSnapAnchors,snapBendPoint,snapPhysicalPoint} from "./physical-editing";
 
 function fixture():HarnessDesignDocument {
  const d=createEmptyHarnessDesign();
@@ -30,6 +30,20 @@ function fixture():HarnessDesignDocument {
 }
 
 describe("joining pipe hierarchy",()=>{
+ it.each(["from","to"] as const)("snaps the %s OP endpoint to a horizontal axis from below and above",side=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+  const doc={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+  const scene=physicalTopologyScene(doc),end=scene.find(o=>o.id===`op:${side}`)!;
+  const anchors=joiningPipeEndpointSnapAnchors(scene,end);
+  expect(anchors).toHaveLength(1);
+  for(const direction of [1,-1]){
+   const pointerYs=direction===1?[45,30,20,10,0,-10]:[-45,-30,-20,-10,0,10];
+   const snapped=pointerYs.map(delta=>snapPhysicalPoint({x:end.x+100,y:anchors[0]!.y+delta},anchors,true,7,Math.PI/6).point);
+   expect(snapped[4]!.y).toBeCloseTo(anchors[0]!.y);
+  }
+  expect(snapPhysicalPoint({x:end.x+35,y:end.y+9},anchors,false,7,Math.PI/6).point).toEqual({x:end.x+35,y:end.y+9});
+  expect(joiningPipeEndpointSnapAnchors(scene,{...end,metadata:{joiningPipe:"other"}})).toEqual([]);
+ });
  it("retains local Ctrl and Shift route anchors for a member endpoint",()=>{
   const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
   const doc={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};

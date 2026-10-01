@@ -260,6 +260,18 @@ export function physicalObjectSnapAnchors(objects:readonly {id:string;kind:strin
     .map(o=>({x:o.x-(exit.x-object.x),y:o.y-(exit.y-object.y)})));
 }
 
+/** OP endpoint drags use the opposite endpoint of the same OP as their local
+ * angular reference. Presentation overlap with member pipes is irrelevant. */
+export function joiningPipeEndpointSnapAnchors(objects:readonly {
+  id:string;kind:string;x:number;y:number;metadata?:Readonly<Record<string,string>>;
+}[],object:{id:string;kind:string;metadata?:Readonly<Record<string,string>>}):Point[] {
+  const pipeId=object.metadata?.joiningPipe;
+  if(object.kind!=="physical-node"||!pipeId)return [];
+  const opposite=objects.find(candidate=>candidate.kind==="physical-node"
+    &&candidate.metadata?.joiningPipe===pipeId&&candidate.id!==object.id);
+  return opposite?[{x:opposite.x,y:opposite.y}]:[];
+}
+
 /** Preserve adjacent inner shoulders in carry mode; Shift edits only the selected vertex. */
 export function editPhysicalBend(document:HarnessDesignDocument,id:string,index:number,point:Point,mode:PhysicalDragMode,insert=false):HarnessDesignDocument {
   const segment=document.physicalTopology?.segments.find(s=>s.id===id);if(!segment)return document;
