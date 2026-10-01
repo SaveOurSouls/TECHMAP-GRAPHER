@@ -24,9 +24,26 @@ describe("inline route row", () => {
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).not.toContain("<dialog");
-    expect(markup).toContain("Индекс полуфабриката");
+    expect(markup).toContain("Индекс");
     expect(markup).toContain("Длина резки остаётся заданной в жгуте");
-    expect(markup).toContain("Технические операции");
+    expect(markup).toContain("Операции");
     expect(markup).toContain("Фото этапа");
+    expect(markup).toContain('class="route-material-table"');
+    expect(markup).toContain('class="route-metrics-table"');
+  });
+
+  it("shows terminal articles instead of encoded keys in tables and drawing", () => {
+    const key = "3:JST|13:SXH-002T-P0.6|0:|3:XHP";
+    const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
+    const b = createConnector("b", "X2", 1, { x: 100, y: 0 });
+    const connectors = [a, b].map(connector => ({ ...connector, contacts: connector.contacts.map(contact => ({ ...contact, terminalArticle: key })) }));
+    const document = { ...createEmptyHarnessDesign(), connectors, wires: [createWire("wire", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100, "Питание", "#f00")] };
+    const route = generateRoute(document, "a".repeat(64), 1);
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", row: route.rows[0]!, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).toContain("SXH-002T-P0.6");
+    expect(markup).not.toContain(key);
   });
 });
