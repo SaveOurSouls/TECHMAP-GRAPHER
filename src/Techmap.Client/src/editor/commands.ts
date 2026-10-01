@@ -222,13 +222,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const authoredPosition=document.views.e4.e4RoutingMode==="angular"
         ? snapE4AngularBend(original,command.index,command.position,!!command.insert)
         : command.position;
-      const raw=editedE4Points(original,command.index,authoredPosition,command.mode,command.insert,false);
+      const editMode=document.views.e4.e4RoutingMode==="angular"?"adjacent":command.mode;
+      const raw=editedE4Points(original,command.index,authoredPosition,editMode,command.insert,false);
       const baseline=[...original];
       if(command.insert){const a=baseline[command.index]!,b=baseline[command.index+1]!;baseline.splice(command.index+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
       const positions=movedE4Junctions(document,wire.id,baseline,raw);
-      const points=editedE4Points(original,command.index,authoredPosition,command.mode,command.insert);
+      const points=editedE4Points(original,command.index,authoredPosition,editMode,command.insert);
       const route=preserveE4Leads(points,request.start,request.end).slice(1,-1);
-      let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),command.mode);
+      let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),editMode);
       const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>id!==wire.id));
       if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
       changed=repairE4JunctionBranches(changed,branches);
@@ -859,8 +860,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           drawingRoute: command.route.map((point) => ({ ...point })),
         }), "Провод не найден."),
       };
-    case "set-e4-wire-route":
+    case "set-e4-wire-route": {
+      const wire=findWire(document,command.wireId);
+      if(screenJunctionEnds(wire)&&command.route.length>0)throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
+      const start=wireEndpointE4Anchor(document,wire.from),end=wireEndpointE4Anchor(document,wire.to);
+      if(!start||!end)throw new Error("Точки подключения маршрута Э4 не найдены.");
+      requireE4ModeGeometry(document,[start.position,...command.route,end.position]);
       return setE4WireRoute(document, command.wireId, command.route);
+    }
     case "move-e4-wire-route-point": {
       const wire = findWire(document, command.wireId);
       if (!Number.isSafeInteger(command.pointIndex) || command.pointIndex < 0 || command.pointIndex >= wire.e4Route.length) {
@@ -1876,6 +1883,18 @@ function repairE4JunctionBranches(document:HarnessDesignDocument,wireIds:Readonl
   return changed;
 }
 
+function requireE4ModeGeometry(document: HarnessDesignDocument, points: readonly Point[]): void {
+  const step=document.views.e4.e4RoutingMode==="angular"?Math.PI/6:Math.PI/2;
+  for(let index=1;index<points.length;index++){
+    const a=points[index-1]!,b=points[index]!;
+    if(a.x===b.x&&a.y===b.y)continue;
+    const turns=Math.atan2(b.y-a.y,b.x-a.x)/step;
+    if(Math.abs(turns-Math.round(turns))>1e-6)throw new Error(document.views.e4.e4RoutingMode==="angular"
+      ?"Маршрут Э4 допускает только углы, кратные 30°."
+      :"При выключенных углах маршрут Э4 должен быть ортогональным.");
+  }
+}
+
 function nearestValidE4Route(document: HarnessDesignDocument, wireId: string, preferred: readonly Point[]): HarnessDesignDocument | null {
   const wire = findWire(document, wireId);
   const start = wireEndpointE4Anchor(document, wire.from);
@@ -2561,11 +2580,17 @@ function removeRequired<T extends { readonly id: string }>(items: readonly T[], 
 }
 
 function snapE4AngularBend(points: readonly Point[], index: number, target: Point, insert: boolean): Point {
-  const at = Math.max(0, Math.min(points.length - 2, index + (insert ? 0 : 1)));
-  const origin = points[at]!;
-  const angle = Math.atan2(target.y - origin.y, target.x - origin.x);
-  const step = Math.PI / 6;
-  const snapped = Math.round(angle / step) * step;
-  const distance = Math.hypot(target.x - origin.x, target.y - origin.y);
-  return { x: origin.x + Math.cos(snapped) * distance, y: origin.y + Math.sin(snapped) * distance };
+  const previous=points[index]!,next=points[index+(insert?1:2)]!;
+  const directions=Array.from({length:12},(_,sector)=>({x:Math.cos(sector*Math.PI/6),y:Math.sin(sector*Math.PI/6)}));
+  const candidates:Point[]=[];
+  for(const from of directions)for(const to of directions){
+    const determinant=from.x*to.y-from.y*to.x;
+    if(Math.abs(determinant)<1e-8)continue;
+    const dx=next.x-previous.x,dy=next.y-previous.y;
+    const distanceFrom=(dx*to.y-dy*to.x)/determinant;
+    const distanceTo=(dx*from.y-dy*from.x)/determinant;
+    if(distanceFrom<1e-5||distanceTo> -1e-5)continue;
+    candidates.push({x:previous.x+from.x*distanceFrom,y:previous.y+from.y*distanceFrom});
+  }
+  return candidates.sort((left,right)=>Math.hypot(left.x-target.x,left.y-target.y)-Math.hypot(right.x-target.x,right.y-target.y))[0]??target;
 }

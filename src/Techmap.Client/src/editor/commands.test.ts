@@ -1842,6 +1842,40 @@ it("C3 and C7 plan real automatic pair routes at 24 units for the full horizonta
  expect(layout.span.end).toBe(span!.end);
 });
 
+it("C5 adjusts one angular bend with both neighbouring directions on the 30 degree lattice",()=>{
+ const base=singleWireConnectionDocument();
+ const angular=applyEditorCommand(base,{type:"set-e4-routing-mode",mode:"angular"});
+ const initial=applyEditorCommand(angular,{type:"set-e4-wire-route",wireId:"w1",route:[
+  {x:700,y:64},{x:700,y:200},{x:900,y:200},{x:900,y:64},
+ ]});
+ const changed=applyEditorCommand(initial,{type:"edit-e4-bend",wireId:"w1",index:1,position:{x:740,y:235},mode:"adjacent"});
+ const route=changed.wires[0]!.e4Route;
+ const bend=route[1]!,previous=route[0]!,next=route[2]!;
+ const onLattice=(a:{x:number;y:number},b:{x:number;y:number})=>{
+  const turns=Math.atan2(b.y-a.y,b.x-a.x)/(Math.PI/6);
+  return Math.abs(turns-Math.round(turns))<1e-6;
+ };
+ expect(onLattice(previous,bend)).toBe(true);
+ expect(onLattice(bend,next)).toBe(true);
+ expect(bend).not.toEqual(initial.wires[0]!.e4Route[1]);
+ expect(e4RoutingIssues(changed)).toEqual([]);
+});
+
+it("C1 rejects a direct diagonal E4 route while angle mode is off",()=>{
+ const document=singleWireConnectionDocument();
+ expect(()=>applyEditorCommand(document,{type:"set-e4-wire-route",wireId:"w1",route:[
+  {x:700,y:64},{x:800,y:120},{x:900,y:64},
+ ]})).toThrow(/ортогональным/);
+ expect(document.wires[0]!.e4RouteMode).toBe("auto");
+});
+
+it("C5 rejects a direct route with an arbitrary angle even when 30 degree mode is on",()=>{
+ const document=applyEditorCommand(singleWireConnectionDocument(),{type:"set-e4-routing-mode",mode:"angular"});
+ expect(()=>applyEditorCommand(document,{type:"set-e4-wire-route",wireId:"w1",route:[
+  {x:700,y:64},{x:800,y:120},{x:900,y:64},
+ ]})).toThrow(/30°/);
+});
+
 describe("E4 drawing placement history",()=>{
   it("persists independent position/visibility and undoes each operation without moving the table",()=>{
     const connector=templateConnector(),document={...createEmptyHarnessDesign(),connectors:[connector]};
