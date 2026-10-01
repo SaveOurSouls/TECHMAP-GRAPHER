@@ -18,6 +18,7 @@ import {coveringHit} from "./covering-renderer";
 import {coveringGrips} from "./covering-renderer";
 import {coveringRoute} from "./physical-coverings";
 import {drawingRouteCommands} from "./drawing-route-path";
+import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,snapBendPoint} from "./physical-editing";
 
 function fixture():HarnessDesignDocument {
  const d=createEmptyHarnessDesign();
@@ -29,6 +30,55 @@ function fixture():HarnessDesignDocument {
 }
 
 describe("joining pipe hierarchy",()=>{
+ it("retains local Ctrl and Shift route anchors for a member endpoint",()=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+  const doc={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+  const scene=physicalTopologyScene(doc),node=scene.find(object=>object.id==="c")!;
+  expect(node.metadata?.bundleMember).toBe("true");
+  for(const mode of ["carry","adjacent"] as const){
+   const anchors=physicalObjectRouteAnchors(scene,node,mode);
+   expect(anchors.length).toBeGreaterThan(0);
+   expect(snapBendPoint({x:node.x+31,y:node.y+22},anchors,true,7,node,Math.PI/6).point)
+    .not.toEqual({x:node.x+31,y:node.y+22});
+  }
+ });
+ it("keeps Ctrl anchors on member transitions and maps Shift anchors to authored bends",()=>{
+  const d=fixture(),segments=d.physicalTopology!.segments.map(segment=>segment.id==="p0"
+    ?{...segment,path:{kind:"polyline" as const,points:[{x:80,y:30},{x:500,y:30}]}}:segment);
+  const source={...d,physicalTopology:{...d.physicalTopology!,segments}};
+  const op=createJoiningPipe(source,[["p0"],["p1"]],"op");
+  const doc={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}};
+  const member=physicalTopologyScene(doc).find(object=>object.id==="p0")!;
+  const pipe=member.pipe!,display=[member.points![0]!,...pipe.handles,member.points!.at(-1)!];
+  const transition=pipe.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
+  const transitionPoint=pipe.handles[transition.index]!;
+  const transitionAnchors=pipeBendSnapAnchors(pipe,display,transition.index,false,"adjacent",transitionPoint);
+  expect(transitionAnchors).toEqual(bendSnapAnchors(display,transition.index,false,"adjacent",transitionPoint));
+  expect(transitionAnchors).toHaveLength(2);
+  const snapped=snapBendPoint({x:transitionPoint.x+27,y:transitionPoint.y+41},transitionAnchors,true,7,undefined,Math.PI/6).point;
+  expect(snapped).not.toEqual({x:transitionPoint.x+27,y:transitionPoint.y+41});
+  const authoredIndex=pipe.authoredHandleIndices!.findIndex(value=>value===2);
+  expect(authoredIndex).toBeGreaterThanOrEqual(0);
+  expect(authoredIndex).not.toBe(1);
+  const authoredPoint=pipe.handles[authoredIndex]!;
+  for(const mode of ["carry","adjacent"] as const){
+   expect(pipeBendSnapAnchors(pipe,display,authoredIndex,false,mode,authoredPoint))
+    .toEqual(bendSnapAnchors(pipe.authoredPoints!,1,false,mode,authoredPoint));
+  }
+  expect(pipeBendSnapAnchors(pipe,display,authoredIndex,false,"carry",authoredPoint))
+   .not.toEqual(pipeBendSnapAnchors(pipe,display,authoredIndex,false,"adjacent",authoredPoint));
+  const memberIndex=transition.memberIndex;
+  const memberWithOuter={...op,members:op.members.map((entry,index)=>index===memberIndex
+   ?{...entry,enterBend:transitionPoint,enterOuter:display[transition.index]!}:entry)};
+  const start={...doc,physicalTopology:{...doc.physicalTopology,joiningPipes:[memberWithOuter]}};
+  const destination={x:transitionPoint.x+24,y:transitionPoint.y-12};
+  const adjacent=applyEditorCommand(start,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex,side:"enter",position:destination,mode:"adjacent"});
+  const carried=applyEditorCommand(start,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex,side:"enter",position:destination,mode:"carry"});
+  expect(adjacent.physicalTopology!.joiningPipes![0]!.members[memberIndex]!.enterOuter).toEqual(display[transition.index]);
+  expect(carried.physicalTopology!.joiningPipes![0]!.members[memberIndex]!.enterOuter!.x).toBeCloseTo(display[transition.index]!.x+24);
+  expect(carried.physicalTopology!.joiningPipes![0]!.members[memberIndex]!.enterOuter!.y).toBeCloseTo(display[transition.index]!.y-12);
+  expect(carried.physicalTopology!.routes).toEqual(start.physicalTopology.routes);
+ });
  it("owns an independent centreline and keeps members parallel inside it",()=>{
   const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
   const next={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
