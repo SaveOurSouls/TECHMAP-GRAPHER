@@ -1,3 +1,17 @@
+# Текущий срез карточки 021 — 01.10.2026
+
+Кодовый коммит: `0d82d15` (`Redesign wire and connector property inspector`).
+Изменения панели свойств провода и соединителя зафиксированы отдельно от
+рабочего дерева параллельных карточек; документальная карточка —
+`tasks/021-property-inspector-redesign.md`.
+
+Проверки: профильные тесты ObjectInspector/drawing-object-properties — 22;
+E4ConnectorInspector — 18; полный клиентский Vitest — 156 файлов / 1520 тестов;
+TypeScript `tsc --noEmit`; Vite production build; `git diff --check`.
+Ручная C1–C2 проверка заблокирована standalone Vite без server runtime-config:
+порт 5080 показывает экран повреждённой конфигурации. Незатрекованный ZIP и
+изменения карточек 014 остаются вне этого среза.
+
 # Текущий срез карточки 020 — 01.10.2026
 
 Кодовый коммит: `7cdcf6a` (`Fix E4 differential route integrity and angle mode`);
