@@ -135,7 +135,8 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
   // branch. Otherwise project onto the active shoulder; this preserves a
   // continuous drag and waits for the next valid intersection.
   const maxJump=Math.max(32,tolerance*8);
-  if(candidate&&jump<=maxJump&&forward){
+  const nearPointer=!!candidate&&candidate.distance<=maxJump;
+  if(candidate&&forward&&(jump<=maxJump||nearPointer)){
     state.active=candidate.active;
     state.previous=candidate.point;
     return {point:candidate.point,guide:candidate.guide};

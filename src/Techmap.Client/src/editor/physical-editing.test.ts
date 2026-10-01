@@ -151,6 +151,14 @@ it("uses a 30-degree grid only when the Ctrl snap step is requested",()=>{
  expect(Math.atan2(snapped.y,snapped.x)/(Math.PI/6)).toBeCloseTo(1,6);
  expect(snapPhysicalPoint({x:100,y:50},[{x:0,y:0}],false,0,Math.PI/6).point).toEqual({x:100,y:50});
 });
+it("covers every 30-degree direction around the full circle",()=>{
+ const anchor={x:0,y:0};
+ for(const expected of Array.from({length:12},(_,index)=>index*30)){
+  const angle=expected*Math.PI/180,result=snapPhysicalPoint({x:100*Math.cos(angle),y:100*Math.sin(angle)},[anchor],true,0,Math.PI/6).point;
+  const actual=(Math.atan2(result.y,result.x)*180/Math.PI+360)%360;
+  expect(actual).toBeCloseTo(expected,6);
+ }
+});
 it("gives cardinal directions a ±20° attraction sector",()=>{
  const anchor={x:0,y:0};
  for(const [angle,expected] of [[20,0],[21,30],[70,90],[110,90],[160,180],[200,180],[250,270],[290,270],[340,0]] as const){
