@@ -56,6 +56,7 @@ import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Rou
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
+import { commonParallelSpan } from "./e4-parallel-spans";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -108,6 +109,7 @@ export type EditorCommand =
   | { readonly type: "move-e4-wire-segment"; readonly wireId: string; readonly segmentIndex: number; readonly position: Point; readonly detached?: boolean }
   | { readonly type: "reroute-e4-wires"; readonly wireIds: readonly string[] }
   | { readonly type: "set-wire-crossing-style"; readonly view: EditorView; readonly style: WireCrossingStyle }
+  | { readonly type: "set-e4-routing-mode"; readonly mode: "orthogonal" | "angular" }
   | { readonly type: "create-junction"; readonly junction: E4Junction; readonly branchWire?: WireInstance }
   | { readonly type: "move-junction"; readonly junctionId: string; readonly position: Point }
   | { readonly type: "remove-junction"; readonly junctionId: string }
@@ -948,6 +950,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         ...document,
         views: { ...document.views, [command.view]: { ...document.views[command.view], wireCrossingStyle: command.style } },
       };
+    case "set-e4-routing-mode": {
+      const changed = {
+        ...document,
+        views: { ...document.views, e4: { ...document.views.e4, e4RoutingMode: command.mode } },
+      };
+      if (command.mode === "orthogonal") return changed;
+      return rerouteE4WireBatch(changed, changed.wires.filter(wire => wire.e4RouteMode !== "manual").map(wire => wire.id));
+    }
     case "create-junction": {
       if (document.junctions.some((item) => item.id === command.junction.id)) throw new Error("Узел соединения с таким ID уже существует.");
       let changed = document;
@@ -1041,10 +1051,13 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if (document.diffPairs.some((item) => item.wireIds.some((wireId) => group.wireIds.includes(wireId)))) {
         throw new Error("Провод уже входит в другую дифференциальную пару.");
       }
-      return { ...document, diffPairs: [...document.diffPairs, group] };
+      return compactAutomaticDifferentialPairs(
+        { ...document, diffPairs: [...document.diffPairs, group] },
+        group.wireIds,
+      );
     }
     case "update-diff-pair":
-      return {
+      const changed = {
         ...document,
         diffPairs: replaceRequired(document.diffPairs, command.groupId, (group) => normalizeDiffPair(document, {
           ...group,
@@ -1053,6 +1066,8 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           amplitude: command.amplitude ?? group.amplitude,
         }), "Дифференциальная пара не найдена."),
       };
+      const group = changed.diffPairs.find(item => item.id === command.groupId);
+      return group ? compactAutomaticDifferentialPairs(changed, group.wireIds) : changed;
     case "remove-diff-pair":
       return { ...document, diffPairs: removeRequired(document.diffPairs, command.groupId, "Дифференциальная пара не найдена.") };
     case "create-screen": {
@@ -1737,7 +1752,7 @@ function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly s
       lastError = error;
     }
   }
-  if (best) return best;
+  if (best) return compactAutomaticDifferentialPairs(best, baseOrder);
   throw lastError;
 }
 
@@ -2007,8 +2022,77 @@ function createE4RoutingRequest(
     ],
     // Leave a visible gap from the table stroke while keeping the mandatory
     // contact lead attached to the table itself.
-    options: { leadLength: screenJunctionEnds(wire) ? 0 : defaultE4WireLead, wireClearance: 8, obstacleClearance: 4 },
+    options: {
+      leadLength: screenJunctionEnds(wire) ? 0 : defaultE4WireLead,
+      wireClearance: 8,
+      obstacleClearance: 4,
+      angleStep: document.views.e4.e4RoutingMode === "angular" ? Math.PI / 6 : undefined,
+    },
   };
+}
+
+/**
+ * Bring an automatically routed differential pair onto the same compact
+ * lanes that the E4 motif uses. The transformation is deliberately limited
+ * to the common parallel segment and is kept only when the regular route
+ * validator accepts the resulting conductors.
+ */
+function compactAutomaticDifferentialPairs(
+  document: HarnessDesignDocument,
+  routedWireIds: readonly string[],
+): HarnessDesignDocument {
+  const routed = new Set(routedWireIds);
+  let result = document;
+  for (const group of document.diffPairs) {
+    if (!group.wireIds.every(id => routed.has(id))) continue;
+    const wires = group.wireIds.map(id => result.wires.find(wire => wire.id === id));
+    if (wires.some(wire => !wire)) continue;
+    const paths = wires.map(wire => {
+      const start = wireEndpointE4Anchor(result, wire!.from)?.position;
+      const end = wireEndpointE4Anchor(result, wire!.to)?.position;
+      return start && end ? { id: wire!.id, points: [start, ...wire!.e4Route, end] } : null;
+    });
+    if (paths.some(path => !path)) continue;
+    const span = commonParallelSpan(paths as { id: string; points: readonly Point[] }[]);
+    if (!span || span.direction || span.crossMaximum - span.crossMinimum <= 24 + 1e-6) continue;
+    const targetGap = 24;
+    const center = (span.crossMinimum + span.crossMaximum) / 2;
+    const targets = new Map(group.wireIds.map((id, index) => [id, center + (index === 0 ? -targetGap / 2 : targetGap / 2)]));
+    const nextWires = result.wires.map(wire => {
+      const target = targets.get(wire.id);
+      const segment = span.segmentByWireId[wire.id];
+      if (target === undefined || !segment) return wire;
+      const start = wireEndpointE4Anchor(result, wire.from)?.position;
+      const end = wireEndpointE4Anchor(result, wire.to)?.position;
+      if (!start || !end) return wire;
+      const full = [start, ...wire.e4Route, end];
+      const p0 = full[segment.index]!, p1 = full[segment.index + 1]!;
+      const along = (point: Point) => span.orientation === "horizontal" ? point.x : point.y;
+      const cross = (point: Point) => span.orientation === "horizontal" ? point.y : point.x;
+      const axis0 = along(p0), axis1 = along(p1), direction = axis1 >= axis0 ? 1 : -1;
+      const lo = Math.max(Math.min(axis0, axis1), span.start), hi = Math.min(Math.max(axis0, axis1), span.end);
+      if (hi - lo <= 1e-6) return wire;
+      const axisValues = direction > 0 ? [axis0, lo, hi, axis1] : [axis0, hi, lo, axis1];
+      const world = (axis: number, crossValue: number): Point => span.orientation === "horizontal"
+        ? { x: axis, y: crossValue } : { x: crossValue, y: axis };
+      const replacement = axisValues.map((axis, index) => world(axis, index === 1 || index === 2 ? target : cross(p0)));
+      const next = [...full.slice(0, segment.index), ...replacement, ...full.slice(segment.index + 2)];
+      const compacted = next.filter((point, index) => index === 0 || Math.hypot(point.x - next[index - 1]!.x, point.y - next[index - 1]!.y) > 1e-7);
+      try {
+        validateE4Polyline(
+          wireEndpointE4Anchor(result, wire.from)!,
+          compacted.slice(1, -1),
+          wireEndpointE4Anchor(result, wire.to)!,
+          screenJunctionEnds(wire) ? 0 : defaultE4WireLead,
+        );
+        return { ...wire, e4Route: compacted.slice(1, -1) };
+      } catch {
+        return wire;
+      }
+    });
+    result = { ...result, wires: nextWires };
+  }
+  return result;
 }
 
 function orthogonalPathProjectionDistance(points: readonly Point[], point: Point): number {

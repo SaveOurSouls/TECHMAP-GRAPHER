@@ -2,7 +2,7 @@ import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
-import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors } from "./physical-editing";
+import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -77,6 +77,7 @@ export interface CanvasViewportProps {
   readonly foregroundWireIds?: readonly string[];
   readonly cables?: readonly CableInstance[];
   readonly e4Overlays?: E4SceneOverlays;
+  readonly e4RoutingMode?: "orthogonal" | "angular";
   /** Exact project snapshots keyed to connector scene-object ids. */
   readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
   /** Resolves an asset inside the exact project snapshot. */
@@ -213,6 +214,7 @@ interface ObjectPointerDrag {
   readonly mode?:PhysicalDragMode;
   readonly anchors?:readonly EditorPoint[];
   readonly routeAnchors?:readonly EditorPoint[];
+  readonly snapState?:BendSnapState;
 }
 
 interface WireRoutePointerDrag {
@@ -226,6 +228,7 @@ interface WireRoutePointerDrag {
   readonly mode?:PhysicalDragMode;
   readonly insert?:boolean;
   readonly anchors?:readonly EditorPoint[];
+  readonly snapState?:BendSnapState;
 }
 
 interface E4WireSegmentPointerDrag {
@@ -327,6 +330,18 @@ function finitePoint(point: EditorPoint | undefined): point is EditorPoint {
 
 function samePoint(left: EditorPoint, right: EditorPoint): boolean {
   return Math.abs(left.x - right.x) < 0.000001 && Math.abs(left.y - right.y) < 0.000001;
+}
+
+function orthogonalE4Bend(point: EditorPoint, original: EditorPoint, route: readonly EditorPoint[]): EditorPoint {
+  const index = route.findIndex(candidate => samePoint(candidate, original));
+  if (index <= 0 || index >= route.length - 1) return point;
+  const previous = route[index - 1]!;
+  const next = route[index + 1]!;
+  const horizontalFromPrevious = previous.y === original.y;
+  const horizontalToNext = original.y === next.y;
+  if (horizontalFromPrevious && !horizontalToNext) return { x: point.x, y: original.y };
+  if (!horizontalFromPrevious && horizontalToNext) return { x: original.x, y: point.y };
+  return horizontalFromPrevious ? { x: point.x, y: original.y } : { x: original.x, y: point.y };
 }
 
 /** The scene owns routing. Painting and hit testing use exactly the same supplied points. */
@@ -648,8 +663,12 @@ export function getE4DifferentialPairLayout(
   // instead of reproducing that detour in every X motif.  Preserve a smaller
   // authored separation (and the amplitude fallback for coincident paths).
   const rawCrossGap = Math.abs(common.crossMaximum - common.crossMinimum);
+  // The compact gap is now authored into automatic routes. Never paint a
+  // motif on coordinates that the wire strokes do not occupy: legacy/manual
+  // routes keep their real gap until the user requests a reroute.
+  const routesCarryMode = group.wireIds.every(id => objects.find(object => object.id === id)?.metadata?.e4RouteMode !== undefined);
   const crossGap = rawCrossGap > 1e-6
-    ? Math.min(rawCrossGap, connectorE4TableMetrics.rowHeight)
+    ? routesCarryMode ? rawCrossGap : Math.min(rawCrossGap, connectorE4TableMetrics.rowHeight)
     : Math.max(group.amplitude * 2, 1);
   const compactCrossCenter = (common.crossMinimum + common.crossMaximum) / 2;
   const compactCommon: E4ParallelSpan = {
@@ -2734,6 +2753,7 @@ export function CanvasViewport({
   foregroundWireIds = [],
   cables = [],
   e4Overlays,
+  e4RoutingMode = "orthogonal",
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
   overlay,onDimensionCreate,onPositionRailCreate,
@@ -2958,7 +2978,7 @@ export function CanvasViewport({
       setConnectorAlignmentGuides({});
       const drag=dragRef.current;
       const result=drag?.kind==='object'&&drag.routeAnchors?.length
-        ?snapBendPoint(destination,drag.routeAnchors,snapEnabled,7/camera.zoom,{x:drag.objectX,y:drag.objectY},Math.PI/6)
+        ?snapBendPoint(destination,drag.routeAnchors,snapEnabled,7/camera.zoom,{x:drag.objectX,y:drag.objectY},Math.PI/6,drag.snapState)
         :snapPhysicalPoint(destination,drag?.kind==="object"?drag.anchors??[]:[],snapEnabled,7/camera.zoom,Math.PI/6);
       setPhysicalGuide(result.guide);
       return result.point;
@@ -3181,7 +3201,7 @@ export function CanvasViewport({
             const points=selectedWire.points!,point=middle?.point??points[index+1]!;
             event.currentTarget.setPointerCapture(event.pointerId);
             dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:selectedWire.id,routeIndex:index,point,
-              mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry")};
+              mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry"),snapState:{}};
             return;
           }
         }
@@ -3230,7 +3250,7 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?.joiningTransitionHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===index)?[]:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point)};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?.joiningTransitionHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===index)?[]:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point),snapState:{}};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
@@ -3254,6 +3274,7 @@ export function CanvasViewport({
             wireId: selectedWire.id,
             routeIndex,
             point: routePoint,
+            snapState:{},
           };
           return;
         }
@@ -3292,6 +3313,7 @@ export function CanvasViewport({
           mode:event.shiftKey?"adjacent":"carry",
           anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
           routeAnchors:view==='drawing'&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
+          snapState:{},
         };
       }
     }
@@ -3342,7 +3364,8 @@ export function CanvasViewport({
       });
     } else if (drag.kind === "wire-route") {
       if(!inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY))return;
-      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],event.ctrlKey,7/camera.zoom,undefined,Math.PI/6);
+      const angularSnap = view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey;
+      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],angularSnap,7/camera.zoom,undefined,Math.PI/6,drag.snapState);
       setPhysicalGuide(result.guide);
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,result.point,drag.mode,drag.insert);
     } else if (drag.kind === "e4-wire-label") {
@@ -3406,10 +3429,13 @@ export function CanvasViewport({
       const drag = dragRef.current;
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,null);
       const moved=inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY);
-      if(drag.insert||moved) onWireRoutePointMove?.(drag.wireId, drag.routeIndex, moved?snapBendPoint({
+      if(drag.insert||moved) {
+        const rawPoint = moved ? snapBendPoint({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
-      },drag.anchors??[],event.ctrlKey,7/camera.zoom,undefined,Math.PI/6).point:drag.point,drag.mode,drag.insert);
+        }, drag.anchors ?? [], view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey, 7 / camera.zoom, undefined, Math.PI / 6, drag.snapState).point : drag.point;
+        onWireRoutePointMove?.(drag.wireId, drag.routeIndex, view === "e4" && e4RoutingMode === "orthogonal" ? orthogonalE4Bend(rawPoint, drag.point, objects.find(item => item.id === drag.wireId)?.points ?? []) : rawPoint, drag.mode, drag.insert);
+      }
       setPhysicalGuide(undefined);
     } else if (dragRef.current?.kind === "e4-wire-segment") {
       const drag = dragRef.current;

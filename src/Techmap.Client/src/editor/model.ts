@@ -540,6 +540,8 @@ export interface EditorLayer {
 export interface EditorViewState {
   readonly layers: readonly EditorLayer[];
   readonly wireCrossingStyle: WireCrossingStyle;
+  /** E4 automatic/manual route geometry. Missing legacy values are orthogonal. */
+  readonly e4RoutingMode?: "orthogonal" | "angular";
 }
 
 export interface HarnessDesignDocument {
@@ -702,7 +704,7 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
     diffPairs: [],
     screens: [],
     views: {
-      e4: { layers: defaultLayers(), wireCrossingStyle: "none" },
+      e4: { layers: defaultLayers(), wireCrossingStyle: "none", e4RoutingMode: "orthogonal" },
       drawing: { layers: defaultLayers(), wireCrossingStyle: "none" },
     },
   };
@@ -729,7 +731,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
     junctions: record.junctions === undefined ? [] : parseJunctions(record.junctions),
     diffPairs: record.diffPairs === undefined ? [] : parseDiffPairs(record.diffPairs),
     screens: record.screens === undefined ? [] : parseScreens(record.screens),
-    views: { e4: parseView(views.e4), drawing: parseView(views.drawing) },
+    views: { e4: parseView(views.e4, true), drawing: parseView(views.drawing, false) },
   };
   document = {
     ...document,
@@ -1906,7 +1908,7 @@ function parseEndpoint(value: unknown): WireEndpoint {
   };
 }
 
-function parseView(value: unknown): EditorViewState {
+function parseView(value: unknown, isE4 = false): EditorViewState {
   const record = requireRecord(value, "Представление документа задано неверно.");
   if (!Array.isArray(record.layers)) throw new Error("Слои представления заданы неверно.");
   const layers = record.layers.map((layerValue) => {
@@ -1940,7 +1942,11 @@ function parseView(value: unknown): EditorViewState {
   if (wireCrossingStyle !== "none" && wireCrossingStyle !== "bridge") {
     throw new Error("Режим пересечения проводов задан неверно.");
   }
-  return { layers, wireCrossingStyle };
+  const e4RoutingMode = record.e4RoutingMode === undefined ? "orthogonal" : record.e4RoutingMode;
+  if (e4RoutingMode !== "orthogonal" && e4RoutingMode !== "angular") {
+    throw new Error("Режим угловой трассировки Э4 задан неверно.");
+  }
+  return isE4 ? { layers, wireCrossingStyle, e4RoutingMode } : { layers, wireCrossingStyle };
 }
 
 function parseJunctions(value: unknown): readonly E4Junction[] {

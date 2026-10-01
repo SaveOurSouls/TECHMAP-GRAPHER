@@ -173,6 +173,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onE4ScreenChange?: (state: E4ScreenState | null) => void;
   readonly onE4ClearGroup?: () => void;
   readonly e4Detached?: boolean;
+  readonly e4RoutingMode?: "orthogonal" | "angular";
   readonly onE4DetachedChange?: (detached: boolean) => void;
   readonly onE4Reroute?: () => void;
   readonly onWireRoutePointPreview?: (id:string,index:number,point:EditorPoint|null, mode?:PhysicalDragMode, insert?:boolean)=>void;
@@ -289,6 +290,7 @@ export function HarnessEditorWorkspace({
   onE4ScreenChange,
   onE4ClearGroup,
   e4Detached,
+  e4RoutingMode = "orthogonal",
   onE4DetachedChange,
   onE4Reroute,
   onWireRoutePointMove, onWireRoutePointPreview,
@@ -573,6 +575,7 @@ export function HarnessEditorWorkspace({
           foregroundWireIds={foregroundWireIds}
           cables={cables}
           e4Overlays={e4Overlays}
+          e4RoutingMode={e4RoutingMode}
           componentTemplateViewInstances={componentTemplateViewInstances}
           resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
           overlay={e4WireMenu}

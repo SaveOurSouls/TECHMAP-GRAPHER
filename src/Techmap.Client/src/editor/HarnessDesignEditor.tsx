@@ -495,6 +495,7 @@ export function designToScene(
         ...(stripProfileDisplayWarning ? { stripProfileDisplayWarning } : {}),
         ...(view === "e4" ? {
           view: "e4",
+          e4RouteMode: wire.e4RouteMode ?? "auto",
           fromSide: fromAnchor?.leadDirection ?? "",
           toSide: toAnchor?.leadDirection ?? "",
           leadLength: "24",
@@ -1825,7 +1826,21 @@ export function HarnessDesignEditor({
           <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} wireMaterialOptions={wireLookup.databaseOptions} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
         documentActions={<>
-          {view === "e4" && <ConnectionTableSettings />}
+          {view === "e4" && <>
+            <ConnectionTableSettings />
+            <section className="he-utility-section he-controls-section" aria-labelledby="he-e4-routing-heading">
+              <h3 id="he-e4-routing-heading">Маршрути Э4</h3>
+              <button
+                type="button"
+                className="ui-control he-control-action"
+                aria-pressed={history.present.views.e4.e4RoutingMode === "angular"}
+                onClick={() => run({ type: "set-e4-routing-mode", mode: history.present.views.e4.e4RoutingMode === "angular" ? "orthogonal" : "angular" })}
+              >
+                {history.present.views.e4.e4RoutingMode === "angular" ? "Углы 30° включены" : "Разрешить углы 30°"}
+              </button>
+              <InfoHint>Выключено: автоматическая трассировка и ручное перемещение используют только горизонтальные и вертикальные участки. Включено: новые автоматические маршруты и перетягивание точек допускают направления, кратные 30°.</InfoHint>
+            </section>
+          </>}
           {view === "drawing" && <section className="he-utility-section he-controls-section" aria-labelledby="he-controls-heading">
             <h3 id="he-controls-heading">Настройки чертежа</h3>
           {joiningPipeDraft&&history.present.physicalTopology&&<JoiningPipeEditor document={history.present} draft={joiningPipeDraft} onChange={setJoiningPipeDraft} onCancel={()=>setJoiningPipeDraft(null)} onSave={()=>{try{const topology=joiningPipeDraftTopology(history.present,joiningPipeDraft);if(run({type:'set-physical-topology',topology})){setSelectedObjectId(joiningPipeDraft.id);setSelectedObjectIds([joiningPipeDraft.id]);setJoiningPipeDraft(null);}}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
@@ -1879,6 +1894,7 @@ export function HarnessDesignEditor({
           diffPairs: history.present.diffPairs,
           screens: history.present.screens,
         } : undefined}
+        e4RoutingMode={history.present.views.e4.e4RoutingMode ?? "orthogonal"}
         componentTemplateViewInstances={componentTemplateViewInstances}
         resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
         saveState={saveState}

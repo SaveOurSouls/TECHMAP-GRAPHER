@@ -44,6 +44,8 @@ export interface E4RouterOptions {
   readonly searchMargin?: number;
   /** Guards an accidental unbounded UI workload. Defaults to 250,000 grid nodes. */
   readonly maxGridNodes?: number;
+  /** When set, automatic routes may use segments on this angular lattice. */
+  readonly angleStep?: number;
 }
 
 export interface E4RoutingRequest {
@@ -70,6 +72,7 @@ interface NormalizedOptions {
   readonly obstacleClearance: number;
   readonly searchMargin: number;
   readonly maxGridNodes: number;
+  readonly angleStep?: number;
 }
 
 interface Rect {
@@ -135,6 +138,11 @@ export function routeE4WireThroughWaypoints(
 
   validateForcedLead(input.start, startLead, true, input);
   validateForcedLead(input.end, endLead, false, input);
+
+  if (input.options.angleStep !== undefined && waypoints.length === 0) {
+    const angular = routeAngularLattice(input, startLead, endLead);
+    if (angular) return angular;
+  }
 
   const { xs, ys } = buildGridCoordinates(input, startLead, endLead, waypoints);
   const gridNodeCount = xs.length * ys.length;
@@ -222,6 +230,7 @@ function normalizeRequest(request: E4RoutingRequest): {
   readonly occupiedSegments: readonly OccupiedSegment[];
   readonly occupiedBends: readonly OccupiedBend[];
   readonly occupiedPoints: readonly Point[];
+  readonly occupiedRoutes: readonly E4OccupiedRoute[];
   readonly options: NormalizedOptions;
 } {
   validateAnchor(request.start, "Начальный контакт");
@@ -269,7 +278,7 @@ function normalizeRequest(request: E4RoutingRequest): {
     }
     occupiedPoints.push(...route.points);
   }
-  return { start: request.start, end: request.end, obstacles, occupiedSegments, occupiedBends, occupiedPoints, options };
+  return { start: request.start, end: request.end, obstacles, occupiedSegments, occupiedBends, occupiedPoints, occupiedRoutes: request.occupiedRoutes ?? [], options };
 }
 
 function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptions {
@@ -293,7 +302,61 @@ function normalizeOptions(options: E4RouterOptions | undefined): NormalizedOptio
   if (!Number.isFinite(searchMargin) || searchMargin <= 0) {
     throw new Error("Поле поиска автотрассировки задано неверно.");
   }
-  return { leadLength, wireClearance, obstacleClearance, searchMargin, maxGridNodes };
+  const angleStep = options?.angleStep;
+  if (angleStep !== undefined && (!Number.isFinite(angleStep) || angleStep <= 0 || angleStep > Math.PI / 2)) {
+    throw new Error("Шаг угловой трассировки задан неверно.");
+  }
+  return { leadLength, wireClearance, obstacleClearance, searchMargin, maxGridNodes, angleStep };
+}
+
+/**
+ * Small deterministic angular router used by the optional E4 mode. Contact
+ * leads stay axis aligned; the free span is made from one or two directions
+ * on the requested lattice. Obstacles and occupied routes are still checked
+ * by the normal route validator, with orthogonal routing as the fallback.
+ */
+function routeAngularLattice(
+  input: ReturnType<typeof normalizeRequest>,
+  startLead: Point,
+  endLead: Point,
+): E4RouteResult | null {
+  const step = input.options.angleStep;
+  if (step === undefined) return null;
+  const candidates: Point[][] = [];
+  if (samePoint(startLead, endLead)) candidates.push([startLead]);
+  const directionCount = Math.round((Math.PI * 2) / step);
+  const directions = Array.from({ length: directionCount }, (_, index) => ({
+    x: Math.cos(index * step), y: Math.sin(index * step),
+  }));
+  const addCandidate = (points: Point[]) => {
+    const route = [...simplifyPolyline([input.start.position, startLead, ...points, endLead, input.end.position])];
+    try {
+      validateE4Route(route, {
+        start: input.start,
+        end: input.end,
+        obstacles: input.obstacles.map(obstacle => ({ x: obstacle.left, y: obstacle.top, width: obstacle.right - obstacle.left, height: obstacle.bottom - obstacle.top })),
+        occupiedRoutes: input.occupiedRoutes,
+        options: { leadLength: input.options.leadLength, wireClearance: input.options.wireClearance, obstacleClearance: input.options.obstacleClearance },
+      });
+      candidates.push(route);
+    } catch { /* try another lattice intersection */ }
+  };
+  const directAngle = Math.atan2(endLead.y - startLead.y, endLead.x - startLead.x);
+  const snapped = Math.round(directAngle / step) * step;
+  if (Math.abs(Math.sin(directAngle - snapped)) < 1e-7) addCandidate([]);
+  for (const first of directions) for (const second of directions) {
+    const denominator = first.x * second.y - first.y * second.x;
+    if (Math.abs(denominator) < 1e-8) continue;
+    const dx = endLead.x - startLead.x, dy = endLead.y - startLead.y;
+    const t = (dx * second.y - dy * second.x) / denominator;
+    const u = (dx * first.y - dy * first.x) / denominator;
+    if (t <= 1e-6 || u >= -1e-6) continue;
+    addCandidate([{ x: startLead.x + first.x * t, y: startLead.y + first.y * t }]);
+  }
+  const best = candidates
+    .map(points => ({ points, length: polylineLength(points), bends: Math.max(0, points.length - 2) }))
+    .sort((left, right) => left.length - right.length || left.bends - right.bends)[0];
+  return best ? { points: best.points, intermediate: best.points.slice(1, -1), length: best.length, bends: best.bends } : null;
 }
 
 function validateAnchor(anchor: E4RouterAnchor, label: string): void {

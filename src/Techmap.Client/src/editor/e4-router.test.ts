@@ -16,6 +16,20 @@ const horizontalRequest = (overrides: Partial<E4RoutingRequest> = {}): E4Routing
 });
 
 describe("E4 obstacle router", () => {
+  it("uses a 30 degree lattice when angular routing is enabled", () => {
+    const request: E4RoutingRequest = {
+      start: { position: { x: 0, y: 0 }, leadDirection: null },
+      end: { position: { x: 100, y: 100 / Math.sqrt(3) }, leadDirection: null },
+      options: { leadLength: 0, angleStep: Math.PI / 6 },
+    };
+    const route = routeE4Wire(request);
+    expect(route.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 100 / Math.sqrt(3) },
+    ]);
+    expect(() => validateE4Route(route.points, request)).not.toThrow();
+  });
+
   it("minimizes the full path through a mandatory point, including bends after that point", () => {
     const request: E4RoutingRequest = {
       start: { position: { x: 0, y: 0 }, leadDirection: null },
