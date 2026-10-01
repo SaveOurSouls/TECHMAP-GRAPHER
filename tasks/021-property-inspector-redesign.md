@@ -39,7 +39,7 @@
 
 ## Журнал результата
 
-- **Коммит кода/документации:** `0d82d15` (`Redesign wire and connector property inspector`), отправка в origin ожидает завершения документального коммита.
+- **Коммит кода/документации:** код `0d82d15` (`Redesign wire and connector property inspector`), документация `9ff3e18` (`Document property inspector redesign verification`); оба отправлены в origin.
 - **Проверки и даты:** 01.10.2026 — профильные тесты ObjectInspector/drawing-object-properties (22 теста), E4ConnectorInspector (18 тестов), полный клиентский Vitest (156 файлов / 1520 тестов), TypeScript `tsc --noEmit`, Vite production build и `git diff --check` прошли.
 - **Ограничения и открытые вопросы:** ручная C1–C2 проверка заблокирована: standalone Vite без серверного runtime-config показывает экран «Не удалось загрузить конфигурацию»; порт 5080 закрыт после проверки. Поля strip profile и сводная карточка материала намеренно убраны из UI, их модельные данные не изменяются.
 - **Решение владельца о приёмке:** —

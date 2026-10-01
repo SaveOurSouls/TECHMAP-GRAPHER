@@ -1,6 +1,7 @@
 # Текущий срез карточки 021 — 01.10.2026
 
-Кодовый коммит: `0d82d15` (`Redesign wire and connector property inspector`).
+Кодовый коммит: `0d82d15` (`Redesign wire and connector property inspector`);
+документальный коммит: `9ff3e18` (`Document property inspector redesign verification`).
 Изменения панели свойств провода и соединителя зафиксированы отдельно от
 рабочего дерева параллельных карточек; документальная карточка —
 `tasks/021-property-inspector-redesign.md`.
