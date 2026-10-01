@@ -8,6 +8,36 @@ import { resolvedCoveringSpan } from "./physical-coverings";
 export type PhysicalDragMode = "carry" | "adjacent";
 const near = (a:Point,b:Point) => Math.hypot(a.x-b.x,a.y-b.y)<1e-6;
 const shifted = (p:Point,d:Point):Point => ({x:p.x+d.x,y:p.y+d.y});
+const TAU=Math.PI*2;
+const angleDistance=(a:number,b:number)=>{
+  const d=Math.abs((a-b)%TAU);
+  return Math.min(d,TAU-d);
+};
+
+/** Direction state kept for one pointer gesture. It prevents a bend from
+ * switching to a distant intersection while the pointer is moving along the
+ * currently selected shoulder. */
+export interface BendSnapState {
+  previous?:Point;
+  lastPointer?:Point;
+  active?:readonly {anchor:Point;direction:Point}[];
+}
+
+function snappedDirectionIndex(angle:number,angleStep:number):number {
+  const count=Math.max(1,Math.round(TAU/angleStep));
+  const normalized=((angle%TAU)+TAU)%TAU;
+  const axes=[0,Math.PI/2,Math.PI,3*Math.PI/2];
+  // The cardinal sectors have priority over the regular midpoint rule.
+  const axis=axes.find(a=>angleDistance(normalized,a)<=Math.PI/9+1e-9);
+  const chosen=axis===undefined?Math.round(normalized/angleStep)*angleStep:axis;
+  return ((Math.round(chosen/angleStep)%count)+count)%count;
+}
+
+function directionFor(a:Point,p:Point,directions:readonly Point[],angleStep:number):Point {
+  const dx=p.x-a.x,dy=p.y-a.y;
+  if(Math.hypot(dx,dy)<1e-8)return directions[0]!;
+  return directions[snappedDirectionIndex(Math.atan2(dy,dx),angleStep)]!;
+}
 
 /** Automatic corners become author-owned only when an edit is committed. */
 export function physicalEditablePoints(document:HarnessDesignDocument,segment:PhysicalSegment):readonly Point[] {
@@ -27,14 +57,15 @@ export function materializePhysicalPath(document:HarnessDesignDocument,id:string
 export function snapPhysicalPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,angleStep=Math.PI/12) {
   if(!enabled||!anchors.length)return {point,guide:undefined as readonly Point[]|undefined};
   let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
-  for(const a of anchors)for(let i=0;i<Math.round((Math.PI*2)/angleStep);i++) {
-    const angle=i*angleStep;
-    const u={x:Math.cos(angle),y:Math.sin(angle)},length=(point.x-a.x)*u.x+(point.y-a.y)*u.y;
+  for(const a of anchors) {
+    const index=snappedDirectionIndex(Math.atan2(point.y-a.y,point.x-a.x),angleStep);
+    const angle=index*angleStep,u={x:Math.cos(angle),y:Math.sin(angle)},length=(point.x-a.x)*u.x+(point.y-a.y)*u.y;
     const p={x:a.x+u.x*length,y:a.y+u.y*length},distance=Math.hypot(p.x-point.x,p.y-point.y);
     if(distance<=tolerance&&(!best||distance<best.distance))best={point:p,guide:[a,p],distance};
   }
   if(best)return best;
-  const a=anchors[0]!,angle=Math.round(Math.atan2(point.y-a.y,point.x-a.x)/angleStep)*angleStep;
+  const a=anchors.reduce((closest,current)=>Math.hypot(current.x-point.x,current.y-point.y)<Math.hypot(closest.x-point.x,closest.y-point.y)?current:closest,anchors[0]!);
+  const index=snappedDirectionIndex(Math.atan2(point.y-a.y,point.x-a.x),angleStep),angle=index*angleStep;
   const length=Math.hypot(point.x-a.x,point.y-a.y);
   return {point:{x:a.x+Math.cos(angle)*length,y:a.y+Math.sin(angle)*length},guide:undefined};
 }
@@ -57,12 +88,15 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
 
 /** Intersect angular direction families and validate every changing shoulder.
  * Collinear supports retain continuous motion along the line. */
-export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12) {
+export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12,state?:BendSnapState) {
   const unique=anchors.filter((a,i)=>anchors.findIndex(b=>near(a,b))===i);
-  if(!enabled||unique.length<2)return snapPhysicalPoint(point,unique,enabled,tolerance,angleStep);
+  if(!enabled||unique.length<2){
+    if(state){state.active=undefined;state.previous=undefined;state.lastPointer=point;}
+    return snapPhysicalPoint(point,unique,enabled,tolerance,angleStep);
+  }
   const a=unique[0]!;
   const directions=Array.from({length:Math.round((Math.PI*2)/angleStep)},(_,i)=>({x:Math.cos(i*angleStep),y:Math.sin(i*angleStep)}));
-  let best:{point:Point;guide:readonly Point[];distance:number}|undefined;
+  let best:{point:Point;guide:readonly Point[];distance:number;active:readonly {anchor:Point;direction:Point}[]}|undefined;
   const add=(p:Point)=>{
     if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
     if(unique.some(anchor=>{
@@ -70,7 +104,8 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
       return length<1e-6||!directions.some(u=>Math.abs(dx*u.y-dy*u.x)<=1e-7*length);
     }))return;
     const distance=Math.hypot(p.x-point.x,p.y-point.y);
-    if(!best||distance<best.distance-1e-7)best={point:p,guide:unique.flatMap((anchor,i)=>i?[p,anchor]:[anchor]),distance};
+    const active=unique.map(anchor=>({anchor,direction:directionFor(anchor,p,directions,angleStep)}));
+    if(!best||distance<best.distance-1e-7)best={point:p,guide:unique.flatMap((anchor,i)=>i?[p,anchor]:[anchor]),distance,active};
   };
   for(const b of unique.slice(1))for(const u of directions)for(const v of directions){
     const denominator=u.x*v.y-u.y*v.x,dx=b.x-a.x,dy=b.y-a.y;
@@ -80,7 +115,41 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
   }
   // Several fixed shoulders may admit no common angular point. Keep the
   // original position instead of silently violating one connected route.
-  return best??{point:fallback??point,guide:undefined};
+  if(!state)return best??{point:fallback??point,guide:undefined};
+  const previous=state.previous;
+  const pointerDelta=state.lastPointer?{x:point.x-state.lastPointer.x,y:point.y-state.lastPointer.y}:undefined;
+  state.lastPointer=point;
+  if(!previous||!state.active){
+    const result=best??{point:fallback??point,guide:undefined,active:undefined};
+    if(result.active)state.active=result.active;
+    state.previous=result.point;
+    return {point:result.point,guide:result.guide};
+  }
+  const movement=Math.hypot(pointerDelta?.x??0,pointerDelta?.y??0);
+  const candidate=best;
+  const jump=candidate?Math.hypot(candidate.point.x-previous.x,candidate.point.y-previous.y):Infinity;
+  const forward=candidate&&pointerDelta&&movement>1e-6
+    ?(candidate.point.x-previous.x)*pointerDelta.x+(candidate.point.y-previous.y)*pointerDelta.y>=-1e-6
+    :true;
+  // A direction change is accepted only when it is local to the current
+  // branch. Otherwise project onto the active shoulder; this preserves a
+  // continuous drag and waits for the next valid intersection.
+  const maxJump=Math.max(32,tolerance*8);
+  if(candidate&&jump<=maxJump&&forward){
+    state.active=candidate.active;
+    state.previous=candidate.point;
+    return {point:candidate.point,guide:candidate.guide};
+  }
+  const projected=state.active.map(({anchor,direction})=>{
+    const length=(point.x-anchor.x)*direction.x+(point.y-anchor.y)*direction.y;
+    const p={x:anchor.x+direction.x*length,y:anchor.y+direction.y*length};
+    const advance=pointerDelta?(p.x-previous.x)*pointerDelta.x+(p.y-previous.y)*pointerDelta.y:0;
+    return {p,anchor,distance:Math.hypot(p.x-point.x,p.y-point.y),advance};
+  }).filter(item=>!pointerDelta||movement<1e-6||item.advance>=-1e-6)
+    .sort((left,right)=>left.distance-right.distance)[0];
+  const result=projected?.p??candidate?.point??fallback??point;
+  state.previous=result;
+  return {point:result,guide:projected?[projected.anchor,projected.p]:undefined};
 }
 
 /** The same initially straight path must produce the same carried shoulders

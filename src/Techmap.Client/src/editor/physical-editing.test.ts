@@ -1,6 +1,6 @@
 import {expect,it} from "vitest";
 import {physicalFixture} from "./physical-topology-fixture";
-import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors,carryPhysicalExits,bendSnapAnchors,snapBendPoint} from "./physical-editing";
+import {physicalEditablePoints,snapPhysicalPoint,physicalObjectSnapAnchors,carryPhysicalExits,bendSnapAnchors,snapBendPoint,type BendSnapState} from "./physical-editing";
 import {editedE4Points} from "./e4-editing";
 import {applyEditorCommand} from "./commands";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
@@ -150,6 +150,25 @@ it("uses a 30-degree grid only when the Ctrl snap step is requested",()=>{
  const snapped=snapPhysicalPoint({x:100,y:50},[{x:0,y:0}],true,0,Math.PI/6).point;
  expect(Math.atan2(snapped.y,snapped.x)/(Math.PI/6)).toBeCloseTo(1,6);
  expect(snapPhysicalPoint({x:100,y:50},[{x:0,y:0}],false,0,Math.PI/6).point).toEqual({x:100,y:50});
+});
+it("gives cardinal directions a ±20° attraction sector",()=>{
+ const anchor={x:0,y:0};
+ for(const [angle,expected] of [[20,0],[21,30],[70,90],[110,90],[160,180],[200,180],[250,270],[290,270],[340,0]] as const){
+  const radians=angle*Math.PI/180,result=snapPhysicalPoint({x:100*Math.cos(radians),y:100*Math.sin(radians)},[anchor],true,0,Math.PI/6).point;
+  const actual=(Math.atan2(result.y,result.x)*180/Math.PI+360)%360;
+  expect(actual).toBeCloseTo(expected,6);
+ }
+});
+it("keeps a bend on its active shoulder while pointer crosses distant intersections",()=>{
+ const anchors=[{x:210,y:226},{x:1026,y:76}],state:BendSnapState={};
+ const points=[];
+ for(const x of [299,330,380,430,475,520,580,650,700])
+  points.push(snapBendPoint({x,y:80},anchors,true,7,undefined,Math.PI/6,state).point);
+ for(let i=1;i<points.length;i++){
+  expect(points[i]!.x).toBeGreaterThanOrEqual(points[i-1]!.x-1e-6);
+  expect(Math.abs(points[i]!.y-points[i-1]!.y)).toBeLessThan(32);
+ }
+ expect(points.at(-1)!.y).toBeCloseTo(76,6);
 });
 it("updates automatic routes after geometry and dimensions change while retaining manual assignments",()=>{
  const base=physicalFixture();
