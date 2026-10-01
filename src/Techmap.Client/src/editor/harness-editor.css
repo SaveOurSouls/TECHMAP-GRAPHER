@@ -230,7 +230,7 @@
 .he-inspector-empty strong { color: #365568; font-size: 13px; }
 .he-inspector-empty-glyph { margin-bottom: 5px; color: #93aab6; font-size: 31px; }
 
-.he-property-form { padding: 15px; display: grid; gap: 14px; }
+.he-property-form { padding: 14px 12px 18px; display: grid; gap: 12px; background: #fff; color: #244653; }
 .he-selected-object { padding: 10px; display: flex; align-items: center; gap: 10px; border: 1px solid #dde6ea; border-radius: 7px; background: #f7fafb; }
 .he-selected-object > div { min-width: 0; display: grid; gap: 2px; }
 .he-selected-object strong { color: #294b5e; font-size: 12px; }
@@ -241,8 +241,9 @@
 .he-object-symbol.text { height: 28px; border: 0; background: transparent; }
 .he-object-symbol.text::before { content: "T"; color: #54788b; font: 700 24px Georgia, serif; }
 .he-property-form label { display: grid; gap: 5px; color: #5b6f7b; font-size: 10px; font-weight: 750; }
-.he-property-form input:not([type="color"]):not([type="checkbox"]) { width: 100%; height: 34px; padding: 7px 9px; border: 1px solid #cad7de; border-radius: 6px; background: #fff; color: #203e50; font: 500 11px Arial, sans-serif; }
-.he-property-form input:focus { border-color: #7ab5cf; outline: 2px solid rgb(58 147 188 / 13%); }
+.he-property-form input:not([type="color"]):not([type="checkbox"]), .he-property-form select { box-sizing: border-box; width: 100%; min-width: 0; height: 34px; padding: 7px 9px; border: 1px solid #cbd9df; border-radius: 8px; background: #fff; color: #203e50; font: 500 11px Arial, sans-serif; transition: border-color .15s ease, box-shadow .15s ease; }
+.he-property-form input:not([type="color"]):not([type="checkbox"]):hover:not(:disabled), .he-property-form select:hover:not(:disabled) { border-color: #9dbfcd; }
+.he-property-form input:focus, .he-property-form select:focus { border-color: #4f9cbc; outline: 0; box-shadow: 0 0 0 3px rgb(58 147 188 / 14%); }
 .he-property-form input:disabled { background: #f2f4f5; color: #89959c; }
 .he-property-form .he-toggle-field { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .he-toggle-field input { width: 15px; height: 15px; margin: 0; accent-color: var(--he-accent); }
@@ -294,10 +295,18 @@
 .he-wire-standard-colors button { width: 23px; height: 23px; padding: 0; border: 1px solid rgb(32 62 80 / 24%); border-radius: 4px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 35%); cursor: pointer; }
 .he-wire-standard-colors button:hover:not(:disabled), .he-wire-standard-colors button.active { outline: 2px solid #2585ad; outline-offset: 1px; }
 .he-wire-standard-colors button:disabled { cursor: default; opacity: .55; }
-.he-readonly-facts { margin-top: 2px; padding-top: 12px; display: grid; gap: 8px; border-top: 1px solid #e2e8eb; }
+.he-property-form > .he-context-fields { margin: 0; padding: 10px; gap: 8px; border: 1px solid #d9e5e9; border-radius: 9px; background: #f7fafb; }
+.he-property-form > .he-context-fields > strong { grid-column: 1 / -1; color: #31586b; font-size: 11px; }
+.he-property-form > .he-context-fields > small { grid-column: 1 / -1; color: #7a8b94; font-size: 9px; }
+.he-readonly-facts { margin-top: 0; padding: 10px; display: grid; gap: 8px; border: 1px solid #d9e5e9; border-radius: 9px; background: #f7fafb; }
 .he-readonly-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .he-readonly-facts span { color: #7b8992; font-size: 9px; }
 .he-readonly-facts strong { overflow: hidden; color: #3b596a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The document/specification editors stay available from the action buttons and
+   floating tables. Keep the object-properties tab focused on the selected item. */
+.he-right-panel .he-relations[aria-label="Позиции спецификации"],
+.he-right-panel .he-relations[aria-label="Документы схемы"] { display: none; }
 
 .he-layers-panel { padding: 12px 10px; }
 .he-panel-note { margin: 0 3px 10px; color: #839098; font-size: 9px; line-height: 1.4; }

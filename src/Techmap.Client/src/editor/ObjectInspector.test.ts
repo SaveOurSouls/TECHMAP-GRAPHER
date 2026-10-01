@@ -99,7 +99,7 @@ describe("wire object inspector", () => {
     expect(inputTag(markup, "Цвет объекта")).toContain('type="color"');
   });
 
-  it("shows an assigned material and exposes explicit clearing", () => {
+  it("keeps the removed wire summary card out of the inspector", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "e4",
       selectedObject: wireObject({
@@ -112,18 +112,17 @@ describe("wire object inspector", () => {
       onWireMaterialClear: vi.fn(),
     }));
 
-    expect(markup).toContain('aria-label="Материал провода"');
-    expect(markup).toContain("UL1061 24AWG");
-    expect(markup).toContain("UL1061-24AWG");
-    expect(markup).toContain("Очистить материал");
+    expect(markup).not.toContain('aria-label="Материал провода"');
+    expect(markup).not.toContain("UL1061 24AWG");
+    expect(markup).not.toContain("Очистить материал");
   });
 
-  it("explains how to assign a missing material", () => {
+  it("does not render the removed empty material card", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "e4", selectedObject: wireObject({}), disabled: false, onChange: vi.fn(),
     }));
-    expect(markup).toContain("Материал не выбран");
-    expect(markup).toContain("нижнем справочнике");
+    expect(markup).not.toContain("Материал не выбран");
+    expect(markup).not.toContain("нижнем справочнике");
   });
 
   it("offers mark and exact database position when an E4 wire is selected", () => {
@@ -139,7 +138,7 @@ describe("wire object inspector", () => {
     expect(markup).toContain('aria-label="Позиция материала провода"');
   });
 
-  it("shows separate drawing strip profiles and calculated step lengths", () => {
+  it("keeps the drawing inspector free of the removed strip profile card", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "drawing",
       selectedObject: wireObject({ lengthKnown: "false" }),
@@ -165,14 +164,10 @@ describe("wire object inspector", () => {
       },
     }));
 
-    expect(markup).toContain('aria-label="Профиль разделки провода"');
-    expect(markup).toContain('aria-selected="true"');
-    expect(markup).toContain("Начало");
-    expect(markup).toContain("Конец");
-    expect(markup).toContain("BNC / RG58");
-    expect(markup).toContain("Ступень, мм");
-    expect(markup).toContain(">3<");
-    expect(markup).toContain("Очистить начало");
+    expect(markup).not.toContain('aria-label="Профиль разделки провода"');
+    expect(markup).not.toContain('aria-selected="true"');
+    expect(markup).not.toContain("BNC / RG58");
+    expect(markup).not.toContain("Ступень, мм");
   });
 
   it("keeps strip profiles out of E4 and explains an empty drawing end", () => {
@@ -185,8 +180,8 @@ describe("wire object inspector", () => {
       view: "drawing", selectedObject: wireObject({ lengthKnown: "false" }), disabled: true, onChange: vi.fn(),
       activeWireStripEnd: "to", onActiveWireStripEndChange: vi.fn(),
     }));
-    expect(drawing).toContain("Профиль не выбран");
-    expect(drawing).toContain("дважды щёлкните профиль разделки");
+    expect(drawing).not.toContain("Профиль не выбран");
+    expect(drawing).not.toContain("дважды щёлкните профиль разделки");
     expect(drawing).toContain("disabled");
   });
 
@@ -198,7 +193,25 @@ describe("wire object inspector", () => {
       onChange: vi.fn(),
     }));
 
-    expect(markup).toContain("Разделку невозможно показать");
-    expect(markup).toContain("нет достаточно длинного направленного участка");
+    expect(markup).not.toContain("Разделку невозможно показать");
+    expect(markup).not.toContain("нет достаточно длинного направленного участка");
+  });
+
+  it("omits coordinates and color from connector properties", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "drawing",
+      selectedObject: {
+        id: "connector-1", layerId: "connectors", kind: "connector", label: "XS5",
+        x: 1983.3, y: 316.6, width: 100, height: 80, color: "#416579",
+      },
+      disabled: false,
+      onChange: vi.fn(),
+    }));
+    expect(markup).toContain("Обозначение");
+    expect(markup).not.toContain('aria-label="Цвет объекта"');
+    expect(markup).not.toContain(">X<");
+    expect(markup).not.toContain(">Y<");
+    expect(markup).toContain("Слой");
+    expect(markup).toContain("Представление");
   });
 });

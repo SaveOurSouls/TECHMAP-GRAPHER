@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
-import { calculateWireStripSteps, type WireEndStripProfiles, type WireStripProfileBinding } from "./model";
+import type { WireEndStripProfiles } from "./model";
 import { builtInWireColors } from "./wire-reference-catalog";
 import { WireDatabasePicker } from "./WireDatabasePicker";
 import type { WireDatabaseOption } from "./wire-database";
@@ -21,22 +21,6 @@ export interface ObjectInspectorProps {
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
 }
-
-const kindLabels: Readonly<Record<EditorSceneObject["kind"], string>> = {
-  "specification-item":"Позиция спецификации",
-  "drawing-table": "Таблица",
-  "position-leader": "Выноска",
-  "leader-anchor": "Якорь выноски",
-  "position-rail": "Линия привязки позиций",
-  "rail-handle": "Конец линии привязки",
-  "physical-covering": "Оболочка",
-  "physical-node": "Узел ветви",
-  "physical-segment": "Участок ветви",
-  connector: "Соединитель",
-  wire: "Провод",
-  text: "Текст",
-  dimension: "Размер",
-};
 
 function finiteNumber(value: string, fallback: number): number {
   const parsed = Number(value);
@@ -86,61 +70,6 @@ function WireCorrectionInput({
   </label>;
 }
 
-function WireStripProfilePanel({
-  wireId,
-  profiles,
-  activeEnd,
-  disabled,
-  onEndChange,
-  onClear,
-}: {
-  readonly wireId: string;
-  readonly profiles?: WireEndStripProfiles;
-  readonly activeEnd: "from" | "to";
-  readonly disabled: boolean;
-  readonly onEndChange?: (end: "from" | "to") => void;
-  readonly onClear?: (wireId: string, end: "from" | "to") => void;
-}) {
-  const profile: WireStripProfileBinding | undefined = profiles?.[activeEnd];
-  const steps = profile ? calculateWireStripSteps(profile.layers) : [];
-  return <section className="he-wire-strip-profile" aria-label="Профиль разделки провода">
-    <header>
-      <strong>Разделка конца</strong>
-      <div className="he-wire-end-tabs" role="tablist" aria-label="Конец провода">
-        {(["from", "to"] as const).map((end) => <button
-          key={end}
-          type="button"
-          role="tab"
-          aria-selected={activeEnd === end}
-          className={activeEnd === end ? "active" : ""}
-          disabled={disabled}
-          onClick={() => onEndChange?.(end)}
-        >{end === "from" ? "Начало" : "Конец"}</button>)}
-      </div>
-    </header>
-    {profile ? <>
-      <div className="he-wire-strip-identity">
-        <span>{profile.displayName}</span>
-        <small>{profile.sourceKey}</small>
-      </div>
-      <table className="he-wire-strip-table">
-        <thead><tr><th>Слой</th><th>D, мм</th><th>L, мм</th><th>Ступень, мм</th></tr></thead>
-        <tbody>{steps.map((step) => <tr key={step.index}>
-          <th>L{step.index}</th>
-          <td>{step.diameterMm}</td>
-          <td>{step.cumulativeLengthMm}</td>
-          <td>{step.stepLengthMm}</td>
-        </tr>)}</tbody>
-      </table>
-      {onClear && <button className="he-wire-strip-clear" type="button" disabled={disabled}
-        onClick={() => onClear(wireId, activeEnd)}>Очистить {activeEnd === "from" ? "начало" : "конец"}</button>}
-    </> : <div className="he-wire-strip-empty">
-      <span>Профиль не выбран</span>
-      <small>Выберите нужный конец и дважды щёлкните профиль разделки в нижнем справочнике.</small>
-    </div>}
-  </section>;
-}
-
 export function ObjectInspector({
   view,
   selectedObject,
@@ -169,13 +98,6 @@ export function ObjectInspector({
 
   return (
     <form className="he-property-form" onSubmit={(event) => event.preventDefault()}>
-      <div className="he-selected-object">
-        <span className={`he-object-symbol ${selectedObject.kind}`} aria-hidden="true" />
-        <div>
-          <strong>{kindLabels[selectedObject.kind]}</strong>
-          <span>{selectedObject.id}</span>
-        </div>
-      </div>
       <label>
         {selectedObject.kind === "wire" ? "Цепь / обозначение" : "Обозначение"}
         <input
@@ -184,37 +106,12 @@ export function ObjectInspector({
           onChange={(event) => onChange(selectedObject.id, { label: event.target.value })}
         />
       </label>
-      {selectedObject.kind === "wire" && <section className="he-wire-material" aria-label="Материал провода">
-        <strong>Материал</strong>
-        {selectedObject.metadata?.materialSourceKey ? <>
-          <span>{selectedObject.metadata.materialDisplayName || selectedObject.metadata.materialSourceKey}</span>
-          <small>{selectedObject.metadata.materialSourceKey} · {selectedObject.metadata.materialEntityType === "cable" ? "кабель" : "провод"}</small>
-          {onWireMaterialClear && <button type="button" disabled={disabled} onClick={() => onWireMaterialClear(selectedObject.id)}>Очистить материал</button>}
-        </> : <>
-          <span>Материал не выбран</span>
-          <small>Выберите провод или кабель в нижнем справочнике двойным щелчком.</small>
-        </>}
-      </section>}
       {selectedObject.kind === "wire" && wireMaterialOptions && onWireMaterialSelect && <WireDatabasePicker
         key={selectedObject.id}
         options={wireMaterialOptions} currentMark={selectedObject.metadata?.wireMark} currentRecordId={selectedObject.metadata?.materialRecordId}
         disabled={disabled} onSelect={option=>onWireMaterialSelect(selectedObject.id,option)}/>}
       {selectedObject.kind === "wire" && view === "drawing" && (
         <>
-          <WireStripProfilePanel
-            wireId={selectedObject.id}
-            profiles={wireStripProfiles}
-            activeEnd={activeWireStripEnd}
-            disabled={disabled}
-            onEndChange={onActiveWireStripEndChange}
-            onClear={onWireStripProfileClear}
-          />
-          {selectedObject.metadata?.stripProfileDisplayWarning && (
-            <div className="he-wire-length-status is-incomplete" role="alert">
-              <strong>Разделку невозможно показать</strong>
-              <span>У выбранного конца провода нет достаточно длинного направленного участка.</span>
-            </div>
-          )}
           <label className="he-toggle-field">
             <input
               type="checkbox"
@@ -293,7 +190,7 @@ export function ObjectInspector({
           )}
         </>
       )}
-      {(selectedObject.kind === "connector" || selectedObject.kind === "text") && (
+      {selectedObject.kind === "text" && (
         <div className="he-field-pair">
           <label>
             X
@@ -319,7 +216,7 @@ export function ObjectInspector({
           </label>
         </div>
       )}
-      <label>
+      {selectedObject.kind !== "connector" && <label>
         Цвет
         {selectedObject.kind === "wire" && <span className="he-wire-standard-colors" aria-label="Стандартные цвета проводов">
           {builtInWireColors.map((color) => <button
@@ -343,7 +240,7 @@ export function ObjectInspector({
           />
           <code>{selectedObject.color.toUpperCase()}</code>
         </span>
-      </label>
+      </label>}
       <div className="he-readonly-facts">
         <div><span>Слой</span><strong>{selectedObject.layerId}</strong></div>
         <div><span>Представление</span><strong>{view === "e4" ? "Схема Э4" : "Чертёж"}</strong></div>
