@@ -86,6 +86,34 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
   });
 }
 
+/** Resolve a displayed member grip to its authored station before choosing
+ * shoulders. OP-generated grips have no authored station and use only their
+ * neighbouring visible shoulders. */
+export function pipeBendSnapAnchors(pipe:{
+  authoredPoints?:readonly Point[];handles:readonly Point[];
+  authoredHandleIndices?:readonly number[];
+  joiningTransitionHandles?:readonly {index:number;side:"enter"|"exit"}[];
+  joiningBoundaryHandles?:readonly {index:number}[];
+  joiningTransitionMidpoints?:readonly {index:number}[];
+},displayPoints:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode,displayOrigin:Point):Point[] {
+  const transition=!insert?pipe.joiningTransitionHandles?.find(handle=>handle.index===index):undefined;
+  if(transition&&mode==="carry"){
+    const at=index+1,step=transition.side==="enter"?-1:1;
+    const outer=displayPoints[at+step],fixed=displayPoints[at+2*step],axis=displayPoints[at-step];
+    if(outer&&fixed&&axis)return [
+      {x:displayOrigin.x+fixed.x-outer.x,y:displayOrigin.y+fixed.y-outer.y},axis,
+    ];
+  }
+  const generated=!!transition
+    ||pipe.joiningBoundaryHandles?.some(handle=>handle.index===index)
+    ||insert&&pipe.joiningTransitionMidpoints?.some(handle=>handle.index===index);
+  if(generated)return bendSnapAnchors(displayPoints,index,insert,"adjacent",displayOrigin);
+  const authoredIndex=pipe.authoredHandleIndices?.[index];
+  if(!insert&&authoredIndex!==undefined&&authoredIndex>=1&&pipe.authoredPoints)
+    return bendSnapAnchors(pipe.authoredPoints,authoredIndex-1,false,mode,displayOrigin);
+  return bendSnapAnchors(displayPoints,index,insert,mode,displayOrigin);
+}
+
 /** Intersect angular direction families and validate every changing shoulder.
  * Collinear supports retain continuous motion along the line. */
 export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12,state?:BendSnapState) {
