@@ -1,3 +1,18 @@
+# Текущий проверенный срез — 01.10.2026
+
+Новый код после предыдущего ZIP `f1fdb1c` зафиксирован до `b996608`; версия
+пакета повышена коммитом `370fc6b` до `0.63.12-m5-07-review`. В сборочный срез
+вошли изменения Э4 (`7cdcf6a`, `5d6471f`, `8467cd4`), управления привязками
+(`e483e09`) и Дизайна интерфейса (`0d82d15`, `9ff3e18`, `b996608`).
+
+ZIP: `artifacts/m5-07-20261001-neighbor-chat-slice/TECHMAP-GRAPHER-0.63.12-m5-07-review-win-x64.zip`, 57 012 364 байта, SHA-256
+`734FE9AF388F486317A4F0D97D92102EE1657F964C6DACD873F2480F0C9D161E`.
+
+Проверки: 1520 клиентских тестов, TypeScript/Vite production build, 1044
+Release .NET-теста, self-contained publish, манифест на 212 файлов и все 7
+portable-режимов из `C:\Temp\TECHMAP-portable-20261001-neighbor-chat-slice`.
+Ручная UI-приёмка не выполнялась. Старый ZIP остаётся неотслеживаемым.
+
 # Текущий срез карточки 021 — 01.10.2026
 
 Кодовый коммит: `0d82d15` (`Redesign wire and connector property inspector`);

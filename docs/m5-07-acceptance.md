@@ -1,3 +1,38 @@
+# Пакет 01.10.2026 — новые коммиты соседних чатов
+
+Проверен новый зафиксированный срез после пакета `f1fdb1c`. Кодовый коммит:
+`b996608` (`Finalize property inspector handoff notes`); версия зафиксирована
+коммитом `370fc6b` как `0.63.12-m5-07-review`; полный сборочный `HEAD`:
+`370fc6b534eac479207948303532b5c03d2ae395`.
+
+Новые коммиты, вошедшие в `HEAD` и ZIP:
+
+- Э4: `7cdcf6a` (`Fix E4 differential route integrity and angle mode`),
+  `5d6471f`, `8467cd4`;
+- привязки и управление углом: `e483e09` (`fix(drawing): keep Ctrl bend
+  snapping continuous`);
+- Дизайн интерфейса: `0d82d15` (`Redesign wire and connector property
+  inspector`), `9ff3e18`, `b996608`.
+
+Для перечисленных коммитов `git merge-base --is-ancestor` подтвердил вхождение
+в собираемый `HEAD`. Новых незакоммиченных изменений от соседних чатов нет.
+
+Windows x64 ZIP версии `0.63.12-m5-07-review`:
+`artifacts/m5-07-20261001-neighbor-chat-slice/TECHMAP-GRAPHER-0.63.12-m5-07-review-win-x64.zip`.
+Размер: **57 012 364 байта**. SHA-256:
+`734FE9AF388F486317A4F0D97D92102EE1657F964C6DACD873F2480F0C9D161E`.
+
+Штатный `scripts/build-package.ps1` завершился успешно: 1520 клиентских
+тестов, TypeScript/Vite production build, 1044 Release .NET-теста и
+self-contained win-x64 publish. `verify-package.ps1` подтвердил 212 файлов
+манифеста. `test-portable-package.ps1` подтвердил все 7 portable-режимов из
+`C:\Temp\TECHMAP-portable-20261001-neighbor-chat-slice`, включая каталог с
+кириллицей и пробелами.
+
+Ручная UI-приёмка пользовательского чертежа не выполнялась. ZIP локальный и в
+Git не включается; старый `TECHMAP-GRAPHER-current-2026-09-29.zip` остаётся
+неотслеживаемым и в поставку не входит.
+
 # Пакет 30.09.2026 — Дизайн интерфейса, Э4, таблицы и привязки
 
 Проверенный кодовый срез: `4bc54e0` (`Record position toggle verification`).
