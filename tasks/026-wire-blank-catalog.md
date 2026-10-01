@@ -1,12 +1,12 @@
 # 026. Справочник полуфабрикатов провода
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** текущая задача, 01.10.2026
 - **Источник запроса:** поручение владельца от 01.10.2026; готовые рисунки карточки 024
 - **Требования:** REQ-051, REQ-049
 - **Решения:** ADR-0006 (версии справочников)
 - **Зависимости:** карточка 024
-- **Владелец файлов:** `src/Techmap.Client/src/WireBlankCatalog*`, `src/Techmap.Client/src/wire-blank-catalog.css`, `src/Techmap.Client/src/ReferenceImportPanel.tsx`, `src/Techmap.Web/WireBlankCatalogSeed.cs`, `src/Techmap.Web/Program.cs`, `src/Techmap.Web/Techmap.Web.csproj`, `tests/Techmap.Web.Tests/WireBlankCatalogSeedTests.cs`, `docs/requirements.md`, эта карточка, `tasks/README.md`; чужой `src/Techmap.Client/src/editor/e4-router.ts` не менять.
+- **Владелец файлов:** `src/Techmap.Client/src/WireBlankCatalog*`, `src/Techmap.Client/src/wire-blank-catalog.css`, `src/Techmap.Client/src/ReferenceImportPanel.tsx`, `src/Techmap.Web/WireBlankCatalogSeed.cs`, `src/Techmap.Web/ReferenceCatalogEndpoints.cs`, `src/Techmap.Web/Program.cs`, `src/Techmap.Web/Techmap.Web.csproj`, `tests/Techmap.Web.Tests/WireBlankCatalogSeedTests.cs`, `docs/requirements.md`, эта карточка, `tasks/README.md`, `status.md`; чужой `src/Techmap.Client/src/editor/e4-router.ts` не менять.
 
 ## Результат и границы
 
@@ -26,7 +26,7 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: —
-- Проверки и даты: —
-- Ограничения и открытые вопросы: —
+- Коммит кода/документации: `4c44cd5`, отправлен в `origin/codex/restore-20260918-0235`; итоговый документальный коммит указан в передаче результата.
+- Проверки и даты: 01.10.2026 — клиентский Vitest 1532/1532; `tsc --noEmit`; Vite production build; серверный профиль 3/3; серверная сборка без предупреждений; `git diff --cached --check`.
+- Ограничения и открытые вопросы: полный серверный прогон 987/988 — один отказ `ReferenceCatalogSearchPerformanceTests.Fifty_thousand_record_catalog_meets_search_budget` (p95 142,24 мс при бюджете 100 мс); тест не затрагивает новый каталог. Ручной UI-просмотр не выполнен. Новый справочник не назначает полуфабрикат автоматически на строки маршрута — отдельной команды на это не было.
 - Решение владельца о приёмке: —
