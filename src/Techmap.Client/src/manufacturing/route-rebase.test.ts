@@ -17,3 +17,16 @@ it("previews removals without mutating manual work and revokes readiness", () =>
   expect(route.rows[0]!.sourceObjects).toHaveLength(1);
   expect(preview.route.source.sha256).toBe("b".repeat(64));
 });
+
+it("removes assembly input lines whose raw source disappeared from the drawing", () => {
+  const source = { kind: "connector" as const, id: "removed" };
+  const route: ManufacturingRoute = { contractVersion: 1, source: { fingerprintVersion: 1, sha256: "a".repeat(64) }, status: "draft", rows: [{
+    id: "assembly", kind: "assembly", title: "Сборка", comment: "Сохранить", sourceObjects: [source], dependsOn: [],
+    assemblyInputs: [{ id: "input-1", kind: "source", ref: source }], operations: [], prepared: true,
+    presentation: { backgroundOpacity: 0, objects: [{ ref: source, points: [{ x: 5, y: 6 }], hidden: false }] },
+  }] };
+  const preview = previewRouteRebase(route, createEmptyHarnessDesign(), "b".repeat(64));
+  expect(preview.removed).toEqual([source]);
+  expect(preview.route.rows[0]).toMatchObject({ assemblyInputs: [], sourceObjects: [], prepared: false, comment: "Сохранить" });
+  expect(preview.route.rows[0]!.presentation.objects).toEqual([]);
+});

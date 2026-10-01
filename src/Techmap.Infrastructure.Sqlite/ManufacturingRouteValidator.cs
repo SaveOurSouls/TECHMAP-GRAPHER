@@ -37,6 +37,7 @@ internal static class ManufacturingRouteValidator
                 if (row.TryGetProperty("operationTimeMinutes", out _)) rowKeys = [..rowKeys, "operationTimeMinutes"];
                 if (row.TryGetProperty("photos", out _)) rowKeys = [..rowKeys, "photos"];
                 if (row.TryGetProperty("terminalRequirements", out _)) rowKeys = [..rowKeys, "terminalRequirements"];
+                if (row.TryGetProperty("assemblyInputs", out _)) rowKeys = [..rowKeys, "assemblyInputs"];
             }
             RequireExact(row, rowKeys);
             var id = Text(row, "id", path + ".id", 128);
@@ -53,7 +54,10 @@ internal static class ManufacturingRouteValidator
             rowRefs[id] = refs;
             if (row.TryGetProperty("terminalRequirements", out var terminalRequirements))
                 ValidateTerminalRequirements(terminalRequirements, path + ".terminalRequirements", refs, ref referenceCount);
-            foreach (var dependency in TextArray(row, "dependsOn", path + ".dependsOn", 1000))
+            var dependencies = TextArray(row, "dependsOn", path + ".dependsOn", 1000).ToArray();
+            if (row.TryGetProperty("assemblyInputs", out var assemblyInputs))
+                ValidateAssemblyInputs(assemblyInputs, path + ".assemblyInputs", kind, refs, dependencies, ref referenceCount);
+            foreach (var dependency in dependencies)
             {
                 referenceCount++;
                 if (dependency == id) throw Invalid("A manufacturing route row cannot depend on itself.", path + ".dependsOn");
@@ -134,6 +138,43 @@ internal static class ManufacturingRouteValidator
         return result;
     }
 
+    private static void ValidateAssemblyInputs(JsonElement value, string path, string rowKind,
+        HashSet<(string Kind, string Id)> sourceRefs, string[] dependencies, ref int count)
+    {
+        if (rowKind != "assembly" || value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > MaximumReferences)
+            throw Invalid("Only assembly rows may contain input lines.", path);
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var inputSources = new HashSet<(string Kind, string Id)>();
+        var inputRows = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var input in value.EnumerateArray())
+        {
+            var inputPath = $"{path}[{count}]";
+            var kind = Text(input, "kind", inputPath + ".kind", 16);
+            if (!ids.Add(Text(input, "id", inputPath + ".id", 128)))
+                throw Invalid("Assembly input IDs must be unique.", inputPath + ".id");
+            if (kind == "source")
+            {
+                RequireExact(input, "id", "kind", "ref");
+                var reference = input.GetProperty("ref"); RequireExact(reference, "kind", "id");
+                var sourceKind = Text(reference, "kind", inputPath + ".ref.kind", 32);
+                if (sourceKind is not ("wire" or "cable" or "covering" or "connector"))
+                    throw Invalid("Invalid assembly source kind.", inputPath + ".ref.kind");
+                if (!inputSources.Add((sourceKind, Text(reference, "id", inputPath + ".ref.id", 128))))
+                    throw Invalid("Assembly source input is duplicated.", inputPath + ".ref");
+            }
+            else if (kind == "row")
+            {
+                RequireExact(input, "id", "kind", "rowId");
+                if (!inputRows.Add(Text(input, "rowId", inputPath + ".rowId", 128)))
+                    throw Invalid("Assembly row input is duplicated.", inputPath + ".rowId");
+            }
+            else throw Invalid("Invalid assembly input kind.", inputPath + ".kind");
+            count++;
+        }
+        if (!inputSources.SetEquals(sourceRefs) || !inputRows.SetEquals(dependencies))
+            throw Invalid("Assembly input lines must match sources and dependencies.", path);
+    }
+
     private static void ValidateTerminalRequirements(JsonElement value, string path, HashSet<(string Kind, string Id)> refs, ref int count)
     {
         if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > MaximumReferences)
@@ -197,7 +238,7 @@ internal static class ManufacturingRouteValidator
     {
         RequireExact(value, "backgroundOpacity", "objects");
         var opacity = Number(value, "backgroundOpacity", path + ".backgroundOpacity");
-        if (!double.IsFinite(opacity) || opacity < .1 || opacity > .5) throw Invalid("Route background opacity must be between 0.1 and 0.5.", path + ".backgroundOpacity");
+        if (!double.IsFinite(opacity) || opacity < 0 || opacity > 1) throw Invalid("Route background opacity must be between 0 and 1.", path + ".backgroundOpacity");
         var objects = Array(value, "objects", path + ".objects", MaximumReferences);
         var seen = new HashSet<(string, string)>();
         foreach (var item in objects.EnumerateArray())

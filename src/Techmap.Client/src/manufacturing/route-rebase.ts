@@ -10,15 +10,18 @@ export function previewRouteRebase(route: ManufacturingRoute, document: HarnessD
 } {
   const available = new Set(buildRouteSourceItems(document).map(item => key(item.ref)));
   const removed = new Map<string, RouteSourceRef>();
-  const rows: RouteRow[] = route.rows.map(row => ({
-    ...row, prepared: false,
-    sourceObjects: row.sourceObjects.filter(ref => {
+  const rows: RouteRow[] = route.rows.map(row => {
+    const sourceObjects = row.sourceObjects.filter(ref => {
       if (available.has(key(ref))) return true;
       removed.set(key(ref), ref); return false;
-    }),
-    ...(row.terminalRequirements ? { terminalRequirements: row.terminalRequirements.filter(requirement => available.has(`wire:${requirement.wireId}`)) } : {}),
-    presentation: { ...row.presentation, objects: row.presentation.objects.filter(item => available.has(key(item.ref))) },
-  }));
+    });
+    return {
+      ...row, prepared: false, sourceObjects,
+      ...(row.assemblyInputs ? { assemblyInputs: row.assemblyInputs.filter(input => input.kind !== "source" || available.has(key(input.ref))) } : {}),
+      ...(row.terminalRequirements ? { terminalRequirements: row.terminalRequirements.filter(requirement => available.has(`wire:${requirement.wireId}`)) } : {}),
+      presentation: { ...row.presentation, objects: row.presentation.objects.filter(item => available.has(key(item.ref))) },
+    };
+  });
   const introduced = new Set(rows.flatMap(row => row.sourceObjects.map(key)));
   const fresh = generateRoute(document, fingerprint, quantity).rows.filter(row => row.sourceObjects.some(ref => !introduced.has(key(ref))));
   const added = fresh.flatMap(row => row.sourceObjects);

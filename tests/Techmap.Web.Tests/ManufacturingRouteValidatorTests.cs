@@ -38,9 +38,52 @@ public sealed class ManufacturingRouteValidatorTests
             case "duplicate-dependency": row["dependsOn"] = new JsonArray("a", "a"); break;
             case "unknown-kind": row["kind"] = "other"; break;
             case "invalid-binding": row["operations"]![0]!["binding"] = new JsonObject(); break;
-            case "opacity": row["presentation"]!["backgroundOpacity"] = .6; break;
+            case "opacity": row["presentation"]!["backgroundOpacity"] = 1.1; break;
             case "extra-field": row["oops"] = true; break;
         }
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    public void Background_opacity_accepts_full_percent_range(double opacity)
+    {
+        var graph = BaseRoute();
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["backgroundOpacity"] = opacity;
+        Validate(graph);
+    }
+
+    [Fact]
+    public void Assembly_input_lines_accept_empty_and_dependency_backed_rows()
+    {
+        var graph = BaseRoute(); var row = graph["manufacturingRoute"]!["rows"]![1]!;
+        row["dependsOn"] = new JsonArray(); row["assemblyInputs"] = new JsonArray();
+        Validate(graph);
+        row["dependsOn"] = new JsonArray("a");
+        row["assemblyInputs"] = new JsonArray(new JsonObject { ["id"] = "input-a", ["kind"] = "row", ["rowId"] = "a" });
+        Validate(graph);
+    }
+
+    [Theory]
+    [InlineData("missing-line")]
+    [InlineData("duplicate-line")]
+    [InlineData("wrong-row")]
+    [InlineData("extra-field")]
+    public void Assembly_input_lines_reject_drift_and_malformed_entries(string mutation)
+    {
+        var graph = BaseRoute(); var row = graph["manufacturingRoute"]!["rows"]![1]!;
+        var input = new JsonObject { ["id"] = "input-a", ["kind"] = "row", ["rowId"] = "a" };
+        var inputs = new JsonArray(input);
+        switch (mutation)
+        {
+            case "missing-line": inputs.Clear(); break;
+            case "duplicate-line": inputs.Add(input.DeepClone()); break;
+            case "wrong-row": input["rowId"] = "missing"; break;
+            case "extra-field": input["extra"] = true; break;
+        }
+        row["assemblyInputs"] = inputs;
         Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
     }
 
