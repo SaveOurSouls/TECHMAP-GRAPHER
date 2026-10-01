@@ -18,9 +18,15 @@ export function drawingLocalPoint(point:{x:number;y:number},placements:readonly 
  * Contact snapshots intentionally keep cardinal directions, so a non-axial
  * rotation is represented by the nearest axis after the vector is rotated. */
 export function drawingLocalDirection(direction:DrawingDirection,placements:readonly ConnectorDrawingPlacement[]|undefined):DrawingDirection {
- const vector=drawingLocalPoint(drawingDirectionVectors[direction],placements);
+ const vector=drawingLocalDirectionVector(direction,placements);
  if(Math.abs(vector.x)>=Math.abs(vector.y))return vector.x>=0?"right":"left";
  return vector.y>=0?"down":"up";
+}
+
+/** Exact unit direction for contact marks at any drawing rotation angle. */
+export function drawingLocalDirectionVector(direction:DrawingDirection,placements:readonly ConnectorDrawingPlacement[]|undefined){
+ const vector=drawingLocalPoint(drawingDirectionVectors[direction],placements),length=Math.hypot(vector.x,vector.y);
+ return {x:vector.x/length,y:vector.y/length};
 }
 
 export function drawingPointToLocal(point:{x:number;y:number},placements:readonly ConnectorDrawingPlacement[]|undefined){

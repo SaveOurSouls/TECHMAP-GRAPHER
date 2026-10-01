@@ -1274,6 +1274,7 @@ function legacyConnectorContactPoints(object: EditorSceneObject): readonly Edito
 
 export interface MaterializedConnectorContactPoint extends EditorPoint {
   readonly direction: "left" | "right" | "up" | "down";
+  readonly directionVector?: EditorPoint;
   readonly status: "available" | "not-connected";
 }
 
@@ -1301,11 +1302,15 @@ export function getMaterializedConnectorContactPoints(
     if (typeof record.x !== "number" || !Number.isFinite(record.x) ||
         typeof record.y !== "number" || !Number.isFinite(record.y) ||
         !["left", "right", "up", "down"].includes(String(record.direction)) ||
+        (record.directionVector !== undefined && (!record.directionVector || typeof record.directionVector !== "object" ||
+          typeof (record.directionVector as EditorPoint).x !== "number" || !Number.isFinite((record.directionVector as EditorPoint).x) ||
+          typeof (record.directionVector as EditorPoint).y !== "number" || !Number.isFinite((record.directionVector as EditorPoint).y))) ||
         !["available", "not-connected"].includes(String(record.status))) return null;
     result.push({
       x: object.x + record.x,
       y: object.y + record.y,
       direction: record.direction as MaterializedConnectorContactPoint["direction"],
+      ...(record.directionVector ? {directionVector:record.directionVector as EditorPoint} : {}),
       status: record.status as MaterializedConnectorContactPoint["status"],
     });
   }
@@ -1358,7 +1363,7 @@ function contactOutward(direction: MaterializedConnectorContactPoint["direction"
 }
 
 function contactCrossCenter(point: ConnectorCanvasContactPoint): EditorPoint {
-  const outward = contactOutward(point.direction);
+  const outward = point.directionVector ?? contactOutward(point.direction);
   return {
     x: point.x + outward.x * point.crossOffset,
     y: point.y + outward.y * point.crossOffset,
