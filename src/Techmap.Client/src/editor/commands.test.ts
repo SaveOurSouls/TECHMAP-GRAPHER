@@ -4,6 +4,7 @@ import { createEditorHistory, executeEditorCommand, redoEditorCommand, undoEdito
 import { validateE4Route } from "./e4-router";
 import { designToScene } from "./HarnessDesignEditor";
 import { getE4ScreenLayout, getE4DifferentialPairLayout } from "./CanvasViewport";
+import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
 import { selectConnectorSeriesArticle } from "./connector-series";
 import {
@@ -1806,6 +1807,40 @@ function singleWireConnectionDocument() {
     wire: createWire("w1", { connectorId: "x1", contactId: "x1:contact:1" }, { connectorId: "x2", contactId: "x2:contact:1" }),
   });
 }
+
+it("C6 keeps a manually dragged E4 wire editable when a pinned neighbour owns its clearance",()=>{
+ let document=connectionDocument();
+ document=applyEditorCommand(document,{type:"set-e4-wire-route",wireId:"w1",route:[
+  {x:648,y:64},{x:740,y:64},{x:740,y:160},{x:900,y:160},{x:900,y:64},{x:976,y:64},
+ ]});
+ const moved=applyEditorCommand(document,{type:"set-e4-wire-route",wireId:"w1",route:[
+  {x:648,y:64},{x:740,y:64},{x:740,y:80},{x:900,y:80},{x:900,y:64},{x:976,y:64},
+ ]});
+ expect(moved.wires.find(wire=>wire.id==="w1")?.e4Route[2]?.y).toBe(80);
+ expect(moved.wires.map(wire=>[wire.from,wire.to])).toEqual(document.wires.map(wire=>[wire.from,wire.to]));
+ expect(e4RoutingIssues(moved).length).toBeGreaterThan(0);
+});
+
+it("C3 and C7 plan real automatic pair routes at 24 units for the full horizontal run",()=>{
+ const left=createConnector("pair-left","XP1",2,{x:0,y:0});
+ const rightBase=createConnector("pair-right","XP2",2,{x:1000,y:120});
+ const right={...rightBase,schematic:{...rightBase.schematic,orientation:"contacts-left" as const}};
+ const wires=[0,1].map(index=>createWire(`pair-${index}`,
+  {connectorId:left.id,contactId:left.contacts[index]!.id},
+  {connectorId:right.id,contactId:right.contacts[index]!.id}));
+ let document: ReturnType<typeof createEmptyHarnessDesign>={...createEmptyHarnessDesign(),connectors:[left,right],wires:wires.map((wire,index)=>({...wire,e4Route:[{x:648,y:64+index*24},{x:976,y:64+index*24}]}))};
+ document=applyEditorCommand(document,{type:"create-diff-pair",group:{id:"pair",wireIds:["pair-0","pair-1"],step:24,amplitude:4,variant:1}});
+ const paths=document.wires.map(wire=>({id:wire.id,points:[wireEndpointE4Anchor(document,wire.from)!.position,...wire.e4Route,wireEndpointE4Anchor(document,wire.to)!.position]}));
+ const span=commonHorizontalPairSpan(paths);
+ expect(span).not.toBeNull();
+ expect(span!.crossMaximum-span!.crossMinimum).toBe(24);
+ expect(span!.end-span!.start).toBeGreaterThan(250);
+ const layout=getE4DifferentialPairLayout({id:"pair",wireIds:["pair-0","pair-1"],step:24,amplitude:4,variant:1},designToScene(document,"e4"))!;
+ expect(layout.span.orientation).toBe("horizontal");
+ expect(layout.crossMaximum-layout.crossMinimum).toBe(24);
+ expect(layout.span.start).toBe(span!.start);
+ expect(layout.span.end).toBe(span!.end);
+});
 
 describe("E4 drawing placement history",()=>{
   it("persists independent position/visibility and undoes each operation without moving the table",()=>{

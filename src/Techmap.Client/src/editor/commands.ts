@@ -56,7 +56,7 @@ import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Rou
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
-import { commonParallelSpan } from "./e4-parallel-spans";
+import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -219,11 +219,14 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(screenJunctionEnds(wire))throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
       const request=createE4RoutingRequest(document,wire,wire.id);
       const original=[request.start.position,...wire.e4Route,request.end.position];
-      const raw=editedE4Points(original,command.index,command.position,command.mode,command.insert,false);
+      const authoredPosition=document.views.e4.e4RoutingMode==="angular"
+        ? snapE4AngularBend(original,command.index,command.position,!!command.insert)
+        : command.position;
+      const raw=editedE4Points(original,command.index,authoredPosition,command.mode,command.insert,false);
       const baseline=[...original];
       if(command.insert){const a=baseline[command.index]!,b=baseline[command.index+1]!;baseline.splice(command.index+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
       const positions=movedE4Junctions(document,wire.id,baseline,raw);
-      const points=editedE4Points(original,command.index,command.position,command.mode,command.insert);
+      const points=editedE4Points(original,command.index,authoredPosition,command.mode,command.insert);
       const route=preserveE4Leads(points,request.start,request.end).slice(1,-1);
       let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),command.mode);
       const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>id!==wire.id));
@@ -1568,10 +1571,17 @@ function setE4WireRoute(document: HarnessDesignDocument, wireId: string, route: 
   const repairedStart = wireEndpointE4Anchor(repaired, repairedWire.from);
   const repairedEnd = wireEndpointE4Anchor(repaired, repairedWire.to);
   if (!repairedStart || !repairedEnd) throw new Error("Точки подключения маршрута Э4 не найдены.");
-  validateE4Route(
-    [repairedStart.position, ...repairedWire.e4Route, repairedEnd.position],
-    createE4RoutingRequest(repaired, repairedWire, wireId),
-  );
+  try {
+    validateE4Route(
+      [repairedStart.position, ...repairedWire.e4Route, repairedEnd.position],
+      createE4RoutingRequest(repaired, repairedWire, wireId),
+    );
+  } catch (error) {
+    // A manual drag owns its geometry. If all neighbouring wires are pinned,
+    // a temporary clearance conflict must remain editable and diagnosable;
+    // it must not turn the drag into an unhandled command failure.
+    if (!(error instanceof Error) || !/зазор|пересеч|clearance/i.test(error.message)) throw error;
+  }
   for (const junction of repaired.junctions.filter((item) => item.wireIds.includes(wireId))) validateJunctionAgainstWires(repaired, junction);
   validateWireGroups(repaired);
   return repaired;
@@ -1809,8 +1819,9 @@ function validateE4WireIds(document: HarnessDesignDocument, wireIds: readonly st
     if (screenJunctionEnds(wire) && wire.e4Route.length !== 0) {
       throw new Error("Подключение экрана к проводу должно быть прямым, без изгибов.");
     }
+    const points = [start.position, ...wire.e4Route, end.position];
     validateE4Route(
-      [start.position, ...wire.e4Route, end.position],
+      points,
       {
         ...request,
         obstacles: request.obstacles?.filter((obstacle) =>
@@ -2045,6 +2056,8 @@ function compactAutomaticDifferentialPairs(
   let result = document;
   for (const group of document.diffPairs) {
     if (!group.wireIds.every(id => routed.has(id))) continue;
+    const planned = planHorizontalDifferentialPair(result, group.wireIds);
+    if (planned) { result = planned; continue; }
     const wires = group.wireIds.map(id => result.wires.find(wire => wire.id === id));
     if (wires.some(wire => !wire)) continue;
     const paths = wires.map(wire => {
@@ -2053,8 +2066,11 @@ function compactAutomaticDifferentialPairs(
       return start && end ? { id: wire!.id, points: [start, ...wire!.e4Route, end] } : null;
     });
     if (paths.some(path => !path)) continue;
-    const span = commonParallelSpan(paths as { id: string; points: readonly Point[] }[]);
-    if (!span || span.direction || span.crossMaximum - span.crossMinimum <= 24 + 1e-6) continue;
+    const span = commonHorizontalPairSpan(paths as { id: string; points: readonly Point[] }[]);
+    // A differential pair is a horizontal bundle. Oblique/vertical spans are
+    // valid ordinary wire geometry, but they are not candidates for the pair
+    // planner and must not produce a rotated X decoration.
+    if (!span || span.direction || span.orientation !== "horizontal" || span.crossMaximum - span.crossMinimum <= 24 + 1e-6) continue;
     const targetGap = 24;
     const center = (span.crossMinimum + span.crossMaximum) / 2;
     const targets = new Map(group.wireIds.map((id, index) => [id, center + (index === 0 ? -targetGap / 2 : targetGap / 2)]));
@@ -2079,20 +2095,78 @@ function compactAutomaticDifferentialPairs(
       const next = [...full.slice(0, segment.index), ...replacement, ...full.slice(segment.index + 2)];
       const compacted = next.filter((point, index) => index === 0 || Math.hypot(point.x - next[index - 1]!.x, point.y - next[index - 1]!.y) > 1e-7);
       try {
-        validateE4Polyline(
-          wireEndpointE4Anchor(result, wire.from)!,
-          compacted.slice(1, -1),
-          wireEndpointE4Anchor(result, wire.to)!,
-          screenJunctionEnds(wire) ? 0 : defaultE4WireLead,
-        );
+        const compactStart = wireEndpointE4Anchor(result, wire.from)!;
+        const compactEnd = wireEndpointE4Anchor(result, wire.to)!;
+        validateE4Polyline(compactStart, compacted.slice(1, -1), compactEnd,
+          screenJunctionEnds(wire) ? 0 : defaultE4WireLead);
         return { ...wire, e4Route: compacted.slice(1, -1) };
       } catch {
         return wire;
       }
     });
-    result = { ...result, wires: nextWires };
+    const candidate = { ...result, wires: nextWires };
+    // Commit the two conductors as one geometry transaction. Checking each
+    // changed lane against the old position of its partner rejects a valid
+    // compact pair, while accepting only one lane leaves a wide half-pair.
+    try {
+      for (const id of group.wireIds) validateE4WireIds(candidate, [id]);
+      result = candidate;
+    } catch { /* Keep the last valid pair when compact geometry is obstructed. */ }
   }
   return result;
+}
+
+function planHorizontalDifferentialPair(
+  document: HarnessDesignDocument,
+  wireIds: readonly [string, string],
+): HarnessDesignDocument | null {
+  const wires = wireIds.map(id => document.wires.find(wire => wire.id === id));
+  if (wires.some(wire => !wire || wire.e4RouteMode === "manual" ||
+      document.junctions.some(junction => junction.wireIds.includes(wire!.id)) ||
+      document.screens.some(screen => screen.wireIds.includes(wire!.id)))) return null;
+  const anchors = wires.map(wire => ({
+    start: wireEndpointE4Anchor(document, wire!.from),
+    end: wireEndpointE4Anchor(document, wire!.to),
+  }));
+  if (anchors.some(pair => !pair.start || !pair.end)) return null;
+  const forward = anchors.every(pair => pair.start!.leadDirection === "right" && pair.end!.leadDirection === "left");
+  const reverse = anchors.every(pair => pair.start!.leadDirection === "left" && pair.end!.leadDirection === "right");
+  if (!forward && !reverse) return null;
+  const direction = forward ? 1 : -1;
+  const departure = forward
+    ? Math.max(...anchors.map(pair => pair.start!.position.x)) + defaultE4WireLead + 4
+    : Math.min(...anchors.map(pair => pair.start!.position.x)) - defaultE4WireLead - 4;
+  const arrival = forward
+    ? Math.min(...anchors.map(pair => pair.end!.position.x)) - defaultE4WireLead - 4
+    : Math.max(...anchors.map(pair => pair.end!.position.x)) + defaultE4WireLead + 4;
+  if (direction * (arrival - departure) < 48) return null;
+  const ys = anchors.map(pair => pair.start!.position.y);
+  const firstOnTop = ys[0]! <= ys[1]!;
+  const middle = anchors.reduce((sum, pair) => sum + pair.start!.position.y + pair.end!.position.y, 0) / 4;
+  const centers = [middle, ...[24, -24, 48, -48, 72, -72].map(delta => middle + delta)];
+  for (const center of centers) {
+    const lanes = firstOnTop ? [center - 12, center + 12] : [center + 12, center - 12];
+    const candidates = wires.map((wire, index) => {
+      const { start, end } = anchors[index]!;
+      const lane = lanes[index]!;
+      const full = [start!.position,
+        { x: departure, y: start!.position.y },
+        { x: departure, y: lane },
+        { x: arrival, y: lane },
+        { x: arrival, y: end!.position.y },
+        end!.position];
+      return { wire: wire!, points: simplifyE4IntermediateRoute(full[0]!, full.slice(1, -1), full.at(-1)!) };
+    });
+    const candidate: HarnessDesignDocument = { ...document, wires: document.wires.map(wire => {
+      const planned = candidates.find(item => item.wire.id === wire.id);
+      return planned ? { ...wire, e4Route: planned.points } : wire;
+    }) };
+    try {
+      for (const id of wireIds) validateE4WireIds(candidate, [id]);
+      return candidate;
+    } catch { /* Try the nearest free parallel lane. */ }
+  }
+  return null;
 }
 
 function orthogonalPathProjectionDistance(points: readonly Point[], point: Point): number {
@@ -2458,4 +2532,14 @@ function replaceRequired<T extends { readonly id: string }>(
 function removeRequired<T extends { readonly id: string }>(items: readonly T[], id: string, message: string): readonly T[] {
   if (!items.some((item) => item.id === id)) throw new Error(message);
   return items.filter((item) => item.id !== id);
+}
+
+function snapE4AngularBend(points: readonly Point[], index: number, target: Point, insert: boolean): Point {
+  const at = Math.max(0, Math.min(points.length - 2, index + (insert ? 0 : 1)));
+  const origin = points[at]!;
+  const angle = Math.atan2(target.y - origin.y, target.x - origin.x);
+  const step = Math.PI / 6;
+  const snapped = Math.round(angle / step) * step;
+  const distance = Math.hypot(target.x - origin.x, target.y - origin.y);
+  return { x: origin.x + Math.cos(snapped) * distance, y: origin.y + Math.sin(snapped) * distance };
 }

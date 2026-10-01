@@ -53,3 +53,25 @@ export function commonParallelSpan(paths:readonly {id:string;points:readonly Poi
   }
   return best;
 }
+
+/** The twisted E4 symbol is laid out only on a horizontal run shared by both
+ * real conductors. Vertical and oblique spans remain valid for other E4
+ * features, such as screens, but never become the differential pair body. */
+export function commonHorizontalPairSpan(paths:readonly {id:string;points:readonly Point[]}[]):ParallelSpan|null {
+  if(paths.length!==2)return null;
+  const horizontal=paths.map(path=>path.points.slice(1).flatMap((end,index)=>{
+    const start=path.points[index]!;
+    if(Math.abs(end.y-start.y)>1e-7||Math.abs(end.x-start.x)<1e-7)return [];
+    return [{index,start,end,minimum:Math.min(start.x,end.x),maximum:Math.max(start.x,end.x)}];
+  }));
+  let best:ParallelSpan|null=null;
+  for(const first of horizontal[0]??[])for(const second of horizontal[1]??[]){
+    const start=Math.max(first.minimum,second.minimum),end=Math.min(first.maximum,second.maximum);
+    if(end-start<1e-7||best&&best.end-best.start>=end-start-1e-7)continue;
+    best={orientation:"horizontal",start,end,crossMinimum:Math.min(first.start.y,second.start.y),
+      crossMaximum:Math.max(first.start.y,second.start.y),firstWireDirection:first.end.x>=first.start.x?1:-1,
+      segmentByWireId:{[paths[0]!.id]:{index:first.index,start:first.start,end:first.end,orientation:"horizontal"},
+        [paths[1]!.id]:{index:second.index,start:second.start,end:second.end,orientation:"horizontal"}}};
+  }
+  return best;
+}

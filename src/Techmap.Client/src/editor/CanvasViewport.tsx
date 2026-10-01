@@ -1,5 +1,5 @@
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
-import { commonParallelSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
+import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
@@ -337,11 +337,16 @@ function orthogonalE4Bend(point: EditorPoint, original: EditorPoint, route: read
   if (index <= 0 || index >= route.length - 1) return point;
   const previous = route[index - 1]!;
   const next = route[index + 1]!;
-  const horizontalFromPrevious = previous.y === original.y;
-  const horizontalToNext = original.y === next.y;
-  if (horizontalFromPrevious && !horizontalToNext) return { x: point.x, y: original.y };
-  if (!horizontalFromPrevious && horizontalToNext) return { x: original.x, y: point.y };
-  return horizontalFromPrevious ? { x: point.x, y: original.y } : { x: original.x, y: point.y };
+  // A corner is defined by its two neighbours. Choosing one shared axis for
+  // each adjacent segment keeps both shoulders orthogonal even when a legacy
+  // route already contains a diagonal segment or a carried junction.
+  const candidates = [
+    { x: previous.x, y: next.y },
+    { x: next.x, y: previous.y },
+  ];
+  return candidates.sort((left, right) =>
+    Math.hypot(left.x - point.x, left.y - point.y) -
+    Math.hypot(right.x - point.x, right.y - point.y))[0]!;
 }
 
 /** The scene owns routing. Painting and hit testing use exactly the same supplied points. */
@@ -649,7 +654,7 @@ export function getE4DifferentialPairLayout(
   group: E4DifferentialPairOverlay,
   objects: readonly EditorSceneObject[],
 ): E4DifferentialPairLayout | null {
-  const common = findE4CommonParallelSpan(objects, group.wireIds);
+  const common = commonHorizontalPairSpan(group.wireIds.map(id => ({id,points:objects.find(o=>o.id===id&&o.kind==="wire")?.points??[]})));
   if (!common) return null;
   const tables=objects.filter(object=>object.kind==="connector").map(table=>{
     if(!common.direction)return table;
@@ -657,19 +662,11 @@ export function getE4DifferentialPairLayout(
     const x=Math.min(...corners.map(p=>p.x)),y=Math.min(...corners.map(p=>p.y));
     return {x,y,width:Math.max(...corners.map(p=>p.x))-x,height:Math.max(...corners.map(p=>p.y))-y};
   });
-  // A routed pair can temporarily have a very wide common span when its
-  // contacts are connected in different rows.  The differential-pair mark is
-  // a presentation layer, so keep its two lanes at one E4 table row pitch
-  // instead of reproducing that detour in every X motif.  Preserve a smaller
-  // authored separation (and the amplitude fallback for coincident paths).
+  // Paint the pair directly on the shared horizontal segment of the real
+  // routes. A wide legacy/manual bundle remains wide until its routes are
+  // replanned; shifting only the painted motif would detach it from the wires.
   const rawCrossGap = Math.abs(common.crossMaximum - common.crossMinimum);
-  // The compact gap is now authored into automatic routes. Never paint a
-  // motif on coordinates that the wire strokes do not occupy: legacy/manual
-  // routes keep their real gap until the user requests a reroute.
-  const routesCarryMode = group.wireIds.every(id => objects.find(object => object.id === id)?.metadata?.e4RouteMode !== undefined);
-  const crossGap = rawCrossGap > 1e-6
-    ? routesCarryMode ? rawCrossGap : Math.min(rawCrossGap, connectorE4TableMetrics.rowHeight)
-    : Math.max(group.amplitude * 2, 1);
+  const crossGap = rawCrossGap > 1e-6 ? rawCrossGap : Math.max(group.amplitude * 2, 1);
   const compactCrossCenter = (common.crossMinimum + common.crossMaximum) / 2;
   const compactCommon: E4ParallelSpan = {
     ...common,
@@ -2618,7 +2615,10 @@ export function redrawCanvas(
     const overlays = e4Overlays ?? parseE4SceneOverlays(objects);
     const visibleOverlays = getVisibleE4SceneOverlays(overlays, objects, layers);
     if (overlays.crossingStyle === "bridge") {
-      drawE4BridgeCrossings(context, getE4WireCrossings(objects, layers, visibleOverlays.junctions), objects);
+      const pairKeys = new Set(visibleOverlays.diffPairs.map(pair => [...pair.wireIds].sort().join("\u0000")));
+      const crossings = getE4WireCrossings(objects, layers, visibleOverlays.junctions).filter(crossing =>
+        !pairKeys.has([crossing.overWireId, crossing.underWireId].sort().join("\u0000")));
+      drawE4BridgeCrossings(context, crossings, objects);
     }
     drawE4DifferentialPairs(context, visibleOverlays.diffPairs, objects);
     drawE4Junctions(context, visibleOverlays.junctions);
