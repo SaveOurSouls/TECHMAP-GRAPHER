@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "viewBox": [
+    0,
+    0,
+    1200,
+    240
+  ],
+  "entries": [
+    {
+      "id": "01-cut",
+      "title": "Провод нарезан",
+      "left": "cut",
+      "right": "cut",
+      "file": "01-cut.svg"
+    },
+    {
+      "id": "02-strip-one",
+      "title": "Зачищен один конец · 5 мм",
+      "left": "copper",
+      "right": "cut",
+      "file": "02-strip-one.svg"
+    },
+    {
+      "id": "02-strip-both",
+      "title": "Зачищены оба конца · 5 мм",
+      "left": "copper",
+      "right": "copper",
+      "file": "02-strip-both.svg"
+    },
+    {
+      "id": "03-tin-one",
+      "title": "Лужён один конец, другой — медь · 5 мм",
+      "left": "tin",
+      "right": "copper",
+      "file": "03-tin-one.svg"
+    },
+    {
+      "id": "03-tin-both",
+      "title": "Лужены оба конца · 5 мм",
+      "left": "tin",
+      "right": "tin",
+      "file": "03-tin-both.svg"
+    },
+    {
+      "id": "04-crimp-copper",
+      "title": "Наконечник без уплотнителя + медь",
+      "left": "terminal",
+      "right": "copper",
+      "file": "04-crimp-copper.svg"
+    },
+    {
+      "id": "04-crimp-tin",
+      "title": "Наконечник без уплотнителя + лужение",
+      "left": "terminal",
+      "right": "tin",
+      "file": "04-crimp-tin.svg"
+    },
+    {
+      "id": "05-crimp-both",
+      "title": "Наконечники без уплотнителей с двух сторон",
+      "left": "terminal",
+      "right": "terminal",
+      "file": "05-crimp-both.svg"
+    },
+    {
+      "id": "06-seal-copper",
+      "title": "Наконечник с уплотнителем + медь",
+      "left": "sealed",
+      "right": "copper",
+      "file": "06-seal-copper.svg"
+    },
+    {
+      "id": "06-seal-tin",
+      "title": "Наконечник с уплотнителем + лужение",
+      "left": "sealed",
+      "right": "tin",
+      "file": "06-seal-tin.svg"
+    },
+    {
+      "id": "07-seal-terminal",
+      "title": "Уплотнённый и обычный наконечники",
+      "left": "sealed",
+      "right": "terminal",
+      "file": "07-seal-terminal.svg"
+    },
+    {
+      "id": "08-seal-both-female",
+      "title": "Уплотнители с двух сторон · гнездовые контакты",
+      "left": "sealed",
+      "right": "sealed",
+      "file": "08-seal-both-female.svg"
+    },
+    {
+      "id": "08-seal-both-mixed",
+      "title": "Уплотнители с двух сторон · гнездовой и штыревой контакты",
+      "left": "sealed",
+      "right": "sealed-pin",
+      "file": "08-seal-both-mixed.svg"
+    }
+  ]
+}

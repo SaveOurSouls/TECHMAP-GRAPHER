@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="title desc">
+  <title id="title">Провод нарезан</title><desc id="desc">Схематичный вид провода с технологической обработкой концов. Цвет изоляции условный.</desc>
+  <defs>
+  <linearGradient id="jacket" x2="0" y2="1"><stop stop-color="#264b82"/><stop offset=".18" stop-color="#5386c3"/><stop offset=".44" stop-color="#26609e"/><stop offset=".76" stop-color="#174574"/><stop offset="1" stop-color="#102f51"/></linearGradient>
+  <linearGradient id="metal" x2="0" y2="1"><stop stop-color="#e9eff2"/><stop offset=".24" stop-color="#aebfc8"/><stop offset=".47" stop-color="#f7fafb"/><stop offset=".72" stop-color="#8d9ca5"/><stop offset="1" stop-color="#657783"/></linearGradient>
+  <linearGradient id="copper" x2="0" y2="1"><stop stop-color="#e7ab73"/><stop offset=".48" stop-color="#b76739"/><stop offset="1" stop-color="#814529"/></linearGradient>
+  <linearGradient id="tin" x2="0" y2="1"><stop stop-color="#f7faf9"/><stop offset=".5" stop-color="#b7c4c7"/><stop offset="1" stop-color="#738b92"/></linearGradient>
+  <linearGradient id="seal" x2="0" y2="1"><stop stop-color="#a6c7a4"/><stop offset=".45" stop-color="#648e75"/><stop offset="1" stop-color="#355b53"/></linearGradient>
+  <clipPath id="wire"><rect x="220" y="96" width="760" height="48" rx="17"/></clipPath>
+</defs>
+  <rect x="220" y="96" width="760" height="48" rx="17" fill="url(#jacket)" stroke="#25445f" stroke-width="2.5"/>
+  <path d="M235 102H965" stroke="#b5d0ea" stroke-width="3" opacity=".5" clip-path="url(#wire)"/>
+  <path d="M237 138H963" stroke="#092b51" stroke-width="3" opacity=".55" clip-path="url(#wire)"/>
+  <g><path d="M220 101 Q213 101 213 108V132Q213 139 220 139" fill="#163d68" stroke="#183a5d" stroke-width="2"/>
+    <path d="M214 110V130" stroke="#6887aa" stroke-width="2" opacity=".65"/></g>
+  <g transform="translate(1200 0) scale(-1 1)"><path d="M220 101 Q213 101 213 108V132Q213 139 220 139" fill="#163d68" stroke="#183a5d" stroke-width="2"/>
+    <path d="M214 110V130" stroke="#6887aa" stroke-width="2" opacity=".65"/></g>
+</svg>
