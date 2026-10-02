@@ -2,18 +2,20 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
-import { createEmptyHarnessDesign } from "../editor/model";
+import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor } from "../editor/model";
 import { generateRoute } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, assemblyDrawingFragment, assemblyDrawingScene, createAssemblyDrawingDraft, moveAssemblyDrawingObject, setAssemblyDrawingLayerVisibility } from "./RouteAssemblyDrawing";
 import { designToScene } from "../editor/HarnessDesignEditor";
 import { physicalFixture } from "../editor/physical-topology-fixture";
 
+const runtime = { config: { configVersion: 1 as const, basePath: "/", apiBasePath: "/api", appVersion: "test", apiVersion: "1", schemaVersion: "1" }, session: { csrfNonce: "test", instanceId: "test" }, projectId: "p", harnessId: "h" };
 function fixture() {
   const a = createConnector("a", "X1", 1, { x: 40, y: 50 });
   const b = createConnector("b", "X2", 1, { x: 400, y: 90 });
   const wire = { ...createWire("wire", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 225, "Питание", "#f00"), drawingRoute: [{ x: 180, y: 50 }, { x: 180, y: 90 }] };
   const document = { ...createEmptyHarnessDesign(), connectors: [a, b], wires: [wire] };
+  document.wires = document.wires.map(w => ({ ...w, e4Route: createOrthogonalE4Route(wireEndpointE4Anchor(document, w.from)!, wireEndpointE4Anchor(document, w.to)!) }));
   const items = buildRouteSourceItems(document);
   const generated = generateRoute(document, "a".repeat(64), 1);
   const row = { ...generated.rows[0]!, kind: "assembly" as const, title: "Первая сборка" };
@@ -58,14 +60,11 @@ describe("assembly drawing copy", () => {
   it("renders full harness geometry only in the editor copy", () => {
     const { document, items, row } = fixture();
     const markup = renderToStaticMarkup(createElement(RouteAssemblyDrawing, {
-      row, document, sources: items, items: items.filter(item => item.ref.kind === "wire"), onSave: () => {}, onCancel: () => {},
+      ...runtime, row, document, sources: items, items: items.filter(item => item.ref.kind === "wire"), onSave: () => {}, onCancel: () => {},
     }));
     expect(markup).toContain("Копия чертежа сборки");
-    expect(markup).toContain("Сохранить фрагмент");
-    expect(markup).toContain("Фон жгута");
-    expect(markup).toContain('min="0" max="100"');
-    expect(markup).toContain("route-assembly-drawing__viewport-background");
-    expect(markup).toContain("route-assembly-drawing__viewport-canvas");
+    expect(markup).toContain("route-full-drawing");
+    expect(markup).not.toContain("route-assembly-drawing__handles");
   });
 
   it("opens an empty assembly on all drawing layers and preserves an isolated fragment", () => {
@@ -79,7 +78,7 @@ describe("assembly drawing copy", () => {
     const reopened = createAssemblyDrawingDraft({ ...row, presentation: saved }, document, []);
     expect(reopened.drawingObjects?.filter(object => !object.hidden).map(object => object.id)).toEqual([wireId]);
     expect(assemblyDrawingScene(designToScene(document, "drawing"), reopened.drawingObjects!).map(object => object.id)).toEqual([wireId]);
-    const markup = renderToStaticMarkup(createElement(RouteAssemblyDrawingPreview, { row: { ...row, presentation: saved }, document }));
+    const markup = renderToStaticMarkup(createElement(RouteAssemblyDrawingPreview, { ...runtime, row: { ...row, presentation: saved }, document }));
     expect(markup).toContain("Фрагмент сборки");
   });
 

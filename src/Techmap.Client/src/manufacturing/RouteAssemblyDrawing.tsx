@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HarnessDesignDocument, Point } from "../editor/model";
-import type { EditorCamera, EditorSceneObject } from "../editor/editor-types";
-import { fitEditorCameraToBounds, screenToWorld } from "../editor/editor-camera";
-import { designToScene } from "../editor/HarnessDesignEditor";
-import { drawEditorSceneObject, getEditorSceneBounds, hitTestEditorScene, objectsInPaintOrder, redrawCanvas } from "../editor/CanvasViewport";
+import type { EditorSceneObject } from "../editor/editor-types";
+import { fitEditorCameraToBounds } from "../editor/editor-camera";
+import { HarnessDesignEditor, designToScene, useLocalCopyTemplateViews } from "../editor/HarnessDesignEditor";
+import { drawEditorSceneObject, getEditorSceneBounds, objectsInPaintOrder } from "../editor/CanvasViewport";
 import { ComponentTemplateImageCache, type ComponentTemplateViewInstance, type ResolveComponentTemplateAssetUrl } from "../editor/component-template-view-renderer";
 import { warmCoveringTextures } from "../editor/covering-renderer";
 import type { RouteRow } from "./route-model";
 import type { RouteSourceItem, RouteSourceRef } from "./route-source";
+import type { RuntimeConfig } from "../runtime-config";
+import type { LocalSession } from "../local-session";
+import { useCoveringAssets, withCoveringTextureUrls } from "../editor/covering-assets";
+import { createRouteDrawingCopy, migrateLegacyRouteDrawingCopy, legacyRouteDrawingCopyWarnings } from "./route-drawing-copy";
 import "./route-assembly-drawing.css";
 
 export type AssemblyDrawingPresentation = RouteRow["presentation"];
@@ -15,6 +19,7 @@ export type AssemblyDrawingObject = AssemblyDrawingPresentation["objects"][numbe
 type DrawingObject = NonNullable<AssemblyDrawingPresentation["drawingObjects"]>[number];
 export interface RouteAssemblyDrawingProps {
   readonly row: RouteRow; readonly document: HarnessDesignDocument;
+  readonly config: RuntimeConfig; readonly session: LocalSession; readonly projectId: string; readonly harnessId: string;
   readonly sources?: readonly RouteSourceItem[]; readonly items: readonly RouteSourceItem[];
   readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
@@ -88,11 +93,24 @@ export function assemblyDrawingScene(scene: readonly EditorSceneObject[], states
   });
 }
 
-export function RouteAssemblyDrawingPreview({ row, document, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl }: Pick<RouteAssemblyDrawingProps, "row" | "document" | "componentTemplateViewInstances" | "resolveComponentTemplateAssetUrl">) {
+export function RouteAssemblyDrawingPreview({ row, document: sourceDocument, config, session, projectId, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl }: Pick<RouteAssemblyDrawingProps, "row" | "document" | "config" | "session" | "projectId" | "componentTemplateViewInstances" | "resolveComponentTemplateAssetUrl">) {
+  const document = row.presentation.drawingCopy?.document ?? sourceDocument;
+  const localTemplateViews = useLocalCopyTemplateViews(row.presentation.drawingCopy ? document : undefined,
+    config, session, projectId, !!row.presentation.drawingCopy, componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
+  const previewInstances = row.presentation.drawingCopy ? localTemplateViews.instances : componentTemplateViewInstances;
+  const previewAssetUrl = row.presentation.drawingCopy ? localTemplateViews.resolveAssetUrl : resolveComponentTemplateAssetUrl;
+  const textures = useCoveringAssets(config, session, projectId, !!document.drawingDocuments?.coveringLibrary?.textures.length, document.drawingDocuments?.coveringLibrary?.textures.map(texture => texture.sha256).join(",") ?? "");
   const canvas = useRef<HTMLCanvasElement>(null);
-  const scene = useMemo(() => designToScene(document, "drawing"), [document]);
-  const objects = useMemo(() => assemblyDrawingScene(scene, row.presentation.drawingObjects ?? []), [scene, row.presentation.drawingObjects]);
-  const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: true, locked: true })), [document]);
+  const scene = useMemo(() => withCoveringTextureUrls(designToScene(document, "drawing"), textures.urls).map(object =>
+    object.kind === "wire" || object.kind === "physical-segment" || object.kind === "physical-covering"
+      ? { ...object, metadata: { ...object.metadata, volumeShading: object.metadata?.volumeShading ?? String(document.drawingDocuments?.volumeShading !== false) } }
+      : object), [document, textures.urls]);
+  const objects = useMemo(() => {
+    if (!row.presentation.drawingCopy) return assemblyDrawingScene(scene, row.presentation.drawingObjects ?? []);
+    const hidden = new Set(row.presentation.drawingCopy.hiddenObjectIds);
+    return scene.filter(object => !hidden.has(object.id));
+  }, [scene, row.presentation]);
+  const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: layer.visible, locked: true })), [document]);
   const cache = useRef(new ComponentTemplateImageCache());
   useEffect(() => {
     const element = canvas.current;
@@ -103,80 +121,33 @@ export function RouteAssemblyDrawingPreview({ row, document, componentTemplateVi
       const context = element.getContext("2d"); if (!context) return;
       context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
       const camera = fitEditorCameraToBounds({ offsetX: 0, offsetY: 0, zoom: 1 },
-        getEditorSceneBounds(objects, layers, "drawing", undefined, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, document.cables), { width, height }, 20);
+        getEditorSceneBounds(objects, layers, "drawing", undefined, previewInstances, previewAssetUrl, document.cables), { width, height }, 20);
       context.save(); context.translate(camera.offsetX, camera.offsetY); context.scale(camera.zoom, camera.zoom);
-      const instances = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
-      for (const object of objectsInPaintOrder(objects, layers, "drawing")) drawEditorSceneObject(context, object, false, "drawing", instances.get(object.id), resolveComponentTemplateAssetUrl, cache.current);
+      const instances = new Map(previewInstances.map(instance => [instance.objectId, instance]));
+      for (const object of objectsInPaintOrder(objects, layers, "drawing")) drawEditorSceneObject(context, object, false, "drawing", instances.get(object.id), previewAssetUrl, cache.current);
       context.restore();
     };
     cache.current.setInvalidate(draw);
     draw(); const stopTextures = warmCoveringTextures(draw, objects); const observer = new ResizeObserver(draw); observer.observe(element); return () => { observer.disconnect(); stopTextures(); cache.current.setInvalidate(null); };
-  }, [objects, layers, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, document]);
-  return <canvas ref={canvas} className="route-assembly-drawing__preview" role="img" aria-label={`Фрагмент сборки ${row.title}`} />;
+  }, [objects, layers, previewInstances, previewAssetUrl, document]);
+  return <>{localTemplateViews.error && <p role="status">{localTemplateViews.error}</p>}<canvas ref={canvas} className="route-assembly-drawing__preview" role="img" aria-label={`Фрагмент сборки ${row.title}`} /></>;
 }
 
-export function RouteAssemblyDrawing({ row, document, items, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl, onSave, onCancel }: RouteAssemblyDrawingProps) {
-  const scene = useMemo(() => designToScene(document, "drawing"), [document]);
-  const [presentation, setPresentation] = useState<AssemblyDrawingPresentation>(() => createAssemblyDrawingDraft(row, document, items));
-  const [selected, setSelected] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [camera, setCamera] = useState<EditorCamera>({ offsetX: 0, offsetY: 0, zoom: 1 });
-  const frame = useRef<HTMLDivElement>(null), backgroundCanvas = useRef<HTMLCanvasElement>(null), foregroundCanvas = useRef<HTMLCanvasElement>(null);
-  const imageCache = useRef(new ComponentTemplateImageCache());
-  const drag = useRef<{ id: string; index: number; pointerId: number; start?: Point } | null>(null);
-  const states = presentation.drawingObjects ?? [];
-  const stateById = useMemo(() => new Map(states.map(state => [state.id, state])), [states]);
-  const sceneById = useMemo(() => new Map(scene.map(object => [object.id, object])), [scene]);
-  const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: true, locked: false })), [document]);
-  const background = scene.filter(object => layers.some(layer => layer.id === object.layerId && layer.visible));
-  const foreground = assemblyDrawingScene(scene, states).filter(object => layers.some(layer => layer.id === object.layerId && layer.visible));
-  const selectedObject = foreground.find(object => object.id === selected), selectedState = selected ? stateById.get(selected) : undefined;
-  const choose = (id: string, additive: boolean) => {
-    setSelected(id);
-    setSelectedIds(current => additive ? (() => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; })() : new Set([id]));
-  };
-  const named = (object: EditorSceneObject) => object.kind === "physical-segment" ? `${object.pipe?.role === "joining-pipe" ? "ОП" : "П"} · ${object.label}` : object.kind === "physical-covering" ? `Оболочка · ${object.label}` : object.label || object.kind;
-  useEffect(() => {
-    const element = frame.current; if (!element) return;
-    const fit = () => setCamera(current => fitEditorCameraToBounds(current, getEditorSceneBounds(scene, layers, "drawing", undefined, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, document.cables), { width: element.clientWidth, height: element.clientHeight }, 42));
-    fit(); const observer = new ResizeObserver(fit); observer.observe(element); return () => observer.disconnect();
-  }, [scene, document, componentTemplateViewInstances, resolveComponentTemplateAssetUrl]);
-  useEffect(() => {
-    if (!backgroundCanvas.current || !foregroundCanvas.current) return;
-    const canvas = foregroundCanvas.current, context = canvas.getContext("2d");
-    if (!context) return;
-    const draw = () => {
-      redrawCanvas(backgroundCanvas.current!, "drawing", camera, background, layers, new Set(), document.cables, undefined, undefined, componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
-      const ratio = window.devicePixelRatio || 1, width = Math.max(1, Math.round(canvas.clientWidth)), height = Math.max(1, Math.round(canvas.clientHeight));
-      canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
-      context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
-      context.save(); context.translate(camera.offsetX, camera.offsetY); context.scale(camera.zoom, camera.zoom);
-      const instances = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
-      for (const object of objectsInPaintOrder(foreground, layers, "drawing")) drawEditorSceneObject(context, object, selected === object.id, "drawing", instances.get(object.id), resolveComponentTemplateAssetUrl, imageCache.current);
-      context.restore();
-    };
-    imageCache.current.setInvalidate(draw); draw();
-    const stopTextures = warmCoveringTextures(draw, foreground);
-    return () => { stopTextures(); imageCache.current.setInvalidate(null); };
-  }, [background, foreground, layers, camera, selected, document, componentTemplateViewInstances, resolveComponentTemplateAssetUrl]);
-  const updateState = (id: string, update: (state: DrawingObject) => DrawingObject) => setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => state.id === id ? update(state) : state) }));
-  const localPoint = (event: React.PointerEvent<HTMLDivElement>): Point => {
-    const rect = frame.current!.getBoundingClientRect(); return screenToWorld(camera, { x: event.clientX - rect.left, y: event.clientY - rect.top });
-  };
-  return <section className="route-assembly-drawing" aria-label={`Рисунок сборки ${row.title}`}>
-    <header className="route-assembly-drawing__header"><div><p className="route-assembly-drawing__eyebrow">КОПИЯ ЧЕРТЕЖА СБОРКИ</p><h3>{row.title}</h3><p>Геометрия и видимость сохраняются в рисунке этапа. Исходный чертёж и длины остаются прежними.</p></div><div className="route-assembly-drawing__actions"><button type="button" className="secondary-action" onClick={onCancel}>Отмена</button><button type="button" className="primary-action" onClick={() => onSave(assemblyDrawingFragment(presentation))}>Сохранить фрагмент</button></div></header>
-    <div className="route-assembly-drawing__toolbar"><label>Фон жгута <output>{Math.round(presentation.backgroundOpacity * 100)}%</output><input type="range" min={0} max={100} step={1} value={Math.round(presentation.backgroundOpacity * 100)} aria-label="Фон жгута" onChange={event => setPresentation(current => ({ ...current, backgroundOpacity: Number(event.target.value) / 100 }))} /></label><span className="route-assembly-drawing__count">В фрагменте: {states.filter(state => !state.hidden).length} из {states.length}; выбрано {selectedIds.size}</span><button type="button" className="secondary-action" onClick={() => setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => ({ ...state, hidden: false })) }))}>Показать все</button><button type="button" className="secondary-action" disabled={!selectedIds.size} onClick={() => setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => ({ ...state, hidden: !selectedIds.has(state.id) })) }))}>Изолировать выбранное</button></div>
-    <div className="route-assembly-drawing__workspace"><aside className="route-assembly-drawing__objects" aria-label="Объекты чертежа"><h4>Слои и объекты</h4>{document.views.drawing.layers.map(layer => <section key={layer.id} className="route-assembly-drawing__layer"><label><input type="checkbox" checked={states.filter(state => state.layerId === layer.id).every(state => !state.hidden)} onChange={event => setPresentation(current => ({ ...current, drawingObjects: setAssemblyDrawingLayerVisibility(current.drawingObjects ?? [], layer.id, event.target.checked) }))} />{layer.name}</label>{scene.filter(object => object.layerId === layer.id).map(object => { const hidden = stateById.get(object.id)?.hidden ?? true; return <div key={object.id} className={`route-assembly-drawing__object ${selectedIds.has(object.id) ? "is-selected" : ""} ${hidden ? "is-hidden" : ""}`}><button type="button" className="route-assembly-drawing__object-name" aria-pressed={selectedIds.has(object.id)} onClick={event => choose(object.id, event.ctrlKey || event.shiftKey || event.metaKey)}><span>{named(object)}</span><small>{hidden ? "Скрыто" : "В фрагменте"}</small></button><button type="button" className="icon-action" aria-label={`${hidden ? "Показать" : "Скрыть"} ${named(object)}`} onClick={() => updateState(object.id, current => ({ ...current, hidden: !current.hidden }))}>{hidden ? "◉" : "◌"}</button></div>; })}</section>)}</aside>
-      <div ref={frame} className="route-assembly-drawing__viewport" role="img" aria-label="Копия чертежа сборки" onPointerDown={event => {
-        const point = localPoint(event);
-        if (selectedObject && selectedState) { const index = selectedState.points.findIndex(control => Math.hypot(control.x - point.x, control.y - point.y) <= 9 / camera.zoom); if (index >= 0) { drag.current = { id: selectedObject.id, index, pointerId: event.pointerId, start: point }; event.currentTarget.setPointerCapture(event.pointerId); return; } }
-        const hit = hitTestEditorScene(foreground, layers, point, camera.zoom, "drawing", componentTemplateViewInstances, resolveComponentTemplateAssetUrl)
-          ?? hitTestEditorScene(scene, layers, point, camera.zoom, "drawing", componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
-        if (hit && hit === selected && sceneById.get(hit)?.kind === "physical-covering" && !stateById.get(hit)?.hidden) { drag.current = { id: hit, index: 0, pointerId: event.pointerId, start: point }; event.currentTarget.setPointerCapture(event.pointerId); return; }
-        if (hit) { choose(hit, event.ctrlKey || event.shiftKey || event.metaKey); updateState(hit, state => ({ ...state, hidden: false })); }
-      }} onPointerMove={event => { const active = drag.current; if (active?.pointerId !== event.pointerId) return; const point = localPoint(event); if (sceneById.get(active.id)?.kind === "physical-covering") { const previous = active.start!; setPresentation(current => ({ ...current, drawingObjects: moveAssemblyDrawingObject(current.drawingObjects ?? [], active.id, previous, point) })); drag.current = { ...active, start: point }; } else updateState(active.id, state => ({ ...state, points: state.points.map((value, index) => index === active.index ? point : value) })); }} onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId); } }} onPointerCancel={() => { drag.current = null; }}>
-        <canvas ref={backgroundCanvas} className="route-assembly-drawing__viewport-canvas route-assembly-drawing__viewport-background" style={{ opacity: presentation.backgroundOpacity }} aria-hidden="true" /><canvas ref={foregroundCanvas} className="route-assembly-drawing__viewport-canvas" aria-hidden="true" />
-        {selectedObject && selectedState && !selectedState.hidden && <svg className="route-assembly-drawing__handles" aria-hidden="true">{selectedState.points.map((point, index) => <circle key={index} cx={point.x * camera.zoom + camera.offsetX} cy={point.y * camera.zoom + camera.offsetY} r={5} />)}</svg>}
-      </div></div><p className="route-assembly-drawing__hint">Выберите объект на чертеже или в слое. П/ОП и оболочки выбираются поверх проводов; ручки выбранной геометрии можно перемещать.</p>
+export function RouteAssemblyDrawing({ row, document, config, session, projectId, harnessId, onSave, onCancel }: RouteAssemblyDrawingProps) {
+  const [initialCopy] = useState(() => row.presentation.drawingCopy
+    ? createRouteDrawingCopy(row.presentation.drawingCopy.document, row.presentation.drawingCopy.hiddenObjectIds)
+    : migrateLegacyRouteDrawingCopy(document, row.presentation.drawingObjects ?? []));
+  const legacyWarnings = useMemo(() => row.presentation.drawingCopy ? [] : legacyRouteDrawingCopyWarnings(document, row.presentation.drawingObjects ?? []), [document, row.presentation.drawingCopy, row.presentation.drawingObjects]);
+  const localCopy = useMemo(() => ({
+    initialDocument: initialCopy.document, hiddenObjectIds: initialCopy.hiddenObjectIds,
+    backgroundOpacity: row.presentation.backgroundOpacity,
+    onSave: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => onSave({
+      ...row.presentation, backgroundOpacity, drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds),
+    }), onCancel,
+  }), [initialCopy, row.presentation, onSave, onCancel]);
+  return <section className="route-full-drawing" aria-label={`Копия чертежа сборки ${row.title}`}>
+    {legacyWarnings.length > 0 && <p className="route-full-drawing__migration" role="status">Старый рисунок: расположение {legacyWarnings.length} объектов восстановлено из чертежа. Проверьте их положение перед сохранением. Отмена сохранит прежний рисунок.</p>}
+    <HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId}
+      harnessDesignation={row.title} initialView="drawing" localCopy={localCopy} />
   </section>;
 }

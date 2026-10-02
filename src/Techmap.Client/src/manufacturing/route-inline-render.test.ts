@@ -28,7 +28,7 @@ describe("inline route row", () => {
     const route = generateRoute(document, "a".repeat(64), 2);
     const row = route.rows[0]!;
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
-      config, session, projectId: "p", row, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
+      config, session, projectId: "p", harnessId: "h", row, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).not.toContain("<dialog");
@@ -48,7 +48,7 @@ describe("inline route row", () => {
     const document = { ...createEmptyHarnessDesign(), connectors, wires: [createWire("wire", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100, "Питание", "#f00")] };
     const route = generateRoute(document, "a".repeat(64), 1);
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
-      config, session, projectId: "p", row: route.rows[0]!, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
+      config, session, projectId: "p", harnessId: "h", row: route.rows[0]!, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain("SXH-002T-P0.6");
@@ -60,7 +60,7 @@ describe("inline route row", () => {
     const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
     const row = { ...route.rows[0]!, operations: [{ id: "op", mode: "assembly" as const, note: "", binding: null }] };
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
-      config, session, projectId: "p", row, route, document, sources: [], ordinal: 1,
+      config, session, projectId: "p", harnessId: "h", row, route, document, sources: [], ordinal: 1,
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain('aria-label="Операция 1: не выбрана"');
@@ -72,7 +72,7 @@ describe("inline route row", () => {
     const document = createEmptyHarnessDesign();
     const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
-      config, session, projectId: "p", row: route.rows[0]!, route, document, sources: [], ordinal: 1,
+      config, session, projectId: "p", harnessId: "h", row: route.rows[0]!, route, document, sources: [], ordinal: 1,
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain("Состав сборки");

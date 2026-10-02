@@ -575,6 +575,48 @@ export async function loadComponentTemplateForPlacement(
     : api.getVersion(templateId, catalogVersion);
 }
 
+/** Read-only artwork for route previews whose copy contains connectors without project placements. */
+const EMPTY_TEMPLATE_INSTANCES: readonly ComponentTemplateViewInstance[] = [];
+export function useLocalCopyTemplateViews(
+  document: HarnessDesignDocument | undefined,
+  config: RuntimeConfig,
+  session: LocalSession,
+  projectId: string,
+  enabled = true,
+  projectInstances: readonly ComponentTemplateViewInstance[] = EMPTY_TEMPLATE_INSTANCES,
+  projectAssetUrl?: (snapshotId: string, assetId: string) => string,
+) {
+  const api = useMemo(() => createComponentTemplateApi(config, session), [config, session]);
+  const [snapshots, setSnapshots] = useState<ProjectComponentSnapshotLookup>(() => new Map());
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!enabled || !document) return;
+    let cancelled = false;
+    const bindings = document.connectors.flatMap(connector => connector.libraryBinding?.mode === "template" && !projectInstances.some(instance => instance.objectId === connector.id)
+      ? [{connectorId: connector.id, binding: connector.libraryBinding}]
+      : []);
+    void Promise.all(bindings.map(async ({connectorId, binding}) => {
+      const template = await loadComponentTemplateForLocalCopy(api, binding.templateId, binding.templateVersion);
+      if (template.versionSha256 !== binding.versionSha256) throw new Error("Версия библиотечного рисунка изменилась.");
+      return [connectorId, localTemplateSnapshot(projectId, template)] as const;
+    })).then(entries => {
+      if (!cancelled) { setSnapshots(new Map(entries)); setError(""); }
+    }).catch(cause => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось загрузить библиотечные рисунки копии.");
+    });
+    return () => { cancelled = true; };
+  }, [api, document?.connectors, enabled, projectId, projectInstances]);
+  const instances = useMemo(() => enabled && document
+    ? [...projectInstances, ...buildComponentTemplateViewInstances(document, snapshots).filter(instance => !projectInstances.some(project => project.objectId === instance.objectId))] : projectInstances,
+    [document, enabled, snapshots, projectInstances]);
+  const resolveAssetUrl = useCallback((snapshotId: string, assetId: string) => {
+    const snapshot = [...snapshots.values()].find(item => item.snapshotId === snapshotId);
+    return snapshot ? api.assetContentUrl(snapshot.sourceTemplateId, snapshot.sourceVersion, assetId)
+      : projectAssetUrl?.(snapshotId, assetId) ?? "";
+  }, [api, snapshots, projectAssetUrl]);
+  return {instances, resolveAssetUrl, error};
+}
+
 /** Local drawing copies may read a published snapshot but must never publish a library draft. */
 export function loadComponentTemplateForLocalCopy(
   api: ComponentTemplateApi,
@@ -582,6 +624,20 @@ export function loadComponentTemplateForLocalCopy(
   catalogVersion: number,
 ) {
   return api.getVersion(templateId, catalogVersion);
+}
+
+/** Adapts a read-only published template response to the renderer snapshot contract. */
+export function localTemplateSnapshot(
+  projectId: string,
+  template: Awaited<ReturnType<ComponentTemplateApi["getVersion"]>>,
+): ProjectComponentSnapshotResource {
+  return {
+    snapshotId: crypto.randomUUID(), projectId, sourceTemplateId: template.templateId,
+    sourceVersion: template.version, sourceVersionSha256: template.versionSha256,
+    code: template.code, name: template.name, articleBindings: template.articleBindings,
+    assets: template.assets, schemaVersion: template.content.schemaVersion, content: template.content,
+    createdUtc: template.createdUtc, updatedUtc: template.updatedUtc ?? template.createdUtc,
+  };
 }
 
 export function saveLocalDrawingCopy(
@@ -789,6 +845,9 @@ export function HarnessDesignEditor({
   }[]>([]);
   const [componentSnapshotsByPlacement, setComponentSnapshotsByPlacement] =
     useState<ProjectComponentSnapshotLookup>(() => new Map());
+  const localTemplateLoading = useRef(new Set<string>());
+  const localTemplateSnapshotIds = useRef(new Set<string>());
+  const [componentGraphLoaded, setComponentGraphLoaded] = useState(false);
   const [componentGraphMessage, setComponentGraphMessage] = useState("");
   const historyRef = useRef<EditorHistory | null>(null);
   const resourceRef = useRef<HarnessDesignResource | null>(null);
@@ -834,6 +893,7 @@ export function HarnessDesignEditor({
       setComponentSnapshotsByPlacement((current) =>
         acceptProjectComponentSnapshotLookup(current, graph, editorGeneration, loadGeneration.current));
       setComponentGraphMessage("");
+      setComponentGraphLoaded(true);
     } catch (error) {
       if (editorGeneration !== loadGeneration.current ||
           requestGeneration !== componentGraphRequestGeneration.current) return;
@@ -841,13 +901,38 @@ export function HarnessDesignEditor({
       setComponentGraphMessage(error instanceof Error
         ? `Не удалось загрузить закреплённые виды компонентов: ${error.message}`
         : "Не удалось загрузить закреплённые виды компонентов.");
+      setComponentGraphLoaded(true);
     }
   }, [componentPlacementApi, harnessId, projectId]);
   const resolveComponentTemplateAssetUrl = useCallback(
-    (snapshotId: string, assetId: string) =>
-      componentPlacementApi.assetContentUrl(projectId, harnessId, snapshotId, assetId),
-    [componentPlacementApi, harnessId, projectId],
+    (snapshotId: string, assetId: string) => {
+      if (localCopy && localTemplateSnapshotIds.current.has(snapshotId)) {
+        const snapshot = [...componentSnapshotsByPlacement.values()].find(item => item.snapshotId === snapshotId);
+        if (snapshot) return componentTemplateApi.assetContentUrl(snapshot.sourceTemplateId, snapshot.sourceVersion, assetId);
+      }
+      return componentPlacementApi.assetContentUrl(projectId, harnessId, snapshotId, assetId);
+    },
+    [componentPlacementApi, componentSnapshotsByPlacement, componentTemplateApi, harnessId, projectId, localCopy],
   );
+
+  useEffect(() => {
+    if (!localCopy || !history || !componentGraphLoaded) return;
+    const generation = loadGeneration.current;
+    for (const connector of history.present.connectors) {
+      const binding = connector.libraryBinding;
+      if (binding?.mode !== "template" || componentSnapshotsByPlacement.has(connector.id) || localTemplateLoading.current.has(connector.id)) continue;
+      localTemplateLoading.current.add(connector.id);
+      void loadComponentTemplateForLocalCopy(componentTemplateApi, binding.templateId, binding.templateVersion).then(template => {
+        if (generation !== loadGeneration.current) return;
+        if (template.versionSha256 !== binding.versionSha256) throw new Error("Версия библиотечного рисунка изменилась.");
+        const snapshot = localTemplateSnapshot(projectId, template);
+        localTemplateSnapshotIds.current.add(snapshot.snapshotId);
+        setComponentSnapshotsByPlacement(current => new Map(current).set(connector.id, snapshot));
+      }).catch(error => {
+        if (generation === loadGeneration.current) setMessage(error instanceof Error ? error.message : "Не удалось загрузить библиотечный рисунок копии.");
+      }).finally(() => localTemplateLoading.current.delete(connector.id));
+    }
+  }, [localCopy, history?.present.connectors, componentSnapshotsByPlacement, componentTemplateApi, projectId, componentGraphLoaded]);
 
   useEffect(() => {
     const generation = ++loadGeneration.current;
@@ -865,6 +950,9 @@ export function HarnessDesignEditor({
     setEditingObjectId(null);
     setMovePreview(null);
     setComponentSnapshotsByPlacement(new Map());
+    localTemplateLoading.current.clear();
+    localTemplateSnapshotIds.current.clear();
+    setComponentGraphLoaded(false);
     setComponentGraphMessage("");
     setMessage("Загружаем документ жгута…");
     setRecoveryDrafts([]);

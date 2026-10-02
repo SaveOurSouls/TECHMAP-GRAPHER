@@ -15,4 +15,9 @@ it("migrates legacy visibility and authored P geometry without changing source l
   expect(copy.document.wires.map(wire => wire.lengthMm)).toEqual(source.wires.map(wire => wire.lengthMm));
   expect(source).toEqual(before);
   expect(legacyRouteDrawingCopyWarnings(source, [{ id: "cover", points: [{ x: 1, y: 2 }] }])).toEqual(["cover"]);
+  expect(legacyRouteDrawingCopyWarnings(source, [
+    { id: "S0", points: [{ x: 1, y: 2 }] },
+    { id: "NA", points: [{ x: 999, y: 999 }] },
+    { id: "S1", points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] },
+  ])).toEqual(["S0", "NA"]);
 });

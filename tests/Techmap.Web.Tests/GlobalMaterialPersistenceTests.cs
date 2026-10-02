@@ -19,8 +19,8 @@ public sealed class GlobalMaterialPersistenceTests
         }
         using(var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path,Pooling=false}.ToString()))
         {
-            db.Open();using var command=db.CreateCommand();
-            command.CommandText="DELETE FROM global_materials WHERE json_extract(metadata_json,'$.hatchCode') IS NOT NULL; DELETE FROM schema_history WHERE version=22; PRAGMA user_version=21;";
+            db.Open(); LegacyHarnessDesignSchema.RestoreOneMiBLimit(db); using var command=db.CreateCommand();
+            command.CommandText="DELETE FROM global_materials WHERE json_extract(metadata_json,'$.hatchCode') IS NOT NULL; DELETE FROM schema_history WHERE version IN (22, 23); PRAGMA user_version=21;";
             command.ExecuteNonQuery();
         }
         await using(var lease=DataRootLease.Acquire(root))

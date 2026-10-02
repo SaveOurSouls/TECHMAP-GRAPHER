@@ -543,7 +543,7 @@ public sealed class HarnessDesignApiTests
         using var noCsrfResponse = await sessionClient.SendAsync(noCsrf, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, noCsrfResponse.StatusCode);
 
-        var huge = "x".PadLeft(1_048_577, 'x');
+        var huge = new string('x', SqliteHarnessDesignDocumentStore.MaximumContentBytes + 1);
         using var hugeContent = JsonDocument.Parse($"{{\"schemaVersion\":1,\"value\":\"{huge}\"}}");
         using var tooLarge = await SendAsync(
             sessionClient, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),

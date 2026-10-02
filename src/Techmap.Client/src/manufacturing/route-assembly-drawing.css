@@ -38,3 +38,9 @@
 .route-assembly-drawing__handle:active { cursor: grabbing; }
 .route-assembly-drawing__hint { margin: 0; color: #718692; font-size: 11px; }
 @media (max-width: 800px) { .route-assembly-drawing__header { flex-direction: column; } .route-assembly-drawing__workspace { grid-template-columns: 1fr; } .route-assembly-drawing__objects { max-height: 220px; overflow: auto; } .route-assembly-drawing__count { margin-left: 0; } }
+
+.route-full-drawing { position: fixed; inset: 0; z-index: 100; background: #f7fafb; overflow: auto; }
+.route-full-drawing .he-host { min-height: 100vh; }
+
+.route-full-drawing__migration { margin: 0; padding: 7px 12px; background: #fff5d9; color: #664d1c; font-size: 12px; }
+.route-full-drawing:has(.route-full-drawing__migration) .harness-editor { height: calc(100dvh - 42px); }

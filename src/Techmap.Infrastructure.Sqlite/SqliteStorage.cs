@@ -20,7 +20,7 @@ public sealed record SqliteStorageDiagnostics(
 
 public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 {
-    public const int CurrentSchemaVersion = 22;
+    public const int CurrentSchemaVersion = 23;
     public const int DefaultBusyTimeoutMilliseconds = 5_000;
 
     private const string InitialMigrationId = "M1-03-initial-storage";
@@ -645,6 +645,36 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
         SELECT harness_id, 0, 1, '{{EmptyHarnessDesignJson}}', created_utc, updated_utc
         FROM harnesses;
 
+        CREATE TRIGGER create_harness_design_document
+        AFTER INSERT ON harnesses
+        BEGIN
+            INSERT INTO harness_design_documents
+                (harness_id, revision, schema_version, content_json, created_utc, updated_utc)
+            VALUES (NEW.harness_id, 0, 1, '{{EmptyHarnessDesignJson}}', NEW.created_utc, NEW.updated_utc);
+        END;
+        """;
+
+    private const string HarnessDesign16MiBMigrationId = "M5-08-harness-design-16mib";
+    private static readonly string HarnessDesign16MiBSchemaSql =
+        $$"""
+        DROP TRIGGER create_harness_design_document;
+        CREATE TABLE harness_design_documents_v23 (
+            harness_id TEXT NOT NULL PRIMARY KEY
+                REFERENCES harnesses(harness_id) ON UPDATE CASCADE ON DELETE CASCADE,
+            revision INTEGER NOT NULL CHECK (revision >= 0),
+            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+            content_json TEXT NOT NULL
+                CHECK (length(content_json) BETWEEN 2 AND 16777216)
+                CHECK (json_valid(content_json)),
+            created_utc TEXT NOT NULL CHECK (length(created_utc) BETWEEN 1 AND 64),
+            updated_utc TEXT NOT NULL CHECK (length(updated_utc) BETWEEN 1 AND 64)
+        ) STRICT;
+        INSERT INTO harness_design_documents_v23
+            (harness_id, revision, schema_version, content_json, created_utc, updated_utc)
+        SELECT harness_id, revision, schema_version, content_json, created_utc, updated_utc
+        FROM harness_design_documents;
+        DROP TABLE harness_design_documents;
+        ALTER TABLE harness_design_documents_v23 RENAME TO harness_design_documents;
         CREATE TRIGGER create_harness_design_document
         AFTER INSERT ON harnesses
         BEGIN
@@ -1739,6 +1769,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
             (Version: 20, MigrationId: ProjectComponentSnapshotsV5MigrationId, Sql: ProjectComponentSnapshotsV5SchemaSql),
             (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql),
             (Version: 22, MigrationId: "M4-115-hatching-library", Sql: ReadHatchingSeeds()),
+            (Version: 23, MigrationId: HarnessDesign16MiBMigrationId, Sql: HarnessDesign16MiBSchemaSql),
         };
         for (var index = 0; index < rows.Count; index++)
         {
@@ -1888,6 +1919,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         if (schemaVersion >= 21) ExecuteSchemaSql(expected, GlobalMaterialsSchemaSql);
         if (schemaVersion >= 22) ExecuteSchemaSql(expected, ReadHatchingSeeds());
+        if (schemaVersion >= 23) ExecuteSchemaSql(expected, HarnessDesign16MiBSchemaSql);
         return ReadSchemaShape(expected);
     }
 
@@ -2033,6 +2065,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
                 Description: "Project component snapshots support content schema version 5"),
             20 => (Version: 21, MigrationId: GlobalMaterialsMigrationId, Sql: GlobalMaterialsSchemaSql, Description: "Global material library with validated PNG textures"),
             21 => (Version: 22, MigrationId: "M4-115-hatching-library", Sql: ReadHatchingSeeds(), Description: "Parametric hatching material presets"),
+            22 => (Version: 23, MigrationId: HarnessDesign16MiBMigrationId, Sql: HarnessDesign16MiBSchemaSql, Description: "Harness design content capacity 16 MiB"),
             _ => throw new InvalidDataException(
                 $"No supported migration follows storage schema {currentVersion}."),
         };
@@ -2109,7 +2142,7 @@ public sealed class SqliteStorage : IDisposable, IAsyncDisposable
 
         for (var version = sourceVersion; version < targetVersion; version++)
         {
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20 or 21))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20 or 21 or 22))
             {
                 return false;
             }

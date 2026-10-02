@@ -12,7 +12,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
     TimeProvider timeProvider) : IHarnessDesignDocumentStore
 {
     public const int CurrentContentSchemaVersion = 1;
-    public const int MaximumContentBytes = 1024 * 1024;
+    public const int MaximumContentBytes = 16 * 1024 * 1024;
 
     public HarnessDesignDocument Get(ProjectIdentity projectId, HarnessIdentity harnessId)
     {

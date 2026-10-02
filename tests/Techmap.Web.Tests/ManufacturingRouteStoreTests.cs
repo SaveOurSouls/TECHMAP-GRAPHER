@@ -10,6 +10,46 @@ namespace Techmap.Web.Tests;
 public sealed class ManufacturingRouteStoreTests
 {
     [Fact]
+    public void Multiple_full_drawing_copies_above_one_mib_save_but_total_above_sixteen_mib_rejects()
+    {
+        using var fixture = new Fixture();
+        var graph = Construction();
+        var source = fixture.Put(0, graph, 2);
+        var route = Route(source.SourceFingerprint!);
+        var layers = new JsonArray();
+        for (var index = 0; index < 5000; index++) layers.Add(new JsonObject
+        {
+            ["id"] = $"layer-{index}", ["name"] = new string('L', 80) + index,
+            ["order"] = index, ["visible"] = true, ["locked"] = false,
+        });
+        JsonObject Copy() => new()
+        {
+            ["schemaVersion"] = 1, ["connectors"] = new JsonArray(), ["wires"] = new JsonArray(),
+            ["cables"] = new JsonArray(), ["junctions"] = new JsonArray(), ["diffPairs"] = new JsonArray(), ["screens"] = new JsonArray(),
+            ["views"] = new JsonObject
+            {
+                ["drawing"] = new JsonObject { ["layers"] = layers.DeepClone(), ["wireCrossingStyle"] = "none" },
+                ["e4"] = new JsonObject { ["layers"] = new JsonArray(), ["wireCrossingStyle"] = "none" },
+            },
+        };
+        for (var index = 0; index < 2; index++) route["rows"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = $"assembly-{index}", ["kind"] = "assembly", ["title"] = "Assembly", ["comment"] = "",
+            ["sourceObjects"] = new JsonArray(), ["dependsOn"] = new JsonArray("r"), ["operations"] = new JsonArray(),
+            ["presentation"] = new JsonObject { ["backgroundOpacity"] = .25, ["objects"] = new JsonArray(),
+                ["drawingCopy"] = new JsonObject { ["document"] = Copy(), ["hiddenObjectIds"] = new JsonArray() } },
+            ["prepared"] = false,
+        });
+        graph["manufacturingRoute"] = route;
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(graph.ToJsonString()) > 1024 * 1024);
+        var saved = fixture.Put(source.Revision, graph, 2);
+        Assert.Equal(2, JsonNode.Parse(fixture.Get().ContentJson)!["manufacturingRoute"]!["rows"]!.AsArray().Count - 1);
+        graph["padding"] = new string('x', SqliteHarnessDesignDocumentStore.MaximumContentBytes);
+        Assert.Equal("design_content_too_large", Assert.Throws<HarnessDesignDocumentException>(() => fixture.Put(saved.Revision, graph, 2)).Code);
+        Assert.Equal(saved, fixture.Get());
+    }
+
+    [Fact]
     public async Task Route_photos_require_project_owned_attachment_and_do_not_change_source_fingerprint()
     {
         using var fixture = new Fixture(); var graph = Construction(); var source = fixture.Put(0, graph, 2);

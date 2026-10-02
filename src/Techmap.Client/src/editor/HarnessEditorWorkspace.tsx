@@ -569,7 +569,7 @@ export function HarnessEditorWorkspace({
                 ? [...new Set([...localCopyControls.hiddenObjectIds, ...selectedObjectIds])] : localCopyControls.hiddenObjectIds)} disabled={!selectedObjectIds.length}>Скрыть выбранные</button>
               <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => !selectedObjectIds.includes(object.id)).map(object => object.id))} disabled={!selectedObjectIds.length}>Только выбранные</button>
               <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange([])}>Показать все</button>
-              <label>Прозрачность фона: {Math.round(localCopyControls.backgroundOpacity * 100)}%
+              <label>Фон жгута: {Math.round(localCopyControls.backgroundOpacity * 100)}%
                 <input type="range" min="0" max="100" value={Math.round(localCopyControls.backgroundOpacity * 100)} onChange={event => localCopyControls.onBackgroundOpacityChange(Number(event.target.value) / 100)} />
               </label>
             </section>}

@@ -17,6 +17,17 @@ public sealed class HarnessDesignRecoveryTests
     private static JsonElement Content(string name) => JsonSerializer.SerializeToElement(new { schemaVersion = 1, connectors = Array.Empty<object>(), wires = Array.Empty<object>(), name });
 
     [Fact]
+    public void Recovery_journal_round_trips_a_design_larger_than_one_mib()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "techmap-recovery-tests", Guid.NewGuid().ToString("N"));
+        var journal = new HarnessDesignRecoveryJournal(root, new StubDesignStore());
+        var project = Guid.NewGuid(); var harness = Guid.NewGuid(); var id = Guid.NewGuid();
+        var large = new string('x', 2 * 1024 * 1024);
+        journal.Put(project, harness, id, new(1, 0, Content(large)));
+        Assert.Equal(large, Assert.Single(journal.List(project, harness)).Content.GetProperty("name").GetString());
+    }
+
+    [Fact]
     public void Sequence_and_conditional_delete_preserve_newer_and_conflicting_copies()
     {
         var root = Path.Combine(Path.GetTempPath(), "techmap-recovery-tests", Guid.NewGuid().ToString("N"));

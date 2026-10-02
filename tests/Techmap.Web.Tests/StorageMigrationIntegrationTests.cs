@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Techmap.Application;
+using Techmap.Domain;
 using Techmap.Infrastructure.Sqlite;
 using Xunit;
 
@@ -10,6 +11,60 @@ namespace Techmap.Web.Tests;
 
 public sealed class StorageMigrationIntegrationTests
 {
+    [Fact]
+    public async Task Upgrade_22_to_23_preserves_design_and_trigger_and_accepts_larger_content()
+    {
+        using var fixture = MigrationFixture.Create(schemaVersion: 22);
+        var projectId = Guid.NewGuid(); var harnessId = Guid.NewGuid(); var nextHarnessId = Guid.NewGuid();
+        const string original = "{\"schemaVersion\":1,\"connectors\":[],\"wires\":[],\"marker\":\"v22\"}";
+        using (var before = OpenReadWrite(fixture.DatabasePath))
+        using (var insert = before.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO projects (project_id, designation, project_increment, name, batch_quantity, status, created_utc, updated_utc)
+                VALUES ($project, 'P', 1, 'Project', 1, 'draft', '2026-10-02T00:00:00.0000000+00:00', '2026-10-02T00:00:00.0000000+00:00');
+                INSERT INTO harnesses (harness_id, project_id, designation, sort_order, created_utc, updated_utc)
+                VALUES ($harness, $project, 'H1', 0, '2026-10-02T00:00:00.0000000+00:00', '2026-10-02T00:00:00.0000000+00:00');
+                UPDATE harness_design_documents SET revision = 7, content_json = $content WHERE harness_id = $harness;
+                """;
+            insert.Parameters.AddWithValue("$project", projectId.ToString("D"));
+            insert.Parameters.AddWithValue("$harness", harnessId.ToString("D"));
+            insert.Parameters.AddWithValue("$content", original);
+            insert.ExecuteNonQuery();
+        }
+        await using var lease = DataRootLease.Acquire(fixture.DataRoot);
+        var migration = await new SqliteStorageMigrationService(lease).MigrateIfRequiredAsync(
+            fixture.Request(), TestContext.Current.CancellationToken);
+        Assert.True(migration.Migrated);
+        using var opened = SqliteStorage.Open(fixture.DataRoot);
+        Assert.Equal(23, opened.Diagnostics.SchemaVersion);
+        using (var after = OpenReadWrite(opened.Layout.DatabasePath))
+        {
+            using var read = after.CreateCommand();
+            read.CommandText = "SELECT revision, content_json FROM harness_design_documents WHERE harness_id = $harness";
+            read.Parameters.AddWithValue("$harness", harnessId.ToString("D"));
+            using var row = read.ExecuteReader();
+            Assert.True(row.Read()); Assert.Equal(7, row.GetInt64(0)); Assert.Equal(original, row.GetString(1));
+            row.Close();
+            using var insert = after.CreateCommand();
+            insert.CommandText = "INSERT INTO harnesses (harness_id, project_id, designation, sort_order, created_utc, updated_utc) VALUES ($next, $project, 'H2', 1, '2026-10-02T00:00:00.0000000+00:00', '2026-10-02T00:00:00.0000000+00:00')";
+            insert.Parameters.AddWithValue("$next", nextHarnessId.ToString("D"));
+            insert.Parameters.AddWithValue("$project", projectId.ToString("D"));
+            insert.ExecuteNonQuery();
+            using var trigger = after.CreateCommand();
+            trigger.CommandText = "SELECT revision, content_json FROM harness_design_documents WHERE harness_id = $next";
+            trigger.Parameters.AddWithValue("$next", nextHarnessId.ToString("D"));
+            using var created = trigger.ExecuteReader();
+            Assert.True(created.Read()); Assert.Equal(0, created.GetInt64(0));
+            Assert.Equal(1, JsonDocument.Parse(created.GetString(1)).RootElement.GetProperty("schemaVersion").GetInt32());
+        }
+        var large = "{\"schemaVersion\":1,\"connectors\":[],\"wires\":[],\"padding\":\"" + new string('x', 2 * 1024 * 1024) + "\"}";
+        var saved = new SqliteHarnessDesignDocumentStore(opened, TimeProvider.System).Put(
+            new ProjectIdentity(projectId), new HarnessIdentity(harnessId), 7, 1, large);
+        Assert.Equal(8, saved.Revision);
+        Assert.Equal(large, saved.ContentJson);
+    }
+
     [Fact]
     public void Open_rejects_legacy_current_without_mutating_it()
     {

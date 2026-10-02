@@ -81,10 +81,11 @@ export function migrateLegacyRouteDrawingCopy(document: HarnessDesignDocument, d
 
 /** IDs whose legacy overlay geometry has no lossless persisted-model mapping. */
 export function legacyRouteDrawingCopyWarnings(document: HarnessDesignDocument, drawingObjects: readonly { readonly id: string; readonly points: readonly { readonly x: number; readonly y: number }[] }[]): readonly string[] {
-  const known = new Set<string>([
-    ...document.connectors.map(item => item.id), ...document.wires.map(item => item.id),
-    ...(document.physicalTopology?.nodes.filter(item => !item.connectorId).map(item => item.id) ?? []), ...(document.physicalTopology?.segments.map(item => item.id) ?? []),
-    ...(document.physicalTopology?.joiningPipes?.map(item => item.id) ?? []),
-  ]);
-  return drawingObjects.filter(item => item.points.length > 0 && !known.has(item.id)).map(item => item.id);
+  const migratable = new Map<string, (count: number) => boolean>();
+  for (const connector of document.connectors) migratable.set(connector.id, count => count === 1);
+  for (const wire of document.wires) migratable.set(wire.id, count => count === wire.drawingRoute.length + 2);
+  for (const node of document.physicalTopology?.nodes ?? []) if (!node.connectorId) migratable.set(node.id, count => count === 1);
+  for (const segment of document.physicalTopology?.segments ?? []) migratable.set(segment.id, count => count === segment.path.points.length + 2);
+  for (const pipe of document.physicalTopology?.joiningPipes ?? []) migratable.set(pipe.id, count => count === pipe.path.points.length + 2);
+  return drawingObjects.filter(item => item.points.length > 0 && !migratable.get(item.id)?.(item.points.length)).map(item => item.id);
 }

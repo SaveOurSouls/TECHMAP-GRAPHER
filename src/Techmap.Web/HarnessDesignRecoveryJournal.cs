@@ -2,6 +2,7 @@ using System.Text.Json;
 using Techmap.Application;
 using Techmap.Contracts;
 using Techmap.Domain;
+using Techmap.Infrastructure.Sqlite;
 
 namespace Techmap.Web;
 
@@ -9,7 +10,7 @@ namespace Techmap.Web;
 public sealed class HarnessDesignRecoveryJournal(string dataRoot, IHarnessDesignDocumentStore designs)
 {
     public const int MaximumDrafts = 32;
-    public const int MaximumContentBytes = 1024 * 1024;
+    public const int MaximumContentBytes = SqliteHarnessDesignDocumentStore.MaximumContentBytes;
     private readonly object gate = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -33,7 +34,7 @@ public sealed class HarnessDesignRecoveryJournal(string dataRoot, IHarnessDesign
             request.Content.ValueKind != JsonValueKind.Object)
             throw new HarnessDesignDocumentException("invalid_recovery_draft", "Invalid recovery draft.");
         if (System.Text.Encoding.UTF8.GetByteCount(request.Content.GetRawText()) > MaximumContentBytes)
-            throw new HarnessDesignDocumentException("recovery_too_large", "Recovery draft exceeds 1 MiB.");
+            throw new HarnessDesignDocumentException("recovery_too_large", "Recovery draft exceeds 16 MiB.");
         lock (gate)
         {
             var server = designs.Get(new ProjectIdentity(project), new HarnessIdentity(harness));
