@@ -69,7 +69,7 @@ export type EditorCommand =
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "edit-joining-pipe-bend"; readonly pipeId:string; readonly index:number; readonly position:Point; readonly mode:PhysicalDragMode; readonly insert?:boolean; readonly remove?:boolean }
   | { readonly type: "move-joining-pipe"; readonly pipeId:string; readonly delta:Point }
-  | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean }
+  | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean; readonly mode?:PhysicalDragMode; readonly origin?:Point; readonly outerOrigin?:Point }
   | { readonly type: "update-joining-pipe-member-boundary"; readonly pipeId:string; readonly memberIndex:number; readonly boundary:"outerEnter"|"axisEnter"|"axisExit"|"outerExit"; readonly origin:Point; readonly position:Point }
   | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly volumeShading?:boolean }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
@@ -272,7 +272,20 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const t=document.physicalTopology;if(!t)return document;
       const pipe=t.joiningPipes?.find(p=>p.id===command.pipeId);if(!pipe||!pipe.members[command.memberIndex])return document;
       if(!command.clear&&(!command.position||!Number.isFinite(command.position.x)||!Number.isFinite(command.position.y)))throw new Error("Некорректное положение ручки перехода.");
-      const members=pipe.members.map((member,index)=>index!==command.memberIndex?member:{...member,...(command.side==="enter"?{enterBend:command.clear?null:command.position}:{exitBend:command.clear?null:command.position})});
+      const members=pipe.members.map((member,index)=>{
+        if(index!==command.memberIndex)return member;
+        const bendKey=command.side==="enter"?"enterBend":"exitBend";
+        const outerKey=command.side==="enter"?"enterOuter":"exitOuter";
+        if(command.clear)return {...member,[bendKey]:null};
+        if(command.mode==="carry"){
+          const previous=member[bendKey]??command.origin;
+          const outer=member[outerKey]??command.outerOrigin;
+          if(previous&&outer)return {...member,[bendKey]:command.position,[outerKey]:{
+            x:outer.x+command.position!.x-previous.x,y:outer.y+command.position!.y-previous.y,
+          }};
+        }
+        return {...member,[bendKey]:command.position};
+      });
       return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,members}:p)},document)};
     }
     case "update-joining-pipe-member-boundary": {

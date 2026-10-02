@@ -2,7 +2,7 @@ import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
-import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
+import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, pipeBendSnapAnchors, joiningPipeEndpointSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
 import { pipeSceneControls, pipeSceneHandles, pipeSceneEditablePoints, pipeSceneWireIds } from "./physical-scene";
 import { coveringHit, coveringGrips, drawCoveringSurface, warmCoveringTextures } from "./covering-renderer";
 import type { CoveringDragPart, CoveringHandle } from "./covering-layout";
@@ -3255,7 +3255,7 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?.joiningTransitionHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningBoundaryHandles?.some(handle=>handle.index===index)||pipe.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===index)?[]:bendSnapAnchors(pipe.pipe?.authoredPoints??points,index,!!middle,event.shiftKey?"adjacent":"carry",point),snapState:{}};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?pipeBendSnapAnchors(pipe.pipe,points,index,!!middle,event.shiftKey?"adjacent":"carry",point):bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry",point),snapState:{}};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
@@ -3316,8 +3316,8 @@ export function CanvasViewport({
           objectX: object.x,
           objectY: object.y,
           mode:event.shiftKey?"adjacent":"carry",
-          anchors:view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
-          routeAnchors:view==='drawing'&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
+          anchors:view==="drawing"&&object.metadata?.joiningPipe?joiningPipeEndpointSnapAnchors(objects,object):view==="drawing"&&object.metadata?.bundleMember!=="true"&&object.pipe?.role!=="joining-pipe"?physicalObjectSnapAnchors(objects.filter(o=>layers.some(l=>l.id===o.layerId&&l.visible)),object):undefined,
+          routeAnchors:view==='drawing'&&!object.metadata?.joiningPipe&&(object.kind==="physical-node"||object.metadata?.bundleMember!=="true")&&object.pipe?.role!=="joining-pipe"?physicalObjectRouteAnchors(objects,object,event.shiftKey?'adjacent':'carry'):undefined,
           snapState:{},
         };
       }

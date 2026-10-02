@@ -86,6 +86,34 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
   });
 }
 
+/** Resolve a displayed member grip to its authored station before choosing
+ * shoulders. OP-generated grips have no authored station and use only their
+ * neighbouring visible shoulders. */
+export function pipeBendSnapAnchors(pipe:{
+  authoredPoints?:readonly Point[];handles:readonly Point[];
+  authoredHandleIndices?:readonly number[];
+  joiningTransitionHandles?:readonly {index:number;side:"enter"|"exit"}[];
+  joiningBoundaryHandles?:readonly {index:number}[];
+  joiningTransitionMidpoints?:readonly {index:number}[];
+},displayPoints:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode,displayOrigin:Point):Point[] {
+  const transition=!insert?pipe.joiningTransitionHandles?.find(handle=>handle.index===index):undefined;
+  if(transition&&mode==="carry"){
+    const at=index+1,step=transition.side==="enter"?-1:1;
+    const outer=displayPoints[at+step],fixed=displayPoints[at+2*step],axis=displayPoints[at-step];
+    if(outer&&fixed&&axis)return [
+      {x:displayOrigin.x+fixed.x-outer.x,y:displayOrigin.y+fixed.y-outer.y},axis,
+    ];
+  }
+  const generated=!!transition
+    ||pipe.joiningBoundaryHandles?.some(handle=>handle.index===index)
+    ||insert&&pipe.joiningTransitionMidpoints?.some(handle=>handle.index===index);
+  if(generated)return bendSnapAnchors(displayPoints,index,insert,"adjacent",displayOrigin);
+  const authoredIndex=pipe.authoredHandleIndices?.[index];
+  if(!insert&&authoredIndex!==undefined&&authoredIndex>=1&&pipe.authoredPoints)
+    return bendSnapAnchors(pipe.authoredPoints,authoredIndex-1,false,mode,displayOrigin);
+  return bendSnapAnchors(displayPoints,index,insert,mode,displayOrigin);
+}
+
 /** Intersect angular direction families and validate every changing shoulder.
  * Collinear supports retain continuous motion along the line. */
 export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12,state?:BendSnapState) {
@@ -136,6 +164,27 @@ export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boole
   // continuous drag and waits for the next valid intersection.
   const maxJump=Math.max(32,tolerance*8);
   const nearPointer=!!candidate&&candidate.distance<=maxJump;
+  if(unique.length===2&&Math.abs(angleStep-Math.PI/6)<1e-9&&Math.abs(unique[0]!.y-unique[1]!.y)>1e-7){
+    const [start,end]=unique,dx=end!.x-start!.x;
+    // A horizontal shoulder from either anchor intersects a 30° shoulder
+    // from the other. Offer that exact station while the pointer enters its
+    // horizontal attraction band, including when approached from below.
+    for(const anchor of [start!,end!]){
+      const other=anchor===start?end!:start!;
+      for(const slope of [Math.tan(angleStep),-Math.tan(angleStep)]){
+        const x=other.x+(anchor.y-other.y)/slope;
+        if((x-start!.x)*dx<0||(x-end!.x)*dx>0)continue;
+        const horizontal={x,y:anchor.y};
+        if(Math.abs(point.y-horizontal.y)>Math.max(tolerance*3,20))continue;
+        const horizontalDistance=Math.hypot(point.x-x,point.y-anchor.y);
+        if(horizontalDistance>maxJump*3)continue;
+        if(candidate&&horizontalDistance>candidate.distance+Math.max(tolerance*3,20))continue;
+        state.active=unique.map(a=>({anchor:a,direction:directionFor(a,horizontal,directions,angleStep)}));
+        state.previous=horizontal;
+        return {point:horizontal,guide:[anchor,horizontal]};
+      }
+    }
+  }
   if(candidate&&forward&&(jump<=maxJump||nearPointer)){
     state.active=candidate.active;
     state.previous=candidate.point;
@@ -230,6 +279,18 @@ export function physicalObjectSnapAnchors(objects:readonly {id:string;kind:strin
   const own=object.kind==="physical-node"?[object]:objects.filter(o=>o.kind==="physical-node"&&o.port?.connectorId===object.id);
   return own.flatMap(exit=>objects.filter(o=>o.kind==="physical-node"&&o.id!==exit.id&&o.port?.connectorId!==object.id)
     .map(o=>({x:o.x-(exit.x-object.x),y:o.y-(exit.y-object.y)})));
+}
+
+/** OP endpoint drags use the opposite endpoint of the same OP as their local
+ * angular reference. Presentation overlap with member pipes is irrelevant. */
+export function joiningPipeEndpointSnapAnchors(objects:readonly {
+  id:string;kind:string;x:number;y:number;metadata?:Readonly<Record<string,string>>;
+}[],object:{id:string;kind:string;metadata?:Readonly<Record<string,string>>}):Point[] {
+  const pipeId=object.metadata?.joiningPipe;
+  if(object.kind!=="physical-node"||!pipeId)return [];
+  const opposite=objects.find(candidate=>candidate.kind==="physical-node"
+    &&candidate.metadata?.joiningPipe===pipeId&&candidate.id!==object.id);
+  return opposite?[{x:opposite.x,y:opposite.y}]:[];
 }
 
 /** Preserve adjacent inner shoulders in carry mode; Shift edits only the selected vertex. */
