@@ -1,7 +1,7 @@
 import {materialTexture} from "./texture-tint";
 import {drawCatalogHatch} from "../hatching";
 import {drawThreadBand} from "./thread-band-renderer";
-import { drawVolumeSurface } from "./drawing-volume";
+import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import type { CoveringHandle, CoveringSurface } from "./covering-layout";
 import type { EditorPoint, EditorSceneObject } from "./editor-types";
 import { coveringTextureFile,resolvedCoveringStyle,type CoveringStyle } from "./covering-style";
@@ -87,17 +87,26 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
       const xs=polygon.map(p=>p.x),ys=polygon.map(p=>p.y),x=Math.min(...xs),y=Math.min(...ys);
       context.save();context.clip();drawCatalogHatch(context,style.hatchCode,style.hatchSpacing/10,style.hatchRotation,style.hatchColor,style.hatchLineWidth,{x,y,width:Math.max(...xs)-x,height:Math.max(...ys)-y});context.restore();
     }
-    if(object.metadata?.volumeShading === "true") drawVolumeSurface(context,polygon,surface.path);
+    if(object.metadata?.volumeShading === "true") {
+      if(surface.conformal){
+        context.save();context.clip();context.beginPath();
+        surface.path.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+        drawVolumeStroke(context,object.width);context.restore();
+      }else drawVolumeSurface(context,polygon,surface.path);
+    }
     if(object.metadata?.coveringKind === "band" && style.texture!=="none")
       drawThreadBand(context,surface,style.textureScale,style.textureRotation,style.textureTint);
-    context.beginPath();polygon.forEach((p,i)=>i&&!(surface.openEnd&&i===polygon.length/2)?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
-    if(!surface.openStart){const p=polygon[0]!;context.lineTo(p.x,p.y);}
+    context.beginPath();
+    if(surface.conformal){polygon.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.closePath();}
+    else {polygon.forEach((p,i)=>i&&!(surface.openEnd&&i===polygon.length/2)?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));
+      if(!surface.openStart){const p=polygon[0]!;context.lineTo(p.x,p.y);}}
     context.strokeStyle=selected?"#007fae":style.lineColor;context.lineWidth=selected?Math.max(2,style.lineWidth):style.lineWidth;context.stroke();context.restore();
   }
   for(const grip of coveringGrips(object)){
     if(grip.part.startsWith("transition-")){context.beginPath();context.arc(grip.point.x,grip.point.y,4,0,Math.PI*2);context.fillStyle="white";context.fill();context.strokeStyle="#007fae";context.lineWidth=2;context.stroke();continue;}
     if(!selected)continue;
-    const {point:p,normal:n,halfWidth:w}=grip;context.strokeStyle=grip.bound?"#21905c":"#007fae";context.lineWidth=3;
-    context.beginPath();context.moveTo(p.x-n.x*w,p.y-n.y*w);context.lineTo(p.x+n.x*w,p.y+n.y*w);context.stroke();
+    if(grip.pointMarker){context.beginPath();context.arc(grip.point.x,grip.point.y,4,0,Math.PI*2);context.fillStyle="white";context.fill();context.strokeStyle=grip.bound?"#21905c":"#007fae";context.lineWidth=2;context.stroke();continue;}
+    const {point:p,normal:n,halfWidth:w}=grip,right=grip.rightHalfWidth??w;context.strokeStyle=grip.bound?"#21905c":"#007fae";context.lineWidth=3;
+    context.beginPath();context.moveTo(p.x-n.x*right,p.y-n.y*right);context.lineTo(p.x+n.x*w,p.y+n.y*w);context.stroke();
   }
 }

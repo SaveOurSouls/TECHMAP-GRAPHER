@@ -9,10 +9,45 @@ import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe-projection";
+import { conformalCoveringContour } from "./covering-contour";
 
-export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly bound:boolean }
-export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean }
+export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly pointMarker?:boolean; readonly bound:boolean }
+export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean }
 export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
+type TailSample = { readonly at:number; readonly side:"from"|"to"|"core"; readonly members:readonly {readonly point:Point;readonly radius:number}[] };
+type JoiningOutset = {readonly from:number;readonly to:number;readonly width:number};
+
+function joiningSupportCells(samples:readonly TailSample[],from:number,to:number,outsets:readonly JoiningOutset[]):Point[][] {
+ const result:Point[][]=[];
+ const between=(a:Point,b:Point,t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+ const disk=(point:Point,radius:number):Point[]=>Array.from({length:12},(_,i)=>({
+  x:point.x+Math.cos(i*Math.PI/6)*radius,y:point.y+Math.sin(i*Math.PI/6)*radius}));
+ for(let i=1;i<samples.length;i++){
+  const a=samples[i-1]!,b=samples[i]!;
+  if(a.side!==b.side||a.at>=to||b.at<=from||b.at-a.at<1e-7)continue;
+  const first=Math.max(from,a.at),last=Math.min(to,b.at);
+  if(last-first<1e-7)continue;
+  const cuts=[first,...outsets.flatMap(item=>[item.from,item.to]).filter(at=>at>first&&at<last),last].sort((x,y)=>x-y);
+  for(let stop=1;stop<cuts.length;stop++){
+   const lo=cuts[stop-1]!,hi=cuts[stop]!,start=(lo-a.at)/(b.at-a.at),end=(hi-a.at)/(b.at-a.at);
+   const width=Math.max(...outsets.filter(item=>(lo+hi)/2>item.from&&(lo+hi)/2<item.to).map(item=>item.width),0);
+   const section:Point[]=[];
+   for(let member=0;member<a.members.length;member++){
+    const one=a.members[member]!,two=b.members[member]!;
+    if(!two)continue;
+    const p=between(one.point,two.point,start),q=between(one.point,two.point,end);
+    section.push(...disk(p,one.radius+width),...disk(q,two.radius+width));
+   }
+   if(section.length)result.push(section);
+  }
+ }
+ return result;
+}
+function endpointGripPoint(polygon:readonly Point[],point:Point,tangent:Point,part:"from"|"to"):Point {
+ const facing=polygon.filter(p=>((p.x-point.x)*tangent.x+(p.y-point.y)*tangent.y)*(part==="to"?1:-1)>1e-6);
+ const candidates=facing.length?facing:polygon;
+ return candidates.reduce((nearest,p)=>Math.hypot(p.x-point.x,p.y-point.y)<Math.hypot(nearest.x-point.x,nearest.y-point.y)?p:nearest,candidates[0]??point);
+}
 /** Round generated OP→P transitions after projection. The source route is
  * rounded before projection, but the shoulder points are created afterwards;
  * sampling this visible control polygon applies the same radius regulator to
@@ -27,7 +62,10 @@ function roundProjectedCenterline(points:readonly Point[],distances:readonly num
   const a=controlDistances[index-1]!,b=controlDistances[index]!,t=(value-a)/(b-a||1);
   return distances[index-1]!+(distances[index]!-distances[index-1]!)*t;
  };
- return drawingRouteSamples(points,radius).map(sample=>({point:sample.point,distance:sourceAt(sample.distance)}));
+ const rounded=drawingRouteSamples(points,radius).map(sample=>({point:sample.point,distance:sourceAt(sample.distance)}));
+ rounded[0]={point:points[0]!,distance:distances[0]!};
+ rounded[rounded.length-1]={point:points.at(-1)!,distance:distances.at(-1)!};
+ return rounded;
 }
 
 /** Offset edges are shared by the filled surface and endpoint grips. A sharp
@@ -60,9 +98,11 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
  for(const covering of sourceCoverings)if(covering.bundle)addBundle(covering);
  const bundleSections=pipeBundleSections(document);
  const supportsBySegment=new Map<string,WidthSupport[]>();
+ const joiningOutsetsBySegment=new Map<string,JoiningOutset[]>();
  return coverings.map((covering,order)=>{
   const handles:CoveringHandle[]=[],surfaces:CoveringSurface[]=[],paths:Point[][]=[];
   const ownSupports:{segmentId:string;support:WidthSupport}[]=[];
+  const ownJoiningOutsets:{segmentId:string;outset:JoiningOutset}[]=[];
   let maximumWidth=0;
   const bundleAxis=covering.bundle?pipeBundleAxisPath(covering,sourceCoverings):undefined;
   for(const [spanIndex,original] of covering.spans.entries()){
@@ -75,15 +115,6 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const halfAt=(fraction:number):number=>{
     if(groupedWidth!==undefined)return groupedWidth/2;
     let width=pipeWidth;
-    if(joining&&route.envelope.length){
-     const distance=route.before+fraction*route.length;
-     const nextIndex=route.envelope.findIndex(sample=>sample.at>=distance);
-     const beforeSample=route.envelope[Math.max(0,nextIndex<0?route.envelope.length-1:nextIndex-1)]!;
-     const afterSample=route.envelope[nextIndex<0?route.envelope.length-1:nextIndex]!;
-     const t=Math.max(0,Math.min(1,(distance-beforeSample.at)/(afterSample.at-beforeSample.at||1)));
-     const spread=beforeSample.spread+(afterSample.spread-beforeSample.spread)*t;
-     width=Math.max(width,2*spread+scale);
-    }
     if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=joining?Math.max(width,bundle):bundle;
     // Array order is the physical stacking order; any lower surface remains enclosed.
     for(const lower of coverings.slice(0,order)) {
@@ -93,8 +124,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     return (width+.5*scale)/2;
    };
    const boundaries=[0,1,...route.envelope.map(sample=>(sample.at-route.before)/route.length),...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
-   const baseProfile=coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length));
-   const fitted=encloseWidthProfiles(baseProfile,supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
+   const fitted=encloseWidthProfiles(
+     coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length)),
+     supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
    // The width field controls the largest diameter. Every smaller diameter
    // grows with it, at 1/ratio of the increment per adjacent support level.
    const levels=[...new Set(fitted.map(p=>p.halfWidth))].sort((a,b)=>b-a);
@@ -108,16 +140,38 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
      ? roundProjectedCenterline(projected,display.map(p=>p.distance),drawingBendRadius(document))
      : projected.map((point,index)=>({point,distance:display[index]!.distance}));
    const centerline=visible.map(sample=>sample.point);if(centerline.length<2)continue;
+   if(joining&&Math.abs(from)<1e-9)centerline[0]=joining.start;
+   if(joining&&Math.abs(to-1)<1e-9)centerline[centerline.length-1]=joining.end;
    const widths=visible.map(sample=>profileHalfWidth(profile,sample.distance-route.before));
    for(const width of widths)maximumWidth=Math.max(maximumWidth,2*width);
    const left=offsetPolyline(centerline,widths),right=offsetPolyline(centerline,widths.map(w=>-w));
-   surfaces.push({polygon:[...left,...right.reverse()],path:centerline,spanIndex,
+   const polygon=[...left,...right.reverse()];
+   const segmentFrom=route.before+from*route.length,segmentTo=route.before+to*route.length;
+   const lowerOutsets=joiningOutsetsBySegment.get(s.segmentId)??[];
+   const limits=[segmentFrom,...lowerOutsets.flatMap(item=>[item.from,item.to]).filter(at=>at>segmentFrom&&at<segmentTo),segmentTo].sort((a,b)=>a-b);
+   const outsets:JoiningOutset[]=[];
+   if(joining)for(let i=1;i<limits.length;i++){
+    const start=limits[i-1]!,end=limits[i]!,mid=(start+end)/2;
+    const lower=Math.max(0,...lowerOutsets.filter(item=>mid>item.from&&mid<item.to).map(item=>item.width));
+    const outset={from:start,to:end,width:Math.max(coveringClearance+growth,lower+coveringClearance)};
+    outsets.push(outset);ownJoiningOutsets.push({segmentId:s.segmentId,outset});
+   }
+   const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets):[];
+   const contour=joining?conformalCoveringContour(centerline,widths,widths,supports):polygon;
+   surfaces.push({polygon:contour,path:centerline,spanIndex,
+     ...(joining?{conformal:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
-   for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,len=Math.hypot(q.x-p.x,q.y-p.y)||1;handles.push({objectId:covering.id,spanIndex,part,point:p,normal:{x:-(q.y-p.y)/len,y:(q.x-p.x)/len},halfWidth:widths[i]!,bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
+   for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,dx=part==="from"?q.x-p.x:p.x-q.x,dy=part==="from"?q.y-p.y:p.y-q.y,len=Math.hypot(dx,dy)||1;
+    const at=visible[i]!.distance,near=route.envelope.findIndex(sample=>sample.at>=at),a=route.envelope[Math.max(0,near<0?route.envelope.length-1:near-1)],b=route.envelope[near<0?route.envelope.length-1:near];
+    const t=a&&b?Math.max(0,Math.min(1,(at-a.at)/(b.at-a.at||1))):0;
+    const leftSpread=a&&b?a.leftSpread+(b.leftSpread-a.leftSpread)*t:0,rightSpread=a&&b?a.rightSpread+(b.rightSpread-a.rightSpread)*t:0;
+    const gripPoint=joining?endpointGripPoint(contour,p,{x:dx/len,y:dy/len},part):p;
+    handles.push({objectId:covering.id,spanIndex,part,point:gripPoint,normal:{x:-dy/len,y:dx/len},halfWidth:Math.max(widths[i]!,leftSpread+coveringClearance),...(joining?{rightHalfWidth:Math.max(widths[i]!,rightSpread+coveringClearance),pointMarker:true}:{}),bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
   if(covering.bundle)handles.push(...pipeBundleTransitionHandles(document,covering.id));
   for(const {segmentId,support} of ownSupports) supportsBySegment.set(segmentId,[...(supportsBySegment.get(segmentId)??[]),support]);
+  for(const {segmentId,outset} of ownJoiningOutsets)joiningOutsetsBySegment.set(segmentId,[...(joiningOutsetsBySegment.get(segmentId)??[]),outset]);
   return {id:covering.id,kind:"physical-covering",layerId:"wires",x:0,y:0,width:maximumWidth,height:0,color:covering.color,label:covering.name,paths,points:paths.flat(),routeRadius:0,metadata:{coveringKind:coveringKind(covering),...(document.drawingDocuments?.volumeShading === false ? {volumeShading:"false"} : {}),coveringStyle:JSON.stringify({...covering.style,texture:!covering.style?.texture||covering.style.texture==="auto"?document.drawingDocuments?.coveringLibrary?.defaults[coveringKind(covering)]?.texture??"auto":covering.style.texture}),surfaces:JSON.stringify(surfaces),coveringHandles:JSON.stringify(handles)}};
  });
 }

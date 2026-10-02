@@ -14,7 +14,7 @@ import {migrateJoiningPipes} from "./physical-joining-pipes";
 import {beginJoiningPipe,toggleJoiningPipeMember,joiningPipeDraftTopology} from "./JoiningPipeEditor";
 import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./history";
 import {hitTestEditorScene,hitTestWireRoutePoint,numberedPipeBendHandles,pipeMidpoints} from "./CanvasViewport";
-import {coveringHit} from "./covering-renderer";
+import {coveringHit,coveringSurfaces} from "./covering-renderer";
 import {coveringGrips} from "./covering-renderer";
 import {coveringRoute} from "./physical-coverings";
 import {drawingRouteCommands,drawingRouteHitPoints} from "./drawing-route-path";
@@ -29,6 +29,17 @@ function fixture():HarnessDesignDocument {
     {id:"p0",from:"a",to:"b",path:{kind:"polyline",points:[]}},
     {id:"p1",from:"c",to:"d",path:{kind:"polyline",points:[]}}],routes:[]}};
 }
+
+it("keeps an outer OP covering outside the inner covering along both member tails",()=>{
+ const source=fixture(),op=createJoiningPipe(source,[["p0"],["p1"]],"op");
+ const inner={id:"inner",name:"Inner",kind:"heat-shrink" as const,width:0,color:"#8899aa",lengthMm:null,
+  spans:[{segmentId:"op",from:-.3,to:1.3}]};
+ const outer={...inner,id:"outer",name:"Outer"};
+ const document={...source,physicalTopology:{...source.physicalTopology!,joiningPipes:[op],coverings:[inner,outer]}};
+ const [inside,outside]=coveringScene(document),innerPolygon=coveringSurfaces(inside!)[0]!.polygon;
+ expect(innerPolygon.length).toBeGreaterThan(4);
+ for(const point of innerPolygon)expect(coveringHit(outside!,point,0)).toBe(0);
+});
 
 describe("joining pipe hierarchy",()=>{
  it.each(["from","to"] as const)("snaps the %s OP endpoint to a horizontal axis from below and above",side=>{

@@ -1,13 +1,14 @@
 import type { EditorCatalogItem } from "./editor-types";
 import { findWireEndpoint, type HarnessDesignDocument, type Point } from "./model";
 import { physicalSegmentPoints, physicalSegmentControls, physicalNodePoint } from "./physical-geometry";
-import { drawingBendRadius, projectOntoDrawingRoute } from "./drawing-route-path";
+import { drawingBendRadius, drawingRouteSamples, projectOntoDrawingRoute } from "./drawing-route-path";
 import { validCoveringStyle, type CoveringStyle } from "./covering-style";
 import {applyCoveringPreference} from "./covering-library";
 import {resolvePipeBundles,type PipeBundle} from "./pipe-bundle-model";
 import {splitPipeBundleMembers} from "./pipe-bundle-editing";
 import { joiningPipePoints } from "./physical-joining-pipes";
 import { joiningPipeDisplaySamples } from "./physical-joining-pipe-projection";
+import { drawingPipeWidth } from "./drawing-thickness";
 import type { JoiningPipeMember, PhysicalJoiningPipe } from "./physical-topology-model";
 
 export interface CoveringMaterial {
@@ -147,7 +148,14 @@ function joiningMemberCoveringSamples(document:HarnessDesignDocument,member:Join
  let before=0;
  const samples=member.segmentIds.flatMap((id,index)=>{
   const length=lengths[index]!,points=joiningPipeDisplaySamples(document,id)??[];
-  const result=points.map(sample=>({fraction:(before+sample.fraction*length)/total,point:sample.point}));
+  const stations:number[]=[];let distance=0;
+  points.forEach((sample,i)=>{if(i)distance+=Math.hypot(sample.point.x-points[i-1]!.point.x,sample.point.y-points[i-1]!.point.y);stations.push(distance);});
+  const result=drawingRouteSamples(points.map(sample=>sample.point),drawingBendRadius(document)).map(sample=>{
+   const next=stations.findIndex(at=>at>=sample.distance),i=next<0?stations.length-1:next;
+   const a=Math.max(0,i-1),t=(sample.distance-stations[a]!)/(stations[i]!-stations[a]!||1);
+   const fraction=points[a]!.fraction+(points[i]!.fraction-points[a]!.fraction)*Math.max(0,Math.min(1,t));
+   return {fraction:(before+fraction*length)/total,point:sample.point};
+  });
   before+=length;return index?result.slice(1):result;
  });
  return member.reverse?samples.reverse().map(sample=>({fraction:1-sample.fraction,point:sample.point})):samples;
@@ -164,11 +172,15 @@ function pointAtFraction(samples:readonly {fraction:number;point:Point}[],fracti
 }
 
 function joiningCoveringTail(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe,side:"from"|"to") {
- const members=pipe.members.map(member=>({member,samples:joiningMemberCoveringSamples(document,member),start:member.reverse?1-member.to:member.from,end:member.reverse?1-member.from:member.to}));
- if(members.some(member=>member.samples.length<2))return [{point:side==="from"?pipe.start:pipe.end,spread:0}];
- const positions=members.map(({samples,start,end})=>{
+ const members=pipe.members.map(member=>({member,samples:joiningMemberCoveringSamples(document,member),start:member.reverse?1-member.to:member.from,end:member.reverse?1-member.from:member.to,
+  radius:Math.max(...member.segmentIds.map(id=>{
+   const segment=document.physicalTopology?.segments.find(item=>item.id===id);
+   return segment?drawingPipeWidth(document,segment)/2:0;
+  }))}));
+ if(members.some(member=>member.samples.length<2))return [{point:side==="from"?pipe.start:pipe.end,spread:0,leftSpread:0,rightSpread:0,members:[]}];
+ const positions=members.map(({samples,start,end,radius})=>{
   const boundary=side==="from"?start:end,range=side==="from"?start:1-end;
-  return {samples,boundary,range};
+  return {samples,boundary,range,radius};
  });
  const stops=new Set<number>([0,1]);
  for(const {samples,boundary,range} of positions)if(range>1e-7)for(const sample of samples){
@@ -176,12 +188,38 @@ function joiningCoveringTail(document:HarnessDesignDocument,pipe:PhysicalJoining
   if(u>0&&u<1)stops.add(u);
  }
  for(let index=1;index<8;index++)stops.add(index/8);
- return [...stops].sort((a,b)=>a-b).map(u=>{
+ const stations=[...stops].sort((a,b)=>a-b).map(u=>{
   const memberPoints=positions.map(({samples,boundary,range})=>pointAtFraction(samples,side==="from"?u*range:boundary+u*range));
   const mean={x:memberPoints.reduce((sum,p)=>sum+p.x,0)/memberPoints.length,y:memberPoints.reduce((sum,p)=>sum+p.y,0)/memberPoints.length};
   const point=side==="from"&&u===1?pipe.start:side==="to"&&u===0?pipe.end:mean;
-  return {point,spread:Math.max(...memberPoints.map(p=>Math.hypot(p.x-point.x,p.y-point.y)))};
+  return {point,memberPoints};
  });
+ return stations.map((station,index)=>{
+  const a=stations[Math.max(0,index-1)]!.point,b=stations[Math.min(stations.length-1,index+1)]!.point;
+  const length=Math.hypot(b.x-a.x,b.y-a.y)||1,normal={x:-(b.y-a.y)/length,y:(b.x-a.x)/length};
+  const offsets=station.memberPoints.map(p=>(p.x-station.point.x)*normal.x+(p.y-station.point.y)*normal.y);
+  const leftSpread=Math.max(0,...offsets.map((offset,i)=>offset+positions[i]!.radius));
+  const rightSpread=Math.max(0,...offsets.map((offset,i)=>-offset+positions[i]!.radius));
+  return {point:station.point,leftSpread,rightSpread,spread:Math.max(leftSpread,rightSpread),
+   members:station.memberPoints.map((point,i)=>({point,radius:positions[i]!.radius}))};
+ });
+}
+
+function joiningCoveringCore(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe) {
+ const members=pipe.members.map(member=>({member,samples:joiningMemberCoveringSamples(document,member),
+  radius:Math.max(...member.segmentIds.map(id=>{
+   const segment=document.physicalTopology?.segments.find(item=>item.id===id);
+   return segment?drawingPipeWidth(document,segment)/2:0;
+  }))}));
+ if(members.some(item=>item.samples.length<2))return [];
+ const stops=new Set<number>([0,1]);
+ for(const {member,samples} of members)for(const sample of samples){
+  const start=member.reverse?1-member.to:member.from;
+  const t=(sample.fraction-start)/(member.to-member.from);
+  if(t>0&&t<1)stops.add(t);
+ }
+ return [...stops].sort((a,b)=>a-b).map(t=>({at:t,members:members.map(({member,samples,radius})=>({
+  point:pointAtFraction(samples,(member.reverse?1-member.to:member.from)+t*(member.to-member.from)),radius}))}));
 }
 
 export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
@@ -191,9 +229,12 @@ export function coveringRoute(document:HarnessDesignDocument,segmentId:string) {
   const enter=joiningCoveringTail(document,joining,"from"),exit=joiningCoveringTail(document,joining,"to");
   const before=pathLength(enter.map(sample=>sample.point)),after=pathLength(exit.map(sample=>sample.point)),total=before+length+after;
   const points=[...enter.slice(0,-1).map(sample=>sample.point),...core,...exit.slice(1).map(sample=>sample.point)];
-  const envelope:{at:number;spread:number}[]=[];
-  let distance=0;enter.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-enter[index-1]!.point.x,sample.point.y-enter[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread});});
-  distance=before+length;exit.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-exit[index-1]!.point.x,sample.point.y-exit[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread});});
+  const envelope:{at:number;spread:number;leftSpread:number;rightSpread:number;side:"from"|"to"|"core";members:readonly {point:Point;radius:number}[]}[]=[];
+  let distance=0;enter.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-enter[index-1]!.point.x,sample.point.y-enter[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread,leftSpread:sample.leftSpread,rightSpread:sample.rightSpread,side:"from",members:sample.members??[]});});
+  distance=before+length;exit.forEach((sample,index)=>{if(index)distance+=Math.hypot(sample.point.x-exit[index-1]!.point.x,sample.point.y-exit[index-1]!.point.y);envelope.push({at:distance,spread:sample.spread,leftSpread:sample.leftSpread,rightSpread:sample.rightSpread,side:"to",members:sample.members??[]});});
+  const coreMembers=joiningCoveringCore(document,joining);
+  coreMembers.forEach(sample=>envelope.push({at:before+sample.at*length,spread:0,leftSpread:0,rightSpread:0,side:"core",members:sample.members}));
+  envelope.sort((a,b)=>a.at-b.at);
   return {points,core,length,before,after,total,min:-before/length,max:1+after/length,envelope};
  }
  const s=t?.segments.find(s=>s.id===segmentId);if(!t||!s)return null;
