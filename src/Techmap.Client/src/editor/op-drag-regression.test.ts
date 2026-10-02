@@ -107,4 +107,3 @@ describe("OP shared exit drag regression", () => {
     }
   });
 });
-
