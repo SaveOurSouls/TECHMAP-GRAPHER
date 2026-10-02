@@ -19,6 +19,7 @@ describe("inline route row", () => {
     const markup = renderToStaticMarkup(createElement(WireBlankStageDrawing, { row, items: [item], snapshot: null, error: null, disabled: false, update: () => {} }));
     expect(markup).toContain("Сохранённый шаблон (закреплённая версия)");
     expect(markup).toContain("aria-label=\"Сохранённый шаблон: После резки — После резки\"");
+    expect(markup).toContain("Справочник «Полуфабрикаты провода» недоступен");
   });
   it("renders the complete editor in one row without a nested dialog", () => {
     const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
