@@ -37,7 +37,9 @@ describe("inline route row", () => {
     expect(markup).toContain("Операции");
     expect(markup).toContain("Фото этапа");
     expect(markup).toContain('class="route-material-table"');
-    expect(markup).toContain('class="route-metrics-table"');
+    expect(markup).toContain('<tfoot><tr><td class="route-metric-cell"');
+    expect(markup).toContain('class="route-operations-table"');
+    expect(markup).not.toContain('class="route-terminal-requirements"');
   });
 
   it("shows terminal articles instead of encoded keys in tables and drawing", () => {

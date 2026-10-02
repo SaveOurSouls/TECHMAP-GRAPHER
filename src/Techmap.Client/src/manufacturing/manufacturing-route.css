@@ -238,11 +238,6 @@
 .route-live-length { color: var(--route-accent-dark); font-size: 16px; font-variant-numeric: tabular-nums; }
 .route-live-length small { color: var(--route-muted); font-weight: 400; }
 .route-terminal-articles { color: #66818f !important; line-height: 1.35; }
-.route-inline-quantity { display: grid; gap: 8px; }
-.route-inline-quantity > label small { color: #b44f43; font-weight: 500; }
-.route-inline-quantity .route-number-input { position: relative; }
-.route-inline-quantity .route-number-input input { padding-right: 45px; }
-.route-inline-quantity .route-number-input span { position: absolute; top: 8px; right: 8px; color: #8c9ca4; font-size: 9px; pointer-events: none; }
 .route-prepared-check { flex-direction: row !important; align-items: center; margin-top: 5px; }
 .route-prepared-check input { width: 15px; height: 15px; accent-color: var(--route-green); }
 .route-inline-visual, .route-inline-operations { display: grid; gap: 10px; }
@@ -490,7 +485,6 @@
   .route-inline-row { min-width: 0; grid-template-columns: 34px minmax(0, 1fr); gap: 16px 8px; }
   .route-inline-row fieldset { grid-column: 2; }
   .route-inline-number { grid-row: 1; }
-  .route-inline-quantity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .route-inline-row .route-kind { margin-bottom: 6px; }
   .route-inline-row .route-presentation { min-height: 220px; aspect-ratio: 4 / 2.5; }
   .route-inline-row button, .route-inline-row input { min-height: 32px; }
@@ -525,7 +519,251 @@
 .route-material-table td:nth-child(3) { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .route-material-table td:nth-child(4) span { color: #527684; white-space: nowrap; }
 .route-comment-field { margin-top: 8px; }
-.route-metrics-table { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.route-metrics-table > p { grid-column: 1 / -1; margin: -2px 0 0; }
-.route-metrics-table > p strong { margin-left: 4px; color: var(--route-ink); font-size: 12px; }
 .route-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Semi-finished rows use a compact work surface: identity and metrics stay together,
+   operations sit below the task, and the drawing keeps its own column. */
+@media (min-width: 821px) {
+  .route-inline-row.semi-finished {
+    min-width: 0;
+    grid-template-columns: 38px minmax(0, 1.3fr) minmax(160px, .7fr) minmax(0, 1.45fr);
+    grid-template-rows: auto auto;
+    column-gap: 16px;
+    row-gap: 14px;
+  }
+  .route-inline-row.semi-finished > .route-inline-number {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: start;
+    padding-top: 9px;
+  }
+  .route-inline-row.semi-finished > .route-inline-material {
+    grid-column: 2 / 4;
+    grid-row: 1;
+    padding: 14px;
+    border: 1px solid #c8dce5;
+    border-radius: 9px;
+    background: #fafdfe;
+  }
+  .route-inline-row.semi-finished > .route-inline-operations {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    min-width: 0;
+  }
+  .route-inline-row.semi-finished > .route-inline-visual {
+    grid-column: 4;
+    grid-row: 1 / 4;
+    min-width: 0;
+  }
+  .route-inline-row.semi-finished .route-identity-table {
+    grid-template-columns: minmax(110px, .38fr) minmax(0, 1fr);
+  }
+  .route-inline-row.semi-finished .route-identity-table label {
+    padding: 8px 9px;
+    border: 1px solid #bfd4de;
+    border-radius: 6px;
+    background: #fff;
+  }
+  .route-inline-row.semi-finished .route-identity-table input {
+    border-color: transparent;
+    background: transparent;
+    font-weight: 750;
+  }
+  .route-inline-row.semi-finished .route-identity-panel {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 9px;
+    padding: 9px;
+    border: 1px solid #b9d3de;
+    border-radius: 8px;
+    background: #eef8fb;
+  }
+  .route-inline-row.semi-finished .route-identity-panel .route-identity-table {
+    min-width: 0;
+  }
+  .route-inline-row.semi-finished .route-identity-panel .route-prepared-check {
+    white-space: nowrap;
+  }
+  .route-inline-row.semi-finished .route-material-table-scroll {
+    overflow: hidden;
+  }
+}
+
+/* C2 material data must fit the task column at desktop widths. */
+.route-inline-row.semi-finished .route-material-table-scroll {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+.route-inline-row.semi-finished .route-material-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.route-inline-row.semi-finished .route-material-table th,
+.route-inline-row.semi-finished .route-material-table td {
+  overflow-wrap: anywhere;
+}
+.route-inline-row.semi-finished .route-material-table td:first-child { min-width: 0; }
+.route-inline-row.semi-finished .route-material-table tfoot td {
+  padding: 8px;
+  border-top: 1px solid #d7e5ea;
+  background: #f8fbfc;
+  vertical-align: middle;
+}
+.route-inline-row.semi-finished .route-material-table tfoot .route-metric-cell {
+  display: grid;
+  gap: 4px;
+}
+.route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(70px, 1fr)) minmax(100px, auto);
+  gap: 8px;
+  align-items: end;
+}
+.route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics > label {
+  display: grid;
+  gap: 3px;
+  color: var(--route-ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+.route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  border: 1px solid #cbdbe3;
+  border-radius: 5px;
+  background: #fff;
+}
+.route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics > .route-muted {
+  align-self: end;
+  padding-bottom: 7px;
+}
+
+.route-inline-row.semi-finished .route-operations-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+.route-inline-row.semi-finished .route-operations-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #e1ebef;
+  vertical-align: middle;
+}
+.route-inline-row.semi-finished .route-operations-table tr:last-child td { border-bottom: 0; }
+.route-inline-row.semi-finished .route-operation-entry.selected { background: #eff8fb; }
+.route-inline-row.semi-finished .route-operation-entry td:first-child { width: 32px; text-align: center; }
+.route-inline-row.semi-finished .route-operation-entry td:last-child { width: 32px; text-align: center; }
+.route-inline-row.semi-finished .route-operation-entry select,
+.route-inline-row.semi-finished .route-operation-entry input,
+.route-inline-row.semi-finished .route-operation-entry button {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  font-size: 11px;
+}
+.route-inline-row.semi-finished .route-operation-entry td:first-child input,
+.route-inline-row.semi-finished .route-operation-entry td:last-child button { width: auto; }
+
+.route-inline-row.semi-finished .route-drawing-mode {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid #c4dce6;
+  border-radius: 7px;
+  background: #eef8fb;
+}
+.route-inline-row.semi-finished .route-drawing-mode label {
+  display: grid;
+  gap: 4px;
+  color: var(--route-ink-soft);
+  font-size: 10px;
+  font-weight: 750;
+}
+.route-inline-row.semi-finished .route-drawing-mode select { min-width: 0; }
+.route-inline-row.semi-finished .route-drawing-mode small { color: var(--route-muted); font-size: 10px; }
+.route-inline-row.semi-finished .route-material-table tfoot label {
+  display: grid;
+  gap: 3px;
+  color: var(--route-ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+.route-inline-row.semi-finished .route-material-table tfoot input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  border: 1px solid #cbdbe3;
+  border-radius: 5px;
+  background: #fff;
+}
+
+/* The drawing mode control belongs to the drawing surface, with a clear boundary. */
+.route-inline-row.semi-finished .route-inline-visual .route-presentation-toolbar,
+.route-inline-row.semi-finished .route-inline-visual .route-wire-blank label {
+  padding: 7px 9px;
+  border: 1px solid #c8dce5;
+  border-radius: 6px;
+  background: #f7fbfc;
+}
+.route-inline-row.semi-finished .route-inline-visual .route-presentation-toolbar label select,
+.route-inline-row.semi-finished .route-inline-visual .route-wire-blank select {
+  min-width: 0;
+}
+
+@media (max-width: 1120px) and (min-width: 821px) {
+  .route-inline-row.semi-finished {
+    grid-template-columns: 38px minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+  .route-inline-row.semi-finished > .route-inline-material,
+  .route-inline-row.semi-finished > .route-inline-operations {
+    grid-column: 2;
+  }
+  .route-inline-row.semi-finished > .route-inline-visual {
+    grid-column: 3;
+    grid-row: 1 / 4;
+  }
+}
+
+@media (max-width: 820px) {
+  .route-inline-row.semi-finished {
+    min-width: 0;
+  }
+  .route-inline-row.semi-finished > .route-inline-material,
+  .route-inline-row.semi-finished > .route-inline-operations,
+  .route-inline-row.semi-finished > .route-inline-visual {
+    grid-column: 2;
+    grid-row: auto;
+  }
+  .route-inline-row.semi-finished > .route-inline-material {
+    padding: 11px;
+  }
+  .route-inline-row.semi-finished .route-identity-panel {
+    grid-template-columns: 1fr;
+  }
+  .route-inline-row.semi-finished .route-material-table th,
+  .route-inline-row.semi-finished .route-material-table td {
+    padding: 6px 5px;
+    font-size: 9px;
+  }
+  .route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .route-inline-row.semi-finished .route-material-table tfoot .route-muted { grid-column: 1 / -1; }
+  .route-inline-row.semi-finished .route-operation-entry td { padding: 6px 4px; }
+}
+
+@media (max-width: 520px) {
+  .route-inline-row.semi-finished .route-identity-table {
+    grid-template-columns: 1fr;
+  }
+  .route-inline-row.semi-finished .route-material-table tfoot .route-material-table-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
