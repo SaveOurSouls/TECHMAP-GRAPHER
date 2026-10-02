@@ -7,12 +7,19 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { addAssemblyRow, generateRoute } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
-import { RouteRowInline } from "./ManufacturingRoutePanel";
+import { RouteRowInline, WireBlankStageDrawing } from "./ManufacturingRoutePanel";
 
 const config: RuntimeConfig = { configVersion: 1, basePath: "/", apiBasePath: "/api", appVersion: "test", apiVersion: "1", schemaVersion: "1" };
 const session: LocalSession = { csrfNonce: "test", instanceId: "test" };
 
 describe("inline route row", () => {
+  it("keeps a pinned template visible when the active catalog is unavailable", () => {
+    const row = { id: "r", kind: "semiFinished" as const, title: "Провод", comment: "", sourceObjects: [{ kind: "wire" as const, id: "wire" }], dependsOn: [], operations: [], prepared: false, presentation: { backgroundOpacity: .25, objects: [] }, wireBlankSelections: [{ wireId: "wire", binding: { sourceId: "technology-wire-blanks" as const, entityType: "wire-blank" as const, snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), sourceKey: "ПФП-01", displayName: "Сохранённый шаблон", visual: { start: "cut", end: "cut", color: "#26609e", templateId: "01-cut", photoDataUrl: null } } }] };
+    const item = { ref: { kind: "wire" as const, id: "wire" }, title: "Провод", lengthMm: null, color: null, material: "", materialArticle: "", section: "", terminalFrom: "", terminalTo: "" };
+    const markup = renderToStaticMarkup(createElement(WireBlankStageDrawing, { row, items: [item], snapshot: null, error: null, disabled: false, update: () => {} }));
+    expect(markup).toContain("Сохранённый шаблон (закреплённая версия)");
+    expect(markup).toContain("aria-label=\"Сохранённый шаблон: После резки — После резки\"");
+  });
   it("renders the complete editor in one row without a nested dialog", () => {
     const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
     const b = createConnector("b", "X2", 1, { x: 100, y: 0 });
