@@ -19,6 +19,7 @@ export function previewRouteRebase(route: ManufacturingRoute, document: HarnessD
       ...row, prepared: false, sourceObjects,
       ...(row.assemblyInputs ? { assemblyInputs: row.assemblyInputs.filter(input => input.kind !== "source" || available.has(key(input.ref))) } : {}),
       ...(row.terminalRequirements ? { terminalRequirements: row.terminalRequirements.filter(requirement => available.has(`wire:${requirement.wireId}`)) } : {}),
+      ...(row.wireBlankSelections ? { wireBlankSelections: row.wireBlankSelections.filter(selection => available.has(`wire:${selection.wireId}`)) } : {}),
       presentation: { ...row.presentation, objects: row.presentation.objects.filter(item => available.has(key(item.ref))) },
     };
   });

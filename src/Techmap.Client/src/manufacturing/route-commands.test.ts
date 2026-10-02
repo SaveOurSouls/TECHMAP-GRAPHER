@@ -13,6 +13,21 @@ const row = (id: string, dependsOn: string[] = []): RouteRow => ({
 const route = (...rows: RouteRow[]): ManufacturingRoute => parseManufacturingRoute({ contractVersion: 1, source: { fingerprintVersion: 1, sha256: sha }, status: "draft", rows })!;
 
 describe("manufacturing route commands", () => {
+  it("preserves per-wire catalog choices when merging semi-finished rows", () => {
+    const binding = { sourceId: "technology-wire-blanks" as const, entityType: "wire-blank" as const, snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "b".repeat(64), recordId: "c".repeat(64), sourceKey: "blank", displayName: "Blank", visual: { start: "cut", end: "cut", color: "#ff0000", templateId: "01-cut", photoDataUrl: null } };
+    const original = route(...["a", "b"].map(id => ({ ...row(id), wireBlankSelections: [{ wireId: id, binding }] })));
+    const merged = mergeRouteRows(original, ["a", "b"], "merged");
+    expect(merged.rows[0]!.wireBlankSelections).toEqual(original.rows.flatMap(item => item.wireBlankSelections!));
+  });
+  it("copies assembly drawing overlays independently of manufacturing composition", () => {
+    const drawingObjects = [{ id: "pipe", kind: "physical-segment", layerId: "wires", points: [{ x: 10, y: 20 }], hidden: true }];
+    const original = addAssemblyRow(route(row("a")), "assembly", "Assembly", [], []);
+    const updated = updateRouteRow(original, "assembly", { presentation: { backgroundOpacity: .5, objects: [], drawingObjects } });
+    const copied = copyAssemblyPresentation(updated, "assembly");
+    expect(copied.drawingObjects).toEqual(drawingObjects);
+    expect(copied.drawingObjects![0]!.points[0]).not.toBe(drawingObjects[0]!.points[0]);
+    expect(routeRowComposition(updated, "assembly")).toEqual([]);
+  });
   it("generates wire, cable and covering once, with cable conductors unprepared and connectors reserved for assembly", () => {
     const a = createConnector("a", "X1", 2, { x: 0, y: 0 }), b = createConnector("b", "X2", 2, { x: 100, y: 0 });
     const wire = createWire("wire", { connectorId: "a", contactId: a.contacts[0]!.id }, { connectorId: "b", contactId: b.contacts[0]!.id }, null);

@@ -50,6 +50,7 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
     presentation: { backgroundOpacity: selected[0]!.presentation.backgroundOpacity, objects: [...objects.values()] },
     ...(selected.some(row => row.terminalRequirements) ? { terminalRequirements: selected.flatMap(row => row.terminalRequirements ?? []) } : {}),
     ...(selected.some(row => row.photos) ? { photos: [...new Map(selected.flatMap(row => row.photos ?? []).map(photo => [photo.sha256.toLowerCase(), photo])).values()] } : {}),
+    ...(selected.some(row => row.wireBlankSelections) ? { wireBlankSelections: [...new Map(selected.flatMap(row => row.wireBlankSelections ?? []).map(selection => [selection.wireId, selection])).values()] } : {}),
   };
   let inserted = false;
   const rows = original.rows.flatMap(row => {
@@ -151,7 +152,7 @@ export function copyAssemblyPresentation(route: ManufacturingRoute, assemblyId: 
     }));
   };
   visit(assemblyId);
-  return { backgroundOpacity: row.presentation.backgroundOpacity, objects: [...objects.values()] };
+  return { ...row.presentation, objects: [...objects.values()], ...(row.presentation.drawingObjects ? { drawingObjects: row.presentation.drawingObjects.map(object => ({ ...object, points: object.points.map(point => ({ ...point })) })) } : {}) };
 }
 
 export function updateRouteRow(route: ManufacturingRoute, id: string, patch: Partial<Omit<RouteRow, "id">>): ManufacturingRoute {
