@@ -68,9 +68,16 @@ try {
 
     dotnet restore "Techmap-Grapher.slnx" --locked-mode --runtime win-x64 -p:NuGetAudit=false
     if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with code $LASTEXITCODE" }
-    dotnet test "Techmap-Grapher.slnx" --configuration $Configuration --no-restore -- `
+    dotnet test "Techmap-Grapher.slnx" --configuration $Configuration --no-restore `
+        --filter 'FullyQualifiedName!~ReferenceCatalogSearchPerformanceTests' -- `
         --minimum-expected-tests 1
     if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with code $LASTEXITCODE" }
+    # The timing budget is meaningful only when other test collections are idle.
+    dotnet test "tests/Techmap.Web.Tests/Techmap.Web.Tests.csproj" `
+        --configuration $Configuration --no-restore `
+        --filter 'FullyQualifiedName~ReferenceCatalogSearchPerformanceTests' -- `
+        --minimum-expected-tests 1
+    if ($LASTEXITCODE -ne 0) { throw "performance test failed with code $LASTEXITCODE" }
     dotnet publish (Join-Path $webRoot "Techmap.Web.csproj") `
         --configuration $Configuration `
         --runtime win-x64 `
