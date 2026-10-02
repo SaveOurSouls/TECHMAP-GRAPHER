@@ -3356,7 +3356,9 @@ export function CanvasViewport({
     } else if (drag.kind === "pan") {
       onCameraChange(panEditorCamera(drag.camera, event.clientX - drag.clientX, event.clientY - drag.clientY));
     } else if (drag.kind === "object" && inlineObjectDragMoved(event.clientX - drag.clientX, event.clientY - drag.clientY)) {
-      const destination = snappedObjectDestination(drag.objectId, inlineObjectDragDestination(
+      const destination = objects.find(o=>o.id===drag.objectId)?.metadata?.joiningPipeExit
+        ? inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, event.clientX - drag.clientX, event.clientY - drag.clientY, camera.zoom)
+        : snappedObjectDestination(drag.objectId, inlineObjectDragDestination(
         { x: drag.objectX, y: drag.objectY },
         event.clientX - drag.clientX,
         event.clientY - drag.clientY,
@@ -3421,7 +3423,9 @@ export function CanvasViewport({
       const deltaX = event.clientX - drag.clientX;
       const deltaY = event.clientY - drag.clientY;
       if (inlineObjectDragMoved(deltaX, deltaY)) {
-        onObjectMove?.(drag.objectId, snappedObjectDestination(
+        onObjectMove?.(drag.objectId, objects.find(o=>o.id===drag.objectId)?.metadata?.joiningPipeExit
+          ? inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom)
+          : snappedObjectDestination(
           drag.objectId,
           inlineObjectDragDestination({ x: drag.objectX, y: drag.objectY }, deltaX, deltaY, camera.zoom),
           event.ctrlKey,

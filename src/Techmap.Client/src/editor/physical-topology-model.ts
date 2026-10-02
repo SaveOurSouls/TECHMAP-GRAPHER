@@ -28,6 +28,9 @@ export interface PhysicalJoiningPipe {
   readonly start: Point; readonly end: Point;
   readonly path: PhysicalPath;
   readonly members: readonly JoiningPipeMember[];
+  /** Shared straight lead lengths at the two OP ends (drawing units). */
+  readonly enterLength?: number;
+  readonly exitLength?: number;
   readonly mode: "flat" | "round";
   readonly width?: number; readonly color?: string; readonly opacity?:number; readonly volumeShading?: boolean;
 }

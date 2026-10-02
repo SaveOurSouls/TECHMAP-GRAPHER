@@ -7,7 +7,7 @@ import { defaultLayerIds } from "./model";
 import { physicalEditablePoints } from "./physical-editing";
 import { drawingBendRadius } from "./drawing-route-path";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
-import { joiningPipePoints, joiningPipeEndpointId } from "./physical-joining-pipes";
+import { joiningPipePoints, joiningPipeEndpointId, joiningPipeExitId, joiningPipeExitPoint } from "./physical-joining-pipes";
 import { joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
 import {projectOntoPolyline} from "./physical-coverings";
 
@@ -46,8 +46,9 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     // Controls and grips use the same projection as the painted pipe so a
     // grouped member remains directly editable on its visible path.
     const controls = projectPipeBundleControls(document, segment.id, physicalSegmentControls(document, segment));
-    const editable = projectPipeBundleControls(document, segment.id, physicalEditablePoints(document, segment));
-    const authored = physicalEditablePoints(document, segment);
+    const memberOfOp=topology.joiningPipes?.some(pipe=>pipe.members.some(member=>member.segmentIds.includes(segment.id)))??false;
+    const authored = memberOfOp?physicalSegmentControls(document,segment):physicalEditablePoints(document, segment);
+    const editable = projectPipeBundleControls(document, segment.id, authored);
     const display = pipeBundleDisplaySamples(document, segment.id);
     const route=physicalSegmentPoints(document,segment);
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
@@ -141,7 +142,12 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     return {id:joiningPipeEndpointId(p.id,side),kind:"physical-node",label:`ОП${i+1} · ${side==="from"?"начало":"конец"}`,layerId:defaultLayerIds.connectionPoints,
       x:point.x-5,y:point.y-5,width:10,height:10,color:"#8555ad",metadata:{joiningPipe:p.id,bundleMember:"true"},port:{direction:null}};
   }));
-  return [...segments.sort((a,b)=>pipeBundleDepth(document,a.id)-pipeBundleDepth(document,b.id)), ...joining.sort((a,b)=>joiningPipeDepth(document,a.id)-joiningPipeDepth(document,b.id)), ...nodes,...joiningEnds];
+  const joiningExits:EditorSceneObject[]=(topology.joiningPipes??[]).flatMap((p,i)=>(["from","to"] as const).map(side=>{
+    const point=joiningPipeExitPoint(p,side);
+    return {id:joiningPipeExitId(p.id,side),kind:"physical-node",label:`ОП${i+1} · выход`,layerId:defaultLayerIds.connectionPoints,
+      x:point.x-5,y:point.y-5,width:10,height:10,color:"#a05cce",metadata:{joiningPipeExit:p.id,bundleMember:"true"},port:{direction:null}} as EditorSceneObject;
+  }));
+  return [...segments.sort((a,b)=>pipeBundleDepth(document,a.id)-pipeBundleDepth(document,b.id)), ...joining.sort((a,b)=>joiningPipeDepth(document,a.id)-joiningPipeDepth(document,b.id)), ...nodes,...joiningEnds,...joiningExits];
 }
 
 export function pipeSceneControls(object: EditorSceneObject): readonly EditorPoint[] {

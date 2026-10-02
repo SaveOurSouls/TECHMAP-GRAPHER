@@ -25,7 +25,7 @@ import { routePhysicalWires } from "./physical-wire-routing";
 import { physicalWireDisplay, physicalWirePoints } from "./physical-wire-geometry";
 import { ensureConnectorExits, branchPhysicalSegment, connectPhysicalNodeToSegment } from "./physical-topology";
 import { physicalNodePoint } from "./physical-ports";
-import { joiningPipeEndpoint, migrateJoiningPipes } from "./physical-joining-pipes";
+import { joiningPipeEndpoint, joiningPipeExit, migrateJoiningPipes } from "./physical-joining-pipes";
 
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
@@ -1104,6 +1104,8 @@ export function HarnessDesignEditor({
       if(opEndpoint){
         return {document:applyEditorCommand(history.present,{type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:movePreview.point.x+5,y:movePreview.point.y+5}}),error:null};
       }
+      const opExit=joiningPipeExit(topology,movePreview.objectId);
+      if(opExit)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-exit",pipeId:opExit.pipe.id,side:opExit.side,position:{x:movePreview.point.x+5,y:movePreview.point.y+5}}),error:null};
       const node = topology?.nodes.find(n => n.id === movePreview.objectId);
       if (node && topology) {
         const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
@@ -2021,6 +2023,8 @@ export function HarnessDesignEditor({
           if(joiningPipe){run({type:"move-joining-pipe",pipeId:joiningPipe.id,delta:point});return;}
           const opEndpoint=joiningPipeEndpoint(topology,objectId);
           if(opEndpoint){run({type:"update-joining-pipe",pipeId:opEndpoint.pipe.id,[opEndpoint.side==="from"?"start":"end"]:{x:point.x+5,y:point.y+5}});return;}
+          const opExit=joiningPipeExit(topology,objectId);
+          if(opExit){run({type:"update-joining-pipe-exit",pipeId:opExit.pipe.id,side:opExit.side,position:{x:point.x+5,y:point.y+5}});return;}
           const node = topology?.nodes.find(n => n.id === objectId);
           if (topology && node) { const original=physicalNodePoint(history.present,node),display=pipeBundleNodePoint(history.present,node.id,original);
             run({type:"move-physical-node",nodeId:node.id,position:{x:point.x+5+original.x-display.x,y:point.y+5+original.y-display.y},mode}); }

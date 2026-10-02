@@ -19,6 +19,7 @@ import {coveringGrips} from "./covering-renderer";
 import {coveringRoute} from "./physical-coverings";
 import {drawingRouteCommands} from "./drawing-route-path";
 import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,joiningPipeEndpointSnapAnchors,snapBendPoint,snapPhysicalPoint} from "./physical-editing";
+import {unprojectPipeBundleEdit} from "./pipe-bundle-projection";
 
 function fixture():HarnessDesignDocument {
  const d=createEmptyHarnessDesign();
@@ -64,6 +65,40 @@ describe("joining pipe hierarchy",()=>{
   const doc={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}};
   const member=physicalTopologyScene(doc).find(object=>object.id==="p0")!;
   const pipe=member.pipe!,display=[member.points![0]!,...pipe.handles,member.points!.at(-1)!];
+  expect(pipe.joiningTransitionHandles).toHaveLength(0);
+  const authoredIndex=pipe.authoredHandleIndices!.findIndex(value=>value===1);
+  expect(authoredIndex).toBeGreaterThanOrEqual(0);
+  const authoredPoint=pipe.handles[authoredIndex]!;
+ });
+it("keeps explicit member transition points separate from shared exits",()=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
+  expect(joiningPipeTransitionHandles(base,"p0")).toHaveLength(0);
+  const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:0,side:"enter",position:{x:150,y:-40}});
+  expect(joiningPipeTransitionHandles(moved,"p0")).toHaveLength(1);
+  expect(joiningPipeDisplaySamples(moved,"p0")!.some(sample=>Math.hypot(sample.point.x-150,sample.point.y+40)<1e-6)).toBe(true);
+  const changed=applyEditorCommand(moved,{type:"update-joining-pipe-exit",pipeId:"op",side:"from",position:{x:op.start.x-80,y:op.start.y+50}});
+  expect(changed.physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
+  expect(joiningPipeDisplaySamples(changed,"p0")!.some(sample=>Math.hypot(sample.point.x-150,sample.point.y+40)<1e-6)).toBe(true);
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed))).physicalTopology!.joiningPipes![0]!.members[0]!.enterBend).toEqual({x:150,y:-40});
+ });
+ it("moves a member's authored outside bend through the displayed handle",()=>{
+  const d=fixture(),segments=d.physicalTopology!.segments.map(segment=>segment.id==="p0"?{...segment,path:{kind:"polyline" as const,points:[{x:80,y:30},{x:500,y:30}]}}:segment);
+  const source={...d,physicalTopology:{...d.physicalTopology!,segments}},op=createJoiningPipe(source,[["p0"],["p1"]],"op");
+  const doc={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}},before=physicalTopologyScene(doc).find(o=>o.id==="p0")!;
+  const index=before.pipe!.authoredHandleIndices!.findIndex(i=>i===1),visible=before.pipe!.handles[index]!;
+  expect(index).toBeGreaterThanOrEqual(0);
+  const target={x:visible.x+25,y:visible.y-35};
+  const position=unprojectPipeBundleEdit(doc,"p0",{x:80,y:30},target);
+  const preview=applyEditorCommand(doc,{type:"edit-physical-bend",segmentId:"p0",index:0,position,mode:"adjacent"});
+  expect(preview.physicalTopology!.segments[0]!.path.points[0]).toEqual(position);
+  const after=physicalTopologyScene(preview).find(o=>o.id==="p0")!;
+  expect(after.pipe!.handles[after.pipe!.authoredHandleIndices!.findIndex(i=>i===1)]).not.toEqual(visible);
+  expect(preview.physicalTopology!.segments[0]!.path.points).toHaveLength(2);
+ });
+ it("keeps Ctrl anchors on a saved transition",()=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),explicit={...op,members:op.members.map((entry,index)=>index===0?{...entry,enterBend:{x:140,y:-25}}:entry)};
+  const doc={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[explicit]}};
+  const member=physicalTopologyScene(doc).find(object=>object.id==="p0")!,pipe=member.pipe!,display=[member.points![0]!,...pipe.handles,member.points!.at(-1)!];
   const transition=pipe.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
   const transitionPoint=pipe.handles[transition.index]!;
   const transitionAnchors=pipeBendSnapAnchors(pipe,display,transition.index,false,"adjacent",transitionPoint);
@@ -71,16 +106,6 @@ describe("joining pipe hierarchy",()=>{
   expect(transitionAnchors).toHaveLength(2);
   const snapped=snapBendPoint({x:transitionPoint.x+27,y:transitionPoint.y+41},transitionAnchors,true,7,undefined,Math.PI/6).point;
   expect(snapped).not.toEqual({x:transitionPoint.x+27,y:transitionPoint.y+41});
-  const authoredIndex=pipe.authoredHandleIndices!.findIndex(value=>value===2);
-  expect(authoredIndex).toBeGreaterThanOrEqual(0);
-  expect(authoredIndex).not.toBe(1);
-  const authoredPoint=pipe.handles[authoredIndex]!;
-  for(const mode of ["carry","adjacent"] as const){
-   expect(pipeBendSnapAnchors(pipe,display,authoredIndex,false,mode,authoredPoint))
-    .toEqual(bendSnapAnchors(pipe.authoredPoints!,1,false,mode,authoredPoint));
-  }
-  expect(pipeBendSnapAnchors(pipe,display,authoredIndex,false,"carry",authoredPoint))
-   .not.toEqual(pipeBendSnapAnchors(pipe,display,authoredIndex,false,"adjacent",authoredPoint));
   const memberIndex=transition.memberIndex;
   const memberWithOuter={...op,members:op.members.map((entry,index)=>index===memberIndex
    ?{...entry,enterBend:transitionPoint,enterOuter:display[transition.index]!}:entry)};
@@ -181,9 +206,9 @@ it("keeps projected members inside a covering when the OP bends",()=>{
 it("exposes joining transitions as authored member handles",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const transitions=joiningPipeTransitionHandles(base,"p0");
- expect(transitions).toHaveLength(2);
+ expect(transitions).toHaveLength(0);
  const member=physicalTopologyScene(base).find(object=>object.id==="p0")!;
- expect(member.pipe?.joiningTransitionHandles).toHaveLength(2);
+ expect(member.pipe?.joiningTransitionHandles).toHaveLength(0);
  for(const transition of transitions)expect(member.pipe?.handles).toContainEqual(transition.point);
  expect(member.routeRadius).toBeGreaterThan(0);
  expect(drawingRouteCommands(member.points!,member.routeRadius).some(command=>command.kind==="arc")).toBe(true);
@@ -197,22 +222,22 @@ it("exposes joining transitions as authored member handles",()=>{
 it("numbers, deletes, restores and recreates a member transition like a normal bend",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const original=physicalTopologyScene(base).find(object=>object.id==="p1")!;
- const enter=original.pipe!.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
- const transitionPoint=original.pipe!.handles[enter.index]!;
- expect(hitTestWireRoutePoint(original,transitionPoint,1)).toBe(enter.index);
- expect(numberedPipeBendHandles(original)).toContain(enter.index);
- expect(numberedPipeBendHandles(original).indexOf(enter.index)+1).toBe(2);
- expect(numberedPipeBendHandles(original)).toContain(original.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!.index);
- const history=executeEditorCommand(createEditorHistory(base),{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:enter.memberIndex,side:"enter",clear:true});
+ expect(original.pipe!.joiningTransitionHandles).toHaveLength(0);
+ const added=applyEditorCommand(base,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:1,side:"enter",position:{x:130,y:75}});
+ const authored=physicalTopologyScene(added).find(object=>object.id==="p1")!;
+ const enter=authored.pipe!.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
+ const transitionPoint=authored.pipe!.handles[enter.index]!;
+ expect(hitTestWireRoutePoint(authored,transitionPoint,1)).toBe(enter.index);
+ expect(numberedPipeBendHandles(authored)).toContain(enter.index);
+ const history=executeEditorCommand(createEditorHistory(added),{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:enter.memberIndex,side:"enter",clear:true});
  const removed=history.present,member=physicalTopologyScene(removed).find(object=>object.id==="p1")!;
  expect(removed.physicalTopology!.joiningPipes![0]!.members[enter.memberIndex]!.enterBend).toBeNull();
  expect(member.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="enter")).toBe(false);
- expect(member.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="exit")).toBe(true);
- expect(numberedPipeBendHandles(member)).toHaveLength(3);
- expect(joiningPipeDisplaySamples(removed,"p1")!.length).toBeLessThan(joiningPipeDisplaySamples(base,"p1")!.length);
+ expect(member.pipe!.joiningTransitionHandles!.some(handle=>handle.side==="exit")).toBe(false);
+ expect(joiningPipeDisplaySamples(removed,"p1")!.length).toBeLessThan(joiningPipeDisplaySamples(added,"p1")!.length);
  const loaded=parseHarnessDesignDocument(JSON.parse(JSON.stringify(removed)));
  expect(loaded.physicalTopology!.joiningPipes![0]!.members[enter.memberIndex]!.enterBend).toBeNull();
- expect(undoEditorCommand(history).present).toBe(base);
+ expect(undoEditorCommand(history).present).toBe(added);
  const midpoint=member.pipe!.joiningTransitionMidpoints!.find(handle=>handle.side==="enter")!;
  expect(pipeMidpoints(member).some(handle=>handle.index===midpoint.index)).toBe(true);
  const recreated=applyEditorCommand(removed,{type:"update-joining-pipe-member-bend",pipeId:"op",memberIndex:enter.memberIndex,side:"enter",position:{x:150,y:75}});
@@ -224,13 +249,13 @@ it("numbers, deletes, restores and recreates a member transition like a normal b
 it("builds each member transition as connection to bend to connection with usable midpoints",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const controls=joiningPipeMemberControls(base,"p1")!;
- expect(controls).toHaveLength(6);
+ expect(controls).toHaveLength(4);
  expect(controls.filter(control=>control.connection)).toHaveLength(4);
- expect(controls.filter(control=>control.transition)).toHaveLength(2);
- expect(controls.map(control=>control.transition?.side)).toEqual([undefined,"enter",undefined,undefined,"exit",undefined]);
+ expect(controls.filter(control=>control.transition)).toHaveLength(0);
+ expect(controls.map(control=>control.transition?.side)).toEqual([undefined,undefined,undefined,undefined]);
  expect(controls.every((control,index)=>index===0||control.fraction>controls[index-1]!.fraction)).toBe(true);
  const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
- expect(member.pipe?.joiningTransitionMidpoints).toHaveLength(4);
+ expect(member.pipe?.joiningTransitionMidpoints).toHaveLength(2);
  expect(pipeMidpoints(member)).toEqual(expect.arrayContaining(member.pipe!.joiningTransitionMidpoints!.map(handle=>expect.objectContaining({index:handle.index}))));
 });
 
@@ -320,6 +345,6 @@ it("draft creation, cancellation, selection and deletion keep the electrical gra
  expect(hitTestEditorScene(scene,layers,{x:250,y:0},1,"drawing")).toBe(chosen.id);
  const memberMidpoints=pipeMidpoints(scene.find(o=>o.id==="p1")!);
  expect(memberMidpoints.length).toBeGreaterThan(0);
- expect(scene.find(o=>o.id==="p1")!.pipe?.joiningTransitionMidpoints).toHaveLength(4);
+ expect(scene.find(o=>o.id==="p1")!.pipe?.joiningTransitionMidpoints).toHaveLength(2);
  const removed=applyEditorCommand(next,{type:"remove-physical-segment",segmentId:chosen.id});expect(removed.physicalTopology!.joiningPipes).toEqual([]);expect(removed.physicalTopology!.segments).toEqual(t.segments);
 });

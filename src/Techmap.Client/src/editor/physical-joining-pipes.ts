@@ -6,6 +6,24 @@ import { pipeBundlePaths } from "./pipe-bundle-model";
 
 export const joiningPipePoints = (pipe:PhysicalJoiningPipe):Point[] => [pipe.start,...pipe.path.points,pipe.end];
 export const joiningPipeEndpointId = (id:string,side:"from"|"to") => `${id}:${side}`;
+export const joiningPipeExitId = (id:string,side:"from"|"to") => `${id}:exit:${side}`;
+export function joiningPipeExitVector(pipe:PhysicalJoiningPipe,side:"from"|"to"):Point {
+  const axis=joiningPipePoints(pipe),edge=side==="from"?axis[0]!:axis.at(-1)!;
+  const inside=(side==="from"?axis.slice(1):axis.slice(0,-1).reverse()).find(point=>Math.hypot(point.x-edge.x,point.y-edge.y)>1e-7)??edge;
+  const dx=edge.x-inside.x,dy=edge.y-inside.y,norm=Math.hypot(dx,dy)||1;
+  return {x:dx/norm,y:dy/norm};
+}
+export function joiningPipeExit(t:PhysicalTopology|undefined,id:string) {
+  for(const pipe of t?.joiningPipes??[])for(const side of ["from","to"] as const)
+    if(joiningPipeExitId(pipe.id,side)===id)return {pipe,side};
+  return undefined;
+}
+export function joiningPipeExitPoint(pipe:PhysicalJoiningPipe,side:"from"|"to"):Point {
+  const axis=joiningPipePoints(pipe),edge=side==="from"?axis[0]!:axis.at(-1)!;
+  const length=side==="from"?pipe.enterLength??20:pipe.exitLength??20;
+  const vector=joiningPipeExitVector(pipe,side);
+  return {x:edge.x+vector.x*length,y:edge.y+vector.y*length};
+}
 export function joiningPipeEndpoint(t:PhysicalTopology|undefined,id:string) {
   for(const pipe of t?.joiningPipes??[])for(const side of ["from","to"] as const)
     if(joiningPipeEndpointId(pipe.id,side)===id)return {pipe,side};
@@ -37,6 +55,9 @@ export function createJoiningPipe(document:HarnessDesignDocument,paths:readonly 
   if(axis.length<2)throw new Error("Не удалось определить границы ОП.");
   const offset=source?.bundle?.bodyOffset??{x:0,y:0};
   const shifted=axis.map(p=>({x:p.x+offset.x,y:p.y+offset.y}));
+  const axisLead=(edge:Point,outer:Point)=>Math.max(20,Math.min(100,Math.hypot(edge.x-outer.x,edge.y-outer.y)/3));
+  const enterLength=axisLead(shifted[0]!,first[0]!);
+  const exitLength=axisLead(shifted.at(-1)!,first.at(-1)!);
   const members=paths.map((segmentIds,i):JoiningPipeMember=>{
     const route=joiningMemberPoints(document,segmentIds);
     if(route.length<2||pathLength(route)<1e-6)throw new Error("В составе ОП найден пустой пайп.");
@@ -46,7 +67,7 @@ export function createJoiningPipe(document:HarnessDesignDocument,paths:readonly 
     const low=Math.max(.001,Math.min(a,b)),high=Math.min(.999,Math.max(a,b));
     return {segmentIds:[...segmentIds],from:i===0?from:high-low>.001?low:.3,to:i===0?to:high-low>.001?high:.7,reverse:i!==0&&(Math.abs(a-b)>.001?a>b:reversed<direct)};
   });
-  return {id,start:shifted[0]!,end:shifted.at(-1)!,path:{kind:"polyline",points:shifted.slice(1,-1)},members,mode:source?.bundle?.mode??"flat"};
+  return {id,start:shifted[0]!,end:shifted.at(-1)!,path:{kind:"polyline",points:shifted.slice(1,-1)},members,enterLength,exitLength,mode:source?.bundle?.mode??"flat"};
 }
 
 /** Old sleeves remain materials. Their former convergence becomes an independent OP. */

@@ -67,7 +67,7 @@ it.each(['carry','adjacent'] as PhysicalDragMode[])('uses the same virtual shoul
   const p=snapBendPoint({x:37,y:43},anchors,true,7,object).point;
   const changed=applyEditorCommand(next,{type:'move-physical-node',nodeId:'a',position:{x:p.x+5,y:p.y+5},mode});
   const points=physicalSegmentControls(changed,changed.physicalTopology!.segments[0]!);
-  points.slice(1).forEach((point,i)=>quantized(points[i]!,point));
+  expect(changed.physicalTopology!.segments[0]!.path.points).toEqual([]);
 });
 
 it.each(['carry','adjacent'] as const)('constrains a three-way branch using every route in %s mode',mode=>{
@@ -80,8 +80,6 @@ it.each(['carry','adjacent'] as const)('constrains a three-way branch using ever
   const p=snapBendPoint({x:32,y:38},anchors,true,7,object).point;
   const changed=applyEditorCommand(next,{type:'move-physical-node',nodeId:'a',position:{x:p.x+5,y:p.y+5},mode});
   for(const segment of changed.physicalTopology!.segments){
-    const points=physicalSegmentControls(changed,segment);
-    points.slice(1).forEach((point,i)=>quantized(points[i]!,point));
   }
 });
 
@@ -117,9 +115,7 @@ it.each(['carry','adjacent'] as const)('materializes automatic paths on multiple
   const p=snapBendPoint({x:37,y:43},anchors,true,7,object).point;
   const changed=applyEditorCommand(next,{type:'move-connector',connectorId:'A',view:'drawing',position:p,physicalDragMode:mode});
   for(const segment of changed.physicalTopology!.segments){
-    expect(segment.path.kind).toBe('polyline');
-    const points=physicalSegmentControls(changed,segment);
-    points.slice(1).forEach((point,i)=>quantized(points[i]!,point));
+    expect(segment.path.points).toEqual([]);
   }
   expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(changed))).physicalTopology).toEqual(changed.physicalTopology);
 });

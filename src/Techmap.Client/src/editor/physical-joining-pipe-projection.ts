@@ -4,7 +4,7 @@ import { drawingPhysicalScale, drawingPipeWidth } from "./drawing-thickness";
 import { drawingBendRadius, drawingRouteSamples } from "./drawing-route-path";
 import { pathLength } from "./physical-coverings";
 import { physicalSegmentPoints } from "./physical-geometry";
-import { joiningPipePoints, joiningMemberPoints } from "./physical-joining-pipes";
+import { joiningPipePoints, joiningMemberPoints, joiningPipeExitVector } from "./physical-joining-pipes";
 import { packPipeBundle } from "./pipe-bundle-packing";
 
 export interface JoiningPipeSample { readonly fraction:number; readonly point:Point }
@@ -71,6 +71,7 @@ interface Placement {
   readonly low:number; readonly high:number;
   readonly memberIndex:number;
   readonly enterBend:Point|null; readonly exitBend:Point|null;
+  readonly enterLeadPoint:Point; readonly exitLeadPoint:Point;
 }
 const cache=new WeakMap<HarnessDesignDocument,ReadonlyMap<string,Placement>>();
 function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement> {
@@ -90,18 +91,17 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const axisControls=member.reverse?[...axisControlsBase].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):axisControlsBase;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
       const low=member.from/2,high=(1+member.to)/2;
-      const shoulder=(edge:Point,next:Point,outer:Point):Point=>{
-        const dx=next.x-edge.x,dy=next.y-edge.y,len=Math.hypot(dx,dy)||1;
-        const lead=Math.max(20,Math.min(100,Math.hypot(edge.x-outer.x,edge.y-outer.y)/3));
-        return {x:edge.x-dx/len*lead,y:edge.y-dy/len*lead};
-      };
       const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(source,low),outerB=member.exitOuter??at(source,high);
-      const enterBend=member.enterBend===undefined?shoulder(a,oriented[1]!.point,outerA):member.enterBend;
-      const exitBend=member.exitBend===undefined?shoulder(b,oriented.at(-2)!.point,outerB):member.exitBend;
-      const enter=sample(enterBend===null?[outerA,a]:[outerA,enterBend,a]);
-      const exit=sample(exitBend===null?[b,outerB]:[b,exitBend,outerB]);
+      const enterLead=member.reverse?pipe.exitLength:pipe.enterLength;
+      const exitLead=member.reverse?pipe.enterLength:pipe.exitLength;
+      const enterVector=joiningPipeExitVector(pipe,member.reverse?"to":"from"),exitVector=joiningPipeExitVector(pipe,member.reverse?"from":"to");
+      const enterLeadPoint={x:a.x+enterVector.x*(enterLead??20),y:a.y+enterVector.y*(enterLead??20)};
+      const exitLeadPoint={x:b.x+exitVector.x*(exitLead??20),y:b.y+exitVector.y*(exitLead??20)};
+      const enterBend=member.enterBend??null,exitBend=member.exitBend??null;
+      const enter=sample(enterBend===null?[outerA,enterLeadPoint,a]:[outerA,enterBend,enterLeadPoint,a]);
+      const exit=sample(exitBend===null?[b,exitLeadPoint,outerB]:[b,exitLeadPoint,exitBend,outerB]);
       let before=0;
-      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend});before+=lengths[j]!;});
+      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend,enterLeadPoint,exitLeadPoint});before+=lengths[j]!;});
     }
   }
   cache.set(document,result);return result;
@@ -111,7 +111,7 @@ function localFraction(p:Placement,fraction:number) {return (fraction*p.total-p.
 function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberControl[] {
  const m=p.member;
  const enterBendFraction=p.low+(m.from-p.low)*(p.enter[1]?.fraction??.5);
- const exitBendFraction=m.to+(p.high-m.to)*(p.exit[1]?.fraction??.5);
+ const exitBendFraction=m.to+(p.high-m.to)*(p.exit.at(-2)?.fraction??.5);
  const candidates:JoiningPipeMemberControl[]=[
    // The outer station is the first real transition corner on the member
    // route. Keep it visible and numbered; OP axis stations remain controlled
@@ -175,7 +175,7 @@ export function joiningPipeTransitionHandles(document:HarnessDesignDocument,id:s
   const m=p.member;
   const handles: {fraction:number;point:Point;memberIndex:number;side:"enter"|"exit"}[]=[
     ...(p.enterBend===null?[]:[{fraction:localFraction(p,p.low+(m.from-p.low)*p.enter[1]!.fraction),point:p.enterBend,memberIndex:p.memberIndex,side:"enter" as const}]),
-    ...(p.exitBend===null?[]:[{fraction:localFraction(p,m.to+(p.high-m.to)*p.exit[1]!.fraction),point:p.exitBend,memberIndex:p.memberIndex,side:"exit" as const}]),
+    ...(p.exitBend===null?[]:[{fraction:localFraction(p,m.to+(p.high-m.to)*p.exit.at(-2)!.fraction),point:p.exitBend,memberIndex:p.memberIndex,side:"exit" as const}]),
   ];
   return handles.filter(handle=>handle.fraction>0&&handle.fraction<1);
 }

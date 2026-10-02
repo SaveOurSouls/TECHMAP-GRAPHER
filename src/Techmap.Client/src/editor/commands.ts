@@ -9,6 +9,7 @@ import { type PhysicalTopology } from "./physical-topology-model";
 import {editJoiningPipeBend,moveJoiningPipe,removeJoiningPipe,remapJoiningPipeMemberBends} from "./physical-joining-pipe-editing";
 import { carryPhysicalExits, editPhysicalBend, deletePhysicalBend, materializePhysicalPath, type PhysicalDragMode } from "./physical-editing";
 import { physicalNodeLocalPoint } from "./physical-ports";
+import { joiningPipePoints, joiningPipeExitVector } from "./physical-joining-pipes";
 import { refreshAutomaticPhysicalRoutes } from "./physical-wire-routing";
 import {
   connectorBaseColumnKeys,
@@ -69,6 +70,7 @@ export type EditorCommand =
   | { readonly type: "remove-physical-segment"; readonly segmentId: string }
   | { readonly type: "edit-joining-pipe-bend"; readonly pipeId:string; readonly index:number; readonly position:Point; readonly mode:PhysicalDragMode; readonly insert?:boolean; readonly remove?:boolean }
   | { readonly type: "move-joining-pipe"; readonly pipeId:string; readonly delta:Point }
+  | { readonly type: "update-joining-pipe-exit"; readonly pipeId:string; readonly side:"from"|"to"; readonly position:Point }
   | { readonly type: "update-joining-pipe-member-bend"; readonly pipeId:string; readonly memberIndex:number; readonly side:"enter"|"exit"; readonly position?:Point; readonly clear?:boolean; readonly mode?:PhysicalDragMode; readonly origin?:Point; readonly outerOrigin?:Point }
   | { readonly type: "update-joining-pipe-member-boundary"; readonly pipeId:string; readonly memberIndex:number; readonly boundary:"outerEnter"|"axisEnter"|"axisExit"|"outerExit"; readonly origin:Point; readonly position:Point }
   | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly volumeShading?:boolean }
@@ -266,6 +268,16 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
       const t=document.physicalTopology;if(!t)return document;
       return {...document,physicalTopology:parsePhysicalTopology(moveJoiningPipe(t,command.pipeId,command.delta),document)};
+    }
+    case "update-joining-pipe-exit": {
+      if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");
+      const t=document.physicalTopology,pipe=t?.joiningPipes?.find(p=>p.id===command.pipeId);if(!t||!pipe)return document;
+      const axis=joiningPipePoints(pipe),edge=command.side==="from"?axis[0]!:axis.at(-1)!;
+      const vector=joiningPipeExitVector(pipe,command.side);
+      const length=Math.max(0,Math.min(1e7,(command.position.x-edge.x)*vector.x+(command.position.y-edge.y)*vector.y));
+      if(!Number.isFinite(length))throw new Error("Некорректная длина выхода ОП.");
+      const key=command.side==="from"?"enterLength":"exitLength";
+      return {...document,physicalTopology:parsePhysicalTopology({...t,joiningPipes:t.joiningPipes?.map(p=>p.id===pipe.id?{...p,[key]:length}:p)},document)};
     }
     case "update-joining-pipe-member-bend": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой трассы заблокирован.");

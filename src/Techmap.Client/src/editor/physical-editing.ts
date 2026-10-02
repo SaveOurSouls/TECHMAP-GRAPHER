@@ -41,6 +41,8 @@ function directionFor(a:Point,p:Point,directions:readonly Point[],angleStep:numb
 
 /** Automatic corners become author-owned only when an edit is committed. */
 export function physicalEditablePoints(document:HarnessDesignDocument,segment:PhysicalSegment):readonly Point[] {
+  if(document.physicalTopology?.joiningPipes?.some(pipe=>pipe.members.some(member=>member.segmentIds.includes(segment.id))))
+    return physicalSegmentControls(document,segment);
   return segment.path.kind==="routed"&&!segment.path.points.length&&document.physicalTopology?.snap
     ? physicalSegmentPoints(document,segment) : physicalSegmentControls(document,segment);
 }
@@ -329,6 +331,10 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
   let result=after;
   for(const segment of before.physicalTopology.segments){
     if(!nodeIds.has(segment.from)&&!nodeIds.has(segment.to))continue;
+    // Empty routed paths are generated from node geometry. Keep them empty
+    // while dragging so a preview/commit cycle never materializes synthetic
+    // shoulders as authored vertices.
+    if(segment.path.points.length===0)continue;
     const original=carriedExitPoints(physicalEditablePoints(before,segment),mode);
     const points=[...original],map=anchorMap(before,segment,original),shifts=new Map<number,Point[]>();
     for(const side of ["from","to"] as const){

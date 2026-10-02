@@ -64,12 +64,11 @@ it("moves a pipe's shared shoulder once for two translated exits",()=>{
  const after={...d,physicalTopology:{...d.physicalTopology,nodes:d.physicalTopology.nodes.map(n=>({...n,position:{x:n.position.x+20,y:n.position.y+30}}))}};
  expect(carryPhysicalExits(d,after,new Set(["a","b"]),"carry").physicalTopology!.segments[0]!.path.points).toEqual([{x:170,y:180}]);
 });
-it("carries the exit of an initially straight pipe and keeps its original direction",()=>{
+it("does not turn a straight pipe's generated shoulders into authored bends",()=>{
  const d=fixture(),straight={...d,physicalTopology:{...d.physicalTopology,segments:[{...d.physicalTopology.segments[0]!,path:{kind:"polyline" as const,points:[]}}]}};
  const changed=applyEditorCommand(straight,{type:"move-physical-node",nodeId:"a",position:{x:20,y:30},mode:"carry"});
  const points=changed.physicalTopology!.segments[0]!.path.points;
- expect(points).toHaveLength(2);expect((points[0]!.x-20)/(points[0]!.y-30)).toBeCloseTo(3);
- expect(points[1]).toEqual({x:200,y:200/3});
+ expect(points).toEqual([]);
 });
 it("aligns connectors using their exits rather than the picture origin",()=>{
  const objects=[{id:"A",kind:"connector",x:0,y:0},{id:"exitA",kind:"physical-node",x:145,y:95,port:{connectorId:"A"}},{id:"exitB",kind:"physical-node",x:345,y:195}];
