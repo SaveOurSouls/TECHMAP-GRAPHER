@@ -83,7 +83,10 @@ export function splitPhysicalSegment(document: HarnessDesignDocument, segmentId:
   if (bendIndex < 1 || bendIndex >= points.length - 1) throw new Error("Выберите существующий перегиб участка.");
   const at = points[bendIndex]!, next = points[bendIndex + 1]!, vector = { x: next.x - at.x, y: next.y - at.y };
   const direction: PhysicalDirection = Math.abs(vector.x) >= Math.abs(vector.y) ? (vector.x >= 0 ? "right" : "left") : (vector.y >= 0 ? "down" : "up");
-  return { ...t, joiningPipes:t.joiningPipes?.map(p=>({...p,members:p.members.map(m=>({...m,segmentIds:m.segmentIds.flatMap(id=>id===segmentId?[id,nextId]:[id])}))})), coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: at, direction }],
+  const visibleAt=t.joiningPipes?.flatMap(pipe=>pipe.members).flatMap(member=>member.authoredBendRegions??[])
+    .find(entry=>entry.segmentId===segmentId&&entry.bendIndex===bendIndex-1)?.displayPoint??at;
+  return { ...t, joiningPipes:t.joiningPipes?.map(p=>({...p,members:p.members.map(m=>({...m,segmentIds:m.segmentIds.flatMap(id=>id===segmentId?[id,nextId]:[id]),
+    authoredBendRegions:m.authoredBendRegions?.flatMap(entry=>entry.segmentId!==segmentId?[entry]:entry.bendIndex<bendIndex-1?[entry]:entry.bendIndex===bendIndex-1?[]:[{...entry,segmentId:nextId,bendIndex:entry.bendIndex-bendIndex}])}))})), coverings: splitCoveringSpans(t.coverings, segmentId, nextId, pathLength(points.slice(0, bendIndex + 1)) / pathLength(points)), nodes: [...t.nodes, { id: nodeId, position: visibleAt, direction }],
       segments: [...t.segments.map(item => item.id === s.id ? { ...s, to: nodeId, path: { kind: "polyline" as const, points: points.slice(1, bendIndex) },  } : item),
       { ...s, id: nextId, from: nodeId, to: s.to, path: { kind: "polyline" as const, points: points.slice(bendIndex + 1, -1) },  }],
     routes: t.routes.map(r => ({ ...r, steps: r.steps.flatMap(step => step.segmentId !== s.id ? [step] : step.reverse

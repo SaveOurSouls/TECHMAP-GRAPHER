@@ -23,14 +23,19 @@ export interface PhysicalPipeSceneData {
   readonly fromNodeId?: string;
   readonly toNodeId?: string;
   readonly midpoints?: readonly EditorPoint[];
+  /** Gesture-start source station for each displayed midpoint. */
+  readonly midpointSources?: readonly {readonly index:number;readonly point:EditorPoint}[];
+  readonly midpointRegions?: readonly ("before-enter"|"enter"|"axis"|"exit"|"after-exit"|undefined)[];
   readonly controls: readonly EditorPoint[];
   readonly handles: readonly EditorPoint[];
   readonly wireIds: readonly string[];
   readonly role?: "pipe" | "joining-pipe";
+  readonly joiningMember?: boolean;
   readonly memberSegmentIds?: readonly string[];
   readonly controlledHandles?: readonly number[];
   readonly controlledMidpoints?: readonly number[];
   readonly authoredHandleIndices?: readonly number[];
+  readonly authoredHandleRegions?: readonly ("before-enter"|"enter"|"axis"|"exit"|"after-exit"|undefined)[];
   readonly joiningTransitionHandles?: readonly {readonly index:number;readonly memberIndex:number;readonly side:"enter"|"exit"}[];
   readonly joiningBoundaryHandles?: readonly {readonly index:number;readonly memberIndex:number;readonly boundary:"outerEnter"|"axisEnter"|"axisExit"|"outerExit"}[];
   readonly joiningTransitionMidpoints?: readonly {readonly index:number;readonly memberIndex:number;readonly side:"enter"|"exit"}[];

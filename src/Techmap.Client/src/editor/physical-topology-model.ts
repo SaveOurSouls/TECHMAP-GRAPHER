@@ -13,6 +13,7 @@ export interface PhysicalSegment { readonly id: string; readonly from: string; r
 /** A first-class common pipe (ОП). It owns its axis; member segments are
  * projected onto it for presentation while their electrical routes remain
  * unchanged. */
+export type JoiningPipeBendRegion = "before-enter"|"enter"|"axis"|"exit"|"after-exit";
 export interface JoiningPipeMember {
   /** Consecutive fragments of one pipe after an explicit split. */
   readonly segmentIds: readonly string[];
@@ -22,6 +23,8 @@ export interface JoiningPipeMember {
   readonly exitBend?: Point | null;
   readonly enterOuter?: Point;
   readonly exitOuter?: Point;
+  /** Stable ownership of authored route bends across OP projection edits. */
+  readonly authoredBendRegions?: readonly {readonly segmentId:string;readonly bendIndex:number;readonly region:JoiningPipeBendRegion;readonly displayPoint?:Point}[];
 }
 export interface PhysicalJoiningPipe {
   readonly id: string;

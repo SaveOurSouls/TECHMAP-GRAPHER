@@ -16,6 +16,7 @@ export interface JoiningPipeMemberControl {
  readonly connection?:boolean;
  readonly boundary?:"outerEnter"|"axisEnter"|"axisExit"|"outerExit";
  readonly memberIndex?:number;
+ readonly lead?:"enter"|"exit";
 }
 const mix=(a:Point,b:Point,t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
 function at(samples:readonly JoiningPipeSample[],fraction:number):Point {
@@ -68,6 +69,7 @@ interface Placement {
   readonly exit:readonly JoiningPipeSample[];
   readonly member:JoiningPipeMember;
   readonly before:number; readonly length:number; readonly total:number;
+  readonly sourceBefore:number; readonly sourceLength:number;
   readonly low:number; readonly high:number;
   readonly memberIndex:number;
   readonly enterBend:Point|null; readonly exitBend:Point|null;
@@ -101,13 +103,27 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const enter=sample(enterBend===null?[outerA,enterLeadPoint,a]:[outerA,enterBend,enterLeadPoint,a]);
       const exit=sample(exitBend===null?[b,exitLeadPoint,outerB]:[b,exitLeadPoint,exitBend,outerB]);
       let before=0;
-      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend,enterLeadPoint,exitLeadPoint});before+=lengths[j]!;});
+      member.segmentIds.forEach((id,j)=>{result.set(id,{source,axis:oriented,axisControls,enter,exit,member,before,length:lengths[j]!,sourceBefore:before,sourceLength:lengths[j]!,total,low,high,memberIndex:i,enterBend,exitBend,enterLeadPoint,exitLeadPoint});before+=lengths[j]!;});
+      if(member.authoredBendRegions?.some(entry=>entry.displayPoint)&&member.segmentIds.length>1){
+        const anchor=result.get(member.segmentIds[0]!)!;
+        const stations=orderedAuthoredStations(anchor);
+        const boundaries=[0,...member.segmentIds.slice(0,-1).map((id,j)=>{
+          const raw=(result.get(id)!.sourceBefore+result.get(id)!.sourceLength)/(total||1);
+          const left=Math.max(0,...stations.filter(s=>member.segmentIds.indexOf(s.segmentId)<=j).map(s=>s.chain));
+          const right=Math.min(1,...stations.filter(s=>member.segmentIds.indexOf(s.segmentId)>j).map(s=>s.chain));
+          return Math.max(left+1e-6,Math.min(right-1e-6,raw));
+        }),1];
+        if(boundaries.every((value,j)=>j===0||value>boundaries[j-1]!))member.segmentIds.forEach((id,j)=>{
+          result.set(id,{...result.get(id)!,before:boundaries[j]!*total,length:(boundaries[j+1]!-boundaries[j]!)*total});
+        });
+      }
     }
   }
   cache.set(document,result);return result;
 }
 function chainFraction(p:Placement,fraction:number) {return (p.before+fraction*p.length)/(p.total||1);}
 function localFraction(p:Placement,fraction:number) {return (fraction*p.total-p.before)/(p.length||1);}
+function sourceChainFraction(p:Placement,fraction:number) {return (p.sourceBefore+fraction*p.sourceLength)/(p.total||1);}
 function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberControl[] {
  const m=p.member;
  const enterBendFraction=p.low+(m.from-p.low)*(p.enter[1]?.fraction??.5);
@@ -118,9 +134,11 @@ function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberCont
    // by the common pipe itself.
    {fraction:p.low,point:p.enter[0]!.point,controlled:false,connection:true,boundary:"outerEnter",memberIndex:p.memberIndex},
    ...(p.enterBend===null?[]:[{fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}}]),
+   {fraction:p.low+(m.from-p.low)*p.enter.at(-2)!.fraction,point:p.enterLeadPoint,controlled:true,lead:"enter",memberIndex:p.memberIndex},
    {fraction:m.from,point:p.axisControls[0]!.point,controlled:true,connection:true,boundary:"axisEnter",memberIndex:p.memberIndex},
    ...p.axisControls.slice(1,-1).map(sample=>({fraction:m.from+sample.fraction*(m.to-m.from),point:sample.point,controlled:true})),
    {fraction:m.to,point:p.axisControls.at(-1)!.point,controlled:true,connection:true,boundary:"axisExit",memberIndex:p.memberIndex},
+   {fraction:m.to+(p.high-m.to)*p.exit[1]!.fraction,point:p.exitLeadPoint,controlled:true,lead:"exit",memberIndex:p.memberIndex},
    ...(p.exitBend===null?[]:[{fraction:exitBendFraction,point:p.exitBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"exit" as const}}]),
    {fraction:p.high,point:p.exit.at(-1)!.point,controlled:false,connection:true,boundary:"outerExit",memberIndex:p.memberIndex},
  ];
@@ -150,7 +168,12 @@ export function joiningPipeControlsMemberStation(document:HarnessDesignDocument,
   const p=placements(document).get(id);if(!p)return false;
   const t=chainFraction(p,fraction);return t>=p.member.from&&t<=p.member.to;
 }
-export function projectJoiningPipePoint(document:HarnessDesignDocument,id:string,fraction:number,point:Point):Point {
+export function joiningPipeMidpointRegion(document:HarnessDesignDocument,id:string,fraction:number):"before-enter"|"enter"|"axis"|"exit"|"after-exit"|undefined {
+  const p=placements(document).get(id);if(!p)return undefined;
+  const t=chainFraction(p,fraction),enterLead=p.low+p.enter.at(-2)!.fraction*(p.member.from-p.low),exitLead=p.member.to+p.exit[1]!.fraction*(p.high-p.member.to);
+  return t<p.low?"before-enter":t<enterLead?"enter":t<=exitLead?"axis":t<=p.high?"exit":"after-exit";
+}
+function rawProjectJoiningPipePoint(document:HarnessDesignDocument,id:string,fraction:number,point:Point):Point {
   const p=placements(document).get(id);if(!p)return point;
   const t=chainFraction(p,fraction),m=p.member;
   let projected:Point;
@@ -162,10 +185,75 @@ export function projectJoiningPipePoint(document:HarnessDesignDocument,id:string
   const original=at(p.source,t);
   return {x:point.x+projected.x-original.x,y:point.y+projected.y-original.y};
 }
+function orderedAuthoredStations(p:Placement){
+  const member=p.member,leadEnter=p.low+p.enter.at(-2)!.fraction*(member.from-p.low),leadExit=member.to+p.exit[1]!.fraction*(p.high-member.to);
+  const bands={"before-enter":[0,p.low],enter:[p.low,leadEnter],axis:[member.from,member.to],exit:[leadExit,p.high],"after-exit":[p.high,1]} as const;
+  const entries=(member.authoredBendRegions?.filter(entry=>entry.displayPoint&&entry.region!=="axis")??[])
+    .sort((a,b)=>member.segmentIds.indexOf(a.segmentId)-member.segmentIds.indexOf(b.segmentId)||a.bendIndex-b.bendIndex);
+  return entries.map(entry=>{
+    const [start,end]=bands[entry.region],same=entries.filter(item=>item.region===entry.region);
+    const ordinal=same.findIndex(item=>item.segmentId===entry.segmentId&&item.bendIndex===entry.bendIndex),chain=start+(end-start)*(ordinal+1)/(same.length+1);
+    return {chain,point:entry.displayPoint!,segmentId:entry.segmentId,bendIndex:entry.bendIndex};
+  });
+}
+function authoredDisplayStations(document:HarnessDesignDocument,id:string){
+  const p=placements(document).get(id);
+  if(!p)return [];
+  return orderedAuthoredStations(p).filter(station=>station.segmentId===id)
+    .map(station=>({...station,fraction:localFraction(p,station.chain)}))
+    .filter(station=>station.fraction>0&&station.fraction<1);
+}
+export function joiningPipeAuthoredHandle(document:HarnessDesignDocument,id:string,bendIndex:number):{point:Point;fraction:number;controlled:boolean}|undefined {
+  const p=placements(document).get(id),entry=p?.member.authoredBendRegions?.find(item=>item.segmentId===id&&item.bendIndex===bendIndex);
+  if(!p||!entry?.displayPoint)return undefined;
+  const station=authoredDisplayStations(document,id).find(item=>item.bendIndex===bendIndex);
+  if(!station)return undefined;
+  return {point:entry.displayPoint,fraction:station.fraction,controlled:entry.region==="axis"};
+}
+const persistedControlsCache=new WeakMap<HarnessDesignDocument,Map<string,readonly JoiningPipeSample[]>>();
+function persistedDisplayControls(document:HarnessDesignDocument,id:string):readonly JoiningPipeSample[]|undefined {
+  const p=placements(document).get(id);
+  if(!p||p.member.authoredBendRegions===undefined)return undefined;
+  let map=persistedControlsCache.get(document);if(!map){map=new Map();persistedControlsCache.set(document,map);}
+  const known=map.get(id);if(known)return known;
+  const generated=joiningPipeMemberControls(document,id)??[];
+  const stations=authoredDisplayStations(document,id);
+  const sourceStart=at(p.source,chainFraction(p,0)),sourceEnd=at(p.source,chainFraction(p,1));
+  const fragment=p.member.segmentIds.indexOf(id);
+  const segment=document.physicalTopology!.segments.find(item=>item.id===id)!;
+  const startNode=fragment>0?document.physicalTopology!.nodes.find(node=>node.id===segment.from):undefined;
+  const endNode=fragment<p.member.segmentIds.length-1?document.physicalTopology!.nodes.find(node=>node.id===segment.to):undefined;
+  const axisSamples=p.axis.map(sample=>({fraction:localFraction(p,p.member.from+sample.fraction*(p.member.to-p.member.from)),point:sample.point}))
+    .filter(sample=>sample.fraction>0&&sample.fraction<1);
+  const controls=[{fraction:0,point:startNode?.position??rawProjectJoiningPipePoint(document,id,0,sourceStart)},
+    ...generated.map(control=>({fraction:control.fraction,point:control.point})),
+    ...axisSamples,
+    ...stations.map(station=>({fraction:station.fraction,point:station.point})),
+    {fraction:1,point:endNode?.position??rawProjectJoiningPipePoint(document,id,1,sourceEnd)}]
+    .sort((a,b)=>a.fraction-b.fraction)
+    .reduce<JoiningPipeSample[]>((result,control)=>{
+      const last=result.at(-1);
+      if(last&&Math.abs(last.fraction-control.fraction)<1e-7){
+        if(stations.some(station=>station.fraction===control.fraction&&station.point===control.point))result[result.length-1]=control;
+      }else result.push(control);
+      return result;
+    },[]);
+  map.set(id,controls);return controls;
+}
+export function projectJoiningPipePoint(document:HarnessDesignDocument,id:string,fraction:number,point:Point):Point {
+  const persistent=persistedDisplayControls(document,id),placement=placements(document).get(id);
+  if(persistent&&placement){
+    const shown=at(persistent,fraction),source=at(placement.source,sourceChainFraction(placement,fraction));
+    return {x:point.x+shown.x-source.x,y:point.y+shown.y-source.y};
+  }
+  return rawProjectJoiningPipePoint(document,id,fraction,point);
+}
 export function joiningPipeProjectionStops(document:HarnessDesignDocument,id:string):number[] {
   const p=placements(document).get(id);if(!p)return [];
+  const persistent=persistedDisplayControls(document,id);
+  if(persistent)return persistent.map(control=>control.fraction);
   const m=p.member;
-  return [...p.source.map(s=>s.fraction),...p.enter.map(s=>p.low+s.fraction*(m.from-p.low)),
+  return [...p.source.map(s=>s.fraction),...authoredDisplayStations(document,id).map(s=>chainFraction(p,s.fraction)),...p.enter.map(s=>p.low+s.fraction*(m.from-p.low)),
     ...p.axis.map(s=>m.from+s.fraction*(m.to-m.from)),
     ...p.exit.map(s=>m.to+s.fraction*(p.high-m.to))]
     .map(t=>localFraction(p,t)).filter(t=>t>=0&&t<=1);
@@ -185,6 +273,6 @@ export function joiningPipeDisplaySamples(document:HarnessDesignDocument,id:stri
   let map=displayCache.get(document);if(!map){map=new Map();displayCache.set(document,map);}
   const known=map.get(id);if(known)return known;
   const fractions=[...new Set([0,1,...joiningPipeProjectionStops(document,id)])].sort((a,b)=>a-b);
-  const result=fractions.map(fraction=>({fraction,point:projectJoiningPipePoint(document,id,fraction,at(p.source,chainFraction(p,fraction)))}));
+  const result=fractions.map(fraction=>({fraction,point:projectJoiningPipePoint(document,id,fraction,at(p.source,sourceChainFraction(p,fraction)))}));
   map.set(id,result);return result;
 }

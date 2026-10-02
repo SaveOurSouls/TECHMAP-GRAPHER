@@ -227,6 +227,7 @@ interface WireRoutePointerDrag {
   readonly point: EditorPoint;
   readonly mode?:PhysicalDragMode;
   readonly insert?:boolean;
+  readonly opMember?:boolean;
   readonly anchors?:readonly EditorPoint[];
   readonly snapState?:BendSnapState;
 }
@@ -992,7 +993,9 @@ export function numberedPipeBendHandles(object:EditorSceneObject):readonly numbe
 
 export function pipeMidpoints(object:EditorSceneObject):readonly {index:number;point:EditorPoint}[] {
   if(object.kind!=="physical-segment")return [];
-  if(object.pipe?.midpoints)return object.pipe.midpoints.flatMap((point,index)=>object.pipe?.controlledMidpoints?.includes(index)?[]:[{point,index}]);
+  if(object.pipe?.midpoints)return object.pipe.midpoints.flatMap((point,index)=>
+    object.pipe?.controlledMidpoints?.includes(index)||!object.pipe?.joiningTransitionMidpoints?.some(item=>item.index===index)&&pipeSceneHandles(object).some((handle,handleIndex)=>
+      !object.pipe?.controlledHandles?.includes(handleIndex)&&Math.hypot(point.x-handle.x,point.y-handle.y)<=10)?[]:[{point,index}]);
   const points=[object.points![0]!,...pipeSceneHandles(object),object.points!.at(-1)!];
   return points.slice(1).map((p,i)=>({index:i,point:{x:(p.x+points[i]!.x)/2,y:(p.y+points[i]!.y)/2}}));
 }
@@ -3255,7 +3258,8 @@ export function CanvasViewport({
           const point=middle?.point??points[index+1]!;
           onObjectSelect(pipe.id,false);event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current={kind:"wire-route",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,wireId:pipe.id,routeIndex:index,point,
-            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,anchors:pipe.pipe?pipeBendSnapAnchors(pipe.pipe,points,index,!!middle,event.shiftKey?"adjacent":"carry",point):bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry",point),snapState:{}};
+            mode:event.shiftKey?"adjacent":"carry",insert:!!middle,opMember:!!pipe.pipe?.joiningMember,
+            anchors:pipe.pipe?pipeBendSnapAnchors(pipe.pipe,points,index,!!middle,event.shiftKey?"adjacent":"carry",point):bendSnapAnchors(points,index,!!middle,event.shiftKey?"adjacent":"carry",point),snapState:{}};
           return;
         }
         const cableSheath = hitTestCableSheath(cableSheathScene.geometries, worldPoint, camera.zoom);
@@ -3372,7 +3376,7 @@ export function CanvasViewport({
     } else if (drag.kind === "wire-route") {
       if(!inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY))return;
       const angularSnap = view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey;
-      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],angularSnap,7/camera.zoom,undefined,Math.PI/6,drag.snapState);
+      const result=snapBendPoint({x:drag.point.x+(event.clientX-drag.clientX)/camera.zoom,y:drag.point.y+(event.clientY-drag.clientY)/camera.zoom},drag.anchors??[],angularSnap,7/camera.zoom,undefined,Math.PI/6,drag.snapState,drag.opMember?"nearest-compatible":"all");
       setPhysicalGuide(result.guide);
       onWireRoutePointPreview?.(drag.wireId,drag.routeIndex,result.point,drag.mode,drag.insert);
     } else if (drag.kind === "e4-wire-label") {
@@ -3442,7 +3446,7 @@ export function CanvasViewport({
         const rawPoint = moved ? snapBendPoint({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
-        }, drag.anchors ?? [], view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey, 7 / camera.zoom, undefined, Math.PI / 6, drag.snapState).point : drag.point;
+        }, drag.anchors ?? [], view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey, 7 / camera.zoom, undefined, Math.PI / 6, drag.snapState,drag.opMember?"nearest-compatible":"all").point : drag.point;
         onWireRoutePointMove?.(drag.wireId, drag.routeIndex, view === "e4" && e4RoutingMode === "orthogonal" ? orthogonalE4Bend(rawPoint, drag.point, objects.find(item => item.id === drag.wireId)?.points ?? []) : rawPoint, drag.mode, drag.insert);
       }
       setPhysicalGuide(undefined);

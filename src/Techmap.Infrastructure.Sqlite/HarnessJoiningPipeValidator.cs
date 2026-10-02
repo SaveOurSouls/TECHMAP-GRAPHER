@@ -15,6 +15,8 @@ internal static class HarnessJoiningPipeValidator
         if(!topology.TryGetProperty("joiningPipes",out var pipes))return result;
         if(pipes.ValueKind!=JsonValueKind.Array||pipes.GetArrayLength()>10000)throw Invalid();
         var owned=new HashSet<string>(StringComparer.Ordinal);
+        var pointCounts=topology.GetProperty("segments").EnumerateArray().ToDictionary(
+            segment=>Text(segment,"id"),segment=>HarnessPhysicalTopologyValidator.AuthoredPoints(segment).GetArrayLength(),StringComparer.Ordinal);
         foreach(var pipe in pipes.EnumerateArray())
         {
             var id=Text(pipe,"id");
@@ -50,6 +52,24 @@ internal static class HarnessJoiningPipeValidator
                     if(previous is null)visited.Add(segment.From);
                     if(!visited.Add(segment.To))throw Invalid();
                     previous=segment.To;
+                }
+                if(member.TryGetProperty("authoredBendRegions",out var regions))
+                {
+                    if(regions.ValueKind!=JsonValueKind.Array)throw Invalid();
+                    var memberSegments=leaves.EnumerateArray().Select(leaf=>leaf.GetString()!).ToHashSet(StringComparer.Ordinal);
+                    if(regions.GetArrayLength()>memberSegments.Sum(segmentId=>pointCounts[segmentId]))throw Invalid();
+                    var seenBends=new HashSet<(string SegmentId,int BendIndex)>();
+                    foreach(var region in regions.EnumerateArray())
+                    {
+                        var segmentId=Text(region,"segmentId");
+                        if(!memberSegments.Contains(segmentId))throw Invalid();
+                        if(!region.TryGetProperty("bendIndex",out var indexValue)||indexValue.ValueKind!=JsonValueKind.Number||
+                           !indexValue.TryGetInt32(out var bendIndex)||bendIndex<0||
+                           bendIndex>=pointCounts[segmentId]||
+                           !seenBends.Add((segmentId,bendIndex)))throw Invalid();
+                        if(Text(region,"region") is not ("before-enter" or "enter" or "axis" or "exit" or "after-exit"))throw Invalid();
+                        if(region.TryGetProperty("displayPoint",out var displayPoint))Point(displayPoint);
+                    }
                 }
             }
             result.Add(id,pipe);

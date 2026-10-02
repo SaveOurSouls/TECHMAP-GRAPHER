@@ -16,6 +16,42 @@ public sealed class HarnessJoiningPipeTests
     """)!.AsObject();
     private static void Validate(JsonObject value){using var json=JsonDocument.Parse(value.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);}
     [Fact] public void Accepts_independent_axis_and_coating(){Validate(Fixture());}
+    [Fact] public void Accepts_authored_bend_regions_on_owned_fragments()
+    {
+        var root=Fixture();var topology=root["physicalTopology"]!;
+        topology["segments"]![0]!["path"]!["points"]=JsonNode.Parse("[{\"x\":120,\"y\":15},{\"x\":430,\"y\":25}]");
+        topology["segments"]![1]!["path"]!["points"]=JsonNode.Parse("[{\"x\":160,\"y\":50}]");
+        topology["joiningPipes"]![0]!["members"]![0]!["authoredBendRegions"]=JsonNode.Parse("""
+          [{"segmentId":"p0","bendIndex":0,"region":"before-enter","displayPoint":{"x":120,"y":20}},
+           {"segmentId":"p0","bendIndex":1,"region":"after-exit","displayPoint":{"x":430,"y":30}}]
+          """);
+        topology["joiningPipes"]![0]!["members"]![1]!["authoredBendRegions"]=JsonNode.Parse("""
+          [{"segmentId":"p1","bendIndex":0,"region":"axis"}]
+          """);
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("{}")]
+    [InlineData("[{\"segmentId\":\"p1\",\"bendIndex\":0,\"region\":\"enter\"}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":-1,\"region\":\"enter\"}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0.5,\"region\":\"enter\"}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":1,\"region\":\"enter\"}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"other\"}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"enter\",\"displayPoint\":null}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"enter\",\"displayPoint\":{}}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"enter\",\"displayPoint\":{\"x\":10000001,\"y\":0}}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":null}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":{}}]")]
+    [InlineData("[null]")][InlineData("[{}]")]
+    [InlineData("[{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"enter\"},{\"segmentId\":\"p0\",\"bendIndex\":0,\"region\":\"exit\"}]")]
+    public void Rejects_invalid_authored_bend_regions(string value)
+    {
+        var root=Fixture();var topology=root["physicalTopology"]!;
+        topology["segments"]![0]!["path"]!["points"]=JsonNode.Parse("[{\"x\":120,\"y\":15}]");
+        topology["segments"]![1]!["path"]!["points"]=JsonNode.Parse("[{\"x\":160,\"y\":50}]");
+        topology["joiningPipes"]![0]!["members"]![0]!["authoredBendRegions"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Fact] public void Accepts_removed_transition_bends_and_authored_outer_stations()
     {
         var root=Fixture();var member=root["physicalTopology"]!["joiningPipes"]![0]!["members"]![0]!;

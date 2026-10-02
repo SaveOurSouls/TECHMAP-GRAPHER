@@ -17,7 +17,7 @@ import {hitTestEditorScene,hitTestWireRoutePoint,numberedPipeBendHandles,pipeMid
 import {coveringHit} from "./covering-renderer";
 import {coveringGrips} from "./covering-renderer";
 import {coveringRoute} from "./physical-coverings";
-import {drawingRouteCommands} from "./drawing-route-path";
+import {drawingRouteCommands,drawingRouteHitPoints} from "./drawing-route-path";
 import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,joiningPipeEndpointSnapAnchors,snapBendPoint,snapPhysicalPoint} from "./physical-editing";
 import {unprojectPipeBundleEdit} from "./pipe-bundle-projection";
 
@@ -203,6 +203,24 @@ it("keeps projected members inside a covering when the OP bends",()=>{
  expect(path.filter(sample=>sample.fraction>=.3&&sample.fraction<=.7).every(sample=>coveringHit(shell,sample.point,1e-6)!==null)).toBe(true);
 });
 
+it("retains the rounded OP axis after an exterior member bend is saved",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+ const bent={...op,path:{kind:"polyline" as const,points:[{x:300,y:120}]}};
+ const base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[bent]}};
+ const before=physicalTopologyScene(base).find(object=>object.id==="p1")!;
+ const member=bent.members[1]!;
+ const saved={...base,physicalTopology:{...base.physicalTopology,joiningPipes:[{...bent,members:bent.members.map((entry,index)=>
+   index===1?{...entry,authoredBendRegions:[{segmentId:"p1",bendIndex:0,region:"before-enter" as const,
+     displayPoint:{x:90,y:100}}]}:entry)}]}};
+ const after=physicalTopologyScene(saved).find(object=>object.id==="p1")!;
+ const centre=bent.path.points[0]!;
+ const axisBefore=drawingRouteHitPoints(before.points!,before.routeRadius).filter(point=>Math.hypot(point.x-centre.x,point.y-centre.y)<55);
+ const axisAfter=drawingRouteHitPoints(after.points!,after.routeRadius);
+ expect(member.from).toBeLessThan(member.to);
+ expect(axisBefore.length).toBeGreaterThan(0);
+ for(const point of axisBefore)expect(Math.min(...axisAfter.map(other=>Math.hypot(point.x-other.x,point.y-other.y)))).toBeLessThan(5);
+});
+
 it("exposes joining transitions as authored member handles",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const transitions=joiningPipeTransitionHandles(base,"p0");
@@ -249,10 +267,11 @@ it("numbers, deletes, restores and recreates a member transition like a normal b
 it("builds each member transition as connection to bend to connection with usable midpoints",()=>{
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const controls=joiningPipeMemberControls(base,"p1")!;
- expect(controls).toHaveLength(4);
+ expect(controls).toHaveLength(6);
  expect(controls.filter(control=>control.connection)).toHaveLength(4);
+ expect(controls.filter(control=>control.lead)).toHaveLength(2);
  expect(controls.filter(control=>control.transition)).toHaveLength(0);
- expect(controls.map(control=>control.transition?.side)).toEqual([undefined,undefined,undefined,undefined]);
+ expect(controls.map(control=>control.transition?.side)).toEqual(Array(6).fill(undefined));
  expect(controls.every((control,index)=>index===0||control.fraction>controls[index-1]!.fraction)).toBe(true);
  const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
  expect(member.pipe?.joiningTransitionMidpoints).toHaveLength(2);

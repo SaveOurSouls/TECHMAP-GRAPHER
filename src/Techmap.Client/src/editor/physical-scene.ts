@@ -5,11 +5,24 @@ import { physicalNodePoint, physicalNodeFacingDirection } from "./physical-ports
 import { drawingPipeWidth } from "./drawing-thickness";
 import { defaultLayerIds } from "./model";
 import { physicalEditablePoints } from "./physical-editing";
-import { drawingBendRadius } from "./drawing-route-path";
+import { drawingBendRadius, drawingRouteSamples, projectOntoDrawingRoute } from "./drawing-route-path";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
 import { joiningPipePoints, joiningPipeEndpointId, joiningPipeExitId, joiningPipeExitPoint } from "./physical-joining-pipes";
-import { joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeWidth,joiningPipeControlsMemberStation } from "./physical-joining-pipe-projection";
+import { joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeWidth,joiningPipeControlsMemberStation,joiningPipeAuthoredHandle,joiningPipeMidpointRegion } from "./physical-joining-pipe-projection";
 import {projectOntoPolyline} from "./physical-coverings";
+import type { JoiningPipeBendRegion } from "./physical-topology-model";
+
+function pointAtRouteFraction(points:readonly EditorPoint[],fraction:number):EditorPoint {
+  const lengths=points.slice(1).map((point,index)=>Math.hypot(point.x-points[index]!.x,point.y-points[index]!.y));
+  let remaining=fraction*lengths.reduce((sum,length)=>sum+length,0);
+  for(let index=0;index<lengths.length;index++){
+    const length=lengths[index]!;
+    if(remaining<=length||index===lengths.length-1){const t=length?Math.max(0,Math.min(1,remaining/length)):0;
+      return {x:points[index]!.x+(points[index+1]!.x-points[index]!.x)*t,y:points[index]!.y+(points[index+1]!.y-points[index]!.y)*t};}
+    remaining-=length;
+  }
+  return points[0]!;
+}
 
 function joiningPipeDepth(document:HarnessDesignDocument,id:string,visited= new Set<string>()):number {
   const pipe=document.physicalTopology?.joiningPipes?.find(item=>item.id===id);
@@ -53,9 +66,14 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const route=physicalSegmentPoints(document,segment);
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
     const generatedControls=joiningPipeMemberControls(document,segment.id);
-    type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;connection?:boolean;boundary?:"outerEnter"|"axisEnter"|"axisExit"|"outerExit";memberIndex?:number;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
-    const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>({fraction:projectOntoPolyline(route,point).fraction,point,authoredIndex:index+1,controlled:controlled(point)}));
-    const generated:SceneControl[]=generatedControls?.map(control=>({fraction:control.fraction,point:control.point,controlled:control.controlled,connection:control.connection,boundary:control.boundary,memberIndex:control.memberIndex,transition:control.transition}))??[];
+    type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;authoredRegion?:JoiningPipeBendRegion;connection?:boolean;boundary?:"outerEnter"|"axisEnter"|"axisExit"|"outerExit";lead?:"enter"|"exit";memberIndex?:number;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
+    const member=topology.joiningPipes?.flatMap(pipe=>pipe.members).find(item=>item.segmentIds.includes(segment.id));
+    const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>{
+      const fixed=joiningPipeAuthoredHandle(document,segment.id,index),fraction=fixed?.fraction??projectOntoPolyline(route,authored[index+1]!).fraction;
+      const authoredRegion=member?.authoredBendRegions?.find(entry=>entry.segmentId===segment.id&&entry.bendIndex===index)?.region;
+      return {fraction,point:fixed?.point??point,authoredIndex:index+1,authoredRegion,controlled:fixed?.controlled??controlled(authored[index+1]!)};
+    });
+    const generated:SceneControl[]=generatedControls?.map(control=>({fraction:control.fraction,point:control.point,controlled:control.controlled,connection:control.connection,boundary:control.boundary,lead:control.lead,memberIndex:control.memberIndex,transition:control.transition}))??[];
     const mergedHandles:SceneControl[]=[...authoredHandles,...generated].sort((a,b)=>a.fraction-b.fraction)
       .reduce<SceneControl[]>((handles,handle)=>{
         const previous=handles.at(-1);
@@ -71,24 +89,50 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       },[]);
     const handles=mergedHandles.map(handle=>handle.point);
     const authoredHandleIndices=mergedHandles.map(handle=>handle.authoredIndex??-1);
+    const authoredHandleRegions=mergedHandles.map(handle=>handle.authoredRegion);
     const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>handle.transition?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
     const joiningBoundaryHandleData=mergedHandles.flatMap((handle,index)=>handle.boundary?[{index,memberIndex:handle.memberIndex!,boundary:handle.boundary}]:[]);
     const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>handle.controlled?[index]:[]);
     const routeControls:SceneControl[]=[{fraction:0,point:editable[0]!,controlled:false},...mergedHandles,{fraction:1,point:editable.at(-1)!,controlled:false}];
+    const painted=display?.map(sample=>sample.point)??route;
+    const radius=display&&!joiningPipeDisplaySamples(document,segment.id)?0:drawingBendRadius(document);
+    const rounded=drawingRouteSamples(painted,radius);
+    const pointAtDistance=(distance:number):EditorPoint=>{
+      const next=rounded.findIndex(sample=>sample.distance>=distance);
+      const at=next<0?rounded.length-1:next;
+      const b=rounded[at]!,a=rounded[Math.max(0,at-1)]!;
+      const t=b.distance===a.distance?0:Math.max(0,Math.min(1,(distance-a.distance)/(b.distance-a.distance)));
+      return {x:a.point.x+(b.point.x-a.point.x)*t,y:a.point.y+(b.point.y-a.point.y)*t};
+    };
+    const midpointFractions=routeControls.slice(1).map((control,index)=>(control.fraction+routeControls[index]!.fraction)/2);
+    const midpointRegions=midpointFractions.map(fraction=>joiningPipeMidpointRegion(document,segment.id,fraction));
     const midpoints=generatedControls
-      ? routeControls.slice(1).map((point,index)=>({x:(point.point.x-routeControls[index]!.point.x)/2+routeControls[index]!.point.x,y:(point.point.y-routeControls[index]!.point.y)/2+routeControls[index]!.point.y}))
-      : projectPipeBundleControls(document, segment.id, authored.slice(1).map((p,i)=>({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})));
+      ? routeControls.slice(1).map((control,index)=>{
+          const previous=routeControls[index]!,a=projectOntoDrawingRoute(painted,radius,previous.point),b=projectOntoDrawingRoute(painted,radius,control.point);
+          return pointAtDistance((a+b)/2);
+        })
+      : projectPipeBundleControls(document,segment.id,authored.slice(1).map((point,index)=>({
+          x:(point.x+authored[index]!.x)/2,y:(point.y+authored[index]!.y)/2})));
+    const midpointSources=midpoints.map((_,index)=>{
+      const sourcePoint=generatedControls?pointAtRouteFraction(route,midpointFractions[index]!):{
+        x:(authored[index]!.x+authored[index+1]!.x)/2,y:(authored[index]!.y+authored[index+1]!.y)/2};
+      const insertion=projectOntoPolyline(authored,sourcePoint).index;
+      return {index:insertion-1,point:sourcePoint};
+    });
     const controlledMidpoints=generatedControls
       ? routeControls.slice(1).flatMap((point,index)=>{
           const previous=routeControls[index]!;
           const removedTransition=previous.boundary==="outerEnter"&&point.boundary==="axisEnter"||previous.boundary==="axisExit"&&point.boundary==="outerExit";
-          return point.controlled&&previous.controlled&&!removedTransition?[index]:[];
+          const authoredShoulder=previous.authoredIndex!==undefined||point.authoredIndex!==undefined;
+          const transitionShoulder=previous.transition||point.transition||removedTransition;
+          const isTransition=previous.boundary==="outerEnter"&&point.lead==="enter"||previous.lead==="exit"&&point.boundary==="outerExit";
+          return (point.controlled||previous.controlled)&&!authoredShoulder&&!transitionShoulder&&!isTransition?[index]:[];
         })
       : authored.slice(1).flatMap((p,i)=>controlled({x:(p.x+authored[i]!.x)/2,y:(p.y+authored[i]!.y)/2})?[i]:[]);
     const joiningTransitionMidpoints=generatedControls
       ? routeControls.slice(1).flatMap((point,index)=>{
           const previous=routeControls[index]!;
-          const directSide=previous.boundary==="outerEnter"&&point.boundary==="axisEnter"?"enter":previous.boundary==="axisExit"&&point.boundary==="outerExit"?"exit":undefined;
+          const directSide=previous.boundary==="outerEnter"&&(point.lead==="enter"||point.boundary==="axisEnter")?"enter":(previous.lead==="exit"||previous.boundary==="axisExit")&&point.boundary==="outerExit"?"exit":undefined;
           const transition=point.transition??previous.transition??(directSide?{memberIndex:point.memberIndex!,side:directSide}:undefined);
           return transition&&!(point.transition&&routeControls[index]!.transition)?[{index,memberIndex:transition.memberIndex,side:transition.side}]:[];
         })
@@ -101,13 +145,17 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     // stations, so the global radius can round the full adjacent legs.
     routeRadius:joiningPipeDisplaySamples(document,segment.id) ? drawingBendRadius(document) : display ? 0 : drawingBendRadius(document),
     pipe: {
+      joiningMember:memberOfOp,
       fromNodeId: segment.from,
       toNodeId: segment.to,
       authoredPoints: authored,
       controls: controls,
       handles,
       authoredHandleIndices,
+      authoredHandleRegions,
       midpoints,
+      midpointSources,
+      midpointRegions,
       controlledHandles:controlledHandleIndices,
       controlledMidpoints,
       joiningTransitionHandles:joiningTransitionHandleData,

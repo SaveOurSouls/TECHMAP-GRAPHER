@@ -25,6 +25,16 @@ export function validateJoiningPipes(t:PhysicalTopology,existingIds:Set<string>)
         if(visited.has(s.to))return fail();visited.add(s.to);
         owned.add(id);previous=s.to;
       }
+      if(m.authoredBendRegions!==undefined){
+        if(!Array.isArray(m.authoredBendRegions)||m.authoredBendRegions.length>m.segmentIds.reduce((sum:number,id:string)=>sum+(segments.get(id)?.path.points.length??0),0))return fail();
+        const seen=new Set<string>();
+        for(const entry of m.authoredBendRegions){
+          const segment=segments.get(entry?.segmentId),key=`${entry?.segmentId}:${entry?.bendIndex}`;
+          if(!segment||!m.segmentIds.includes(entry.segmentId)||!Number.isInteger(entry.bendIndex)||entry.bendIndex<0||entry.bendIndex>=segment.path.points.length||
+            !["before-enter","enter","axis","exit","after-exit"].includes(entry.region)||entry.displayPoint!==undefined&&!point(entry.displayPoint)||seen.has(key))return fail();
+          seen.add(key);
+        }
+      }
     }
   }
 }

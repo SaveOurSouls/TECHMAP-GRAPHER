@@ -29,6 +29,33 @@ public sealed class HarnessDesignApiTests
         Assert.Equal(1,saved!.Revision);Assert.True(JsonElement.DeepEquals(original,saved.Content));
     }
 
+    [Fact]
+    public async Task Joining_pipe_authored_bend_regions_round_trip_and_reject_invalid_region()
+    {
+        await using var factory=new TechmapWebApplicationFactory();using var client=factory.CreateLocalClient();
+        var csrf=await StartSessionAsync(client);var ids=await CreateHarnessAsync(client,csrf);
+        var content=HarnessJoiningPipeTests.Fixture();
+        var topology=content["physicalTopology"]!;
+        topology["segments"]![0]!["path"]!["points"]=JsonNode.Parse("[{\"x\":120,\"y\":15}]");
+        topology["joiningPipes"]![0]!["members"]![0]!["authoredBendRegions"]=JsonNode.Parse("""
+          [{"segmentId":"p0","bendIndex":0,"region":"before-enter","displayPoint":{"x":120,"y":20}}]
+          """);
+        var original=JsonSerializer.SerializeToElement(content);
+        using var accepted=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),
+            new PutHarnessDesignRequest(0,1,original),csrf);
+        Assert.Equal(HttpStatusCode.OK,accepted.StatusCode);
+        var saved=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(1,saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(original,saved.Content));
+        topology["joiningPipes"]![0]!["members"]![0]!["authoredBendRegions"]![0]!["region"]="not-a-region";
+        using var rejected=await SendAsync(client,HttpMethod.Put,Route(ids.ProjectId,ids.HarnessId),
+            new PutHarnessDesignRequest(saved.Revision,1,JsonSerializer.SerializeToElement(content)),csrf);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        var unchanged=await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId,ids.HarnessId),TestContext.Current.CancellationToken);
+        Assert.Equal(saved.Revision,unchanged!.Revision);
+        Assert.True(JsonElement.DeepEquals(original,unchanged.Content));
+    }
+
     [Theory]
     [InlineData("width")]
     [InlineData("color")]

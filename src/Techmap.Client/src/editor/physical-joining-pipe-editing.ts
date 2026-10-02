@@ -22,6 +22,13 @@ export function remapJoiningPipeMemberBends(before:PhysicalJoiningPipe,after:Phy
     ...member,
     ...(member.enterBend&&{enterBend:rotate(member.enterBend,oldAxis[0]!,newAxis[0]!,tangent(oldAxis,"enter"),tangent(newAxis,"enter"))}),
     ...(member.exitBend&&{exitBend:rotate(member.exitBend,oldAxis.at(-1)!,newAxis.at(-1)!,tangent(oldAxis,"exit"),tangent(newAxis,"exit"))}),
+    ...(member.enterOuter&&{enterOuter:rotate(member.enterOuter,oldAxis[0]!,newAxis[0]!,tangent(oldAxis,"enter"),tangent(newAxis,"enter"))}),
+    ...(member.exitOuter&&{exitOuter:rotate(member.exitOuter,oldAxis.at(-1)!,newAxis.at(-1)!,tangent(oldAxis,"exit"),tangent(newAxis,"exit"))}),
+    authoredBendRegions:member.authoredBendRegions?.map(entry=>!entry.displayPoint?entry:{...entry,displayPoint:entry.region==="before-enter"||entry.region==="enter"
+      ?rotate(entry.displayPoint,oldAxis[0]!,newAxis[0]!,tangent(oldAxis,"enter"),tangent(newAxis,"enter"))
+      :entry.region==="exit"||entry.region==="after-exit"
+        ?rotate(entry.displayPoint,oldAxis.at(-1)!,newAxis.at(-1)!,tangent(oldAxis,"exit"),tangent(newAxis,"exit"))
+        :entry.displayPoint}),
   }));
 }
 
@@ -38,6 +45,9 @@ export function moveJoiningPipe(t:PhysicalTopology,id:string,delta:Point):Physic
     members:pipe.members.map(member=>({...member,
       ...(member.enterBend?{enterBend:{x:member.enterBend.x+delta.x,y:member.enterBend.y+delta.y}}:{}),
       ...(member.exitBend?{exitBend:{x:member.exitBend.x+delta.x,y:member.exitBend.y+delta.y}}:{}),
+      ...(member.enterOuter?{enterOuter:{x:member.enterOuter.x+delta.x,y:member.enterOuter.y+delta.y}}:{}),
+      ...(member.exitOuter?{exitOuter:{x:member.exitOuter.x+delta.x,y:member.exitOuter.y+delta.y}}:{}),
+      authoredBendRegions:member.authoredBendRegions?.map(entry=>entry.displayPoint?{...entry,displayPoint:{x:entry.displayPoint.x+delta.x,y:entry.displayPoint.y+delta.y}}:entry),
     })),
   })};
 }

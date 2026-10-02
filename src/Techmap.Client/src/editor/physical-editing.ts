@@ -4,6 +4,32 @@ import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geome
 import { physicalNodePoint } from "./physical-ports";
 import { measuredWireLength } from "./drawing-dimensions";
 import { resolvedCoveringSpan } from "./physical-coverings";
+import { joiningMemberPoints } from "./physical-joining-pipes";
+import type { JoiningPipeMember } from "./physical-topology-model";
+import { projectPipeBundleControls } from "./pipe-bundle-projection";
+
+type BendRegion=NonNullable<JoiningPipeMember["authoredBendRegions"]>[number]["region"];
+function regionAt(fraction:number,from:number,to:number):BendRegion {
+  return fraction<from/2?"before-enter":fraction<from?"enter":fraction<=to?"axis":fraction<(1+to)/2?"exit":"after-exit";
+}
+function memberBendRegions(document:HarnessDesignDocument,member:JoiningPipeMember){
+  if(member.authoredBendRegions)return member.authoredBendRegions.map(entry=>{
+    if(entry.displayPoint)return entry;
+    const segment=document.physicalTopology!.segments.find(item=>item.id===entry.segmentId)!;
+    return {...entry,displayPoint:projectPipeBundleControls(document,entry.segmentId,[segment.path.points[entry.bendIndex]!])[0]!};
+  });
+  const route=joiningMemberPoints(document,member.segmentIds),length=route.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-route[i]!.x,p.y-route[i]!.y),0);
+  let travelled=0;
+  return member.segmentIds.flatMap(id=>{
+    const segment=document.physicalTopology!.segments.find(item=>item.id===id)!,points=physicalSegmentPoints(document,segment);
+    return points.slice(1).flatMap((p,index)=>{
+      travelled+=Math.hypot(p.x-points[index]!.x,p.y-points[index]!.y);
+      const authored=index<segment.path.points.length;
+      return authored?[{segmentId:id,bendIndex:index,region:regionAt(length?travelled/length:0,member.from,member.to),
+        displayPoint:projectPipeBundleControls(document,id,[p])[0]!}]:[];
+    });
+  });
+}
 
 export type PhysicalDragMode = "carry" | "adjacent";
 const near = (a:Point,b:Point) => Math.hypot(a.x-b.x,a.y-b.y)<1e-6;
@@ -93,10 +119,13 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
  * neighbouring visible shoulders. */
 export function pipeBendSnapAnchors(pipe:{
   authoredPoints?:readonly Point[];handles:readonly Point[];
+  joiningMember?:boolean;
   authoredHandleIndices?:readonly number[];
   joiningTransitionHandles?:readonly {index:number;side:"enter"|"exit"}[];
   joiningBoundaryHandles?:readonly {index:number}[];
   joiningTransitionMidpoints?:readonly {index:number}[];
+  authoredHandleRegions?:readonly (BendRegion|undefined)[];
+  midpointRegions?:readonly (BendRegion|undefined)[];
 },displayPoints:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode,displayOrigin:Point):Point[] {
   const transition=!insert?pipe.joiningTransitionHandles?.find(handle=>handle.index===index):undefined;
   if(transition&&mode==="carry"){
@@ -110,7 +139,35 @@ export function pipeBendSnapAnchors(pipe:{
     ||pipe.joiningBoundaryHandles?.some(handle=>handle.index===index)
     ||insert&&pipe.joiningTransitionMidpoints?.some(handle=>handle.index===index);
   if(generated)return bendSnapAnchors(displayPoints,index,insert,"adjacent",displayOrigin);
+  if(insert&&pipe.joiningMember){
+    const region=pipe.midpointRegions?.[index];
+    return [-1,1].flatMap(direction=>{
+      const neighbour=index+(direction<0?0:1),point=displayPoints[neighbour];
+      if(!point)return [];
+      const handleIndex=neighbour-1;
+      const carried=mode==="carry"&&region!==undefined&&
+        pipe.authoredHandleRegions?.[handleIndex]===region&&
+        (pipe.authoredHandleIndices?.[handleIndex]??-1)>=1;
+      if(!carried)return [point];
+      const fixed=displayPoints[neighbour+direction];
+      return fixed?[{x:displayOrigin.x+fixed.x-point.x,y:displayOrigin.y+fixed.y-point.y}]:[];
+    });
+  }
   const authoredIndex=pipe.authoredHandleIndices?.[index];
+  if(!insert&&authoredIndex!==undefined&&authoredIndex>=1&&pipe.joiningMember){
+    const at=index+1,region=pipe.authoredHandleRegions?.[index];
+    return [-1,1].flatMap(direction=>{
+      const neighbour=at+direction,point=displayPoints[neighbour];
+      if(!point)return [];
+      const handleIndex=neighbour-1;
+      const carried=mode==="carry"&&region!==undefined&&
+        pipe.authoredHandleRegions?.[handleIndex]===region&&
+        (pipe.authoredHandleIndices?.[handleIndex]??-1)>=1;
+      if(!carried)return [point];
+      const fixed=displayPoints[neighbour+direction];
+      return fixed?[{x:displayOrigin.x+fixed.x-point.x,y:displayOrigin.y+fixed.y-point.y}]:[];
+    });
+  }
   if(!insert&&authoredIndex!==undefined&&authoredIndex>=1&&pipe.authoredPoints)
     return bendSnapAnchors(pipe.authoredPoints,authoredIndex-1,false,mode,displayOrigin);
   return bendSnapAnchors(displayPoints,index,insert,mode,displayOrigin);
@@ -118,8 +175,20 @@ export function pipeBendSnapAnchors(pipe:{
 
 /** Intersect angular direction families and validate every changing shoulder.
  * Collinear supports retain continuous motion along the line. */
-export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12,state?:BendSnapState) {
+export function snapBendPoint(point:Point,anchors:readonly Point[],enabled:boolean,tolerance:number,fallback?:Point,angleStep=Math.PI/12,state?:BendSnapState,strategy:"all"|"nearest-compatible"="all") {
   const unique=anchors.filter((a,i)=>anchors.findIndex(b=>near(a,b))===i);
+  if(enabled&&strategy==="nearest-compatible"&&unique.length){
+    const candidates=unique.map(anchor=>{
+      const direction=snappedDirectionIndex(Math.atan2(point.y-anchor.y,point.x-anchor.x),angleStep)*angleStep;
+      const unit={x:Math.cos(direction),y:Math.sin(direction)};
+      const along=(point.x-anchor.x)*unit.x+(point.y-anchor.y)*unit.y;
+      const projected={x:anchor.x+along*unit.x,y:anchor.y+along*unit.y};
+      return {anchor,projected,distance:Math.hypot(projected.x-point.x,projected.y-point.y)};
+    }).sort((a,b)=>a.distance-b.distance||Math.hypot(point.x-a.anchor.x,point.y-a.anchor.y)-Math.hypot(point.x-b.anchor.x,point.y-b.anchor.y));
+    const chosen=candidates[0]!;
+    if(state){state.active=undefined;state.previous=chosen.projected;state.lastPointer=point;}
+    return {point:chosen.projected,guide:[chosen.anchor,chosen.projected]};
+  }
   if(!enabled||unique.length<2){
     if(state){state.active=undefined;state.previous=undefined;state.lastPointer=point;}
     return snapPhysicalPoint(point,unique,enabled,tolerance,angleStep);
@@ -296,25 +365,61 @@ export function joiningPipeEndpointSnapAnchors(objects:readonly {
 }
 
 /** Preserve adjacent inner shoulders in carry mode; Shift edits only the selected vertex. */
-export function editPhysicalBend(document:HarnessDesignDocument,id:string,index:number,point:Point,mode:PhysicalDragMode,insert=false):HarnessDesignDocument {
+export function editPhysicalBend(document:HarnessDesignDocument,id:string,index:number,point:Point,mode:PhysicalDragMode,insert=false,region?:BendRegion,displayPosition?:Point,displayOrigin?:Point):HarnessDesignDocument {
   const segment=document.physicalTopology?.segments.find(s=>s.id===id);if(!segment)return document;
+  const frozen=(document.physicalTopology?.joiningPipes??[]).flatMap(pipe=>pipe.members.flatMap((member,memberIndex)=>{
+    if(!member.segmentIds.includes(id))return [];
+    const route=joiningMemberPoints(document,member.segmentIds),length=route.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-route[i]!.x,p.y-route[i]!.y),0);
+    const at=(fraction:number)=>{let remaining=length*fraction;for(let i=1;i<route.length;i++){
+      const a=route[i-1]!,b=route[i]!,span=Math.hypot(b.x-a.x,b.y-a.y);
+      if(remaining<=span||i===route.length-1){const t=span?remaining/span:0;return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};}remaining-=span;
+    }return route[0]!;};
+    return [{pipeId:pipe.id,memberIndex,enterOuter:member.enterOuter??at(member.from/2),exitOuter:member.exitOuter??at((1+member.to)/2),
+      authoredBendRegions:memberBendRegions(document,member)}];
+  }));
   const original=physicalEditablePoints(document,segment),map=anchorMap(document,segment,original);
   const points=[...original];
+  const owned=frozen[0]?.authoredBendRegions??[];
+  const selectedRegion=insert?region:owned.find(entry=>entry.segmentId===id&&entry.bendIndex===index)?.region;
+  const sameRegion=(controlIndex:number)=>controlIndex>0&&controlIndex<original.length-1&&
+    (!frozen.length||owned.some(entry=>entry.segmentId===id&&entry.bendIndex===controlIndex-1&&entry.region===selectedRegion));
   if(insert){
     if(index<0||index>=points.length-1)return document;
     const a=points[index]!,b=points[index+1]!;
     const delta={x:point.x-(a.x+b.x)/2,y:point.y-(a.y+b.y)/2};
-    if(mode==="carry")for(const i of [index,index+1])if(i>0&&i<points.length-1)points[i]=shifted(points[i]!,delta);
+    if(mode==="carry")for(const i of [index,index+1])if(sameRegion(i))points[i]=shifted(points[i]!,delta);
     points.splice(index+1,0,point);
     for(const [old,value] of map)if(value>index)map.set(old,value+1);
   }else {
     const at=index+1;if(at<=0||at>=points.length-1)return document;
     const delta={x:point.x-points[at]!.x,y:point.y-points[at]!.y};
     points[at]=point;
-    if(mode==="carry")for(const neighbor of [at-1,at+1])if(neighbor>0&&neighbor<points.length-1)points[neighbor]=shifted(points[neighbor]!,delta);
+    if(mode==="carry")for(const neighbor of [at-1,at+1])if(sameRegion(neighbor))points[neighbor]=shifted(points[neighbor]!,delta);
     if(mode==="carry")mergeStraight(points,map);
   }
-  return replacePath(document,segment,points,map);
+  const changed=replacePath(document,segment,points,map);
+  if(!frozen.length||!changed.physicalTopology)return changed;
+  const joiningPipes=changed.physicalTopology.joiningPipes?.map(pipe=>({...pipe,members:pipe.members.map((member,memberIndex)=>{
+    const match=frozen.find(item=>item.pipeId===pipe.id&&item.memberIndex===memberIndex);
+    if(!match)return member;
+    const remapped=match.authoredBendRegions.flatMap(entry=>{
+      if(entry.segmentId!==id)return [entry];
+      const nextIndex=map.get(entry.bendIndex+1);
+      if(nextIndex===undefined||nextIndex<=0||nextIndex>=points.length-1)return [];
+      const previous=original[entry.bendIndex+1]!,next=points[nextIndex]!;
+      const moved=Math.hypot(next.x-previous.x,next.y-previous.y)>1e-7;
+      const visibleDelta=moved&&insert&&displayPosition&&displayOrigin
+        ?{x:displayPosition.x-displayOrigin.x,y:displayPosition.y-displayOrigin.y}
+        :{x:next.x-previous.x,y:next.y-previous.y};
+      const shiftedDisplay=entry.displayPoint?shifted(entry.displayPoint,visibleDelta):next;
+      return [{...entry,bendIndex:nextIndex-1,displayPoint:!insert&&entry.bendIndex===index
+        ?displayPosition??shiftedDisplay:shiftedDisplay}];
+    });
+    if(insert)remapped.push({segmentId:id,bendIndex:index,region:region??regionAt(member.from/2,member.from,member.to),
+      displayPoint:displayPosition??point});
+    return {...member,enterOuter:match.enterOuter,exitOuter:match.exitOuter,authoredBendRegions:remapped};
+  })}));
+  return {...changed,physicalTopology:{...changed.physicalTopology,joiningPipes}};
 }
 
 export function deletePhysicalBend(document:HarnessDesignDocument,id:string,index:number):HarnessDesignDocument {
@@ -322,7 +427,13 @@ export function deletePhysicalBend(document:HarnessDesignDocument,id:string,inde
   const original=physicalEditablePoints(document,segment),map=anchorMap(document,segment,original),at=index+1;
   if(at<=0||at>=original.length-1)return document;
   for(const [old,value] of map){if(value===at)map.delete(old);else if(value>at)map.set(old,value-1);}
-  return replacePath(document,segment,original.filter((_,i)=>i!==at),map);
+  const changed=replacePath(document,segment,original.filter((_,i)=>i!==at),map);
+  if(!changed.physicalTopology)return changed;
+  const joiningPipes=changed.physicalTopology.joiningPipes?.map(pipe=>({...pipe,members:pipe.members.map(member=>
+    member.segmentIds.includes(id)?{...member,authoredBendRegions:memberBendRegions(document,member)
+      .filter(entry=>entry.segmentId!==id||entry.bendIndex!==index)
+      .map(entry=>entry.segmentId===id&&entry.bendIndex>index?{...entry,bendIndex:entry.bendIndex-1}:entry)}:member)}));
+  return {...changed,physicalTopology:{...changed.physicalTopology,joiningPipes}};
 }
 
 /** Freeze the visible route at move start and carry only shoulders next to moved exits. */
@@ -349,6 +460,23 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
     for(const [i,deltas] of shifts)points[i]=shifted(original[i]!,{x:deltas.reduce((n,d)=>n+d.x,0)/deltas.length,y:deltas.reduce((n,d)=>n+d.y,0)/deltas.length});
     if(mode==="carry")mergeStraight(points,map);
     result=replacePath(result,segment,points,map);
+    const joiningPipes=result.physicalTopology!.joiningPipes?.map(pipe=>({...pipe,members:pipe.members.map(member=>{
+      if(!member.segmentIds.includes(segment.id))return member;
+      const originalMember=before.physicalTopology!.joiningPipes?.find(item=>item.id===pipe.id)?.members
+        .find(item=>item.segmentIds.includes(segment.id));
+      if(!originalMember)return member;
+      const authoredBendRegions=memberBendRegions(before,originalMember).flatMap(entry=>{
+        if(entry.segmentId!==segment.id)return [entry];
+        const nextIndex=map.get(entry.bendIndex+1);
+        if(nextIndex===undefined||nextIndex<=0||nextIndex>=points.length-1)return [];
+        const previous=original[entry.bendIndex+1]!,next=points[nextIndex]!;
+        const delta={x:next.x-previous.x,y:next.y-previous.y};
+        return [{...entry,bendIndex:nextIndex-1,displayPoint:entry.displayPoint
+          ?shifted(entry.displayPoint,delta):undefined}];
+      });
+      return {...member,authoredBendRegions};
+    })}));
+    if(joiningPipes)result={...result,physicalTopology:{...result.physicalTopology!,joiningPipes}};
   }
   return result;
 }

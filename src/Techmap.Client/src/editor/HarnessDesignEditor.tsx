@@ -2,10 +2,9 @@ import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-cov
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { orderPhysicalScene, physicalTopologyScene } from "./physical-scene";
 import { volumeShadingEligible } from "./volume-shading";
-import { unprojectPipeBundleEdit, unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
-import { physicalEditablePoints } from "./physical-editing";
+import { unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
+import { resolvePhysicalRoutePointCommand } from "./physical-route-point-command";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
-import { projectOntoPolyline } from "./physical-coverings";
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
 import {SpecificationItemsPanel} from "./SpecificationItemsPanel";
@@ -1054,41 +1053,8 @@ export function HarnessDesignEditor({
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб Э4."};}
     }
     if(pipePreview&&history.present.physicalTopology) {
-      try{const segment=history.present.physicalTopology.segments.find(s=>s.id===pipePreview.id)!;
-        const op=history.present.physicalTopology.joiningPipes?.find(p=>p.id===pipePreview.id);
-        if(op){
-          const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===pipePreview.id);
-          const transition=!pipePreview.insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===pipePreview.index);
-          if(transition)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:op.id,memberIndex:transition.memberIndex,side:transition.side,position:pipePreview.point,mode:pipePreview.mode}),error:null};
-          return {document:applyEditorCommand(history.present,{type:"edit-joining-pipe-bend",pipeId:op.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};
-        }
-        const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===pipePreview.id);
-        const transition=!pipePreview.insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===pipePreview.index);
-        const boundary=!pipePreview.insert&&sceneObject?.pipe?.joiningBoundaryHandles?.find(handle=>handle.index===pipePreview.index);
-        if(boundary){const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(pipePreview.id));if(memberPipe)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-boundary",pipeId:memberPipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[pipePreview.index]!,position:pipePreview.point}),error:null};}
-        const generatedMidpoint=pipePreview.insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.some(handle=>handle.index===pipePreview.index);
-        if(generatedMidpoint){
-          const midpoint=sceneObject!.pipe!.joiningTransitionMidpoints!.find(handle=>handle.index===pipePreview.index)!;
-          const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[midpoint.memberIndex]?.segmentIds.includes(pipePreview.id));
-          if(memberPipe?.members[midpoint.memberIndex]?.[midpoint.side==="enter"?"enterBend":"exitBend"]===null)
-            return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:midpoint.memberIndex,side:midpoint.side,position:pipePreview.point}),error:null};
-          const source=unprojectPipeBundlePoint(history.present,pipePreview.id,pipePreview.point);
-          const points=physicalEditablePoints(history.present,segment),station=projectOntoPolyline(points,source);
-          const position=unprojectPipeBundleEdit(history.present,pipePreview.id,source,pipePreview.point);
-          return {document:applyEditorCommand(history.present,{type:"edit-physical-bend",segmentId:pipePreview.id,index:station.index-1,position,mode:pipePreview.mode??"carry",insert:true}),error:null};
-        }
-        if(transition){
-          const memberPipe=history.present.physicalTopology.joiningPipes?.find(p=>p.members[transition.memberIndex]?.segmentIds.includes(pipePreview.id));
-          if(memberPipe)return {document:applyEditorCommand(history.present,{type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:transition.memberIndex,side:transition.side,position:pipePreview.point,mode:pipePreview.mode,origin:sceneObject!.pipe!.handles[transition.index],outerOrigin:[sceneObject!.points![0]!,...sceneObject!.pipe!.handles,sceneObject!.points!.at(-1)!][transition.index+(transition.side==="enter"?0:2)]}),error:null};
-        }
-        const points=physicalEditablePoints(history.present,segment);
-        const authoredIndex=pipePreview.insert?undefined:sceneObject?.pipe?.authoredHandleIndices?.[pipePreview.index];
-        if(authoredIndex===-1)return {document:history.present,error:null};
-        const source=pipePreview.insert?unprojectPipeBundlePoint(history.present,pipePreview.id,pipePreview.point):undefined;
-        const i=pipePreview.insert?projectOntoPolyline(points,source!).index:authoredIndex??pipePreview.index+1;
-        const original=pipePreview.insert?source!:points[i]!;
-        const position=unprojectPipeBundleEdit(history.present,pipePreview.id,original,pipePreview.point);
-        return {document:applyEditorCommand(history.present,{type:"edit-physical-bend",segmentId:pipePreview.id,index:i-1,position,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
+      try{const command=resolvePhysicalRoutePointCommand(history.present,pipePreview.id,pipePreview.index,pipePreview.point,pipePreview.mode,pipePreview.insert);
+        return {document:command?applyEditorCommand(history.present,command):history.present,error:null};}
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб."};}
     }
     if (!movePreview) return { document: history.present, error: null };
@@ -2205,24 +2171,7 @@ export function HarnessDesignEditor({
           const op=topology?.joiningPipes?.find(p=>p.id===wireId);
           if(op){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:point,mode,insert});return;}
           const segment = topology?.segments.find(s => s.id === wireId);
-          if (topology && segment) { const sceneObject=physicalTopologyScene(history.present).find(o=>o.id===wireId);
-            const transition=!insert&&sceneObject?.pipe?.joiningTransitionHandles?.find(handle=>handle.index===routeIndex);
-            const boundary=!insert&&sceneObject?.pipe?.joiningBoundaryHandles?.find(handle=>handle.index===routeIndex);
-            if(boundary){const pipe=topology.joiningPipes?.find(p=>p.members[boundary.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-boundary",pipeId:pipe.id,memberIndex:boundary.memberIndex,boundary:boundary.boundary,origin:sceneObject!.pipe!.handles[routeIndex]!,position:point});return;}
-            const generatedMidpoint=insert&&sceneObject?.pipe?.joiningTransitionMidpoints?.find(handle=>handle.index===routeIndex);
-            if(generatedMidpoint){
-              const memberPipe=topology.joiningPipes?.find(p=>p.members[generatedMidpoint.memberIndex]?.segmentIds.includes(wireId));
-              if(memberPipe?.members[generatedMidpoint.memberIndex]?.[generatedMidpoint.side==="enter"?"enterBend":"exitBend"]===null){
-                run({type:"update-joining-pipe-member-bend",pipeId:memberPipe.id,memberIndex:generatedMidpoint.memberIndex,side:generatedMidpoint.side,position:point});return;
-              }
-              const source=unprojectPipeBundlePoint(history.present,wireId,point),points=physicalEditablePoints(history.present,segment),station=projectOntoPolyline(points,source);
-              run({type:"edit-physical-bend",segmentId:wireId,index:station.index-1,position:unprojectPipeBundleEdit(history.present,wireId,source,point),mode,insert:true}); return;
-            }
-            if(transition){const pipe=topology.joiningPipes?.find(p=>p.members[transition.memberIndex]?.segmentIds.includes(wireId));if(pipe)run({type:"update-joining-pipe-member-bend",pipeId:pipe.id,memberIndex:transition.memberIndex,side:transition.side,position:point,mode,origin:sceneObject!.pipe!.handles[transition.index],outerOrigin:[sceneObject!.points![0]!,...sceneObject!.pipe!.handles,sceneObject!.points!.at(-1)!][transition.index+(transition.side==="enter"?0:2)]});return;}
-            const authoredIndex=insert?routeIndex+1:sceneObject?.pipe?.authoredHandleIndices?.[routeIndex];if(authoredIndex===-1)return;
-            const points=physicalEditablePoints(history.present,segment),i=(authoredIndex??routeIndex+1);
-            const original=insert?{x:(points[i-1]!.x+points[i]!.x)/2,y:(points[i-1]!.y+points[i]!.y)/2}:points[i]!;
-            run({type:"edit-physical-bend",segmentId:wireId,index:i-1,position:unprojectPipeBundleEdit(history.present,wireId,original,point),mode,insert}); return; }
+          if (topology && segment) {const command=resolvePhysicalRoutePointCommand(history.present,wireId,routeIndex,point,mode,insert);if(command)run(command);return;}
           const wire = history.present.wires.find((item) => item.id === wireId);
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);

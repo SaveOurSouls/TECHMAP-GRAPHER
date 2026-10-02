@@ -63,7 +63,7 @@ export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode;readonly auxiliary?:boolean}
   | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
-  | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
+  | {readonly type:"edit-physical-bend";readonly segmentId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean;readonly region?:"before-enter"|"enter"|"axis"|"exit"|"after-exit";readonly displayPosition?:Point;readonly displayOrigin?:Point}
   | {readonly type:"move-physical-node";readonly nodeId:string;readonly position:Point;readonly mode:PhysicalDragMode}
   | {readonly type:"set-drawing-documents"; readonly documents:DrawingDocuments}
   | { readonly type: "set-physical-topology"; readonly topology: PhysicalTopology; readonly coveringLibrary?:CoveringLibrary }
@@ -256,7 +256,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
     }
     case "edit-physical-bend": {
       if(document.views.drawing.layers.some(l=>l.id==="wires"&&l.locked))throw new Error("Слой проводов заблокирован.");
-      const changed=editPhysicalBend(document,command.segmentId,command.index,command.position,command.mode,command.insert);
+      const changed=editPhysicalBend(document,command.segmentId,command.index,command.position,command.mode,command.insert,command.region,command.displayPosition,command.displayOrigin);
       return {...changed,physicalTopology:parsePhysicalTopology(changed.physicalTopology,changed)};
     }
     case "edit-joining-pipe-bend": {
