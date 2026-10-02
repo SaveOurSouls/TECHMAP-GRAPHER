@@ -54,7 +54,19 @@ function seal() {
     <path d="M205 92H269M205 147H269" stroke="#b6d1a8" stroke-width="2" opacity=".65"/></g>`;
 }
 
-function terminal(pin = false) {
+function terminalInsulation(color) {
+  // C2: the jacket crosses beneath the rear crimp and ends halfway through
+  // the gap (x=162..181). These are illustration coordinates, not IPC limits.
+  const jacket = safeWireColor(color);
+  return `<g data-part="terminal-insulation">
+    <path d="M222 94H171.5V146H222" fill="var(--wire-color,${jacket})" stroke="#294257" stroke-width="2.4"/>
+    <path d="M222 96H172.7V144H222Z" fill="url(#wireBody)"/>
+    <path d="M173 100H222" stroke="#fff" stroke-width="2.4" opacity=".33"/>
+    <path d="M173 141H222" stroke="#173c59" stroke-width="2" opacity=".28"/>
+  </g>`;
+}
+
+function terminal(pin = false, color = "#26609e", sealed = false) {
   const copperLines = Array.from({ length: 10 }, (_, index) => {
     const y = 103 + index * 3.3;
     return `<path d="M79 ${y.toFixed(1)} C101 ${(y - 2).toFixed(1)} 116 ${(y + 2).toFixed(1)} 137 ${y.toFixed(1)} M161 ${y.toFixed(1)} C180 ${(y - 2).toFixed(1)} 195 ${(y + 2).toFixed(1)} 213 ${y.toFixed(1)}" fill="none" stroke="${palette.copperDark}" stroke-width="1.25"/>`;
@@ -64,6 +76,7 @@ function terminal(pin = false) {
     : `<path d="M27 96H80V144H27Q22 144 22 139V101Q22 96 27 96Z" fill="url(#silver)" stroke="${palette.outline}" stroke-width="2.6"/><path d="M30 103H76V137H30Z" fill="#758992" stroke="#3c515d" stroke-width="1.7"/><path d="M34 108H72V132H34Z" fill="#dce6e9"/><path d="M62 107V133" stroke="#82959b" stroke-width="1.4"/><path d="M48 96L56 84L67 84L72 96" fill="url(#silver)" stroke="${palette.outline}" stroke-width="2"/>`;
   return `<g data-part="${pin ? "sealed-pin-terminal" : "terminal"}">
     <path d="M78 101H214V139H78Z" fill="url(#bronze)" stroke="${palette.copperDark}" stroke-width="1.8"/>${copperLines}
+    ${terminalInsulation(color)}${sealed ? seal() : ""}
     <path d="M78 94H217V102H78Z M78 138H217V146H78Z" fill="url(#silver)" stroke="${palette.outline}" stroke-width="1.7"/>
     ${contact}
     <path d="M78 95H111V101C111 109 107 112 101 112H78Z M78 145H111V139C111 131 107 128 101 128H78Z" fill="url(#silver)" stroke="${palette.outline}" stroke-width="2.2"/>
@@ -76,14 +89,14 @@ function terminal(pin = false) {
   </g>`;
 }
 
-export function endPart(kind) {
+export function endPart(kind, color = "#26609e") {
   switch (kind) {
     case "cut": return cut();
     case "copper": return conductor(false);
     case "tin": return conductor(true);
-    case "terminal": return terminal(false);
-    case "sealed": return seal() + terminal(false);
-    case "sealed-pin": return seal() + terminal(true);
+    case "terminal": return terminal(false, color);
+    case "sealed": return terminal(false, color, true);
+    case "sealed-pin": return terminal(true, color, true);
     default: throw new Error(`Unknown wire end: ${kind}`);
   }
 }
@@ -95,10 +108,10 @@ function escapeXml(value) {
 export function renderWireSvg({ left, right, color = "#26609e", title = "Подготовленный провод" }) {
   if (!artworkEnds.includes(left) || !artworkEnds.includes(right)) throw new Error("Unknown wire configuration");
   const safeColor = safeWireColor(color);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="${artworkViewBox}" role="img" aria-labelledby="title" style="--wire-color:${safeColor}"><title id="title">${escapeXml(title)}</title>${defs()}${bodyPart(safeColor)}${endPart(left)}<g transform="translate(1200 0) scale(-1 1)">${endPart(right)}</g></svg>\n`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="${artworkViewBox}" role="img" aria-labelledby="title" style="--wire-color:${safeColor}"><title id="title">${escapeXml(title)}</title>${defs()}${bodyPart(safeColor)}${endPart(left, safeColor)}<g transform="translate(1200 0) scale(-1 1)">${endPart(right, safeColor)}</g></svg>\n`;
 }
 
 export function renderPartSvg(part, color = "#26609e") {
-  const content = part === "body" ? bodyPart(color) : endPart(part);
+  const content = part === "body" ? bodyPart(color) : endPart(part, color);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="${artworkViewBox}" role="img">${defs()}${content}</svg>\n`;
 }
