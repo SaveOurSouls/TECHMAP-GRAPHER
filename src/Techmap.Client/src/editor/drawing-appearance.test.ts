@@ -22,6 +22,14 @@ describe("covering offsets",()=>{
   const points=offsetPolyline([{x:0,y:0},{x:10,y:10},{x:20,y:0}],[20,20,20]);
   expect(Math.hypot(points[1]!.x-10,points[1]!.y-10)).toBeLessThanOrEqual(30);
  });
+ it("keeps ordinary covering caps square after duplicate route points",()=>{
+  const left=offsetPolyline([{x:0,y:0},{x:0,y:0},{x:0,y:100}],[10,10,10]);
+  const right=offsetPolyline([{x:0,y:0},{x:0,y:0},{x:0,y:100}],[-10,-10,-10]);
+  // A vertical route has horizontal cap edges. Duplicate authored points
+  // must not make the endpoint fall back to a world-axis normal.
+  expect(left[0]).toEqual({x:-10,y:0});
+  expect(right[0]).toEqual({x:10,y:0});
+ });
 });
 
 describe("relative drawing scale",()=>{

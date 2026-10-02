@@ -36,7 +36,14 @@ function joiningSupportCells(samples:readonly TailSample[],from:number,to:number
     const one=a.members[member]!,two=b.members[member]!;
     if(!two)continue;
     const p=between(one.point,two.point,start),q=between(one.point,two.point,end);
-    section.push(...disk(p,one.radius+width),...disk(q,two.radius+width));
+    const pr=one.radius+width,qr=two.radius+width;
+    section.push(...disk(p,pr),...disk(q,qr));
+    // The two end disks alone leave a gap when a narrow member turns sharply
+    // between envelope stations. Add the local capsule sides so the OP shell
+    // follows the member continuously through the stepped transition.
+    const dx=q.x-p.x,dy=q.y-p.y,length=Math.hypot(dx,dy)||1,n={x:-dy/length,y:dx/length};
+    section.push({x:p.x+n.x*pr,y:p.y+n.y*pr},{x:p.x-n.x*pr,y:p.y-n.y*pr},
+      {x:q.x+n.x*qr,y:q.y+n.y*qr},{x:q.x-n.x*qr,y:q.y-n.y*qr});
    }
    if(section.length)result.push(section);
   }
@@ -73,13 +80,29 @@ function roundProjectedCenterline(points:readonly Point[],distances:readonly num
  * wide; the cap turns that corner into a short bevel while preserving the
  * authored centreline and all endpoint positions. */
 export function offsetPolyline(points:readonly Point[],offsets:readonly number[]):Point[] {
+ // End caps use the first/last non-zero tangent explicitly. This keeps the
+ // ordinary covering end square even when a route contains duplicate
+ // control points or a very short first segment. Interior joins retain the
+ // bounded miter used for local bends and transition ramps.
+ const normalBetween=(a:Point,b:Point):Point|null=>{
+  const length=Math.hypot(b.x-a.x,b.y-a.y);
+  return length>1e-9?{x:-(b.y-a.y)/length,y:(b.x-a.x)/length}:null;
+ };
+ const normalAt=(index:number):{normal:Point;factor:number}=>{
+  let before=index-1;while(before>=0&&!normalBetween(points[before]!,points[index]!))before--;
+  let after=index+1;while(after<points.length&&!normalBetween(points[index]!,points[after]!))after++;
+  const u=before>=0?normalBetween(points[before]!,points[index]!):null;
+  const v=after<points.length?normalBetween(points[index]!,points[after]!):null;
+  if(!u&&!v)return {normal:{x:0,y:1},factor:1};
+  if(!u)return {normal:v!,factor:1};
+  if(!v)return {normal:u,factor:1};
+  const n={x:u.x+v.x,y:u.y+v.y},len=Math.hypot(n.x,n.y)||1;
+  const normal={x:n.x/len,y:n.y/len};
+  return {normal,factor:Math.min(1.5,1/Math.max(.25,normal.x*v.x+normal.y*v.y))};
+ };
  return points.map((p,i)=>{
-  const a=points[Math.max(0,i-1)]!,b=points[Math.min(points.length-1,i+1)]!;
-  const before=Math.hypot(p.x-a.x,p.y-a.y),after=Math.hypot(b.x-p.x,b.y-p.y);
-  const u=before?{x:-(p.y-a.y)/before,y:(p.x-a.x)/before}:null,v=after?{x:-(b.y-p.y)/after,y:(b.x-p.x)/after}:null;
-  const n=u&&v?{x:u.x+v.x,y:u.y+v.y}:u??v??{x:0,y:1},len=Math.hypot(n.x,n.y)||1;
-  const normal={x:n.x/len,y:n.y/len},factor=u&&v?Math.min(1.5,1/Math.max(.25,normal.x*v.x+normal.y*v.y)):1;
-  return {x:p.x+normal.x*offsets[i]!*factor,y:p.y+normal.y*offsets[i]!*factor};
+  const {normal,factor}=normalAt(i),amount=offsets[i]??0;
+  return {x:p.x+normal.x*amount*factor,y:p.y+normal.y*amount*factor};
  });
 }
 
