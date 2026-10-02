@@ -5,7 +5,9 @@ import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
 import { generateRoute } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
-import { RouteAssemblyDrawing, assemblyDrawingFragment, createAssemblyDrawingDraft } from "./RouteAssemblyDrawing";
+import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, assemblyDrawingFragment, assemblyDrawingScene, createAssemblyDrawingDraft } from "./RouteAssemblyDrawing";
+import { designToScene } from "../editor/HarnessDesignEditor";
+import { physicalFixture } from "../editor/physical-topology-fixture";
 
 function fixture() {
   const a = createConnector("a", "X1", 1, { x: 40, y: 50 });
@@ -23,7 +25,8 @@ describe("assembly drawing copy", () => {
     const { document, items, row } = fixture();
     const sourceBefore = structuredClone(document);
     const draft = createAssemblyDrawingDraft(row, document, items.filter(item => item.ref.kind === "wire"));
-    expect(draft.objects[0]!.points).toEqual([{ x: 40, y: 50 }, { x: 180, y: 50 }, { x: 180, y: 90 }, { x: 400, y: 90 }]);
+    expect(draft.objects[0]!.points.slice(1, 3)).toEqual([{ x: 180, y: 50 }, { x: 180, y: 90 }]);
+    expect(draft.drawingObjects?.some(object => object.kind === "wire" && object.points.length >= 4)).toBe(true);
     expect(draft.objects[0]!.points[1]).not.toBe(document.wires[0]!.drawingRoute[0]);
     expect(document).toEqual(sourceBefore);
     expect(row.presentation.objects).toEqual([]);
@@ -61,7 +64,41 @@ describe("assembly drawing copy", () => {
     expect(markup).toContain("Сохранить фрагмент");
     expect(markup).toContain("Фон жгута");
     expect(markup).toContain('min="0" max="100"');
-    expect(markup).toContain("route-assembly-drawing__background");
-    expect(markup).toContain("route-assembly-drawing__foreground");
+    expect(markup).toContain("route-assembly-drawing__viewport-background");
+    expect(markup).toContain("route-assembly-drawing__viewport-canvas");
+  });
+
+  it("opens an empty assembly on all drawing layers and preserves an isolated fragment", () => {
+    const { document, row } = fixture();
+    const draft = createAssemblyDrawingDraft(row, document, []);
+    expect(draft.drawingObjects?.length).toBeGreaterThan(2);
+    expect(draft.drawingObjects?.every(object => !object.hidden)).toBe(true);
+    const wireId = document.wires[0]!.id;
+    const isolated = { ...draft, drawingObjects: draft.drawingObjects!.map(object => ({ ...object, hidden: object.id !== wireId })) };
+    const saved = assemblyDrawingFragment(isolated);
+    const reopened = createAssemblyDrawingDraft({ ...row, presentation: saved }, document, []);
+    expect(reopened.drawingObjects?.filter(object => !object.hidden).map(object => object.id)).toEqual([wireId]);
+    expect(assemblyDrawingScene(designToScene(document, "drawing"), reopened.drawingObjects!).map(object => object.id)).toEqual([wireId]);
+    const markup = renderToStaticMarkup(createElement(RouteAssemblyDrawingPreview, { row: { ...row, presentation: saved }, document }));
+    expect(markup).toContain("Фрагмент сборки");
+  });
+
+  it("keeps P, OP and covering as selectable saved drawing objects", () => {
+    const base = physicalFixture();
+    const document = { ...base, physicalTopology: { ...base.physicalTopology!,
+      joiningPipes: [{ id: "op", start: { x: 120, y: 80 }, end: { x: 360, y: 80 }, path: { kind: "polyline" as const, points: [] }, members: [{ segmentIds: ["S0"], from: 0, to: 1, reverse: false }], mode: "flat" as const }],
+      coverings: [{ id: "shell", name: "Оболочка", width: 14, color: "#aebfc9", lengthMm: null, spans: [{ segmentId: "S0", from: 0, to: 1 }] }],
+    } };
+    const generated = generateRoute(document, "a".repeat(64), 1);
+    const row = { ...generated.rows[0]!, kind: "assembly" as const };
+    const draft = createAssemblyDrawingDraft(row, document, []);
+    const ids = draft.drawingObjects!.map(object => object.id);
+    expect(ids).toContain("S0");
+    expect(ids).toContain("op");
+    expect(ids).toContain("shell");
+    const source = JSON.stringify(document);
+    const isolated = assemblyDrawingFragment({ ...draft, drawingObjects: draft.drawingObjects!.map(object => ({ ...object, hidden: object.id !== "op" })) });
+    expect(assemblyDrawingScene(designToScene(document, "drawing"), isolated.drawingObjects!).map(object => object.id)).toEqual(["op"]);
+    expect(JSON.stringify(document)).toBe(source);
   });
 });

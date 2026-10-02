@@ -20,6 +20,14 @@
 .route-assembly-drawing__object-name small { color: #78919a; font-size: 9px; }
 .icon-action { border: 0; background: transparent; color: #4e7e8b; cursor: pointer; font-size: 14px; }
 .route-assembly-drawing__canvas { width: 100%; min-height: 390px; border: 1px solid #d1e0e5; border-radius: 9px; background: #fff; touch-action: none; }
+.route-assembly-drawing__viewport { position: relative; min-height: 520px; overflow: hidden; border: 1px solid #d1e0e5; border-radius: 9px; background: #fff; touch-action: none; }
+.route-assembly-drawing__preview { display: block; width: 100%; height: 270px; background: #f7fafb; border: 1px solid #d1e0e5; border-radius: 8px; }
+.route-assembly-drawing__viewport-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.route-assembly-drawing__viewport-background { opacity: .8; }
+.route-assembly-drawing__handles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.route-assembly-drawing__handles circle { fill: #fff; stroke: #16839a; stroke-width: 2; }
+.route-assembly-drawing__layer { margin: 8px 0 12px; border-top: 1px solid #e7eff2; padding-top: 6px; }
+.route-assembly-drawing__layer > label { display: flex; gap: 6px; align-items: center; color: #45616b; font-size: 11px; font-weight: 700; }
 .route-assembly-drawing__background polyline { fill: none; stroke: #76919a; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .route-assembly-drawing__foreground { cursor: pointer; }
 .route-assembly-drawing__line { fill: none; stroke: #1e4050; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
