@@ -113,6 +113,15 @@ export interface HarnessEditorWorkspaceProps {
   readonly cables?: readonly CableInstance[];
   readonly saveState?: EditorSaveState;
   readonly onSaveRequest?: () => void;
+  readonly localCopyControls?: {
+    readonly hiddenObjectIds: readonly string[];
+    readonly backgroundOpacity: number;
+    readonly onHiddenObjectIdsChange: (ids: readonly string[]) => void;
+    readonly onBackgroundOpacityChange: (opacity: number) => void;
+    readonly onCancel: () => void;
+  };
+  readonly backgroundObjects?: readonly EditorSceneObject[];
+  readonly backgroundOpacity?: number;
   readonly onViewChange?: (view: HarnessEditorView) => void;
   /** Opens the manufacturing route document from the editor header. */
   readonly onRouteRequest?: () => void;
@@ -253,6 +262,9 @@ export function HarnessEditorWorkspace({
   cables = [],
   saveState = "saved",
   onSaveRequest,
+  localCopyControls,
+  backgroundObjects,
+  backgroundOpacity,
   onViewChange,
   onObjectsChange,
   onLayersChange,
@@ -461,8 +473,8 @@ export function HarnessEditorWorkspace({
   };
 
   const viewportObjects = useMemo(
-    () => view === "e4" ? objects.filter((object) => object.kind !== "dimension") : objects,
-    [objects, view],
+    () => objects.filter((object) => (view !== "e4" || object.kind !== "dimension") && !localCopyControls?.hiddenObjectIds.includes(object.id)),
+    [objects, view, localCopyControls?.hiddenObjectIds],
   );
   const rememberViewportSize = useCallback((size: EditorViewportSize) => {
     setViewportSize((current) => current.width === size.width && current.height === size.height ? current : size);
@@ -523,21 +535,22 @@ export function HarnessEditorWorkspace({
             <strong>{harnessDesignation}</strong>
           </div>
         </div>
-        <div className="he-view-tabs" role="tablist" aria-label="Представление жгута">
+        {!localCopyControls && <div className="he-view-tabs" role="tablist" aria-label="Представление жгута">
           <button type="button" role="tab" aria-selected={view === "e4"} className={view === "e4" ? "active" : ""} onClick={() => changeView("e4")}>Схема Э4</button>
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
           {onRouteRequest && <button type="button" role="tab" aria-selected={false} className="he-route-tab" onClick={onRouteRequest}>Маршрут</button>}
-        </div>
+        </div>}
         <button className="he-inspector-toggle" type="button" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) setUtilityPanelOpen(false); }}>Свойства и слои</button>
         <button
           className={`he-save-state ${saveState}`}
           type="button"
           onClick={onSaveRequest}
-          disabled={!onSaveRequest || saveState === "saved" || saveState === "saving"}
+          disabled={!onSaveRequest || (!localCopyControls && (saveState === "saved" || saveState === "saving"))}
           title={saveState === "error" ? "Повторить сохранение" : "Сохранить сейчас"}
         >
-          <span aria-hidden="true" />{saveLabels[saveState]}
+          <span aria-hidden="true" />{localCopyControls ? "Сохранить фрагмент" : saveLabels[saveState]}
         </button>
+        {localCopyControls && <button className="he-back" type="button" onClick={localCopyControls.onCancel}>Отмена</button>}
       </header>
 
       <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""} ${utilityPanelOpen ? "he-utility-open" : "he-utility-closed"} ${inspectorOpen ? "he-inspector-open" : "he-inspector-closed"}`}>
@@ -550,6 +563,16 @@ export function HarnessEditorWorkspace({
             <div className="he-view-options">
               <InfoHint>Перемещайте точки свободно. Удерживайте Ctrl для привязки к углам с шагом 30°. Shift меняет редактирование соседних плеч; Ctrl и Shift можно удерживать вместе.</InfoHint>
             </div>
+            {localCopyControls && <section className="he-utility-section he-controls-section" aria-label="Видимость фрагмента">
+              <h3>Видимость фрагмента</h3>
+              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => selectedObjectIds.includes(object.id)).map(object => object.id).length
+                ? [...new Set([...localCopyControls.hiddenObjectIds, ...selectedObjectIds])] : localCopyControls.hiddenObjectIds)} disabled={!selectedObjectIds.length}>Скрыть выбранные</button>
+              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => !selectedObjectIds.includes(object.id)).map(object => object.id))} disabled={!selectedObjectIds.length}>Только выбранные</button>
+              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange([])}>Показать все</button>
+              <label>Прозрачность фона: {Math.round(localCopyControls.backgroundOpacity * 100)}%
+                <input type="range" min="0" max="100" value={Math.round(localCopyControls.backgroundOpacity * 100)} onChange={event => localCopyControls.onBackgroundOpacityChange(Number(event.target.value) / 100)} />
+              </label>
+            </section>}
             {documentActions}
           </div>
         </aside>
@@ -573,6 +596,8 @@ export function HarnessEditorWorkspace({
           selectedObjectIds={selectedObjectIds}
           highlightedObjectIds={highlightedObjectIds}
           foregroundWireIds={foregroundWireIds}
+          backgroundObjects={backgroundObjects}
+          backgroundOpacity={backgroundOpacity}
           cables={cables}
           e4Overlays={e4Overlays}
           e4RoutingMode={e4RoutingMode}
@@ -644,12 +669,12 @@ export function HarnessEditorWorkspace({
                 />
               )
             ) : (
-              <LayersPanel
+              <><LayersPanel
                 layers={layers}
                 onVisibilityToggle={(layerId) => changeLayers(toggleLayerVisibility(layers, layerId))}
                 onLockToggle={(layerId) => changeLayers(toggleLayerLock(layers, layerId))}
                 onMove={(layerId, targetIndex) => changeLayers(moveLayer(layers, layerId, targetIndex))}
-              />
+              />{localCopyControls && <section aria-label="Видимость объектов"><h3>Объекты</h3>{objects.map(object => <label key={object.id} style={{display:"block"}}><input type="checkbox" checked={!localCopyControls.hiddenObjectIds.includes(object.id)} onChange={event => localCopyControls.onHiddenObjectIdsChange(event.target.checked ? localCopyControls.hiddenObjectIds.filter(id => id !== object.id) : [...localCopyControls.hiddenObjectIds, object.id])} />{object.label || object.id}</label>)}</section>}</>
             )}
           </div>
         </aside>

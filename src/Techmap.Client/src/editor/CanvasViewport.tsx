@@ -75,6 +75,9 @@ export interface CanvasViewportProps {
   readonly selectedObjectIds?: readonly string[];
   readonly highlightedObjectIds?: readonly string[];
   readonly foregroundWireIds?: readonly string[];
+  /** Presentation-only background; these objects are painted but never hit-tested. */
+  readonly backgroundObjects?: readonly EditorSceneObject[];
+  readonly backgroundOpacity?: number;
   readonly cables?: readonly CableInstance[];
   readonly e4Overlays?: E4SceneOverlays;
   readonly e4RoutingMode?: "orthogonal" | "angular";
@@ -2526,6 +2529,8 @@ export function redrawCanvas(
   highlightedObjectIds: readonly string[] = [],
   physicalNodePreview?: { readonly from: EditorPoint; readonly to: EditorPoint } | null,
   foregroundWireIds:readonly string[] = [],
+  backgroundObjects:readonly EditorSceneObject[] = [],
+  backgroundOpacity = 0,
 ) {
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -2543,6 +2548,18 @@ export function redrawCanvas(
   context.save();
   context.translate(camera.offsetX, camera.offsetY);
   context.scale(camera.zoom, camera.zoom);
+  const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
+  if (backgroundOpacity > 0 && backgroundObjects.length > 0) {
+    context.save();
+    context.globalAlpha = Math.max(0, Math.min(1, backgroundOpacity));
+    for (const object of objectsInPaintOrder(backgroundObjects, layers, view)) {
+      drawEditorSceneObject(context, object, false, view,
+        object.kind === "connector" ? componentViews.get(object.id) : undefined,
+        resolveComponentTemplateAssetUrl, componentTemplateImageCache,
+        view === "drawing" ? ratio * .9 : 0);
+    }
+    context.restore();
+  }
   if (view === "drawing") {
     drawCableSheaths(
       context,
@@ -2552,7 +2569,6 @@ export function redrawCanvas(
       new Set(objects.filter(object => object.kind === "wire" && object.metadata?.volumeShading === "true").map(object => object.id)),
     );
   }
-  const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const highlighted = new Set(highlightedObjectIds);
   for (const object of objectsInPaintOrder(objects, layers, view)) {
     if (highlighted.has(object.id) && object.kind === "wire") {
@@ -2759,6 +2775,8 @@ export function CanvasViewport({
   selectedObjectIds,
   highlightedObjectIds = [],
   foregroundWireIds = [],
+  backgroundObjects = [],
+  backgroundOpacity = 0,
   cables = [],
   e4Overlays,
   e4RoutingMode = "orthogonal",
@@ -2905,13 +2923,15 @@ export function CanvasViewport({
         highlightedObjectIds,
         physicalNodePreview,
         foregroundWireIds,
+        backgroundObjects,
+        backgroundOpacity,
       );
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
         height: Math.max(1, Math.round(canvas.clientHeight)),
       });
     };
-    const stopTextures=warmCoveringTextures(redraw,displayObjects);
+    const stopTextures=warmCoveringTextures(redraw,[...displayObjects,...backgroundObjects]);
     componentTemplateImageCacheRef.current!.setInvalidate(redraw);
     redraw();
     const observer = new ResizeObserver(redraw);
@@ -2921,7 +2941,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [highlightedObjectIds, foregroundWireIds, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
+  }, [highlightedObjectIds, foregroundWireIds, backgroundObjects, backgroundOpacity, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
 
   useEffect(() => {
     const frame = frameRef.current;
