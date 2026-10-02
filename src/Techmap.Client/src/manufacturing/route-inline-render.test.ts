@@ -25,7 +25,7 @@ describe("inline route row", () => {
     }));
     expect(markup).not.toContain("<dialog");
     expect(markup).toContain("Индекс");
-    expect(markup).toContain("Длина резки остаётся заданной в жгуте");
+    expect(markup).toContain("Шаблон полуфабриката");
     expect(markup).toContain("Операции");
     expect(markup).toContain("Фото этапа");
     expect(markup).toContain('class="route-material-table"');

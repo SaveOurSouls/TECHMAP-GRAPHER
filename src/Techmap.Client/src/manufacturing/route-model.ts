@@ -31,8 +31,10 @@ export interface RouteRow {
   readonly dependsOn: readonly string[];
   /** Optional for routes saved before assembly input lines were introduced. */
   readonly assemblyInputs?: readonly RouteAssemblyInput[];
+  /** Explicit wire illustration choices pinned to an immutable catalog snapshot. */
+  readonly wireBlankSelections?: readonly { readonly wireId: string; readonly binding: { readonly sourceId: "technology-wire-blanks"; readonly entityType: "wire-blank"; readonly snapshotId: string; readonly snapshotSha256: string; readonly recordId: string; readonly sourceKey: string; readonly displayName: string; readonly visual: { readonly start: string; readonly end: string; readonly color: string; readonly templateId: string; readonly photoDataUrl: string | null } } }[];
   readonly operations: readonly RouteOperation[];
-  readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[] };
+  readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingObjects?: readonly { readonly id: string; readonly kind: string; readonly layerId: string; readonly points: readonly Point[]; readonly hidden: boolean }[] };
   readonly prepared: boolean;
 }
 export interface ManufacturingRoute {
@@ -106,8 +108,8 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
   let refCount = 0;
   const rows = array(v.rows, 1000).map(candidate => {
     const r = object(candidate), p = object(r.presentation);
-    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
-    exact(p, ["backgroundOpacity", "objects"]);
+    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.wireBlankSelections !== undefined ? ["wireBlankSelections"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
+    exact(p, ["backgroundOpacity", "objects", ...(p.drawingObjects !== undefined ? ["drawingObjects"] : [])]);
     if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < 0 || p.backgroundOpacity > 1) return fail();
     const sourceObjects = array(r.sourceObjects, 10000).map(parseRef);
     const dependsOn = array(r.dependsOn, 1000).map(id => text(id, 128));
@@ -131,7 +133,23 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
       });
       return { ref: parseRef(o.ref), points, hidden: bool(o.hidden) };
     });
-    refCount += sourceObjects.length + objects.length;
+    const drawingObjects = p.drawingObjects === undefined ? undefined : array(p.drawingObjects, 10000).map(candidate => {
+      const d = object(candidate); exact(d, ["id", "kind", "layerId", "points", "hidden"]);
+      const points = array(d.points, 2000).map(candidate => { const point = object(candidate); exact(point, ["x", "y"]); if (typeof point.x !== "number" || typeof point.y !== "number" || !Number.isFinite(point.x) || !Number.isFinite(point.y) || Math.abs(point.x) > 1e7 || Math.abs(point.y) > 1e7) return fail(); return { x: point.x, y: point.y }; });
+      return { id: text(d.id, 128), kind: text(d.kind, 128), layerId: text(d.layerId, 256), points, hidden: bool(d.hidden) };
+    });
+    if (drawingObjects && new Set(drawingObjects.map(item => `${item.kind}:${item.id}`)).size !== drawingObjects.length) return fail();
+    const wireBlankSelections = r.wireBlankSelections === undefined ? undefined : array(r.wireBlankSelections, 10000).map(candidate => {
+      const selection = object(candidate); exact(selection, ["wireId", "binding"]);
+      const wireId = text(selection.wireId, 128), binding = object(selection.binding);
+      exact(binding, ["sourceId", "entityType", "snapshotId", "snapshotSha256", "recordId", "sourceKey", "displayName", "visual"]);
+      if (binding.sourceId !== "technology-wire-blanks" || binding.entityType !== "wire-blank" || typeof binding.snapshotId !== "string" || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(binding.snapshotId) || binding.snapshotId === "00000000-0000-0000-0000-000000000000") return fail();
+      const visual = object(binding.visual); exact(visual, ["start", "end", "color", "templateId", "photoDataUrl"]);
+      if (!["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(String(visual.start)) || !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(String(visual.end)) || typeof visual.color !== "string" || !/^#[\da-f]{6}$/i.test(visual.color) || visual.photoDataUrl !== null && (typeof visual.photoDataUrl !== "string" || visual.photoDataUrl.length > 1_400_000 || !/^data:image\/png;base64,[a-zA-Z0-9+/]+={0,2}$/.test(visual.photoDataUrl))) return fail();
+      return { wireId, binding: { sourceId: "technology-wire-blanks" as const, entityType: "wire-blank" as const, snapshotId: binding.snapshotId, snapshotSha256: hash(binding.snapshotSha256), recordId: hash(binding.recordId), sourceKey: text(binding.sourceKey, 512), displayName: text(binding.displayName, 512), visual: { start: visual.start as string, end: visual.end as string, color: visual.color, templateId: text(visual.templateId, 128), photoDataUrl: visual.photoDataUrl as string | null } } };
+    });
+    if (wireBlankSelections && (r.kind !== "semiFinished" || new Set(wireBlankSelections.map(item => item.wireId)).size !== wireBlankSelections.length || wireBlankSelections.some(item => !sourceObjects.some(ref => ref.kind === "wire" && ref.id === item.wireId)))) return fail();
+    refCount += sourceObjects.length + objects.length + (drawingObjects?.length ?? 0) + (wireBlankSelections?.length ?? 0);
     const operations = array(r.operations, 100).map(parseOperation);
     if (new Set(operations.map(o => o.id)).size !== operations.length || new Set(objects.map(o => refKey(o.ref))).size !== objects.length) return fail();
     const photos = r.photos === undefined ? undefined : array(r.photos, 16).map(candidate => { const photo = object(candidate); exact(photo, ["sha256", "name"]); return { sha256: hash(photo.sha256), name: text(photo.name, 255) }; });
@@ -147,7 +165,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     for (const [value, minimum] of [[quantity, 1], [reserve, 0], [operationTimeMinutes, 0]] as const) {
       if (value !== undefined && (value < minimum || value > 1e9 || Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-4)) return fail();
     }
-    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
+    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), ...(wireBlankSelections === undefined ? {} : { wireBlankSelections }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects, ...(drawingObjects === undefined ? {} : { drawingObjects }) }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
   });
   if (refCount > 10000) return fail();
   const byId = new Map(rows.map(row => [row.id, row]));

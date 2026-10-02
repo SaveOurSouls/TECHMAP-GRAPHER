@@ -10,8 +10,11 @@ import { parseManufacturingRoute, routeOperationModes, routeRowComposition, type
 import { buildRouteSourceItems, routeSourceDesignation, type RouteSourceItem, type RouteSourceRef } from "./route-source";
 import { RouteWorkspace } from "./route-workspace";
 import { RoutePhotoList } from "./RoutePhotoList";
-import { RouteAssemblyDrawing } from "./RouteAssemblyDrawing";
+import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview } from "./RouteAssemblyDrawing";
 import { resolveRouteTerminalRequirements } from "./route-terminal-requirements";
+import { wireBlankDraft, wireBlankEndLabels, wireBlankSourceId, type WireBlankEnd } from "../WireBlankCatalog";
+import { WireBlankPreview } from "../WireBlankCatalogEditor";
+import { matchWireBlank } from "./route-wire-blank";
 import "./manufacturing-route.css";
 
 type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void; onViewChange?: (view: "e4" | "drawing") => void; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void };
@@ -169,6 +172,7 @@ function operationCategoryLabel(record: ReferenceCatalogRecord): string {
   return typeof record.payload.name === "string" && record.payload.name.trim() ? record.payload.name.trim() : "Без категории";
 }
 
+
 function operationShortLabel(record: ReferenceCatalogRecord): string {
   for (const key of ["operationType", "machine", "instruction", "name"]) if (typeof record.payload[key] === "string" && record.payload[key].trim()) return record.payload[key].trim();
   return "Операция";
@@ -198,6 +202,8 @@ export function RouteRowInline({ config, session, projectId, setPhotoBusy, row, 
   const [chooserOpen, setChooserOpen] = useState(false);
   const [operationCategory, setOperationCategory] = useState<string | null>(null);
   const [assemblyDrawingOpen, setAssemblyDrawingOpen] = useState(false);
+  const [wireBlankSnapshot, setWireBlankSnapshot] = useState<ReferenceCatalogSnapshot | null>(null);
+  const [wireBlankError, setWireBlankError] = useState<string | null>(null);
   const hasOperations = row.operations.length > 0;
   useEffect(() => {
     if (!hasOperations || disabled) return;
@@ -221,6 +227,14 @@ export function RouteRowInline({ config, session, projectId, setPhotoBusy, row, 
 
   const refs = routeRowComposition(route, row.id);
   const items = refs.map(ref => sources.find(item => sourceKey(item.ref) === sourceKey(ref))).filter((item): item is RouteSourceItem => !!item);
+  const wireItems = items.filter(item => item.ref.kind === "wire");
+  useEffect(() => {
+    if (row.kind !== "semiFinished" || !wireItems.length) return;
+    let cancelled = false;
+    void referenceApi.getActive(wireBlankSourceId).then(snapshot => { if (!cancelled) { setWireBlankSnapshot(snapshot); setWireBlankError(null); } })
+      .catch(caught => { if (!cancelled) setWireBlankError(caught instanceof Error ? caught.message : "Справочник полуфабрикатов недоступен."); });
+    return () => { cancelled = true; };
+  }, [referenceApi, row.kind, wireItems.length]);
   const wireIds = new Set(items.filter(item => item.ref.kind === "wire").map(item => item.ref.id));
   const requirements = route.rows.flatMap(row => row.terminalRequirements ?? []).filter(item => wireIds.has(item.wireId));
   const conflicts = routeRowPresentationConflicts(route, row.id);
@@ -254,12 +268,36 @@ export function RouteRowInline({ config, session, projectId, setPhotoBusy, row, 
  </section>    {items.some(item => item.ref.kind === "wire") && <section className="route-terminal-requirements"><h4>Зачистка</h4><table><thead><tr><th>Провод</th><th>Конец</th><th>Артикул</th><th>Длина</th></tr></thead><tbody>{items.filter(item => item.ref.kind === "wire").flatMap(item => (["from", "to"] as const).map(end => { const requirement = requirements.find(value => value.wireId === item.ref.id && value.end === end); return <tr key={`${item.ref.id}:${end}`}><td>{item.title}</td><td>{end === "from" ? "Начало" : "Конец"}</td><td>{terminalArticleLabel(requirement?.terminalArticle || (end === "from" ? item.terminalFrom : item.terminalTo)) || "—"}</td><td>{requirement?.stripLengthMm == null ? "—" : `${requirement.stripLengthMm} мм`}</td></tr>; }))}</tbody></table></section>}
 </fieldset>
     <fieldset className="route-inline-visual" role="cell" disabled={disabled} aria-label={`Рисунок и фото этапа ${ordinal}`}>
-    <section className="route-editor-block"><div className="route-editor-block-heading"><div><h4>Рисунок этапа</h4></div>{row.kind === "assembly" && <button type="button" className="secondary-action" disabled={disabled} onClick={() => setAssemblyDrawingOpen(true)}>Изменить фрагмент</button>}</div>{row.kind === "assembly" && assemblyDrawingOpen ? <RouteAssemblyDrawing row={row} document={document} sources={sources} items={items} onCancel={() => setAssemblyDrawingOpen(false)} onSave={presentation => { guardedUpdate({ presentation }); setAssemblyDrawingOpen(false); }} /> : <RoutePresentation row={row} document={document} sources={sources} items={items} update={guardedUpdate} disabled={disabled} />}</section>
+    <section className="route-editor-block"><div className="route-editor-block-heading"><div><h4>Рисунок этапа</h4></div>{row.kind === "assembly" && <button type="button" className="secondary-action" disabled={disabled} onClick={() => setAssemblyDrawingOpen(true)}>Изменить фрагмент</button>}</div>{row.kind === "assembly" && assemblyDrawingOpen ? <RouteAssemblyDrawing row={row} document={document} sources={sources} items={items} onCancel={() => setAssemblyDrawingOpen(false)} onSave={presentation => { guardedUpdate({ presentation }); setAssemblyDrawingOpen(false); }} /> : row.kind === "assembly" && row.presentation.drawingObjects ? <RouteAssemblyDrawingPreview row={row} document={document} /> : row.kind === "semiFinished" && wireItems.length ? <WireBlankStageDrawing row={row} items={wireItems} snapshot={wireBlankSnapshot} error={wireBlankError} disabled={disabled} update={guardedUpdate} /> : <RoutePresentation row={row} document={document} sources={sources} items={items} update={guardedUpdate} disabled={disabled} />}</section>
     {conflicts.length > 0 && <section className="manufacturing-route-error" role="alert"><strong>Разные представления общего объекта</strong><p>Задайте представление объекта в этой строке, чтобы согласовать результат сборки.</p>{conflicts.map(conflict => <div key={sourceKey(conflict.ref)}><span>{items.find(item => sourceKey(item.ref) === sourceKey(conflict.ref))?.title}</span>{conflict.variants.map(variant => <button key={variant.rowId} type="button" onClick={() => update({ presentation: { ...row.presentation, objects: [...row.presentation.objects.filter(object => sourceKey(object.ref) !== sourceKey(conflict.ref)), variant.object] } })}>Взять из «{route.rows.find(row => row.id === variant.rowId)?.title}»</button>)}</div>)}</section>}
  <section className="route-editor-block route-photo-block"><div className="route-editor-block-heading"><div><h4>Фото этапа</h4></div></div><RoutePhotoList config={config} session={session} projectId={projectId} photos={row.photos} disabled={disabled} onChange={photos => update({ photos })} onBusyChange={setPhotoBusy} /></section></fieldset>
 
   </article>;
 }
+
+export function WireBlankStageDrawing({ row, items, snapshot, error, disabled, update }: { row: RouteRow; items: readonly RouteSourceItem[]; snapshot: ReferenceCatalogSnapshot | null; error: string | null; disabled: boolean; update: (patch: Partial<Omit<RouteRow, "id">>) => void }) {
+  const entries = wireBlankDraft(snapshot);
+  const select = (wireId: string, recordId: string) => {
+    const remaining = (row.wireBlankSelections ?? []).filter(value => value.wireId !== wireId);
+    const entry = entries.find(value => value.id === recordId);
+    if (!entry || !snapshot) { update({ wireBlankSelections: remaining }); return; }
+    update({ wireBlankSelections: [...remaining, { wireId, binding: { sourceId: wireBlankSourceId, entityType: "wire-blank", snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256, recordId: entry.id, sourceKey: entry.index, displayName: entry.title, visual: { start: entry.start, end: entry.end, color: entry.color, templateId: entry.templateId, photoDataUrl: entry.photoDataUrl } } }] });
+  };
+  return <div className="route-wire-blank-list">{error && <p role="alert">{error}</p>}{!snapshot && !error && <p role="status">Загружаем справочник «Полуфабрикаты провода»…</p>}{items.map(item => {
+    const match = matchWireBlank(snapshot, item, row.operations);
+    const pinned = row.wireBlankSelections?.find(value => value.wireId === item.ref.id)?.binding;
+    const active = pinned ? entries.find(value => value.id === pinned.recordId && snapshot?.snapshotId === pinned.snapshotId) : match.entry;
+    const selected = active ?? (pinned ? { id: pinned.recordId, index: pinned.sourceKey, title: pinned.displayName, start: pinned.visual.start as WireBlankEnd, end: pinned.visual.end as WireBlankEnd, color: pinned.visual.color, templateId: pinned.visual.templateId, photoDataUrl: pinned.visual.photoDataUrl, originalPayload: {} } : null);
+    const unavailable = Boolean(pinned && !selected);
+    return <div className="route-wire-blank" key={item.ref.id}>
+      <div className="route-wire-blank__heading"><strong>{item.title}</strong><span>{item.lengthMm === null ? "Длина не задана" : `${item.lengthMm} мм`}</span></div>
+      {selected ? <WireBlankPreview row={selected} /> : <div className="route-wire-blank__missing">{unavailable ? "Закреплённый шаблон отсутствует в активной версии справочника" : "Подходящий шаблон не найден"}</div>}
+      <div className="route-wire-blank__details"><span>{wireBlankEndLabels[match.expected.start]} → {wireBlankEndLabels[match.expected.end]}</span><span>{pinned ? `Выбран: ${pinned.displayName}` : match.reason === "exact" ? "Подставлен автоматически" : match.reason === "ambiguous" ? "Несколько вариантов — выберите шаблон" : "Точного варианта нет — выберите шаблон"}</span></div>
+      <label>Шаблон полуфабриката<select aria-label={`Шаблон полуфабриката ${item.title}`} disabled={disabled || !snapshot} value={pinned?.recordId ?? ""} onChange={event => select(item.ref.id, event.target.value)}><option value="">Автоматически</option>{entries.map(entry => <option key={entry.id} value={entry.id}>{entry.index} · {entry.title}</option>)}</select></label>
+    </div>;
+  })}</div>;
+}
+
 
 function RoutePresentation({ row, document, sources, items, update, disabled }: { row: RouteRow; document: HarnessDesignDocument; sources: readonly RouteSourceItem[]; items: readonly RouteSourceItem[]; disabled: boolean; update: (patch: Partial<Omit<RouteRow, "id">>) => void }) {
   const svg = useRef<SVGSVGElement>(null);

@@ -38,6 +38,7 @@ internal static class ManufacturingRouteValidator
                 if (row.TryGetProperty("photos", out _)) rowKeys = [..rowKeys, "photos"];
                 if (row.TryGetProperty("terminalRequirements", out _)) rowKeys = [..rowKeys, "terminalRequirements"];
                 if (row.TryGetProperty("assemblyInputs", out _)) rowKeys = [..rowKeys, "assemblyInputs"];
+                if (row.TryGetProperty("wireBlankSelections", out _)) rowKeys = [..rowKeys, "wireBlankSelections"];
             }
             RequireExact(row, rowKeys);
             var id = Text(row, "id", path + ".id", 128);
@@ -54,6 +55,8 @@ internal static class ManufacturingRouteValidator
             rowRefs[id] = refs;
             if (row.TryGetProperty("terminalRequirements", out var terminalRequirements))
                 ValidateTerminalRequirements(terminalRequirements, path + ".terminalRequirements", refs, ref referenceCount);
+            if (row.TryGetProperty("wireBlankSelections", out var wireBlankSelections))
+                ValidateWireBlankSelections(wireBlankSelections, path + ".wireBlankSelections", kind, refs, ref referenceCount);
             var dependencies = TextArray(row, "dependsOn", path + ".dependsOn", 1000).ToArray();
             if (row.TryGetProperty("assemblyInputs", out var assemblyInputs))
                 ValidateAssemblyInputs(assemblyInputs, path + ".assemblyInputs", kind, refs, dependencies, ref referenceCount);
@@ -209,6 +212,36 @@ internal static class ManufacturingRouteValidator
         }
     }
 
+    private static void ValidateWireBlankSelections(JsonElement value, string path, string kind,
+        HashSet<(string Kind, string Id)> refs, ref int count)
+    {
+        if (kind != "semiFinished" || value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > MaximumReferences)
+            throw Invalid("Only semi-finished rows may pin wire illustrations.", path);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var selection in value.EnumerateArray())
+        {
+            RequireExact(selection, "wireId", "binding");
+            var wireId = Text(selection, "wireId", path, 128);
+            if (!seen.Add(wireId) || !refs.Contains(("wire", wireId)))
+                throw Invalid("Wire illustration must refer to a unique wire introduced in this row.", path);
+            var binding = selection.GetProperty("binding");
+            RequireExact(binding, "sourceId", "entityType", "snapshotId", "snapshotSha256", "recordId", "sourceKey", "displayName", "visual");
+            if (Text(binding, "sourceId", path, 512) != "technology-wire-blanks" || Text(binding, "entityType", path, 64) != "wire-blank")
+                throw Invalid("Wire illustration must come from the wire blank catalog.", path);
+            if (!Guid.TryParseExact(Text(binding, "snapshotId", path, 36), "D", out var snapshotId) || snapshotId == Guid.Empty)
+                throw Invalid("Wire illustration snapshotId must be a non-empty UUID.", path);
+            RequireSha(binding, "snapshotSha256", path); RequireSha(binding, "recordId", path);
+            _ = Text(binding, "sourceKey", path, 512); _ = Text(binding, "displayName", path, 512);
+            var visual = binding.GetProperty("visual"); RequireExact(visual, "start", "end", "color", "templateId", "photoDataUrl");
+            var start = Text(visual, "start", path, 32); var end = Text(visual, "end", path, 32);
+            var validEnds = new[] { "cut", "copper", "tin", "terminal", "sealed", "sealed-pin" };
+            if (!validEnds.Contains(start, StringComparer.Ordinal) || !validEnds.Contains(end, StringComparer.Ordinal)) throw Invalid("Wire illustration visual has an invalid end.", path);
+            var color = Text(visual, "color", path, 16); if (!System.Text.RegularExpressions.Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$")) throw Invalid("Wire illustration visual has an invalid color.", path);
+            _ = Text(visual, "templateId", path, 128); var photo = visual.GetProperty("photoDataUrl"); if (photo.ValueKind != JsonValueKind.Null && (photo.ValueKind != JsonValueKind.String || photo.GetString()!.Length > 1_400_000 || !System.Text.RegularExpressions.Regex.IsMatch(photo.GetString()!, "^data:image/png;base64,[a-zA-Z0-9+/]+={0,2}$"))) throw Invalid("Wire illustration visual photo is invalid.", path);
+            count++;
+        }
+    }
+
     private static void ValidateOperations(JsonElement value, string path, HashSet<string> operationIds, ref int count)
     {
         if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > MaximumOperationsPerRow) throw Invalid("Invalid route operation list.", path);
@@ -236,7 +269,7 @@ internal static class ManufacturingRouteValidator
 
     private static void ValidatePresentation(JsonElement value, string path, HashSet<(string Kind, string Id)> refs, ref int count)
     {
-        RequireExact(value, "backgroundOpacity", "objects");
+        RequireExact(value, value.TryGetProperty("drawingObjects", out _) ? ["backgroundOpacity", "objects", "drawingObjects"] : ["backgroundOpacity", "objects"]);
         var opacity = Number(value, "backgroundOpacity", path + ".backgroundOpacity");
         if (!double.IsFinite(opacity) || opacity < 0 || opacity > 1) throw Invalid("Route background opacity must be between 0 and 1.", path + ".backgroundOpacity");
         var objects = Array(value, "objects", path + ".objects", MaximumReferences);
@@ -250,6 +283,28 @@ internal static class ManufacturingRouteValidator
             var points = Array(item, "points", path + ".objects.points", 2000);
             foreach (var point in points.EnumerateArray()) { RequireExact(point, "x", "y"); var x = Number(point, "x", path); var y = Number(point, "y", path); if (!double.IsFinite(x) || !double.IsFinite(y) || Math.Abs(x) > 1e7 || Math.Abs(y) > 1e7) throw Invalid("Route presentation point is out of range.", path + ".objects.points"); }
             count++;
+        }
+        if (value.TryGetProperty("drawingObjects", out _))
+        {
+            var drawingObjects = Array(value, "drawingObjects", path + ".drawingObjects", MaximumReferences);
+            var drawingSeen = new HashSet<(string Kind, string Id)>();
+            foreach (var item in drawingObjects.EnumerateArray())
+            {
+                RequireExact(item, "id", "kind", "layerId", "points", "hidden");
+                var id = Text(item, "id", path + ".drawingObjects.id", 128);
+                var kind = Text(item, "kind", path + ".drawingObjects.kind", 128);
+                _ = Text(item, "layerId", path + ".drawingObjects.layerId", 256);
+                if (!drawingSeen.Add((kind, id))) throw Invalid("Duplicate drawing object.", path + ".drawingObjects");
+                if (item.GetProperty("hidden").ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw Invalid("Drawing object hidden must be boolean.", path + ".drawingObjects.hidden");
+                foreach (var point in Array(item, "points", path + ".drawingObjects.points", 2000).EnumerateArray())
+                {
+                    RequireExact(point, "x", "y");
+                    var x = Number(point, "x", path); var y = Number(point, "y", path);
+                    if (!double.IsFinite(x) || !double.IsFinite(y) || Math.Abs(x) > 1e7 || Math.Abs(y) > 1e7)
+                        throw Invalid("Drawing object point is out of range.", path + ".drawingObjects.points");
+                }
+                count++;
+            }
         }
     }
 

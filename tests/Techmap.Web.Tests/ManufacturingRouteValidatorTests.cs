@@ -88,6 +88,50 @@ public sealed class ManufacturingRouteValidatorTests
     }
 
     [Fact]
+    public void Wire_blank_selection_and_drawing_scene_are_validated_and_pinned()
+    {
+        var graph = BaseRoute();
+        var row = graph["manufacturingRoute"]!["rows"]![0]!;
+        row["wireBlankSelections"] = new JsonArray(new JsonObject
+        {
+            ["wireId"] = "w",
+            ["binding"] = new JsonObject
+            {
+                ["sourceId"] = "technology-wire-blanks", ["entityType"] = "wire-blank",
+                ["snapshotId"] = Guid.NewGuid().ToString("D"), ["snapshotSha256"] = new string('a', 64),
+                ["recordId"] = new string('b', 64), ["sourceKey"] = "ПФП-01", ["displayName"] = "Провод нарезан",
+                ["visual"] = new JsonObject { ["start"] = "cut", ["end"] = "cut", ["color"] = "#26609e", ["templateId"] = "01-cut", ["photoDataUrl"] = null },
+            },
+        });
+        row["presentation"]!["drawingObjects"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "pipe-1", ["kind"] = "physical-pipe", ["layerId"] = "pipes",
+            ["points"] = new JsonArray(new JsonObject { ["x"] = 1, ["y"] = 2 }), ["hidden"] = true,
+        });
+        Validate(graph);
+        row["wireBlankSelections"]!.AsArray().Add(row["wireBlankSelections"]![0]!.DeepClone());
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+
+    [Fact]
+    public void Wire_blank_selection_rejects_wrong_source_and_orphan_wire()
+    {
+        var graph = BaseRoute();
+        var row = graph["manufacturingRoute"]!["rows"]![0]!;
+        row["wireBlankSelections"] = new JsonArray(new JsonObject
+        {
+            ["wireId"] = "missing",
+            ["binding"] = new JsonObject
+            {
+                ["sourceId"] = "other", ["entityType"] = "wire-blank", ["snapshotId"] = Guid.NewGuid().ToString("D"),
+                ["snapshotSha256"] = new string('a', 64), ["recordId"] = new string('b', 64), ["sourceKey"] = "x", ["displayName"] = "x",
+                ["visual"] = new JsonObject { ["start"] = "cut", ["end"] = "cut", ["color"] = "#26609e", ["templateId"] = "01-cut", ["photoDataUrl"] = null },
+            },
+        });
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+
+    [Fact]
     public void Fingerprint_ignores_derived_routes_and_route_root_but_tracks_source()
     {
         using var baseDocument = JsonDocument.Parse("""{"schemaVersion":1,"connectors":[],"wires":[{"id":"w","lengthMm":10}],"physicalTopology":{"nodes":[],"segments":[]}}""");

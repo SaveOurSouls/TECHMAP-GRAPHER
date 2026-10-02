@@ -58,6 +58,13 @@ describe("manufacturing route contract", () => {
       expect(() => route([{ ...row("a"), presentation: { backgroundOpacity, objects: [] } }])).toThrow();
     }
   });
+  it("pins a wire illustration and preserves an independent drawing scene", () => {
+    const pinned = { wireId: "a", binding: { sourceId: "technology-wire-blanks", entityType: "wire-blank", snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), sourceKey: "ПФП-01", displayName: "После резки", visual: { start: "cut", end: "cut", color: "#26609e", templateId: "01-cut", photoDataUrl: null } } };
+    const candidate = { ...row("a"), wireBlankSelections: [pinned], presentation: { backgroundOpacity: .25, objects: [{ ref: ref("a"), points: [], hidden: false }], drawingObjects: [{ id: "pipe-1", kind: "physical-pipe", layerId: "pipes", points: [{ x: 3, y: 4 }], hidden: true }] } };
+    expect(route([candidate])?.rows[0]?.wireBlankSelections?.[0]?.binding.recordId).toBe("b".repeat(64));
+    expect(route([candidate])?.rows[0]?.presentation.drawingObjects?.[0]?.hidden).toBe(true);
+    expect(() => route([{ ...candidate, wireBlankSelections: [pinned, pinned] }])).toThrow();
+  });
   it("preserves independently addressable assembly inputs and rejects drift from dependency lists", () => {
     const assembly = { ...row("assembly", ["a"], []), kind: "assembly", assemblyInputs: [{ id: "input-a", kind: "row", rowId: "a" }] };
     expect(route([row("a"), assembly])?.rows[1]?.assemblyInputs).toEqual(assembly.assemblyInputs);
