@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text;
 using Techmap.Application;
 
 namespace Techmap.Infrastructure.Sqlite;
@@ -66,7 +67,7 @@ internal static class ManufacturingRouteValidator
                 if (dependency == id) throw Invalid("A manufacturing route row cannot depend on itself.", path + ".dependsOn");
             }
             ValidateOperations(row.GetProperty("operations"), path + ".operations", operations, ref referenceCount);
-            ValidatePresentation(row.GetProperty("presentation"), path + ".presentation", refs, ref referenceCount);
+            ValidatePresentation(row.GetProperty("presentation"), path + ".presentation", kind, refs, ref referenceCount);
             if (row.GetProperty("prepared").ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw Invalid("prepared must be boolean.", path + ".prepared");
             if (row.TryGetProperty("photos", out _))
             {
@@ -267,9 +268,12 @@ internal static class ManufacturingRouteValidator
         }
     }
 
-    private static void ValidatePresentation(JsonElement value, string path, HashSet<(string Kind, string Id)> refs, ref int count)
+    private static void ValidatePresentation(JsonElement value, string path, string rowKind, HashSet<(string Kind, string Id)> refs, ref int count)
     {
-        RequireExact(value, value.TryGetProperty("drawingObjects", out _) ? ["backgroundOpacity", "objects", "drawingObjects"] : ["backgroundOpacity", "objects"]);
+        var keys = new List<string> { "backgroundOpacity", "objects" };
+        if (value.TryGetProperty("drawingObjects", out _)) keys.Add("drawingObjects");
+        if (value.TryGetProperty("drawingCopy", out _)) keys.Add("drawingCopy");
+        RequireExact(value, keys.ToArray());
         var opacity = Number(value, "backgroundOpacity", path + ".backgroundOpacity");
         if (!double.IsFinite(opacity) || opacity < 0 || opacity > 1) throw Invalid("Route background opacity must be between 0 and 1.", path + ".backgroundOpacity");
         var objects = Array(value, "objects", path + ".objects", MaximumReferences);
@@ -306,6 +310,54 @@ internal static class ManufacturingRouteValidator
                 count++;
             }
         }
+        if (value.TryGetProperty("drawingCopy", out var drawingCopy))
+        {
+            if (rowKind != "assembly") throw Invalid("Only assembly rows may contain a drawing copy.", path + ".drawingCopy");
+            ValidateDrawingCopy(drawingCopy, path + ".drawingCopy");
+        }
+    }
+
+    private static void ValidateDrawingCopy(JsonElement value, string path)
+    {
+        RequireExact(value, "document", "hiddenObjectIds");
+        var design = value.GetProperty("document");
+        if (design.ValueKind != JsonValueKind.Object ||
+            Encoding.UTF8.GetByteCount(design.GetRawText()) > SqliteHarnessDesignDocumentStore.MaximumContentBytes ||
+            !design.TryGetProperty("schemaVersion", out var version) ||
+            version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var schemaVersion) || schemaVersion != 1)
+            throw Invalid("Invalid or oversized drawing copy.", path + ".document");
+        foreach (var collection in new[] { "connectors", "wires", "cables", "junctions", "diffPairs", "screens" })
+            if (!design.TryGetProperty(collection, out var values) || values.ValueKind != JsonValueKind.Array)
+                throw Invalid("Drawing copy is missing a design collection.", path + ".document." + collection);
+        if (!design.TryGetProperty("views", out var views) || views.ValueKind != JsonValueKind.Object ||
+            !views.TryGetProperty("drawing", out var drawing) || drawing.ValueKind != JsonValueKind.Object ||
+            !views.TryGetProperty("e4", out var e4) || e4.ValueKind != JsonValueKind.Object)
+            throw Invalid("Drawing copy has invalid views.", path + ".document.views");
+        var nodes = 0;
+        void Inspect(JsonElement element, int depth)
+        {
+            if (++nodes > 100_000 || depth > 128) throw Invalid("Drawing copy exceeds complexity limits.", path + ".document");
+            if (element.ValueKind == JsonValueKind.Object)
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Name == "manufacturingRoute") throw Invalid("Drawing copy cannot contain a route.", path + ".document");
+                    Inspect(property.Value, depth + 1);
+                }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                if (element.GetArrayLength() > 10_000) throw Invalid("Drawing copy array is too large.", path + ".document");
+                foreach (var item in element.EnumerateArray()) Inspect(item, depth + 1);
+            }
+        }
+        Inspect(design, 0);
+        SqliteHarnessDesignDocumentStore.ValidateEmbeddedDesign(design);
+        var hidden = value.GetProperty("hiddenObjectIds");
+        if (hidden.ValueKind != JsonValueKind.Array || hidden.GetArrayLength() > MaximumReferences)
+            throw Invalid("Invalid drawing copy hidden objects.", path + ".hiddenObjectIds");
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in hidden.EnumerateArray())
+            if (!seen.Add(String(item, path + ".hiddenObjectIds", 128)))
+                throw Invalid("Duplicate hidden drawing object.", path + ".hiddenObjectIds");
     }
 
     private static void ValidateCompleted(JsonElement root, Dictionary<string, (JsonElement Value, string Path)> rows, Dictionary<string, HashSet<(string Kind, string Id)>> refs)

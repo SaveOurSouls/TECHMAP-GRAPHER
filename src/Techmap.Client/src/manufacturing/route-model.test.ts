@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseManufacturingRoute, routeRowComposition } from "./route-model";
+import { createEmptyHarnessDesign } from "../editor/model";
+import { createRouteDrawingCopy } from "./route-drawing-copy";
 
 const ref = (id: string) => ({ kind: "wire" as const, id });
 const row = (id: string, dependsOn: string[] = [], sourceObjects = [ref(id)]): Record<string, unknown> => ({
@@ -11,6 +13,15 @@ const route = (rows: unknown[], status: "draft" | "completed" = "draft") => pars
 });
 
 describe("manufacturing route contract", () => {
+  it("stores a complete independent drawing copy without manufacturing route", () => {
+    const document = createEmptyHarnessDesign();
+    const copy = createRouteDrawingCopy(document, ["layer:wire"]);
+    const candidate = { ...row("assembly", [], []), kind: "assembly" as const, presentation: { backgroundOpacity: .25, objects: [], drawingCopy: copy } };
+    const parsed = route([candidate])!;
+    expect(parsed.rows[0]!.presentation.drawingCopy?.document).toEqual(copy.document);
+    expect(parsed.rows[0]!.presentation.drawingCopy?.document).not.toBe(copy.document);
+    expect(() => route([{ ...candidate, presentation: { ...candidate.presentation, drawingCopy: { ...copy, document: { ...copy.document, manufacturingRoute: route([]) } } } }])).toThrow();
+  });
   it("accepts a diamond and composes shared ancestors once", () => {
     const parsed = route([row("a"), row("b", ["a"], [ref("b")]), row("c", ["a"], [ref("c")]), row("d", ["b", "c"], [])])!;
     expect(routeRowComposition(parsed, "d").map(item => item.id)).toEqual(["a", "b", "c"]);

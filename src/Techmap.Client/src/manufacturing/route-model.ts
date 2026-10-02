@@ -1,6 +1,7 @@
 import type { Point } from "../editor/model";
 import type { RouteSourceRef } from "./route-source";
 import type { RouteTerminalRequirement } from "./route-terminal-requirements";
+import { parseRouteDrawingCopy, type RouteDrawingCopy } from "./route-drawing-copy";
 
 export const routeOperationModes = ["cut", "cut-strip-from", "cut-strip-to", "cut-strip-both", "cut-crimp", "tin", "strip-from", "strip-to", "strip-both", "assembly"] as const;
 export interface RouteOperation {
@@ -34,7 +35,7 @@ export interface RouteRow {
   /** Explicit wire illustration choices pinned to an immutable catalog snapshot. */
   readonly wireBlankSelections?: readonly { readonly wireId: string; readonly binding: { readonly sourceId: "technology-wire-blanks"; readonly entityType: "wire-blank"; readonly snapshotId: string; readonly snapshotSha256: string; readonly recordId: string; readonly sourceKey: string; readonly displayName: string; readonly visual: { readonly start: string; readonly end: string; readonly color: string; readonly templateId: string; readonly photoDataUrl: string | null } } }[];
   readonly operations: readonly RouteOperation[];
-  readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingObjects?: readonly { readonly id: string; readonly kind: string; readonly layerId: string; readonly points: readonly Point[]; readonly hidden: boolean }[] };
+  readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingObjects?: readonly { readonly id: string; readonly kind: string; readonly layerId: string; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingCopy?: RouteDrawingCopy };
   readonly prepared: boolean;
 }
 export interface ManufacturingRoute {
@@ -109,7 +110,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
   const rows = array(v.rows, 1000).map(candidate => {
     const r = object(candidate), p = object(r.presentation);
     exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.wireBlankSelections !== undefined ? ["wireBlankSelections"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
-    exact(p, ["backgroundOpacity", "objects", ...(p.drawingObjects !== undefined ? ["drawingObjects"] : [])]);
+    exact(p, ["backgroundOpacity", "objects", ...(p.drawingObjects !== undefined ? ["drawingObjects"] : []), ...(p.drawingCopy !== undefined ? ["drawingCopy"] : [])]);
     if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < 0 || p.backgroundOpacity > 1) return fail();
     const sourceObjects = array(r.sourceObjects, 10000).map(parseRef);
     const dependsOn = array(r.dependsOn, 1000).map(id => text(id, 128));
@@ -139,6 +140,8 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
       return { id: text(d.id, 128), kind: text(d.kind, 128), layerId: text(d.layerId, 256), points, hidden: bool(d.hidden) };
     });
     if (drawingObjects && new Set(drawingObjects.map(item => `${item.kind}:${item.id}`)).size !== drawingObjects.length) return fail();
+    const drawingCopy = p.drawingCopy === undefined ? undefined : parseRouteDrawingCopy(p.drawingCopy);
+    if (drawingCopy && r.kind !== "assembly") return fail();
     const wireBlankSelections = r.wireBlankSelections === undefined ? undefined : array(r.wireBlankSelections, 10000).map(candidate => {
       const selection = object(candidate); exact(selection, ["wireId", "binding"]);
       const wireId = text(selection.wireId, 128), binding = object(selection.binding);
@@ -165,7 +168,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     for (const [value, minimum] of [[quantity, 1], [reserve, 0], [operationTimeMinutes, 0]] as const) {
       if (value !== undefined && (value < minimum || value > 1e9 || Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-4)) return fail();
     }
-    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), ...(wireBlankSelections === undefined ? {} : { wireBlankSelections }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects, ...(drawingObjects === undefined ? {} : { drawingObjects }) }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
+    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), ...(wireBlankSelections === undefined ? {} : { wireBlankSelections }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects, ...(drawingObjects === undefined ? {} : { drawingObjects }), ...(drawingCopy === undefined ? {} : { drawingCopy }) }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
   });
   if (refCount > 10000) return fail();
   const byId = new Map(rows.map(row => [row.id, row]));

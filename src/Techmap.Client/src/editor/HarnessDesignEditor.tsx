@@ -575,6 +575,24 @@ export async function loadComponentTemplateForPlacement(
     : api.getVersion(templateId, catalogVersion);
 }
 
+/** Local drawing copies may read a published snapshot but must never publish a library draft. */
+export function loadComponentTemplateForLocalCopy(
+  api: ComponentTemplateApi,
+  templateId: string,
+  catalogVersion: number,
+) {
+  return api.getVersion(templateId, catalogVersion);
+}
+
+export function saveLocalDrawingCopy(
+  document: HarnessDesignDocument,
+  hiddenObjectIds: readonly string[],
+  backgroundOpacity: number,
+  onSave: (document: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => void,
+): void {
+  onSave(structuredClone(document), [...hiddenObjectIds], backgroundOpacity);
+}
+
 type CableUpdateCommand = Extract<EditorCommand, { readonly type: "update-cable" }>;
 
 export function cableMaterialUpdateFromCatalogItem(
@@ -1461,7 +1479,7 @@ export function HarnessDesignEditor({
     if (item.componentTemplateId && item.componentTemplateVersion) {
       try {
         const template = localCopy
-          ? await componentTemplateApi.getVersion(item.componentTemplateId, item.componentTemplateVersion)
+          ? await loadComponentTemplateForLocalCopy(componentTemplateApi, item.componentTemplateId, item.componentTemplateVersion)
           : await loadComponentTemplateForPlacement(
             componentTemplateApi, item.componentTemplateId, item.componentTemplateVersion);
         if (generation !== loadGeneration.current) return;
@@ -1917,7 +1935,7 @@ export function HarnessDesignEditor({
           const current = historyRef.current?.present;
           if (current) {
             try {
-              localCopy.onSave(structuredClone(current), hiddenObjectIds, backgroundOpacity);
+              saveLocalDrawingCopy(current, hiddenObjectIds, backgroundOpacity, localCopy.onSave);
               setSaveState("saved");
               setMessage("");
             } catch (error) {

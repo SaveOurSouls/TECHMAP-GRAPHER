@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { createEmptyHarnessDesign } from "../editor/model";
 import { previewRouteRebase } from "./route-rebase";
 import type { ManufacturingRoute } from "./route-model";
+import { createRouteDrawingCopy } from "./route-drawing-copy";
 
 it("previews removals without mutating manual work and revokes readiness", () => {
   const route: ManufacturingRoute = { contractVersion: 1, source: { fingerprintVersion: 1, sha256: "a".repeat(64) }, status: "draft", rows: [{
@@ -25,11 +26,13 @@ it("removes assembly input lines whose raw source disappeared from the drawing",
   const route: ManufacturingRoute = { contractVersion: 1, source: { fingerprintVersion: 1, sha256: "a".repeat(64) }, status: "draft", rows: [{
     id: "assembly", kind: "assembly", title: "Сборка", comment: "Сохранить", sourceObjects: [source], dependsOn: [],
     assemblyInputs: [{ id: "input-1", kind: "source", ref: source }], operations: [], prepared: true,
-    presentation: { backgroundOpacity: 0, objects: [{ ref: source, points: [{ x: 5, y: 6 }], hidden: false }], drawingObjects: [{ id: "pipe", kind: "physical-segment", layerId: "wires", points: [{ x: 5, y: 6 }], hidden: true }] },
+    presentation: { backgroundOpacity: 0, objects: [{ ref: source, points: [{ x: 5, y: 6 }], hidden: false }], drawingObjects: [{ id: "pipe", kind: "physical-segment", layerId: "wires", points: [{ x: 5, y: 6 }], hidden: true }], drawingCopy: createRouteDrawingCopy(createEmptyHarnessDesign(), ["pipe"]) },
   }] };
   const preview = previewRouteRebase(route, createEmptyHarnessDesign(), "b".repeat(64));
   expect(preview.removed).toEqual([source]);
   expect(preview.route.rows[0]).toMatchObject({ assemblyInputs: [], sourceObjects: [], prepared: false, comment: "Сохранить" });
   expect(preview.route.rows[0]!.presentation.objects).toEqual([]);
   expect(preview.route.rows[0]!.presentation.drawingObjects).toEqual(route.rows[0]!.presentation.drawingObjects);
+  expect(preview.route.rows[0]!.presentation.drawingCopy).toEqual(route.rows[0]!.presentation.drawingCopy);
+  expect(preview.route.rows[0]!.presentation.drawingCopy).not.toBe(route.rows[0]!.presentation.drawingCopy);
 });

@@ -9,6 +9,32 @@ namespace Techmap.Web.Tests;
 public sealed class ManufacturingRouteValidatorTests
 {
     [Fact]
+    public void Drawing_copy_accepts_design_and_rejects_nested_route()
+    {
+        var graph = BaseRoute();
+        var copy = JsonNode.Parse("""{"schemaVersion":1,"connectors":[],"wires":[],"cables":[],"junctions":[],"diffPairs":[],"screens":[],"views":{"drawing":{"layers":[],"wireCrossingStyle":"none"},"e4":{"layers":[],"wireCrossingStyle":"none"}}}""")!.AsObject();
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"] =
+            new JsonObject { ["document"] = copy, ["hiddenObjectIds"] = new JsonArray("w") };
+        Validate(graph);
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"]!["document"]!["manufacturingRoute"] =
+            new JsonObject();
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+
+    [Fact]
+    public void Drawing_copy_rejects_missing_design_collections_and_duplicate_hidden_ids()
+    {
+        var graph = BaseRoute();
+        var copy = JsonNode.Parse("""{"schemaVersion":1,"connectors":[],"wires":[],"cables":[],"junctions":[],"diffPairs":[],"screens":[],"views":{"drawing":{},"e4":{}}}""")!;
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"] =
+            new JsonObject { ["document"] = copy, ["hiddenObjectIds"] = new JsonArray("a", "a") };
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"]!["hiddenObjectIds"] = new JsonArray();
+        copy.AsObject().Remove("wires");
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+
+    [Fact]
     public void Fingerprint_tracks_measured_dimensions_and_quantity_but_not_drawing_scale_or_order()
     {
         var graph = JsonNode.Parse("""{"connectors":[],"wires":[{"id":"b","lengthMm":10.0},{"id":"a","lengthMm":12}],"drawingDocuments":{"dimensions":[{"id":"d","segmentId":"s","from":0,"to":1,"lengthMm":300,"auxiliary":false}],"scale":1}}""")!;

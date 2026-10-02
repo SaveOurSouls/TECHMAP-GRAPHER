@@ -15,9 +15,11 @@ import {
   editorWireUpdateCommand,
   HarnessEditorErrorBoundary,
   loadComponentTemplateForPlacement,
+  loadComponentTemplateForLocalCopy,
   normalizeEditorSelection,
   selectedEditorDeletionCommands,
   snapRoutePoint,
+  saveLocalDrawingCopy,
   wireMaterialUpdateFromCatalogItem,
   wireStripProfileUpdateFromCatalogItem,
 } from "./HarnessDesignEditor";
@@ -41,6 +43,33 @@ it("publishes one autosaved draft checkpoint before template placement", async (
   expect(api.publishDraft).toHaveBeenCalledOnce();
   expect(api.publishDraft).toHaveBeenCalledWith("template", 1, 7);
   expect(api.getVersion).not.toHaveBeenCalled();
+});
+
+it("reads only a published template version while editing a local drawing copy", async () => {
+  const published = { templateId: "template", version: 2 };
+  const api = {
+    getVersion: vi.fn().mockResolvedValue(published),
+    getDraft: vi.fn().mockRejectedValue(new Error("source draft must not be read")),
+    publishDraft: vi.fn().mockRejectedValue(new Error("source draft must not be published")),
+  };
+  await expect(loadComponentTemplateForLocalCopy(api as never, "template", 2)).resolves.toBe(published);
+  expect(api.getVersion).toHaveBeenCalledWith("template", 2);
+  expect(api.getDraft).not.toHaveBeenCalled();
+  expect(api.publishDraft).not.toHaveBeenCalled();
+});
+
+it("hands local drawing data to its callback without sharing mutable document or visibility arrays", () => {
+  const document = createEmptyHarnessDesign();
+  const hidden = ["object-1"];
+  const onSave = vi.fn((copy: typeof document, hiddenIds: readonly string[], opacity: number) => {
+    expect(copy).toEqual(document);
+    expect(copy).not.toBe(document);
+    expect(hiddenIds).toEqual(hidden);
+    expect(hiddenIds).not.toBe(hidden);
+    expect(opacity).toBe(.35);
+  });
+  saveLocalDrawingCopy(document, hidden, .35, onSave);
+  expect(onSave).toHaveBeenCalledOnce();
 });
 
 function wireMaterialCatalogItem(): EditorCatalogItem {

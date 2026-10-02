@@ -1,6 +1,7 @@
 import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceRef } from "./route-source";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteAssemblyInput, type RouteRow } from "./route-model";
+import { parseRouteDrawingCopy } from "./route-drawing-copy";
 
 const validate = (route: ManufacturingRoute): ManufacturingRoute => parseManufacturingRoute(route)!;
 const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
@@ -152,7 +153,7 @@ export function copyAssemblyPresentation(route: ManufacturingRoute, assemblyId: 
     }));
   };
   visit(assemblyId);
-  return { ...row.presentation, objects: [...objects.values()], ...(row.presentation.drawingObjects ? { drawingObjects: row.presentation.drawingObjects.map(object => ({ ...object, points: object.points.map(point => ({ ...point })) })) } : {}) };
+  return { ...row.presentation, objects: [...objects.values()], ...(row.presentation.drawingObjects ? { drawingObjects: row.presentation.drawingObjects.map(object => ({ ...object, points: object.points.map(point => ({ ...point })) })) } : {}), ...(row.presentation.drawingCopy ? { drawingCopy: parseRouteDrawingCopy(row.presentation.drawingCopy) } : {}) };
 }
 
 export function updateRouteRow(route: ManufacturingRoute, id: string, patch: Partial<Omit<RouteRow, "id">>): ManufacturingRoute {
