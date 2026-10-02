@@ -1,31 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PublishEditableReferenceTableRequest, ReferenceCatalogSnapshot } from "./reference-catalog-api";
-import { wireBlankDraft, wireBlankEndLabels, wireBlankEnds, wireBlankRequest, type WireBlank, type WireBlankEnd } from "./WireBlankCatalog";
+import { wireBlankDraft, wireBlankEndLabels, wireBlankEnds, wireBlankRequest, type WireBlank } from "./WireBlankCatalog";
+import { renderWireSvg } from "./wire-blank-artwork.mjs";
 import "./wire-blank-catalog.css";
 
-function WireBlankEndGraphic({ end, side, gradientId }: { end: WireBlankEnd; side: "left" | "right"; gradientId: string }) {
-  const mirror = side === "right" ? "translate(1200 0) scale(-1 1)" : undefined;
-  return <g transform={mirror} aria-label={wireBlankEndLabels[end]}>
-    {end === "cut" && <><path d="M220 101Q213 101 213 108V132Q213 139 220 139" fill="#163d68" stroke="#183a5d" strokeWidth="2"/><path d="M214 110V130" stroke="#6887aa" strokeWidth="2" opacity=".65"/></>}
-    {end === "copper" && <><path d="M177 108H220V132H177Z" fill={`url(#${gradientId}-copper)`} stroke="#8b4d2e" strokeWidth="1.5"/><path d="M179 112H218M179 117H218M179 122H218M179 127H218" stroke="#87492a" strokeWidth="1" opacity=".8"/><path d="M220 101Q213 101 213 108V132Q213 139 220 139" fill="#163d68" stroke="#183a5d" strokeWidth="2"/></>}
-    {end === "tin" && <><path d="M177 108H220V132H177Z" fill={`url(#${gradientId}-tin)`} stroke="#667981" strokeWidth="1.5"/><path d="M179 112H218M179 117H218M179 122H218M179 127H218" stroke="#82969d" strokeWidth="1" opacity=".8"/><path d="M220 101Q213 101 213 108V132Q213 139 220 139" fill="#163d68" stroke="#183a5d" strokeWidth="2"/></>}
-    {(end === "terminal" || end === "sealed" || end === "sealed-pin") && <>
-      {end !== "terminal" && <><path d="M222 98Q229 87 241 88H280Q293 88 300 98V143Q293 153 280 153H241Q229 152 222 142Z" fill={`url(#${gradientId}-seal)`} stroke="#315748" strokeWidth="2.4"/><path d="M239 89V152M252 88V153M265 88V153M279 89V152" stroke="#d0e0c6" strokeWidth="5" opacity=".75"/></>}
-      {end === "sealed-pin" ? <><path d="M139 101H166L177 107V133L166 139H139Z" fill={`url(#${gradientId}-metal)`} stroke="#536671" strokeWidth="2"/><path d="M39 104Q39 96 47 96H136V144H47Q39 144 39 136Z" fill={`url(#${gradientId}-metal)`} stroke="#4c626b" strokeWidth="2.5"/><path d="M53 109H106V131H53Z" fill="#d5e0e3" opacity=".87"/><path d="M80 104V136M93 104V136" stroke="#72848c" strokeWidth="2"/></> : <><path d="M168 103H207L218 109V131L207 137H168L177 130V110Z" fill={`url(#${gradientId}-metal)`} stroke="#526771" strokeWidth="2.2"/><path d="M181 104V136M193 103V137M204 105V135" stroke="#6f838d" strokeWidth="2.2"/><path d="M139 101H165L177 107V133L165 139H139Z" fill={`url(#${gradientId}-metal)`} stroke="#536671" strokeWidth="2"/></>}
-    </>}
-  </g>;
-}
-
 export function WireBlankPreview({ row }: { row: WireBlank }) {
-  const clipId = useId().replaceAll(":", "");
   if (row.photoDataUrl) return <img className="wire-blank-preview" src={row.photoDataUrl} alt={`Фото полуфабриката ${row.title}`} />;
-  return <svg className="wire-blank-preview" viewBox="0 0 1200 240" role="img" aria-label={`${row.title}: ${wireBlankEndLabels[row.start]} — ${wireBlankEndLabels[row.end]}`}>
-    <defs><linearGradient id={`${clipId}-copper`} x2="0" y2="1"><stop stopColor="#e7ab73"/><stop offset=".48" stopColor="#b76739"/><stop offset="1" stopColor="#814529"/></linearGradient><linearGradient id={`${clipId}-tin`} x2="0" y2="1"><stop stopColor="#f7faf9"/><stop offset=".5" stopColor="#b7c4c7"/><stop offset="1" stopColor="#738b92"/></linearGradient><linearGradient id={`${clipId}-metal`} x2="0" y2="1"><stop stopColor="#e9eff2"/><stop offset=".5" stopColor="#aebfc8"/><stop offset="1" stopColor="#657783"/></linearGradient><linearGradient id={`${clipId}-seal`} x2="0" y2="1"><stop stopColor="#a6c7a4"/><stop offset=".45" stopColor="#648e75"/><stop offset="1" stopColor="#355b53"/></linearGradient></defs>
-    <rect x="220" y="96" width="760" height="48" rx="17" fill={row.color} stroke="#263746" strokeWidth="3" />
-    <path d="M320 104H880" stroke="#fff" strokeWidth="3" opacity=".28" />
-    <WireBlankEndGraphic end={row.start} side="left" gradientId={clipId} />
-    <WireBlankEndGraphic end={row.end} side="right" gradientId={clipId} />
-  </svg>;
+  const title = `${row.title}: ${wireBlankEndLabels[row.start]} — ${wireBlankEndLabels[row.end]}`;
+  const artwork = renderWireSvg({ left: row.start, right: row.end, color: row.color });
+  return <img className="wire-blank-preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(artwork)}`} alt={title} />;
 }
 
 export function WireBlankCatalogEditor({ snapshot, disabled, onSave }: {

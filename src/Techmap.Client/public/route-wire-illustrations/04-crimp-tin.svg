@@ -1,33 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="title desc">
-  <title id="title">Наконечник без уплотнителя + лужение</title><desc id="desc">Схематичный вид провода с технологической обработкой концов. Цвет изоляции условный.</desc>
-  <defs>
-  <linearGradient id="jacket" x2="0" y2="1"><stop stop-color="#264b82"/><stop offset=".18" stop-color="#5386c3"/><stop offset=".44" stop-color="#26609e"/><stop offset=".76" stop-color="#174574"/><stop offset="1" stop-color="#102f51"/></linearGradient>
-  <linearGradient id="metal" x2="0" y2="1"><stop stop-color="#e9eff2"/><stop offset=".24" stop-color="#aebfc8"/><stop offset=".47" stop-color="#f7fafb"/><stop offset=".72" stop-color="#8d9ca5"/><stop offset="1" stop-color="#657783"/></linearGradient>
-  <linearGradient id="copper" x2="0" y2="1"><stop stop-color="#e7ab73"/><stop offset=".48" stop-color="#b76739"/><stop offset="1" stop-color="#814529"/></linearGradient>
-  <linearGradient id="tin" x2="0" y2="1"><stop stop-color="#f7faf9"/><stop offset=".5" stop-color="#b7c4c7"/><stop offset="1" stop-color="#738b92"/></linearGradient>
-  <linearGradient id="seal" x2="0" y2="1"><stop stop-color="#a6c7a4"/><stop offset=".45" stop-color="#648e75"/><stop offset="1" stop-color="#355b53"/></linearGradient>
-  <clipPath id="wire"><rect x="220" y="96" width="760" height="48" rx="17"/></clipPath>
-</defs>
-  <rect x="220" y="96" width="760" height="48" rx="17" fill="url(#jacket)" stroke="#25445f" stroke-width="2.5"/>
-  <path d="M235 102H965" stroke="#b5d0ea" stroke-width="3" opacity=".5" clip-path="url(#wire)"/>
-  <path d="M237 138H963" stroke="#092b51" stroke-width="3" opacity=".55" clip-path="url(#wire)"/>
-  <g>
-    <path d="M177 108L219 108V132H177Z" fill="url(#copper)" stroke="#8b4d2e" stroke-width="1.5"/>
-    <path d="M179 111H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 114H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 117H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 120H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 123H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 126H218" stroke="#87492a" stroke-width="1" opacity=".8"/><path d="M179 129H218" stroke="#87492a" stroke-width="1" opacity=".8"/>
-    <path d="M139 101H165L177 107V133L165 139H139Z" fill="url(#metal)" stroke="#536671" stroke-width="2"/>
-    <path d="M47 96H136V144H47Q39 144 39 136V104Q39 96 47 96Z" fill="url(#metal)" stroke="#4c626b" stroke-width="2.5"/>
-       <path d="M47 104H112V136H47Z" fill="#4b626f" stroke="#213a48" stroke-width="2"/>
-       <path d="M53 109H106V131H53Z" fill="#d5e0e3" opacity=".87"/>
-       <path d="M80 104V136M93 104V136" stroke="#72848c" stroke-width="2"/>
-       <path d="M118 93L129 85L134 97" fill="url(#metal)" stroke="#4c626b" stroke-width="1.5"/>
-    <path d="M139 100H154L166 106L170 113L161 117L149 111H139M139 140H154L166 134L170 127L161 123L149 129H139" fill="url(#metal)" stroke="#536671" stroke-width="2"/>
-    <path d="M168 103H207L218 109V131L207 137H168L177 130V110Z" fill="url(#metal)" stroke="#526771" stroke-width="2.2"/>
-    <path d="M181 104V136M193 103V137M204 105V135" stroke="#6f838d" stroke-width="2.2"/>
-    <path d="M205 101Q224 90 239 96L245 104L236 112L221 107L211 111M205 139Q224 150 239 144L245 136L236 128L221 133L211 129" fill="url(#metal)" stroke="#4d626e" stroke-width="2"/>
-    <path d="M219 108Q228 113 239 108M219 132Q228 127 239 132" fill="none" stroke="#556a72" stroke-width="2"/>
-    <path d="M125 98H136M125 142H136" stroke="#6d8088" stroke-width="2"/></g>
-  <g transform="translate(1200 0) scale(-1 1)"><path d="M146 105 Q144 120 146 135 L220 135 L220 105 Z" fill="url(#tin)" stroke="#7b929a" stroke-width="1.8"/>
-    <path d="M148 107.0 Q180 106.0 218 107.0" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 110.2 Q180 111.6 218 110.2" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 113.4 Q180 112.4 218 113.4" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 116.6 Q180 118.0 218 116.6" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 119.8 Q180 118.8 218 119.8" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 123.0 Q180 124.4 218 123.0" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 126.2 Q180 125.2 218 126.2" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 129.4 Q180 130.8 218 129.4" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/><path d="M148 132.6 Q180 131.6 218 132.6" fill="none" stroke="#7b929a" stroke-width="1.3" opacity=".82"/>
-    <path d="M221 98V142" stroke="#153c67" stroke-width="3"/>
-    <path d="M146 105V135" stroke="#7b929a" stroke-width="1.8"/></g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="title" style="--wire-color:#26609e"><title id="title">Наконечник без уплотнителя + лужение</title><defs>
+    <linearGradient id="wireBody" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".34"/><stop offset=".28" stop-color="#fff" stop-opacity=".1"/><stop offset=".8" stop-color="#001a2b" stop-opacity=".12"/><stop offset="1" stop-color="#001a2b" stop-opacity=".3"/></linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f8fafb"/><stop offset=".31" stop-color="#c5d0d5"/><stop offset=".56" stop-color="#e7edef"/><stop offset="1" stop-color="#889aa3"/></linearGradient>
+    <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f3ba85"/><stop offset=".45" stop-color="#ca7e4a"/><stop offset="1" stop-color="#854725"/></linearGradient>
+    <linearGradient id="solder" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f7fbfb"/><stop offset=".54" stop-color="#b8c7cc"/><stop offset="1" stop-color="#80949c"/></linearGradient>
+    <linearGradient id="rubber" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#89bb8d"/><stop offset=".44" stop-color="#397b55"/><stop offset="1" stop-color="#28543d"/></linearGradient>
+  </defs><g data-part="body"><rect x="220" y="94" width="760" height="52" fill="var(--wire-color,#26609e)" stroke="#294257" stroke-width="2.4"/>
+    <rect x="222" y="96" width="756" height="48" fill="url(#wireBody)"/>
+    <path d="M222 100H978" stroke="#fff" stroke-width="2.4" opacity=".33"/>
+    <path d="M222 141H978" stroke="#173c59" stroke-width="2" opacity=".28"/></g><g data-part="terminal">
+    <path d="M78 101H214V139H78Z" fill="url(#bronze)" stroke="#874721" stroke-width="1.8"/><path d="M79 103.0 C101 101.0 116 105.0 137 103.0 M161 103.0 C180 101.0 195 105.0 213 103.0" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 106.3 C101 104.3 116 108.3 137 106.3 M161 106.3 C180 104.3 195 108.3 213 106.3" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 109.6 C101 107.6 116 111.6 137 109.6 M161 109.6 C180 107.6 195 111.6 213 109.6" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 112.9 C101 110.9 116 114.9 137 112.9 M161 112.9 C180 110.9 195 114.9 213 112.9" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 116.2 C101 114.2 116 118.2 137 116.2 M161 116.2 C180 114.2 195 118.2 213 116.2" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 119.5 C101 117.5 116 121.5 137 119.5 M161 119.5 C180 117.5 195 121.5 213 119.5" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 122.8 C101 120.8 116 124.8 137 122.8 M161 122.8 C180 120.8 195 124.8 213 122.8" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 126.1 C101 124.1 116 128.1 137 126.1 M161 126.1 C180 124.1 195 128.1 213 126.1" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 129.4 C101 127.4 116 131.4 137 129.4 M161 129.4 C180 127.4 195 131.4 213 129.4" fill="none" stroke="#874721" stroke-width="1.25"/><path d="M79 132.7 C101 130.7 116 134.7 137 132.7 M161 132.7 C180 130.7 195 134.7 213 132.7" fill="none" stroke="#874721" stroke-width="1.25"/>
+    <path d="M78 94H217V102H78Z M78 138H217V146H78Z" fill="url(#silver)" stroke="#273942" stroke-width="1.7"/>
+    <path d="M27 96H80V144H27Q22 144 22 139V101Q22 96 27 96Z" fill="url(#silver)" stroke="#273942" stroke-width="2.6"/><path d="M30 103H76V137H30Z" fill="#758992" stroke="#3c515d" stroke-width="1.7"/><path d="M34 108H72V132H34Z" fill="#dce6e9"/><path d="M62 107V133" stroke="#82959b" stroke-width="1.4"/><path d="M48 96L56 84L67 84L72 96" fill="url(#silver)" stroke="#273942" stroke-width="2"/>
+    <path d="M78 95H111V101C111 109 107 112 101 112H78Z M78 145H111V139C111 131 107 128 101 128H78Z" fill="url(#silver)" stroke="#273942" stroke-width="2.2"/>
+    <path d="M132 98H154Q162 98 162 107V133Q162 142 154 142H132Z" fill="url(#silver)" stroke="#273942" stroke-width="2.2"/>
+    <path d="M136 101V139M143 101V139M150 101V139" stroke="#81939b" stroke-width="1.6"/>
+    <path d="M163 99H187V104Q187 114 181 114H163Z M163 141H187V136Q187 126 181 126H163Z" fill="url(#silver)" stroke="#273942" stroke-width="2.1"/>
+    <path d="M188 92H217V103H199Q193 103 193 110V130Q193 137 199 137H217V148H188Q181 148 181 141V99Q181 92 188 92Z" fill="url(#silver)" stroke="#273942" stroke-width="2.3"/>
+    <path d="M204 93V104M204 136V147" stroke="#758790" stroke-width="1.7"/>
+    <path d="M93 95L112 88L114 97" fill="url(#silver)" stroke="#273942" stroke-width="1.7"/>
+  </g><g transform="translate(1200 0) scale(-1 1)"><g data-part="tin"><path d="M158 102H220V138H158Z" fill="url(#solder)" stroke="#728991" stroke-width="1.7"/><path d="M158 103 C176 101 194 105 220 103" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 106 C176 104 194 108 220 106" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 109 C176 107 194 111 220 109" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 112 C176 110 194 114 220 112" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 115 C176 113 194 117 220 115" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 118 C176 116 194 120 220 118" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 121 C176 119 194 123 220 121" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 124 C176 122 194 126 220 124" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 127 C176 125 194 129 220 127" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 130 C176 128 194 132 220 130" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 133 C176 131 194 135 220 133" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/><path d="M158 136 C176 134 194 138 220 136" fill="none" stroke="#728991" stroke-width="1.2" opacity=".9"/>
+    <path d="M158 102V138" stroke="#728991" stroke-width="2"/>
+    <path d="M220 94V146" stroke="#1c3952" stroke-width="2.6"/></g></g></svg>

@@ -9,29 +9,34 @@ const row: WireBlank = {
   start: "cut", end: "cut", templateId: "01-cut", photoDataUrl: null, originalPayload: {},
 };
 
+function artwork(sample: WireBlank): string {
+  const markup = renderToStaticMarkup(createElement(WireBlankPreview, { row: sample }));
+  const encoded = markup.match(/src="data:image\/svg\+xml;charset=utf-8,([^"]+)"/)?.[1];
+  expect(encoded).toBeTruthy();
+  return decodeURIComponent(encoded!);
+}
+
 describe("wire blank preview", () => {
-  it("draws both selected end treatments as inline SVG", () => {
-    const cut = renderToStaticMarkup(createElement(WireBlankPreview, { row }));
-    expect(cut).not.toContain("<image");
+  it("assembles each selected end from the canonical artwork on both sides", () => {
+    const cut = artwork(row);
+    expect(cut).toContain('data-part="cut"');
     for (const end of wireBlankEnds) {
-      if (end === "cut") continue;
-      const left = renderToStaticMarkup(createElement(WireBlankPreview, { row: { ...row, start: end } }));
-      const right = renderToStaticMarkup(createElement(WireBlankPreview, { row: { ...row, end } }));
-      expect(left).not.toBe(cut);
-      expect(right).not.toBe(cut);
-      expect(left).toContain("<g aria-label=");
+      const left = artwork({ ...row, start: end });
+      const right = artwork({ ...row, end });
+      expect(left).toContain(`data-part="${end === "sealed-pin" ? "sealed-pin-terminal" : end === "sealed" ? "seal" : end}"`);
       expect(right).toContain('transform="translate(1200 0) scale(-1 1)"');
-      expect(left).not.toContain("<image");
+      expect(right).toContain(`data-part="${end === "sealed-pin" ? "sealed-pin-terminal" : end === "sealed" ? "seal" : end}"`);
+      if (end !== "cut") { expect(left).not.toBe(cut); expect(right).not.toBe(cut); }
     }
   });
 
-  it("uses per-card gradient IDs and switches to the uploaded photo", () => {
-    const markup = renderToStaticMarkup(createElement(WireBlankPreview, { row: { ...row, start: "sealed", end: "tin" } }));
-    expect(markup).toMatch(/fill="url\(#([^)]*)-seal\)"/);
-    expect(markup).toMatch(/fill="url\(#([^)]*)-tin\)"/);
+  it("changes jacket color without recoloring copper or tin, and retains uploaded photo", () => {
+    const colored = artwork({ ...row, color: "#ff6600", start: "sealed", end: "tin" });
+    expect(colored).toContain("--wire-color:#ff6600");
+    expect(colored).toContain('data-part="seal"');
+    expect(colored).toContain('data-part="tin"');
+    expect(colored).toContain("#874721");
     expect(renderToStaticMarkup(createElement(WireBlankPreview, { row: { ...row, photoDataUrl: "data:image/png;base64,AAAA" } })))
       .toContain('<img class="wire-blank-preview" src="data:image/png;base64,AAAA"');
   });
 });
-
-

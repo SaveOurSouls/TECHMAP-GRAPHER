@@ -1,11 +1,23 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "viewBox": [
     0,
     0,
     1200,
     240
   ],
+  "parts": {
+    "body": "parts/body.svg",
+    "ends": {
+      "cut": "parts/cut.svg",
+      "copper": "parts/copper.svg",
+      "tin": "parts/tin.svg",
+      "terminal": "parts/terminal.svg",
+      "sealed": "parts/sealed.svg",
+      "sealed-pin": "parts/sealed-pin.svg"
+    },
+    "rightTransform": "translate(1200 0) scale(-1 1)"
+  },
   "entries": [
     {
       "id": "01-cut",

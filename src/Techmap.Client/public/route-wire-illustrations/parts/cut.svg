@@ -1,12 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img" aria-labelledby="title" style="--wire-color:#26609e"><title id="title">Провод нарезан</title><defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img"><defs>
     <linearGradient id="wireBody" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".34"/><stop offset=".28" stop-color="#fff" stop-opacity=".1"/><stop offset=".8" stop-color="#001a2b" stop-opacity=".12"/><stop offset="1" stop-color="#001a2b" stop-opacity=".3"/></linearGradient>
     <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f8fafb"/><stop offset=".31" stop-color="#c5d0d5"/><stop offset=".56" stop-color="#e7edef"/><stop offset="1" stop-color="#889aa3"/></linearGradient>
     <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f3ba85"/><stop offset=".45" stop-color="#ca7e4a"/><stop offset="1" stop-color="#854725"/></linearGradient>
     <linearGradient id="solder" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f7fbfb"/><stop offset=".54" stop-color="#b8c7cc"/><stop offset="1" stop-color="#80949c"/></linearGradient>
     <linearGradient id="rubber" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#89bb8d"/><stop offset=".44" stop-color="#397b55"/><stop offset="1" stop-color="#28543d"/></linearGradient>
-  </defs><g data-part="body"><rect x="220" y="94" width="760" height="52" fill="var(--wire-color,#26609e)" stroke="#294257" stroke-width="2.4"/>
-    <rect x="222" y="96" width="756" height="48" fill="url(#wireBody)"/>
-    <path d="M222 100H978" stroke="#fff" stroke-width="2.4" opacity=".33"/>
-    <path d="M222 141H978" stroke="#173c59" stroke-width="2" opacity=".28"/></g><g data-part="cut"><path d="M220 94V146" fill="none" stroke="#21394c" stroke-width="2.6"/>
-    <path d="M220 98V142" stroke="#e2e9ed" stroke-width="1.5" opacity=".48"/></g><g transform="translate(1200 0) scale(-1 1)"><g data-part="cut"><path d="M220 94V146" fill="none" stroke="#21394c" stroke-width="2.6"/>
-    <path d="M220 98V142" stroke="#e2e9ed" stroke-width="1.5" opacity=".48"/></g></g></svg>
+  </defs><g data-part="cut"><path d="M220 94V146" fill="none" stroke="#21394c" stroke-width="2.6"/>
+    <path d="M220 98V142" stroke="#e2e9ed" stroke-width="1.5" opacity=".48"/></g></svg>
