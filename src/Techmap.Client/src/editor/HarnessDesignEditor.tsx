@@ -1915,7 +1915,16 @@ export function HarnessDesignEditor({
         saveState={saveState}
         onSaveRequest={localCopy ? () => {
           const current = historyRef.current?.present;
-          if (current) localCopy.onSave(structuredClone(current), hiddenObjectIds, backgroundOpacity);
+          if (current) {
+            try {
+              localCopy.onSave(structuredClone(current), hiddenObjectIds, backgroundOpacity);
+              setSaveState("saved");
+              setMessage("");
+            } catch (error) {
+              setSaveState("error");
+              setMessage(error instanceof Error ? error.message : "Не удалось сохранить фрагмент.");
+            }
+          }
         } : () => void flushSave()}
         localCopyControls={localCopy ? {
           hiddenObjectIds, backgroundOpacity,
