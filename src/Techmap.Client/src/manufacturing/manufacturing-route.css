@@ -392,6 +392,7 @@
 .route-presentation-toolbar input[type=range] { width: 90px; accent-color: var(--route-accent); }
 .route-presentation-section > p { margin: 9px 0; color: var(--route-muted); font-size: 11px; }
 .route-presentation { display: block; width: 100%; min-height: 270px; max-height: 510px; border: 1px solid #d7e3e8; border-radius: 7px; background: #f8fbfc; touch-action: none; }
+.route-covering-artwork { display: block; width: 100%; height: 100%; overflow: visible; }
 .route-svg-object { cursor: pointer; }
 .route-svg-object text { fill: #24465d; font: 12px Arial, sans-serif; pointer-events: none; }
 .route-point-handle { fill: #fff; stroke: #3887b2; stroke-width: 2; cursor: grab; }
