@@ -23,6 +23,7 @@ export interface RouteAssemblyDrawingProps {
 const refKey = (ref: RouteSourceRef): string => `${ref.kind}:${ref.id}`;
 const clonePoints = (points: readonly Point[]): Point[] => points.map(point => ({ ...point }));
 const clamp = (value: number): number => Math.max(0, Math.min(1, value));
+const EMPTY_INSTANCES: readonly ComponentTemplateViewInstance[] = [];
 const sceneControls = (object: EditorSceneObject): readonly Point[] => object.pipe?.authoredPoints ?? object.points ?? [{ x: object.x, y: object.y }];
 
 /** Every scene object has a stable ID, including P, OP, shells and annotations. */
@@ -44,6 +45,13 @@ export function createAssemblyDrawingDraft(row: RouteRow, document: HarnessDesig
 export function assemblyDrawingFragment(presentation: AssemblyDrawingPresentation): AssemblyDrawingPresentation {
   return { backgroundOpacity: presentation.backgroundOpacity, objects: presentation.objects.map(object => ({ ...object, points: clonePoints(object.points) })),
     ...(presentation.drawingObjects ? { drawingObjects: presentation.drawingObjects.map(object => ({ ...object, points: clonePoints(object.points) })) } : {}) };
+}
+export function setAssemblyDrawingLayerVisibility(states: readonly DrawingObject[], layerId: string, visible: boolean): DrawingObject[] {
+  return states.map(state => state.layerId === layerId ? { ...state, hidden: !visible } : state);
+}
+export function moveAssemblyDrawingObject(states: readonly DrawingObject[], id: string, from: Point, to: Point): DrawingObject[] {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  return states.map(state => state.id === id ? { ...state, points: state.points.map(point => ({ x: point.x + dx, y: point.y + dy })) } : state);
 }
 export function assemblyDrawingScene(scene: readonly EditorSceneObject[], states: readonly DrawingObject[]): EditorSceneObject[] {
   const byId = new Map(states.map(state => [state.id, state]));
@@ -80,7 +88,7 @@ export function assemblyDrawingScene(scene: readonly EditorSceneObject[], states
   });
 }
 
-export function RouteAssemblyDrawingPreview({ row, document, componentTemplateViewInstances = [], resolveComponentTemplateAssetUrl }: Pick<RouteAssemblyDrawingProps, "row" | "document" | "componentTemplateViewInstances" | "resolveComponentTemplateAssetUrl">) {
+export function RouteAssemblyDrawingPreview({ row, document, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl }: Pick<RouteAssemblyDrawingProps, "row" | "document" | "componentTemplateViewInstances" | "resolveComponentTemplateAssetUrl">) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useMemo(() => designToScene(document, "drawing"), [document]);
   const objects = useMemo(() => assemblyDrawingScene(scene, row.presentation.drawingObjects ?? []), [scene, row.presentation.drawingObjects]);
@@ -107,20 +115,19 @@ export function RouteAssemblyDrawingPreview({ row, document, componentTemplateVi
   return <canvas ref={canvas} className="route-assembly-drawing__preview" role="img" aria-label={`Фрагмент сборки ${row.title}`} />;
 }
 
-export function RouteAssemblyDrawing({ row, document, items, componentTemplateViewInstances = [], resolveComponentTemplateAssetUrl, onSave, onCancel }: RouteAssemblyDrawingProps) {
+export function RouteAssemblyDrawing({ row, document, items, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl, onSave, onCancel }: RouteAssemblyDrawingProps) {
   const scene = useMemo(() => designToScene(document, "drawing"), [document]);
   const [presentation, setPresentation] = useState<AssemblyDrawingPresentation>(() => createAssemblyDrawingDraft(row, document, items));
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<string>>(() => new Set());
   const [camera, setCamera] = useState<EditorCamera>({ offsetX: 0, offsetY: 0, zoom: 1 });
   const frame = useRef<HTMLDivElement>(null), backgroundCanvas = useRef<HTMLCanvasElement>(null), foregroundCanvas = useRef<HTMLCanvasElement>(null);
   const imageCache = useRef(new ComponentTemplateImageCache());
-  const drag = useRef<{ id: string; index: number; pointerId: number } | null>(null);
+  const drag = useRef<{ id: string; index: number; pointerId: number; start?: Point } | null>(null);
   const states = presentation.drawingObjects ?? [];
   const stateById = useMemo(() => new Map(states.map(state => [state.id, state])), [states]);
   const sceneById = useMemo(() => new Map(scene.map(object => [object.id, object])), [scene]);
-  const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: !hiddenLayers.has(layer.id), locked: false })), [document, hiddenLayers]);
+  const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: true, locked: false })), [document]);
   const background = scene.filter(object => layers.some(layer => layer.id === object.layerId && layer.visible));
   const foreground = assemblyDrawingScene(scene, states).filter(object => layers.some(layer => layer.id === object.layerId && layer.visible));
   const selectedObject = foreground.find(object => object.id === selected), selectedState = selected ? stateById.get(selected) : undefined;
@@ -159,16 +166,17 @@ export function RouteAssemblyDrawing({ row, document, items, componentTemplateVi
   return <section className="route-assembly-drawing" aria-label={`Рисунок сборки ${row.title}`}>
     <header className="route-assembly-drawing__header"><div><p className="route-assembly-drawing__eyebrow">КОПИЯ ЧЕРТЕЖА СБОРКИ</p><h3>{row.title}</h3><p>Геометрия и видимость сохраняются в рисунке этапа. Исходный чертёж и длины остаются прежними.</p></div><div className="route-assembly-drawing__actions"><button type="button" className="secondary-action" onClick={onCancel}>Отмена</button><button type="button" className="primary-action" onClick={() => onSave(assemblyDrawingFragment(presentation))}>Сохранить фрагмент</button></div></header>
     <div className="route-assembly-drawing__toolbar"><label>Фон жгута <output>{Math.round(presentation.backgroundOpacity * 100)}%</output><input type="range" min={0} max={100} step={1} value={Math.round(presentation.backgroundOpacity * 100)} aria-label="Фон жгута" onChange={event => setPresentation(current => ({ ...current, backgroundOpacity: Number(event.target.value) / 100 }))} /></label><span className="route-assembly-drawing__count">В фрагменте: {states.filter(state => !state.hidden).length} из {states.length}; выбрано {selectedIds.size}</span><button type="button" className="secondary-action" onClick={() => setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => ({ ...state, hidden: false })) }))}>Показать все</button><button type="button" className="secondary-action" disabled={!selectedIds.size} onClick={() => setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => ({ ...state, hidden: !selectedIds.has(state.id) })) }))}>Изолировать выбранное</button></div>
-    <div className="route-assembly-drawing__workspace"><aside className="route-assembly-drawing__objects" aria-label="Объекты чертежа"><h4>Слои и объекты</h4>{document.views.drawing.layers.map(layer => <section key={layer.id} className="route-assembly-drawing__layer"><label><input type="checkbox" checked={!hiddenLayers.has(layer.id)} onChange={event => { const visible = event.target.checked; setHiddenLayers(current => { const next = new Set(current); visible ? next.delete(layer.id) : next.add(layer.id); return next; }); setPresentation(current => ({ ...current, drawingObjects: current.drawingObjects?.map(state => sceneById.get(state.id)?.layerId === layer.id ? { ...state, hidden: !visible } : state) })); }} />{layer.name}</label>{scene.filter(object => object.layerId === layer.id).map(object => { const hidden = stateById.get(object.id)?.hidden ?? true; return <div key={object.id} className={`route-assembly-drawing__object ${selectedIds.has(object.id) ? "is-selected" : ""} ${hidden ? "is-hidden" : ""}`}><button type="button" className="route-assembly-drawing__object-name" aria-pressed={selectedIds.has(object.id)} onClick={event => choose(object.id, event.ctrlKey || event.shiftKey || event.metaKey)}><span>{named(object)}</span><small>{hidden ? "Скрыто" : "В фрагменте"}</small></button><button type="button" className="icon-action" aria-label={`${hidden ? "Показать" : "Скрыть"} ${named(object)}`} onClick={() => updateState(object.id, current => ({ ...current, hidden: !current.hidden }))}>{hidden ? "◉" : "◌"}</button></div>; })}</section>)}</aside>
+    <div className="route-assembly-drawing__workspace"><aside className="route-assembly-drawing__objects" aria-label="Объекты чертежа"><h4>Слои и объекты</h4>{document.views.drawing.layers.map(layer => <section key={layer.id} className="route-assembly-drawing__layer"><label><input type="checkbox" checked={states.filter(state => state.layerId === layer.id).every(state => !state.hidden)} onChange={event => setPresentation(current => ({ ...current, drawingObjects: setAssemblyDrawingLayerVisibility(current.drawingObjects ?? [], layer.id, event.target.checked) }))} />{layer.name}</label>{scene.filter(object => object.layerId === layer.id).map(object => { const hidden = stateById.get(object.id)?.hidden ?? true; return <div key={object.id} className={`route-assembly-drawing__object ${selectedIds.has(object.id) ? "is-selected" : ""} ${hidden ? "is-hidden" : ""}`}><button type="button" className="route-assembly-drawing__object-name" aria-pressed={selectedIds.has(object.id)} onClick={event => choose(object.id, event.ctrlKey || event.shiftKey || event.metaKey)}><span>{named(object)}</span><small>{hidden ? "Скрыто" : "В фрагменте"}</small></button><button type="button" className="icon-action" aria-label={`${hidden ? "Показать" : "Скрыть"} ${named(object)}`} onClick={() => updateState(object.id, current => ({ ...current, hidden: !current.hidden }))}>{hidden ? "◉" : "◌"}</button></div>; })}</section>)}</aside>
       <div ref={frame} className="route-assembly-drawing__viewport" role="img" aria-label="Копия чертежа сборки" onPointerDown={event => {
         const point = localPoint(event);
-        if (selectedObject && selectedState) { const index = selectedState.points.findIndex(control => Math.hypot(control.x - point.x, control.y - point.y) <= 9 / camera.zoom); if (index >= 0 && selectedObject.kind !== "physical-covering") { drag.current = { id: selectedObject.id, index, pointerId: event.pointerId }; event.currentTarget.setPointerCapture(event.pointerId); return; } }
+        if (selectedObject && selectedState) { const index = selectedState.points.findIndex(control => Math.hypot(control.x - point.x, control.y - point.y) <= 9 / camera.zoom); if (index >= 0) { drag.current = { id: selectedObject.id, index, pointerId: event.pointerId, start: point }; event.currentTarget.setPointerCapture(event.pointerId); return; } }
         const hit = hitTestEditorScene(foreground, layers, point, camera.zoom, "drawing", componentTemplateViewInstances, resolveComponentTemplateAssetUrl)
           ?? hitTestEditorScene(scene, layers, point, camera.zoom, "drawing", componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
+        if (hit === selected && sceneById.get(hit)?.kind === "physical-covering" && !stateById.get(hit)?.hidden) { drag.current = { id: hit, index: 0, pointerId: event.pointerId, start: point }; event.currentTarget.setPointerCapture(event.pointerId); return; }
         if (hit) { choose(hit, event.ctrlKey || event.shiftKey || event.metaKey); updateState(hit, state => ({ ...state, hidden: false })); }
-      }} onPointerMove={event => { if (drag.current?.pointerId === event.pointerId) updateState(drag.current.id, state => ({ ...state, points: state.points.map((value, index) => index === drag.current!.index ? localPoint(event) : value) })); }} onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId); } }} onPointerCancel={() => { drag.current = null; }}>
+      }} onPointerMove={event => { const active = drag.current; if (active?.pointerId !== event.pointerId) return; const point = localPoint(event); if (sceneById.get(active.id)?.kind === "physical-covering") { const previous = active.start!; setPresentation(current => ({ ...current, drawingObjects: moveAssemblyDrawingObject(current.drawingObjects ?? [], active.id, previous, point) })); drag.current = { ...active, start: point }; } else updateState(active.id, state => ({ ...state, points: state.points.map((value, index) => index === active.index ? point : value) })); }} onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId); } }} onPointerCancel={() => { drag.current = null; }}>
         <canvas ref={backgroundCanvas} className="route-assembly-drawing__viewport-canvas route-assembly-drawing__viewport-background" style={{ opacity: presentation.backgroundOpacity }} aria-hidden="true" /><canvas ref={foregroundCanvas} className="route-assembly-drawing__viewport-canvas" aria-hidden="true" />
-        {selectedObject && selectedState && !selectedState.hidden && selectedObject.kind !== "physical-covering" && <svg className="route-assembly-drawing__handles" aria-hidden="true">{selectedState.points.map((point, index) => <circle key={index} cx={point.x * camera.zoom + camera.offsetX} cy={point.y * camera.zoom + camera.offsetY} r={5} />)}</svg>}
+        {selectedObject && selectedState && !selectedState.hidden && <svg className="route-assembly-drawing__handles" aria-hidden="true">{selectedState.points.map((point, index) => <circle key={index} cx={point.x * camera.zoom + camera.offsetX} cy={point.y * camera.zoom + camera.offsetY} r={5} />)}</svg>}
       </div></div><p className="route-assembly-drawing__hint">Выберите объект на чертеже или в слое. П/ОП и оболочки выбираются поверх проводов; ручки выбранной геометрии можно перемещать.</p>
   </section>;
 }

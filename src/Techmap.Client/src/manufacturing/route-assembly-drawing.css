@@ -9,8 +9,8 @@
 .route-assembly-drawing__toolbar output { min-width: 38px; color: #356d7d; font-variant-numeric: tabular-nums; }
 .route-assembly-drawing__toolbar input[type="range"] { width: 180px; accent-color: #2c8092; }
 .route-assembly-drawing__count { margin-left: auto; color: #718692; font-size: 11px; }
-.route-assembly-drawing__workspace { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 12px; min-height: 390px; }
-.route-assembly-drawing__objects { padding: 12px; background: #fff; border: 1px solid #dce8ec; border-radius: 9px; }
+.route-assembly-drawing__workspace { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 12px; height: min(68vh, 680px); min-height: 390px; }
+.route-assembly-drawing__objects { min-height: 0; overflow-y: auto; padding: 12px; background: #fff; border: 1px solid #dce8ec; border-radius: 9px; }
 .route-assembly-drawing__objects h4 { margin: 0 0 10px; font-size: 12px; }
 .route-assembly-drawing__object { display: grid; grid-template-columns: minmax(0, 1fr) 28px 28px; gap: 3px; align-items: stretch; margin: 4px 0; border: 1px solid transparent; border-radius: 7px; }
 .route-assembly-drawing__object.is-selected { border-color: #69a6b4; background: #eef8fa; }
@@ -20,7 +20,7 @@
 .route-assembly-drawing__object-name small { color: #78919a; font-size: 9px; }
 .icon-action { border: 0; background: transparent; color: #4e7e8b; cursor: pointer; font-size: 14px; }
 .route-assembly-drawing__canvas { width: 100%; min-height: 390px; border: 1px solid #d1e0e5; border-radius: 9px; background: #fff; touch-action: none; }
-.route-assembly-drawing__viewport { position: relative; min-height: 520px; overflow: hidden; border: 1px solid #d1e0e5; border-radius: 9px; background: #fff; touch-action: none; }
+.route-assembly-drawing__viewport { position: relative; min-height: 0; overflow: hidden; border: 1px solid #d1e0e5; border-radius: 9px; background: #fff; touch-action: none; }
 .route-assembly-drawing__preview { display: block; width: 100%; height: 270px; background: #f7fafb; border: 1px solid #d1e0e5; border-radius: 8px; }
 .route-assembly-drawing__viewport-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .route-assembly-drawing__viewport-background { opacity: .8; }

@@ -5,7 +5,7 @@ import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
 import { generateRoute } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
-import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, assemblyDrawingFragment, assemblyDrawingScene, createAssemblyDrawingDraft } from "./RouteAssemblyDrawing";
+import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, assemblyDrawingFragment, assemblyDrawingScene, createAssemblyDrawingDraft, moveAssemblyDrawingObject, setAssemblyDrawingLayerVisibility } from "./RouteAssemblyDrawing";
 import { designToScene } from "../editor/HarnessDesignEditor";
 import { physicalFixture } from "../editor/physical-topology-fixture";
 
@@ -100,5 +100,19 @@ describe("assembly drawing copy", () => {
     const isolated = assemblyDrawingFragment({ ...draft, drawingObjects: draft.drawingObjects!.map(object => ({ ...object, hidden: object.id !== "op" })) });
     expect(assemblyDrawingScene(designToScene(document, "drawing"), isolated.drawingObjects!).map(object => object.id)).toEqual(["op"]);
     expect(JSON.stringify(document)).toBe(source);
+  });
+
+  it("persists layer visibility and moves a covering in the copy", () => {
+    const base = physicalFixture();
+    const document = { ...base, physicalTopology: { ...base.physicalTopology!, coverings: [{ id: "shell", name: "Оболочка", width: 14, color: "#aaa", lengthMm: null, spans: [{ segmentId: "S0", from: 0, to: 1 }] }] } };
+    const row = { ...generateRoute(document, "a".repeat(64), 1).rows[0]!, kind: "assembly" as const };
+    const draft = createAssemblyDrawingDraft(row, document, []);
+    const shell = draft.drawingObjects!.find(object => object.id === "shell")!;
+    const hidden = setAssemblyDrawingLayerVisibility(draft.drawingObjects!, shell.layerId, false);
+    expect(hidden.find(object => object.id === shell.id)!.hidden).toBe(true);
+    const moved = moveAssemblyDrawingObject(draft.drawingObjects!, shell.id, shell.points[0]!, { x: shell.points[0]!.x + 25, y: shell.points[0]!.y + 15 });
+    expect(moved.find(object => object.id === shell.id)!.points[0]).toEqual({ x: shell.points[0]!.x + 25, y: shell.points[0]!.y + 15 });
+    const reopened = createAssemblyDrawingDraft({ ...row, presentation: assemblyDrawingFragment({ ...draft, drawingObjects: hidden }) }, document, []);
+    expect(reopened.drawingObjects!.find(object => object.id === shell.id)!.hidden).toBe(true);
   });
 });
