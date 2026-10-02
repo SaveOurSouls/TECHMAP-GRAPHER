@@ -159,6 +159,7 @@ export function ManufacturingRoutePanel({ config, session, projectId, harnessId,
   const targetAssemblyId = assemblyRows.some(row => row.id === selectedAssemblyId) ? selectedAssemblyId : assemblyRows.at(-1)?.id ?? "";
   return <section className="manufacturing-route-panel" aria-label="Производственный маршрут">
     {onViewChange && <nav className="route-view-navigation" aria-label="Представление жгута">
+      {onClose && <button type="button" className="route-home-button" disabled={refreshing || photoBusy} onClick={async () => { if (await guard()) onClose(); }} aria-label="Вернуться к проекту">← <span>К проекту</span></button>}
       <button type="button" disabled={refreshing || photoBusy} onClick={async () => { if (await guard()) onViewChange("e4"); }}>Схема Э4</button>
       <button type="button" disabled={refreshing || photoBusy} onClick={async () => { if (await guard()) onViewChange("drawing"); }}>Чертёж</button>
       <button type="button" aria-current="page">Маршрут</button>

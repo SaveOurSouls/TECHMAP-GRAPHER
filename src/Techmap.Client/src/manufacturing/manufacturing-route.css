@@ -14,9 +14,11 @@
   --route-amber: #a56e20;
   --route-amber-soft: #fff4dc;
 }
-.route-view-navigation { display:flex; justify-content:center; gap:4px; margin-bottom:16px; }
+.route-view-navigation { position:sticky; top:0; z-index:10; display:flex; justify-content:center; gap:4px; margin: -28px 0 16px; padding: 10px 0; border-bottom:1px solid var(--route-line); background:rgb(244 247 249 / 94%); backdrop-filter:blur(8px); }
 .manufacturing-route-panel .route-view-navigation button { min-width:90px; font-size:12px; }
 .manufacturing-route-panel .route-view-navigation [aria-current="page"] { color:#fff; background:#008fa8; border-color:#008fa8; }
+.manufacturing-route-panel .route-view-navigation .route-home-button { margin-right:auto; min-width:auto; color:var(--route-ink-soft); }
+.manufacturing-route-panel .route-view-navigation .route-home-button span { font-size:11px; }
 .manufacturing-route-panel {
   min-height: 100vh;
   padding: 28px clamp(20px, 3vw, 52px) 54px;
@@ -161,7 +163,7 @@
 .toolbar-button span { display: inline-grid; place-items: center; min-width: 17px; height: 17px; margin-left: 3px; border-radius: 99px; background: var(--route-accent-soft); color: var(--route-accent); font-size: 10px; }
 
 .manufacturing-route-body { display: grid; grid-template-columns: 412px minmax(0, 1fr); align-items: start; gap: 17px; }
-.route-quick-access { display: grid; grid-template-columns: 200px 200px; align-items: start; gap: 12px; min-width: 0; }
+.route-quick-access { position: sticky; top: 68px; display: grid; grid-template-columns: 200px 200px; align-items: start; gap: 12px; min-width: 0; max-height: calc(100vh - 84px); overflow-y: auto; scrollbar-width: thin; }
 .manufacturing-route-body.materials-collapsed, .manufacturing-route-body.blanks-collapsed { grid-template-columns: 264px minmax(0, 1fr); }
 .materials-collapsed .route-quick-access { grid-template-columns: 52px 200px; }
 .blanks-collapsed .route-quick-access { grid-template-columns: 200px 52px; }
@@ -494,6 +496,7 @@
   .route-inline-row input[type=checkbox], .route-inline-row input[type=radio] { min-height: 20px; }
   .manufacturing-route-status { flex-wrap: wrap; }
   .route-quick-access { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .route-quick-access { position: static; max-height: none; overflow: visible; }
   .materials-collapsed .route-quick-access { grid-template-columns: 52px minmax(0, 1fr); }
   .blanks-collapsed .route-quick-access { grid-template-columns: minmax(0, 1fr) 52px; }
   .materials-collapsed.blanks-collapsed .route-quick-access { grid-template-columns: 52px 52px; }
