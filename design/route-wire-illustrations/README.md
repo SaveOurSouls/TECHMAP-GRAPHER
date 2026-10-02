@@ -1,5 +1,7 @@
 # Рисунки подготовки провода для маршрутной карты
 
+Передача агенту сборщика: [BUILDER-HANDOFF.md](BUILDER-HANDOFF.md) — состав комплекта, API справочника, правила совмещения элементов, цвета и проверки.
+
 В `src/Techmap.Client/public/route-wire-illustrations/` лежат 13 самостоятельных SVG с прозрачным фоном и единым `viewBox` 1200×240. Их можно вставлять как `<img src="/route-wire-illustrations/01-cut.svg">` или выводить в карточке операции по `manifest.json`. `catalog.html` и `overview.png` дают общий просмотр комплекта; `generate.mjs` воспроизводит исходные SVG и манифест.
 
 ## Редакция по C1–C7 от 02.10.2026
