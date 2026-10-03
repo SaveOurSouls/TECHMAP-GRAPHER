@@ -36,8 +36,9 @@ describe("inline route row", () => {
     expect(markup).toContain("Шаблон полуфабриката");
     expect(markup).toContain("Операции");
     expect(markup).toContain("Фото этапа");
-    expect(markup).toContain('class="route-material-table"');
-    expect(markup).toContain('<tfoot><tr><td class="route-metric-cell"');
+    expect(markup).toContain('class="route-material-table route-material-table-components"');
+    expect(markup).toContain('<th>Разделка</th><th>Кол-во</th><th>Запас</th><th>Время</th>');
+    expect(markup).toContain('<td class="route-metric-cell"><label>Кол-во');
     expect(markup).toContain('class="route-operations-table"');
     expect(markup).toContain('+ Добавить операцию');
     expect(markup).not.toContain('Режим операции 1');
@@ -65,19 +66,23 @@ describe("inline route row", () => {
   it("renders independent metrics for merged semi-finished components", () => {
     const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
     const b = createConnector("b", "X2", 1, { x: 100, y: 0 });
-    const document = { ...createEmptyHarnessDesign(), connectors: [a, b], wires: [createWire("wire", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100, "Питание", "#f00")] };
-    const route = generateRoute(document, "a".repeat(64), 1);
-    const source = route.rows[0]!.sourceObjects[0]!;
-    const row = { ...route.rows[0]!, components: [{ ref: source, title: "Провод", index: "ПФ-01", quantity: 2, reserve: 1, operationTimeMinutes: 7 }, { ref: { kind: "connector" as const, id: "connector-2" }, title: "Разъём", index: "ПФ-02", quantity: 3, reserve: 0, operationTimeMinutes: 5 }] };
+    const c = createConnector("c", "X3", 1, { x: 200, y: 0 });
+    const document = { ...createEmptyHarnessDesign(), connectors: [a, b, c], wires: [
+      createWire("wire-1", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100, "Питание", "#f00"),
+      createWire("wire-2", { connectorId: b.id, contactId: b.contacts[0]!.id }, { connectorId: c.id, contactId: c.contacts[0]!.id }, 200, "Сигнал", "#00f"),
+    ] };
+    const generated = generateRoute(document, "a".repeat(64), 1);
+    const refs = generated.rows.map(candidate => candidate.sourceObjects[0]!);
+    const row = { ...generated.rows[0]!, sourceObjects: refs, components: [{ ref: refs[0]!, title: "Питание", index: "ПФ-01", quantity: 2, reserve: 1, operationTimeMinutes: 7 }, { ref: refs[1]!, title: "Сигнал", index: "ПФ-02", quantity: 3, reserve: 0, operationTimeMinutes: 5 }] };
+    const route = { ...generated, rows: [row] };
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
       config, session, projectId: "p", harnessId: "h", row, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
-    expect(markup).toContain('class="route-material-table"');
-    expect(markup).toContain('class="route-component-metrics"');
-    expect(markup).toContain('aria-label="Кол-во"');
-    expect(markup).toContain('value="2"');
-    expect(markup).toContain('value="7"');
+    expect(markup).toContain('class="route-material-table route-material-table-components"');
+    expect(markup).toContain('<th>Разделка</th><th>Кол-во</th><th>Запас</th><th>Время</th>');
+    expect(markup).toMatch(/<tbody><tr><td><strong>ПФ-01<\/strong><span>.*?<\/span>.*?value="2".*?value="1".*?value="7".*?<\/tr><tr><td><strong>ПФ-02<\/strong><span>.*?<\/span>.*?value="3".*?value="0".*?value="5".*?<\/tr><\/tbody>/);
+    expect(markup).not.toContain('class="route-component-metrics"');
     expect(markup).toContain("29 мин");
     expect(markup).toContain("Сводка объединённого полуфабриката");
     expect(markup).not.toContain('<tfoot><tr><td class="route-metric-cell"><label>Кол-во');
