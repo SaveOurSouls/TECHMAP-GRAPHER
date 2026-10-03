@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { HarnessDocumentTabs, rememberHarnessTab } from "./App";
+import { canLeaveProject, HarnessDocumentTabs, rememberHarnessTab } from "./App";
 import type { HarnessSummary } from "./project-api";
 
 const harness: HarnessSummary = {
@@ -43,5 +43,21 @@ describe("harness workspace", () => {
     state = rememberHarnessTab(state, "harness-a", "e4");
 
     expect(state).toEqual({ "harness-a": "e4", "harness-b": "route" });
+  });
+
+  it("blocks project-menu return when the draft confirmation is declined", () => {
+    const confirm = vi.fn(() => false);
+
+    expect(canLeaveProject(true, confirm)).toBe(false);
+    expect(confirm).toHaveBeenCalledOnce();
+  });
+
+  it("allows project-menu return after the draft confirmation", () => {
+    const confirm = vi.fn(() => true);
+
+    expect(canLeaveProject(true, confirm)).toBe(true);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(canLeaveProject(false, confirm)).toBe(true);
+    expect(confirm).toHaveBeenCalledOnce();
   });
 });

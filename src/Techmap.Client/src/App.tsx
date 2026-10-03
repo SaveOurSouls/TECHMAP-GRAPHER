@@ -108,6 +108,13 @@ export function rememberHarnessTab(
   return { ...current, [harnessId]: tab };
 }
 
+export function canLeaveProject(
+  hasUnconfirmedEdits: boolean,
+  confirm: () => boolean,
+): boolean {
+  return !hasUnconfirmedEdits || confirm();
+}
+
 interface AppNavigationProps {
   readonly activeSection: AppSection;
   readonly onSectionChange: (section: AppSection) => void;
@@ -322,10 +329,10 @@ export function App({ config, session }: AppProps) {
     return false;
   };
 
-  const canLeaveCurrentProject = () =>
-    !hasUnconfirmedEdits() || window.confirm(
-      "Есть изменения, не подтверждённые сервером. Закрыть карточку и потерять этот черновик?",
-    );
+  const canLeaveCurrentProject = () => canLeaveProject(
+    hasUnconfirmedEdits(),
+    () => window.confirm("Есть изменения, не подтверждённые сервером. Закрыть карточку и потерять этот черновик?"),
+  );
 
   const discardAutosave = () => {
     unsubscribeAutosaveRef.current?.();
@@ -362,12 +369,12 @@ export function App({ config, session }: AppProps) {
     }
   };
 
-  const closeProject = () => {
+  const closeProject = (): boolean => {
     if (discreteMutationRef.current) {
       setError("Дождитесь завершения текущей операции проекта.");
-      return;
+      return false;
     }
-    if (!canLeaveCurrentProject()) return;
+    if (!canLeaveCurrentProject()) return false;
     transitionGateRef.current.invalidate();
     discardAutosave();
     setSelectedProject(null);
@@ -376,6 +383,15 @@ export function App({ config, session }: AppProps) {
     setOpeningProjectId(null);
     setHarnessFilter("");
     setError(null);
+    return true;
+  };
+
+  const returnToProjectMenu = (): boolean => {
+    if (!closeProject()) return false;
+    setEditorOpen(false);
+    setEditorReveal(undefined);
+    setActiveSection("projects");
+    return true;
   };
 
   const createProject = async (event: FormEvent<HTMLFormElement>) => {
@@ -646,7 +662,7 @@ export function App({ config, session }: AppProps) {
   }, [selectedHarness]);
 
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route") {
-    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={() => setEditorOpen(false)} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} />;
+    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} />;
   }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab !== "route") {
     return (

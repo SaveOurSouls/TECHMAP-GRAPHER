@@ -136,6 +136,19 @@ describe("manufacturing route commands", () => {
     expect(routeRowComposition(withConnector, "assembly").map(ref => ref.id)).toEqual(["a", "b", "x1"]);
     expect(JSON.stringify(original)).toBe(JSON.stringify(route(row("a"), row("b"))));
   });
+  it("adds a resource to a semi-finished stage through a new assembly without changing that stage", () => {
+    const original = route(row("a"), row("b"));
+    const assembly = addAssemblyRow(original, "next", "Сборка a", [], ["a"]);
+    const withInput = addAssemblyInput(assembly, "next", { id: "selected-b", kind: "source", ref: { kind: "wire", id: "b" } });
+    expect(withInput.rows[0]).toEqual(original.rows[0]);
+    expect(withInput.rows.at(-1)?.dependsOn).toEqual(["a", "b"]);
+    expect(withInput.rows.at(-1)?.assemblyInputs).toEqual([
+      { id: "row-1", kind: "row", rowId: "a" },
+      { id: "selected-b", kind: "row", rowId: "b" },
+    ]);
+    expect(routeRowComposition(withInput, "next").map(ref => ref.id)).toEqual(["a", "b"]);
+    expect(() => addAssemblyInput(withInput, "next", { id: "again", kind: "source", ref: { kind: "wire", id: "a" } })).toThrow("уже добавлен");
+  });
   it("rewrites an assembly input when its producing semi-finished rows are merged", () => {
     const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);
     const merged = mergeRouteRows(original, ["a", "b"], "combined");

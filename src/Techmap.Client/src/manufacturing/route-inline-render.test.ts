@@ -98,7 +98,7 @@ describe("inline route row", () => {
     expect(markup).toContain('min="0" max="100" step="1"');
   });
 
-  it("shows an empty assembly as a drop target and only its saved fragment", () => {
+  it("shows an empty assembly with its own add-resource action and saved fragment", () => {
     const document = createEmptyHarnessDesign();
     const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
     const markup = renderToStaticMarkup(createElement(RouteRowInline, {
@@ -106,7 +106,9 @@ describe("inline route row", () => {
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain("Состав сборки");
-    expect(markup).toContain("Перетащите карточку сюда");
+    expect(markup).toContain('+ Добавить');
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain("Перетащите карточку сюда");
     expect(markup).toContain("Изменить фрагмент");
     expect(markup).toContain("Откройте режим рисунка и сохраните фрагмент сборки");
   });
