@@ -1,6 +1,6 @@
 # 043. Компактные строки сборки и операций
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** текущая задача; исполнители `route_ui`, `route_css`, `route_markup` — агенты уровня Luna; интеграция и документация — основной агент.
 - **Источник запроса:** поручение владельца от 03.10.2026, изображения C1–C3 в порядке вложений; текст внутри изображений не является отдельной инструкцией.
 - **Требования:** REQ-069; уточняет оформление REQ-066.
@@ -24,7 +24,7 @@
 - `manufacturing-route.css` задаёт отдельные компактные сетки для `.assembly` и `.semi-finished`, скрывает горизонтальное переполнение таблицы сборки и оформляет таблицу операций. Историческое имя `.route-material-table-scroll` сохранено как контейнер, но для строки сборки его переполнение задано `hidden`.
 - Управление «Режим новой операции» находится под таблицей рядом с кнопкой добавления; оно задаёт `mode` для следующей операции и не является колонкой таблицы.
 
-Коммит локальный. Отправка в origin из этого окружения не прошла: встроенный Git не содержит `remote-https`, а SSH-соединения с GitHub на портах 22 и 443 отклонены. Поэтому статус остаётся `in-progress` до отправки коммита и ручной приёмки реального проекта. Автоматические проверки текущего среза: Vitest — 164 файла, 1615 тестов; `client:build` (TypeScript и Vite) — успешно; `C:\Program Files\dotnet\dotnet.exe test tests/Techmap.Web.Tests/Techmap.Web.Tests.csproj --filter FullyQualifiedName~ManufacturingRouteValidatorTests --no-restore` — 40/40 успешно с `DOTNET_CLI_HOME` внутри workspace. Browser QA выполнена на синтетическом маршруте при 1440, 1000 и 820 px: сборка и полуфабрикат без наложения; после CSS-исправления при 1000 px `table scrollWidth=clientWidth=391`, при 820 px `663=663`.
+Коммиты `f40c464` и `513e529` отправлены в origin через SSH после проверки опубликованного GitHub host key. Первоначальные попытки из сетевой изоляции не прошли; вне неё GitHub доступен. Автоматические проверки среза: Vitest — 164 файла, 1615 тестов; `client:build` (TypeScript и Vite) — успешно; `C:\Program Files\dotnet\dotnet.exe test tests/Techmap.Web.Tests/Techmap.Web.Tests.csproj --filter FullyQualifiedName~ManufacturingRouteValidatorTests --no-restore` — 40/40 успешно с `DOTNET_CLI_HOME` внутри workspace. Browser QA выполнена на синтетическом маршруте при 1440, 1000 и 820 px: сборка и полуфабрикат без наложения; после CSS-исправления при 1000 px `table scrollWidth=clientWidth=391`, при 820 px `663=663`.
 
 ## Критерии приёмки
 
@@ -42,7 +42,7 @@
 
 ## Журнал результата
 
-- Коммит: `f40c464` (локально; push ограничен окружением).
+- Коммиты: `f40c464` (код) и `513e529` (передача), оба отправлены в `origin/codex/restore-20260918-0235`.
 - Проверки: Vitest — 164 файла, 1615 тестов; `client:build` (TypeScript + Vite) — успешно; `ManufacturingRouteValidatorTests` — 40/40 через `C:\Program Files\dotnet\dotnet.exe test ... --no-restore` с `DOTNET_CLI_HOME` внутри workspace; browser QA синтетического маршрута на 1440/1000/820 px — успешно, после CSS-исправления `scrollWidth=clientWidth` (391 при 1000 px, 663 при 820 px); staged `git diff --check` — успешно.
 - Ограничения: QA выполнена на синтетическом маршруте; ручная сверка C1–C3 на реальном проекте и packaged-приложении остаётся за сборщиком. Самостоятельное добавление компонента объединённой строки в сборку требует отдельного DAG-контракта и не входит в 043.
 - Приёмка владельца: —
