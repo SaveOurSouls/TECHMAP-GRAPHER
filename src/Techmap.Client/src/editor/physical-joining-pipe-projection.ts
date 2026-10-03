@@ -31,11 +31,32 @@ function sample(points:readonly Point[],radius=0):JoiningPipeSample[] {
 }
 export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe) {
   const scale=drawingPhysicalScale(document),t=document.physicalTopology!;
-  return packPipeBundle(pipe.members.map((m,i)=>({id:String(i),diameter:Math.max(.5*scale,...m.segmentIds.map(id=>{
+  const axis=joiningPipePoints(pipe),axisStart=axis[0]!,axisEnd=axis.at(-1)!;
+  const axisStartNext=axis.find(point=>Math.hypot(point.x-axisStart.x,point.y-axisStart.y)>1e-7)??axisEnd;
+  const axisEndPrevious=[...axis].reverse().find(point=>Math.hypot(point.x-axisEnd.x,point.y-axisEnd.y)>1e-7)??axisStart;
+  const startLength=Math.hypot(axisStartNext.x-axisStart.x,axisStartNext.y-axisStart.y)||1;
+  const endLength=Math.hypot(axisEnd.x-axisEndPrevious.x,axisEnd.y-axisEndPrevious.y)||1;
+  const startNormal={x:-(axisStartNext.y-axisStart.y)/startLength,y:(axisStartNext.x-axisStart.x)/startLength};
+  const endNormal={x:-(axisEnd.y-axisEndPrevious.y)/endLength,y:(axisEnd.x-axisEndPrevious.x)/endLength};
+  // Keep a member's cross-sectional lane tied to its physical position. The
+  // draft order is an editing detail and must not decide which connector exits
+  // above or below the other members.
+  const ordered=pipe.members.map((member,index)=>{
+    const route=joiningMemberPoints(document,member.segmentIds);
+    const enter=member.reverse?route.at(-1)!:route[0]!;
+    const exit=member.reverse?route[0]!:route.at(-1)!;
+    const startOffset=(enter.x-axisStart.x)*startNormal.x+(enter.y-axisStart.y)*startNormal.y;
+    const endOffset=(exit.x-axisEnd.x)*endNormal.x+(exit.y-axisEnd.y)*endNormal.y;
+    const key=(startOffset+endOffset)/2;
+    return {member,index,key};
+  }).sort((a,b)=>a.key-b.key||a.member.segmentIds.join("\u0000").localeCompare(b.member.segmentIds.join("\u0000")));
+  const packed=packPipeBundle(ordered.map(({index,member})=>({id:String(index),diameter:Math.max(.5*scale,...member.segmentIds.map(id=>{
     let width=drawingPipeWidth(document,t.segments.find(s=>s.id===id)!);
     for(const c of t.coverings??[])if(!c.bundle&&c.spans.some(s=>s.segmentId===id))width=Math.max(c.width*scale,width+.5*scale);
     return width;
   }))})),pipe.mode);
+  const byId=new Map(packed.members.map(member=>[member.id,member]));
+  return {...packed,members:pipe.members.map((_,index)=>byId.get(String(index))!)};
 }
 export function joiningPipeWidth(document:HarnessDesignDocument,pipe:PhysicalJoiningPipe):number {
   const scale=drawingPhysicalScale(document),packing=joiningPipePacking(document,pipe),axis=sample(joiningPipePoints(pipe));
@@ -83,6 +104,12 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
     const axis=sample(joiningPipePoints(pipe),drawingBendRadius(document)),packed=joiningPipePacking(document,pipe);
     for(const [i,member] of pipe.members.entries()){
       const source=sample(joiningMemberPoints(document,member.segmentIds));
+      // A reversed member enters the OP from the opposite connector. Keep the
+      // authored source for projection deltas, but use an OP-oriented copy for
+      // the two transition shoulders.
+      const orientedSource=member.reverse
+        ? [...source].reverse().map(sample=>({fraction:1-sample.fraction,point:sample.point}))
+        : source;
       const rawAxis=sample(joiningPipePoints(pipe));
       const lane=offsetSamples(axis,packed.members[i]!.offset);
       const oriented=member.reverse?[...lane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):lane;
@@ -93,7 +120,7 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const axisControls=member.reverse?[...axisControlsBase].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):axisControlsBase;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
       const low=member.from/2,high=(1+member.to)/2;
-      const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(source,low),outerB=member.exitOuter??at(source,high);
+      const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(orientedSource,low),outerB=member.exitOuter??at(orientedSource,high);
       const enterLead=member.reverse?pipe.exitLength:pipe.enterLength;
       const exitLead=member.reverse?pipe.enterLength:pipe.exitLength;
       const enterVector=joiningPipeExitVector(pipe,member.reverse?"to":"from"),exitVector=joiningPipeExitVector(pipe,member.reverse?"from":"to");

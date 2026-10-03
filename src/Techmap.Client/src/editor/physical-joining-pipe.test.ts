@@ -317,6 +317,26 @@ it("reversed pipes follow the OP direction with fixed endpoints",()=>{
  expect(joiningPipeDisplaySamples(next,"p1")![0]!.point).toEqual({x:600,y:100});
 });
 
+it("keeps each OP lane nearest to its connector when members are added above the axis",()=>{
+ const d=fixture(),nodes=d.physicalTopology!.nodes.map(node=>node.id==="c"||node.id==="d"?{...node,position:{...node.position,y:-100}}:node);
+ const source={...d,physicalTopology:{...d.physicalTopology!,nodes}},op=createJoiningPipe(source,[["p0"],["p1"]],"op");
+ const document={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}};
+ const atMid=(id:string)=>joiningPipeDisplaySamples(document,id)!.reduce((best,current)=>
+   Math.abs(current.fraction-.5)<Math.abs(best.fraction-.5)?current:best);
+ expect(atMid("p1").point.y).toBeLessThan(atMid("p0").point.y);
+});
+
+it("keeps reversed OP members attached to the nearest connector at both ends",()=>{
+ const d=fixture(),nodes=d.physicalTopology!.nodes.map(node=>node.id==="c"||node.id==="d"?{...node,position:{...node.position,y:-100}}:node);
+ const segment=d.physicalTopology!.segments.find(item=>item.id==="p1")!;
+ const source={...d,physicalTopology:{...d.physicalTopology!,nodes,segments:d.physicalTopology!.segments.map(item=>
+   item.id==="p1"?{...item,from:segment.to,to:segment.from}:item)}};
+ const op=createJoiningPipe(source,[["p1"],["p0"]],"op"),document={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}};
+ expect(op.members[1]!.reverse).toBe(true);
+ const controls=joiningPipeMemberControls(document,"p0")!;
+ expect(controls.find(control=>control.boundary==="outerEnter")!.point.x).toBeGreaterThan(controls.find(control=>control.boundary==="outerExit")!.point.x);
+});
+
 it("split fragments share a continuous lane and keep their node on the display route",()=>{
  const d=fixture(),t={...d.physicalTopology!,segments:d.physicalTopology!.segments.map(s=>s.id==="p0"?{...s,path:{kind:"polyline" as const,points:[{x:300,y:0}]}}:s)};
  const start={...d,physicalTopology:t},op=createJoiningPipe(start,[["p0"],["p1"]],"op"),base={...start,physicalTopology:{...t,joiningPipes:[op]}};
