@@ -5,11 +5,11 @@ import type { EditorSceneObject } from "./editor-types";
 
 // Exercise the actual event handlers without a browser renderer. Effects install
 // the real Escape listener; pointer capture and native events are modeled below.
-const hooks=vi.hoisted(()=>({effects:[] as (()=>unknown)[]}));
+const hooks=vi.hoisted(()=>({effects:[] as (()=>unknown)[], states:[] as unknown[], index:0}));
 vi.mock("react",async importOriginal=>({
   ...await importOriginal<typeof import("react")>(),
   useRef:(current:unknown)=>({current}),
-  useState:(value:unknown)=>[typeof value==="function"?value():value,vi.fn()],
+  useState:(value:unknown)=>{const index=hooks.index++;if(!(index in hooks.states))hooks.states[index]=typeof value==="function"?value():value;return [hooks.states[index],(next:unknown)=>{hooks.states[index]=next;}];},
   useMemo:(factory:()=>unknown)=>factory(),
   useEffect:(effect:()=>unknown)=>{hooks.effects.push(effect);},
 }));
@@ -18,7 +18,39 @@ const connector:EditorSceneObject={id:"X",kind:"connector",layerId:"connectors",
 let keydown:(event:{key:string})=>void;
 beforeEach(()=>{
   hooks.effects=[];
+  hooks.states=[];hooks.index=0;
   vi.stubGlobal("window",{addEventListener:(type:string,fn:typeof keydown)=>{if(type==="keydown")keydown=fn;},removeEventListener:vi.fn()});
+});
+
+it.each([110,500])('isolates the full canvas selection from a right click at x=%s',x=>{
+  const isolate=vi.fn(),select=vi.fn(),move=vi.fn();
+  const second={...connector,id:'Y',x:300};
+  const props={view:'drawing' as const,tool:'select' as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[connector,second],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:'X',selectedObjectIds:['X','Y'],onObjectsIsolate:isolate,onObjectSelect:select,onObjectMove:move,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()};
+  const render=()=>{hooks.index=0;return CanvasViewport(props);};
+  const tree=render();
+  const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+  const event={button:2,clientX:x,clientY:90,preventDefault:vi.fn()};
+  (canvas.props as any).onPointerDown(event);
+  (canvas.props as any).onContextMenu(event);
+  expect(select).not.toHaveBeenCalled();
+  const findButton=(node:any):any=>{if(!node||typeof node!=='object')return undefined;if(node.type==='button'&&node.props.children==='Изолировать')return node;return [node.props?.children].flat(Infinity).map(findButton).find(Boolean);};
+  const button=findButton(render());
+  expect(button).toBeDefined();
+  button.props.onClick();
+  expect(isolate).toHaveBeenCalledExactlyOnceWith(['X','Y']);
+  expect(move).not.toHaveBeenCalled();
+});
+
+it('does not offer isolation for service geometry alone', () => {
+  const node: EditorSceneObject = { ...connector, id: 'N', kind: 'physical-node', label: 'Выход', port: { direction: null } };
+  const isolate = vi.fn();
+  const props = { view: 'drawing' as const, tool: 'select' as const, camera: { zoom: 1, offsetX: 0, offsetY: 0 }, objects: [node], layers: [{ id: 'connectors', label: 'Соединители', visible: true, locked: false }], selectedObjectId: 'N', selectedObjectIds: ['N'], onObjectsIsolate: isolate, onObjectSelect: vi.fn(), onCatalogDrop: vi.fn(), onCameraChange: vi.fn() };
+  const render = () => { hooks.index = 0; return CanvasViewport(props); };
+  const tree = render();
+  const canvas = (tree.props as { children: ReactElement[] }).children.find(child => child?.type === 'canvas')!;
+  (canvas.props as any).onContextMenu({ clientX: 110, clientY: 90, preventDefault: vi.fn() });
+  expect(JSON.stringify(render())).not.toContain('Изолировать');
+  expect(isolate).not.toHaveBeenCalled();
 });
 afterEach(()=>vi.unstubAllGlobals());
 

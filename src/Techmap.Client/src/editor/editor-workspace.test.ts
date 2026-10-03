@@ -77,9 +77,15 @@ const stripProfile = {
 };
 
 describe("harness editor workspace", () => {
-  it("restores isolate actions for an assembly drawing copy", () => {
+  it("keeps material objects separate from service geometry in an assembly drawing copy", () => {
     expect(hiddenIdsForIsolatedObjects(objects, ["upper"])).toEqual(["lower", "wire"]);
     expect(hiddenIdsForIsolatedObjects(objects, ["upper", "wire"])).toEqual(["lower"]);
+    const routeSupport: EditorSceneObject = { id: "P1", layerId: "bottom", kind: "physical-segment", label: "П", x: 0, y: 0, width: 1, height: 1, color: "#333", points: [{ x: 0, y: 0 }, { x: 20, y: 0 }], pipe: { controls: [], handles: [], wireIds: ["wire"], fromNodeId: "N1" } };
+    const unrelatedSupport: EditorSceneObject = { ...routeSupport, id: "P2", pipe: { controls: [], handles: [], wireIds: ["other"] } };
+    const routeNode: EditorSceneObject = { id: "N1", layerId: "bottom", kind: "physical-node", label: "Выход", x: 0, y: 0, width: 1, height: 1, color: "#333", port: { connectorId: "upper", direction: null } };
+    expect(hiddenIdsForIsolatedObjects([...objects, routeSupport, unrelatedSupport, routeNode], ["wire"])).toEqual(["lower", "upper", "P2"]);
+    const covering: EditorSceneObject = { id: "C1", layerId: "bottom", kind: "physical-covering", label: "Оболочка", x: 0, y: 0, width: 1, height: 1, color: "#333", metadata: { supportSegmentIds: '["P1"]' } };
+    expect(hiddenIdsForIsolatedObjects([...objects, routeSupport, unrelatedSupport, routeNode, covering], ["C1"])).toEqual(["lower", "upper", "wire", "P2"]);
     expect(layersWithIsolatedLayer(layers, "bottom").map(layer => layer.visible)).toEqual([false, true]);
     const onHiddenObjectIdsChange = vi.fn();
     const markup = renderToStaticMarkup(createElement(HarnessEditorWorkspace, {
@@ -97,11 +103,12 @@ describe("harness editor workspace", () => {
       },
     }));
     expect(markup).toContain("Видимость объектов");
-    expect(markup).toContain("Изолировать выбранные");
-    expect(markup).toContain("Изолировать слой Верхний");
-    expect(markup).toContain("Изолировать слой Нижний");
-    expect(markup).toContain("Изолировать XS1");
-    expect(markup).toContain("Изолировать W1");
+    expect(markup).toContain('aria-label="Список материальных объектов"');
+    expect(markup).toContain('aria-label="Соединители"');
+    expect(markup).toContain('aria-label="Провода"');
+    expect(markup).not.toContain("Изолировать выбранные");
+    expect(markup).not.toContain("Изолировать слой Верхний");
+    expect(markup).not.toContain("Изолировать XS1");
     expect(markup).toContain("Показать все");
   });
 

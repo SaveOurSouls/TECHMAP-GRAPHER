@@ -66,6 +66,7 @@ import {
 import type { CableInstance } from "./model";
 import { railCatchDistance, railDistance, railParameter, snapRailEnd } from "./position-rail";
 import { snapDrawingPoint, type DrawingOutline, type DrawingSnaps } from "../component-library/drawing-geometry";
+import { materialObjectGroup } from "./MaterialObjectsPanel";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -102,6 +103,8 @@ export interface CanvasViewportProps {
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   /** Selects all members of a linked E4 overlay in one state update. */
   readonly onObjectGroupSelect?: (objectIds: readonly string[]) => void;
+  /** Available only for editable route fragment copies. */
+  readonly onObjectsIsolate?: (objectIds: readonly string[]) => void;
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
   readonly onDrawingMove?: (objectId:string,drawingId:string,offset:EditorPoint)=>void;
   readonly objectProperties?: (objectId:string)=>ReactNode;
@@ -2801,6 +2804,7 @@ export function CanvasViewport({
   onViewportSizeChange,
   onObjectSelect,
   onObjectGroupSelect,
+  onObjectsIsolate,
   objectProperties, onObjectPick, onObjectPickCancel, onRelatedObjectsSelect, onObjectMove, onDrawingMove, onDrawingScale,
   onObjectMovePreview, onPipeIntervalSelect, onCoveringDrag,
   onWireConnect,
@@ -3002,7 +3006,7 @@ export function CanvasViewport({
     window.addEventListener("keydown", keydown);
     return () => { window.removeEventListener("keydown", keydown); cancelConnection(); };
   }, [tool, view]);
-  const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number; node?:boolean; wires?:boolean}|null>(null);
+  const [physicalMenu,setPhysicalMenu]=useState<{id:string;point:EditorPoint;x:number;y:number; node?:boolean; wires?:boolean; isolationIds?:readonly string[]}|null>(null);
   useEffect(()=>{if(onObjectPick)setPhysicalMenu(null);},[!!onObjectPick]);
   const [hoverTarget,setHoverTarget]=useState<CanvasHintTarget|null>(null);
   useEffect(()=>{setHoverTarget(null);setPhysicalMenu(null);},[view,tool,camera]);
@@ -3744,15 +3748,21 @@ export function CanvasViewport({
         onDoubleClick={doubleClick}
         onContextMenu={event=>{
           if(onObjectPick){event.preventDefault();return;}
-          if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties))return;
+          if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties&&!onObjectsIsolate))return;
           event.preventDefault();
           setHoverTarget(null);
           const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
           const id=hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
-          const object=objects.find(o=>o.id===id),layer=layers.find(l=>l.id===object?.layerId);
-          if(!object||layer?.locked||!["wire","connector","physical-node","physical-segment","physical-covering"].includes(object.kind)){setPhysicalMenu(null);return;}
+          const object=objects.find(o=>o.id===id) ?? (onObjectsIsolate ? objects.find(o=>selectedSet.has(o.id)) : undefined),layer=layers.find(l=>l.id===object?.layerId);
+          if(!object||layer?.locked||(!onObjectsIsolate&&!["wire","connector","physical-node","physical-segment","physical-covering"].includes(object.kind))){setPhysicalMenu(null);return;}
+          const isolationIds=selectedSet.has(object.id) ? activeSelectedIds.filter(selectedId=>objects.some(o=>o.id===selectedId)) : [object.id];
+          const hasMaterialSelection = isolationIds.some(selectedId => {
+            const selectedObject = objects.find(candidate => candidate.id === selectedId);
+            return selectedObject && materialObjectGroup(selectedObject.kind) !== null;
+          });
+          if (onObjectsIsolate && !hasMaterialSelection) { setPhysicalMenu(null); return; }
           if(!selectedSet.has(object.id))onObjectSelect(object.id,false);
-          setPhysicalMenu({id:object.id,point,node:object.kind==="physical-node",x:event.clientX,y:event.clientY});
+          setPhysicalMenu({id:object.id,point,node:object.kind==="physical-node",x:event.clientX,y:event.clientY,isolationIds});
         }}
       />
       {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><polyline points={physicalGuide.map(p=>`${p.x*camera.zoom+camera.offsetX},${p.y*camera.zoom+camera.offsetY}`).join(" ")} fill="none" stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
@@ -3783,6 +3793,7 @@ export function CanvasViewport({
       <CanvasObjectHint target={physicalMenu?null:hoverTarget}/>
       {physicalMenu&&objects.some(o=>o.id===physicalMenu.id)&&<CanvasObjectPopover key={physicalMenu.id+(physicalMenu.wires?":wires":"")} x={physicalMenu.x} y={physicalMenu.y} label={physicalMenu.wires?"Провода пайпа":"Свойства объекта"} onClose={()=>setPhysicalMenu(null)}>
         {physicalMenu.wires ? <><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).length===0&&<span>Нет назначенных проводов</span>}</> : <>
+          {onObjectsIsolate&&physicalMenu.isolationIds?.length&&<button type="button" className="ui-control" onClick={()=>{onObjectsIsolate(physicalMenu.isolationIds!);setPhysicalMenu(null);}}>Изолировать</button>}
           {objectProperties?.(physicalMenu.id)}
           {!objectProperties&&onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&o.kind==="physical-segment")&&<button type="button" className="ui-control" onClick={()=>{onPhysicalContextAction(physicalMenu.id,physicalMenu.point,"remove-pipe");setPhysicalMenu(null);}}>Удалить пайп</button>}
           {physicalMenu.node ? onPhysicalNodesConnect&&<button type="button" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&(o.kind==="physical-segment"||o.kind==="physical-covering"))&&<details className="he-covering-actions"><summary>Оболочки и ответвление</summary><div className="he-context-actions">{([...(objects.find(o=>o.id===physicalMenu.id)?.kind==="physical-segment"&&objects.find(o=>o.id===physicalMenu.id)?.pipe?.role!=="joining-pipe"?["branch" as const]:[]),...standardCoveringKinds] as const).map(action=><button type="button" className="ui-control" key={action} onClick={()=>{const target=objects.find(o=>o.id===physicalMenu.id);onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action,target?.kind==="physical-covering"?"covering":"segment");setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}</div></details>}

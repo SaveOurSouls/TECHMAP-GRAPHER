@@ -6,6 +6,7 @@ import type { DimensionMode } from "./drawing-dimensions";
 import type { DrawingGraphic } from "./drawing-documents";
 import type { DrawingSnaps } from "../component-library/drawing-geometry";
 import { useCallback, useEffect, useMemo, useState, type FocusEvent, type ReactNode } from "react";
+import { MaterialObjectsPanel, materialObjectGroup } from "./MaterialObjectsPanel";
 import {
   CanvasViewport,
   getEditorSceneBounds,
@@ -87,7 +88,28 @@ const initialCamera: EditorCamera = { offsetX: 70, offsetY: 48, zoom: 1 };
 
 export function hiddenIdsForIsolatedObjects(objects: readonly EditorSceneObject[], isolatedIds: readonly string[]): string[] {
   const isolated = new Set(isolatedIds);
-  return objects.filter(object => !isolated.has(object.id)).map(object => object.id);
+  const selectedWires = new Set(objects.filter(object => object.kind === "wire" && isolated.has(object.id)).map(object => object.id));
+  const selectedConnectors = new Set(objects.filter(object => object.kind === "connector" && isolated.has(object.id)).map(object => object.id));
+  const selectedCoveringSegments = new Set<string>();
+  for (const object of objects) {
+    if (object.kind !== "physical-covering" || !isolated.has(object.id)) continue;
+    try {
+      const ids: unknown = JSON.parse(object.metadata?.supportSegmentIds ?? "[]");
+      if (Array.isArray(ids)) for (const id of ids) if (typeof id === "string") selectedCoveringSegments.add(id);
+    } catch { /* Malformed optional presentation data cannot break isolation. */ }
+  }
+  const supportIds = new Set<string>();
+  for (const object of objects) {
+    if (object.kind === "physical-segment" && (object.pipe?.wireIds.some(wireId => selectedWires.has(wireId)) || selectedCoveringSegments.has(object.id))) {
+      supportIds.add(object.id);
+      if (object.pipe?.fromNodeId) supportIds.add(object.pipe.fromNodeId);
+      if (object.pipe?.toNodeId) supportIds.add(object.pipe.toNodeId);
+    }
+    if (object.kind === "physical-node" && object.port?.connectorId && selectedConnectors.has(object.port.connectorId)) {
+      supportIds.add(object.id);
+    }
+  }
+  return objects.filter(object => !isolated.has(object.id) && !supportIds.has(object.id)).map(object => object.id);
 }
 
 export function layersWithIsolatedLayer(layers: readonly EditorLayer[], layerId: string): EditorLayer[] {
@@ -342,6 +364,7 @@ export function HarnessEditorWorkspace({
   const [catalogExpanded, setCatalogExpanded] = useState(true);
   const [utilityPanelOpen, setUtilityPanelOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
+  const [materialPanelOpen, setMaterialPanelOpen] = useState(() => Boolean(localCopyControls) && (typeof window === "undefined" || window.innerWidth > 1100));
 
   const view = controlledView ?? localView;
   useEffect(() => {
@@ -445,6 +468,7 @@ export function HarnessEditorWorkspace({
       changeLayers(layers.map(layer => layerIds.has(layer.id) ? { ...layer, visible: true } : layer));
     }
     localCopyControls.onHiddenObjectIdsChange(hiddenIdsForIsolatedObjects(objects, objectIds));
+    localCopyControls.onBackgroundOpacityChange(0);
   };
 
   const showAllCopyObjects = () => {
@@ -572,7 +596,10 @@ export function HarnessEditorWorkspace({
           <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
           {onRouteRequest && <button type="button" role="tab" aria-selected={false} className="he-route-tab" onClick={onRouteRequest}>Маршрут</button>}
         </div>}
-        <button className="he-inspector-toggle" type="button" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) setUtilityPanelOpen(false); }}>Свойства и слои</button>
+        <div className="he-header-panels">
+          <button className="he-material-toggle" type="button" aria-expanded={materialPanelOpen} aria-controls="he-material-panel" onClick={() => { setMaterialPanelOpen(open => !open); if (window.innerWidth <= 1100) { setInspectorOpen(false); setUtilityPanelOpen(false); } }}>Объекты</button>
+          <button className="he-inspector-toggle" type="button" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) { setMaterialPanelOpen(false); setUtilityPanelOpen(false); } }}>Свойства и слои</button>
+        </div>
         <button
           className={`he-save-state ${saveState}`}
           type="button"
@@ -585,7 +612,7 @@ export function HarnessEditorWorkspace({
         {localCopyControls && <button className="he-back" type="button" onClick={localCopyControls.onCancel}>Отмена</button>}
       </header>
 
-      <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""} ${utilityPanelOpen ? "he-utility-open" : "he-utility-closed"} ${inspectorOpen ? "he-inspector-open" : "he-inspector-closed"}`}>
+      <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""} ${utilityPanelOpen ? "he-utility-open" : "he-utility-closed"} ${inspectorOpen ? "he-inspector-open" : "he-inspector-closed"} ${materialPanelOpen ? "he-material-open" : "he-material-closed"}`}>
         <aside className={`he-utility-panel ${utilityPanelOpen ? "open" : "closed"}`} aria-label="Параметры и документы">
           <button className="he-utility-toggle" type="button" title={utilityPanelOpen ? "Скрыть панель" : "Показать параметры и документы"} onClick={() => { setUtilityPanelOpen(value => !value); if (window.innerWidth <= 1100) setInspectorOpen(false); }} aria-expanded={utilityPanelOpen} aria-controls="he-utility-content">
             <span aria-hidden="true">{utilityPanelOpen ? "‹" : "›"}</span>
@@ -657,6 +684,7 @@ export function HarnessEditorWorkspace({
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}
           onObjectGroupSelect={selectObjectGroup}
+          onObjectsIsolate={localCopyControls ? isolateCopyObjects : undefined}
           objectProperties={objectProperties}
           onObjectPick={onObjectPick}
           onObjectPickCancel={onObjectPickCancel}
@@ -719,14 +747,9 @@ export function HarnessEditorWorkspace({
                 onVisibilityToggle={(layerId) => changeLayers(toggleLayerVisibility(layers, layerId))}
                 onLockToggle={(layerId) => changeLayers(toggleLayerLock(layers, layerId))}
                 onMove={(layerId, targetIndex) => changeLayers(moveLayer(layers, layerId, targetIndex))}
-                onIsolate={localCopyControls ? layerId => {
-                  changeLayers(layersWithIsolatedLayer(layers, layerId));
-                  localCopyControls.onHiddenObjectIdsChange(localCopyControls.hiddenObjectIds.filter(id =>
-                    objects.find(object => object.id === id)?.layerId !== layerId));
-                } : undefined}
               />{localCopyControls && <section className="he-copy-visibility" aria-label="Видимость объектов">
                 <div className="he-copy-visibility-heading">
-                  <h3>Объекты</h3>
+                  <h3>Служебные объекты</h3>
                   <button
                     type="button"
                     className="ui-control he-copy-action"
@@ -734,14 +757,8 @@ export function HarnessEditorWorkspace({
                     disabled={!localCopyControls.hiddenObjectIds.length && layers.every(layer => layer.visible)}
                   >Показать все</button>
                 </div>
-                <button
-                  type="button"
-                  className="ui-control he-copy-action he-copy-isolate-selection"
-                  onClick={() => isolateCopyObjects(selectedObjectIds)}
-                  disabled={!selectedObjectIds.length}
-                >Изолировать выбранные</button>
                 <div className="he-copy-object-list">
-                  {objects.map(object => {
+                  {objects.filter(object => !materialObjectGroup(object.kind)).map(object => {
                     const visible = !localCopyControls.hiddenObjectIds.includes(object.id);
                     const label = object.label || object.id;
                     return <div className="he-copy-object-row" key={object.id}>
@@ -760,19 +777,30 @@ export function HarnessEditorWorkspace({
                         />
                         <span title={label}>{label}</span>
                       </label>
-                      <button
-                        type="button"
-                        className="ui-control he-copy-action"
-                        aria-label={`Изолировать ${label}`}
-                        title={`Изолировать «${label}»`}
-                        onClick={() => isolateCopyObjects([object.id])}
-                      >Изолировать</button>
                     </div>;
                   })}
                 </div>
               </section>}</>
             )}
           </div>
+        </aside>
+
+        <aside id="he-material-panel" className="he-material-panel" aria-label="Список материальных объектов" hidden={!materialPanelOpen}>
+          <MaterialObjectsPanel
+            objects={objects}
+            hiddenObjectIds={localCopyControls?.hiddenObjectIds ?? []}
+            selectedObjectIds={selectedObjectIds}
+            onObjectSelect={selectObject}
+            onVisibilityChange={localCopyControls ? (objectId, visible) => {
+              const object = objects.find(item => item.id === objectId);
+              if (visible && object && layers.some(layer => layer.id === object.layerId && !layer.visible)) {
+                changeLayers(layers.map(layer => layer.id === object.layerId ? { ...layer, visible: true } : layer));
+              }
+              localCopyControls.onHiddenObjectIdsChange(visible
+                ? localCopyControls.hiddenObjectIds.filter(id => id !== objectId)
+                : [...new Set([...localCopyControls.hiddenObjectIds, objectId])]);
+            } : undefined}
+          />
         </aside>
 
         {view !== "drawing" && <CatalogDock
