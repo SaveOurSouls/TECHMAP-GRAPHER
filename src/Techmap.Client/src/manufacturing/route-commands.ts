@@ -2,6 +2,7 @@ import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceRef } from "./route-source";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteAssemblyInput, type RouteRow } from "./route-model";
 import { parseRouteDrawingCopy } from "./route-drawing-copy";
+import { routeSourceRank } from "./route-order";
 
 const validate = (route: ManufacturingRoute): ManufacturingRoute => parseManufacturingRoute(route)!;
 const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
@@ -10,7 +11,8 @@ const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
 export function generateRoute(document: HarnessDesignDocument, sourceSha256: string, quantity = 1): ManufacturingRoute {
   return validate({
     contractVersion: 1, source: { fingerprintVersion: 1, sha256: sourceSha256 }, status: "draft",
-    rows: buildRouteSourceItems(document).filter(item => item.ref.kind !== "connector").map((item, index) => ({
+    rows: buildRouteSourceItems(document).filter(item => item.ref.kind !== "connector")
+      .sort((a, b) => routeSourceRank(a.ref, document) - routeSourceRank(b.ref, document)).map((item, index) => ({
       id: `source-${index + 1}`, kind: "semiFinished", index: `ПФ-${String(index + 1).padStart(2, "0")}`, title: item.title, quantity, reserve: 0, operationTimeMinutes: 0, comment: "", sourceObjects: [item.ref], dependsOn: [], operations: [], prepared: false,
       presentation: { backgroundOpacity: .25, objects: [] },
     })),

@@ -1,6 +1,7 @@
 import { HarnessDesignApiError, type HarnessDesignApi, type HarnessDesignResource } from "../editor/design-api";
 import type { ManufacturingRoute } from "./route-model";
 import { previewRouteRebase } from "./route-rebase";
+import { orderRouteRows } from "./route-order";
 
 export interface RouteWorkspaceState {
   resource: HarnessDesignResource | null;
@@ -56,7 +57,7 @@ export class RouteWorkspace {
     let preview: ReturnType<typeof previewRouteRebase> | null = null;
     if (current && latest.sourceFingerprint && current.source.sha256 !== latest.sourceFingerprint) {
       preview = previewRouteRebase(current, latest.content, latest.sourceFingerprint, latest.harnessQuantity);
-      if (preview.removed.length && !acceptRemovals) {
+      if (preview.removed.some(ref => ref.kind !== "wire") && !acceptRemovals) {
         this.baseline = latest;
         this.publish({ resource: latest, route: current, sourcePreview: preview, error: null });
         return false;
@@ -72,6 +73,7 @@ export class RouteWorkspace {
         })) };
       } else current = resolved;
     }
+    if (current) current = { ...current, rows: orderRouteRows(current.rows, latest.content) };
     this.baseline = latest;
     this.publish({ resource: latest, route: current, dirty: !same(current, remote), sourcePreview: null, error: null });
     return true;

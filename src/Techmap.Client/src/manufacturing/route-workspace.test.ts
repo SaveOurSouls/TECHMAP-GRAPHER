@@ -60,24 +60,28 @@ describe("RouteWorkspace", () => {
     expect(current.content.manufacturingRoute?.rows[0]?.comment).toBe("Не терять");
   });
 
-  it("requires an explicit decision when an edited route loses a source object", async () => {
+  it("automatically removes a deleted E4 wire and its blank while preserving unrelated edits", async () => {
     let base = document(100);
     const initialRoute = generateRoute(base, "a".repeat(64), 2);
     base = { ...base, manufacturingRoute: initialRoute };
     let current = resource(base, 1, "a".repeat(64));
-    const api: HarnessDesignApi = { get: async () => current, save: async () => current };
+    const api: HarnessDesignApi = { get: async () => current, save: async (_project, _harness, revision, content) => {
+      current = resource(content, revision + 1, current.sourceFingerprint!);
+      return current;
+    } };
     const workspace = new RouteWorkspace(api, "p", "h", async (_resource, route) => route);
     await workspace.sync();
     workspace.edit({ ...initialRoute, rows: initialRoute.rows.map(row => ({ ...row, comment: "локально" })) });
     const removed = document(100);
     current = resource({ ...removed, wires: [] , manufacturingRoute: initialRoute }, 2, "c".repeat(64));
-    expect(await workspace.sync()).toBe(false);
-    expect(workspace.getSnapshot().sourcePreview?.removed.length).toBeGreaterThan(0);
-    expect(workspace.getSnapshot().route?.rows[0]?.comment).toBe("локально");
-    expect(await workspace.acceptSourceChanges()).toBe(true);
+    expect(await workspace.sync()).toBe(true);
     expect(workspace.getSnapshot().sourcePreview).toBeNull();
-    expect(workspace.getSnapshot().route?.rows[0]?.sourceObjects).toEqual([]);
-    expect(workspace.getSnapshot().route?.rows[0]?.comment).toBe("локально");
+    expect(workspace.getSnapshot().route?.rows).toEqual([]);
+    expect(await workspace.save()).toBe(true);
+    expect(workspace.getSnapshot().route?.rows).toEqual([]);
+    const reopened = new RouteWorkspace(api, "p", "h", async (_resource, route) => route);
+    expect(await reopened.sync()).toBe(true);
+    expect(reopened.getSnapshot().route?.rows).toEqual([]);
   });
 
   it("automatically rebases an already stale route on opening and preserves unknown length", async () => {
