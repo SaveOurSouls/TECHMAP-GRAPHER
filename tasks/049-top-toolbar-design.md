@@ -33,7 +33,7 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: —
-- Проверки и даты: —
-- Ограничения и открытые вопросы: browser/package QA до передачи сборщику
+- Коммит кода/документации: локальный `feat(editor): move drawing toolbar to top ribbon` в ветке `codex/drawing-graphics-route`.
+- Проверки и даты: 03.10.2026 — 164 файла / 1622 клиентских теста, TypeScript, Vite build, `git diff --check`.
+- Ограничения и открытые вопросы: Product Design browser/package QA заблокирована повреждённой runtime-конфигурацией; повторить в packaged-приложении.
 - Решение владельца о приёмке: —
