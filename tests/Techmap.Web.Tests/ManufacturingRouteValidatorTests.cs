@@ -9,6 +9,18 @@ namespace Techmap.Web.Tests;
 public sealed class ManufacturingRouteValidatorTests
 {
     [Fact]
+    public void Components_accept_metrics_and_reject_extra_fields_or_mismatched_refs()
+    {
+        var graph = BaseRoute();
+        graph["manufacturingRoute"]!["rows"]![0]!["components"] = new JsonArray(new JsonObject { ["ref"] = new JsonObject { ["kind"] = "wire", ["id"] = "w" }, ["index"] = "ПФ-01", ["title"] = "Wire", ["quantity"] = 2, ["reserve"] = 1, ["operationTimeMinutes"] = 3 });
+        Validate(graph);
+        graph["manufacturingRoute"]!["rows"]![0]!["components"]![0]!["extra"] = true;
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+        graph = BaseRoute();
+        graph["manufacturingRoute"]!["rows"]![0]!["components"] = new JsonArray(new JsonObject { ["ref"] = new JsonObject { ["kind"] = "wire", ["id"] = "missing" }, ["title"] = "Wire" });
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+    [Fact]
     public void Drawing_copy_accepts_design_and_rejects_nested_route()
     {
         var graph = BaseRoute();

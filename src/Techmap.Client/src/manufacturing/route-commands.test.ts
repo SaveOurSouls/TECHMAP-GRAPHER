@@ -3,7 +3,6 @@ import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
 import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteRow } from "./route-model";
-
 const sha = "a".repeat(64);
 const row = (id: string, dependsOn: string[] = []): RouteRow => ({
   id, kind: "semiFinished", title: id, comment: `comment ${id}`, sourceObjects: [{ kind: "wire", id }],
@@ -13,6 +12,23 @@ const row = (id: string, dependsOn: string[] = []): RouteRow => ({
 const route = (...rows: RouteRow[]): ManufacturingRoute => parseManufacturingRoute({ contractVersion: 1, source: { fingerprintVersion: 1, sha256: sha }, status: "draft", rows })!;
 
 describe("manufacturing route commands", () => {
+  it("persists merged component metrics through parse and repeated merge", () => {
+    const original = route({ ...row("a"), index: "ПФ-01", quantity: 2, reserve: 3, operationTimeMinutes: 4 }, { ...row("b"), index: "ПФ-02", quantity: 5, reserve: 1, operationTimeMinutes: 7 });
+    const merged = mergeRouteRows(original, ["a", "b"], "merged");
+    expect(merged.rows[0]!.components?.map(item => [item.title, item.quantity, item.reserve, item.operationTimeMinutes])).toEqual([["a", 2, 3, 4], ["b", 5, 1, 7]]);
+    const restored = parseManufacturingRoute(JSON.parse(JSON.stringify(merged)))!;
+    expect(restored.rows[0]!.components).toEqual(merged.rows[0]!.components);
+    const repeated = mergeRouteRows(route(merged.rows[0]!, { ...row("c"), quantity: 9, reserve: 2, operationTimeMinutes: 8 }), ["merged", "c"], "merged-again");
+    expect(repeated.rows[0]!.components?.map(item => item.ref.id)).toEqual(["a", "b", "c"]);
+    expect(repeated.rows[0]!.components?.at(-1)).toMatchObject({ quantity: 9, reserve: 2, operationTimeMinutes: 8 });
+  });
+  it("rejects component metadata with an extra field or wrong reference", () => {
+    const base = mergeRouteRows(route(row("a"), row("b")), ["a", "b"], "merged");
+    const extra = JSON.parse(JSON.stringify(base)); extra.rows[0].components[0].unexpected = true;
+    expect(() => parseManufacturingRoute(extra)).toThrow();
+    const wrong = JSON.parse(JSON.stringify(base)); wrong.rows[0].components[0].ref.id = "missing";
+    expect(() => parseManufacturingRoute(wrong)).toThrow();
+  });
   it("preserves per-wire catalog choices when merging semi-finished rows", () => {
     const binding = { sourceId: "technology-wire-blanks" as const, entityType: "wire-blank" as const, snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "b".repeat(64), recordId: "c".repeat(64), sourceKey: "blank", displayName: "Blank", visual: { start: "cut", end: "cut", color: "#ff0000", templateId: "01-cut", photoDataUrl: null } };
     const original = route(...["a", "b"].map(id => ({ ...row(id), wireBlankSelections: [{ wireId: id, binding }] })));

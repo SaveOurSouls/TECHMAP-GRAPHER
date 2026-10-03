@@ -40,6 +40,7 @@ internal static class ManufacturingRouteValidator
                 if (row.TryGetProperty("terminalRequirements", out _)) rowKeys = [..rowKeys, "terminalRequirements"];
                 if (row.TryGetProperty("assemblyInputs", out _)) rowKeys = [..rowKeys, "assemblyInputs"];
                 if (row.TryGetProperty("wireBlankSelections", out _)) rowKeys = [..rowKeys, "wireBlankSelections"];
+                if (row.TryGetProperty("components", out _)) rowKeys = [..rowKeys, "components"];
             }
             RequireExact(row, rowKeys);
             var id = Text(row, "id", path + ".id", 128);
@@ -53,6 +54,7 @@ internal static class ManufacturingRouteValidator
             _ = Text(row, "title", path + ".title", 512);
             _ = TextAllowEmpty(row, "comment", path + ".comment", 4000);
             var refs = ValidateSourceObjects(row.GetProperty("sourceObjects"), path + ".sourceObjects", ref referenceCount);
+            if (row.TryGetProperty("components", out var components)) ValidateComponents(components, path + ".components", kind, refs, ref referenceCount);
             rowRefs[id] = refs;
             if (row.TryGetProperty("terminalRequirements", out var terminalRequirements))
                 ValidateTerminalRequirements(terminalRequirements, path + ".terminalRequirements", refs, ref referenceCount);
@@ -140,6 +142,21 @@ internal static class ManufacturingRouteValidator
             count++;
         }
         return result;
+    }
+
+    private static void ValidateComponents(JsonElement value, string path, string kind, HashSet<(string Kind, string Id)> refs, ref int count)
+    {
+        if (kind != "semiFinished" || value.ValueKind != JsonValueKind.Array) throw Invalid("Invalid route components.", path);
+        var seen = new HashSet<(string Kind, string Id)>();
+        foreach (var component in value.EnumerateArray())
+        {
+            var componentKeys = new List<string> { "ref", "title" }; if (component.TryGetProperty("index", out _)) componentKeys.Add("index"); if (component.TryGetProperty("quantity", out _)) componentKeys.Add("quantity"); if (component.TryGetProperty("reserve", out _)) componentKeys.Add("reserve"); if (component.TryGetProperty("operationTimeMinutes", out _)) componentKeys.Add("operationTimeMinutes"); RequireExact(component, componentKeys.ToArray());
+            var reference = component.GetProperty("ref"); RequireExact(reference, "kind", "id"); var key = (Text(reference, "kind", path, 32), Text(reference, "id", path, 128));
+            if (!refs.Contains(key) || !seen.Add(key)) throw Invalid("Route components must match source objects exactly.", path);
+            _ = Text(component, "title", path, 512); if (component.TryGetProperty("index", out _)) _ = Text(component, "index", path, 128);
+            ValidateOptionalNonNegative(component, "quantity", path, true); ValidateOptionalNonNegative(component, "reserve", path, false); ValidateOptionalNonNegative(component, "operationTimeMinutes", path, false); count++;
+        }
+        if (seen.Count != refs.Count) throw Invalid("Route components must match source objects exactly.", path);
     }
 
     private static void ValidateAssemblyInputs(JsonElement value, string path, string rowKind,

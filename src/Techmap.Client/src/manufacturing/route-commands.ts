@@ -41,11 +41,12 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
     if (old && JSON.stringify(old) !== JSON.stringify(item)) throw new Error("Разные представления общего объекта. Согласуйте их перед объединением.");
     objects.set(key, item);
   }
+  const components = selected.flatMap(row => row.components ?? row.sourceObjects.map(ref => ({ ref, ...(row.index === undefined ? {} : { index: row.index }), title: row.title, ...(row.quantity === undefined ? {} : { quantity: row.quantity }), ...(row.reserve === undefined ? {} : { reserve: row.reserve }), ...(row.operationTimeMinutes === undefined ? {} : { operationTimeMinutes: row.operationTimeMinutes }) })));
   const merged: RouteRow = {
     id: newId, kind: "semiFinished", ...(selected[0]?.index === undefined ? {} : { index: selected[0].index }), title: selected.map(row => row.title).join(" + ").slice(0, 512),
     quantity: Math.max(1, selected.reduce((max, row) => Math.max(max, row.quantity ?? 0), 0)), reserve: selected.reduce((sum, row) => sum + (row.reserve ?? 0), 0), operationTimeMinutes: selected.reduce((sum, row) => sum + (row.operationTimeMinutes ?? 0), 0),
     comment: selected.map(row => row.comment).filter(Boolean).join("\n\n"),
-    sourceObjects: selected.flatMap(row => row.sourceObjects),
+    sourceObjects: selected.flatMap(row => row.sourceObjects), components,
     dependsOn: unique(selected.flatMap(row => row.dependsOn).filter(id => !selection.has(id))),
     operations: selected.flatMap(row => row.operations), prepared: false,
     presentation: { backgroundOpacity: selected[0]!.presentation.backgroundOpacity, objects: [...objects.values()] },

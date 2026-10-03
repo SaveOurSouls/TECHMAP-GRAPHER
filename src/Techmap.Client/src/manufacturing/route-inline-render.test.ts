@@ -39,6 +39,9 @@ describe("inline route row", () => {
     expect(markup).toContain('class="route-material-table"');
     expect(markup).toContain('<tfoot><tr><td class="route-metric-cell"');
     expect(markup).toContain('class="route-operations-table"');
+    expect(markup).toContain('+ Добавить операцию');
+    expect(markup).not.toContain('Режим операции 1');
+    expect(markup).not.toContain('type="radio"');
     expect(markup).not.toContain('class="route-terminal-requirements"');
   });
 
@@ -57,6 +60,27 @@ describe("inline route row", () => {
     expect(markup).not.toContain(key);
   });
 
+  it("renders independent metrics for merged semi-finished components", () => {
+    const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
+    const b = createConnector("b", "X2", 1, { x: 100, y: 0 });
+    const document = { ...createEmptyHarnessDesign(), connectors: [a, b], wires: [createWire("wire", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100, "Питание", "#f00")] };
+    const route = generateRoute(document, "a".repeat(64), 1);
+    const source = route.rows[0]!.sourceObjects[0]!;
+    const row = { ...route.rows[0]!, components: [{ ref: source, title: "Провод", index: "ПФ-01", quantity: 2, reserve: 1, operationTimeMinutes: 7 }, { ref: { kind: "connector" as const, id: "connector-2" }, title: "Разъём", index: "ПФ-02", quantity: 3, reserve: 0, operationTimeMinutes: 5 }] };
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", harnessId: "h", row, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).toContain('class="route-material-table"');
+    expect(markup).toContain('class="route-component-metrics"');
+    expect(markup).toContain('aria-label="Кол-во"');
+    expect(markup).toContain('value="2"');
+    expect(markup).toContain('value="7"');
+    expect(markup).toContain("29 мин");
+    expect(markup).toContain("Сводка объединённого полуфабриката");
+    expect(markup).not.toContain('<tfoot><tr><td class="route-metric-cell"><label>Кол-во');
+  });
+
   it("shows a clickable operation field and a 0–100 harness background control", () => {
     const document = createEmptyHarnessDesign();
     const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);
@@ -67,6 +91,10 @@ describe("inline route row", () => {
     }));
     expect(markup).toContain('aria-label="Операция 1: не выбрана"');
     expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('class="route-operation-number"');
+    expect(markup).toContain('Переместить операцию 1 ниже');
+    expect(markup).not.toContain('Режим операции 1');
+    expect(markup).not.toContain('type="radio"');
     expect(markup).toContain('min="0" max="100" step="1"');
   });
 
