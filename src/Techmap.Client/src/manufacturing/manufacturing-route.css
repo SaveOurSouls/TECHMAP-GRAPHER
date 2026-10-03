@@ -630,17 +630,7 @@
 .route-inline-row.semi-finished .route-material-table-components .route-metric-cell > label { gap: 2px; font-size: 9px; }
 .route-inline-row.semi-finished .route-material-table-components .route-number-input input { height: 26px; padding: 4px 21px 4px 4px; font-size: 9px; }
 .route-inline-row.semi-finished .route-material-table-components .route-number-input span { top: 7px; right: 3px; font-size: 8px; }
-
-/* Component metric rows may be rendered as a five-column detail table. */
-.route-inline-row.semi-finished .route-component-metrics {
-  display: grid;
-  grid-template-columns: minmax(64px, .45fr) minmax(120px, 1.6fr) repeat(3, minmax(68px, .8fr));
-  gap: 6px;
-  min-width: 0;
-}
-.route-inline-row.semi-finished .route-component-metrics .route-metric-cell { min-width: 0; padding: 4px; }
-.route-inline-row.semi-finished .route-component-metrics .route-number-input input { height: 27px; padding: 4px 26px 4px 5px; font-size: 10px; }
-.route-inline-row.semi-finished .route-component-metrics .route-number-input span { top: 7px; right: 5px; font-size: 8px; }
+.route-inline-row.semi-finished .route-material-table-components tfoot > tr > td:last-child { width: auto; white-space: normal; }
 
 /* Give the component name the full row; preparation state stays on a compact second line. */
 .route-inline-row.semi-finished .route-identity-panel,
