@@ -83,6 +83,15 @@ const defaultCatalog: readonly EditorCatalogItem[] = [
 
 const initialCamera: EditorCamera = { offsetX: 70, offsetY: 48, zoom: 1 };
 
+export function hiddenIdsForIsolatedObjects(objects: readonly EditorSceneObject[], isolatedIds: readonly string[]): string[] {
+  const isolated = new Set(isolatedIds);
+  return objects.filter(object => !isolated.has(object.id)).map(object => object.id);
+}
+
+export function layersWithIsolatedLayer(layers: readonly EditorLayer[], layerId: string): EditorLayer[] {
+  return layers.map(layer => ({ ...layer, visible: layer.id === layerId }));
+}
+
 export type EditorSaveState = "saved" | "saving" | "changed" | "error";
 
 export interface HarnessEditorWorkspaceProps {
@@ -323,7 +332,7 @@ export function HarnessEditorWorkspace({
   const [localSelectedObjectIds, setLocalSelectedObjectIds] = useState<readonly string[]>(["W1"]);
   const [camera, setCamera] = useState(initialCamera);
   const [viewportSize, setViewportSize] = useState<EditorViewportSize>({ width: 860, height: 560 });
-  const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">("properties");
+  const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">(localCopyControls ? "layers" : "properties");
   const [catalogExpanded, setCatalogExpanded] = useState(true);
   const [utilityPanelOpen, setUtilityPanelOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
@@ -419,6 +428,23 @@ export function HarnessEditorWorkspace({
   const changeLayers = (nextLayers: readonly EditorLayer[]) => {
     if (controlledLayers === undefined) setLocalLayers(nextLayers);
     onLayersChange?.(nextLayers);
+  };
+
+  const isolateCopyObjects = (objectIds: readonly string[]) => {
+    if (!localCopyControls || !objectIds.length) return;
+    const isolatedIds = new Set(objectIds);
+    const layerIds = new Set(objects.filter(object => isolatedIds.has(object.id)).map(object => object.layerId));
+    if (!layerIds.size) return;
+    if (layers.some(layer => layerIds.has(layer.id) && !layer.visible)) {
+      changeLayers(layers.map(layer => layerIds.has(layer.id) ? { ...layer, visible: true } : layer));
+    }
+    localCopyControls.onHiddenObjectIdsChange(hiddenIdsForIsolatedObjects(objects, objectIds));
+  };
+
+  const showAllCopyObjects = () => {
+    if (!localCopyControls) return;
+    if (layers.some(layer => !layer.visible)) changeLayers(layers.map(layer => ({ ...layer, visible: true })));
+    localCopyControls.onHiddenObjectIdsChange([]);
   };
 
   const selectObject = (objectId: string | null, additive = false) => {
@@ -567,8 +593,8 @@ export function HarnessEditorWorkspace({
               <h3>Видимость фрагмента</h3>
               <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => selectedObjectIds.includes(object.id)).map(object => object.id).length
                 ? [...new Set([...localCopyControls.hiddenObjectIds, ...selectedObjectIds])] : localCopyControls.hiddenObjectIds)} disabled={!selectedObjectIds.length}>Скрыть выбранные</button>
-              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => !selectedObjectIds.includes(object.id)).map(object => object.id))} disabled={!selectedObjectIds.length}>Только выбранные</button>
-              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange([])}>Показать все</button>
+              <button type="button" className="ui-control he-control-action" onClick={() => isolateCopyObjects(selectedObjectIds)} disabled={!selectedObjectIds.length}>Только выбранные</button>
+              <button type="button" className="ui-control he-control-action" onClick={showAllCopyObjects}>Показать все</button>
               <label>Фон жгута: {Math.round(localCopyControls.backgroundOpacity * 100)}%
                 <input type="range" min="0" max="100" value={Math.round(localCopyControls.backgroundOpacity * 100)} onChange={event => localCopyControls.onBackgroundOpacityChange(Number(event.target.value) / 100)} />
               </label>
@@ -674,7 +700,58 @@ export function HarnessEditorWorkspace({
                 onVisibilityToggle={(layerId) => changeLayers(toggleLayerVisibility(layers, layerId))}
                 onLockToggle={(layerId) => changeLayers(toggleLayerLock(layers, layerId))}
                 onMove={(layerId, targetIndex) => changeLayers(moveLayer(layers, layerId, targetIndex))}
-              />{localCopyControls && <section aria-label="Видимость объектов"><h3>Объекты</h3>{objects.map(object => <label key={object.id} style={{display:"block"}}><input type="checkbox" checked={!localCopyControls.hiddenObjectIds.includes(object.id)} onChange={event => localCopyControls.onHiddenObjectIdsChange(event.target.checked ? localCopyControls.hiddenObjectIds.filter(id => id !== object.id) : [...localCopyControls.hiddenObjectIds, object.id])} />{object.label || object.id}</label>)}</section>}</>
+                onIsolate={localCopyControls ? layerId => {
+                  changeLayers(layersWithIsolatedLayer(layers, layerId));
+                  localCopyControls.onHiddenObjectIdsChange(localCopyControls.hiddenObjectIds.filter(id =>
+                    objects.find(object => object.id === id)?.layerId !== layerId));
+                } : undefined}
+              />{localCopyControls && <section className="he-copy-visibility" aria-label="Видимость объектов">
+                <div className="he-copy-visibility-heading">
+                  <h3>Объекты</h3>
+                  <button
+                    type="button"
+                    className="ui-control he-copy-action"
+                    onClick={showAllCopyObjects}
+                    disabled={!localCopyControls.hiddenObjectIds.length && layers.every(layer => layer.visible)}
+                  >Показать все</button>
+                </div>
+                <button
+                  type="button"
+                  className="ui-control he-copy-action he-copy-isolate-selection"
+                  onClick={() => isolateCopyObjects(selectedObjectIds)}
+                  disabled={!selectedObjectIds.length}
+                >Изолировать выбранные</button>
+                <div className="he-copy-object-list">
+                  {objects.map(object => {
+                    const visible = !localCopyControls.hiddenObjectIds.includes(object.id);
+                    const label = object.label || object.id;
+                    return <div className="he-copy-object-row" key={object.id}>
+                      <label className="he-copy-object-name">
+                        <input
+                          type="checkbox"
+                          checked={visible}
+                          onChange={event => {
+                            if (event.target.checked && layers.some(layer => layer.id === object.layerId && !layer.visible)) {
+                              changeLayers(layers.map(layer => layer.id === object.layerId ? { ...layer, visible: true } : layer));
+                            }
+                            localCopyControls.onHiddenObjectIdsChange(event.target.checked
+                              ? localCopyControls.hiddenObjectIds.filter(id => id !== object.id)
+                              : [...localCopyControls.hiddenObjectIds, object.id]);
+                          }}
+                        />
+                        <span title={label}>{label}</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="ui-control he-copy-action"
+                        aria-label={`Изолировать ${label}`}
+                        title={`Изолировать «${label}»`}
+                        onClick={() => isolateCopyObjects([object.id])}
+                      >Изолировать</button>
+                    </div>;
+                  })}
+                </div>
+              </section>}</>
             )}
           </div>
         </aside>

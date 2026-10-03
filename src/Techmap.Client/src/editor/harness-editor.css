@@ -312,6 +312,7 @@
 .he-panel-note { margin: 0 3px 10px; color: #839098; font-size: 9px; line-height: 1.4; }
 .he-layer-list { margin: 0; padding: 0; display: grid; gap: 4px; list-style: none; }
 .he-layer-row { min-width: 0; min-height: 40px; padding: 4px 5px; display: grid; grid-template-columns: 19px minmax(0, 1fr) 69px 25px 34px; align-items: center; gap: 3px; border: 1px solid #dce5e9; border-radius: 6px; background: #fff; }
+.he-layer-row:has(.he-layer-isolate) { grid-template-columns:18px minmax(0,1fr) 62px 67px 23px 30px; gap:2px; }
 .he-layer-row:hover { border-color: #b8cdd7; background: #f8fbfc; }
 .he-layer-row.dragging { opacity: .45; }
 .he-layer-row.is-hidden .he-layer-name { color: #89969d; }
@@ -323,10 +324,26 @@
 .he-layer-visibility { min-width: 67px; height: 25px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid #d4e1e6; border-radius: 4px; background: #f8fbfc; color: #687c86; font-size: 9px; cursor: pointer; }
 .he-layer-visibility:hover { border-color: #a9c6d2; background: #eaf2f5; color: #315f74; }
 .he-layer-visibility.active { border-color: #b8d6e1; background: #eef7fa; color: #257a9e; }
+.he-layer-isolate { min-width:0; height:25px; padding:0 4px; overflow:hidden; border:1px solid #d4e1e6; border-radius:4px; background:#fff; color:#477083; font:600 9px Arial,sans-serif; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.he-layer-isolate:hover { border-color:#91bdcc; background:#edf7fa; color:#176889; }
+.he-layer-isolate:focus-visible { outline:2px solid #4e9dbc; outline-offset:1px; }
 .he-layer-order-controls { display: flex; }
 .he-layer-order-controls button { width: 16px; height: 24px; padding: 0; border: 0; background: transparent; color: #728691; font-size: 11px; cursor: pointer; }
 .he-layer-order-controls button:hover:not(:disabled) { color: #087bad; }
 .he-layer-order-controls button:disabled { color: #c7cfd3; cursor: default; }
+
+.he-copy-visibility { min-width:0; display:grid; gap:7px; overflow-x:hidden; }
+.he-copy-visibility-heading { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.he-copy-visibility-heading h3 { min-width:0; margin:0; color:#193f52; font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+.he-copy-isolate-selection { width:100%; justify-content:center; }
+.he-copy-object-list { min-width:0; display:grid; gap:4px; }
+.he-copy-object-row { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:5px; padding:3px 4px; border:1px solid #e0e8ec; border-radius:5px; background:#fff; }
+.he-copy-object-name { min-width:0; display:flex; align-items:center; gap:7px; color:#355365; font-size:10px; cursor:pointer; }
+.he-copy-object-name input { width:15px; height:15px; min-width:15px; min-height:15px; margin:0; accent-color:#087bad; }
+.he-copy-object-name span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.he-copy-action { min-width:0; min-height:27px; padding:4px 7px; border-color:#c8dbe3; background:#fff; color:#285d73; font-size:10px; line-height:1.2; white-space:nowrap; }
+.he-copy-action:hover:not(:disabled) { border-color:#79b7c9; background:#eef9fb; }
+.he-copy-action:disabled { opacity:.55; }
 
 .he-catalog { z-index: 3; min-width: 0; grid-column: 3; grid-row: 2; border-top: 1px solid var(--he-line); background: #fff; }
 .he-catalog-header { min-height: 42px; padding: 6px 10px; display: grid; grid-template-columns: auto minmax(190px, 350px) 1fr; align-items: center; gap: 15px; }
@@ -591,6 +608,8 @@
 .harness-editor { border:0; border-radius:0; box-shadow:none; }
 .harness-editor .he-header { grid-template-columns:minmax(100px,1fr) auto auto auto; gap:14px; }
 .he-inspector-toggle { padding:7px 10px; border:1px solid #527485; border-radius:6px; background:#284f61; color:#d5e9ef; font:600 11px Arial,sans-serif; cursor:pointer; }
+.he-inspector-content { min-width:0; overflow-x:hidden; }
+.he-right-panel { min-width:0; }
 .he-workspace { position:relative; --utility-width:244px; --inspector-width:270px; grid-template-columns:54px var(--utility-width) minmax(0,1fr) var(--inspector-width); grid-template-rows:minmax(0,1fr) auto; }
 .he-workspace.he-utility-closed { --utility-width:42px; }
 .he-workspace.he-inspector-closed { --inspector-width:0px; }
@@ -652,6 +671,28 @@
   .he-table-window { min-width:0; }
   .he-table-window>header { flex-wrap:wrap; gap:4px; }
   .he-table-window>header strong { font-size:11px; }
+}
+
+/* Compact drawing-copy header and inspector controls at narrow route widths. */
+@media(max-width:650px) {
+  .harness-editor .he-header:has(> .he-back:last-child) { grid-template-columns:minmax(0,1fr) auto; }
+  .harness-editor .he-header:has(> .he-back:last-child) .he-header-identity { grid-column:1; grid-row:1; }
+  .harness-editor .he-header:has(> .he-back:last-child) .he-inspector-toggle { grid-column:1; grid-row:2; justify-self:start; }
+  .harness-editor .he-header:has(> .he-back:last-child) .he-save-state { grid-column:2; grid-row:2; justify-self:end; white-space:nowrap; }
+  .harness-editor .he-header:has(> .he-back:last-child) > .he-back:last-child { grid-column:2; grid-row:1; justify-self:end; width:auto; padding:0 9px; font-size:11px; }
+  .he-right-panel { overflow:hidden; }
+  .he-layers-panel { min-width:0; padding:9px 7px; }
+  .he-layer-row { grid-template-columns:16px minmax(0,1fr) 62px 22px 28px; gap:2px; padding:3px; }
+  .he-layer-row:has(.he-layer-isolate) { grid-template-columns:15px minmax(0,1fr) 56px 61px 20px 27px; gap:1px; padding:3px; }
+  .he-layer-control { width:22px; }
+  .he-layer-visibility { min-width:0; padding:0 3px; }
+  .he-layer-isolate { padding:0 2px; font-size:8px; }
+  .he-layer-order-controls button { width:14px; }
+  .he-copy-visibility { gap:6px; }
+  .he-copy-object-row { gap:3px; padding:3px; }
+  .he-copy-object-name { gap:5px; font-size:9px; }
+  .he-copy-object-name input { width:14px; height:14px; min-width:14px; min-height:14px; }
+  .he-copy-action { min-height:25px; padding:3px 5px; font-size:9px; }
 }
 
 /* Connection/BOM tables use the cell as the sizing grid; controls fill their cell. */

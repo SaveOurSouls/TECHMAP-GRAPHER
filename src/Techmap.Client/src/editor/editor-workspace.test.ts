@@ -55,7 +55,7 @@ import {
 import { moveLayer, toggleLayerLock, toggleLayerVisibility, updateEditorObject } from "./editor-state";
 import type { EditorLayer, EditorPoint, EditorSceneObject } from "./editor-types";
 import type { CableInstance } from "./model";
-import { HarnessEditorWorkspace, reconcileWorkspaceSelection } from "./HarnessEditorWorkspace";
+import { HarnessEditorWorkspace, hiddenIdsForIsolatedObjects, layersWithIsolatedLayer, reconcileWorkspaceSelection } from "./HarnessEditorWorkspace";
 
 const layers: readonly EditorLayer[] = [
   { id: "top", label: "Верхний", visible: true, locked: false },
@@ -77,6 +77,34 @@ const stripProfile = {
 };
 
 describe("harness editor workspace", () => {
+  it("restores isolate actions for an assembly drawing copy", () => {
+    expect(hiddenIdsForIsolatedObjects(objects, ["upper"])).toEqual(["lower", "wire"]);
+    expect(hiddenIdsForIsolatedObjects(objects, ["upper", "wire"])).toEqual(["lower"]);
+    expect(layersWithIsolatedLayer(layers, "bottom").map(layer => layer.visible)).toEqual([false, true]);
+    const onHiddenObjectIdsChange = vi.fn();
+    const markup = renderToStaticMarkup(createElement(HarnessEditorWorkspace, {
+      harnessId: "assembly-copy",
+      harnessDesignation: "СБ-01",
+      view: "drawing",
+      objects,
+      layers,
+      localCopyControls: {
+        hiddenObjectIds: [],
+        backgroundOpacity: 0.25,
+        onHiddenObjectIdsChange,
+        onBackgroundOpacityChange: vi.fn(),
+        onCancel: vi.fn(),
+      },
+    }));
+    expect(markup).toContain("Видимость объектов");
+    expect(markup).toContain("Изолировать выбранные");
+    expect(markup).toContain("Изолировать слой Верхний");
+    expect(markup).toContain("Изолировать слой Нижний");
+    expect(markup).toContain("Изолировать XS1");
+    expect(markup).toContain("Изолировать W1");
+    expect(markup).toContain("Показать все");
+  });
+
   it("draws, selects and fits a multicore cable sheath in the drawing view", () => {
     const cable: CableInstance = {
       id: "CABLE-1", memberWireIds: ["core-a", "core-b"], lengthMm: 250,

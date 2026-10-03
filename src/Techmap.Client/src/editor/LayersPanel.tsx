@@ -6,9 +6,10 @@ export interface LayersPanelProps {
   readonly onVisibilityToggle: (layerId: string) => void;
   readonly onLockToggle: (layerId: string) => void;
   readonly onMove: (layerId: string, targetIndex: number) => void;
+  readonly onIsolate?: (layerId: string) => void;
 }
 
-export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove }: LayersPanelProps) {
+export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove, onIsolate }: LayersPanelProps) {
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
 
   const beginDrag = (event: DragEvent<HTMLLIElement>, layerId: string) => {
@@ -40,6 +41,13 @@ export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove }
           >
             <span className="he-drag-handle" title="Перетащить слой" aria-hidden="true">⠿</span>
             <span className="he-layer-name">{layer.label}</span>
+            {onIsolate && <button
+              type="button"
+              className="he-layer-isolate"
+              aria-label={`Изолировать слой ${layer.label}`}
+              title={`Изолировать слой «${layer.label}»`}
+              onClick={() => onIsolate(layer.id)}
+            >Изолировать</button>}
             <button
               type="button"
               className={layer.visible ? "he-layer-visibility active" : "he-layer-visibility"}
