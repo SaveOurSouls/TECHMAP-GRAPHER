@@ -135,7 +135,9 @@ function expandLegacyComponents(route: Record<string, unknown>): Record<string, 
         id, kind: "semiFinished", ...(component.index === undefined ? {} : { index: component.index }), title: component.title,
         quantity: component.quantity ?? 1, reserve: component.reserve ?? 0, operationTimeMinutes: component.operationTimeMinutes ?? 0,
         comment: "", sourceObjects: [ref], dependsOn: legacyDependencies, operations: [], prepared: false,
-        presentation: { backgroundOpacity: object(row.presentation).backgroundOpacity, objects: [] },
+        presentation: { backgroundOpacity: object(row.presentation).backgroundOpacity, objects: array(object(row.presentation).objects, 10000).filter(value => refKey(parseRef(object(value).ref)) === refKey(ref)).map(value => {
+          const item = object(value); return { ref: parseRef(item.ref), points: array(item.points, 2000).map(point => { const coordinates = object(point); return { x: coordinates.x as number, y: coordinates.y as number }; }), hidden: item.hidden as boolean };
+        }) },
         ...(ref.kind === "wire" ? {
           terminalRequirements: terminalRequirements.filter(value => object(value).wireId === ref.id),
           wireBlankSelections: wireBlankSelections.filter(value => object(value).wireId === ref.id),
