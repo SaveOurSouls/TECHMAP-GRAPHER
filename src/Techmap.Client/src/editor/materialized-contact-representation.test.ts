@@ -16,6 +16,8 @@ import {
 } from "./materialized-contact-representation";
 import { designToScene } from "./HarnessDesignEditor";
 import { createWire } from "./commands";
+import { physicalNodeDirection, physicalNodeFacingDirection, physicalNodePoint } from "./physical-ports";
+import { physicalSegmentPoints } from "./physical-geometry";
 
 it("uses current v5 table edges for E4 rendering and routing while retaining drawing points", () => {
   const original = connector();
@@ -146,6 +148,26 @@ function connector(): ConnectorInstance {
 }
 
 describe("materialized contact representations", () => {
+  it.each([0,37,90,180,271])("flips an inward common-port direction for a new pipe at %s degrees", rotationDegrees => {
+    const original=connector(),contact=original.contacts[0]!,binding=original.libraryBinding!;
+    if(binding.mode!=="template")throw new Error("Template fixture expected");
+    const snapshotContact=binding.snapshot.contacts[0]!;
+    const inward={...snapshotContact,representations:snapshotContact.representations.map(r=>r.viewKind==="drawing"?{...r,direction:"right" as const}:r)};
+    const instance={...original,contacts:[contact],drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:1.5,rotationDegrees}],libraryBinding:{...binding,snapshot:{...binding.snapshot,contacts:[inward]}}};
+    const node={id:"exit",connectorId:instance.id,position:{x:0,y:60}};
+    const start=physicalNodePoint({...createEmptyHarnessDesign(),connectors:[instance]},node),a=rotationDegrees*Math.PI/180;
+    const outward={x:-Math.cos(a),y:-Math.sin(a)};
+    const other={id:"other",position:{x:start.x+outward.x*180,y:start.y+outward.y*180+70}};
+    const document={...createEmptyHarnessDesign(),connectors:[instance],physicalTopology:{snap:true,nodes:[node,other],segments:[],routes:[]}};
+    const direction=physicalNodeDirection(document,node)!;
+    expect(direction.x).toBeCloseTo(outward.x,6);expect(direction.y).toBeCloseTo(outward.y,6);
+    const marker=physicalNodeFacingDirection(document,node)!;
+    expect(marker.x*outward.x+marker.y*outward.y).toBeLessThan(0);
+    const points=physicalSegmentPoints(document,{id:"pipe",from:node.id,to:other.id,path:{kind:"routed",points:[]}});
+    const lead={x:points[1]!.x-start.x,y:points[1]!.y-start.y};
+    expect(lead.x*outward.x+lead.y*outward.y).toBeGreaterThan(0);
+    expect(lead.x*outward.y-lead.y*outward.x).toBeCloseTo(0,6);
+  });
   it("selects fixed representations by runtime contact ID or logical contact ID and view kind", () => {
     const instance = connector();
 

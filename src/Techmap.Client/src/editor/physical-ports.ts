@@ -28,18 +28,41 @@ function worldDirection(document: HarnessDesignDocument, node: PhysicalNode, dir
 }
 
 export function physicalNodeDirection(document: HarnessDesignDocument, node: PhysicalNode, target?: Point): Point | null {
-  if (node.direction) return worldDirection(document, node, node.direction);
   const connector = document.connectors.find(c => c.id === node.connectorId);
-  const representations = connector?.contacts.flatMap(c => {
+  if (!connector) return node.direction ? worldDirection(document, node, node.direction)
+    : target ? directionTowards(physicalNodePoint(document, node), target) : null;
+  const representations = connector.contacts.flatMap(c => {
     const r = selectMaterializedContactRepresentation(connector, c.id, "drawing");
     return r ? [r] : [];
-  }) ?? [];
+  });
   // A common port materializes as the same drawing point for all its contacts.
   const common = representations[0];
-  if (common && representations.every(r => r.x === common.x && r.y === common.y && r.direction === common.direction))
-    return worldDirection(document, node, common.direction);
-  if (connector) return worldDirection(document, node, connector.schematic.orientation === "contacts-left" ? "left" : "right");
-  return target ? directionTowards(physicalNodePoint(document, node), target) : null;
+  const direction = node.direction ?? (common && representations.every(r => r.x === common.x && r.y === common.y && r.direction === common.direction)
+    ? common.direction : connector.schematic.orientation === "contacts-left" ? "left" : "right");
+  const tangent = worldDirection(document, node, direction);
+  const connected = new Set(document.wires.filter(wire => !node.wireIds || node.wireIds.includes(wire.id)).flatMap(wire =>
+    [wire.from, wire.to].flatMap(end => end.connectorId === connector.id ? [end.contactId] : [])));
+  const contacts = connector.contacts.flatMap(contact => {
+    if (connected.size && !connected.has(contact.id)) return [];
+    const point = connectorContactPosition(connector, contact.id, "drawing");
+    if (!point) return [];
+    const materialized = selectMaterializedContactRepresentation(connector, contact.id, "drawing");
+    if (materialized) return [point];
+    // Ordinary table lookup returns unrotated local offsets; align its center with the rotated exit.
+    const local = drawingLocalPoint({ x: point.x - connector.positions.drawing.x, y: point.y - connector.positions.drawing.y }, connector.drawingPlacements);
+    return [{ x: connector.positions.drawing.x + local.x, y: connector.positions.drawing.y + local.y }];
+  });
+  if (contacts.length) {
+    const center = contacts.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+    const origin = physicalNodePoint(document, node);
+    const away = { x: origin.x - center.x / contacts.length, y: origin.y - center.y / contacts.length };
+    const projection = tangent.x * away.x + tangent.y * away.y;
+    if (projection < -1e-6) return { x: -tangent.x, y: -tangent.y };
+    if (projection > 1e-6) return tangent;
+    const length = Math.hypot(away.x, away.y);
+    if (length > 1e-6) return { x: away.x / length, y: away.y / length };
+  }
+  return tangent;
 }
 
 /** Visual direction of a connector exit: its marker faces the attached contacts.

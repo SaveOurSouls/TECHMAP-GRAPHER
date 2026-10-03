@@ -50,5 +50,26 @@ describe("pipe routing boundary", () => {
     const a=physicalNodePoint(base,node),b=physicalNodePoint(moved,node);
     expect(b).toEqual({x:a.x+123,y:a.y-91});
   });
+  it.each([-135,0,37,90,180,271])("routes a new pipe away from a left-side connector exit at %s degrees, from either segment end", rotationDegrees=>{
+    const base=physicalFixture(),connector=base.connectors[0]!,node={...base.physicalTopology!.nodes[0]!,position:{x:0,y:36}};
+    const rotated={...base,connectors:base.connectors.map(c=>c.id===connector.id?{...c,drawingPlacements:[{drawingId:"view:drawing",offset:{x:0,y:0},visible:true,scale:1.7,rotationDegrees}]}:c)};
+    const start=physicalNodePoint(rotated,node),angle=rotationDegrees*Math.PI/180;
+    const outward={x:-Math.cos(angle),y:-Math.sin(angle)};
+    const far={id:"far",position:{x:start.x+outward.x*240-outward.y*60,y:start.y+outward.y*240+outward.x*60}};
+    const doc={...rotated,physicalTopology:{...rotated.physicalTopology!,snap:true,nodes:[node,far],segments:[],routes:[]}};
+    const direction=physicalNodeDirection(doc,node)!;
+    expect(direction.x).toBeCloseTo(outward.x,6);expect(direction.y).toBeCloseTo(outward.y,6);
+    const forward=physicalSegmentPoints(doc,{id:"new",from:node.id,to:far.id,path:{kind:"routed",points:[]}});
+    const reverse=physicalSegmentPoints(doc,{id:"new",from:far.id,to:node.id,path:{kind:"routed",points:[]}});
+    for(const lead of [{x:forward[1]!.x-start.x,y:forward[1]!.y-start.y},{x:reverse.at(-2)!.x-start.x,y:reverse.at(-2)!.y-start.y}]){
+      expect(lead.x*outward.y-lead.y*outward.x).toBeCloseTo(0,6);
+      expect(lead.x*outward.x+lead.y*outward.y).toBeGreaterThan(0);
+    }
+  });
+  it("normalizes an inward manual pipe direction away from the connector",()=>{
+    const base=physicalFixture(),node={...base.physicalTopology!.nodes[0]!,position:{x:0,y:36},direction:"right" as const};
+    expect(physicalNodeDirection(base,node)!.x).toBeCloseTo(-1);
+    expect(physicalNodeDirection(base,node)!.y).toBeCloseTo(0);
+  });
 });
 
