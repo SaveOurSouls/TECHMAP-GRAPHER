@@ -327,13 +327,13 @@ function compositeSourceKeyParts(value: string): readonly string[] | null {
   return parts;
 }
 
-/** Human readable БД.ТЕР identity: manufacturer + reel article + series. */
+/** Human readable БД.ТЕР identity: manufacturer + available article + series. */
 export function terminalCatalogLabel(record: ReferenceCatalogSearchRecord): string {
   const text = (key: string) => typeof record.payload[key] === "string" ? record.payload[key].trim() : "";
-  const fromPayload = [text("manufacturer"), text("reelArticle"), text("series")].filter(Boolean);
+  const fromPayload = [text("manufacturer"), text("reelArticle") || text("bagArticle"), text("series")].filter(Boolean);
   if (fromPayload.length) return fromPayload.join(" ");
   const composite = compositeSourceKeyParts(record.sourceKey);
-  const fromKey = composite ? [composite[0], composite[1], composite[3]].filter(Boolean) : [];
+  const fromKey = composite ? [composite[0], composite[1] || composite[2], composite[3]].filter(Boolean) : [];
   return fromKey.length ? fromKey.join(" ") : record.sourceKey;
 }
 

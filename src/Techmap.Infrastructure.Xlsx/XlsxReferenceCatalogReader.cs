@@ -32,7 +32,8 @@ public sealed record XlsxFieldMapping(
     bool AllowNotApplicable = false,
     bool AllowFormulaCachedValue = false,
     bool SkipBlank = false,
-    bool WarnWhenMissing = false);
+    bool WarnWhenMissing = false,
+    bool OptionalColumn = false);
 
 public sealed record XlsxLayerMemberMapping(
     int Index,
@@ -64,7 +65,9 @@ public sealed record XlsxCatalogMapping(
     bool ImportAllColumns = false,
     int? KeyColumnIndex = null,
     int? FirstColumnIndex = null,
-    int? LastColumnIndex = null);
+    int? LastColumnIndex = null,
+    string? AlternativeKeyColumn = null,
+    bool NormalizeMultilineValues = false);
 
 public sealed record XlsxSheetInspection(string Name, bool Hidden);
 
@@ -232,6 +235,8 @@ public sealed class XlsxReferenceCatalogReader
             }
             writer.WriteString("entityType", mapping.EntityType.Normalize(NormalizationForm.FormC));
             writer.WriteString("keyColumn", mapping.KeyColumn.Normalize(NormalizationForm.FormC));
+            writer.WriteString("alternativeKeyColumn", mapping.AlternativeKeyColumn?.Normalize(NormalizationForm.FormC));
+            writer.WriteBoolean("normalizeMultilineValues", mapping.NormalizeMultilineValues);
             writer.WritePropertyName("fields");
             if (mapping.Fields is null)
             {
@@ -248,6 +253,7 @@ public sealed class XlsxReferenceCatalogReader
                     writer.WriteBoolean("allowFormulaCachedValue", field.AllowFormulaCachedValue);
                     writer.WriteBoolean("skipBlank", field.SkipBlank);
                     writer.WriteBoolean("warnWhenMissing", field.WarnWhenMissing);
+                    writer.WriteBoolean("optionalColumn", field.OptionalColumn);
                     writer.WritePropertyName("notApplicableTokens");
                     writer.WriteStartArray();
                     foreach (var token in (field.NotApplicableTokens ?? [])
@@ -407,6 +413,12 @@ public sealed class XlsxReferenceCatalogReader
                 $"Столбец «{mapping.KeyColumn}» должен находиться в {ColumnName(expectedIndex)}{mapping.HeaderRow}.",
                 field: mapping.KeyColumn, location: Location(selectedSheetName, mapping.HeaderRow)));
         }
+        HeaderCell? alternativeKeyColumn = null;
+        if (mapping.AlternativeKeyColumn is not null &&
+            !headers.TryGetValue(NormalizeHeader(mapping.AlternativeKeyColumn), out alternativeKeyColumn))
+            AddDiagnostic(diagnostics, Error("xlsx_required_column_missing",
+                $"Не найден альтернативный ключевой столбец «{mapping.AlternativeKeyColumn}».",
+                field: mapping.AlternativeKeyColumn, location: Location(selectedSheetName, mapping.HeaderRow)));
         var compositeKeyColumns = new List<HeaderCell>();
         foreach (var sourceColumn in mapping.CompositeKeyColumns ?? [])
         {
@@ -459,6 +471,7 @@ public sealed class XlsxReferenceCatalogReader
         var resolved = ResolveFields(headers, requestedFields, sheets[selectedIndex].Name, mapping.HeaderRow, diagnostics);
         var consumedColumns = resolved.Select(item => item.ColumnIndex).ToHashSet();
         if (keyColumn is not null) consumedColumns.Add(keyColumn.ColumnIndex);
+        if (alternativeKeyColumn is not null) consumedColumns.Add(alternativeKeyColumn.ColumnIndex);
         foreach (var compositeKeyColumn in compositeKeyColumns)
             consumedColumns.Add(compositeKeyColumn.ColumnIndex);
         foreach (var boundaryColumn in boundaryColumns)
@@ -503,14 +516,24 @@ public sealed class XlsxReferenceCatalogReader
             }
             if (keyColumn is null)
                 continue;
+            var selectedKeyColumn = keyColumn;
             if (!cells.TryGetValue(keyColumn.ColumnIndex, out var keyCell) ||
                 keyCell.State is ParsedCellState.Missing or ParsedCellState.Blank)
             {
-                if (mapping.ImportAllColumns) { skippedUnkeyedRows++; continue; }
-                AddDiagnostic(diagnostics, Error(
-                    "xlsx_key_missing", "В строке отсутствует ключ записи.", field: mapping.KeyColumn,
-                    location: keyColumn is null ? rowLocation : Location(selectedSheetName, CellReference(keyColumn.ColumnIndex, rowNumber))));
-                continue;
+                if (alternativeKeyColumn is not null && cells.TryGetValue(alternativeKeyColumn.ColumnIndex, out var alternativeCell) &&
+                    alternativeCell.State is not (ParsedCellState.Missing or ParsedCellState.Blank))
+                {
+                    selectedKeyColumn = alternativeKeyColumn;
+                    keyCell = alternativeCell;
+                }
+                else
+                {
+                    if (mapping.ImportAllColumns) { skippedUnkeyedRows++; continue; }
+                    AddDiagnostic(diagnostics, Error(
+                        "xlsx_key_missing", "В строке отсутствует ключ записи.", field: mapping.KeyColumn,
+                        location: Location(selectedSheetName, CellReference(keyColumn.ColumnIndex, rowNumber))));
+                    continue;
+                }
             }
             if (keyCell.State == ParsedCellState.Formula && mapping.CompositeKeyColumns is null)
             {
@@ -519,12 +542,14 @@ public sealed class XlsxReferenceCatalogReader
             }
             if (keyCell.State == ParsedCellState.Error)
             {
-                AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка ключа содержит ошибку Excel.", field: mapping.KeyColumn, location: keyCell.Reference));
+                AddDiagnostic(diagnostics, Error("xlsx_cell_error", "Ячейка ключа содержит ошибку Excel.", field: selectedKeyColumn.Header, location: keyCell.Reference));
                 continue;
             }
-            if ((!mapping.AllowNonTextKey && keyCell.Kind != ParsedValueKind.Text) || string.IsNullOrEmpty(keyCell.Text))
+            if ((!mapping.AllowNonTextKey && keyCell.Kind != ParsedValueKind.Text) ||
+                (mapping.AllowNonTextKey && keyCell.Kind is not (ParsedValueKind.Text or ParsedValueKind.Number)) ||
+                string.IsNullOrEmpty(keyCell.Text))
             {
-                AddDiagnostic(diagnostics, Error("xlsx_key_must_be_text", "Ключ записи должен быть непустым текстом, чтобы сохранить ведущие нули.", field: mapping.KeyColumn, location: keyCell.Reference));
+                AddDiagnostic(diagnostics, Error("xlsx_key_must_be_text", "Ключ записи должен быть непустым текстом или числом без формулы.", field: selectedKeyColumn.Header, location: keyCell.Reference));
                 continue;
             }
 
@@ -629,7 +654,9 @@ public sealed class XlsxReferenceCatalogReader
                     AddDiagnostic(diagnostics, Error("xlsx_value_type_invalid", $"Значение не соответствует типу {field.Mapping.ValueKind}.", mapping.EntityType, sourceKey, field.Mapping.TargetProperty, cell.Reference));
                     continue;
                 }
-                payloadValues[field.Mapping.TargetProperty] = value;
+                payloadValues[field.Mapping.TargetProperty] = mapping.NormalizeMultilineValues && value is string textValue
+                    ? NormalizeMultiline(textValue)
+                    : value;
             }
 
             if (mapping.LayerArray is not null)
@@ -793,7 +820,8 @@ public sealed class XlsxReferenceCatalogReader
             }
             if (!headers.TryGetValue(source, out var header))
             {
-                AddDiagnostic(diagnostics, Error("xlsx_required_column_missing", $"Не найден столбец «{mapping.SourceColumn}».", field: mapping.SourceColumn, location: Location(sheetName, headerRow)));
+                if (!mapping.OptionalColumn)
+                    AddDiagnostic(diagnostics, Error("xlsx_required_column_missing", $"Не найден столбец «{mapping.SourceColumn}».", field: mapping.SourceColumn, location: Location(sheetName, headerRow)));
                 continue;
             }
             result.Add(new ResolvedField(header.ColumnIndex, mapping with { SourceColumn = source, TargetProperty = target }));
@@ -842,6 +870,11 @@ public sealed class XlsxReferenceCatalogReader
 
     private static string NormalizeHeader(string value) =>
         Regex.Replace(value.Normalize(NormalizationForm.FormC).Trim(), @"\s+", " ");
+
+    private static string NormalizeMultiline(string value) =>
+        value.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Replace("\n", "\u2028", StringComparison.Ordinal);
 
     private static string? MaterializeCompositeKey(
         IReadOnlyList<HeaderCell> keyColumns,
@@ -1289,6 +1322,8 @@ public sealed class XlsxReferenceCatalogReader
             mapping.LastDataRow is uint lastDataRow && (lastDataRow < mapping.FirstDataRow || lastDataRow > MaximumRows) ||
             string.IsNullOrWhiteSpace(mapping.EntityType) || mapping.EntityType.Length > 128 ||
             string.IsNullOrWhiteSpace(mapping.KeyColumn) || mapping.KeyColumn.Length > 256 ||
+            mapping.AlternativeKeyColumn is not null &&
+                (string.IsNullOrWhiteSpace(mapping.AlternativeKeyColumn) || mapping.AlternativeKeyColumn.Length > 256) ||
             mapping.SheetName is { Length: > 31 } ||
             mapping.ProfileId is { Length: > 128 } ||
             mapping.KeyColumnIndex is < 1 or > 16384 ||

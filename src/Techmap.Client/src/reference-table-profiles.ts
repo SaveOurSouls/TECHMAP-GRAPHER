@@ -86,6 +86,7 @@ export const referenceTableProfiles: Readonly<Record<string, ReferenceTableProfi
       { name: "lengthMinusMm", label: "L-" },
       { name: "conductorCrimpHeightMm", label: "Высота обжима проводника , мм" },
       { name: "insulationCrimpHeightMm", label: "Высота обжима изоляции, мм" },
+      { name: "pullForceN", label: "Усилие обрыва контакта, N" },
       { name: "pullForceMinN", label: "Усилие обрыва контакта от, N" },
       { name: "pullForceMaxN", label: "Усилие обрыва контакта до, N" },
       { name: "awgFrom", label: "От AWG" },
@@ -97,6 +98,7 @@ export const referenceTableProfiles: Readonly<Record<string, ReferenceTableProfi
       { name: "contactMaterial", label: "Материал контакта" },
       { name: "maximumCurrentA", label: "Максисмальная сила тока, А" },
       { name: "datasheetUrl", label: "Ссылка на DATASHEET на сайте производителя" },
+      { name: "crimpHeightSource", label: "Источник высоты обжима" },
     ],
   },
   "technology-coax-terminations": {

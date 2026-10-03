@@ -134,17 +134,19 @@ public static class XlsxKnownProfiles
         const string sourceId = "technology-terminals";
         var fields = new[]
         {
-            Text("Тип разъема", "connectorType", required: true),
+            Text("Тип разъема", "connectorType"),
             Text("Производитель", "manufacturer"), Text("Product Name", "productName"),
             Text("Series", "series"), Raw("Шаг разьема", "pitchMm"),
-            Text("Тип контакта", "contactType"), Text("Артикул контакта (REEL)", "reelArticle", required: true),
+            Text("Тип контакта", "contactType"), Text("Артикул контакта (REEL)", "reelArticle"),
             Text("Артикул контакта (BAG)", "bagArticle"), Text("Аппликатор", "applicator"),
             Text("Пневма Автомат", "pneumaticAutomatic"), Raw("ОТР", "otr"),
             Raw("С зачисткой", "withStripping"), Text("Длина зачистки, мм", "stripLengthMm", warnWhenMissing: true),
             Raw("L+", "lengthPlusMm"), Raw("L-", "lengthMinusMm"),
             Text("Высота обжима проводника , мм", "conductorCrimpHeightMm"),
             Text("Высота обжима изоляции, мм", "insulationCrimpHeightMm"),
-            Raw("Усилие обрыва контакта от, N", "pullForceMinN"), Raw("Усилие обрыва контакта до, N", "pullForceMaxN"),
+            Text("Усилие обрыва контакта, N", "pullForceN", optionalColumn: true),
+            Raw("Усилие обрыва контакта от, N", "pullForceMinN", optionalColumn: true),
+            Raw("Усилие обрыва контакта до, N", "pullForceMaxN", optionalColumn: true),
             Raw("От AWG", "awgFrom"), Raw("До AWG", "awgTo"),
             Raw("От мм2", "sectionFromMm2", allowFormula: true, warnWhenMissing: true),
             Raw("До мм2", "sectionToMm2", allowFormula: true, warnWhenMissing: true),
@@ -152,6 +154,7 @@ public static class XlsxKnownProfiles
             Raw("Диаметр изоляции до, мм", "insulationDiameterToMm", warnWhenMissing: true),
             Text("Материал контакта", "contactMaterial"), Raw("Максисмальная сила тока, А", "maximumCurrentA"),
             Text("Ссылка на DATASHEET на сайте производителя", "datasheetUrl"),
+            Text("Источник высоты обжима", "crimpHeightSource", optionalColumn: true),
         };
         var mapping = new XlsxCatalogMapping(
             "БД.ТЕР", 1, 2, "terminal", "Артикул контакта (REEL)", fields,
@@ -159,7 +162,10 @@ public static class XlsxKnownProfiles
             IgnoreUnmappedFormulas: true,
             ProfileId: id,
             CompositeKeyColumns: ["Производитель", "Артикул контакта (REEL)", "Артикул контакта (BAG)", "Series"],
-            BoundaryColumns: ["Тип разъема", "Производитель", "Product Name", "Series", "Артикул контакта (REEL)"]);
+            BoundaryColumns: ["Тип разъема", "Производитель", "Product Name", "Series", "Артикул контакта (REEL)", "Артикул контакта (BAG)"],
+            AlternativeKeyColumn: "Артикул контакта (BAG)",
+            AllowNonTextKey: true,
+            NormalizeMultilineValues: true);
         return new XlsxKnownProfile(
             id, "БД.ТЕР — терминалы", sourceId, "БД.ТЕР", "terminal", "составной ключ",
             "Терминалы и совместимость сечений/изоляции; одинаковые артикулы разных серий остаются отдельными.", mapping);
@@ -264,20 +270,24 @@ public static class XlsxKnownProfiles
         string target,
         bool required = false,
         bool allowFormula = false,
-        bool warnWhenMissing = false) =>
+        bool warnWhenMissing = false,
+        bool optionalColumn = false) =>
         new(source, target, XlsxFieldValueKind.TextScalar, required,
             AllowBlank: !required && !warnWhenMissing,
             AllowFormulaCachedValue: allowFormula,
             SkipBlank: !required && warnWhenMissing,
-            WarnWhenMissing: warnWhenMissing);
+            WarnWhenMissing: warnWhenMissing,
+            OptionalColumn: optionalColumn);
 
     private static XlsxFieldMapping Raw(
         string source,
         string target,
         bool allowFormula = false,
-        bool warnWhenMissing = false) =>
+        bool warnWhenMissing = false,
+        bool optionalColumn = false) =>
         new(source, target, XlsxFieldValueKind.RawScalar,
             AllowFormulaCachedValue: allowFormula,
             SkipBlank: true,
-            WarnWhenMissing: warnWhenMissing);
+            WarnWhenMissing: warnWhenMissing,
+            OptionalColumn: optionalColumn);
 }

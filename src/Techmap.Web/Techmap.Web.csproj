@@ -14,6 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="WireCatalogE3Aj.json.gz" LogicalName="Techmap.Web.WireCatalogE3Aj.json.gz" />
+    <EmbeddedResource Include="TechnologyDatabaseArchive.xlsx" LogicalName="Techmap.Web.TechnologyDatabaseArchive.xlsx" />
     <EmbeddedResource Include="../Techmap.Client/public/route-wire-illustrations/manifest.json" LogicalName="Techmap.Web.RouteWireIllustrationsManifest.json" />
   </ItemGroup>
   <ItemGroup>

@@ -23,6 +23,28 @@ public sealed class GoogleSheetsReferenceApiTests
         "google-sheet-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.xlsx";
 
     [Fact]
+    public async Task Current_public_technology_workbook_syncs_all_terminal_rows()
+    {
+        await using var resource = typeof(TechnologyDatabaseSeed).Assembly.GetManifestResourceStream(
+            "Techmap.Web.TechnologyDatabaseArchive.xlsx")!;
+        using var buffer = new MemoryStream();
+        await resource.CopyToAsync(buffer, TestContext.Current.CancellationToken);
+        var downloader = new QueueDownloader(new GoogleSheetsWorkbookDownload(buffer.ToArray(), SafeFileName));
+        await using var factory = CreateFactory(downloader);
+        using var client = CreateLocalClient(factory);
+        var csrf = await StartSessionAsync(client);
+
+        using var response = await SendAsync(client, "/api/v1/reference-import/google-sheets-sync",
+            new GoogleSheetsSyncRequest(PublicUrl, "technology.terminals"), csrf);
+        response.EnsureSuccessStatusCode();
+        var result = (await response.Content.ReadFromJsonAsync<GoogleSheetsSyncResponse>(TestContext.Current.CancellationToken))!;
+        var terminal = Assert.Single(result.Profiles);
+        Assert.Equal("published", terminal.Status);
+        Assert.Equal(279, terminal.RecordCount);
+        Assert.DoesNotContain(terminal.Diagnostics, diagnostic => diagnostic.Severity == "error");
+    }
+
+    [Fact]
     public async Task Selected_wire_profile_publishes_E_to_AJ_columns_without_syncing_other_sources()
     {
         var bytes = new XlsxTestFixtureBuilder().WithWorksheetName("Провода").WithHeaderRow(3)

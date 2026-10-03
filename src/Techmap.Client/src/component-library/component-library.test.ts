@@ -126,6 +126,13 @@ describe("component library UI", () => {
     };
     expect(terminalCatalogLabel(record)).toBe("JST SPH-002T-P0.5S PHR");
     expect(terminalCatalogLabel({ ...record, payload: {} })).toBe("JST SPH-002T-P0.5S PHR");
+    const bagOnly = {
+      ...record,
+      sourceKey: "6:Атлант|0:|10:1/02506-02|7:1/02506",
+      payload: { manufacturer: "Атлант", reelArticle: "", bagArticle: "1/02506-02", series: "1/02506" },
+    };
+    expect(terminalCatalogLabel(bagOnly)).toBe("Атлант 1/02506-02 1/02506");
+    expect(terminalCatalogLabel({ ...bagOnly, payload: {} })).toBe("Атлант 1/02506-02 1/02506");
   });
 
   it("autosaves only complete changed drafts and pauses after a failed attempt", () => {
