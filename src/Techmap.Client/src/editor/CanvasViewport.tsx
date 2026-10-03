@@ -1721,8 +1721,13 @@ function drawE4Connector(
   context.fillRect(layout.x, footerY, layout.width, layout.footerHeight);
 
   const hasDiagnostic = object.metadata?.diagnostic === "error";
-  context.strokeStyle = hasDiagnostic ? "#c43d3d" : selected ? "#087bb4" : object.color;
-  context.lineWidth = selected ? 3 : 1.5;
+  // E4 tables keep the crisp selected outline even when they are not the
+  // active object.  The table is dense and its 1.5px default border becomes
+  // soft at common canvas zoom levels; the C2 reference shows the readable
+  // 3px blue outline as the steady table treatment.  Selection still controls
+  // interaction handles in the final canvas pass.
+  context.strokeStyle = hasDiagnostic ? "#c43d3d" : "#087bb4";
+  context.lineWidth = 3;
   context.strokeRect(layout.x, layout.y, layout.width, layout.height);
   if (hasDiagnostic) {
     context.save();

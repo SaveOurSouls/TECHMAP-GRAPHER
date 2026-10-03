@@ -881,6 +881,40 @@ describe("harness editor workspace", () => {
     expect(path).toContainEqual({ x: 58, y: 220 });
   });
 
+  it.each([false, true])("keeps an E4 table outline crisp regardless of selection (%s)", (selected) => {
+    const connector: EditorSceneObject = {
+      id: "e4-table", layerId: "top", kind: "connector", label: "XS3",
+      x: 40, y: 30, width: 180, height: 100, color: "#55717f",
+      metadata: {
+        view: "e4", orientation: "left", designation: "XS3", libraryCode: "JBT",
+        partNumber: "ННР-2", columns: JSON.stringify(["number"]),
+        rows: JSON.stringify([{
+          number: 1, contactType: "Сигнальные", circuit: "", terminal: "",
+          wire: "", wireSection: "", color: "", secondaryColor: "",
+          status: "available", customValues: {},
+        }]),
+      },
+    };
+    const outlines: { style: string; width: number }[] = [];
+    const state: Record<string, unknown> = { strokeStyle: "", lineWidth: 0 };
+    const context = new Proxy(state, {
+      get(target, key: string) {
+        if (key === "strokeRect") return () => outlines.push({ style: String(target.strokeStyle), width: Number(target.lineWidth) });
+        if (key in target) return target[key];
+        if (key === "measureText") return () => ({ width: 0 });
+        return () => undefined;
+      },
+      set(target, key: string, value: unknown) {
+        target[key] = value;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+
+    drawEditorSceneObject(context, connector, selected, "e4");
+
+    expect(outlines[0]).toEqual({ style: "#087bb4", width: 3 });
+  });
+
   it("reports one bridge at a polyline vertex and only suppresses a junction for its own wires", () => {
     const crossingWires: readonly EditorSceneObject[] = [
       {
