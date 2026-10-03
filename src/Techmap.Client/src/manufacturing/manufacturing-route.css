@@ -155,6 +155,7 @@
   top: var(--route-navigation-height, 0px);
   z-index: 9;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
