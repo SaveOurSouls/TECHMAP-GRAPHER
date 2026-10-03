@@ -29,7 +29,6 @@ it("removes a vanished wire from a merged blank and its assembly, then inserts a
   const document = { ...createEmptyHarnessDesign(), connectors: [a, b], wires: [wire("keep", 0), wire("new", 1)] };
   const route: ManufacturingRoute = { contractVersion: 1, source: { fingerprintVersion: 1, sha256: "a".repeat(64) }, status: "draft", rows: [
     { id: "merged", kind: "semiFinished", title: "Пара", comment: "Оставить", sourceObjects: [{ kind: "wire", id: "keep" }, { kind: "wire", id: "gone" }],
-      components: [{ ref: { kind: "wire", id: "keep" }, title: "Первый" }, { ref: { kind: "wire", id: "gone" }, title: "Второй" }],
       dependsOn: [], operations: [], prepared: true, presentation: { backgroundOpacity: .25, objects: [] } },
     { id: "orphan", kind: "semiFinished", title: "Удалён", comment: "", sourceObjects: [{ kind: "wire", id: "gone2" }], dependsOn: [], operations: [], prepared: true, presentation: { backgroundOpacity: .25, objects: [] } },
     { id: "assembly", kind: "assembly", title: "Сборка", comment: "Ручная", sourceObjects: [], dependsOn: ["merged", "orphan"],
@@ -40,7 +39,7 @@ it("removes a vanished wire from a merged blank and its assembly, then inserts a
   expect(result.removed.map(ref => ref.id)).toEqual(["gone", "gone2"]);
   expect(result.added).toEqual([{ kind: "wire", id: "new" }]);
   expect(result.route.rows.map(row => row.kind === "assembly" ? row.id : row.sourceObjects[0]!.id)).toEqual(["keep", "new", "assembly"]);
-  expect(result.route.rows[0]).toMatchObject({ id: "merged", comment: "Оставить", prepared: false, components: [{ ref: { kind: "wire", id: "keep" } }] });
+  expect(result.route.rows[0]).toMatchObject({ id: "merged", comment: "Оставить", prepared: false, sourceObjects: [{ kind: "wire", id: "keep" }] });
   expect(result.route.rows[2]).toMatchObject({ dependsOn: ["merged"], assemblyInputs: [{ id: "one", rowId: "merged" }], comment: "Ручная", prepared: false });
 });
 

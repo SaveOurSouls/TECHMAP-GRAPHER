@@ -15,7 +15,7 @@ export type RouteAssemblyInput =
   | { readonly id: string; readonly kind: "source"; readonly ref: RouteSourceRef }
   | { readonly id: string; readonly kind: "row"; readonly rowId: string };
 export interface RouteRow {
-  readonly components?: readonly RouteComponent[];
+  readonly role?: "sharedOperation";
   readonly terminalRequirements?: readonly RouteTerminalRequirement[];
   readonly photos?: readonly { readonly sha256: string; readonly name: string }[];
   readonly id: string;
@@ -38,14 +38,6 @@ export interface RouteRow {
   readonly operations: readonly RouteOperation[];
   readonly presentation: { readonly backgroundOpacity: number; readonly objects: readonly { readonly ref: RouteSourceRef; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingObjects?: readonly { readonly id: string; readonly kind: string; readonly layerId: string; readonly points: readonly Point[]; readonly hidden: boolean }[]; readonly drawingCopy?: RouteDrawingCopy };
   readonly prepared: boolean;
-}
-export interface RouteComponent {
-  readonly ref: RouteSourceRef;
-  readonly index?: string;
-  readonly title: string;
-  readonly quantity?: number;
-  readonly reserve?: number;
-  readonly operationTimeMinutes?: number;
 }
 export interface ManufacturingRoute {
   readonly contractVersion: 1;
@@ -109,21 +101,73 @@ function parseTerminalRequirement(value: unknown): RouteTerminalRequirement {
   } else if (v.stripLengthMm !== null) return fail();
   return { wireId: text(v.wireId, 128), end: v.end, terminalArticle, stripLengthMm: v.stripLengthMm as number | null, binding };
 }
+/** Expand rows saved by the old merge command before applying the current contract. */
+function expandLegacyComponents(route: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(route.rows) || !route.rows.some(candidate => candidate && typeof candidate === "object" && "components" in candidate)) return route;
+  const existingIds = new Set(route.rows.map(candidate => object(candidate).id));
+  let migrated = false;
+  const rows = route.rows.flatMap(candidate => {
+    const row = object(candidate);
+    if (!("components" in row)) return [row];
+    if (row.kind !== "semiFinished") return fail();
+    const refs = array(row.sourceObjects, 10000).map(parseRef);
+    const components = array(row.components, 10000).map(candidate => {
+      const component = object(candidate);
+      exact(component, ["ref", "title", ...(component.index === undefined ? [] : ["index"]), ...(component.quantity === undefined ? [] : ["quantity"]), ...(component.reserve === undefined ? [] : ["reserve"]), ...(component.operationTimeMinutes === undefined ? [] : ["operationTimeMinutes"])]);
+      return { ref: parseRef(component.ref), title: text(component.title, 512),
+        ...(component.index === undefined ? {} : { index: text(component.index, 128, true) }),
+        ...(component.quantity === undefined ? {} : { quantity: component.quantity }),
+        ...(component.reserve === undefined ? {} : { reserve: component.reserve }),
+        ...(component.operationTimeMinutes === undefined ? {} : { operationTimeMinutes: component.operationTimeMinutes }),
+      };
+    });
+    if (!components.length || components.length !== refs.length || new Set(components.map(component => refKey(component.ref))).size !== refs.length || components.some(component => !refs.some(ref => refKey(ref) === refKey(component.ref)))) return fail();
+    const rowId = text(row.id, 128);
+    const legacyDependencies = array(row.dependsOn, 1000).map(id => text(id, 128));
+    const terminalRequirements = row.terminalRequirements === undefined ? [] : array(row.terminalRequirements, 10000);
+    const wireBlankSelections = row.wireBlankSelections === undefined ? [] : array(row.wireBlankSelections, 10000);
+    const sourceRows = components.map((component, index) => {
+      let id = `${rowId}-pf-${index + 1}`.slice(0, 128), suffix = 2;
+      while (existingIds.has(id)) id = `${rowId.slice(0, 110)}-pf-${index + 1}-${suffix++}`;
+      existingIds.add(id);
+      const ref = component.ref;
+      return {
+        id, kind: "semiFinished", ...(component.index === undefined ? {} : { index: component.index }), title: component.title,
+        quantity: component.quantity ?? 1, reserve: component.reserve ?? 0, operationTimeMinutes: component.operationTimeMinutes ?? 0,
+        comment: "", sourceObjects: [ref], dependsOn: legacyDependencies, operations: [], prepared: false,
+        presentation: { backgroundOpacity: object(row.presentation).backgroundOpacity, objects: [] },
+        ...(ref.kind === "wire" ? {
+          terminalRequirements: terminalRequirements.filter(value => object(value).wireId === ref.id),
+          wireBlankSelections: wireBlankSelections.filter(value => object(value).wireId === ref.id),
+        } : {}),
+      };
+    });
+    const { components: _components, terminalRequirements: _requirements, wireBlankSelections: _selections, ...group } = row;
+    migrated = true;
+    return [...sourceRows, {
+      ...group, kind: "assembly", role: "sharedOperation", index: `ОП-${rowId.slice(0, 32)}`, title: `Общая операция · ${text(row.title, 512)}`.slice(0, 512),
+      quantity: 1, reserve: 0, operationTimeMinutes: 0, sourceObjects: [],
+      dependsOn: sourceRows.map(source => source.id),
+      assemblyInputs: sourceRows.map((source, index) => ({ id: `row-${index + 1}`, kind: "row", rowId: source.id })),
+      prepared: false,
+    }];
+  });
+  return migrated ? { ...route, status: "draft", rows } : route;
+}
 export function parseManufacturingRoute(value: unknown): ManufacturingRoute | undefined {
   if (value === undefined) return undefined;
-  const v = object(value), source = object(v.source);
+  const v = expandLegacyComponents(object(value)), source = object(v.source);
   exact(v, ["contractVersion", "source", "status", "rows"]);
   exact(source, ["fingerprintVersion", "sha256"]);
   if (v.contractVersion !== 1 || source.fingerprintVersion !== 1 || !["draft", "completed"].includes(String(v.status))) return fail();
   let refCount = 0;
   const rows = array(v.rows, 1000).map(candidate => {
     const r = object(candidate), p = object(r.presentation);
-    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.components !== undefined ? ["components"] : []), ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.wireBlankSelections !== undefined ? ["wireBlankSelections"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
+    exact(r, ["id", "kind", "title", "comment", "sourceObjects", "dependsOn", "operations", "presentation", "prepared", ...(r.role !== undefined ? ["role"] : []), ...(r.assemblyInputs !== undefined ? ["assemblyInputs"] : []), ...(r.wireBlankSelections !== undefined ? ["wireBlankSelections"] : []), ...(r.index !== undefined ? ["index"] : []), ...(r.quantity !== undefined ? ["quantity"] : []), ...(r.reserve !== undefined ? ["reserve"] : []), ...(r.operationTimeMinutes !== undefined ? ["operationTimeMinutes"] : []), ...(r.photos !== undefined ? ["photos"] : []), ...(r.terminalRequirements !== undefined ? ["terminalRequirements"] : [])]);
     exact(p, ["backgroundOpacity", "objects", ...(p.drawingObjects !== undefined ? ["drawingObjects"] : []), ...(p.drawingCopy !== undefined ? ["drawingCopy"] : [])]);
-    if (!["semiFinished", "assembly"].includes(String(r.kind)) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < 0 || p.backgroundOpacity > 1) return fail();
+    if (!["semiFinished", "assembly"].includes(String(r.kind)) || (r.role !== undefined && (r.kind !== "assembly" || r.role !== "sharedOperation")) || typeof p.backgroundOpacity !== "number" || !Number.isFinite(p.backgroundOpacity) || p.backgroundOpacity < 0 || p.backgroundOpacity > 1) return fail();
     const sourceObjects = array(r.sourceObjects, 10000).map(parseRef);
-    const components = r.components === undefined ? undefined : array(r.components, 10000).map(value => { const c = object(value); exact(c, ["ref", "title", ...(c.index === undefined ? [] : ["index"]), ...(c.quantity === undefined ? [] : ["quantity"]), ...(c.reserve === undefined ? [] : ["reserve"]), ...(c.operationTimeMinutes === undefined ? [] : ["operationTimeMinutes"])]); const ref = parseRef(c.ref); const number = (key: string, min: number) => c[key] === undefined ? undefined : (typeof c[key] === "number" && Number.isFinite(c[key]) && c[key] >= min && c[key] <= 1e9 && Math.abs((c[key] as number) * 1000 - Math.round((c[key] as number) * 1000)) < 1e-4 ? c[key] as number : fail()); return { ref, title: text(c.title, 512), ...(c.index === undefined ? {} : { index: text(c.index, 128, true) }), ...(number("quantity", 1) === undefined ? {} : { quantity: number("quantity", 1) }), ...(number("reserve", 0) === undefined ? {} : { reserve: number("reserve", 0) }), ...(number("operationTimeMinutes", 0) === undefined ? {} : { operationTimeMinutes: number("operationTimeMinutes", 0) }) }; });
-    if (components && (r.kind !== "semiFinished" || components.length !== sourceObjects.length || new Set(components.map(item => refKey(item.ref))).size !== components.length || components.some(item => !sourceObjects.some(ref => refKey(ref) === refKey(item.ref))))) return fail();
+    if ("components" in r) return fail();
     const dependsOn = array(r.dependsOn, 1000).map(id => text(id, 128));
     const assemblyInputs = r.assemblyInputs === undefined ? undefined : array(r.assemblyInputs, 10000).map(parseAssemblyInput);
     if (assemblyInputs) {
@@ -178,7 +222,7 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     for (const [value, minimum] of [[quantity, 1], [reserve, 0], [operationTimeMinutes, 0]] as const) {
       if (value !== undefined && (value < minimum || value > 1e9 || Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-4)) return fail();
     }
-    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(components === undefined ? {} : { components }), ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), ...(wireBlankSelections === undefined ? {} : { wireBlankSelections }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects, ...(drawingObjects === undefined ? {} : { drawingObjects }), ...(drawingCopy === undefined ? {} : { drawingCopy }) }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
+    return { id: text(r.id, 128), kind: r.kind as RouteRow["kind"], ...(r.role === undefined ? {} : { role: "sharedOperation" as const }), ...(index === undefined ? {} : { index }), title: text(r.title, 512), ...(quantity === undefined ? {} : { quantity }), ...(reserve === undefined ? {} : { reserve }), ...(operationTimeMinutes === undefined ? {} : { operationTimeMinutes }), comment: text(r.comment, 4000, true), sourceObjects, dependsOn, ...(assemblyInputs === undefined ? {} : { assemblyInputs }), ...(wireBlankSelections === undefined ? {} : { wireBlankSelections }), operations, presentation: { backgroundOpacity: p.backgroundOpacity, objects, ...(drawingObjects === undefined ? {} : { drawingObjects }), ...(drawingCopy === undefined ? {} : { drawingCopy }) }, prepared: bool(r.prepared), ...(photos ? { photos } : {}), ...(terminalRequirements ? { terminalRequirements } : {}) };
   });
   if (refCount > 10000) return fail();
   const byId = new Map(rows.map(row => [row.id, row]));
