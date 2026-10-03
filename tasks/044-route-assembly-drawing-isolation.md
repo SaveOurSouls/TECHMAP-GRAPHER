@@ -6,7 +6,7 @@
 - **Требования:** REQ-054, REQ-059, REQ-062 и уточнение REQ-070.
 - **Решения:** ADR-0012.
 - **Зависимости:** редактор локальной копии из карточки 038; незавершённая карточка 043 не входит в этот срез.
-- **Владелец файлов:** terra — `src/Techmap.Client/src/editor/HarnessEditorWorkspace.tsx`, `LayersPanel.tsx` и адресные тесты поведения; luna — `src/Techmap.Client/src/editor/harness-editor.css`; основной агент — эта карточка, план и передача сборщику. Файлы `ManufacturingRoutePanel.tsx`, `manufacturing-route.css`, `docs/requirements.md` и `tasks/README.md` уже меняются в карточке 043 и не входят в этот коммит.
+- **Владелец файлов:** terra — `src/Techmap.Client/src/editor/HarnessEditorWorkspace.tsx`, `LayersPanel.tsx` и адресные тесты поведения; luna — `src/Techmap.Client/src/editor/harness-editor.css`; основной агент — эта карточка, план, передача сборщику и только собственные строки REQ-070/044 в общих `docs/requirements.md` и `tasks/README.md`. Файлы `ManufacturingRoutePanel.tsx` и `manufacturing-route.css` принадлежат карточке 043.
 
 ## Наблюдение и результат
 
@@ -29,7 +29,7 @@
 
 ## Журнал результата
 
-- **Коммит:** локальный `12bc467ff60a0ea131b0c0a34360327bacddb745`; push отклонён автоматической проверкой разрешений, подробности в `docs/route-assembly-isolation-044-handoff.md`.
+- **Коммит:** код `12bc467ff60a0ea131b0c0a34360327bacddb745`; документация `70bb22c`, `7a97d61`. Push отклонён автоматической проверкой разрешений, подробности в `docs/route-assembly-isolation-044-handoff.md`.
 - **Проверки:** адресный Vitest 42/42, полный клиентский Vitest 164 файла / 1615 тестов, TypeScript и Vite production build, `git diff --check` — успешно 03.10.2026.
 - **Ограничения и открытые вопросы:** ручная проверка на исходном пользовательском чертеже и в упакованной сборке остаётся задачей приёмки.
 - **Приёмка владельца:** —

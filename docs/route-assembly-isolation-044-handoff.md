@@ -3,7 +3,7 @@
 ## Срез
 
 - Карточка [044](../tasks/044-route-assembly-drawing-isolation.md), требования REQ-054/059/062 и восстановленная функция изоляции.
-- Код: локальный коммит `12bc467ff60a0ea131b0c0a34360327bacddb745` в ветке `codex/restore-20260918-0235`; изменения ограничены `HarnessEditorWorkspace.tsx`, `LayersPanel.tsx`, профильным тестом и `harness-editor.css`.
+- Код: локальный коммит `12bc467ff60a0ea131b0c0a34360327bacddb745` в ветке `codex/restore-20260918-0235`; документация дополнена в `70bb22c` и `7a97d61`. Изменения кода ограничены `HarnessEditorWorkspace.tsx`, `LayersPanel.tsx`, профильным тестом и `harness-editor.css`.
 - Исполнители: terra — поведение и тесты; luna — адаптивная верстка; интеграция и проверки — основной агент.
 
 ## Изменения
