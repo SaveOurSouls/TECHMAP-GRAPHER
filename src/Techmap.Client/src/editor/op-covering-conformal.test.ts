@@ -8,7 +8,7 @@ import { createJoiningPipe } from "./physical-joining-pipes";
 import { joiningPipeDisplaySamples } from "./physical-joining-pipe-projection";
 import { drawingPipeWidth } from "./drawing-thickness";
 import { drawingRouteHitPoints } from "./drawing-route-path";
-import { conformalCoveringContour } from "./covering-contour";
+import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 
 function fixture(reverse = false, side: "from" | "to" = "to", continuous = false): HarnessDesignDocument {
   const blank = createEmptyHarnessDesign();
@@ -184,6 +184,16 @@ describe("REQ-039: OP shell follows member pipes beyond both ends", () => {
 });
 
 describe("OP envelope contour", () => {
+  it("keeps a bounded OP span square at both ends", () => {
+    const path = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
+    const contour = squareConformalContourEnds(conformalCoveringContour(path, [8, 8], [8, 8], [[
+      { x: -24, y: -12 }, { x: 124, y: -12 }, { x: 124, y: 12 }, { x: -24, y: 12 },
+    ]]), path);
+    expect(Math.min(...contour.map(point => point.x))).toBeCloseTo(0, 6);
+    expect(Math.max(...contour.map(point => point.x))).toBeCloseTo(100, 6);
+    expect(crossings(contour)).toEqual([]);
+    console.log("bounded", contour);
+  });
   it("keeps a straight asymmetric sleeve rectangular", () => {
     const polygon = conformalCoveringContour([{ x: 0, y: 0 }, { x: 100, y: 0 }], [8, 8], [14, 14]);
     expect(crossings(polygon)).toEqual([]);

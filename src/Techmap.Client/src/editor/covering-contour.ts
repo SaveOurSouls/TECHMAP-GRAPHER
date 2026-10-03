@@ -50,6 +50,28 @@ function inside(poly: readonly Point[], p: Point): boolean {
  return result;
 }
 
+/** Trim only a bounded OP span to transverse end caps. Overhanging spans keep
+ * their continuation cells so the visible P remains fully enclosed. */
+export function squareConformalContourEnds(contour: readonly Point[], path: readonly Point[]): Point[] {
+ if (contour.length < 3 || path.length < 2) return [...contour];
+ const first=path[0]!,last=path.at(-1)!;
+ const second=path.find(point=>Math.hypot(point.x-first.x,point.y-first.y)>1e-9);
+ const previous=[...path].reverse().find(point=>Math.hypot(point.x-last.x,point.y-last.y)>1e-9);
+ if(!second||!previous)return [...contour];
+ const clip=(input:readonly Point[],endpoint:Point,tangent:Point,keep:1|-1):Point[]=>{
+  const output:Point[]=[];
+  const signed=(point:Point)=>keep*((point.x-endpoint.x)*tangent.x+(point.y-endpoint.y)*tangent.y);
+  for(let index=0;index<input.length;index++){
+   const a=input[index]!,b=input[(index+1)%input.length]!,da=signed(a),db=signed(b),ai=da>=-1e-8,bi=db>=-1e-8;
+   if(ai)output.push(a);
+   if(ai!==bi){const t=da/(da-db||1);output.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}
+  }
+  return output;
+ };
+ const start={x:second.x-first.x,y:second.y-first.y},end={x:last.x-previous.x,y:last.y-previous.y};
+ return clip(clip(contour,first,start,1),last,end,-1);
+}
+
 /** Union neighbouring sleeve sections and corner joins. Only local sections
  * are merged, so a distant arm of a U cannot fill its open interior. */
 export function conformalCoveringContour(path: readonly Point[], left: readonly number[], right: readonly number[], supports: readonly (readonly Point[])[] = []): Point[] {

@@ -9,7 +9,7 @@ import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe-projection";
-import { conformalCoveringContour } from "./covering-contour";
+import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly pointMarker?:boolean; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean }
@@ -180,7 +180,11 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     outsets.push(outset);ownJoiningOutsets.push({segmentId:s.segmentId,outset});
    }
    const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets):[];
-   const contour=joining?conformalCoveringContour(centerline,widths,widths,supports):polygon;
+   const contour=joining
+     ? (from>=-1e-9&&to<=1+1e-9
+       ? squareConformalContourEnds(conformalCoveringContour(centerline,widths,widths,supports),centerline)
+       : conformalCoveringContour(centerline,widths,widths,supports))
+     : polygon;
    surfaces.push({polygon:contour,path:centerline,spanIndex,
      ...(joining?{conformal:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),

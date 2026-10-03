@@ -5,8 +5,8 @@ import {parseHarnessDesignDocument} from "./model";
 import {coveringScene,moveCovering} from "./covering-layout";
 import {splitCoveringSpans,type PhysicalCovering} from "./physical-coverings";
 import {coveringTextureFile,defaultCoveringStyle,resolvedCoveringStyle,type CoveringStyle} from "./covering-style";
-import {coveringTextureUrls,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
-import {drawVolumeSurface} from "./drawing-volume";
+import {coveringTextureUrls,coveringTextureTransform,drawCoveringSurface,drawHatchTile,warmCoveringTextures} from "./covering-renderer";
+import {drawConformalVolumeSurface,drawVolumeSurface} from "./drawing-volume";
 
 const style:CoveringStyle={texture:"Metal049A",textureScale:2.5,textureRotation:-30,hatch:"cross",hatchColor:"#ff0000",hatchSpacing:6,hatchRotation:60,lineColor:"#0000ff"};
 const cover:PhysicalCovering={id:"style-cover",name:"Оболочка",color:"#ffffff",width:20,lengthMm:90,spans:[{segmentId:"S0",from:.1,to:.8}],style};
@@ -15,6 +15,15 @@ it("shades sleeve bands from local centre points",()=>{
  const fills:string[]=[];const state={fillStyle:"",save:()=>undefined,restore:()=>undefined,beginPath:()=>undefined,moveTo:()=>undefined,lineTo:()=>undefined,closePath:()=>undefined,fill:()=>fills.push(state.fillStyle),clip:()=>undefined};
  drawVolumeSurface(state as unknown as CanvasRenderingContext2D,[{x:0,y:-10},{x:100,y:-10},{x:100,y:10},{x:0,y:10}],[{x:0,y:0},{x:100,y:0}]);
  expect(fills.length).toBe(8);expect(fills[0]).toBe("rgba(0,0,0,.25)");
+});
+it("continues conformal volume shading through the filled OP gap",()=>{
+ const fills:string[]=[];const stops:number[]=[];
+ const gradient={addColorStop:(offset:number)=>stops.push(offset)};
+ const state={fillStyle:"",save:()=>undefined,restore:()=>undefined,beginPath:()=>undefined,moveTo:()=>undefined,lineTo:()=>undefined,closePath:()=>undefined,fill:()=>fills.push(state.fillStyle),createLinearGradient:()=>gradient};
+ drawConformalVolumeSurface(state as unknown as CanvasRenderingContext2D,[{x:0,y:-10},{x:100,y:-20},{x:180,y:20},{x:0,y:10}],[{x:0,y:0},{x:100,y:0},{x:180,y:0}]);
+ expect(fills).toHaveLength(2);
+ expect(fills[0]).toBe("rgba(0,0,0,.20)");
+ expect(stops).toEqual([0,.5,1]);
 });
 afterEach(()=>vi.unstubAllGlobals());
 it("imports every built-in texture through the asset pipeline",()=>{
@@ -63,6 +72,18 @@ it("renders fill, texture, hatch and outline independently with separate transfo
   const d=fixture();d.physicalTopology.coverings=[{...cover,style:{...style,texture:"none",hatch:"none"}}];
   drawCoveringSurface(ctx,coveringScene(d)[0]!,false);
   expect(fills).toEqual(["#ffffff"]);expect(transforms).toHaveLength(0);
+});
+it("stretches conformal material only when the OP contour widens",()=>{
+ class Matrix { sx=1;sy=1; rotate(_:number){return this;} scale(x:number,y=x){this.sx*=x;this.sy*=y;return this;} }
+ vi.stubGlobal("DOMMatrix",Matrix);
+ const tile={width:64} as HTMLCanvasElement;
+ const base={texture:"Metal049A",textureScale:1,textureRotation:0,hatch:"none",hatchColor:"#000000",hatchLineWidth:1,hatchSpacing:4,hatchRotation:0,lineColor:"#000000"} as Required<CoveringStyle>;
+ const straight={conformal:true,path:[{x:0,y:0},{x:100,y:0}],polygon:[{x:0,y:-10},{x:100,y:-10},{x:100,y:10},{x:0,y:10}]} as const;
+ const spread={...straight,polygon:[{x:0,y:-10},{x:100,y:-35},{x:100,y:35},{x:0,y:10}]} as const;
+ const regular=coveringTextureTransform(base,tile,straight) as unknown as Matrix;
+ const stretched=coveringTextureTransform(base,tile,spread) as unknown as Matrix;
+ expect(stretched.sx).toBeGreaterThan(regular.sx);
+ expect(stretched.sy).toBeGreaterThan(regular.sy);
 });
 it.each(["parallel","cross","dots"] as const)("draws %s in the requested hatch color",hatch=>{
   const ctx=new Proxy({},{get:(t,k)=>k in t?Reflect.get(t,k):vi.fn(),set:(t,k,v)=>{Reflect.set(t,k,v);return true;}}) as CanvasRenderingContext2D;
