@@ -938,7 +938,7 @@ function containsPoint(
   if(object.kind.startsWith("graphic-")){const p=object.points??[],width=Number(object.metadata?.graphicWidth??2)/2+tolerance,k=object.metadata?.graphicKind;if(k==="contact")return !!p[0]&&Math.hypot(point.x-p[0].x,point.y-p[0].y)<=Math.max(6,width);if(k==="text")return point.x>=object.x-tolerance&&point.x<=object.x+Math.max(30,object.label.length*8)+tolerance&&point.y>=object.y-20-tolerance&&point.y<=object.y+8+tolerance;if(k==="rectangle")return point.x>=Math.min(p[0]?.x??0,p[1]?.x??0)-tolerance&&point.x<=Math.max(p[0]?.x??0,p[1]?.x??0)+tolerance&&point.y>=Math.min(p[0]?.y??0,p[1]?.y??0)-tolerance&&point.y<=Math.max(p[0]?.y??0,p[1]?.y??0)+tolerance;return p.slice(1).some((v,i)=>pointToSegmentDistance(point,p[i]!,v)<=width)||k==="closedContour"&&pointToSegmentDistance(point,p.at(-1)!,p[0]!)<=width;}
   if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
-  if(view==="drawing"&&object.kind==="wire"&&object.visibleWireStrokes)return object.visibleWireStrokes.some(stroke=>{const curve=drawingRouteHitPoints(stroke.points,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=stroke.width/2+Math.min(tolerance,2));});
+  if(view==="drawing"&&object.kind==="wire"&&object.visibleWireStrokes)return object.visibleWireStrokes.some(stroke=>{const curve=drawingRouteHitPoints(stroke.points,stroke.radius??object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=stroke.width/2+Math.min(tolerance,2));});
   if(view==="drawing"&&object.kind==="wire"&&object.paths)return object.paths.some(path=>{const curve=drawingRouteHitPoints(path,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance);});
   if (object.kind === "physical-covering" && object.metadata?.surfaces) return coveringHit(object,point,tolerance)!==null;
   if (object.kind === "physical-covering" || object.kind === "physical-segment") return (object.paths ?? [object.points ?? []]).some(path => {const curve=drawingRouteHitPoints(path,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=tolerance+object.width/2);});
@@ -1927,7 +1927,7 @@ export function drawEditorSceneObject(
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
-    for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth}))){traceDrawingRoute(context,stroke.points,object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
+    for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth,radius:undefined}))){traceDrawingRoute(context,stroke.points,stroke.radius??object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
     drawWireStripProfiles(context, object, selected);
     context.restore();return;
   }

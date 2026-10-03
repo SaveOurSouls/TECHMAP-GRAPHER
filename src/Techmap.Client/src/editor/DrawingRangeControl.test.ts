@@ -2,13 +2,13 @@ import { expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 
-vi.mock("react",async original=>({...await original<typeof import("react")>(),useRef:(current:unknown)=>({current})}));
+vi.mock("react",async original=>({...await original<typeof import("react")>(),useId:()=>"range-test",useRef:(current:unknown)=>({current})}));
 function fixture(){
   const preview=vi.fn(),commit=vi.fn();
   const tree=DrawingRangeControl({label:"Позиции",accessibleLabel:"Scale",value:1,min:.25,max:4,step:.05,hint:"Hint",onPreview:preview,onCommit:commit});
-  const label=(tree.props.children as ReactElement[])[0]!;
-  const input=(label.props as {children:ReactElement[]}).children[1]!;
-  return {preview,commit,handlers:input.props as Record<string,(e?:unknown)=>void>};
+  const [label,,,input]=tree.props.children as ReactElement<Record<string,unknown>>[];
+  expect(label!.props.htmlFor).toBe(input!.props.id);
+  return {preview,commit,handlers:input!.props as Record<string,(e?:unknown)=>void>};
 }
 it.each(["onPointerUp","onKeyUp","onBlur"])("previews immediately and commits once on %s",event=>{
   const {handlers:h,preview,commit}=fixture();

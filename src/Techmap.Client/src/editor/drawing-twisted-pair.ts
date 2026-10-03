@@ -1,8 +1,8 @@
 import type { DiffPairGroup, HarnessDesignDocument, Point } from "./model";
 import { commonParallelSpan, parallelSpanLocal, parallelSpanWorld } from "./e4-parallel-spans";
-import { drawingWireWidth, segmentWireLanes } from "./drawing-thickness";
+import { drawingPhysicalScale, drawingWireWidth, segmentWireLanes } from "./drawing-thickness";
 
-export interface TwistedPairStroke { readonly points: readonly Point[]; readonly width: number }
+export interface TwistedPairStroke { readonly points: readonly Point[]; readonly width: number; readonly radius?: number }
 export interface TwistedPairPath { readonly path: Point[]; readonly strokes: TwistedPairStroke[] }
 
 function twistRuns(
@@ -19,7 +19,7 @@ function twistRuns(
   if (length < Math.max(16, pitch * .8) || Math.abs(halfGap) < 1e-6) return null;
   const turns = Math.max(1, Math.round(length / Math.max(16, pitch)));
   const period = length / turns;
-  const gapHalf = Math.min(period / 12, width * .65 + .8);
+  const gapHalf = Math.min(period / 14, width * .35 + .2);
   const gaps: { start: number; end: number }[] = [];
   for (let crossing = 0; crossing < turns * 2; crossing++) {
     if ((crossing % 2 === 0) !== firstWire) continue;
@@ -40,10 +40,10 @@ function twistRuns(
   const strokes: TwistedPairStroke[] = [];
   let from = 0;
   for (const gap of gaps) {
-    if (gap.start > from) strokes.push({ points: sample(from, gap.start), width });
+    if (gap.start > from) strokes.push({ points: sample(from, gap.start), width, radius: 0 });
     from = gap.end;
   }
-  if (from < length) strokes.push({ points: sample(from, length), width });
+  if (from < length) strokes.push({ points: sample(from, length), width, radius: 0 });
   return { path: sample(0, length), strokes };
 }
 
@@ -81,7 +81,7 @@ export function physicalTwistedPairPath(
       normal: { x: -(b.y - a.y) / leg, y: (b.x - a.x) / leg } };
   };
   const wire = document.wires.find(item => item.id === wireId)!;
-  return twistRuns(length, group.step, distance => frame(distance).point,
+  return twistRuns(length, group.step * drawingPhysicalScale(document), distance => frame(distance).point,
     distance => frame(distance).normal, middle, halfGap, drawingWireWidth(document, wire),
     wireId === group.wireIds[0], group.variant);
 }
@@ -89,9 +89,10 @@ export function physicalTwistedPairPath(
 export function freeTwistedPairPaths(
   group: DiffPairGroup,
   wires: readonly { id: string; points: readonly Point[]; width: number }[],
+  physicalScale = 1,
 ): ReadonlyMap<string, TwistedPairPath> {
   const span = commonParallelSpan(wires);
-  if (!span || span.end - span.start < Math.max(16, group.step * .8)) return new Map();
+  if (!span || span.end - span.start < Math.max(16, group.step * physicalScale * .8)) return new Map();
   const firstCross = parallelSpanLocal(span, span.segmentByWireId[group.wireIds[0]]!.start).y;
   const secondCross = parallelSpanLocal(span, span.segmentByWireId[group.wireIds[1]]!.start).y;
   const middle = (firstCross + secondCross) / 2;
@@ -101,7 +102,7 @@ export function freeTwistedPairPaths(
   return new Map(wires.flatMap(wire => {
     const segment = span.segmentByWireId[wire.id];
     if (!segment) return [];
-    const twisted = twistRuns(span.end - span.start, group.step,
+    const twisted = twistRuns(span.end - span.start, group.step * physicalScale,
       distance => parallelSpanWorld(span, span.start + distance, 0),
       () => span.direction ? { x: -span.direction.y, y: span.direction.x }
         : span.orientation === "horizontal" ? { x: 0, y: 1 } : { x: 1, y: 0 },
@@ -113,8 +114,11 @@ export function freeTwistedPairPaths(
     const after = wire.points.slice(segment.index + 1);
     const full = [...before, ...path, ...after];
     const runs = forward ? twisted.strokes : [...twisted.strokes].reverse().map(stroke => ({ ...stroke, points: [...stroke.points].reverse() }));
-    const strokes = runs.map((stroke, index) => ({ width: wire.width,
-      points: [...(index === 0 ? before : []), ...stroke.points, ...(index === runs.length - 1 ? after : [])] }));
+    const strokes: TwistedPairStroke[] = [
+      ...(before.length ? [{ width: wire.width, points: [...before, path[0]!] }] : []),
+      ...runs,
+      ...(after.length ? [{ width: wire.width, points: [path.at(-1)!, ...after] }] : []),
+    ];
     return [[wire.id, { path: full, strokes }]] as const;
   }));
 }

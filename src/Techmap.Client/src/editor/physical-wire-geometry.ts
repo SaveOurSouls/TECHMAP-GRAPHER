@@ -41,7 +41,7 @@ function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
   if(current.length)result.push(current);
   return result;
 }
-export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number }
+export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number; readonly radius?:number }
 export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[]; readonly twisted:boolean }
 export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):PhysicalWireDisplay|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
@@ -65,7 +65,7 @@ export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string
   if(twist)allPaths[allPaths.length-1]=[...twistedPath];
   paths.push([...twistedPath]);
   if(twist){
-   visibleStrokes.push(...(step.reverse?[...twist.strokes].reverse().map(stroke=>({points:[...stroke.points].reverse(),width:stroke.width})):twist.strokes));
+   visibleStrokes.push(...(step.reverse?[...twist.strokes].reverse().map(stroke=>({...stroke,points:[...stroke.points].reverse()})):twist.strokes));
    continue;
   }
   const projection=segmentWireProjection(document,segment.id);

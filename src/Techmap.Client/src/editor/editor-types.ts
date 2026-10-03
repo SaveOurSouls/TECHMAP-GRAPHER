@@ -59,7 +59,7 @@ export interface EditorSceneObject {
   readonly points?: readonly EditorPoint[];
   readonly paths?: readonly (readonly EditorPoint[])[];
   /** Frontmost spans of a round bundle; paths retain the complete route for selection. */
-  readonly visibleWireStrokes?: readonly {readonly points:readonly EditorPoint[];readonly width:number}[];
+  readonly visibleWireStrokes?: readonly {readonly points:readonly EditorPoint[];readonly width:number;readonly radius?:number}[];
   /** Presentation only. Zero keeps sharp joins; no physical lengths change. */
   readonly routeRadius?: number;
   /** End-treatment presentation shares the wire identity and drawing layer. */

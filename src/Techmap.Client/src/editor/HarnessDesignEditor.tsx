@@ -487,7 +487,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:wireDisplay?.twisted ? 0 : drawingBendRadius(document)} : {}),
+      ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
       ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute||wireDisplay.twisted?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
@@ -526,12 +526,12 @@ export function designToScene(
     if (pair.some(wire => !wire || wire.metadata?.physicalRoute === "true")) continue;
     const twisted = freeTwistedPairPaths(group, pair.map(wire => ({
       id: wire!.id, points: wire!.points ?? [], width: Number(wire!.metadata?.drawingWidth ?? 2.5),
-    })));
+    })), document.drawingDocuments?.physicalScale ?? 1);
     for (const wire of pair) {
       const display = twisted.get(wire!.id);
       if (!display) continue;
       const index = wires.findIndex(item => item.id === wire!.id);
-      wires[index] = { ...wire!, paths: [display.path], visibleWireStrokes: display.strokes, routeRadius: 0 };
+      wires[index] = { ...wire!, paths: [display.path], visibleWireStrokes: display.strokes };
     }
   }
   const dimensions: EditorSceneObject[] = view === "drawing" ? drawingDimensionScene(document,wires,perimeters) : [];
@@ -1195,9 +1195,11 @@ export function HarnessDesignEditor({
   const [dimensionScalePreview,setDimensionScalePreview]=useState<number|null>(null);
   const [minimumOverlapPreview,setMinimumOverlapPreview]=useState<number|null>(null);
   const [coveringRatioPreview,setCoveringRatioPreview]=useState<number|null>(null);
+  const [pairPitchPreview,setPairPitchPreview]=useState<{id:string;step:number}|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number};mode?:import("./physical-editing").PhysicalDragMode;insert?:boolean}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
+    if(pairPitchPreview)return {document:{...history.present,diffPairs:history.present.diffPairs.map(pair=>pair.id===pairPitchPreview.id?{...pair,step:pairPitchPreview.step}:pair)},error:null};
     if(bendRadiusPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius:bendRadiusPreview}},error:null};
     if(leaderScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale:leaderScalePreview}},error:null};
     if(dimensionScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale:dimensionScalePreview}},error:null};
@@ -1258,7 +1260,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, dimensionScalePreview, minimumOverlapPreview, bendRadiusPreview, coveringRatioPreview]);
+  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, dimensionScalePreview, minimumOverlapPreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1990,6 +1992,7 @@ export function HarnessDesignEditor({
           {joiningPipeDraft&&history.present.physicalTopology&&<JoiningPipeEditor document={history.present} draft={joiningPipeDraft} onChange={setJoiningPipeDraft} onCancel={()=>setJoiningPipeDraft(null)} onSave={()=>{try{const topology=joiningPipeDraftTopology(history.present,joiningPipeDraft);if(run({type:'set-physical-topology',topology})){setSelectedObjectId(joiningPipeDraft.id);setSelectedObjectIds([joiningPipeDraft.id]);setJoiningPipeDraft(null);}}catch(error){setMessage(error instanceof Error?error.message:'Не удалось сохранить состав группы.');}}}/>}
           <DrawingRangeControl label="Прозрачность П/ОП" accessibleLabel="Прозрачность пайпов и объединяющих пайпов" min={0} max={100} step={1} digits={0} unit="%" value={pipeOpacityPreview??Math.round((1-(history.present.drawingDocuments?.pipeOpacity??.72))*100)} onPreview={setPipeOpacityPreview} onCommit={transparency=>{const pipeOpacity=1-transparency/100;if(pipeOpacity!==(history.present.drawingDocuments?.pipeOpacity??.72))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),pipeOpacity}});}} hint="Единая прозрачность всех пайпов и объединяющих пайпов на чертеже. Электрические связи и геометрия не меняются."/>
           <DrawingRangeControl label="Толщина" accessibleLabel="Масштаб толщины проводов" min={.2} max={8} step={.05} value={thicknessPreview??history.present.drawingDocuments?.physicalScale??1} onPreview={setThicknessPreview} onCommit={physicalScale=>{if(physicalScale!==(history.present.drawingDocuments?.physicalScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),physicalScale}});}} hint={`Опорный диаметр: ${drawingReferenceDiameter(history.present)} мм. Отношения диаметров сохраняются.`}/>
+          {history.present.diffPairs.map((pair,index)=><DrawingRangeControl key={pair.id} label={history.present.diffPairs.length===1?"Шаг витой пары":`Шаг пары ${index+1}`} accessibleLabel={`Шаг витой пары ${index+1}`} min={5} max={Math.max(150,Math.ceil(pair.step/50)*50)} step={1} digits={0} unit=" мм" value={pairPitchPreview?.id===pair.id?pairPitchPreview.step:pair.step} onPreview={step=>setPairPitchPreview(step===null?null:{id:pair.id,step})} onCommit={step=>{if(step!==pair.step)run({type:"update-diff-pair",groupId:pair.id,step});}} hint={`Провода ${pair.wireIds.map(id=>history.present.wires.find(wire=>wire.id===id)?.circuit||id).join(" и ")}. Шаг сохраняется в паре Э4; на чертеже учитывается масштаб толщины.`}/>)}
           <DrawingRangeControl label="Диаметры 1:" unit="" digits={1} accessibleLabel="Соотношение диаметров оболочек" min={1.1} max={4} step={.1} value={coveringRatioPreview??history.present.drawingDocuments?.coveringDiameterRatio??2} onPreview={setCoveringRatioPreview} onCommit={coveringDiameterRatio=>{if(coveringDiameterRatio!==(history.present.drawingDocuments?.coveringDiameterRatio??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio}});}} hint="Глобальное правило 1:x для соседних оболочек. При увеличении ширины переходы сохраняют форму; локальные ширины и материал не меняются."/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
           <DrawingRangeControl label="Позиции" accessibleLabel="Масштаб позиционных обозначений" min={.25} max={4} step={.05} value={leaderScalePreview??history.present.drawingDocuments?.leaderScale??1} onPreview={setLeaderScalePreview} onCommit={leaderScale=>{if(leaderScale!==(history.present.drawingDocuments?.leaderScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale}});}} hint="Размер кружков, номеров и точек выносок. Ручное положение сохраняется. Escape отменяет изменение; отпускание ползунка сохраняет его одним шагом отмены."/>
