@@ -4,6 +4,7 @@ import { drawingWireWidth, segmentWireLanes, segmentWireProjection } from "./dra
 import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline } from "./physical-coverings";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples } from "./pipe-bundle-projection";
 import { drawingBendRadius, drawingRouteHitPoints } from "./drawing-route-path";
+import { physicalTwistedPairPath } from "./drawing-twisted-pair";
 
 /** Conductors follow the pipe centreline exactly; do not apply another angle snap. */
 export function physicalWirePoints(document: HarnessDesignDocument, wireId: string, start: Point, end: Point): Point[] | null {
@@ -41,7 +42,7 @@ function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
   return result;
 }
 export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number }
-export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[] }
+export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[]; readonly twisted:boolean }
 export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):PhysicalWireDisplay|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
  const paths:(Point[]|null)[]=[];
@@ -50,14 +51,23 @@ export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string
  const wire=document.wires.find(w=>w.id===wireId)!;
  const wireWidth=drawingWireWidth(document,wire);
  const projected=route.steps.some(step=>hasPipeBundleProjection(document,step.segmentId));
+ let twisted=false;
  for(const step of route.steps){
   const segment=t.segments.find(s=>s.id===step.segmentId)!;
   const offset=segmentWireLanes(document,segment.id).find(l=>l.id===wireId)?.offset??0;
-  const points=pipeBundleDisplaySamples(document,segment.id)?.map(s=>s.point)??(projected?drawingRouteHitPoints(physicalSegmentPoints(document,segment),drawingBendRadius(document)):physicalSegmentPoints(document,segment));
+  const points=pipeBundleDisplaySamples(document,segment.id)?.map(s=>s.point)??(projected||document.diffPairs.some(pair=>pair.wireIds.includes(wireId))?drawingRouteHitPoints(physicalSegmentPoints(document,segment),drawingBendRadius(document)):physicalSegmentPoints(document,segment));
   const lane=offsetPolyline(points,points.map(()=>offset));
   if(step.reverse)lane.reverse();allPaths.push(lane);
   if(segment.showWires===false){paths.push(null);continue;}
-  paths.push(lane);
+  const twist=physicalTwistedPairPath(document,segment.id,wireId,points);
+  twisted ||= twist !== null;
+  const twistedPath=twist?(step.reverse?[...twist.path].reverse():twist.path):lane;
+  if(twist)allPaths[allPaths.length-1]=[...twistedPath];
+  paths.push([...twistedPath]);
+  if(twist){
+   visibleStrokes.push(...(step.reverse?[...twist.strokes].reverse().map(stroke=>({points:[...stroke.points].reverse(),width:stroke.width})):twist.strokes));
+   continue;
+  }
   const projection=segmentWireProjection(document,segment.id);
   for(const strip of projection.strips.filter(strip=>strip.id===wireId)){
    const projected=offsetPolyline(points,points.map(()=>strip.offset));
@@ -90,7 +100,7 @@ export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string
  const joined=joinDisplayPaths(routePaths);
  if(startPath.length>1)visibleStrokes.push({points:startPath,width:wireWidth});
  if(endPath.length>1)visibleStrokes.push({points:endPath,width:wireWidth});
- return {paths:joined,selectionPaths:joinDisplayPaths([startPath,...allPaths,endPath]),visibleStrokes};
+ return {paths:joined,selectionPaths:joinDisplayPaths([startPath,...allPaths,endPath]),visibleStrokes,twisted};
 }
 export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
  return physicalWireDisplay(document,wireId,start,end)?.paths;

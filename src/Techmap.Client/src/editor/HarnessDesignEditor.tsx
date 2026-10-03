@@ -27,6 +27,7 @@ import { physicalNodePoint } from "./physical-ports";
 import { joiningPipeEndpoint, joiningPipeExit, migrateJoiningPipes } from "./physical-joining-pipes";
 
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
+import { freeTwistedPairPaths } from "./drawing-twisted-pair";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
@@ -486,8 +487,8 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
-      ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
+      ...(view === "drawing" ? {routeRadius:wireDisplay?.twisted ? 0 : drawingBendRadius(document)} : {}),
+      ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute||wireDisplay.twisted?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       metadata: {
         ...(localVolume !== undefined ? { volumeShading: String(localVolume) } : {}),
@@ -520,6 +521,19 @@ export function designToScene(
       },
     }];
   });
+  if (view === "drawing") for (const group of document.diffPairs) {
+    const pair = group.wireIds.map(id => wires.find(wire => wire.id === id));
+    if (pair.some(wire => !wire || wire.metadata?.physicalRoute === "true")) continue;
+    const twisted = freeTwistedPairPaths(group, pair.map(wire => ({
+      id: wire!.id, points: wire!.points ?? [], width: Number(wire!.metadata?.drawingWidth ?? 2.5),
+    })));
+    for (const wire of pair) {
+      const display = twisted.get(wire!.id);
+      if (!display) continue;
+      const index = wires.findIndex(item => item.id === wire!.id);
+      wires[index] = { ...wire!, paths: [display.path], visibleWireStrokes: display.strokes, routeRadius: 0 };
+    }
+  }
   const dimensions: EditorSceneObject[] = view === "drawing" ? drawingDimensionScene(document,wires,perimeters) : [];
   const physical = view === "drawing" ? physicalTopologyScene(document) : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
