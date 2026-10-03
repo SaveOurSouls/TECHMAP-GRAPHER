@@ -8,10 +8,15 @@ REQ-075 и карточка [049](tasks/049-top-toolbar-design.md) добавл�
 групп правки, привязок и масштаба на узком viewport через горизонтальную
 прокрутку. Модель, связи, длины и сохранение не менялись.
 
-Проверки разработчика: 164 клиентских файла / 1622 теста, TypeScript, Vite
-production build и `git diff --check` прошли. До публикации ZIP требуется
-визуальная проверка Чертежа, Э4 и редактора полуфабриката в packaged-сборке.
-Передача: [протокол 049](docs/top-toolbar-049-handoff.md).
+Проверенный ZIP `0.63.22-m5-11-review` собран из `8fc413b`: 1635 клиентских
+тестов, TypeScript/Vite, 1087 Release .NET-тестов, performance-тест, manifest
+на 275 файлов и 7 portable-режимов прошли. Packaged QA подтвердила верхнюю
+панель в Чертёже, Э4, копии рисунка сборки и narrow viewport. ZIP:
+`artifacts/final-chats-20261003-v3/TECHMAP-GRAPHER-0.63.22-m5-11-review-win-x64.zip`,
+61 427 556 байт, SHA-256
+`81D3E7EC5CFC0A9232EC51C33FC22726C090938D1B5E5A0A5481D151A1CA4E82`.
+Передача: [протокол 049](docs/top-toolbar-049-handoff.md); подробности
+приёмки: [M5-11](docs/m5-11-acceptance.md).
 
 # Текущий проверенный ZIP — 03.10.2026
 
