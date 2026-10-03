@@ -5,7 +5,7 @@ import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { addAssemblyRow, generateRoute } from "./route-commands";
+import { addAssemblyRow, generateRoute, mergeRouteRows } from "./route-commands";
 import { buildRouteSourceItems } from "./route-source";
 import { RouteRowInline, WireBlankStageDrawing } from "./ManufacturingRoutePanel";
 
@@ -88,6 +88,27 @@ describe("inline route row", () => {
     expect(markup).toContain("14 мин");
     expect(markup).not.toContain("Сводка объединённого полуфабриката");
     expect(markup).not.toContain('<tfoot><tr><td class="route-metric-cell"><label>Кол-во');
+  });
+
+  it("labels a grouped operation without presenting it as another product", () => {
+    const a = createConnector("a", "X1", 1, { x: 0, y: 0 });
+    const b = createConnector("b", "X2", 1, { x: 100, y: 0 });
+    const c = createConnector("c", "X3", 1, { x: 200, y: 0 });
+    const document = { ...createEmptyHarnessDesign(), connectors: [a, b, c], wires: [
+      createWire("one", { connectorId: a.id, contactId: a.contacts[0]!.id }, { connectorId: b.id, contactId: b.contacts[0]!.id }, 100),
+      createWire("two", { connectorId: b.id, contactId: b.contacts[0]!.id }, { connectorId: c.id, contactId: c.contacts[0]!.id }, 100),
+    ] };
+    const generated = generateRoute(document, "a".repeat(64));
+    const route = mergeRouteRows(generated, generated.rows.map(row => row.id), "shared");
+    const row = route.rows.at(-1)!;
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", harnessId: "h", row, route, document, sources: buildRouteSourceItems(document), ordinal: 3,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).toContain("ОБЩАЯ ОПЕРАЦИЯ");
+    expect(markup).toContain("Участники общей операции");
+    expect(markup).not.toContain("Состав сборки");
+    expect(markup).not.toContain("route-material-table-scroll");
   });
 
   it("shows a clickable operation field and a 0–100 harness background control", () => {

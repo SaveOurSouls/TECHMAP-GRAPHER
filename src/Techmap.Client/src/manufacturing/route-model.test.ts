@@ -92,4 +92,9 @@ describe("manufacturing route contract", () => {
     expect(() => parseManufacturingRoute({ ...parsed, source: { ...parsed.source, fingerprintVersion: 2 } })).toThrow();
     expect(() => parseManufacturingRoute({ ...parsed, source: { ...parsed.source, sha256: "bad" } })).toThrow();
   });
+  it("accepts the shared operation role only on an assembly row", () => {
+    const assembly = { ...row("assembly", ["a"], []), kind: "assembly" as const, role: "sharedOperation", assemblyInputs: [{ id: "input-a", kind: "row" as const, rowId: "a" }] };
+    expect(route([row("a"), assembly])?.rows[1]?.role).toBe("sharedOperation");
+    expect(() => route([{ ...row("a"), role: "sharedOperation" }])).toThrow();
+  });
 });
