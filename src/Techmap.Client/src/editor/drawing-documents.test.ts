@@ -8,6 +8,31 @@ import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./
 const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"wire",sourceKey:"SAME",displayName:"Провод"};
 import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from "./drawing-dimensions";
 import { tableWindowPosition, tableWindowStyle, resizeTableWindow } from "./DrawingTableWindows";
+import { snapDrawingPoint, type DrawingOutline } from "../component-library/drawing-geometry";
+
+describe("authored canvas graphics",()=>{
+ it("applies angular, corner, contour, and circle tangent snaps according to enabled settings",()=>{
+  const corner:DrawingOutline={id:"poly",points:[{x:0,y:0},{x:20,y:0}],closed:false,corners:[{x:0,y:0},{x:20,y:0}]};
+  const circle:DrawingOutline={id:"circle",points:[{x:-10,y:0},{x:10,y:0}],closed:true,circle:{center:{x:0,y:0},radius:10}};
+  expect(snapDrawingPoint({x:19,y:1},[corner],{corners:true,contours:false,tangents:false},3)).toEqual({x:20,y:0});
+  expect(snapDrawingPoint({x:0,y:11},[circle],{corners:false,contours:true,tangents:false},3)).toEqual({x:0,y:10});
+  const tangent=snapDrawingPoint({x:5,y:9},[circle],{corners:false,contours:false,tangents:true},2,{x:20,y:0});
+  expect(tangent.x).toBeCloseTo(5);expect(tangent.y).toBeCloseTo(8.660254,5);
+ });
+ it("round trips and isolates graphics by view, then moves them as document geometry",()=>{
+  const base=physicalFixture(),graphics=[{id:"g1",view:"drawing" as const,kind:"line" as const,points:[{x:1,y:2},{x:10,y:20}]},{id:"g2",view:"e4" as const,kind:"contact" as const,points:[{x:30,y:40}]}];
+  const document=parseHarnessDesignDocument({...base,drawingDocuments:{...emptyDrawingDocuments(),graphics}});
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(document))).drawingDocuments?.graphics).toEqual(graphics);
+  expect(drawingDocumentScene(document,1,undefined,"drawing").map(o=>o.id)).toContain("g1");
+  expect(drawingDocumentScene(document,1,undefined,"drawing").map(o=>o.id)).not.toContain("g2");
+  expect(drawingDocumentScene(document,1,undefined,"e4").map(o=>o.id)).toEqual(["g2"]);
+  expect(moveDrawingAnnotation(document,"g1",{x:11,y:12})?.graphics?.[0]?.points).toEqual([{x:11,y:12},{x:20,y:30}]);
+ });
+ it("rejects malformed authored graphics",()=>{
+  const base=physicalFixture(),docs={...emptyDrawingDocuments(),graphics:[{id:"g",view:"drawing",kind:"line",points:[{x:0,y:0}]}]};
+  expect(()=>parseHarnessDesignDocument({...base,drawingDocuments:docs})).toThrow();
+ });
+});
 
 describe("drawing tables and position leaders",()=>{
  it.each([true,false])("preserves volume switch %s through command, JSON and undo",enabled=>{

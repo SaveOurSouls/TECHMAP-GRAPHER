@@ -11,6 +11,7 @@ import { physicalSegmentPoints } from "./physical-geometry";
 import { movePositionLeaderOnRails, movePositionRail } from "./position-rail";
 import { connectionTableColumnLabels, getConnectionTableSettings, type ConnectionTableColumnId } from "./connection-table-settings";
 import { builtInWireColors, resolveWireColorHex } from "./wire-reference-catalog";
+import { snapDrawingTranslation, type DrawingOutline, type DrawingSnaps } from "../component-library/drawing-geometry";
 export { createPositionRail } from "./position-rail";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
@@ -29,7 +30,9 @@ export interface DrawingSpecificationItem {
   readonly sourceIdentity?: string;
   readonly position?: Point;
 }
-export interface DrawingDocuments { readonly coveringLibrary?:CoveringLibrary; readonly pipeOpacity?:number; readonly physicalScale?:number; readonly leaderScale?:number; readonly dimensionScale?:number; readonly minimumCoveringOverlapPx?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export type DrawingGraphicKind="contact"|"line"|"polyline"|"rectangle"|"ellipse"|"bezier"|"closedContour"|"text";
+export interface DrawingGraphic {readonly id:string;readonly view:"drawing"|"e4";readonly kind:DrawingGraphicKind;readonly points:readonly Point[];readonly text?:string;readonly angle?:number;readonly color?:string;readonly width?:number}
+export interface DrawingDocuments { readonly graphics?:readonly DrawingGraphic[]; readonly coveringLibrary?:CoveringLibrary; readonly pipeOpacity?:number; readonly physicalScale?:number; readonly leaderScale?:number; readonly dimensionScale?:number; readonly minimumCoveringOverlapPx?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
@@ -242,6 +245,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;
   const point=(p:Point)=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e7&&Math.abs(p.y)<=1e7;
+  if(d.graphics!==undefined){if(!Array.isArray(d.graphics)||d.graphics.length>10000)return fail();for(const candidate of d.graphics){const g=candidate as DrawingGraphic|null,counts:Record<DrawingGraphicKind,{min:number;max:number}>={contact:{min:1,max:1},line:{min:2,max:2},polyline:{min:2,max:256},rectangle:{min:2,max:2},ellipse:{min:2,max:2},bezier:{min:4,max:4},closedContour:{min:3,max:256},text:{min:1,max:1}};const range=g&&counts[g.kind];if(!g||!text(g.id)||ids.has(g.id)||!(g.view==="drawing"||g.view==="e4")||!range||!Array.isArray(g.points)||g.points.length<range.min||g.points.length>range.max||g.points.some((p:Point)=>!point(p))||g.kind==="text"&&(!text(g.text,1024)||g.angle!==undefined&&!Number.isFinite(g.angle))||g.kind!=="text"&&(g.text!==undefined||g.angle!==undefined)||g.color!==undefined&&(!/^#[0-9a-f]{6}$/i.test(g.color))||g.width!==undefined&&(!Number.isFinite(g.width)||g.width<.2||g.width>100))return fail();ids.add(g.id);}}
   for(const t of [...d.tables,...d.leaders]){if(!t||!text(t.id)||ids.has(t.id))return fail();ids.add(t.id);}
   for(const t of d.tables)if(!["bom","connections","cut"].includes(t.kind)||!point(t.position)||(t.dock!==undefined&&!["left","right","top","bottom"].includes(t.dock))||
     (t.width!==undefined&&(!Number.isFinite(t.width)||t.width<280||t.width>4000))||(t.height!==undefined&&(!Number.isFinite(t.height)||t.height<160||t.height>4000)))return fail();
@@ -264,7 +268,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   return d;
 }
 
-export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,perimeters?:DrawingPerimeters):EditorSceneObject[] {
+export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,perimeters?:DrawingPerimeters,view:"drawing"|"e4"="drawing"):EditorSceneObject[] {
   const d=document.drawingDocuments;if(!d)return [];
   const rows=buildDrawingBom(document,quantity);
   const tables:EditorSceneObject[]=d.tables.filter(t=>t.kind!=="cut" && !t.dock).map(t=>{
@@ -288,10 +292,13 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
     {id:rail.id,kind:"position-rail",layerId:"dimensions",label:"Линия позиций",x:Math.min(rail.start.x,rail.end.x),y:Math.min(rail.start.y,rail.end.y),width:Math.abs(rail.end.x-rail.start.x),height:Math.abs(rail.end.y-rail.start.y),color:"#587084",points:[rail.start,rail.end]},
     ...(["start","end"] as const).map(end=>({id:`${rail.id}:${end}`,kind:"rail-handle" as const,layerId:"dimensions",label:"Конец линии позиций",x:rail[end].x-5,y:rail[end].y-5,width:10,height:10,color:"#587084"}))
   ]);
-  return [...tables,...rails,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
+  const graphics:EditorSceneObject[]=(d.graphics??[]).filter(g=>g.view===view).map(g=>{const points=g.points,minX=Math.min(...points.map(p=>p.x)),minY=Math.min(...points.map(p=>p.y)),maxX=Math.max(...points.map(p=>p.x)),maxY=Math.max(...points.map(p=>p.y));return {id:g.id,kind:(`graphic-${g.kind.replace("closedContour","closed-contour")}`) as EditorSceneObject["kind"],layerId:g.view==="drawing"?"dimensions":"connectors",label:g.text??g.kind,x:minX,y:minY,width:Math.max(1,maxX-minX),height:Math.max(1,maxY-minY),color:g.color??"#253b4a",points,metadata:{graphicKind:g.kind,graphicView:g.view,graphicText:g.text??"",graphicAngle:String(g.angle??0),graphicWidth:String(g.width??2)}};});
+  if(view==="e4")return graphics;
+  return [...graphics,...tables,...rails,...leaders,...(d.specificationItems??[]).filter(i=>i.position).map(i=>({id:i.id,kind:"specification-item" as const,layerId:"dimensions",label:i.designation || i.name,x:i.position!.x,y:i.position!.y,width:110,height:38,color:"#416579"}))];
 }
-export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters):DrawingDocuments|null {
+export function moveDrawingAnnotation(document:HarnessDesignDocument,id:string,point:Point,perimeters?:DrawingPerimeters,snaps?:DrawingSnaps):DrawingDocuments|null {
   const d=document.drawingDocuments;if(!d)return null;
+  const graphic=d.graphics?.find(g=>g.id===id);if(graphic){const origin={x:Math.min(...graphic.points.map(p=>p.x)),y:Math.min(...graphic.points.map(p=>p.y))},requested={x:point.x-origin.x,y:point.y-origin.y},targets:DrawingOutline[]=drawingDocumentScene(document,1,perimeters,graphic.view).filter(o=>o.id!==id&&o.points?.length).map(o=>({id:o.id,points:[...(o.points??[])],closed:o.metadata?.graphicKind==="closedContour",corners:o.points as Point[]})),outline:DrawingOutline={id:graphic.id,points:[...graphic.points],closed:graphic.kind==="closedContour",corners:[...graphic.points]},delta=snaps?snapDrawingTranslation(outline,requested,targets,snaps,8):requested;return {...d,graphics:d.graphics!.map(g=>g.id===id?{...g,points:g.points.map(p=>({x:p.x+delta.x,y:p.y+delta.y}))}:g)};}
   const dimension=moveDrawingDimension(document,id,point,perimeters);if(dimension)return dimension;
   const rail=movePositionRail(d,id,point);if(rail)return rail;
   if(d.specificationItems?.some(i=>i.id===id&&i.position))return {...d,specificationItems:d.specificationItems.map(i=>i.id===id?{...i,position:point}:i)};

@@ -37,6 +37,7 @@ import { DrawingObjectProperties } from "./DrawingObjectProperties";
 import { JoiningPipeEditor, type JoiningPipeDraft, beginJoiningPipe, joiningPipeDraftTopology, joiningPipeDraftHighlights, toggleJoiningPipeMember } from "./JoiningPipeEditor";
 import { DocumentIcon } from "./DocumentIcon";
 import { DrawingRangeControl } from "./DrawingRangeControl";
+import { defaultDrawingSnaps, type DrawingSnaps } from "../component-library/drawing-geometry";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
 import {
@@ -303,6 +304,7 @@ export function selectedEditorDeletionCommands(
 ): readonly EditorCommand[] {
   const selectedIds = new Set(selectedObjectIds);
   return [
+    ...(document.drawingDocuments?.graphics?.some(g=>selectedIds.has(g.id))?[{type:"set-drawing-documents" as const,documents:{...document.drawingDocuments,graphics:document.drawingDocuments.graphics.filter(g=>!selectedIds.has(g.id))}}]:[]),
     ...document.physicalTopology?.joiningPipes?.filter(p=>selectedIds.has(p.id)).map((p):EditorCommand=>({type:"remove-physical-segment",segmentId:p.id}))??[],
     ...(document.drawingDocuments && (document.drawingDocuments.specificationItems?.some(i=>selectedIds.has(i.id))||document.drawingDocuments.tables.some(t=>selectedIds.has(t.id))||document.drawingDocuments.leaders.some(l=>selectedIds.has(l.id)||selectedIds.has(`${l.id}:anchor`))||(document.drawingDocuments.rails??[]).some(r=>selectedIds.has(r.id)||selectedIds.has(`${r.id}:start`)||selectedIds.has(`${r.id}:end`))) ? [{type:"set-drawing-documents" as const,documents:{...document.drawingDocuments,specificationItems:document.drawingDocuments.specificationItems?.filter(i=>!selectedIds.has(i.id)),tables:document.drawingDocuments.tables.filter(t=>!selectedIds.has(t.id)),leaders:document.drawingDocuments.leaders.filter(l=>!selectedIds.has(l.id)&&!selectedIds.has(`${l.id}:anchor`)),rails:(document.drawingDocuments.rails??[]).filter(r=>!selectedIds.has(r.id)&&!selectedIds.has(`${r.id}:start`)&&!selectedIds.has(`${r.id}:end`))}}] : []),
     ...document.wires
@@ -522,7 +524,7 @@ export function designToScene(
   const physical = view === "drawing" ? physicalTopologyScene(document) : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
   const drawingPhysical= view === "drawing" ? orderPhysicalScene(document,[...physical,...wires,...coverings]) : [];
-  return [...connectors, ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...(view==="drawing"?drawingDocumentScene(document,quantity,perimeters):[])];
+  return [...connectors, ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...drawingDocumentScene(document,quantity,perimeters,view)];
 }
 
 type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
@@ -817,6 +819,9 @@ export function HarnessDesignEditor({
   const textureAssets=useCoveringAssets(config,session,projectId,!!history?.present.drawingDocuments?.coveringLibrary?.textures.length,history?.present.drawingDocuments?.coveringLibrary?.textures.map(t=>t.sha256).join(",")??"");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectIds, setSelectedObjectIds] = useState<readonly string[]>([]);
+  const graphicsClipboardRef=useRef<readonly import("./drawing-documents").DrawingGraphic[]>([]);
+  const [drawingSnaps,setDrawingSnaps]=useState<DrawingSnaps>(defaultDrawingSnaps);
+  const [graphicAngleStep,setGraphicAngleStep]=useState(15);
   const [relatedSourceIds, setRelatedSourceIds] = useState<readonly string[]>([]);
   const [wholeNet, setWholeNet] = useState(false);
   const [joiningPipeDraft, setJoiningPipeDraft] = useState<JoiningPipeDraft | null>(null);
@@ -1375,6 +1380,10 @@ export function HarnessDesignEditor({
       }
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       const key = event.key.toLocaleLowerCase();
+      const current=historyRef.current?.present;
+      if(key==="c"&&current){const selected=new Set(selectedObjectIds);graphicsClipboardRef.current=(current.drawingDocuments?.graphics??[]).filter(g=>selected.has(g.id));if(graphicsClipboardRef.current.length){event.preventDefault();return;}}
+      if(key==="v"&&current&&graphicsClipboardRef.current.length){event.preventDefault();const docs=current.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};const copies=graphicsClipboardRef.current.map(g=>({...g,id:crypto.randomUUID(),view,points:g.points.map(p=>({x:p.x+20,y:p.y+20}))}));run({type:"set-drawing-documents",documents:{...docs,graphics:[...(docs.graphics??[]),...copies]}});setSelectedObjectIds(copies.map(g=>g.id));setSelectedObjectId(copies.at(-1)?.id??null);return;}
+      if((event.key==="["||event.key==="]")&&current){const selected=new Set(selectedObjectIds),delta=event.key==="]"?15:-15,graphics=current.drawingDocuments?.graphics??[],changed=graphics.filter(g=>selected.has(g.id));if(changed.length){event.preventDefault();const docs=current.drawingDocuments!;run({type:"set-drawing-documents",documents:{...docs,graphics:graphics.map(g=>{if(!selected.has(g.id))return g;if(g.kind==="text")return {...g,angle:((g.angle??0)+delta+360)%360};const cx=g.points.reduce((s,p)=>s+p.x,0)/g.points.length,cy=g.points.reduce((s,p)=>s+p.y,0)/g.points.length,a=delta*Math.PI/180,c=Math.cos(a),sn=Math.sin(a);return {...g,points:g.points.map(p=>({x:cx+(p.x-cx)*c-(p.y-cy)*sn,y:cy+(p.x-cx)*sn+(p.y-cy)*c}))};})}});return;}}
       if (key === "z" && !event.shiftKey) {
         event.preventDefault();
         setHistory((current) => current ? undoEditorCommand(current) : current);
@@ -1999,6 +2008,18 @@ export function HarnessDesignEditor({
           const rail={id:crypto.randomUUID(),start,end,leaderIds};
           run({type:"set-drawing-documents",documents:createPositionRail(documents,rail)});
         }}
+        onGraphicCreate={graphic=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(run({type:"set-drawing-documents",documents:{...documents,graphics:[...(documents.graphics??[]),graphic]}})){setSelectedObjectId(graphic.id);setSelectedObjectIds([graphic.id]);}}}
+        drawingSnaps={drawingSnaps}
+        drawingAngleStep={graphicAngleStep}
+        selectedGraphic={history.present.drawingDocuments?.graphics?.some(g=>selectedObjectIds.includes(g.id))??false}
+        canPasteGraphic={graphicsClipboardRef.current.length>0}
+        onGraphicCopy={()=>{graphicsClipboardRef.current=(history.present.drawingDocuments?.graphics??[]).filter(g=>selectedObjectIds.includes(g.id));}}
+        onGraphicPaste={()=>{const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]},copies=graphicsClipboardRef.current.map(g=>({...g,id:crypto.randomUUID(),view,points:g.points.map(p=>({x:p.x+20,y:p.y+20}))}));if(copies.length&&run({type:"set-drawing-documents",documents:{...documents,graphics:[...(documents.graphics??[]),...copies]}})){setSelectedObjectIds(copies.map(g=>g.id));setSelectedObjectId(copies.at(-1)?.id??null);}}}
+        onGraphicDelete={()=>{const commands=selectedEditorDeletionCommands(history.present,selectedObjectIds);commands.filter(c=>c.type==="set-drawing-documents"&&c.documents.graphics!==undefined).forEach(run);setSelectedObjectIds([]);setSelectedObjectId(null);}}
+        onUndo={()=>setHistory(current=>current?undoEditorCommand(current):current)}
+        angleStep={graphicAngleStep}
+        onAngleStepChange={setGraphicAngleStep}
+        onDrawingSnapsChange={setDrawingSnaps}
         relationPanel={()=><>{view === "drawing" && <PhysicalTopologyPanel mode="actions" document={history.present} selectedId={selectedObjectId} selectedIds={selectedObjectIds} onChange={topology => run({ type: "set-physical-topology", topology })} onSelect={(id,additive) => { setRelatedSourceIds([]); setSelectedObjectId(id); setSelectedObjectIds(additive ? [...new Set([...selectedObjectIds,id])] : [id]); }} />}{view==="drawing"&&<SpecificationItemsPanel documents={history.present.drawingDocuments} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}/>}{view==="drawing"&&<DrawingDimensionsPanel pipeInterval={selectedPipeInterval} document={history.present} selectedId={selectedObjectId} onChange={documents=>run({type:"set-drawing-documents",documents})}/>} {<DrawingDocumentsPanel connectionTableSettings={connectionTableSettings} sourceFingerprint={resource.sourceFingerprint} unsaved={saveState!=="saved"} wireOptions={wireLookup.options} wireDatabaseOptions={wireLookup.databaseOptions} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} availableKinds={view==="drawing"?undefined:["connections"]} document={history.present} quantity={harnessQuantity} selectedId={selectedObjectId} selectedIds={[...selectedObjectIds,...related.wireIds,...related.componentIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}} />}<HarnessRelationsPanel sourceFingerprint={resource.sourceFingerprint} showCut={view==="drawing"} onOpenCut={view==="drawing"?()=>run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),tables:[...(history.present.drawingDocuments?.tables??[]),{id:crypto.randomUUID(),kind:"cut",position:{x:20,y:20}}]}}):undefined} revision={resource.revision} onCommand={run} document={history.present} projectId={projectId} harnessId={harnessId} quantity={harnessQuantity} related={related} wholeNet={wholeNet} onWholeNet={setWholeNet} unsaved={saveState !== "saved"} hiddenCount={related.wireIds.filter(id => { const wire = history.present.wires.find(w => w.id === id); return wire && layers.some(layer => layer.id === wire.layerIds[view] && !layer.visible); }).length}
           onClear={() => {setRelatedSourceIds([]); setSelectedObjectId(null); setSelectedObjectIds([]);}}
           onReveal={id => {
@@ -2143,7 +2164,7 @@ export function HarnessDesignEditor({
         onWireStripProfileClear={(wireId, end) => run({ type: "set-wire-strip-profile", wireId, end, profile: null })}
         onRelatedObjectsSelect={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}
         onObjectMove={(objectId, point, mode="carry") => {
-          const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters);
+          const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters,drawingSnaps);
           if(annotation){run({type:"set-drawing-documents",documents:annotation});return;}
           const topology = history.present.physicalTopology;
           const joiningPipe=topology?.joiningPipes?.find(pipe=>pipe.id===objectId);

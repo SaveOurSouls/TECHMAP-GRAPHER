@@ -152,7 +152,6 @@ export function parseManufacturingRoute(value: unknown): ManufacturingRoute | un
     });
     if (drawingObjects && new Set(drawingObjects.map(item => `${item.kind}:${item.id}`)).size !== drawingObjects.length) return fail();
     const drawingCopy = p.drawingCopy === undefined ? undefined : parseRouteDrawingCopy(p.drawingCopy);
-    if (drawingCopy && r.kind !== "assembly") return fail();
     const wireBlankSelections = r.wireBlankSelections === undefined ? undefined : array(r.wireBlankSelections, 10000).map(candidate => {
       const selection = object(candidate); exact(selection, ["wireId", "binding"]);
       const wireId = text(selection.wireId, 128), binding = object(selection.binding);

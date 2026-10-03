@@ -3,6 +3,8 @@ import { InfoHint } from "../InfoHint";
 import type { CoveringDragPart } from "./covering-layout";
 import {type PhysicalContextAction,type PhysicalContextTarget} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
+import type { DrawingGraphic } from "./drawing-documents";
+import type { DrawingSnaps } from "../component-library/drawing-geometry";
 import { useCallback, useEffect, useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import {
   CanvasViewport,
@@ -116,6 +118,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode,auxiliary?:boolean)=>void;
   readonly onPositionRailCreate?:(start:EditorPoint,end:EditorPoint,leaderIds:readonly string[])=>void;
+  readonly onGraphicCreate?:(graphic:DrawingGraphic)=>void;
+  readonly drawingSnaps?:DrawingSnaps;
+  readonly drawingAngleStep?:number;
+  readonly selectedGraphic?:boolean; readonly canPasteGraphic?:boolean; readonly onGraphicCopy?:()=>void; readonly onGraphicPaste?:()=>void; readonly onGraphicDelete?:()=>void; readonly onUndo?:()=>void; readonly angleStep?:number; readonly onAngleStepChange?:(degrees:number)=>void; readonly onDrawingSnapsChange?:(snaps:DrawingSnaps)=>void;
   readonly documentActions?: ReactNode;
   readonly drawingWindows?: (camera:EditorCamera)=>ReactNode;
   readonly revealRequest?: { readonly token: number; readonly objectIds: readonly string[] };
@@ -267,7 +273,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
-  highlightedObjectIds = [], foregroundWireIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onPipeIntervalSelect,onCoveringDrag,
+  highlightedObjectIds = [], foregroundWireIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onGraphicCreate,drawingSnaps,drawingAngleStep,selectedGraphic,canPasteGraphic,onGraphicCopy,onGraphicPaste,onGraphicDelete,onUndo,angleStep,onAngleStepChange,onDrawingSnapsChange,onPipeIntervalSelect,onCoveringDrag,
   cables = [],
   saveState = "saved",
   onSaveRequest,
@@ -606,6 +612,16 @@ export function HarnessEditorWorkspace({
           view={view}
           activeTool={tool}
           zoom={camera.zoom}
+          selectedGraphic={selectedGraphic}
+          canPasteGraphic={canPasteGraphic}
+          onCopy={onGraphicCopy}
+          onPaste={onGraphicPaste}
+          onDelete={onGraphicDelete}
+          onUndo={onUndo}
+          angleStep={angleStep}
+          onAngleStepChange={onAngleStepChange}
+          snaps={drawingSnaps}
+          onSnapsChange={onDrawingSnapsChange}
           onToolChange={setTool}
           onZoomIn={() => changeZoom(1.2)}
           onZoomOut={() => changeZoom(1 / 1.2)}
@@ -634,6 +650,9 @@ export function HarnessEditorWorkspace({
           onPipeIntervalSelect={onPipeIntervalSelect} onCoveringDrag={onCoveringDrag}
           onDimensionCreate={(...args)=>{onDimensionCreate?.(...args);setTool("select");}}
           onPositionRailCreate={(...args)=>{onPositionRailCreate?.(...args);setTool("select");}}
+          onGraphicCreate={onGraphicCreate}
+          drawingSnaps={drawingSnaps}
+          drawingAngleStep={drawingAngleStep}
           onCameraChange={setCamera}
           onViewportSizeChange={rememberViewportSize}
           onObjectSelect={selectObject}

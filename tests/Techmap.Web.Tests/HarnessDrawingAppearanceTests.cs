@@ -56,6 +56,30 @@ public sealed class HarnessDrawingAppearanceTests
        "coverings":[{"id":"C","name":"Heat shrink","kind":"heat-shrink","lengthMode":"auto","width":20,"color":"#334455","lengthMm":null,"spans":[{"segmentId":"S","from":-0.2,"to":1,"toAnchor":1}]}]}}
       """)!.AsObject();
     private static void Validate(JsonObject root){using var json=JsonDocument.Parse(root.ToJsonString());HarnessPhysicalTopologyValidator.Validate(json.RootElement);HarnessDrawingDocumentsValidator.Validate(json.RootElement);}
+    [Fact]
+    public void Accepts_separate_graphics_for_drawing_and_e4()
+    {
+        var root=Fixture();
+        root["drawingDocuments"]!["graphics"]=JsonNode.Parse("""[{"id":"graphic-drawing","view":"drawing","kind":"line","points":[{"x":0,"y":0},{"x":20,"y":0}],"color":"#112233","width":2},{"id":"graphic-e4","view":"e4","kind":"text","points":[{"x":10,"y":20}],"text":"Э4","angle":30}]""");
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("duplicate")]
+    [InlineData("view")]
+    [InlineData("points")]
+    [InlineData("color")]
+    public void Rejects_invalid_graphics(string mutation)
+    {
+        var root=Fixture();
+        var graphic=JsonNode.Parse("""{"id":"graphic","view":"drawing","kind":"line","points":[{"x":0,"y":0},{"x":20,"y":0}]}""")!;
+        if(mutation=="view")graphic["view"]="route";
+        if(mutation=="points")graphic["points"] = new JsonArray(new JsonObject{["x"]=0,["y"]=0});
+        if(mutation=="color")graphic["color"]="red";
+        var graphics=new JsonArray(graphic);
+        if(mutation=="duplicate")graphics.Add(graphic.DeepClone());
+        root["drawingDocuments"]!["graphics"]=graphics;
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Fact] public void Accepts_relative_scale_path_dimension_and_extended_surface(){Validate(Fixture());}
     [Fact] public void Accepts_covering_library_and_content_addressed_texture()
     {

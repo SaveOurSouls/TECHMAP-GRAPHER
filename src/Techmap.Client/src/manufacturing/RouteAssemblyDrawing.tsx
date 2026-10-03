@@ -145,7 +145,7 @@ export function RouteAssemblyDrawing({ row, document, config, session, projectId
       ...row.presentation, backgroundOpacity, drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds),
     }), onCancel,
   }), [initialCopy, row.presentation, onSave, onCancel]);
-  return <section className="route-full-drawing" aria-label={`Копия чертежа сборки ${row.title}`}>
+  return <section className="route-full-drawing" aria-label={`Копия чертежа этапа ${row.title}`}>
     {legacyWarnings.length > 0 && <p className="route-full-drawing__migration" role="status">Старый рисунок: расположение {legacyWarnings.length} объектов восстановлено из чертежа. Проверьте их положение перед сохранением. Отмена сохранит прежний рисунок.</p>}
     <HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId}
       harnessDesignation={row.title} initialView="drawing" localCopy={localCopy} />

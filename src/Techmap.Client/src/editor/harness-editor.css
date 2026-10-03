@@ -179,6 +179,9 @@
   background: #fff;
 }
 .he-toolbar-group { display: grid; gap: 5px; }
+.he-graphic-angle { width: 40px; height: 28px; padding: 0 2px; font-size: 10px; }
+.he-graphic-snap { width: 39px; min-height: 30px; display: flex; align-items: center; justify-content: center; gap: 2px; color: #496473; font-size: 12px; }
+.he-graphic-snap input { width: 12px; height: 12px; margin: 0; }
 .he-tool { position: relative; width: 39px; height: 39px; padding: 0; display: grid; place-items: center; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #496473; font: 600 17px/1 Arial, sans-serif; cursor: pointer; }
 .he-tool:hover { border-color: #ccdde5; background: #f0f6f8; color: #176889; }
 .he-tool.active { border-color: #a9d2e4; background: #e1f2f9; color: #0877a8; }

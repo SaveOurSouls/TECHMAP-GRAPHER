@@ -69,7 +69,7 @@ internal static class ManufacturingRouteValidator
                 if (dependency == id) throw Invalid("A manufacturing route row cannot depend on itself.", path + ".dependsOn");
             }
             ValidateOperations(row.GetProperty("operations"), path + ".operations", operations, ref referenceCount);
-            ValidatePresentation(row.GetProperty("presentation"), path + ".presentation", kind, refs, ref referenceCount);
+            ValidatePresentation(row.GetProperty("presentation"), path + ".presentation", refs, ref referenceCount);
             if (row.GetProperty("prepared").ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw Invalid("prepared must be boolean.", path + ".prepared");
             if (row.TryGetProperty("photos", out _))
             {
@@ -285,7 +285,7 @@ internal static class ManufacturingRouteValidator
         }
     }
 
-    private static void ValidatePresentation(JsonElement value, string path, string rowKind, HashSet<(string Kind, string Id)> refs, ref int count)
+    private static void ValidatePresentation(JsonElement value, string path, HashSet<(string Kind, string Id)> refs, ref int count)
     {
         var keys = new List<string> { "backgroundOpacity", "objects" };
         if (value.TryGetProperty("drawingObjects", out _)) keys.Add("drawingObjects");
@@ -329,7 +329,6 @@ internal static class ManufacturingRouteValidator
         }
         if (value.TryGetProperty("drawingCopy", out var drawingCopy))
         {
-            if (rowKind != "assembly") throw Invalid("Only assembly rows may contain a drawing copy.", path + ".drawingCopy");
             ValidateDrawingCopy(drawingCopy, path + ".drawingCopy");
         }
     }

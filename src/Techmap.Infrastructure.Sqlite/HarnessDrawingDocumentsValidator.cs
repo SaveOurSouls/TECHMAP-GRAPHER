@@ -53,6 +53,38 @@ internal static class HarnessDrawingDocumentsValidator
             if(leader.TryGetProperty("anchorLocal",out _))Point(leader,"anchorLocal");
             if(leader.TryGetProperty("hidden",out var hidden)&&hidden.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw Invalid();
         }
+        if(d.TryGetProperty("graphics",out var graphics))
+        {
+            if(graphics.ValueKind!=JsonValueKind.Array||graphics.GetArrayLength()>10000)throw Invalid();
+            foreach(var graphic in graphics.EnumerateArray())
+            {
+                if(graphic.ValueKind!=JsonValueKind.Object||!ids.Add(Text(graphic,"id")))throw Invalid();
+                if(Text(graphic,"view") is not ("drawing" or "e4"))throw Invalid();
+                var kind=Text(graphic,"kind");
+                if(kind is not ("contact" or "line" or "polyline" or "rectangle" or "ellipse" or "bezier" or "closedContour" or "text"))throw Invalid();
+                var points=Array(graphic,"points",256);
+                var count=points.GetArrayLength();
+                if((kind is "contact" or "text") && count!=1 ||
+                   (kind is "line" or "rectangle" or "ellipse") && count!=2 ||
+                   kind=="bezier" && count!=4 ||
+                   kind=="polyline" && count<2 ||
+                   kind=="closedContour" && count<3)throw Invalid();
+                foreach(var point in points.EnumerateArray())
+                {
+                    if(point.ValueKind!=JsonValueKind.Object)throw Invalid();
+                    foreach(var axis in new[]{"x","y"})
+                        if(!point.TryGetProperty(axis,out var coordinate)||coordinate.ValueKind!=JsonValueKind.Number||!coordinate.TryGetDouble(out var value)||!double.IsFinite(value)||Math.Abs(value)>1e7)throw Invalid();
+                }
+                if(graphic.TryGetProperty("text",out var label) && (kind!="text"||label.ValueKind!=JsonValueKind.String||string.IsNullOrWhiteSpace(label.GetString())||label.GetString()!.Length>1024))throw Invalid();
+                if(kind=="text" && !graphic.TryGetProperty("text",out _))throw Invalid();
+                if(graphic.TryGetProperty("angle",out var angle) && (kind!="text"||angle.ValueKind!=JsonValueKind.Number||!angle.TryGetDouble(out var degrees)||!double.IsFinite(degrees)))throw Invalid();
+                if(graphic.TryGetProperty("color",out var color))
+                {
+                    if(color.ValueKind!=JsonValueKind.String||color.GetString() is not {} hex||hex.Length!=7||hex[0]!='#'||hex.Skip(1).Any(c=>!Uri.IsHexDigit(c)))throw Invalid();
+                }
+                if(graphic.TryGetProperty("width",out var width) && (width.ValueKind!=JsonValueKind.Number||!width.TryGetDouble(out var stroke)||!double.IsFinite(stroke)||stroke<.2||stroke>100))throw Invalid();
+            }
+        }
         if(d.TryGetProperty("bomText",out var edits))
         {
             if(edits.ValueKind!=JsonValueKind.Object||edits.EnumerateObject().Count()>50000)throw Invalid();

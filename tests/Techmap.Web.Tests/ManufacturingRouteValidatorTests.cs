@@ -34,6 +34,18 @@ public sealed class ManufacturingRouteValidatorTests
     }
 
     [Fact]
+    public void Semi_finished_row_accepts_an_independent_drawing_copy()
+    {
+        var graph = BaseRoute();
+        var copy = JsonNode.Parse("""{"schemaVersion":1,"connectors":[],"wires":[],"cables":[],"junctions":[],"diffPairs":[],"screens":[],"views":{"drawing":{"layers":[],"wireCrossingStyle":"none"},"e4":{"layers":[],"wireCrossingStyle":"none"}}}""")!;
+        copy["drawingDocuments"] = JsonNode.Parse("""{"tables":[],"leaders":[],"bomOrder":[],"graphics":[{"id":"semi-graphic","view":"drawing","kind":"line","points":[{"x":0,"y":0},{"x":30,"y":0}]}]}""");
+        graph["manufacturingRoute"]!["rows"]![0]!["presentation"]!["drawingCopy"] =
+            new JsonObject { ["document"] = copy, ["hiddenObjectIds"] = new JsonArray() };
+
+        Validate(graph);
+    }
+
+    [Fact]
     public void Drawing_copy_rejects_missing_design_collections_and_duplicate_hidden_ids()
     {
         var graph = BaseRoute();

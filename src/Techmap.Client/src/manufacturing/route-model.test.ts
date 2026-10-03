@@ -13,7 +13,7 @@ const route = (rows: unknown[], status: "draft" | "completed" = "draft") => pars
 });
 
 describe("manufacturing route contract", () => {
-  it("stores a complete independent drawing copy without manufacturing route", () => {
+  it("stores a complete independent drawing copy for an assembly or semi-finished row", () => {
     const document = createEmptyHarnessDesign();
     const copy = createRouteDrawingCopy(document, ["layer:wire"]);
     const candidate = { ...row("assembly", [], []), kind: "assembly" as const, presentation: { backgroundOpacity: .25, objects: [], drawingCopy: copy } };
@@ -21,6 +21,9 @@ describe("manufacturing route contract", () => {
     expect(parsed.rows[0]!.presentation.drawingCopy?.document).toEqual(copy.document);
     expect(parsed.rows[0]!.presentation.drawingCopy?.document).not.toBe(copy.document);
     expect(() => route([{ ...candidate, presentation: { ...candidate.presentation, drawingCopy: { ...copy, document: { ...copy.document, manufacturingRoute: route([]) } } } }])).toThrow();
+    const semiFinished = { ...row("wire"), presentation: { backgroundOpacity: .25, objects: [], drawingCopy: copy }, wireBlankSelections: [{ wireId: "wire", binding: { sourceId: "technology-wire-blanks", entityType: "wire-blank", snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), sourceKey: "P-01", displayName: "Провод", visual: { start: "cut", end: "cut", color: "#26609e", templateId: "cut", photoDataUrl: null } } }] };
+    expect(route([semiFinished])?.rows[0]?.presentation.drawingCopy?.document).toEqual(copy.document);
+    expect(route([semiFinished])?.rows[0]?.wireBlankSelections).toEqual(semiFinished.wireBlankSelections);
   });
   it("accepts a diamond and composes shared ancestors once", () => {
     const parsed = route([row("a"), row("b", ["a"], [ref("b")]), row("c", ["a"], [ref("c")]), row("d", ["b", "c"], [])])!;

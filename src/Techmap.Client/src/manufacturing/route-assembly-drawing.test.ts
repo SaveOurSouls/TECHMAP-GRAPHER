@@ -62,7 +62,7 @@ describe("assembly drawing copy", () => {
     const markup = renderToStaticMarkup(createElement(RouteAssemblyDrawing, {
       ...runtime, row, document, sources: items, items: items.filter(item => item.ref.kind === "wire"), onSave: () => {}, onCancel: () => {},
     }));
-    expect(markup).toContain("Копия чертежа сборки");
+    expect(markup).toContain("Копия чертежа этапа");
     expect(markup).toContain("route-full-drawing");
     expect(markup).not.toContain("route-assembly-drawing__handles");
   });

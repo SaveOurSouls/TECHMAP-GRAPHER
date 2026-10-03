@@ -10,6 +10,7 @@ import { projectOntoPolyline } from "./physical-coverings";
 import { traceDrawingRoute, drawingRouteHitPoints } from "./drawing-route-path";
 import {standardCoveringKinds,type PhysicalContextAction,type PhysicalContextTarget} from "./physical-coverings";
 import type { DimensionMode } from "./drawing-dimensions";
+import type { DrawingGraphic, DrawingGraphicKind } from "./drawing-documents";
 import { screenCrossSections, uprightScreenBody, clearScreenSections, type ScreenCrossSection } from "./e4-screen-spans";
 import { CanvasObjectPopover } from "./CanvasObjectPopover";
 import { CanvasObjectHint, type CanvasHintTarget } from "./CanvasObjectHint";
@@ -64,6 +65,7 @@ import {
 } from "./cable-sheath-geometry";
 import type { CableInstance } from "./model";
 import { railCatchDistance, railDistance, railParameter, snapRailEnd } from "./position-rail";
+import { snapDrawingPoint, type DrawingOutline, type DrawingSnaps } from "../component-library/drawing-geometry";
 
 export interface CanvasViewportProps {
   readonly view: HarnessEditorView;
@@ -90,6 +92,9 @@ export interface CanvasViewportProps {
   readonly onCoveringDrag?:(id:string,spanIndex:number,part:CoveringDragPart,start:EditorPoint,point:EditorPoint,phase:"preview"|"commit"|"cancel")=>void;
   readonly onDimensionCreate?:(wireId:string,from:number,to:number,pointCount:number,mode:DimensionMode,auxiliary?:boolean)=>void;
   readonly onPositionRailCreate?:(start:EditorPoint,end:EditorPoint,leaderIds:readonly string[])=>void;
+  readonly onGraphicCreate?:(graphic:DrawingGraphic)=>void;
+  readonly drawingSnaps?:DrawingSnaps;
+  readonly drawingAngleStep?:number;
   readonly diagnosticOverlay?: ReactNode;
   readonly inlineEditor?: ReactNode;
   readonly onCameraChange: (camera: EditorCamera) => void;
@@ -930,6 +935,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if(object.kind.startsWith("graphic-")){const p=object.points??[],width=Number(object.metadata?.graphicWidth??2)/2+tolerance,k=object.metadata?.graphicKind;if(k==="contact")return !!p[0]&&Math.hypot(point.x-p[0].x,point.y-p[0].y)<=Math.max(6,width);if(k==="text")return point.x>=object.x-tolerance&&point.x<=object.x+Math.max(30,object.label.length*8)+tolerance&&point.y>=object.y-20-tolerance&&point.y<=object.y+8+tolerance;if(k==="rectangle")return point.x>=Math.min(p[0]?.x??0,p[1]?.x??0)-tolerance&&point.x<=Math.max(p[0]?.x??0,p[1]?.x??0)+tolerance&&point.y>=Math.min(p[0]?.y??0,p[1]?.y??0)-tolerance&&point.y<=Math.max(p[0]?.y??0,p[1]?.y??0)+tolerance;return p.slice(1).some((v,i)=>pointToSegmentDistance(point,p[i]!,v)<=width)||k==="closedContour"&&pointToSegmentDistance(point,p.at(-1)!,p[0]!)<=width;}
   if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
   if(view==="drawing"&&object.kind==="wire"&&object.visibleWireStrokes)return object.visibleWireStrokes.some(stroke=>{const curve=drawingRouteHitPoints(stroke.points,object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=stroke.width/2+Math.min(tolerance,2));});
@@ -1883,6 +1889,7 @@ export function drawEditorSceneObject(
   minimumStrokePixels = 0,
 ) {
   context.save();
+  if(object.kind.startsWith("graphic-")){const p=object.points??[],kind=object.metadata?.graphicKind;context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?Number(object.metadata?.graphicWidth??2)+1:Number(object.metadata?.graphicWidth??2);context.lineCap="round";context.lineJoin="round";context.beginPath();if(kind==="contact"){const q=p[0]!;context.arc(q.x,q.y,5,0,Math.PI*2);context.moveTo(q.x-9,q.y);context.lineTo(q.x+9,q.y);context.moveTo(q.x,q.y-9);context.lineTo(q.x,q.y+9);context.stroke();}else if(kind==="text"){const q=p[0]!;context.translate(q.x,q.y);context.rotate(Number(object.metadata?.graphicAngle??0)*Math.PI/180);context.font="16px Arial";context.fillText(object.metadata?.graphicText??object.label,0,0);context.restore();return;}else if(kind==="rectangle"){const a=p[0]!,b=p[1]!;context.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(a.x-b.x),Math.abs(a.y-b.y));}else if(kind==="ellipse"){const a=p[0]!,b=p[1]!;context.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.abs(a.x-b.x)/2,Math.abs(a.y-b.y)/2,0,0,Math.PI*2);context.stroke();}else if(kind==="bezier"&&p.length===4){context.moveTo(p[0]!.x,p[0]!.y);context.bezierCurveTo(p[1]!.x,p[1]!.y,p[2]!.x,p[2]!.y,p[3]!.x,p[3]!.y);context.stroke();}else{p.forEach((q,i)=>i?context.lineTo(q.x,q.y):context.moveTo(q.x,q.y));if(kind==="closedContour")context.closePath();context.stroke();}context.restore();return;}
   if(object.kind==="drawing-table") {
     const widths=JSON.parse(object.metadata?.widths ?? "[]") as number[],headers=JSON.parse(object.metadata?.headers ?? "[]") as string[],rows=JSON.parse(object.metadata?.rows ?? "[]") as string[][];
     context.fillStyle="#fff";context.fillRect(object.x,object.y,object.width,object.height);context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=selected?2:1;context.strokeRect(object.x,object.y,object.width,object.height);
@@ -2782,7 +2789,7 @@ export function CanvasViewport({
   e4RoutingMode = "orthogonal",
   componentTemplateViewInstances = [],
   resolveComponentTemplateAssetUrl,
-  overlay,onDimensionCreate,onPositionRailCreate,
+  overlay,onDimensionCreate,onPositionRailCreate,onGraphicCreate,drawingSnaps={corners:true,contours:true,tangents:true},drawingAngleStep=15,
   diagnosticOverlay,
   inlineEditor,
   onCameraChange,
@@ -2830,6 +2837,8 @@ export function CanvasViewport({
   const [dimensionStart,setDimensionStart]=useState<{wireId:string;index:number;point:EditorPoint;pointCount:number}[]>([]);
   const [railDraft,setRailDraft]=useState<{start:EditorPoint;end:EditorPoint;leaderIds:readonly string[]}|null>(null);
   const [dimensionMessage,setDimensionMessage]=useState("");
+  const [graphicStart,setGraphicStart]=useState<EditorPoint|null>(null);
+  const [graphicPathDraft,setGraphicPathDraft]=useState<{kind:"polyline"|"closedContour";points:EditorPoint[]}|null>(null);
   useEffect(()=>{setDimensionStart([]);setDimensionMessage("");},[tool,view]);
   useEffect(()=>{setRailDraft(null);},[tool,view]);
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
@@ -3049,6 +3058,14 @@ export function CanvasViewport({
         onPositionRailCreate?.(railDraft.start,end,ids);
       }
       setRailDraft(null);return;
+    }
+    if(event.button===0&&tool.startsWith("graphic-")&&onGraphicCreate){
+      const rawPoint=screenToWorld(camera,localPoint(event.clientX,event.clientY)),kind=tool.slice(8).replace("closed-contour","closedContour") as DrawingGraphicKind,targets:DrawingOutline[]=objects.filter(o=>o.points?.length).map(o=>({id:o.id,points:[...(o.points??[])],closed:["closedContour","ellipse","rectangle"].includes(o.metadata?.graphicKind??""),corners:o.points as {x:number;y:number}[],...(o.kind==="graphic-ellipse"&&Math.abs(o.width-o.height)<.01?{circle:{center:{x:o.x+o.width/2,y:o.y+o.height/2},radius:o.width/2}}:{})})),featurePoint=snapDrawingPoint(rawPoint,targets,drawingSnaps,8/camera.zoom,graphicPathDraft?.points.at(-1)??graphicStart),angleAnchor=graphicPathDraft?.points.at(-1)??graphicStart,point=angleAnchor&&drawingAngleStep>0?(()=>{const dx=featurePoint.x-angleAnchor.x,dy=featurePoint.y-angleAnchor.y,r=Math.hypot(dx,dy),step=drawingAngleStep*Math.PI/180,a=Math.round(Math.atan2(dy,dx)/step)*step;return{x:angleAnchor.x+r*Math.cos(a),y:angleAnchor.y+r*Math.sin(a)};})():featurePoint;
+      if(kind==="contact"||kind==="text"){const text=kind==="text"?window.prompt("Текст фигуры","Текст"):undefined;if(kind==="text"&&!text?.trim())return;onGraphicCreate({id:crypto.randomUUID(),view,kind,points:[point],...(kind==="text"?{text:text!.trim(),angle:0}:{}),color:"#253b4a",width:2});return;}
+      if(kind==="polyline"||kind==="closedContour"){const previous=graphicPathDraft?.points.at(-1),same=previous&&Math.hypot(previous.x-point.x,previous.y-point.y)<.01,next=graphicPathDraft?{...graphicPathDraft,points:same?graphicPathDraft.points:[...graphicPathDraft.points,point]}:{kind,points:[point]};setGraphicPathDraft(next);if(event.detail>=2&&next.points.length>=(kind==="closedContour"?3:2)){onGraphicCreate({id:crypto.randomUUID(),view,kind,points:next.points,color:"#253b4a",width:2});setGraphicPathDraft(null);}return;}
+      if(!graphicStart){setGraphicStart(point);return;}
+      const dx=point.x-graphicStart.x,dy=point.y-graphicStart.y,kindPoints=kind==="bezier"?[graphicStart,{x:graphicStart.x+dx/3,y:graphicStart.y+dy},{x:graphicStart.x+2*dx/3,y:graphicStart.y-dy},point]:[graphicStart,point];
+      onGraphicCreate({id:crypto.randomUUID(),view,kind,points:kindPoints,color:"#253b4a",width:2});setGraphicStart(null);return;
     }
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
@@ -3329,7 +3346,7 @@ export function CanvasViewport({
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
-      if (object && (object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle" || object.kind === "physical-segment" && object.pipe?.role === "joining-pipe") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind.startsWith("graphic-") || object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle" || object.kind === "physical-segment" && object.pipe?.role === "joining-pipe") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",

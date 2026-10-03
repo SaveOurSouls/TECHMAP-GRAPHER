@@ -43,6 +43,8 @@ describe("inline route row", () => {
     expect(markup).not.toContain('Режим операции 1');
     expect(markup).not.toContain('type="radio"');
     expect(markup).not.toContain('class="route-terminal-requirements"');
+    expect(markup).toContain("Открыть редактор рисунка");
+    expect(markup).not.toContain("Копия чертежа этапа");
   });
 
   it("shows terminal articles instead of encoded keys in tables and drawing", () => {
