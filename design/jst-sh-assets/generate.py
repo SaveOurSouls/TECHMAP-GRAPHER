@@ -17,8 +17,8 @@ HEIGHT = 192
 SCALE = 4
 SUPERSAMPLE = 2
 FIRST_CENTER = 65
-START_WIDTH = 82
-END_WIDTH = 81
+START_WIDTH = FIRST_CENTER
+END_WIDTH = 64
 STROKE = 1.5
 INK = (0, 0, 0, 255)
 
@@ -26,7 +26,7 @@ INK = (0, 0, 0, 255)
 def width_for(contacts: int) -> int:
     if not 2 <= contacts <= 20:
         raise ValueError("JST SH artwork supports 2 to 20 contacts")
-    return START_WIDTH + PITCH * (contacts - 2) + END_WIDTH
+    return START_WIDTH + PITCH * (contacts - 1) + END_WIDTH
 
 
 def render(contacts: int) -> Image.Image:
@@ -95,11 +95,6 @@ def render(contacts: int) -> Image.Image:
               (center - 9, 142), (center - 9, 150),
               (center + 9, 150), (center + 9, 142),
               (center + 12, 138), (center + 15, 138)])
-        if index in (0, contacts - 1):
-            # The rectangular details occur only at the two ends in the source.
-            line([(center - 10, 150), (center - 10, 166),
-                  (center + 10, 166), (center + 10, 150)])
-
     return image.resize((width * SCALE, HEIGHT * SCALE), Image.Resampling.LANCZOS)
 
 
@@ -113,9 +108,20 @@ def render_triangle() -> Image.Image:
     return image.resize((48 * SCALE, 44 * SCALE), Image.Resampling.LANCZOS)
 
 
+def render_terminal_box() -> Image.Image:
+    factor = SCALE * SUPERSAMPLE
+    image = Image.new("RGBA", (24 * factor, HEIGHT * factor), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.line([(2 * factor, 150 * factor), (22 * factor, 150 * factor),
+               (22 * factor, 166 * factor), (2 * factor, 166 * factor),
+               (2 * factor, 150 * factor)],
+              fill=INK, width=round(STROKE * factor), joint="curve")
+    return image.resize((24 * SCALE, HEIGHT * SCALE), Image.Resampling.LANCZOS)
+
+
 def assemble(start: Image.Image, repeat: Image.Image,
              end: Image.Image, contacts: int) -> Image.Image:
-    pieces = [start] + [repeat] * (contacts - 2) + [end]
+    pieces = [start] + [repeat] * (contacts - 1) + [end]
     image = Image.new("RGBA", (sum(piece.width for piece in pieces),
                                start.height), (0, 0, 0, 0))
     x = 0
@@ -123,6 +129,15 @@ def assemble(start: Image.Image, repeat: Image.Image,
         image.paste(piece, (x, 0))
         x += piece.width
     return image
+
+
+def add_terminal_boxes(image: Image.Image, box: Image.Image,
+                       contacts: int) -> Image.Image:
+    finished = image.copy()
+    for index in (0, contacts - 1):
+        left = (FIRST_CENTER + index * PITCH - 12) * SCALE
+        finished.alpha_composite(box, (left, 0))
+    return finished
 
 
 def on_white(image: Image.Image) -> Image.Image:
@@ -136,15 +151,18 @@ def main() -> None:
     PREVIEWS.mkdir(exist_ok=True)
     reference = render(5)
     start = reference.crop((0, 0, START_WIDTH * SCALE, reference.height))
-    repeat = reference.crop((START_WIDTH * SCALE, 0,
-                             (START_WIDTH + PITCH) * SCALE, reference.height))
-    end = reference.crop(((START_WIDTH + 3 * PITCH) * SCALE, 0,
+    repeat_from = FIRST_CENTER + PITCH
+    repeat = reference.crop((repeat_from * SCALE, 0,
+                             (repeat_from + PITCH) * SCALE, reference.height))
+    end = reference.crop(((FIRST_CENTER + 4 * PITCH) * SCALE, 0,
                           reference.width, reference.height))
     marker = render_triangle()
+    box = render_terminal_box()
     for name, image in (("jst_sh_start.png", start),
                         ("jst_sh_repeat.png", repeat),
                         ("jst_sh_end.png", end),
-                        ("jst_sh_orientation_triangle.png", marker)):
+                        ("jst_sh_orientation_triangle.png", marker),
+                        ("jst_sh_terminal_box.png", box)):
         image.save(OUT / name)
 
     gap = 24
@@ -156,11 +174,13 @@ def main() -> None:
         x += image.width + gap
     parts.convert("RGB").save(PREVIEWS / "jst_sh_parts_preview.png")
     on_white(marker).save(PREVIEWS / "jst_sh_orientation_triangle_preview.png")
+    on_white(box).save(PREVIEWS / "jst_sh_terminal_box_preview.png")
 
     for contacts in range(2, 21):
-        image = assemble(start, repeat, end, contacts)
-        if image.tobytes() != render(contacts).tobytes():
+        body = assemble(start, repeat, end, contacts)
+        if body.tobytes() != render(contacts).tobytes():
             raise RuntimeError(f"Segment assembly differs for {contacts} contacts")
+        image = add_terminal_boxes(body, box, contacts)
         for index in range(contacts):
             x = (FIRST_CENTER + index * PITCH - 10) * SCALE
             has_end_box = image.getpixel((x, 158 * SCALE))[3] > 200

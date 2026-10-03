@@ -10,24 +10,31 @@ manufacturing drawings or a substitute for a JST datasheet.
 
 | File | Size | Contents |
 | --- | ---: | --- |
-| `jst_sh_start.png` | 328 x 768 px | Left housing, first contact and its rectangular end detail |
-| `jst_sh_repeat.png` | 136 x 768 px | One middle contact position |
-| `jst_sh_end.png` | 324 x 768 px | Last contact, its rectangular end detail and right housing |
+| `jst_sh_start.png` | 260 x 768 px | Left housing and the left half of the first contact |
+| `jst_sh_repeat.png` | 136 x 768 px | One pitch, from one contact center to the next |
+| `jst_sh_end.png` | 256 x 768 px | Right half of the last contact and right housing |
+| `jst_sh_terminal_box.png` | 96 x 768 px | Reusable end detail, placed twice |
 | `jst_sh_orientation_triangle.png` | 192 x 176 px | Independent orientation marker |
 
-For any integer `N` from 2 through 20, join the three connector pieces with
-no overlap or gap:
+For any integer `N` from 2 through 20, join the three body pieces with no
+overlap or gap:
 
-`start + repeat * (N - 2) + end`
+`start + repeat * (N - 1) + end`
 
-The repeat pitch is 136 px and the result width is `652 + 136 * (N - 2)` px.
-All three connector pieces and all assembled images have a transparent RGBA
-background and the same 768 px height. The first and last rectangular lower
-details appear only in the fixed ends, matching the reference; middle contacts
-end in a shorter U-shaped detail.
+Place the terminal-box PNG over the assembled body twice, with its top at
+`y = 0`: first at `x = 212 px`, then at `x = 212 + 136 * (N - 1) px`.
+These placements complete the unique rectangular details at the first and
+last contacts without putting a full repeated contact in either fixed end.
+The orientation triangle can be placed independently. The ready-made PNGs in
+`variants/` already include both terminal boxes and omit the triangle.
+
+The repeat pitch is 136 px and the result width is `516 + 136 * (N - 1)` px.
+All three body pieces, the terminal-box overlay and the assembled images have
+a transparent RGBA background and the same 768 px height.
 
 `variants/` contains every count from 2 to 20 in increments of one.
 `previews/` contains white-background inspection copies and a view of the
 three separated pieces. Run `generate.py` with Python and Pillow to recreate
-the assets. It checks every assembled image against a directly rendered image
-pixel by pixel, including the join boundaries.
+the assets. It checks the three-piece body against a directly rendered body
+pixel by pixel for every count, including the join boundaries, and checks
+that rectangular details appear only at the two ends.
