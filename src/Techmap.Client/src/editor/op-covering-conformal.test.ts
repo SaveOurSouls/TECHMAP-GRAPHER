@@ -192,7 +192,6 @@ describe("OP envelope contour", () => {
     expect(Math.min(...contour.map(point => point.x))).toBeCloseTo(0, 6);
     expect(Math.max(...contour.map(point => point.x))).toBeCloseTo(100, 6);
     expect(crossings(contour)).toEqual([]);
-    console.log("bounded", contour);
   });
   it("keeps a straight asymmetric sleeve rectangular", () => {
     const polygon = conformalCoveringContour([{ x: 0, y: 0 }, { x: 100, y: 0 }], [8, 8], [14, 14]);
