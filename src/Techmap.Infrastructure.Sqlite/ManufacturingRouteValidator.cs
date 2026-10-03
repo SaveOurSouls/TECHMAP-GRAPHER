@@ -41,12 +41,15 @@ internal static class ManufacturingRouteValidator
                 if (row.TryGetProperty("assemblyInputs", out _)) rowKeys = [..rowKeys, "assemblyInputs"];
                 if (row.TryGetProperty("wireBlankSelections", out _)) rowKeys = [..rowKeys, "wireBlankSelections"];
                 if (row.TryGetProperty("components", out _)) rowKeys = [..rowKeys, "components"];
+                if (row.TryGetProperty("role", out _)) rowKeys = [..rowKeys, "role"];
             }
             RequireExact(row, rowKeys);
             var id = Text(row, "id", path + ".id", 128);
             if (!rows.TryAdd(id, (row, path))) throw Invalid("Manufacturing route row IDs must be unique.", path + ".id");
             var kind = Text(row, "kind", path + ".kind", 32);
             if (kind is not ("semiFinished" or "assembly")) throw Invalid("Invalid manufacturing route row kind.", path + ".kind");
+            if (row.TryGetProperty("role", out _) && (kind != "assembly" || Text(row, "role", path + ".role", 32) != "sharedOperation"))
+                throw Invalid("Invalid manufacturing route row role.", path + ".role");
             if (row.TryGetProperty("index", out var index) && (index.ValueKind != JsonValueKind.String || index.GetString()!.Length > 128)) throw Invalid("Invalid route row index.", path + ".index");
             ValidateOptionalNonNegative(row, "quantity", path, positive: true);
             ValidateOptionalNonNegative(row, "reserve", path, positive: false);

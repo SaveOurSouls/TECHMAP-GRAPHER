@@ -12,28 +12,33 @@ const row = (id: string, dependsOn: string[] = []): RouteRow => ({
 const route = (...rows: RouteRow[]): ManufacturingRoute => parseManufacturingRoute({ contractVersion: 1, source: { fingerprintVersion: 1, sha256: sha }, status: "draft", rows })!;
 
 describe("manufacturing route commands", () => {
-  it("persists merged component metrics through parse and repeated merge", () => {
+  it("keeps selected semi-finished rows independent and adds only a shared assembly operation row", () => {
     const original = route({ ...row("a"), index: "ПФ-01", quantity: 2, reserve: 3, operationTimeMinutes: 4 }, { ...row("b"), index: "ПФ-02", quantity: 5, reserve: 1, operationTimeMinutes: 7 });
     const merged = mergeRouteRows(original, ["a", "b"], "merged");
-    expect(merged.rows[0]!.components?.map(item => [item.title, item.quantity, item.reserve, item.operationTimeMinutes])).toEqual([["a", 2, 3, 4], ["b", 5, 1, 7]]);
+    expect(merged.rows.map(item => item.id)).toEqual(["a", "b", "merged"]);
+    expect(merged.rows[0]).toEqual(original.rows[0]);
+    expect(merged.rows[1]).toEqual(original.rows[1]);
+    expect(merged.rows[2]).toMatchObject({ kind: "assembly", sourceObjects: [], dependsOn: ["a", "b"], assemblyInputs: [{ rowId: "a" }, { rowId: "b" }], operations: [] });
     const restored = parseManufacturingRoute(JSON.parse(JSON.stringify(merged)))!;
-    expect(restored.rows[0]!.components).toEqual(merged.rows[0]!.components);
-    const repeated = mergeRouteRows(route(merged.rows[0]!, { ...row("c"), quantity: 9, reserve: 2, operationTimeMinutes: 8 }), ["merged", "c"], "merged-again");
-    expect(repeated.rows[0]!.components?.map(item => item.ref.id)).toEqual(["a", "b", "c"]);
-    expect(repeated.rows[0]!.components?.at(-1)).toMatchObject({ quantity: 9, reserve: 2, operationTimeMinutes: 8 });
+    expect(restored.rows[0]!.quantity).toBe(2);
+    expect(restored.rows[1]!.quantity).toBe(5);
   });
-  it("rejects component metadata with an extra field or wrong reference", () => {
-    const base = mergeRouteRows(route(row("a"), row("b")), ["a", "b"], "merged");
-    const extra = JSON.parse(JSON.stringify(base)); extra.rows[0].components[0].unexpected = true;
-    expect(() => parseManufacturingRoute(extra)).toThrow();
-    const wrong = JSON.parse(JSON.stringify(base)); wrong.rows[0].components[0].ref.id = "missing";
-    expect(() => parseManufacturingRoute(wrong)).toThrow();
+  it("opens a saved merged row as separate products and a shared operation", () => {
+    const candidate = JSON.parse(JSON.stringify(route({ ...row("a"), sourceObjects: [{ kind: "wire", id: "a" }, { kind: "wire", id: "b" }], presentation: { backgroundOpacity: .25, objects: [] } })));
+    candidate.rows[0].components = [{ ref: { kind: "wire", id: "a" }, title: "a", index: "ПФ-01", quantity: 2 }, { ref: { kind: "wire", id: "b" }, title: "b", index: "ПФ-02", quantity: 3 }];
+    const migrated = parseManufacturingRoute(candidate)!;
+    expect(migrated.rows.map(row => row.kind)).toEqual(["semiFinished", "semiFinished", "assembly"]);
+    expect(migrated.rows.slice(0, 2).map(row => [row.index, row.quantity])).toEqual([["ПФ-01", 2], ["ПФ-02", 3]]);
+    expect(migrated.rows[2]!.id).toBe("a");
+    expect(migrated.rows[2]!.sourceObjects).toEqual([]);
+    expect(() => parseManufacturingRoute({ ...candidate, rows: [{ ...candidate.rows[0], components: [{ ref: { kind: "wire", id: "missing" }, title: "x" }] }] })).toThrow();
   });
-  it("preserves per-wire catalog choices when merging semi-finished rows", () => {
+  it("preserves per-wire catalog choices on independent rows after grouping", () => {
     const binding = { sourceId: "technology-wire-blanks" as const, entityType: "wire-blank" as const, snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "b".repeat(64), recordId: "c".repeat(64), sourceKey: "blank", displayName: "Blank", visual: { start: "cut", end: "cut", color: "#ff0000", templateId: "01-cut", photoDataUrl: null } };
     const original = route(...["a", "b"].map(id => ({ ...row(id), wireBlankSelections: [{ wireId: id, binding }] })));
-    const merged = mergeRouteRows(original, ["a", "b"], "merged");
-    expect(merged.rows[0]!.wireBlankSelections).toEqual(original.rows.flatMap(item => item.wireBlankSelections!));
+    const grouped = mergeRouteRows(original, ["a", "b"], "merged");
+    expect(grouped.rows[0]!.wireBlankSelections).toEqual(original.rows[0]!.wireBlankSelections);
+    expect(grouped.rows[1]!.wireBlankSelections).toEqual(original.rows[1]!.wireBlankSelections);
   });
   it("copies assembly drawing overlays independently of manufacturing composition", () => {
     const drawingObjects = [{ id: "pipe", kind: "physical-segment", layerId: "wires", points: [{ x: 10, y: 20 }], hidden: true }];
@@ -56,42 +61,44 @@ describe("manufacturing route commands", () => {
     expect(JSON.stringify(document)).toBe(saved);
     expect(generated.source.sha256).toBe(sha);
   });
-  it("merges objects, operations, presentation and comments and rewrites downstream dependencies", () => {
+  it("keeps downstream dependencies and adds a shared assembly marker", () => {
     const original = route(row("a"), row("b"), row("c", ["a", "b"]), row("d", ["c"]));
     const snapshot = JSON.stringify(original);
     const merged = mergeRouteRows(original, ["a", "b"], "merged");
-    expect(merged.rows.map(r => r.id)).toEqual(["merged", "c", "d"]);
-    expect(merged.rows[0]!.operations.map(op => op.id)).toEqual(["op-a", "op-b"]);
-    expect(merged.rows[0]!.sourceObjects.map(ref => ref.id)).toEqual(["a", "b"]);
-    expect(merged.rows[0]!.presentation.objects).toHaveLength(2);
-    expect(merged.rows[0]!.comment).toBe("comment a\n\ncomment b");
-    expect(merged.rows[1]!.dependsOn).toEqual(["merged"]);
-    expect(merged.rows.every(r => !r.prepared)).toBe(true);
+    expect(merged.rows.map(r => r.id)).toEqual(["a", "b", "c", "d", "merged"]);
+    expect(merged.rows[0]!.operations.map(op => op.id)).toEqual(["op-a"]);
+    expect(merged.rows[1]!.operations.map(op => op.id)).toEqual(["op-b"]);
+    expect(merged.rows[2]!.dependsOn).toEqual(["a", "b"]);
+    expect(merged.rows[4]!.dependsOn).toEqual(["a", "b"]);
+    expect(merged.rows.slice(0, 2).every(r => r.prepared)).toBe(true);
+    expect(merged.rows.at(-1)!.prepared).toBe(false);
     expect(routeRowComposition(merged, "d").map(ref => ref.id)).toEqual(["a", "b", "c", "d"]);
     expect(JSON.stringify(original)).toBe(snapshot);
   });
-  it("keeps each wire's terminal requirements and project photos when blanks are merged", () => {
+  it("keeps each wire's terminal requirements and project photos on its own row", () => {
     const terminal = (wireId: string) => ({ wireId, end: "from" as const, terminalArticle: `${wireId}-terminal`, stripLengthMm: null, binding: null });
     const first = { ...row("a"), terminalRequirements: [terminal("a")], photos: [{ sha256: "a".repeat(64), name: "first.png" }] };
     const second = { ...row("b"), terminalRequirements: [terminal("b")], photos: [{ sha256: "b".repeat(64), name: "second.png" }] };
-    const merged = mergeRouteRows(route(first, second), ["a", "b"], "merged").rows[0]!;
-    expect(merged.terminalRequirements).toEqual([terminal("a"), terminal("b")]);
-    expect(merged.photos?.map(photo => photo.name)).toEqual(["first.png", "second.png"]);
+    const grouped = mergeRouteRows(route(first, second), ["a", "b"], "merged");
+    expect(grouped.rows[0]!.terminalRequirements).toEqual([terminal("a")]);
+    expect(grouped.rows[1]!.terminalRequirements).toEqual([terminal("b")]);
+    expect(grouped.rows[0]!.photos?.map(photo => photo.name)).toEqual(["first.png"]);
+    expect(grouped.rows[1]!.photos?.map(photo => photo.name)).toEqual(["second.png"]);
   });
-  it("collapses internal dependencies but rejects a merge producing a cycle", () => {
-    expect(mergeRouteRows(route(row("a"), row("b", ["a"])), ["a", "b"], "merged").rows[0]!.dependsOn).toEqual([]);
-    expect(() => mergeRouteRows(route(row("a"), row("middle", ["a"]), row("b", ["middle"])), ["a", "b"], "merged")).toThrow();
+  it("adds shared operation links without collapsing internal dependencies", () => {
+    expect(mergeRouteRows(route(row("a"), row("b", ["a"])), ["a", "b"], "merged").rows.at(-1)!.dependsOn).toEqual(["a", "b"]);
+    expect(mergeRouteRows(route(row("a"), row("middle", ["a"]), row("b", ["middle"])), ["a", "b"], "merged").rows.at(-1)!.dependsOn).toEqual(["a", "b"]);
   });
   it("unions shared ancestors once and refuses to silently discard conflicting presentation", () => {
     const sharedObject = { ref: { kind: "wire" as const, id: "a" }, points: [{ x: 10, y: 20 }], hidden: false };
     const b = { ...row("b", ["a"]), presentation: { backgroundOpacity: .25, objects: [sharedObject] } };
     const c = { ...row("c", ["a"]), presentation: { backgroundOpacity: .25, objects: [sharedObject] } };
     const merged = mergeRouteRows(route(row("a"), b, c), ["b", "c"], "merged");
-    expect(merged.rows[1]!.dependsOn).toEqual(["a"]);
-    expect(merged.rows[1]!.presentation.objects).toHaveLength(1);
+    expect(merged.rows.find(row => row.id === "b")!.dependsOn).toEqual(["a"]);
+    expect(merged.rows.find(row => row.id === "c")!.presentation.objects).toHaveLength(1);
     expect(routeRowComposition(merged, "merged").map(ref => ref.id)).toEqual(["a", "b", "c"]);
     const changedC = { ...c, presentation: { ...c.presentation, objects: [{ ...sharedObject, hidden: true }] } };
-    expect(() => mergeRouteRows(route(row("a"), b, changedC), ["b", "c"], "merged")).toThrow("Разные представления");
+    expect(() => mergeRouteRows(route(row("a"), b, changedC), ["b", "c"], "merged")).not.toThrow();
   });
   it("rejects assemblies, duplicate selections, missing rows and occupied output IDs", () => {
     const original = route(row("a"), row("b"));
@@ -149,11 +156,11 @@ describe("manufacturing route commands", () => {
     expect(routeRowComposition(withInput, "next").map(ref => ref.id)).toEqual(["a", "b"]);
     expect(() => addAssemblyInput(withInput, "next", { id: "again", kind: "source", ref: { kind: "wire", id: "a" } })).toThrow("уже добавлен");
   });
-  it("rewrites an assembly input when its producing semi-finished rows are merged", () => {
+  it("adds a second shared operation without replacing existing rows", () => {
     const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);
-    const merged = mergeRouteRows(original, ["a", "b"], "combined");
-    expect(merged.rows.at(-1)?.dependsOn).toEqual(["combined"]);
-    expect(merged.rows.at(-1)?.assemblyInputs).toEqual([{ id: "row-1", kind: "row", rowId: "combined" }]);
+    const grouped = mergeRouteRows(original, ["a", "b"], "combined");
+    expect(grouped.rows.map(row => row.id)).toEqual(["a", "b", "assembly", "combined"]);
+    expect(grouped.rows.find(row => row.id === "assembly")?.dependsOn).toEqual(["a", "b"]);
   });
   it("removes one input and invalidates descendants and saved shapes outside their composition", () => {
     const original = route(row("a"), row("b"));

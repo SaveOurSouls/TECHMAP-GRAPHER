@@ -5,7 +5,6 @@ import { parseRouteDrawingCopy } from "./route-drawing-copy";
 import { routeSourceRank } from "./route-order";
 
 const validate = (route: ManufacturingRoute): ManufacturingRoute => parseManufacturingRoute(route)!;
-const unique = <T>(items: readonly T[]): T[] => [...new Set(items)];
 
 /** Initial generation only; opening an existing route must preserve manually authored rows. */
 export function generateRoute(document: HarnessDesignDocument, sourceSha256: string, quantity = 1): ManufacturingRoute {
@@ -36,39 +35,28 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
   if (selection.size !== ids.length || selection.size < 2) throw new Error("Выберите минимум два разных полуфабриката.");
   const selected = original.rows.filter(row => selection.has(row.id));
   if (selected.length !== selection.size || selected.some(row => row.kind !== "semiFinished")) throw new Error("Объединять можно только существующие полуфабрикаты.");
-  if (original.rows.some(row => row.id === newId)) throw new Error("ID нового полуфабриката уже существует.");
-  const objects = new Map<string, RouteRow["presentation"]["objects"][number]>();
-  for (const row of selected) for (const item of row.presentation.objects) {
-    const key = `${item.ref.kind}:${item.ref.id}`, old = objects.get(key);
-    if (old && JSON.stringify(old) !== JSON.stringify(item)) throw new Error("Разные представления общего объекта. Согласуйте их перед объединением.");
-    objects.set(key, item);
-  }
-  const components = selected.flatMap(row => row.components ?? row.sourceObjects.map(ref => ({ ref, ...(row.index === undefined ? {} : { index: row.index }), title: row.title, ...(row.quantity === undefined ? {} : { quantity: row.quantity }), ...(row.reserve === undefined ? {} : { reserve: row.reserve }), ...(row.operationTimeMinutes === undefined ? {} : { operationTimeMinutes: row.operationTimeMinutes }) })));
-  const merged: RouteRow = {
-    id: newId, kind: "semiFinished", ...(selected[0]?.index === undefined ? {} : { index: selected[0].index }), title: selected.map(row => row.title).join(" + ").slice(0, 512),
-    quantity: Math.max(1, selected.reduce((max, row) => Math.max(max, row.quantity ?? 0), 0)), reserve: selected.reduce((sum, row) => sum + (row.reserve ?? 0), 0), operationTimeMinutes: selected.reduce((sum, row) => sum + (row.operationTimeMinutes ?? 0), 0),
-    comment: selected.map(row => row.comment).filter(Boolean).join("\n\n"),
-    sourceObjects: selected.flatMap(row => row.sourceObjects), components,
-    dependsOn: unique(selected.flatMap(row => row.dependsOn).filter(id => !selection.has(id))),
-    operations: selected.flatMap(row => row.operations), prepared: false,
-    presentation: { backgroundOpacity: selected[0]!.presentation.backgroundOpacity, objects: [...objects.values()] },
-    ...(selected.some(row => row.terminalRequirements) ? { terminalRequirements: selected.flatMap(row => row.terminalRequirements ?? []) } : {}),
-    ...(selected.some(row => row.photos) ? { photos: [...new Map(selected.flatMap(row => row.photos ?? []).map(photo => [photo.sha256.toLowerCase(), photo])).values()] } : {}),
-    ...(selected.some(row => row.wireBlankSelections) ? { wireBlankSelections: [...new Map(selected.flatMap(row => row.wireBlankSelections ?? []).map(selection => [selection.wireId, selection])).values()] } : {}),
-  };
-  let inserted = false;
-  const rows = original.rows.flatMap(row => {
-    if (selection.has(row.id)) {
-      if (inserted) return [];
-      inserted = true; return [merged];
-    }
-    const dependsOn = unique(row.dependsOn.map(id => selection.has(id) ? newId : id));
-    const assemblyInputs = row.assemblyInputs?.filter((input, index, inputs) => input.kind !== "row" ||
-      inputs.findIndex(other => other.kind === "row" && (selection.has(other.rowId) ? newId : other.rowId) === (selection.has(input.rowId) ? newId : input.rowId)) === index)
-      .map(input => input.kind === "row" && selection.has(input.rowId) ? { ...input, rowId: newId } : input);
-    return [{ ...row, dependsOn, ...(assemblyInputs ? { assemblyInputs } : {}) }];
-  });
-  return validate({ ...original, status: "draft", rows: invalidateDescendants(rows, new Set([newId])) });
+  if (original.rows.some(row => row.id === newId)) throw new Error("ID общей операции уже существует.");
+  // The selected semi-finished products remain independent rows. The new row is
+  // an assembly marker for one shared operation and contains only DAG links.
+  // It deliberately has no sourceObjects, components, or copied metrics.
+  const assembly = {
+    id: newId,
+    kind: "assembly" as const,
+    role: "sharedOperation" as const,
+    index: `ОП-${String(original.rows.length + 1).padStart(2, "0")}`,
+    title: `Общая операция · ${selected.map(row => row.title).join(" + ").slice(0, 480)}`,
+    quantity: 1,
+    reserve: 0,
+    operationTimeMinutes: 0,
+    comment: "",
+    sourceObjects: [],
+    dependsOn: selected.map(row => row.id),
+    assemblyInputs: selected.map((row, index) => ({ id: `row-${index + 1}`, kind: "row" as const, rowId: row.id })),
+    operations: [],
+    presentation: { backgroundOpacity: .25, objects: [] },
+    prepared: false,
+  } satisfies RouteRow;
+  return validate({ ...original, status: "draft", rows: invalidateDescendants([...original.rows, assembly], new Set([newId])) });
 }
 
 export function addAssemblyRow(route: ManufacturingRoute, id: string, title: string, sourceRefs: readonly RouteSourceRef[], dependsOn: readonly string[]): ManufacturingRoute {

@@ -9,6 +9,15 @@ namespace Techmap.Web.Tests;
 public sealed class ManufacturingRouteValidatorTests
 {
     [Fact]
+    public void Shared_operation_role_is_limited_to_assembly_rows()
+    {
+        var graph = BaseRoute();
+        graph["manufacturingRoute"]!["rows"]![1]!["role"] = "sharedOperation";
+        Validate(graph);
+        graph["manufacturingRoute"]!["rows"]![0]!["role"] = "sharedOperation";
+        Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
+    }
+    [Fact]
     public void Components_accept_metrics_and_reject_extra_fields_or_mismatched_refs()
     {
         var graph = BaseRoute();
