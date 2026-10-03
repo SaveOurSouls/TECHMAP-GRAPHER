@@ -19,7 +19,10 @@ describe("route covering artwork", () => {
     expect(markup).toContain("role=\"img\"");
     expect(markup).toContain("aria-label=\"Оплётка · 240 мм");
     expect(markup).toContain("pattern");
+    expect(markup).toContain("<image");
     expect(markup).toContain("Metal049A");
     expect(markup).toContain("240 мм");
+    expect(markup).not.toContain("<text");
+    expect(markup).not.toContain(" rx=");
   });
 });

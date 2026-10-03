@@ -1,7 +1,8 @@
 import { createElement, type ReactElement } from "react";
 import type { PhysicalCovering } from "../editor/physical-coverings";
 import { coveringKind } from "../editor/physical-coverings";
-import { resolvedCoveringStyle } from "../editor/covering-style";
+import { coveringTextureFile, resolvedCoveringStyle } from "../editor/covering-style";
+import { coveringTextureUrls } from "../editor/covering-renderer";
 
 /** Stable, operator-facing values used by the route artwork and its a11y label. */
 export function coveringArtworkDescriptor(covering: Pick<PhysicalCovering, "name" | "color" | "style" | "kind" | "lengthMm">) {
@@ -20,17 +21,21 @@ export function RouteCoveringArtwork({ covering, width = 560, height = 120 }: { 
   const id = `covering-${descriptor.kind}-${Math.abs((covering.name ?? "").split("").reduce((sum, char) => sum * 31 + char.charCodeAt(0), 7))}`;
   const color = /^#[0-9a-f]{6}$/i.test(covering.color ?? "") ? covering.color! : "#aebfc9";
   const texture = style.texture === "none" ? null : style.texture;
+  const textureFile = coveringTextureFile(descriptor.kind, covering.style);
+  const textureUrl = textureFile ? coveringTextureUrls[textureFile] : undefined;
+  const tileSize = Math.max(16, 64 / style.textureScale);
+  const swatchY = height * .25;
+  const swatchHeight = height * .5;
   return createElement("svg", { className: "route-covering-artwork", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": descriptor.label, "data-covering-texture": texture ?? "none", preserveAspectRatio: "xMidYMid meet" },
     createElement("title", { key: "title" }, descriptor.label),
     createElement("defs", { key: "defs" },
-      createElement("pattern", { id, width: 18, height: 18, patternUnits: "userSpaceOnUse", patternTransform: `rotate(${style.textureRotation})`, key: "pattern" },
-        createElement("rect", { width: 18, height: 18, fill: color }),
-        texture && style.hatch !== "dots" && createElement("path", { d: "M-4 18L18 -4M5 23L23 5", stroke: style.textureTint, strokeOpacity: .34, strokeWidth: 3 }),
-        texture && style.hatch === "dots" && createElement("circle", { cx: 9, cy: 9, r: 2.3, fill: style.textureTint, fillOpacity: .4 }),
+      createElement("pattern", { id, width: tileSize, height: tileSize, patternUnits: "userSpaceOnUse", patternTransform: `rotate(${style.textureRotation})`, key: "pattern" },
+        createElement("rect", { width: tileSize, height: tileSize, fill: color }),
+        textureUrl && createElement("image", { href: textureUrl, width: tileSize, height: tileSize, preserveAspectRatio: "xMidYMid slice", opacity: .82 }),
+        texture && style.hatch !== "none" && style.hatch !== "dots" && createElement("path", { d: `M-${tileSize * .2} ${tileSize}L${tileSize} -${tileSize * .2}M${tileSize * .3} ${tileSize * 1.3}L${tileSize * 1.3} ${tileSize * .3}`, stroke: style.textureTint, strokeOpacity: .34, strokeWidth: Math.max(1, style.hatchSpacing / 3) }),
+        texture && style.hatch === "dots" && createElement("circle", { cx: tileSize / 2, cy: tileSize / 2, r: Math.max(1, style.hatchSpacing / 4), fill: style.textureTint, fillOpacity: .4 }),
       ),
     ),
-    createElement("rect", { x: 22, y: height * .29, width: width - 44, height: height * .42, rx: height * .12, fill: `url(#${id})`, stroke: style.lineColor, strokeWidth: Math.max(1.5, style.lineWidth) }),
-    createElement("text", { x: 24, y: height * .2, fill: "#294257", fontSize: 13 }, covering.name),
-    createElement("text", { x: 24, y: height * .88, fill: "#46616f", fontSize: 11 }, `${descriptor.length}${descriptor.hatch}`),
+    createElement("rect", { x: 22, y: swatchY, width: width - 44, height: swatchHeight, fill: `url(#${id})`, stroke: style.lineColor, strokeWidth: Math.max(1.5, style.lineWidth) }),
   );
 }
