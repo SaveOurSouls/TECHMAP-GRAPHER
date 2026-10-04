@@ -29,6 +29,13 @@ describe("authored canvas graphics",()=>{
   expect(drawingDocumentScene(document,1,undefined,"e4").map(o=>o.id)).toEqual(["g2"]);
   expect(moveDrawingAnnotation(document,"g1",{x:11,y:12})?.graphics?.[0]?.points).toEqual([{x:11,y:12},{x:20,y:30}]);
  });
+ it("persists editable text family and size without widening the graphic contract",()=>{
+  const base=physicalFixture(),graphics=[{id:"label",view:"e4" as const,kind:"text" as const,points:[{x:30,y:40}],text:"Э4",fontFamily:"Times New Roman",fontSize:24}];
+  const document=parseHarnessDesignDocument({...base,drawingDocuments:{...emptyDrawingDocuments(),graphics}});
+  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(document))).drawingDocuments?.graphics).toEqual(graphics);
+  expect(()=>parseHarnessDesignDocument({...base,drawingDocuments:{...emptyDrawingDocuments(),graphics:[{...graphics[0],fontSize:145}]}})).toThrow();
+  expect(()=>parseHarnessDesignDocument({...base,drawingDocuments:{...emptyDrawingDocuments(),graphics:[{...graphics[0],fontFamily:"<script>"}]}})).toThrow();
+ });
  it("rejects malformed authored graphics",()=>{
   const base=physicalFixture(),docs={...emptyDrawingDocuments(),graphics:[{id:"g",view:"drawing",kind:"line",points:[{x:0,y:0}]}]};
   expect(()=>parseHarnessDesignDocument({...base,drawingDocuments:docs})).toThrow();

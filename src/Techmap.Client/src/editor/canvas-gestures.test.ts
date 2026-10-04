@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { CanvasViewport, freeWireEndAxes, freeWireEndpointAxis, snapFreeWireEndpointX } from "./CanvasViewport";
+import { CanvasViewport, freeWireEndAxes, freeWireEndpointAxis, objectIntersectsSelectionRectangle, selectionRectangleObjectIds, snapFreeWireEndpointX } from "./CanvasViewport";
 import type { EditorSceneObject } from "./editor-types";
 
 // Exercise the actual event handlers without a browser renderer. Effects install
@@ -53,6 +53,76 @@ it('does not offer isolation for service geometry alone', () => {
   expect(isolate).not.toHaveBeenCalled();
 });
 afterEach(()=>vi.unstubAllGlobals());
+
+it("selects every graphic touched by the selection perimeter, including ellipse and text",()=>{
+ const line:EditorSceneObject={id:"line",kind:"graphic-line",layerId:"connectors",label:"line",x:0,y:0,width:100,height:0,color:"#222",points:[{x:0,y:0},{x:100,y:0}],metadata:{graphicKind:"line",graphicWidth:"2"}};
+ const ellipse:EditorSceneObject={id:"ellipse",kind:"graphic-ellipse",layerId:"connectors",label:"ellipse",x:40,y:20,width:80,height:60,color:"#222",points:[{x:40,y:20},{x:120,y:80}],metadata:{graphicKind:"ellipse",graphicWidth:"2"}};
+ const text:EditorSceneObject={id:"text",kind:"graphic-text",layerId:"connectors",label:"Э4",x:150,y:50,width:1,height:1,color:"#222",points:[{x:150,y:50}],metadata:{graphicKind:"text",graphicFontSize:"24"}};
+ const selection={start:{x:90,y:-5},end:{x:160,y:55}};
+ expect(objectIntersectsSelectionRectangle(line,selection)).toBe(true);
+ expect(selectionRectangleObjectIds([line,ellipse,text],[{id:"connectors",label:"Графика",visible:true,locked:false}],selection)).toEqual(["line","ellipse","text"]);
+});
+
+it("does not create graphic objects until its first canvas click and completes a line on right click",()=>{
+ const create=vi.fn(),props={view:"e4" as const,tool:"graphic-line" as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[],layers:[{id:"connectors",label:"Графика",visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onGraphicCreate:create};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ expect(create).not.toHaveBeenCalled();
+ const handlers=()=>{const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==="canvas")!;return canvas.props as Record<string,(event:any)=>void>;};
+ const target={style:{cursor:""},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:20,clientY:30,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).not.toHaveBeenCalled();
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:80,clientY:30,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).not.toHaveBeenCalled();
+ handlers().onPointerDown!({button:2,pointerId:1,clientX:80,clientY:30,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).not.toHaveBeenCalled();
+ handlers().onContextMenu!({clientX:80,clientY:30,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({kind:"line",points:[{x:20,y:30},{x:80,y:30}]}));
+});
+
+it("clears an unfinished one-point line on right click and closes a later path at its first point",()=>{
+ const create=vi.fn(),props={view:"e4" as const,tool:"graphic-line" as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[],layers:[{id:"connectors",label:"Графика",visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onGraphicCreate:create};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ const handlers=()=>{const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==="canvas")!;return canvas.props as Record<string,(event:any)=>void>;},target={style:{cursor:""},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:10,clientY:10,currentTarget:target,preventDefault:vi.fn()});
+ handlers().onContextMenu!({clientX:10,clientY:10,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).not.toHaveBeenCalled();
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:20,clientY:20,currentTarget:target,preventDefault:vi.fn()});
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:80,clientY:20,currentTarget:target,preventDefault:vi.fn()});
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:20,clientY:20,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({kind:"closedContour",points:[{x:20,y:20},{x:80,y:20},{x:20,y:20}]}));
+});
+
+it("creates a rectangle only on its second click",()=>{
+ const create=vi.fn(),props={view:"e4" as const,tool:"graphic-rectangle" as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[],layers:[{id:"connectors",label:"Графика",visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onGraphicCreate:create};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ const handlers=()=>{const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==="canvas")!;return canvas.props as Record<string,(event:any)=>void>;},target={style:{cursor:""},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:20,clientY:30,currentTarget:target,preventDefault:vi.fn()});
+ handlers().onPointerMove!({pointerId:1,clientX:80,clientY:90,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).not.toHaveBeenCalled();
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:80,clientY:90,currentTarget:target,preventDefault:vi.fn()});
+ expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({kind:"rectangle",points:[{x:20,y:30},{x:80,y:90}]}));
+});
+
+it("applies additive and toggle modes when selecting by a frame",()=>{
+ const selectGroup=vi.fn(),line:EditorSceneObject={id:"line",kind:"graphic-line",layerId:"connectors",label:"line",x:20,y:20,width:50,height:0,color:"#222",points:[{x:20,y:20},{x:70,y:20}],metadata:{graphicKind:"line",graphicWidth:"2"}};
+ const props={view:"e4" as const,tool:"select" as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[line],layers:[{id:"connectors",label:"Графика",visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onObjectGroupSelect:selectGroup,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==="canvas")!,handlers=canvas.props as Record<string,(event:any)=>void>,target={style:{cursor:""},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ const event={button:0,pointerId:1,clientX:0,clientY:0,currentTarget:target,preventDefault:vi.fn()};
+ handlers.onPointerDown!({...event,shiftKey:true});handlers.onPointerMove!({...event,clientX:90,clientY:40,shiftKey:true});handlers.onPointerUp!({...event,clientX:90,clientY:40,shiftKey:true});
+ handlers.onPointerDown!({...event,pointerId:2,ctrlKey:true});handlers.onPointerMove!({...event,pointerId:2,clientX:90,clientY:40,ctrlKey:true});handlers.onPointerUp!({...event,pointerId:2,clientX:90,clientY:40,ctrlKey:true});
+ expect(selectGroup).toHaveBeenNthCalledWith(1,["line"],"add");
+ expect(selectGroup).toHaveBeenNthCalledWith(2,["line"],"toggle");
+});
+
+it("stretches a Ctrl-constrained circle from its clicked center",()=>{
+ const create=vi.fn(),props={view:"e4" as const,tool:"graphic-ellipse" as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[],layers:[{id:"connectors",label:"Графика",visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onGraphicCreate:create};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ const handlers=()=>{const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==="canvas")!;return canvas.props as Record<string,(event:any)=>void>;},target={style:{cursor:""},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:50,clientY:50,currentTarget:target,preventDefault:vi.fn()});
+ handlers().onPointerDown!({button:0,pointerId:1,clientX:80,clientY:90,ctrlKey:true,currentTarget:target,preventDefault:vi.fn()});
+ const graphic=create.mock.calls[0]![0];expect(graphic.kind).toBe("ellipse");expect(Math.abs(graphic.points[1].x-graphic.points[0].x)).toBeCloseTo(Math.abs(graphic.points[1].y-graphic.points[0].y));
+});
 
 it('opens the paired wire menu at its free endpoint despite a truncated painted stroke and overlapping dimension',()=>{
  const action=vi.fn(),select=vi.fn();

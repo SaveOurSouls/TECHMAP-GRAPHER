@@ -63,6 +63,26 @@ public sealed class HarnessDrawingAppearanceTests
         root["drawingDocuments"]!["graphics"]=JsonNode.Parse("""[{"id":"graphic-drawing","view":"drawing","kind":"line","points":[{"x":0,"y":0},{"x":20,"y":0}],"color":"#112233","width":2},{"id":"graphic-e4","view":"e4","kind":"text","points":[{"x":10,"y":20}],"text":"Э4","angle":30}]""");
         Validate(root);
     }
+    [Fact]
+    public void Accepts_font_properties_for_authored_text()
+    {
+        var root=Fixture();
+        root["drawingDocuments"]!["graphics"]=JsonNode.Parse("""[{"id":"graphic-e4","view":"e4","kind":"text","points":[{"x":10,"y":20}],"text":"Э4","fontFamily":"Times New Roman","fontSize":24}]""");
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("{\"fontFamily\":\"<script>\"}")]
+    [InlineData("{\"fontSize\":5}")]
+    [InlineData("{\"fontSize\":145}")]
+    [InlineData("{\"fontSize\":\"16\"}")]
+    public void Rejects_invalid_font_properties_for_authored_text(string patch)
+    {
+        var root=Fixture();
+        var graphic=JsonNode.Parse("""{"id":"graphic-e4","view":"e4","kind":"text","points":[{"x":10,"y":20}],"text":"Э4"}""")!.AsObject();
+        foreach(var property in JsonNode.Parse(patch)!.AsObject())graphic[property.Key]=property.Value!.DeepClone();
+        root["drawingDocuments"]!["graphics"]=new JsonArray(graphic);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
     [Theory]
     [InlineData("duplicate")]
     [InlineData("view")]

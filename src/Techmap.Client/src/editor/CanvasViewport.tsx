@@ -108,7 +108,7 @@ export interface CanvasViewportProps {
   readonly onViewportSizeChange?: (size: EditorViewportSize) => void;
   readonly onObjectSelect: (objectId: string | null, additive?: boolean) => void;
   /** Selects all members of a linked E4 overlay in one state update. */
-  readonly onObjectGroupSelect?: (objectIds: readonly string[]) => void;
+  readonly onObjectGroupSelect?: (objectIds: readonly string[], mode?: EditorSelectionMode) => void;
   /** Available only for editable route fragment copies. */
   readonly onObjectsIsolate?: (objectIds: readonly string[]) => void;
   readonly onDrawingScale?: (objectId:string,drawingId:string,scale:number)=>void;
@@ -945,7 +945,7 @@ function containsPoint(
   view?: HarnessEditorView,
 ): boolean {
   if (object.kind === "object-index") return point.x >= object.x - tolerance && point.x <= object.x + object.width + tolerance && point.y >= object.y - tolerance && point.y <= object.y + object.height + tolerance;
-  if(object.kind.startsWith("graphic-")){const p=object.points??[],width=Number(object.metadata?.graphicWidth??2)/2+tolerance,k=object.metadata?.graphicKind;if(k==="contact")return !!p[0]&&Math.hypot(point.x-p[0].x,point.y-p[0].y)<=Math.max(6,width);if(k==="text")return point.x>=object.x-tolerance&&point.x<=object.x+Math.max(30,object.label.length*8)+tolerance&&point.y>=object.y-20-tolerance&&point.y<=object.y+8+tolerance;if(k==="rectangle")return point.x>=Math.min(p[0]?.x??0,p[1]?.x??0)-tolerance&&point.x<=Math.max(p[0]?.x??0,p[1]?.x??0)+tolerance&&point.y>=Math.min(p[0]?.y??0,p[1]?.y??0)-tolerance&&point.y<=Math.max(p[0]?.y??0,p[1]?.y??0)+tolerance;return p.slice(1).some((v,i)=>pointToSegmentDistance(point,p[i]!,v)<=width)||k==="closedContour"&&pointToSegmentDistance(point,p.at(-1)!,p[0]!)<=width;}
+  if(object.kind.startsWith("graphic-")){const p=object.points??[],width=Number(object.metadata?.graphicWidth??2)/2+tolerance,k=object.metadata?.graphicKind;if(k==="contact")return !!p[0]&&Math.hypot(point.x-p[0].x,point.y-p[0].y)<=Math.max(6,width);if(k==="text"){const fontSize=Number(object.metadata?.graphicFontSize??16);return point.x>=object.x-tolerance&&point.x<=object.x+Math.max(fontSize*1.8,object.label.length*fontSize*.65)+tolerance&&point.y>=object.y-fontSize-tolerance&&point.y<=object.y+fontSize*.2+tolerance;}if(k==="rectangle")return point.x>=Math.min(p[0]?.x??0,p[1]?.x??0)-tolerance&&point.x<=Math.max(p[0]?.x??0,p[1]?.x??0)+tolerance&&point.y>=Math.min(p[0]?.y??0,p[1]?.y??0)-tolerance&&point.y<=Math.max(p[0]?.y??0,p[1]?.y??0)+tolerance;if(k==="ellipse"&&p[0]&&p[1]){const center={x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2},rx=Math.abs(p[1].x-p[0].x)/2,ry=Math.abs(p[1].y-p[0].y)/2;return rx>0&&ry>0&&Math.abs(((point.x-center.x)/rx)**2+((point.y-center.y)/ry)**2-1)<=Math.max(.2,width/Math.max(rx,ry));}return p.slice(1).some((v,i)=>pointToSegmentDistance(point,p[i]!,v)<=width)||k==="closedContour"&&pointToSegmentDistance(point,p.at(-1)!,p[0]!)<=width;}
   if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
   if(view==="drawing"&&object.kind==="wire"&&object.visibleWireStrokes)return object.visibleWireStrokes.some(stroke=>{const curve=drawingRouteHitPoints(stroke.points,stroke.radius??object.routeRadius);return curve.slice(1).some((p,i)=>pointToSegmentDistance(point,curve[i]!,p)<=stroke.width/2+Math.min(tolerance,2));});
@@ -1870,6 +1870,74 @@ export interface FreeWireEndpointRef {
   readonly point: EditorPoint;
 }
 
+export interface EditorSelectionRectangle {
+  readonly start: EditorPoint;
+  readonly end: EditorPoint;
+}
+
+function normalizedSelectionRectangle({start,end}:EditorSelectionRectangle) {
+  return {minX:Math.min(start.x,end.x),minY:Math.min(start.y,end.y),maxX:Math.max(start.x,end.x),maxY:Math.max(start.y,end.y)};
+}
+
+function rectangleOverlaps(left:ReturnType<typeof normalizedSelectionRectangle>,right:ReturnType<typeof normalizedSelectionRectangle>):boolean {
+  return left.minX<=right.maxX&&left.maxX>=right.minX&&left.minY<=right.maxY&&left.maxY>=right.minY;
+}
+
+function pointInSelectionRectangle(point:EditorPoint,rectangle:ReturnType<typeof normalizedSelectionRectangle>):boolean {
+  return point.x>=rectangle.minX&&point.x<=rectangle.maxX&&point.y>=rectangle.minY&&point.y<=rectangle.maxY;
+}
+
+function orientation(a:EditorPoint,b:EditorPoint,c:EditorPoint):number {
+  return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+
+function pointOnSegment(point:EditorPoint,start:EditorPoint,end:EditorPoint):boolean {
+  return Math.abs(orientation(start,end,point))<.000001&&point.x>=Math.min(start.x,end.x)&&point.x<=Math.max(start.x,end.x)&&point.y>=Math.min(start.y,end.y)&&point.y<=Math.max(start.y,end.y);
+}
+
+function segmentsIntersect(a:EditorPoint,b:EditorPoint,c:EditorPoint,d:EditorPoint):boolean {
+  const abC=orientation(a,b,c),abD=orientation(a,b,d),cdA=orientation(c,d,a),cdB=orientation(c,d,b);
+  if((abC>0)!==(abD>0)&&(cdA>0)!==(cdB>0))return true;
+  return abC===0&&pointOnSegment(c,a,b)||abD===0&&pointOnSegment(d,a,b)||cdA===0&&pointOnSegment(a,c,d)||cdB===0&&pointOnSegment(b,c,d);
+}
+
+function pathIntersectsSelectionRectangle(points:readonly EditorPoint[],rectangle:ReturnType<typeof normalizedSelectionRectangle>,closed=false):boolean {
+  if(points.some(point=>pointInSelectionRectangle(point,rectangle)))return true;
+  const corners:EditorPoint[]=[{x:rectangle.minX,y:rectangle.minY},{x:rectangle.maxX,y:rectangle.minY},{x:rectangle.maxX,y:rectangle.maxY},{x:rectangle.minX,y:rectangle.maxY}];
+  const edges=[...points.slice(1).map((end,index)=>[points[index]!,end] as const),...(closed&&points.length>2?[[points.at(-1)!,points[0]!] as const]:[])];
+  return edges.some(([start,end])=>corners.some((corner,index)=>segmentsIntersect(start,end,corner,corners[(index+1)%corners.length]!)));
+}
+
+function ellipseSelectionPath(start:EditorPoint,end:EditorPoint):EditorPoint[] {
+  const center={x:(start.x+end.x)/2,y:(start.y+end.y)/2},radiusX=Math.abs(end.x-start.x)/2,radiusY=Math.abs(end.y-start.y)/2;
+  return Array.from({length:33},(_,index)=>{const angle=index/32*Math.PI*2;return{x:center.x+Math.cos(angle)*radiusX,y:center.y+Math.sin(angle)*radiusY};});
+}
+
+/** Any touched visible object is a candidate for window selection. */
+export function objectIntersectsSelectionRectangle(object:EditorSceneObject,selection:EditorSelectionRectangle):boolean {
+  const rectangle=normalizedSelectionRectangle(selection),points=object.points??[],kind=object.metadata?.graphicKind;
+  if(kind==="text"){
+    const fontSize=Number(object.metadata?.graphicFontSize??16),width=Math.max(fontSize*1.8,object.label.length*fontSize*.65);
+    return rectangleOverlaps(rectangle,{minX:object.x,minY:object.y-fontSize,maxX:object.x+width,maxY:object.y+fontSize*.2});
+  }
+  if(kind==="contact"){
+    const point=points[0]??{x:object.x,y:object.y};
+    return rectangleOverlaps(rectangle,{minX:point.x-6,minY:point.y-6,maxX:point.x+6,maxY:point.y+6});
+  }
+  if(kind==="rectangle")return rectangleOverlaps(rectangle,{minX:Math.min(points[0]?.x??object.x,points[1]?.x??object.x+object.width),minY:Math.min(points[0]?.y??object.y,points[1]?.y??object.y+object.height),maxX:Math.max(points[0]?.x??object.x,points[1]?.x??object.x+object.width),maxY:Math.max(points[0]?.y??object.y,points[1]?.y??object.y+object.height)});
+  if(kind==="ellipse"&&points[0]&&points[1])return pathIntersectsSelectionRectangle(ellipseSelectionPath(points[0],points[1]),rectangle);
+  const paths=object.paths??(points.length?[points]:[]);
+  if(paths.some(path=>pathIntersectsSelectionRectangle(path,rectangle,kind==="closedContour")))return true;
+  return rectangleOverlaps(rectangle,{minX:object.x,minY:object.y,maxX:object.x+Math.max(1,object.width),maxY:object.y+Math.max(1,object.height)});
+}
+
+export function selectionRectangleObjectIds(objects:readonly EditorSceneObject[],layers:readonly EditorLayer[],selection:EditorSelectionRectangle):readonly string[] {
+  const visible=new Set(layers.filter(layer=>layer.visible).map(layer=>layer.id));
+  return objects.filter(object=>visible.has(object.layerId)&&objectIntersectsSelectionRectangle(object,selection)).map(object=>object.id);
+}
+
+export type EditorSelectionMode = "replace" | "add" | "toggle";
+
 export interface FreeWireEndAxis {
   readonly end: "from" | "to";
   readonly wireIds: readonly string[];
@@ -2035,7 +2103,7 @@ export function drawEditorSceneObject(
     context.fillText(object.label, object.x + padX, object.y + height / 2);
     context.restore(); return;
   }
-  if(object.kind.startsWith("graphic-")){const p=object.points??[],kind=object.metadata?.graphicKind;context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?Number(object.metadata?.graphicWidth??2)+1:Number(object.metadata?.graphicWidth??2);context.lineCap="round";context.lineJoin="round";context.beginPath();if(kind==="contact"){const q=p[0]!;context.arc(q.x,q.y,5,0,Math.PI*2);context.moveTo(q.x-9,q.y);context.lineTo(q.x+9,q.y);context.moveTo(q.x,q.y-9);context.lineTo(q.x,q.y+9);context.stroke();}else if(kind==="text"){const q=p[0]!;context.translate(q.x,q.y);context.rotate(Number(object.metadata?.graphicAngle??0)*Math.PI/180);context.font="16px Arial";context.fillText(object.metadata?.graphicText??object.label,0,0);context.restore();return;}else if(kind==="rectangle"){const a=p[0]!,b=p[1]!;context.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(a.x-b.x),Math.abs(a.y-b.y));}else if(kind==="ellipse"){const a=p[0]!,b=p[1]!;context.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.abs(a.x-b.x)/2,Math.abs(a.y-b.y)/2,0,0,Math.PI*2);context.stroke();}else if(kind==="bezier"&&p.length===4){context.moveTo(p[0]!.x,p[0]!.y);context.bezierCurveTo(p[1]!.x,p[1]!.y,p[2]!.x,p[2]!.y,p[3]!.x,p[3]!.y);context.stroke();}else{p.forEach((q,i)=>i?context.lineTo(q.x,q.y):context.moveTo(q.x,q.y));if(kind==="closedContour")context.closePath();context.stroke();}context.restore();return;}
+  if(object.kind.startsWith("graphic-")){const p=object.points??[],kind=object.metadata?.graphicKind;context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?Number(object.metadata?.graphicWidth??2)+1:Number(object.metadata?.graphicWidth??2);context.lineCap="round";context.lineJoin="round";context.beginPath();if(kind==="contact"){const q=p[0]!;context.arc(q.x,q.y,5,0,Math.PI*2);context.moveTo(q.x-9,q.y);context.lineTo(q.x+9,q.y);context.moveTo(q.x,q.y-9);context.lineTo(q.x,q.y+9);context.stroke();}else if(kind==="text"){const q=p[0]!;context.translate(q.x,q.y);context.rotate(Number(object.metadata?.graphicAngle??0)*Math.PI/180);const fontSize=Number(object.metadata?.graphicFontSize??16),fontFamily=object.metadata?.graphicFontFamily??"Arial";context.font=`${fontSize}px ${fontFamily}`;context.fillText(object.metadata?.graphicText??object.label,0,0);context.restore();return;}else if(kind==="rectangle"){const a=p[0]!,b=p[1]!;context.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(a.x-b.x),Math.abs(a.y-b.y));}else if(kind==="ellipse"){const a=p[0]!,b=p[1]!;context.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.abs(a.x-b.x)/2,Math.abs(a.y-b.y)/2,0,0,Math.PI*2);context.stroke();}else if(kind==="bezier"&&p.length===4){context.moveTo(p[0]!.x,p[0]!.y);context.bezierCurveTo(p[1]!.x,p[1]!.y,p[2]!.x,p[2]!.y,p[3]!.x,p[3]!.y);context.stroke();}else{p.forEach((q,i)=>i?context.lineTo(q.x,q.y):context.moveTo(q.x,q.y));if(kind==="closedContour")context.closePath();context.stroke();}context.restore();return;}
   if(object.kind==="drawing-table") {
     const widths=JSON.parse(object.metadata?.widths ?? "[]") as number[],headers=JSON.parse(object.metadata?.headers ?? "[]") as string[],rows=JSON.parse(object.metadata?.rows ?? "[]") as string[][];
     context.fillStyle="#fff";context.fillRect(object.x,object.y,object.width,object.height);context.strokeStyle=selected?"#1179ac":object.color;context.lineWidth=selected?2:1;context.strokeRect(object.x,object.y,object.width,object.height);
@@ -2994,9 +3062,14 @@ export function CanvasViewport({
   const [railDraft,setRailDraft]=useState<{start:EditorPoint;end:EditorPoint;leaderIds:readonly string[]}|null>(null);
   const [dimensionMessage,setDimensionMessage]=useState("");
   const [graphicStart,setGraphicStart]=useState<EditorPoint|null>(null);
-  const [graphicPathDraft,setGraphicPathDraft]=useState<{kind:"polyline"|"closedContour";points:EditorPoint[]}|null>(null);
+  const [graphicPathDraft,setGraphicPathDraft]=useState<{kind:"line"|"polyline"|"closedContour";points:EditorPoint[]}|null>(null);
+  const [graphicPreview,setGraphicPreview]=useState<DrawingGraphic|null>(null);
+  const [selectionRectangle,setSelectionRectangle]=useState<EditorSelectionRectangle|null>(null);
+  const [selectionCandidateIds,setSelectionCandidateIds]=useState<readonly string[]>([]);
+  const selectionDragRef=useRef<{pointerId:number;start:EditorPoint;clientX:number;clientY:number;mode:EditorSelectionMode}|null>(null);
   useEffect(()=>{setDimensionStart([]);setDimensionMessage("");},[tool,view]);
   useEffect(()=>{setRailDraft(null);},[tool,view]);
+  useEffect(()=>{setGraphicStart(null);setGraphicPathDraft(null);setGraphicPreview(null);setSelectionRectangle(null);setSelectionCandidateIds([]);selectionDragRef.current=null;},[tool,view]);
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
@@ -3011,6 +3084,9 @@ export function CanvasViewport({
     : objects;
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
+  const paintObjects=graphicPreview?[...displayObjects,{...graphicPreview,id:"graphic-preview",kind:(`graphic-${graphicPreview.kind.replace("closedContour","closed-contour")}`) as EditorSceneObject["kind"],layerId:view==="drawing"?"dimensions":"connectors",label:graphicPreview.text??graphicPreview.kind,x:Math.min(...graphicPreview.points.map(point=>point.x)),y:Math.min(...graphicPreview.points.map(point=>point.y)),width:Math.max(1,Math.abs((graphicPreview.points.at(-1)?.x??0)-(graphicPreview.points[0]?.x??0))),height:Math.max(1,Math.abs((graphicPreview.points.at(-1)?.y??0)-(graphicPreview.points[0]?.y??0))),color:graphicPreview.color??"#253b4a",metadata:{graphicKind:graphicPreview.kind,graphicView:graphicPreview.view,graphicText:graphicPreview.text??"",graphicAngle:String(graphicPreview.angle??0),graphicFontFamily:graphicPreview.fontFamily??"Arial",graphicFontSize:String(graphicPreview.fontSize??16),graphicWidth:String(graphicPreview.width??2)}}]:displayObjects;
+  const paintSelectedSet=graphicPreview?new Set([...selectedSet,"graphic-preview"]):selectedSet;
+  const effectiveHighlights=[...highlightedObjectIds,...selectionCandidateIds];
   const freeEndpointRefs = freeWireEndpointRefs(objects, selectedSet, layers);
   const freeEndAxes = freeWireEndAxes(freeEndpointRefs);
   const snapRefs = freeWireEndpointRefs(objects, new Set(objects.map(object => object.id)), layers);
@@ -3084,16 +3160,16 @@ export function CanvasViewport({
         canvas,
         view,
         camera,
-        displayObjects,
+        paintObjects,
         layers,
-        selectedSet,
+        paintSelectedSet,
         cables,
         overlays,
         connectorAlignmentGuides,
         displayInstances,
         resolveComponentTemplateAssetUrl,
         componentTemplateImageCacheRef.current!,
-        highlightedObjectIds,
+        effectiveHighlights,
         physicalNodePreview,
         foregroundWireIds,
         backgroundObjects,
@@ -3104,7 +3180,7 @@ export function CanvasViewport({
         height: Math.max(1, Math.round(canvas.clientHeight)),
       });
     };
-    const stopTextures=warmCoveringTextures(redraw,[...displayObjects,...backgroundObjects]);
+    const stopTextures=warmCoveringTextures(redraw,[...paintObjects,...backgroundObjects]);
     componentTemplateImageCacheRef.current!.setInvalidate(redraw);
     redraw();
     const observer = new ResizeObserver(redraw);
@@ -3114,7 +3190,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [highlightedObjectIds, foregroundWireIds, backgroundObjects, backgroundOpacity, cables, camera, displayInstances, connectorAlignmentGuides, displayObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
+  }, [effectiveHighlights, foregroundWireIds, backgroundObjects, backgroundOpacity, cables, camera, displayInstances, connectorAlignmentGuides, paintObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -3155,6 +3231,12 @@ export function CanvasViewport({
       setPhysicalStart(null);
       setPhysicalNodePreview(null);
       setPhysicalGuide(undefined);
+      setGraphicStart(null);
+      setGraphicPathDraft(null);
+      setGraphicPreview(null);
+      setSelectionRectangle(null);
+      setSelectionCandidateIds([]);
+      selectionDragRef.current=null;
     };
     cancelConnection();
     const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") cancelConnection(); };
@@ -3204,6 +3286,24 @@ export function CanvasViewport({
     return result.position;
   };
 
+  const snapGraphicPoint = (rawPoint:EditorPoint,anchor?:EditorPoint,angleSnap=true):EditorPoint => {
+    const targets:DrawingOutline[]=objects.filter(o=>o.points?.length).map(o=>({id:o.id,points:[...(o.points??[])],closed:["closedContour","ellipse","rectangle"].includes(o.metadata?.graphicKind??""),corners:o.points as {x:number;y:number}[]}));
+    const featurePoint=snapDrawingPoint(rawPoint,targets,drawingSnaps,8/camera.zoom,anchor);
+    if(!anchor||!angleSnap||drawingAngleStep<=0)return featurePoint;
+    const dx=featurePoint.x-anchor.x,dy=featurePoint.y-anchor.y,r=Math.hypot(dx,dy),step=drawingAngleStep*Math.PI/180,a=Math.round(Math.atan2(dy,dx)/step)*step;
+    return {x:anchor.x+r*Math.cos(a),y:anchor.y+r*Math.sin(a)};
+  };
+
+  const finishGraphicPath=()=>{
+    const draft=graphicPathDraft;
+    if(!draft)return;
+    if(draft.points.length>=2&&onGraphicCreate){
+      const kind=draft.kind==="line"&&draft.points.length>2?"polyline":draft.kind;
+      onGraphicCreate({id:crypto.randomUUID(),view,kind,points:draft.points,color:"#253b4a",width:2});
+    }
+    setGraphicPathDraft(null);setGraphicStart(null);setGraphicPreview(null);
+  };
+
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if(event.button===0&&view==="drawing"&&tool==="select"&&(onFreeWireEndpointMove||onFreeWireEndpointsXChange)&&!onObjectPick){
       const p=screenToWorld(camera,localPoint(event.clientX,event.clientY));
@@ -3223,12 +3323,24 @@ export function CanvasViewport({
       if(hit){event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);freeEndDrag.current=hit;onObjectSelect(hit.wireId,false);return;}
     }
     setHoverTarget(null);
-    if(event.button===2)return;setPhysicalMenu(null);
+    if(event.button===2){
+      return;
+    }
+    setPhysicalMenu(null);
     if(event.button===0&&onObjectPick){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const selectable=objects.filter(o=>layers.some(l=>l.id===o.layerId&&!l.locked));
       onObjectPick(hitTestEditorScene(selectable,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl));
       return;
+    }
+    if(event.button===0&&tool==="select"&&!onObjectPick){
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const hit=hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
+      if(!hit){
+        event.currentTarget.setPointerCapture(event.pointerId);
+        selectionDragRef.current={pointerId:event.pointerId,start:point,clientX:event.clientX,clientY:event.clientY,mode:event.shiftKey?"add":event.ctrlKey||event.metaKey?"toggle":"replace"};
+        setSelectionRectangle({start:point,end:point});setSelectionCandidateIds([]);return;
+      }
     }
     if(event.button===0&&view==="drawing"&&tool==="position-rail"){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
@@ -3241,12 +3353,24 @@ export function CanvasViewport({
       setRailDraft(null);return;
     }
     if(event.button===0&&tool.startsWith("graphic-")&&onGraphicCreate){
-      const rawPoint=screenToWorld(camera,localPoint(event.clientX,event.clientY)),kind=tool.slice(8).replace("closed-contour","closedContour") as DrawingGraphicKind,targets:DrawingOutline[]=objects.filter(o=>o.points?.length).map(o=>({id:o.id,points:[...(o.points??[])],closed:["closedContour","ellipse","rectangle"].includes(o.metadata?.graphicKind??""),corners:o.points as {x:number;y:number}[],...(o.kind==="graphic-ellipse"&&Math.abs(o.width-o.height)<.01?{circle:{center:{x:o.x+o.width/2,y:o.y+o.height/2},radius:o.width/2}}:{})})),featurePoint=snapDrawingPoint(rawPoint,targets,drawingSnaps,8/camera.zoom,graphicPathDraft?.points.at(-1)??graphicStart),angleAnchor=graphicPathDraft?.points.at(-1)??graphicStart,point=angleAnchor&&drawingAngleStep>0?(()=>{const dx=featurePoint.x-angleAnchor.x,dy=featurePoint.y-angleAnchor.y,r=Math.hypot(dx,dy),step=drawingAngleStep*Math.PI/180,a=Math.round(Math.atan2(dy,dx)/step)*step;return{x:angleAnchor.x+r*Math.cos(a),y:angleAnchor.y+r*Math.sin(a)};})():featurePoint;
-      if(kind==="contact"||kind==="text"){const text=kind==="text"?window.prompt("Текст фигуры","Текст"):undefined;if(kind==="text"&&!text?.trim())return;onGraphicCreate({id:crypto.randomUUID(),view,kind,points:[point],...(kind==="text"?{text:text!.trim(),angle:0}:{}),color:"#253b4a",width:2});return;}
-      if(kind==="polyline"||kind==="closedContour"){const previous=graphicPathDraft?.points.at(-1),same=previous&&Math.hypot(previous.x-point.x,previous.y-point.y)<.01,next=graphicPathDraft?{...graphicPathDraft,points:same?graphicPathDraft.points:[...graphicPathDraft.points,point]}:{kind,points:[point]};setGraphicPathDraft(next);if(event.detail>=2&&next.points.length>=(kind==="closedContour"?3:2)){onGraphicCreate({id:crypto.randomUUID(),view,kind,points:next.points,color:"#253b4a",width:2});setGraphicPathDraft(null);}return;}
-      if(!graphicStart){setGraphicStart(point);return;}
-      const dx=point.x-graphicStart.x,dy=point.y-graphicStart.y,kindPoints=kind==="bezier"?[graphicStart,{x:graphicStart.x+dx/3,y:graphicStart.y+dy},{x:graphicStart.x+2*dx/3,y:graphicStart.y-dy},point]:[graphicStart,point];
-      onGraphicCreate({id:crypto.randomUUID(),view,kind,points:kindPoints,color:"#253b4a",width:2});setGraphicStart(null);return;
+      const rawPoint=screenToWorld(camera,localPoint(event.clientX,event.clientY)),kind=tool.slice(8).replace("closed-contour","closedContour") as DrawingGraphicKind,anchor=graphicPathDraft?.points.at(-1)??graphicStart??undefined,point=snapGraphicPoint(rawPoint,anchor,kind!=="rectangle"&&kind!=="ellipse");
+      if(kind==="contact"||kind==="text"){const text=kind==="text"?window.prompt("Текст фигуры","Текст"):undefined;if(kind==="text"&&!text?.trim())return;onGraphicCreate({id:crypto.randomUUID(),view,kind,points:[point],...(kind==="text"?{text:text!.trim(),angle:0,fontFamily:"Arial",fontSize:16}:{}),color:"#253b4a",width:2});return;}
+      if(kind==="line"||kind==="polyline"||kind==="closedContour"){
+        const previous=graphicPathDraft?.points.at(-1),same=previous&&Math.hypot(previous.x-point.x,previous.y-point.y)<.01;
+        if(graphicPathDraft&&same&&graphicPathDraft.points.length>=2){finishGraphicPath();return;}
+        const first=graphicPathDraft?.points[0],closes=first&&graphicPathDraft!.points.length>=2&&Math.hypot(first.x-point.x,first.y-point.y)<=8/camera.zoom;
+        if(closes){onGraphicCreate({id:crypto.randomUUID(),view,kind:"closedContour",points:[...graphicPathDraft!.points,first],color:"#253b4a",width:2});setGraphicPathDraft(null);setGraphicStart(null);setGraphicPreview(null);return;}
+        const next=graphicPathDraft?{...graphicPathDraft,points:same?graphicPathDraft.points:[...graphicPathDraft.points,point]}:{kind,points:[point]};
+        setGraphicPathDraft(next);setGraphicStart(next.points[0]??null);setGraphicPreview({id:"preview",view,kind:next.kind,points:[next.points[0]!,next.points[0]!],color:"#253b4a",width:2});return;
+      }
+      if(!graphicStart){setGraphicStart(point);setGraphicPreview({id:"preview",view,kind,points:[point,point],color:"#253b4a",width:2});return;}
+      const dx=point.x-graphicStart.x,dy=point.y-graphicStart.y;
+      if(kind==="rectangle"||kind==="ellipse"){
+        const radius=event.ctrlKey?Math.hypot(dx,dy):undefined,points=kind==="ellipse"?[{x:graphicStart.x-(radius??Math.abs(dx)),y:graphicStart.y-(radius??Math.abs(dy))},{x:graphicStart.x+(radius??Math.abs(dx)),y:graphicStart.y+(radius??Math.abs(dy))}]:[graphicStart,point];
+        onGraphicCreate({id:crypto.randomUUID(),view,kind,points,color:"#253b4a",width:2});setGraphicStart(null);setGraphicPreview(null);return;
+      }
+      const kindPoints=kind==="bezier"?[graphicStart,{x:graphicStart.x+dx/3,y:graphicStart.y+dy},{x:graphicStart.x+2*dx/3,y:graphicStart.y-dy},point]:[graphicStart,point];
+      onGraphicCreate({id:crypto.randomUUID(),view,kind,points:kindPoints,color:"#253b4a",width:2});setGraphicStart(null);setGraphicPreview(null);return;
     }
     if(event.button===0&&view==="drawing"&&tool==="wire"&&onPhysicalNodesConnect){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
@@ -3528,7 +3652,11 @@ export function CanvasViewport({
       const selectedObject = objects.find((item) => item.id === selectedObjectId);
       const preserveWireForRoutePoint = view === "drawing" && objectId === null &&
         (selectedObject?.kind === "wire" || selectedObject?.kind === "physical-segment") && onCanvasDoubleClick !== undefined;
-      if (!preserveWireForRoutePoint) onObjectSelect(objectId, event.ctrlKey || view!=="drawing"&&event.shiftKey);
+      if (!preserveWireForRoutePoint) {
+        const mode:EditorSelectionMode=event.shiftKey?"add":event.ctrlKey||event.metaKey?"toggle":"replace";
+        if(onObjectGroupSelect)onObjectGroupSelect(objectId?[objectId]:[],mode);
+        else onObjectSelect(objectId,mode==="toggle");
+      }
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
@@ -3554,6 +3682,21 @@ export function CanvasViewport({
   const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
   const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>(g.pointMarker?Math.hypot(point.x-g.point.x,point.y-g.point.y):pointToSegmentDistance(point,{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth}))<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(selectionDragRef.current?.pointerId===event.pointerId){
+      const drag=selectionDragRef.current,end=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const selection={start:drag.start,end};setSelectionRectangle(selection);
+      setSelectionCandidateIds(selectionRectangleObjectIds(objects,layers,selection));return;
+    }
+    if(graphicStart&&tool.startsWith("graphic-")&&["graphic-rectangle","graphic-ellipse","graphic-bezier"].includes(tool)){
+      const kind=tool.slice(8).replace("closed-contour","closedContour") as DrawingGraphicKind,point=snapGraphicPoint(screenToWorld(camera,localPoint(event.clientX,event.clientY)),graphicStart,kind!=="rectangle"&&kind!=="ellipse"),dx=point.x-graphicStart.x,dy=point.y-graphicStart.y;
+      if(kind==="rectangle"||kind==="ellipse"){
+        const radius=kind==="ellipse"&&event.ctrlKey?Math.hypot(dx,dy):undefined,points=kind==="ellipse"?[{x:graphicStart.x-(radius??Math.abs(dx)),y:graphicStart.y-(radius??Math.abs(dy))},{x:graphicStart.x+(radius??Math.abs(dx)),y:graphicStart.y+(radius??Math.abs(dy))}]:[graphicStart,point];
+        setGraphicPreview({id:"preview",view,kind,points,color:"#253b4a",width:2});
+      }
+    } else if(graphicPathDraft&&tool.startsWith("graphic-")&&["line","polyline","closedContour"].includes(graphicPathDraft.kind)){
+      const point=snapGraphicPoint(screenToWorld(camera,localPoint(event.clientX,event.clientY)),graphicPathDraft.points.at(-1));
+      setGraphicPreview({id:"preview",view,kind:graphicPathDraft.kind,points:[...graphicPathDraft.points,point],color:"#253b4a",width:2});
+    }
     if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;const raw=screenToWorld(camera,localPoint(event.clientX,event.clientY));if(d.group){for(const ref of d.group)onFreeWireEndpointPreview?.(ref.wireId,ref.end,{x:raw.x,y:ref.point.y});}else{const snapped=snapFreeWireEndpointX(raw,snapRefs,d.wireId,d.end,8/camera.zoom);onFreeWireEndpointPreview?.(d.wireId,d.end,snapped);}return;}
     if(railDraft&&view==="drawing"&&tool==="position-rail"){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),end=snapRailEnd(railDraft.start,point);
@@ -3623,6 +3766,13 @@ export function CanvasViewport({
   };
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(selectionDragRef.current?.pointerId===event.pointerId){
+      const drag=selectionDragRef.current,selection={start:drag.start,end:screenToWorld(camera,localPoint(event.clientX,event.clientY))},ids=selectionRectangleObjectIds(objects,layers,selection);
+      if(onObjectGroupSelect)onObjectGroupSelect(ids,drag.mode);
+      else if(drag.mode==="replace")onObjectSelect(ids.at(-1)??null,false);else for(const id of ids)onObjectSelect(id,drag.mode==="toggle");
+      setSelectionRectangle(null);setSelectionCandidateIds([]);selectionDragRef.current=null;
+      if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;
+    }
     if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;const raw=screenToWorld(camera,localPoint(event.clientX,event.clientY));if(d.group&&onFreeWireEndpointsXChange){for(const ref of d.group)onFreeWireEndpointPreview?.(ref.wireId,ref.end,null);onFreeWireEndpointsXChange([...new Set(d.group.map(ref=>ref.wireId))],d.end,raw.x);}else{const snapped=snapFreeWireEndpointX(raw,snapRefs,d.wireId,d.end,8/camera.zoom);onFreeWireEndpointPreview?.(d.wireId,d.end,null);onFreeWireEndpointMove?.(d.wireId,d.end,snapped);}if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current?.kind==="physical-node-connect") {
@@ -3718,6 +3868,7 @@ export function CanvasViewport({
   };
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(selectionDragRef.current?.pointerId===event.pointerId){selectionDragRef.current=null;setSelectionRectangle(null);setSelectionCandidateIds([]);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;for(const ref of d.group??[{wireId:d.wireId,end:d.end}])onFreeWireEndpointPreview?.(ref.wireId,ref.end,null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     setPhysicalGuide(undefined);
     if (dragRef.current?.pointerId !== event.pointerId) return;
@@ -3751,6 +3902,10 @@ export function CanvasViewport({
   const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
     if(onObjectPick)return;
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+    if(tool==="select"){
+      const objectId=hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl),object=objects.find(item=>item.id===objectId);
+      if(object?.metadata?.graphicKind==="text"){onObjectSelect(object.id,false);onObjectEditRequest?.(object.id);return;}
+    }
     if (view === "e4" && tool === "select" && onE4WireRoutePointRemove) {
       const selectedWire = objects.find((item) => item.id === selectedObjectId);
       const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
@@ -3928,6 +4083,7 @@ export function CanvasViewport({
         onDoubleClick={doubleClick}
         onContextMenu={event=>{
           if(onObjectPick){event.preventDefault();return;}
+          if(tool.startsWith("graphic-")&&graphicPathDraft){event.preventDefault();finishGraphicPath();return;}
           if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties&&!onObjectsIsolate&&!onDetachedPairAction&&!onFreeWireEndStyleRequest))return;
           event.preventDefault();
           setHoverTarget(null);
@@ -3951,6 +4107,8 @@ export function CanvasViewport({
           setPhysicalMenu({id:object.id,point,node:object.kind==="physical-node",x:event.clientX,y:event.clientY,isolationIds});
         }}
       />
+      {(graphicPathDraft?.points[0]??graphicStart)&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Первая точка фигуры"><circle cx={(graphicPathDraft?.points[0]??graphicStart)!.x*camera.zoom+camera.offsetX} cy={(graphicPathDraft?.points[0]??graphicStart)!.y*camera.zoom+camera.offsetY} r="4" fill="#fff" stroke="#1179ac" strokeWidth="2"/></svg>}
+      {selectionRectangle&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Рамка выделения"><rect x={Math.min(selectionRectangle.start.x,selectionRectangle.end.x)*camera.zoom+camera.offsetX} y={Math.min(selectionRectangle.start.y,selectionRectangle.end.y)*camera.zoom+camera.offsetY} width={Math.abs(selectionRectangle.end.x-selectionRectangle.start.x)*camera.zoom} height={Math.abs(selectionRectangle.end.y-selectionRectangle.start.y)*camera.zoom} fill="rgba(17,121,172,.10)" stroke="#1179ac" strokeWidth="1" strokeDasharray="5 3"/></svg>}
       {physicalGuide&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Привязка трассы"><polyline points={physicalGuide.map(p=>`${p.x*camera.zoom+camera.offsetX},${p.y*camera.zoom+camera.offsetY}`).join(" ")} fill="none" stroke="#ca5697" strokeWidth="1" strokeDasharray="5 4"/></svg>}
       {railDraft&&<svg style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}} aria-label="Предпросмотр линии позиций"><line x1={railDraft.start.x*camera.zoom+camera.offsetX} y1={railDraft.start.y*camera.zoom+camera.offsetY} x2={railDraft.end.x*camera.zoom+camera.offsetX} y2={railDraft.end.y*camera.zoom+camera.offsetY} stroke="#1179ac" strokeWidth="2" strokeDasharray="9 5 2 5"/><circle cx={railDraft.start.x*camera.zoom+camera.offsetX} cy={railDraft.start.y*camera.zoom+camera.offsetY} r="4" fill="#1179ac"/></svg>}
       {tool==="select" && onDrawingScale && objects.filter(o=>o.id===selectedObjectId&&o.kind==="connector"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(object=>{

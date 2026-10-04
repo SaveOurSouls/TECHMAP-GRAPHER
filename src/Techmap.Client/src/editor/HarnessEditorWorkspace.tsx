@@ -13,6 +13,7 @@ import {
   getVisibleCableSheathScene,
   type E4ConnectableEndpoint,
   type E4SceneOverlays,
+  type EditorSelectionMode,
 } from "./CanvasViewport";
 import type {
   ComponentTemplateViewInstance,
@@ -556,8 +557,11 @@ export function HarnessEditorWorkspace({
     onSelectedObjectIdsChange?.(nextIds);
   };
 
-  const selectObjectGroup = (objectIds: readonly string[]) => {
-    const next = reconcileWorkspaceGroupSelection(objectIds, objects);
+  const selectObjectGroup = (objectIds: readonly string[], mode:EditorSelectionMode="replace") => {
+    const incoming=reconcileWorkspaceGroupSelection(objectIds, objects).objectIds;
+    const current=selectedObjectIds.filter(id=>objects.some(object=>object.id===id));
+    const nextIds=mode==="replace"?incoming:mode==="add"?[...new Set([...current,...incoming])]:current.filter(id=>!incoming.includes(id)).concat(incoming.filter(id=>!current.includes(id)));
+    const next = reconcileWorkspaceGroupSelection(nextIds, objects);
     if (controlledSelectedObjectId === undefined) setLocalSelectedObjectId(next.primaryObjectId);
     if (controlledSelectedObjectIds === undefined) setLocalSelectedObjectIds(next.objectIds);
     onSelectedObjectChange?.(next.primaryObjectId);

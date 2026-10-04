@@ -275,6 +275,15 @@ describe("harness design scene adapter", () => {
     ]);
   });
 
+  it("removes all selected authored graphics with one persisted drawing-document command", () => {
+    const base=createEmptyHarnessDesign();
+    const document={...base,drawingDocuments:{tables:[],leaders:[],bomOrder:[],graphics:[
+      {id:"line",view:"e4" as const,kind:"line" as const,points:[{x:0,y:0},{x:10,y:0}]},
+      {id:"label",view:"e4" as const,kind:"text" as const,points:[{x:20,y:0}],text:"X"},
+    ]}};
+    expect(selectedEditorDeletionCommands(document,["line","label"])).toEqual([{type:"set-drawing-documents",documents:{...document.drawingDocuments,graphics:[]}}]);
+  });
+
   it("renders the same domain instances in E4 and drawing with separate positions", () => {
     const x1 = createConnector("x1", "X1", 2, { x: 10, y: 20 }, { x: 100, y: 120 });
     const x2 = createConnector("x2", "X2", 2, { x: 800, y: 20 }, { x: 500, y: 120 });

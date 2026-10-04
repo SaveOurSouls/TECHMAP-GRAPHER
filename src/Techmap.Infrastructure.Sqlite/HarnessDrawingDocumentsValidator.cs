@@ -99,6 +99,8 @@ internal static class HarnessDrawingDocumentsValidator
                 if(graphic.TryGetProperty("text",out var label) && (kind!="text"||label.ValueKind!=JsonValueKind.String||string.IsNullOrWhiteSpace(label.GetString())||label.GetString()!.Length>1024))throw Invalid();
                 if(kind=="text" && !graphic.TryGetProperty("text",out _))throw Invalid();
                 if(graphic.TryGetProperty("angle",out var angle) && (kind!="text"||angle.ValueKind!=JsonValueKind.Number||!angle.TryGetDouble(out var degrees)||!double.IsFinite(degrees)))throw Invalid();
+                if(graphic.TryGetProperty("fontFamily",out var fontFamily) && (kind!="text"||fontFamily.ValueKind!=JsonValueKind.String||string.IsNullOrWhiteSpace(fontFamily.GetString())||fontFamily.GetString()!.Length>128||fontFamily.GetString()!.Any(character=>!(char.IsLetterOrDigit(character)||character is '-' or ' ' or ','))))throw Invalid();
+                if(graphic.TryGetProperty("fontSize",out var fontSize) && (kind!="text"||fontSize.ValueKind!=JsonValueKind.Number||!fontSize.TryGetDouble(out var size)||!double.IsFinite(size)||size<6||size>144))throw Invalid();
                 if(graphic.TryGetProperty("color",out var color))
                 {
                     if(color.ValueKind!=JsonValueKind.String||color.GetString() is not {} hex||hex.Length!=7||hex[0]!='#'||hex.Skip(1).Any(c=>!Uri.IsHexDigit(c)))throw Invalid();

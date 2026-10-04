@@ -12,6 +12,7 @@ import { projectComponentTemplateView,type ComponentTemplateViewInstance } from 
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import type { WireDatabaseOption } from "./wire-database";
 import { WireDatabasePicker } from "./WireDatabasePicker";
+import { type DrawingGraphic, emptyDrawingDocuments } from "./drawing-documents";
 
 
 function WireMaterialPicker({document,wireId,options,onCommand}: {document:HarnessDesignDocument;wireId:string;options:readonly WireDatabaseOption[];onCommand:(command:EditorCommand)=>boolean}) {
@@ -35,10 +36,22 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
   onBundleEdit?:(id:string)=>void;
   wireMaterialOptions?:readonly WireDatabaseOption[];
 }) {
-  const t=document.physicalTopology,connector=document.connectors.find(c=>c.id===objectId),wire=document.wires.find(w=>w.id===objectId);
+  const t=document.physicalTopology,connector=document.connectors.find(c=>c.id===objectId),wire=document.wires.find(w=>w.id===objectId),graphic=document.drawingDocuments?.graphics?.find(item=>item.id===objectId);
   const joining=t?.joiningPipes?.find(p=>p.id===objectId), topology=t&&(t.nodes.some(n=>n.id===objectId)||t.segments.some(s=>s.id===objectId)||!!joining||wire);
   const cover=t?.coverings?.some(c=>c.id===objectId);
+  const changeGraphic=(patch:Partial<DrawingGraphic>)=>{
+    if(!graphic)return;
+    const documents=document.drawingDocuments??emptyDrawingDocuments();
+    onCommand({type:"set-drawing-documents",documents:{...documents,graphics:(documents.graphics??[]).map(item=>item.id===graphic.id?{...item,...patch}:item)}});
+  };
   return <>
+    {graphic?.kind==="text"&&<section className="he-context-fields" aria-label="Свойства текста">
+      <strong>Текст</strong>
+      <label>Текст<textarea aria-label="Текст фигуры" value={graphic.text??""} onChange={event=>changeGraphic({text:event.target.value})}/></label>
+      <label>Шрифт<select aria-label="Шрифт текста" value={graphic.fontFamily??"Arial"} onChange={event=>changeGraphic({fontFamily:event.target.value})}><option>Arial</option><option>Calibri</option><option>Times New Roman</option><option>Courier New</option></select></label>
+      <label>Размер<input aria-label="Размер шрифта" type="number" min={6} max={144} value={graphic.fontSize??16} onChange={event=>changeGraphic({fontSize:Number(event.target.value)})}/></label>
+      <label>Цвет<input aria-label="Цвет текста" type="color" value={graphic.color??"#253b4a"} onChange={event=>changeGraphic({color:event.target.value})}/></label>
+    </section>}
     {connector&&<section className="he-context-fields" aria-label="Рисунок соединителя">
       <strong>{connector.designation}</strong>
       <label>Масштаб<DrawingScaleControl value={drawingScale(connector.drawingPlacements)} label="Масштаб рисунка на чертеже" disabled={connector.libraryBinding?.mode!=="template"} onChange={scale=>onCommand({type:"set-drawing-placement",connectorId:objectId,drawingId:DRAWING_VIEW_PLACEMENT_ID,scale})}/></label>
