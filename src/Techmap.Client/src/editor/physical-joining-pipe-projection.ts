@@ -41,15 +41,28 @@ export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJ
   // Keep a member's cross-sectional lane tied to its physical position. The
   // draft order is an editing detail and must not decide which connector exits
   // above or below the other members.
-  const ordered=pipe.members.map((member,index)=>{
+  const candidates=pipe.members.map((member,index)=>{
     const route=joiningMemberPoints(document,member.segmentIds);
     const enter=member.reverse?route.at(-1)!:route[0]!;
     const exit=member.reverse?route[0]!:route.at(-1)!;
     const startOffset=(enter.x-axisStart.x)*startNormal.x+(enter.y-axisStart.y)*startNormal.y;
     const endOffset=(exit.x-axisEnd.x)*endNormal.x+(exit.y-axisEnd.y)*endNormal.y;
-    const key=(startOffset+endOffset)/2;
-    return {member,index,key};
-  }).sort((a,b)=>a.key-b.key||a.member.segmentIds.join("\u0000").localeCompare(b.member.segmentIds.join("\u0000")));
+    return {member,index,startOffset,endOffset,key:(startOffset+endOffset)/2};
+  });
+  // A lane is a longitudinal slot.  Sorting by the average of both exits is
+  // attractive for a symmetric pair, but it can put one member between two
+  // others when the connector order differs at the two ends.  That makes the
+  // transition shoulders cross (and leaves no simple contour for an OP shell).
+  // Choose the stable endpoint order with the fewest inversions; ties retain
+  // the old nearest-average ordering so ordinary drawings do not move.
+  const inversions=(items:readonly typeof candidates[number][],key:"startOffset"|"endOffset")=>{
+    let count=0;for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(items[i]![key]>items[j]![key]+1e-7)count++;return count;
+  };
+  const byAverage=[...candidates].sort((a,b)=>a.key-b.key||a.member.segmentIds.join("\u0000").localeCompare(b.member.segmentIds.join("\u0000")));
+  const byStart=[...candidates].sort((a,b)=>a.startOffset-b.startOffset||a.endOffset-b.endOffset||a.index-b.index);
+  const byEnd=[...candidates].sort((a,b)=>a.endOffset-b.endOffset||a.startOffset-b.startOffset||a.index-b.index);
+  const score=(items:readonly typeof candidates[number][])=>inversions(items,"startOffset")+inversions(items,"endOffset");
+  const ordered=[byAverage,byStart,byEnd].sort((a,b)=>score(a)-score(b)||Number(a!==byAverage)-Number(b!==byAverage))[0]!;
   // The OP lane is an independent physical object. A separately selected
   // covering on a member P must not resize the OP when its authored width is
   // edited; lower covering surfaces are handled by coveringScene itself.

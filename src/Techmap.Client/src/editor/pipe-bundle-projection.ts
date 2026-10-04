@@ -331,6 +331,11 @@ export function unprojectPipeBundleEdit(document: HarnessDesignDocument, segment
 /** Context actions target the segment under the pointer. Recover its authored
  * station, not the nearest point of an unrelated, unshifted centreline. */
 export function unprojectPipeBundlePoint(document:HarnessDesignDocument,segmentId:string,point:Point):Point {
+  // A joining pipe is already expressed in the displayed coordinate space.
+  // Context actions on an OP (for example adding a shell) must not run the
+  // ordinary member unprojection below: an OP has no authored segment path,
+  // and looking it up as one dereferences `undefined`.
+  if(document.physicalTopology?.joiningPipes?.some(pipe=>pipe.id===segmentId))return point;
   const samples=pipeBundleDisplaySamples(document,segmentId);if(!samples)return point;
   let nearest=Infinity,fraction=0;
   for(let i=1;i<samples.length;i++){

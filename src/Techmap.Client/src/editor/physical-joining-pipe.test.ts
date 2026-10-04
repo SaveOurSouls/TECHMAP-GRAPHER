@@ -16,7 +16,7 @@ import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./hist
 import {hitTestEditorScene,hitTestWireRoutePoint,numberedPipeBendHandles,pipeMidpoints} from "./CanvasViewport";
 import {coveringHit,coveringSurfaces} from "./covering-renderer";
 import {coveringGrips} from "./covering-renderer";
-import {coveringRoute} from "./physical-coverings";
+import {coveringRoute,standardCovering} from "./physical-coverings";
 import {drawingRouteCommands,drawingRouteHitPoints} from "./drawing-route-path";
 import {bendSnapAnchors,pipeBendSnapAnchors,physicalObjectRouteAnchors,joiningPipeEndpointSnapAnchors,snapBendPoint,snapPhysicalPoint} from "./physical-editing";
 import {unprojectPipeBundleEdit} from "./pipe-bundle-projection";
@@ -338,6 +338,30 @@ it("keeps each OP lane nearest to its connector when members are added above the
  const atMid=(id:string)=>joiningPipeDisplaySamples(document,id)!.reduce((best,current)=>
    Math.abs(current.fraction-.5)<Math.abs(best.fraction-.5)?current:best);
  expect(atMid("p1").point.y).toBeLessThan(atMid("p0").point.y);
+});
+
+it("keeps three shuffled member lanes ordered at both OP transitions and accepts an OP shell after reload",()=>{
+ const d=fixture();
+ const nodes=[
+  {id:"a0",position:{x:0,y:0}},{id:"b0",position:{x:600,y:0}},
+  {id:"a1",position:{x:0,y:-70}},{id:"b1",position:{x:600,y:-70}},
+  {id:"a2",position:{x:0,y:70}},{id:"b2",position:{x:600,y:70}},
+ ];
+ const source={...d,physicalTopology:{...d.physicalTopology!,nodes,segments:[
+  {id:"p0",from:"a0",to:"b0",path:{kind:"polyline" as const,points:[]}},
+  {id:"p1",from:"a1",to:"b1",path:{kind:"polyline" as const,points:[]}},
+  {id:"p2",from:"a2",to:"b2",path:{kind:"polyline" as const,points:[]}},
+ ],routes:[]}};
+ // Deliberately shuffled selection order must not become the visual lane order.
+ const op=createJoiningPipe(source,[["p2"],["p0"],["p1"]],"op");
+ const document={...source,physicalTopology:{...source.physicalTopology!,joiningPipes:[op]}};
+ const packing=joiningPipePacking(document,op);
+ const offsets=new Map(packing.members.map((member,index)=>[op.members[index]!.segmentIds[0]!,member.offset]));
+ expect(offsets.get("p1")!).toBeLessThan(offsets.get("p0")!);
+ expect(offsets.get("p0")!).toBeLessThan(offsets.get("p2")!);
+ const shell=standardCovering(document,"op",op.start,"Термоусадка","shell");
+ const saved=parseHarnessDesignDocument(JSON.parse(JSON.stringify({...document,physicalTopology:{...document.physicalTopology!,coverings:[shell]}})));
+ expect(saved.physicalTopology!.coverings![0]!.spans[0]!.segmentId).toBe("op");
 });
 
 it("keeps reversed OP members attached to the nearest connector at both ends",()=>{
