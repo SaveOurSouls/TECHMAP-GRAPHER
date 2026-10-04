@@ -269,6 +269,14 @@ describe("OP envelope contour", () => {
 });
 
 describe("OP continuation transverse fronts", () => {
+  it("uses the document OP edge allowance for support shoulders", () => {
+    const source = spanFixture(fixture(), 0, 1);
+    const narrow = coveringSurfaces(coveringScene({ ...source, drawingDocuments: { ...source.drawingDocuments!, opCoveringEdgePx: 0 } })[0]!)[0]!;
+    const wide = coveringSurfaces(coveringScene({ ...source, drawingDocuments: { ...source.drawingDocuments!, opCoveringEdgePx: 12 } })[0]!)[0]!;
+    const extent = (polygon: readonly Point[]) => Math.max(...polygon.map(point => point.y)) - Math.min(...polygon.map(point => point.y));
+    expect(extent(wide.polygon)).toBeGreaterThan(extent(narrow.polygon));
+  });
+
   it.each([["from", -.55, 1], ["to", 0, 1.7]] as const)("uses a straight common front at the mid-station %s boundary", (side, from, to) => {
     for (const reverse of [false, true]) {
       const document = spanFixture(fixture(reverse, side), from, to);

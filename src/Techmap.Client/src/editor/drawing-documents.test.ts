@@ -35,6 +35,13 @@ describe("authored canvas graphics",()=>{
 });
 
 describe("drawing tables and position leaders",()=>{
+ it("persists and validates the OP covering edge allowance",()=>{
+   const d=physicalFixture(), documents={...emptyDrawingDocuments(),opCoveringEdgePx:6};
+   const saved=parseHarnessDesignDocument(JSON.parse(JSON.stringify({...d,drawingDocuments:documents})));
+   expect(saved.drawingDocuments?.opCoveringEdgePx).toBe(6);
+   expect(()=>parseHarnessDesignDocument({...d,drawingDocuments:{...documents,opCoveringEdgePx:-1}})).toThrow();
+   expect(()=>parseHarnessDesignDocument({...d,drawingDocuments:{...documents,opCoveringEdgePx:25}})).toThrow();
+ });
  it.each([true,false])("preserves volume switch %s through command, JSON and undo",enabled=>{
    const original=physicalFixture();
    const history=executeEditorCommand(createEditorHistory(original),{type:"set-drawing-documents",documents:{...emptyDrawingDocuments(),volumeShading:enabled}});

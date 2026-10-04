@@ -231,7 +231,11 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    if(joining)for(let i=1;i<limits.length;i++){
     const start=limits[i-1]!,end=limits[i]!,mid=(start+end)/2;
     const lower=Math.max(0,...lowerOutsets.filter(item=>mid>item.from&&mid<item.to).map(item=>item.width));
-    const outset={from:start,to:end,width:Math.max(coveringClearance+growth,lower+coveringClearance)};
+    // Keep the OP transition shoulder deliberately small. The global control
+    // lets the drawing owner tune the extra edge allowance without changing
+    // authored widths or the pipe geometry.
+    const edgeAllowance=document.drawingDocuments?.opCoveringEdgePx??2;
+    const outset={from:start,to:end,width:Math.max(edgeAllowance+growth,lower+edgeAllowance)};
     outsets.push(outset);ownJoiningOutsets.push({segmentId:s.segmentId,outset});
    }
    const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets):[];
