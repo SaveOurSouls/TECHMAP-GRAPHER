@@ -1,6 +1,7 @@
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "../editor/model";
 import type { EditorSceneObject } from "../editor/editor-types";
 import type { WireBlankEnd } from "../WireBlankCatalog";
+import { dimensionRouteKey, type DrawingDimension } from "../editor/drawing-dimensions";
 
 export interface RouteDrawingCopy {
   readonly document: Omit<HarnessDesignDocument, "manufacturingRoute">;
@@ -83,7 +84,7 @@ export function createIndependentIsolatedDocument(
     wires,
     cables,
     junctions: [],
-    diffPairs: [],
+    diffPairs: source.diffPairs.filter(pair => pair.wireIds.every(id => wireSet.has(id))),
     screens: [],
     views: source.views,
     ...(source.customWireColors ? { customWireColors: source.customWireColors } : {}),
@@ -99,9 +100,30 @@ export function createIndependentIsolatedDocument(
       },
     } : {}),
   };
+  // Physical bends are deliberately removed, so partial source dimensions no
+  // longer have meaningful anchors. Keep each full wire measurement and bind
+  // it to the independent endpoints; otherwise show the saved wire length.
+  // These are annotations of the copy, never a new production measurement.
+  const dimensions: DrawingDimension[] = wires.map((wire, index) => {
+    const total = documents?.dimensions?.find(d => d.wireId === wire.id && d.from === 0 && d.to === d.pointCount - 1);
+    return {
+      id: total?.id ?? `isolated-dimension:${index}`,
+      wireId: wire.id, from: 0, to: 1, pointCount: 2,
+      routeKey: dimensionRouteKey(isolated, wire),
+      mode: total?.mode ?? documents?.dimensionMode ?? "aligned",
+      modeOverride: total?.modeOverride ?? false,
+      offset: total?.offset ?? 40 + index * 18,
+      lengthMm: total?.lengthMm ?? wire.lengthMm,
+      auxiliary: true,
+    };
+  });
+  const withDimensions: HarnessDesignDocument = { ...isolated, drawingDocuments: {
+    ...(isolated.drawingDocuments ?? { tables: [], leaders: [], bomOrder: [] }),
+    dimensions, showDimensions: documents?.showDimensions ?? true,
+  } };
   // parseHarnessDesignDocument normalizes defaults and validates that no
   // dangling source references survived the projection.
-  return parseHarnessDesignDocument(isolated);
+  return parseHarnessDesignDocument(withDimensions);
 }
 
 const maximumCopyBytes = 1024 * 1024;

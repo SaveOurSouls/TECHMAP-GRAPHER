@@ -21,6 +21,7 @@ export function dimensionRouteKey(document:HarnessDesignDocument,wire:WireInstan
   }):wire.drawingRoute.length]);
 }
 export function dimensionWirePoints(document:HarnessDesignDocument,wire:WireInstance):readonly Point[] {
+  if(wire.drawingEndpoints)return [wire.drawingEndpoints.from,...wire.drawingRoute,wire.drawingEndpoints.to];
   const a=findWireEndpoint(document,wire.from,"drawing"),b=findWireEndpoint(document,wire.to,"drawing");
   return a&&b?physicalWirePoints(document,wire.id,a,b)??[a,...wire.drawingRoute,b]:[];
 }
@@ -98,6 +99,9 @@ export function reconcileDrawingDimensions(before:HarnessDesignDocument,after:Ha
   });
   const measured={...after,drawingDocuments:{...after.drawingDocuments!,dimensions}};
   return {...measured,wires:after.wires.map(w=>{
+    // A route fragment's dimensions describe its illustration; its source
+    // manufacturing length remains the pinned production value.
+    if(w.drawingEndpoints)return w;
     const own=dimensions.filter(d=>d.wireId===w.id&&!d.auxiliary),shared=pipeMeasuredWireLength(measured,w.id);
     const affected=own.length||shared.managed||old.some(d=>d.wireId===w.id&&!d.auxiliary)||pipeMeasuredWireLength(before,w.id).managed;
     if(!affected)return w;
@@ -115,7 +119,7 @@ export function dimensionTargetPoints(document:HarnessDesignDocument,d:DrawingDi
  const segment=document.physicalTopology?.segments.find(s=>s.id===d.segmentId),wire=document.wires.find(w=>w.id===d.wireId);
  const controls=segment?physicalSegmentControls(document,segment):wire?dimensionWirePoints(document,wire):[];
  const points=controls.slice(d.from,d.to+1).map(p=>({...p}));if(points.length<2)return [];
- const ends=segment?[document.physicalTopology?.nodes.find(n=>n.id===segment.from)?.connectorId,document.physicalTopology?.nodes.find(n=>n.id===segment.to)?.connectorId]:[wire?.from.connectorId,wire?.to.connectorId];
+ const ends=segment?[document.physicalTopology?.nodes.find(n=>n.id===segment.from)?.connectorId,document.physicalTopology?.nodes.find(n=>n.id===segment.to)?.connectorId]:wire?.drawingEndpoints?[]:[wire?.from.connectorId,wire?.to.connectorId];
  if(d.from===0&&ends[0])points[0]=drawingConnectorCorner(document,ends[0],points[0]!,perimeters)??points[0]!;
  if(d.to===controls.length-1&&ends[1])points[points.length-1]=drawingConnectorCorner(document,ends[1],points.at(-1)!,perimeters)??points.at(-1)!;
  return points;

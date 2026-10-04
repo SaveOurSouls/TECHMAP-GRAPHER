@@ -102,7 +102,7 @@ describe("harness editor workspace", () => {
         onCancel: vi.fn(),
       },
     }));
-    expect(markup).toContain("Видимость объектов");
+    expect(markup).toContain('aria-label="Видимость фрагмента"');
     expect(markup).toContain('aria-label="Список материальных объектов"');
     expect(markup).toContain('aria-label="Соединители"');
     expect(markup).toContain('aria-label="Провода"');
@@ -1089,6 +1089,20 @@ it("releases drawing catalogue space while retaining document actions and E4 cat
  expect(drawing).toContain("Соединения");expect(drawing).not.toContain('class="he-catalog');
  const e4=renderToStaticMarkup(createElement(HarnessEditorWorkspace,{...props,view:"e4"}));
  expect(e4).toContain('class="he-catalog');
+});
+it("keeps detached wire end controls reachable at the top of local copy properties",()=>{
+ const freeWire:EditorSceneObject={id:"free-wire",layerId:"bottom",kind:"wire",label:"W-FREE",x:0,y:0,width:0,height:0,color:"#c00",points:[{x:0,y:0},{x:100,y:0}],metadata:{freeFrom:"true",freeTo:"false"},drawingEndStyles:{from:"copper",to:"sealed"}};
+ const relation=createElement("section",{"aria-label":"Large relation panel"},"Relation content");
+ const html=renderToStaticMarkup(createElement(HarnessEditorWorkspace,{
+  harnessId:"assembly-copy",harnessDesignation:"COPY",view:"drawing",objects:[freeWire],layers,
+  selectedObjectId:"free-wire",selectedObjectIds:["free-wire"],relationPanel:relation,
+  localCopyControls:{hiddenObjectIds:[],backgroundOpacity:0,onHiddenObjectIdsChange:vi.fn(),onBackgroundOpacityChange:vi.fn(),onCancel:vi.fn()},
+  onDrawingEndStyleChange:vi.fn(),onDrawingEndStylesChange:vi.fn(),onDrawingEndEndpointChange:vi.fn(),
+ }));
+ expect(html).toContain('aria-selected="true" class="active">Свойства</button>');
+ expect(html).toContain('aria-label="Оконцовки свободных проводов"');
+ expect(html.indexOf('aria-label="Оконцовки свободных проводов"')).toBeLessThan(html.indexOf('aria-label="Large relation panel"'));
+ expect(html).toContain('aria-label="W-FREE: режим from"');
 });
 it("marks the actual drawing contact coordinates at a constant screen size and skips absent contacts",()=>{
  const arc=vi.fn(),context={save:vi.fn(),restore:vi.fn(),beginPath:vi.fn(),arc,fill:vi.fn(),stroke:vi.fn()} as unknown as CanvasRenderingContext2D;

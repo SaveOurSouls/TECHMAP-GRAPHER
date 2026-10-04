@@ -54,6 +54,52 @@ it('does not offer isolation for service geometry alone', () => {
 });
 afterEach(()=>vi.unstubAllGlobals());
 
+it('opens the paired wire menu at its free endpoint despite a truncated painted stroke and overlapping dimension',()=>{
+ const action=vi.fn(),select=vi.fn();
+ const wire:EditorSceneObject={id:'W1',kind:'wire',layerId:'wires',label:'W1',x:0,y:0,width:0,height:0,color:'#222',points:[{x:20,y:50},{x:200,y:50}],visibleWireStrokes:[{points:[{x:20,y:50},{x:150,y:50}],width:2}],metadata:{detachedDrawing:'true',freeTo:'true',drawingPairId:'pair',drawingPairWireIds:JSON.stringify(['W1','W2'])}};
+ const other:EditorSceneObject={...wire,id:'W2',points:[{x:20,y:70},{x:200,y:70}],visibleWireStrokes:[]};
+ const dimension:EditorSceneObject={id:'D',kind:'dimension',layerId:'dimensions',label:'180',x:190,y:40,width:20,height:20,color:'#333',points:[{x:190,y:50},{x:210,y:50}]};
+ const props={view:'drawing' as const,tool:'select' as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[wire,other,dimension],layers:[{id:'dimensions',label:'Размеры',visible:true,locked:false},{id:'wires',label:'Провода',visible:true,locked:false}],selectedObjectId:'W1',selectedObjectIds:['W1'],onObjectSelect:select,onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onDetachedPairAction:action};
+ const render=()=>{hooks.index=0;return CanvasViewport(props);};
+ const canvas=(render().props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+ (canvas.props as any).onContextMenu({clientX:200,clientY:50,preventDefault:vi.fn()});
+ const find=(node:any):any=>{if(!node||typeof node!=='object')return undefined;if(node.type==='button'&&node.props.children==='Распрямить пару')return node;return [node.props?.children].flat(Infinity).map(find).find(Boolean);};
+ const button=find(render());
+ expect(button).toBeDefined();button.props.onClick();
+ expect(action).toHaveBeenCalledExactlyOnceWith(['W1','W2'],'straighten');
+ expect(select).not.toHaveBeenCalled();
+});
+
+it.each([false,true])('inserts a detached midpoint with independent anchors and Escape=%s rollback',cancel=>{
+ const move=vi.fn(),preview=vi.fn();
+ const points=[{x:20,y:50},{x:200,y:50}];
+ const wire:EditorSceneObject={id:'W',kind:'wire',layerId:'wires',label:'W',x:0,y:0,width:0,height:0,color:'#222',points,metadata:{detachedDrawing:'true'}};
+ const tree=CanvasViewport({view:'drawing',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[wire],layers:[{id:'wires',label:'Провода',visible:true,locked:false}],selectedObjectId:'W',onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onWireRoutePointMove:move,onWireRoutePointPreview:preview});
+ hooks.effects.forEach(effect=>effect());
+ const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+ const h=canvas.props as Record<string,(event:any)=>void>;
+ const target={style:{cursor:''},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ const e={pointerId:1,button:0,clientX:110,clientY:50,currentTarget:target,preventDefault:vi.fn()};
+ h.onPointerDown!(e);h.onPointerMove!({...e,clientY:80});
+ expect(preview).toHaveBeenLastCalledWith('W',0,{x:110,y:80},'adjacent',true);
+ if(cancel)keydown({key:'Escape'});
+ h.onPointerUp!({...e,clientY:80});
+ if(cancel)expect(move).not.toHaveBeenCalled();else expect(move).toHaveBeenCalledExactlyOnceWith('W',0,{x:110,y:80},'adjacent',true);
+ expect(points).toEqual([{x:20,y:50},{x:200,y:50}]);
+});
+
+it.each([true,false])('only drags explicitly free drawing endpoints (free=%s)',free=>{
+ const move=vi.fn(),preview=vi.fn();
+ const wire:EditorSceneObject={id:'W',kind:'wire',layerId:'wires',label:'W',x:0,y:0,width:0,height:0,color:'#222',points:[{x:20,y:50},{x:200,y:50}],metadata:{freeFrom:String(free)}};
+ const tree=CanvasViewport({view:'drawing',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[wire],layers:[{id:'wires',label:'Провода',visible:true,locked:false}],selectedObjectId:'W',onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onFreeWireEndpointMove:move,onFreeWireEndpointPreview:preview});
+ const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+ const h=canvas.props as Record<string,(event:any)=>void>;
+ const target={style:{cursor:''},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ const e={pointerId:1,button:0,clientX:20,clientY:50,currentTarget:target,preventDefault:vi.fn()};
+ h.onPointerDown!(e);h.onPointerMove!({...e,clientX:35,clientY:70});h.onPointerUp!({...e,clientX:35,clientY:70});
+ if(free){expect(move).toHaveBeenCalledExactlyOnceWith('W','from',{x:35,y:70});expect(preview).toHaveBeenLastCalledWith('W','from',null);}else expect(move).not.toHaveBeenCalled();
+});
+
 function fixture(){
   const move=vi.fn(),preview=vi.fn();
   const tree=CanvasViewport({view:"e4",tool:"select",camera:{zoom:1,offsetX:0,offsetY:0},objects:[connector],layers:[{id:"connectors",label:"Соединители",visible:true,locked:false}],selectedObjectId:"X",inlineEditor:"Table",onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onObjectSelect:vi.fn(),onObjectMove:move,onObjectMovePreview:preview});

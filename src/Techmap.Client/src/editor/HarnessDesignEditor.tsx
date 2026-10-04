@@ -4,6 +4,7 @@ import { orderPhysicalScene, physicalTopologyScene } from "./physical-scene";
 import { volumeShadingEligible } from "./volume-shading";
 import { unprojectPipeBundlePoint, pipeBundleNodePoint } from "./pipe-bundle-projection";
 import { resolvePhysicalRoutePointCommand } from "./physical-route-point-command";
+import { detachedWireBendInsertionIndex } from "./detached-wire-editing";
 import { coveringScene, moveCovering, type CoveringDragPart } from "./covering-layout";
 import { drawingWireWidth, drawingReferenceDiameter } from "./drawing-thickness";
 import { buildDrawingPerimeters, type DrawingPerimeters } from "./drawing-object-perimeter";
@@ -492,7 +493,7 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
+      ...(view === "drawing" ? {routeRadius:wire.drawingEndpoints ? 0 : drawingBendRadius(document)} : {}),
       ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute||wireDisplay.twisted?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       ...(view === "drawing" && wire.drawingEndStyles ? { drawingEndStyles: wire.drawingEndStyles } : {}),
@@ -510,6 +511,9 @@ export function designToScene(
         materialStatus: cutLength.materialConsumptionMm === null ? "excluded" : "included",
         freeFrom: String(!!wire.drawingEndpoints && !document.connectors.some(connector => connector.id === wire.from.connectorId)),
         freeTo: String(!!wire.drawingEndpoints && !document.connectors.some(connector => connector.id === wire.to.connectorId)),
+        detachedDrawing: String(!!wire.drawingEndpoints),
+        drawingPairId: document.diffPairs.find(pair => pair.wireIds.includes(wire.id))?.id ?? "",
+        drawingPairWireIds: JSON.stringify(document.diffPairs.find(pair => pair.wireIds.includes(wire.id))?.wireIds ?? []),
         materialSourceKey: wire.materialBinding?.sourceKey ?? "",
         materialRecordId: wire.materialBinding?.recordId ?? "",
         wireMark: [wire.from,wire.to].flatMap(end=>"connectorId" in end
@@ -534,7 +538,7 @@ export function designToScene(
     if (pair.some(wire => !wire || wire.metadata?.physicalRoute === "true")) continue;
     const twisted = freeTwistedPairPaths(group, pair.map(wire => ({
       id: wire!.id, points: wire!.points ?? [], width: Number(wire!.metadata?.drawingWidth ?? 2.5),
-    })), document.drawingDocuments?.physicalScale ?? 1);
+    })), document.drawingDocuments?.physicalScale ?? 1, group.wireIds.every(id => document.wires.find(w => w.id === id)?.drawingEndpoints));
     for (const wire of pair) {
       const display = twisted.get(wire!.id);
       if (!display) continue;
@@ -1228,8 +1232,13 @@ export function HarnessDesignEditor({
   const [coveringRatioPreview,setCoveringRatioPreview]=useState<number|null>(null);
   const [pairPitchPreview,setPairPitchPreview]=useState<{id:string;step:number}|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number};mode?:import("./physical-editing").PhysicalDragMode;insert?:boolean}|null>(null);
+  const [freeEndPreview,setFreeEndPreview]=useState<{wireId:string;end:"from"|"to";position:{x:number;y:number}}|null>(null);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
+    if(freeEndPreview){
+      try{return {document:applyEditorCommand(history.present,{type:"set-wire-drawing-endpoint",...freeEndPreview}),error:null};}
+      catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось переместить конец провода."};}
+    }
     if(pairPitchPreview)return {document:{...history.present,diffPairs:history.present.diffPairs.map(pair=>pair.id===pairPitchPreview.id?{...pair,step:pairPitchPreview.step}:pair)},error:null};
     if(bendRadiusPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius:bendRadiusPreview}},error:null};
     if(leaderScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale:leaderScalePreview}},error:null};
@@ -1244,6 +1253,10 @@ export function HarnessDesignEditor({
     if(pipePreview&&view==="e4"){
       try{return {document:applyEditorCommand(history.present,{type:"edit-e4-bend",wireId:pipePreview.id,index:pipePreview.index,position:pipePreview.point,mode:pipePreview.mode??"carry",insert:pipePreview.insert}),error:null};}
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб Э4."};}
+    }
+    if(pipePreview&&view==="drawing"&&history.present.wires.some(w=>w.id===pipePreview.id&&w.drawingEndpoints)){
+      try{return {document:applyEditorCommand(history.present,{type:"edit-detached-wire-bend",wireId:pipePreview.id,index:pipePreview.index,position:pipePreview.point,insert:pipePreview.insert}),error:null};}
+      catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось изменить перегиб."};}
     }
     if(pipePreview&&history.present.physicalTopology) {
       try{const command=resolvePhysicalRoutePointCommand(history.present,pipePreview.id,pipePreview.index,pipePreview.point,pipePreview.mode,pipePreview.insert);
@@ -1298,7 +1311,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, indexScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
+  }, [history, movePreview, view, pipePreview, freeEndPreview, drawingPerimeters, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, indexScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1816,6 +1829,13 @@ export function HarnessDesignEditor({
     if (topology && segment) return;
     const wire = history.present.wires.find((item) => item.id === selectedObjectId);
     if (!wire || topology?.routes.some(r => r.wireId === wire.id)) return;
+    if(wire.drawingEndpoints){
+      const index=detachedWireBendInsertionIndex(wire,point);
+      const anchor=index===0?wire.drawingEndpoints.from:wire.drawingRoute[index-1]!;
+      const next=snapRoutePoint(anchor,point,ctrlKey,Math.PI/12);
+      run({type:"edit-detached-wire-bend",wireId:wire.id,index,position:next,insert:true});
+      return;
+    }
     const renderedWire = scene.find((item) => item.id === wire.id);
     const start = wire.drawingRoute.at(-1) ?? renderedWire?.points?.[0] ??
       findWireEndpoint(history.present, wire.from, "drawing");
@@ -2428,7 +2448,10 @@ export function HarnessDesignEditor({
             run({ type: "remove-screen", screenId: screen.id });
           }
         }}
-        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.physicalTopology?.segments.some(s=>s.id===id)||history.present.physicalTopology?.joiningPipes?.some(p=>p.id===id))?{id,index,point,mode,insert}:null)}
+        onFreeWireEndpointMove={(wireId,end,position)=>{setFreeEndPreview(null);run({type:"set-wire-drawing-endpoint",wireId,end,position});}}
+        onFreeWireEndpointPreview={(wireId,end,position)=>setFreeEndPreview(position?{wireId,end,position}:null)}
+        onDetachedPairAction={(wireIds,action)=>run({type:"set-detached-wire-pair",wireIds,action})}
+        onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.wires.some(w=>w.id===id&&w.drawingEndpoints)||history.present.physicalTopology?.segments.some(s=>s.id===id)||history.present.physicalTopology?.joiningPipes?.some(p=>p.id===id))?{id,index,point,mode,insert}:null)}
         onWireRoutePointMove={(wireId, routeIndex, point, mode="carry", insert=false) => {
           if(view==="e4"){run({type:"edit-e4-bend",wireId,index:routeIndex,position:point,mode,insert});return;}
           const topology = history.present.physicalTopology;
@@ -2437,6 +2460,7 @@ export function HarnessDesignEditor({
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) {const command=resolvePhysicalRoutePointCommand(history.present,wireId,routeIndex,point,mode,insert);if(command)run(command);return;}
           const wire = history.present.wires.find((item) => item.id === wireId);
+          if(wire?.drawingEndpoints){run({type:"edit-detached-wire-bend",wireId,index:routeIndex,position:point,insert});return;}
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           const route = wire.drawingRoute.map((item, index) => index === routeIndex ? point : item);
           run({ type: "set-wire-route", wireId, route });
@@ -2451,6 +2475,7 @@ export function HarnessDesignEditor({
             const authoredIndex=sceneObject?.pipe?.authoredHandleIndices?.[routeIndex];if(authoredIndex===-1)return;
             run({type:"remove-physical-bend",segmentId:wireId,index:(authoredIndex??routeIndex+1)-1}); return; }
           const wire = history.present.wires.find((item) => item.id === wireId);
+          if(wire?.drawingEndpoints){run({type:"remove-detached-wire-bend",wireId,index:routeIndex});return;}
           if (!wire || routeIndex < 0 || routeIndex >= wire.drawingRoute.length) return;
           run({ type: "set-wire-route", wireId, route: wire.drawingRoute.filter((_, index) => index !== routeIndex) });
         }}

@@ -94,3 +94,25 @@ it("keeps both leads visible when the common straight section covers only part o
   expect(first.strokes[0]!.radius).toBeUndefined();
   expect(first.strokes.at(-1)!.radius).toBeUndefined();
 });
+
+it("keeps a visible twist after one polyline bend moves and preserves both end coordinates", () => {
+  const wires = [
+    { id: "W1", points: [{ x: 0, y: 0 }, { x: 60, y: 45 }, { x: 120, y: 0 }], width: 2.5 },
+    { id: "W2", points: [{ x: 0, y: 14 }, { x: 60, y: 14 }, { x: 120, y: 14 }], width: 2.5 },
+  ];
+  const before = structuredClone(wires), result = freeTwistedPairPaths(group, wires, 1, true);
+  expect(result.size).toBe(2);
+  for (const wire of wires) {
+    const display = result.get(wire.id)!;
+    expect(display.path[0]!.x).toBeCloseTo(wire.points[0]!.x);
+    expect(display.path[0]!.y).toBeCloseTo(wire.points[0]!.y);
+    expect(display.path.at(-1)!.x).toBeCloseTo(wire.points.at(-1)!.x);
+    expect(display.path.at(-1)!.y).toBeCloseTo(wire.points.at(-1)!.y);
+    expect(display.strokes.length).toBeGreaterThan(2);
+    expect(display.strokes.every(stroke => stroke.radius === 0)).toBe(true);
+  }
+  expect(wires).toEqual(before);
+  const reversed = freeTwistedPairPaths(group, [wires[0]!, { ...wires[1]!, points: [...wires[1]!.points].reverse() }], 1, true);
+  expect(reversed.get("W2")!.path[0]!.x).toBeCloseTo(120);
+  expect(reversed.get("W2")!.path.at(-1)!.x).toBeCloseTo(0);
+});

@@ -2,6 +2,29 @@ import { expect, it } from "vitest";
 import { physicalFixture } from "../editor/physical-topology-fixture";
 import { createIndependentIsolatedDocument, createRouteDrawingCopy, legacyRouteDrawingCopyWarnings, migrateLegacyRouteDrawingCopy, parseRouteDrawingCopy } from "./route-drawing-copy";
 import { designToScene } from "../editor/HarnessDesignEditor";
+import { dimensionRouteKey } from "../editor/drawing-dimensions";
+import { applyEditorCommand } from "../editor/commands";
+
+it("keeps complete pairs and rebinds dimensions through bends, free end movement and reopen", () => {
+  const base = physicalFixture();
+  const source = { ...base, diffPairs: [{ id: "pair", wireIds: ["W1", "W2"] as const, step: 40, amplitude: 8, variant: 2 as const }],
+    wires: base.wires.map(w => ({ ...w, lengthMm: 385 })) };
+  const before = structuredClone(source);
+  const isolated = createIndependentIsolatedDocument(source, designToScene(source, "drawing"), ["W1", "W2"])!;
+  expect(isolated.diffPairs).toEqual(source.diffPairs);
+  expect(designToScene(isolated, "drawing").filter(o => o.kind === "dimension")).toHaveLength(2);
+  expect(designToScene(isolated, "drawing").find(o => o.id === "W1")!.visibleWireStrokes!.length).toBeGreaterThan(2);
+  const bent = applyEditorCommand(isolated, { type: "edit-detached-wire-bend", wireId: "W1", index: 0, position: { x: 300, y: 190 }, insert: true });
+  const moved = applyEditorCommand(bent, { type: "set-wire-drawing-endpoint", wireId: "W1", end: "to", position: { x: 800, y: 40 } });
+  const reopened = parseRouteDrawingCopy(JSON.parse(JSON.stringify(createRouteDrawingCopy(moved)))).document;
+  expect(reopened.diffPairs).toEqual(source.diffPairs);
+  expect(reopened.drawingDocuments!.dimensions![0]).toMatchObject({ pointCount: 3, to: 2, routeKey: dimensionRouteKey(reopened, reopened.wires[0]!), lengthMm: 385 });
+  expect(designToScene(reopened, "drawing").filter(o => o.kind === "dimension")).toHaveLength(2);
+  expect(reopened.wires[0]!.drawingEndpoints!.to).toEqual({ x: 800, y: 40 });
+  expect(reopened.wires.map(w => w.lengthMm)).toEqual([385, 385]);
+  expect(createIndependentIsolatedDocument(source, designToScene(source, "drawing"), ["W1"])!.diffPairs).toEqual([]);
+  expect(source).toEqual(before);
+});
 
 it("migrates legacy visibility and authored P geometry without changing source lengths", () => {
   const source = physicalFixture();

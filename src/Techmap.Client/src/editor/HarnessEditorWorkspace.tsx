@@ -190,6 +190,9 @@ export interface HarnessEditorWorkspaceProps {
   readonly onDrawingEndStylesChange?: (wireIds: readonly string[], end: "from" | "to", style: WireBlankEnd) => void;
   readonly onDrawingEndEndpointChange?: (wireId: string, end: "from" | "to", position: EditorPoint) => void;
   readonly onDrawingEndBulkXChange?: (wireIds: readonly string[], end: "from" | "to", x: number) => void;
+  readonly onFreeWireEndpointMove?: (wireId: string, end: "from" | "to", point: EditorPoint) => void;
+  readonly onFreeWireEndpointPreview?: (wireId: string, end: "from" | "to", point: EditorPoint | null) => void;
+  readonly onDetachedPairAction?: (wireIds: readonly string[], action: "twist" | "straighten") => void;
   readonly objectProperties?:(objectId:string)=>ReactNode;
   readonly onObjectPick?:(objectId:string|null)=>void;
   readonly onObjectPickCancel?:()=>void;
@@ -335,6 +338,9 @@ export function HarnessEditorWorkspace({
   onDrawingEndStylesChange,
   onDrawingEndEndpointChange,
   onDrawingEndBulkXChange,
+  onFreeWireEndpointMove,
+  onFreeWireEndpointPreview,
+  onDetachedPairAction,
   objectProperties, onRelatedObjectsSelect,
   onObjectMove,
   onObjectMovePreview, onDrawingMove, onDrawingScale,
@@ -376,7 +382,8 @@ export function HarnessEditorWorkspace({
   const [localSelectedObjectIds, setLocalSelectedObjectIds] = useState<readonly string[]>(["W1"]);
   const [camera, setCamera] = useState(initialCamera);
   const [viewportSize, setViewportSize] = useState<EditorViewportSize>({ width: 860, height: 560 });
-  const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">(localCopyControls ? "layers" : "properties");
+  const [inspectorTab, setInspectorTab] = useState<"properties" | "layers">("properties");
+  const [freeWireEndFocus, setFreeWireEndFocus] = useState<{ readonly wireId: string; readonly end: "from" | "to"; readonly requestId: number } | null>(null);
   const [catalogExpanded, setCatalogExpanded] = useState(true);
   const [utilityPanelOpen, setUtilityPanelOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 1100);
@@ -426,6 +433,29 @@ export function HarnessEditorWorkspace({
   );
   const selectedLayer = layers.find((layer) => layer.id === selectedObject?.layerId);
   const selectedWireIds = selectedObjectIds.filter((id) => objects.some((object) => object.id === id && object.kind === "wire"));
+  const selectedFreeWireKey = selectedWireIds.filter(id => {
+    const object = objects.find(item => item.id === id);
+    return object?.metadata?.freeFrom === "true" || object?.metadata?.freeTo === "true";
+  }).join("\u0000");
+  useEffect(() => {
+    if (view === "drawing" && selectedFreeWireKey) {
+      setInspectorOpen(true);
+      if (typeof window !== "undefined" && window.innerWidth <= 1100) {
+        setUtilityPanelOpen(false);
+        setMaterialPanelOpen(false);
+      }
+    }
+  }, [selectedFreeWireKey, view]);
+  const requestFreeWireEndStyle = (wireId: string, end: "from" | "to") => {
+    selectObject(wireId);
+    setInspectorTab("properties");
+    setInspectorOpen(true);
+    setFreeWireEndFocus(current => ({ wireId, end, requestId: (current?.requestId ?? 0) + 1 }));
+    if (window.innerWidth <= 1100) {
+      setMaterialPanelOpen(false);
+      setUtilityPanelOpen(false);
+    }
+  };
   const selectedDiffPair = e4Overlays?.diffPairs.find((group) =>
     group.wireIds.length === selectedWireIds.length && group.wireIds.every((id) => selectedWireIds.includes(id))) ?? null;
   const selectedScreen = e4Overlays?.screens.find((group) =>
@@ -638,6 +668,21 @@ export function HarnessEditorWorkspace({
             <span aria-hidden="true">{utilityPanelOpen ? "‹" : "›"}</span>
             <span>{utilityPanelOpen ? "Скрыть панель" : "Параметры"}</span>
           </button>
+          {localCopyControls && <button
+            className="he-copy-objects-toggle"
+            type="button"
+            aria-label={materialPanelOpen ? "Скрыть объекты" : "Показать объекты"}
+            title={materialPanelOpen ? "Скрыть объекты" : "Показать объекты"}
+            aria-expanded={materialPanelOpen}
+            aria-controls="he-material-panel"
+            onClick={() => {
+              setMaterialPanelOpen(open => !open);
+              if (window.innerWidth <= 1100) {
+                setInspectorOpen(false);
+                setUtilityPanelOpen(false);
+              }
+            }}
+          >Объекты</button>}
           <div className="he-utility-content" id="he-utility-content" hidden={!utilityPanelOpen}>
             <div className="he-view-options">
               <InfoHint>Перемещайте точки свободно. Удерживайте Ctrl для привязки к углам с шагом 30°. Shift меняет редактирование соседних плеч; Ctrl и Shift можно удерживать вместе.</InfoHint>
@@ -730,6 +775,10 @@ export function HarnessEditorWorkspace({
           onPhysicalContextAction={onPhysicalContextAction}
           onPhysicalNodesConnect={onPhysicalNodesConnect}
           onPhysicalNodeConnectToSegment={onPhysicalNodeConnectToSegment}
+          onFreeWireEndpointMove={onFreeWireEndpointMove ?? onDrawingEndEndpointChange}
+          onFreeWireEndpointPreview={onFreeWireEndpointPreview}
+          onDetachedPairAction={onDetachedPairAction}
+          onFreeWireEndStyleRequest={requestFreeWireEndStyle}
           onCatalogDrop={droppedCatalogItem}
           inlineEditor={canvasEditor}
         />
@@ -744,8 +793,8 @@ export function HarnessEditorWorkspace({
             <button type="button" role="tab" aria-selected={inspectorTab === "layers"} className={inspectorTab === "layers" ? "active" : ""} onClick={() => setInspectorTab("layers")}>Слои <span>{layers.length}</span></button>
           </div>
           <div className="he-inspector-content">
+            {view === "drawing" && onDrawingEndStyleChange && onDrawingEndStylesChange && onDrawingEndEndpointChange && <FreeWireEndsPanel objects={objects} selectedIds={selectedObjectIds} disabled={selectedWireIds.some(id => layers.some(layer => layer.locked && layer.id === objects.find(object => object.id === id)?.layerId))} onStyle={onDrawingEndStyleChange} onStyles={onDrawingEndStylesChange} onEndpoint={onDrawingEndEndpointChange} onBulkX={onDrawingEndBulkXChange} focusTarget={freeWireEndFocus} />}
             {typeof relationPanel==="function"?relationPanel(tool,setTool):relationPanel}
-            {view === "drawing" && inspectorTab === "properties" && onDrawingEndStyleChange && onDrawingEndStylesChange && onDrawingEndEndpointChange && <FreeWireEndsPanel objects={objects} selectedIds={selectedObjectIds} disabled={selectedWireIds.some(id => layers.some(layer => layer.locked && layer.id === objects.find(object => object.id === id)?.layerId))} onStyle={onDrawingEndStyleChange} onStyles={onDrawingEndStylesChange} onEndpoint={onDrawingEndEndpointChange} onBulkX={onDrawingEndBulkXChange} />}
             {inspectorTab === "properties" ? (
               propertyInspector ?? (
                 <ObjectInspector

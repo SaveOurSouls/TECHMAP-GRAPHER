@@ -734,3 +734,57 @@
 .he-document-table table[aria-label="Спецификация"] input { box-sizing: border-box; width: 100% !important; min-width: 0; max-width: none; }
 .he-connection-wire-suggestions { max-height: 240px !important; overflow-y: scroll !important; scrollbar-gutter: stable; }
 .he-connection-suggestion-count { display: block; padding: 5px 8px; border-bottom: 1px solid #dce8ed; background: #f5fafb; color: #607985; font-size: 10px; white-space: nowrap; }
+
+/* REQ-096 independent fragment controls */
+.he-workspace { --material-width:220px; grid-template-columns:54px var(--utility-width,244px) minmax(0,1fr) var(--inspector-width,270px) var(--material-width); }
+.he-workspace.he-material-closed { --material-width:0px; }
+.he-material-panel { grid-column:5; grid-row:1 / -1; min-width:0; min-height:0; overflow:auto; border-left:1px solid var(--he-line); background:#fff; }
+.he-material-panel[hidden] { display:none; }
+.he-copy-objects-toggle { width:100%; min-height:34px; padding:0 10px; border:0; border-bottom:1px solid var(--he-line); background:#f7fafb; color:#31576b; font:650 10px Arial,sans-serif; text-align:left; cursor:pointer; }
+.he-copy-objects-toggle:hover,.he-copy-objects-toggle[aria-expanded="true"] { background:#eaf5f8; color:#08749c; }
+.he-copy-objects-toggle:focus-visible { outline:2px solid #4e9dbc; outline-offset:-2px; }
+.he-utility-panel:not(.open) .he-copy-objects-toggle { width:32px; height:32px; min-height:32px; align-self:center; padding:0; border:1px solid #cddde4; border-radius:4px; font-size:0; text-align:center; }
+.he-utility-panel:not(.open) .he-copy-objects-toggle::before { content:"▤"; font-size:15px; }
+.he-material-objects { min-width:0; padding:4px 9px 10px; display:grid; gap:7px; overflow-x:hidden; }
+.he-material-objects-title { margin:0; color:#284f63; font-size:12px; }
+.he-material-group { min-width:0; display:grid; gap:3px; }
+.he-material-group-title { min-width:0; margin:0; padding:5px 1px 4px; display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #e1e9ed; color:#486575; font-size:10px; font-weight:750; }
+.he-material-group-title span { flex:0 0 auto; color:#87959c; font-size:9px; font-weight:500; }
+.he-material-list { min-width:0; margin:0; padding:0; display:grid; gap:1px; list-style:none; }
+.he-material-row { min-width:0; min-height:31px; padding:2px 3px; display:grid; grid-template-columns:minmax(0,1fr) 24px; align-items:center; gap:5px; border-bottom:1px solid #edf1f3; }
+.he-material-row.is-selected { border-radius:3px; background:#edf7fa; }
+.he-material-row.is-hidden .he-material-select { color:#98a5aa; }
+.he-material-select { min-width:0; overflow:hidden; padding:5px 4px; border:0; border-radius:3px; background:transparent; color:#345669; font:600 10px Arial,sans-serif; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.he-material-select:hover { background:#f2f7f9; }
+.he-material-select:focus-visible { outline:2px solid #4e9dbc; outline-offset:1px; }
+.he-material-select[aria-pressed="true"] { color:#086d9a; }
+.he-material-name { min-width:0; min-height:27px; display:grid; place-items:center; cursor:pointer; }
+.he-material-name input { box-sizing:border-box; width:15px; height:15px; margin:0; accent-color:#087bad; }
+.he-material-name input:focus-visible { outline:2px solid #4e9dbc; outline-offset:2px; }
+.he-free-wire-ends { min-width:0; margin:8px; padding:9px; display:grid; gap:7px; border:1px solid #b8d5e1; border-left:3px solid #087bad; border-radius:5px; background:#f5fafc; }
+.he-free-wire-heading { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.he-free-wire-heading h3 { min-width:0; margin:0; color:#244d61; font-size:11px; }
+.he-free-wire-heading > span { flex:0 0 auto; min-width:20px; padding:2px 5px; border-radius:10px; background:#e2f0f5; color:#35667a; font-size:9px; text-align:center; }
+.he-free-wire-row { min-width:0; padding:6px; display:grid; gap:5px; border:1px solid #dce8ed; border-radius:4px; background:#fff; }
+.he-free-wire-row > strong { min-width:0; overflow:hidden; color:#31566a; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.he-free-wire-end { min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:4px 6px; color:#536e7c; font-size:9px; }
+.he-free-wire-end-label { grid-row:1 / 3; }
+.he-free-wire-end select { box-sizing:border-box; width:100%; min-width:0; height:27px; padding:2px 5px; border:1px solid #cbdbe2; border-radius:4px; background:#fff; color:#294e61; font-size:10px; }
+.he-free-wire-end select:focus-visible,.he-free-wire-coordinates input:focus-visible,.he-free-wire-bulk select:focus-visible,.he-free-wire-bulk input:focus-visible { outline:2px solid #4e9dbc; outline-offset:1px; }
+.he-free-wire-coordinates { min-width:0; display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.he-free-wire-coordinates input,.he-free-wire-bulk input { box-sizing:border-box; width:100%; min-width:0; height:25px; padding:2px 5px; border:1px solid #d3e0e5; border-radius:4px; color:#36586a; font-size:9px; }
+.he-free-wire-bulk { min-width:0; padding-top:6px; display:grid; gap:5px; border-top:1px solid #d9e7ed; }
+.he-free-wire-bulk > strong { color:#486878; font-size:9px; }
+.he-free-wire-bulk > div { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 68px; gap:5px; }
+.he-free-wire-bulk select { min-width:0; height:27px; padding:2px 5px; border:1px solid #cbdbe2; border-radius:4px; background:#fff; color:#294e61; font-size:9px; }
+.he-free-wire-ends :disabled { opacity:.55; }
+@media(max-width:1100px) {
+  .he-workspace { --utility-width:42px; --inspector-width:0px; --material-width:0px; grid-template-columns:54px 42px minmax(0,1fr) 0px 0px; }
+  .he-material-panel:not([hidden]) { position:absolute; grid-column:1 / -1; inset:0 0 0 auto; z-index:26; width:min(220px,calc(100% - 42px)); box-shadow:-5px 0 20px #193d5026; }
+  .he-right-panel { grid-column:1 / -1; }
+  .he-utility-panel.open { grid-column:1 / -1; }
+}
+@media(max-width:650px) {
+  .he-workspace { grid-template-columns:44px 30px minmax(0,1fr) 0px 0px; }
+  .he-material-panel:not([hidden]) { width:min(220px,calc(100% - 30px)); }
+}

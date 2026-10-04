@@ -90,9 +90,10 @@ export function freeTwistedPairPaths(
   group: DiffPairGroup,
   wires: readonly { id: string; points: readonly Point[]; width: number }[],
   physicalScale = 1,
+  allowPolylineFallback = false,
 ): ReadonlyMap<string, TwistedPairPath> {
   const span = commonParallelSpan(wires);
-  if (!span || span.end - span.start < Math.max(16, group.step * physicalScale * .8)) return new Map();
+  if (!span || span.end - span.start < Math.max(16, group.step * physicalScale * .8)) return allowPolylineFallback ? bentPairPaths(group, wires, physicalScale) : new Map();
   const firstCross = parallelSpanLocal(span, span.segmentByWireId[group.wireIds[0]]!.start).y;
   const secondCross = parallelSpanLocal(span, span.segmentByWireId[group.wireIds[1]]!.start).y;
   const middle = (firstCross + secondCross) / 2;
@@ -120,5 +121,54 @@ export function freeTwistedPairPaths(
       ...(after.length ? [{ width: wire.width, points: [path.at(-1)!, ...after] }] : []),
     ];
     return [[wire.id, { path: full, strokes }]] as const;
+  }));
+}
+
+/** Follow two independently authored polylines when a moved bend removes the
+ * exact parallel span. Matching positions by route length keeps both endpoints
+ * anchored and needs no spline or mutation of the editable bend controls. */
+function bentPairPaths(
+  group: DiffPairGroup,
+  wires: readonly { id: string; points: readonly Point[]; width: number }[],
+  physicalScale: number,
+): ReadonlyMap<string, TwistedPairPath> {
+  const ordered = group.wireIds.map(id => wires.find(wire => wire.id === id));
+  if (ordered.some(wire => !wire || wire.points.length < 2)) return new Map();
+  const first = ordered[0]!, second = ordered[1]!;
+  const a0 = first.points[0]!, a1 = first.points.at(-1)!;
+  const b0 = second.points[0]!, b1 = second.points.at(-1)!;
+  const direct = Math.hypot(a0.x - b0.x, a0.y - b0.y) + Math.hypot(a1.x - b1.x, a1.y - b1.y);
+  const reverse = Math.hypot(a0.x - b1.x, a0.y - b1.y) + Math.hypot(a1.x - b0.x, a1.y - b0.y) < direct;
+  const secondPoints = reverse ? [...second.points].reverse() : second.points;
+  const bs = secondPoints[0]!, be = secondPoints.at(-1)!;
+  const ax = a1.x - a0.x, ay = a1.y - a0.y, bx = be.x - bs.x, by = be.y - bs.y;
+  const heading = Math.hypot(ax, ay) * Math.hypot(bx, by);
+  if (heading < 1e-6 || (ax * bx + ay * by) / heading < .7) return new Map();
+  const parameterize = (points: readonly Point[]) => {
+    const lengths = [0];
+    for (let index = 1; index < points.length; index++) lengths.push(lengths.at(-1)! + Math.hypot(points[index]!.x - points[index - 1]!.x, points[index]!.y - points[index - 1]!.y));
+    const length = lengths.at(-1)!;
+    return { length, at: (fraction: number): Point => {
+      const distance = Math.max(0, Math.min(1, fraction)) * length;
+      const found = lengths.findIndex(value => value > distance);
+      const index = found < 0 ? points.length - 2 : Math.max(0, found - 1);
+      const start = points[index]!, end = points[index + 1]!;
+      const t = (distance - lengths[index]!) / (lengths[index + 1]! - lengths[index]! || 1);
+      return { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t };
+    } };
+  };
+  const a = parameterize(first.points), b = parameterize(secondPoints);
+  const length = (a.length + b.length) / 2;
+  if (Math.min(a.length, b.length) < Math.max(16, group.step * physicalScale * .8)) return new Map();
+  // Degenerate coincident wires have no visible separation to interchange.
+  if ([0, .25, .5, .75, 1].every(t => Math.hypot(a.at(t).x - b.at(t).x, a.at(t).y - b.at(t).y) < 1e-6)) return new Map();
+  return new Map(ordered.flatMap((wire, index) => {
+    const twisted = twistRuns(length, group.step * physicalScale,
+      distance => { const p = a.at(distance / length), q = b.at(distance / length); return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; },
+      distance => { const p = a.at(distance / length), q = b.at(distance / length); return { x: (p.x - q.x) / 2, y: (p.y - q.y) / 2 }; },
+      0, 1, wire!.width, index === 0, group.variant);
+    if (!twisted) return [];
+    const value = index === 1 && reverse ? { path: [...twisted.path].reverse(), strokes: [...twisted.strokes].reverse().map(stroke => ({ ...stroke, points: [...stroke.points].reverse() })) } : twisted;
+    return [[wire!.id, value]] as const;
   }));
 }

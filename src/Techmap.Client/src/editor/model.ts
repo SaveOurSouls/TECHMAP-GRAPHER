@@ -2031,6 +2031,10 @@ export function wireGroupHasCommonE4ParallelSpan(
   document: HarnessDesignDocument,
   wireIds: readonly string[],
 ): boolean {
+  // Independent drawing copies have no E4 anchors at their free ends.
+  // Pair membership survives subsequent drawing edits; its visible spans are
+  // resolved from the drawing geometry by the renderer.
+  if (wireIds.length >= 2 && wireIds.every(id => document.wires.find(w => w.id === id)?.drawingEndpoints)) return true;
   return commonParallelSpan(wireIds.map(id=>{
     const w=document.wires.find(w=>w.id===id),a=w&&wireEndpointE4Anchor(document,w.from),b=w&&wireEndpointE4Anchor(document,w.to);
     return {id,points:w&&a&&b?[a.position,...w.e4Route,b.position]:[]};

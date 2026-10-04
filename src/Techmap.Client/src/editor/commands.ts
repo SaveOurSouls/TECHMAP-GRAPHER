@@ -1,4 +1,7 @@
 import type {CoveringLibrary} from "./covering-library";
+import { editedDetachedWireBends } from "./detached-wire-editing";
+import { freeTwistedPairPaths } from "./drawing-twisted-pair";
+import { drawingPhysicalScale, drawingWireWidth } from "./drawing-thickness";
 import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength, segmentDimensionKey, type DimensionMode } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
@@ -77,6 +80,9 @@ function assertEditableFreeDrawingEnd(document: HarnessDesignDocument, wire: Wir
 }
 
 export type EditorCommand =
+  | {readonly type:"edit-detached-wire-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly insert?:boolean}
+  | {readonly type:"remove-detached-wire-bend";readonly wireId:string;readonly index:number}
+  | {readonly type:"set-detached-wire-pair";readonly wireIds:readonly string[];readonly action:"twist"|"straighten";readonly groupId?:string;readonly step?:number;readonly amplitude?:number;readonly variant?:1|2}
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode;readonly auxiliary?:boolean}
   | {readonly type:"remove-physical-bend";readonly segmentId:string;readonly index:number}
@@ -1164,6 +1170,46 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       validateWireGroups(routed);
       return normalizeJunctionCircuits(routed);
     }
+    case "edit-detached-wire-bend": {
+      return { ...document, wires: replaceRequired(document.wires, command.wireId, wire => {
+        assertNoLockedDrawingWires(document, [wire]);
+        return { ...wire, drawingRoute: editedDetachedWireBends(wire, command.index, command.position, command.insert) };
+      }, "Провод не найден.") };
+    }
+    case "remove-detached-wire-bend": {
+      return { ...document, wires: replaceRequired(document.wires, command.wireId, wire => {
+        assertNoLockedDrawingWires(document, [wire]);
+        if (!wire.drawingEndpoints || !Number.isInteger(command.index) || command.index < 0 || command.index >= wire.drawingRoute.length) throw new Error("Изгиб независимого провода не найден.");
+        return { ...wire, drawingRoute: wire.drawingRoute.filter((_, index) => index !== command.index) };
+      }, "Провод не найден.") };
+    }
+    case "set-detached-wire-pair": {
+      if (command.wireIds.length !== 2 || new Set(command.wireIds).size !== 2) throw new Error("Выберите два разных независимых провода.");
+      requireWireIds(document, command.wireIds);
+      const wires = document.wires.filter(wire => command.wireIds.includes(wire.id));
+      if (wires.some(wire => !wire.drawingEndpoints)) throw new Error("Скрутка фрагмента доступна только для независимых проводов.");
+      assertNoLockedDrawingWires(document, wires);
+      const existing = document.diffPairs.find(group => command.wireIds.every(id => group.wireIds.includes(id)));
+      if (command.action === "straighten") {
+        if (!existing) return document;
+        return { ...document, diffPairs: document.diffPairs.filter(group => group.id !== existing.id) };
+      }
+      if (document.diffPairs.some(group => group.id !== existing?.id && group.wireIds.some(id => command.wireIds.includes(id)))) throw new Error("Провод уже входит в другую дифференциальную пару.");
+      const group: DiffPairGroup = {
+        id: existing?.id ?? command.groupId ?? crypto.randomUUID(),
+        wireIds: existing?.wireIds ?? [command.wireIds[0]!, command.wireIds[1]!],
+        step: command.step ?? existing?.step ?? 40,
+        amplitude: command.amplitude ?? existing?.amplitude ?? 6,
+        variant: command.variant ?? existing?.variant ?? 1,
+      };
+      if (!group.id.trim() || group.id.length > 128 || document.diffPairs.some(candidate => candidate.id === group.id && candidate !== existing)) throw new Error("ID дифференциальной пары задан неверно.");
+      requirePositiveParameter(group.step, "Шаг дифференциальной пары");
+      requirePositiveParameter(group.amplitude, "Амплитуда дифференциальной пары");
+      if (group.variant !== 1 && group.variant !== 2) throw new Error("Вид дифференциальной пары задан неверно.");
+      const display = freeTwistedPairPaths(group, wires.map(wire => ({ id: wire.id, points: [wire.drawingEndpoints!.from, ...wire.drawingRoute, wire.drawingEndpoints!.to], width: drawingWireWidth(document, wire) })), drawingPhysicalScale(document), true);
+      if (display.size !== 2) throw new Error("Для скрутки нужны два направленных вдоль друг друга провода достаточной длины. Согласуйте их изгибы или уменьшите шаг скрутки.");
+      return { ...document, diffPairs: existing ? document.diffPairs.map(candidate => candidate.id === existing.id ? group : candidate) : [...document.diffPairs, group] };
+    }
     case "create-diff-pair": {
       const group = normalizeDiffPair(document, command.group);
       if (document.diffPairs.some((item) => item.id === group.id)) throw new Error("Дифференциальная пара с таким ID уже существует.");
@@ -2210,6 +2256,7 @@ function compactAutomaticDifferentialPairs(
   let result = document;
   for (const group of document.diffPairs) {
     if (!group.wireIds.every(id => routed.has(id))) continue;
+    if (group.wireIds.some(id => result.wires.find(wire => wire.id === id)?.drawingEndpoints)) continue;
     const planned = planHorizontalDifferentialPair(result, group.wireIds);
     if (planned) { result = planned; continue; }
     const wires = group.wireIds.map(id => result.wires.find(wire => wire.id === id));
@@ -2555,6 +2602,8 @@ function normalizeDiffPair(document: HarnessDesignDocument, group: DiffPairGroup
   const id = group.id.trim();
   if (!id || group.wireIds.length !== 2 || group.wireIds[0] === group.wireIds[1]) throw new Error("Дифференциальная пара должна иметь ID и два разных провода.");
   requireWireIds(document, group.wireIds);
+  const detachedWires = document.wires.filter(wire => group.wireIds.includes(wire.id) && wire.drawingEndpoints);
+  if (detachedWires.length) assertNoLockedDrawingWires(document, detachedWires);
   requirePositiveParameter(group.step, "Шаг дифференциальной пары");
   requirePositiveParameter(group.amplitude, "Амплитуда дифференциальной пары");
   const variant = group.variant ?? 1;

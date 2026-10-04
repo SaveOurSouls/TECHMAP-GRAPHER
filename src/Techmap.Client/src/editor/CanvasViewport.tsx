@@ -70,6 +70,10 @@ import { snapDrawingPoint, type DrawingOutline, type DrawingSnaps } from "../com
 import { materialObjectGroup } from "./MaterialObjectsPanel";
 
 export interface CanvasViewportProps {
+  readonly onFreeWireEndpointMove?: (wireId:string,end:"from"|"to",point:EditorPoint)=>void;
+  readonly onFreeWireEndpointPreview?: (wireId:string,end:"from"|"to",point:EditorPoint|null)=>void;
+  readonly onDetachedPairAction?: (wireIds:readonly string[],action:"twist"|"straighten")=>void;
+  readonly onFreeWireEndStyleRequest?: (wireId:string,end:"from"|"to")=>void;
   readonly view: HarnessEditorView;
   readonly tool: EditorTool;
   readonly camera: EditorCamera;
@@ -2844,6 +2848,7 @@ function e4ConnectorSnapTarget(object: EditorSceneObject): E4ConnectorSnapTarget
 }
 
 export function CanvasViewport({
+  onFreeWireEndpointMove, onFreeWireEndpointPreview, onDetachedPairAction, onFreeWireEndStyleRequest,
   view,
   tool,
   camera,
@@ -2886,6 +2891,12 @@ export function CanvasViewport({
   onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const freeEndDrag = useRef<{wireId:string;end:"from"|"to";pointerId:number}|null>(null);
+  useEffect(()=>{
+    const cancel=(event:KeyboardEvent)=>{if(event.key!=="Escape"||!freeEndDrag.current)return;const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);};
+    window.addEventListener("keydown",cancel);
+    return ()=>window.removeEventListener("keydown",cancel);
+  },[onFreeWireEndpointPreview]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const componentTemplateImageCacheRef = useRef<ComponentTemplateImageCache | null>(null);
   if (!componentTemplateImageCacheRef.current) {
@@ -2927,6 +2938,11 @@ export function CanvasViewport({
     : objects;
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
+  const pairActionIds=(id:string):readonly string[]=>{
+    const selected=objects.filter(o=>o.kind==="wire"&&selectedSet.has(o.id));
+    if(selected.length===2)return selected.map(o=>o.id);
+    try{const ids:unknown=JSON.parse(objects.find(o=>o.id===id)?.metadata?.drawingPairWireIds??"null");return Array.isArray(ids)&&ids.length===2&&ids.every(id=>typeof id==="string"&&objects.some(o=>o.id===id&&o.kind==="wire"))?ids:[];}catch{return [];}
+  };
   const sourceOverlays = useMemo(
     () => e4Overlays ?? parseE4SceneOverlays(objects),
     [e4Overlays, objects],
@@ -3113,6 +3129,14 @@ export function CanvasViewport({
   };
 
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(event.button===0&&view==="drawing"&&tool==="select"&&onFreeWireEndpointMove&&!onObjectPick){
+      const p=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const hit=objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>(["from","to"] as const).flatMap(end=>{
+        const point=end==="from"?o.points?.[0]:o.points?.at(-1);
+        return o.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true"&&point&&Math.hypot(point.x-p.x,point.y-p.y)<=7/camera.zoom?[{wireId:o.id,end,pointerId:event.pointerId}]:[];
+      }))[0];
+      if(hit){event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);freeEndDrag.current=hit;onObjectSelect(hit.wireId,false);return;}
+    }
     setHoverTarget(null);
     if(event.button===2)return;setPhysicalMenu(null);
     if(event.button===0&&onObjectPick){
@@ -3378,10 +3402,12 @@ export function CanvasViewport({
         }
         const selectedWire = objects.find((item) => item.id === selectedObjectId);
         const selectedLayer = selectedWire ? layers.find((item) => item.id === selectedWire.layerId) : null;
-        const routeIndex = selectedLayer?.locked === true || selectedWire?.kind==="wire"&&objects.some(o=>o.kind==="physical-segment"&&containsPoint(o,worldPoint,7/camera.zoom,view))
+        const cornerIndex = selectedLayer?.locked === true || selectedWire?.kind==="wire"&&objects.some(o=>o.kind==="physical-segment"&&containsPoint(o,worldPoint,7/camera.zoom,view))
           ? null
           : hitTestWireRoutePoint(selectedWire, worldPoint, camera.zoom);
-        const routePoint = routeIndex === null ? null : (selectedWire?.kind==="physical-segment"?[selectedWire.points![0]!,...pipeSceneHandles(selectedWire)]:selectedWire?.points)?.[routeIndex + 1];
+        const detachedMiddle=cornerIndex===null&&selectedWire?.metadata?.detachedDrawing==="true"&&selectedLayer?.visible&& !selectedLayer.locked ? e4Midpoints(selectedWire).find(h=>Math.hypot(h.point.x-worldPoint.x,h.point.y-worldPoint.y)<=7/camera.zoom):undefined;
+        const routeIndex=cornerIndex??detachedMiddle?.index??null;
+        const routePoint = detachedMiddle?.point ?? (routeIndex === null ? null : (selectedWire?.kind==="physical-segment"?[selectedWire.points![0]!,...pipeSceneHandles(selectedWire)]:selectedWire?.points)?.[routeIndex + 1]);
         if (selectedWire && routeIndex !== null && routePoint) {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = {
@@ -3392,6 +3418,9 @@ export function CanvasViewport({
             wireId: selectedWire.id,
             routeIndex,
             point: routePoint,
+            insert:!!detachedMiddle,
+            mode:selectedWire.metadata?.detachedDrawing==="true"?"adjacent":undefined,
+            anchors:selectedWire.metadata?.detachedDrawing==="true"?bendSnapAnchors(selectedWire.points??[],routeIndex,!!detachedMiddle,"adjacent"):undefined,
             snapState:{},
           };
           return;
@@ -3440,6 +3469,7 @@ export function CanvasViewport({
   const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
   const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>(g.pointMarker?Math.hypot(point.x-g.point.x,point.y-g.point.y):pointToSegmentDistance(point,{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth}))<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;onFreeWireEndpointPreview?.(d.wireId,d.end,screenToWorld(camera,localPoint(event.clientX,event.clientY)));return;}
     if(railDraft&&view==="drawing"&&tool==="position-rail"){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),end=snapRailEnd(railDraft.start,point);
       const ids=objects.filter(o=>o.kind==="position-leader"&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})>=0&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})<=1&&railDistance({start:railDraft.start,end},{x:o.x+o.width/2,y:o.y+o.height/2})<=railCatchDistance/camera.zoom).map(o=>o.id);
@@ -3508,6 +3538,7 @@ export function CanvasViewport({
   };
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);onFreeWireEndpointMove?.(d.wireId,d.end,screenToWorld(camera,localPoint(event.clientX,event.clientY)));if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current?.kind==="physical-node-connect") {
       const drag=dragRef.current;
@@ -3602,6 +3633,7 @@ export function CanvasViewport({
   };
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     setPhysicalGuide(undefined);
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current.kind==="covering"){const d=dragRef.current;onCoveringDrag?.(d.objectId,d.spanIndex,d.part,d.start,d.start,"cancel");}
@@ -3811,11 +3843,17 @@ export function CanvasViewport({
         onDoubleClick={doubleClick}
         onContextMenu={event=>{
           if(onObjectPick){event.preventDefault();return;}
-          if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties&&!onObjectsIsolate))return;
+          if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties&&!onObjectsIsolate&&!onDetachedPairAction&&!onFreeWireEndStyleRequest))return;
           event.preventDefault();
           setHoverTarget(null);
           const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
-          const id=hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
+          // Endpoint controls remain selectable when a dimension extension or
+          // an underpassing twist stroke lies at the same coordinate.
+          const freeEndWire=objects.find(o=>o.kind==="wire"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible)&&(["from","to"] as const).some(end=>{
+            const p=end==="from"?o.points?.[0]:o.points?.at(-1);
+            return o.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true"&&p&&Math.hypot(p.x-point.x,p.y-point.y)<=7/camera.zoom;
+          }));
+          const id=freeEndWire?.id??hitTestEditorScene(objects,layers,point,camera.zoom,view,componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
           const object=objects.find(o=>o.id===id) ?? (onObjectsIsolate ? objects.find(o=>selectedSet.has(o.id)) : undefined),layer=layers.find(l=>l.id===object?.layerId);
           if(!object||layer?.locked||(!onObjectsIsolate&&!["wire","connector","physical-node","physical-segment","physical-covering"].includes(object.kind))){setPhysicalMenu(null);return;}
           const isolationIds=selectedSet.has(object.id) ? activeSelectedIds.filter(selectedId=>objects.some(o=>o.id===selectedId)) : [object.id];
@@ -3853,10 +3891,14 @@ export function CanvasViewport({
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?pipeSceneEditablePoints(w):w.points??[]).map((p,i)=>i!==0&&i!==(w.kind==="physical-segment"?pipeSceneEditablePoints(w):w.points??[]).length-1?null:<circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите два конца участка"}</div></>}
       {hoverGrip&&view==="drawing"&&<svg className="he-covering-grip" aria-hidden="true"><line x1={(hoverGrip.point.x-hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y1={(hoverGrip.point.y-hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} x2={(hoverGrip.point.x+hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y2={(hoverGrip.point.y+hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} stroke="#00a9db" strokeWidth="6"/><circle cx={hoverGrip.point.x*camera.zoom+camera.offsetX} cy={hoverGrip.point.y*camera.zoom+camera.offsetY} r="5" fill="white" stroke="#007ca8" strokeWidth="2"/></svg>}
+      {view==="drawing"&&tool==="select"&&onFreeWireEndpointMove&&<svg aria-label="Свободные концы проводов" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>{objects.filter(o=>o.kind==="wire"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>(["from","to"] as const).map(end=>{const p=end==="from"?o.points?.[0]:o.points?.at(-1);return p&&o.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true"?<circle key={`${o.id}:${end}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={5} fill="white" stroke="#167caf" strokeWidth={2}/>:null;}))}</svg>}
+      {view==="drawing"&&tool==="select"&&<svg aria-label="Изгибы свободных проводов" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>{objects.filter(o=>o.metadata?.detachedDrawing==="true"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>e4Midpoints(o).map(h=><circle key={`${o.id}:${h.index}`} cx={h.point.x*camera.zoom+camera.offsetX} cy={h.point.y*camera.zoom+camera.offsetY} r={4} fill="#1179ac" opacity={.35}/>))}</svg>}
       <CanvasObjectHint target={physicalMenu?null:hoverTarget}/>
       {physicalMenu&&objects.some(o=>o.id===physicalMenu.id)&&<CanvasObjectPopover key={physicalMenu.id+(physicalMenu.wires?":wires":"")} x={physicalMenu.x} y={physicalMenu.y} label={physicalMenu.wires?"Провода пайпа":"Свойства объекта"} onClose={()=>setPhysicalMenu(null)}>
         {physicalMenu.wires ? <><table className="he-pipe-wires"><thead><tr><th>Провод</th><th>Цепь</th></tr></thead><tbody>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).map(id=>{const w=objects.find(o=>o.id===id);return <tr key={id}><td><button className="he-wire-row" onClick={()=>onRelatedObjectsSelect?.([id])}><i style={{background:resolveWireColorHex(w?.color??"")}}/>{`W${objects.filter(o=>o.kind==="wire").findIndex(o=>o.id===id)+1}`}</button></td><td>{w?.label}</td></tr>;})}</tbody></table>{pipeSceneWireIds(objects.find(o=>o.id===physicalMenu.id)).length===0&&<span>Нет назначенных проводов</span>}</> : <>
           {onObjectsIsolate&&physicalMenu.isolationIds?.length&&<button type="button" className="ui-control" onClick={()=>{onObjectsIsolate(physicalMenu.isolationIds!);setPhysicalMenu(null);}}>Изолировать</button>}
+          {onDetachedPairAction&&pairActionIds(physicalMenu.id).length===2&&(["twist","straighten"] as const).map(action=><button key={action} type="button" className="ui-control" onClick={()=>{onDetachedPairAction(pairActionIds(physicalMenu.id),action);setPhysicalMenu(null);}}>{action==="twist"?"Свить пару":"Распрямить пару"}</button>)}
+          {onFreeWireEndStyleRequest&&(["from","to"] as const).filter(end=>objects.find(o=>o.id===physicalMenu.id)?.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true").map(end=><button key={end} type="button" className="ui-control" onClick={()=>{onFreeWireEndStyleRequest(physicalMenu.id,end);setPhysicalMenu(null);}}>{end==="from"?"Оконцовка начала":"Оконцовка конца"}</button>)}
           {objectProperties?.(physicalMenu.id)}
           {!objectProperties&&onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&o.kind==="physical-segment")&&<button type="button" className="ui-control" onClick={()=>{onPhysicalContextAction(physicalMenu.id,physicalMenu.point,"remove-pipe");setPhysicalMenu(null);}}>Удалить пайп</button>}
           {physicalMenu.node ? onPhysicalNodesConnect&&<button type="button" className="ui-control" disabled={objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id)).length!==2} onClick={()=>{const nodes=objects.filter(o=>o.kind==="physical-node"&&!o.metadata?.joiningPipe&&selectedSet.has(o.id));if(nodes.length===2)onPhysicalNodesConnect?.(nodes[0]!.id,nodes[1]!.id);setPhysicalMenu(null);}}>Пайп между двумя узлами</button> : onPhysicalContextAction&&objects.some(o=>o.id===physicalMenu.id&&(o.kind==="physical-segment"||o.kind==="physical-covering"))&&<details className="he-covering-actions"><summary>Оболочки и ответвление</summary><div className="he-context-actions">{([...(objects.find(o=>o.id===physicalMenu.id)?.kind==="physical-segment"&&objects.find(o=>o.id===physicalMenu.id)?.pipe?.role!=="joining-pipe"?["branch" as const]:[]),...standardCoveringKinds] as const).map(action=><button type="button" className="ui-control" key={action} onClick={()=>{const target=objects.find(o=>o.id===physicalMenu.id);onPhysicalContextAction?.(physicalMenu.id,physicalMenu.point,action,target?.kind==="physical-covering"?"covering":"segment");setPhysicalMenu(null);}}>{action==="branch"?"Т-ответвление":action}</button>)}</div></details>}
