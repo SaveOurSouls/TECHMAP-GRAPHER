@@ -15,7 +15,7 @@ internal static class ElectricalGraphValidator
         return root.TryGetProperty("manufacturingRoute", out _) ? Math.Max(2, number) : number;
     }
 
-    internal static void Validate(JsonElement root)
+    internal static void Validate(JsonElement root, bool allowDetachedDrawingEndpoints = false)
     {
         var strict = RequiredWriterContract(root) >= 1;
         if (strict)
@@ -92,7 +92,20 @@ internal static class ElectricalGraphValidator
                 else
                 {
                     var connectorId = Text(endpoint, "connectorId", path);
-                    if (!contacts.TryGetValue(connectorId, out var contactIds)) throw Invalid("The endpoint connector does not exist.", path + ".connectorId");
+                    if (!contacts.TryGetValue(connectorId, out var contactIds))
+                    {
+                        // Isolated route drawings keep a free wire end as a
+                        // synthetic endpoint instead of rendering a connector
+                        // shell. It is valid only for the exact wire/side that
+                        // created it and only with the reserved free contact.
+                        var detached = allowDetachedDrawingEndpoints &&
+                            endpoint.TryGetProperty("contactId", out var detachedContact) &&
+                            detachedContact.ValueKind == JsonValueKind.String &&
+                            detachedContact.GetString() == "free" &&
+                            connectorId == $"isolated:{wireId}:{end}";
+                        if (detached) continue;
+                        throw Invalid("The endpoint connector does not exist.", path + ".connectorId");
+                    }
                     if (contactIds is null && !endpoint.TryGetProperty("contactId", out _)) continue;
                     var contactId = Text(endpoint, "contactId", path);
                     if (contactIds is null || !contactIds.Contains(contactId)) throw Invalid("The endpoint contact does not exist on its connector.", path + ".contactId");

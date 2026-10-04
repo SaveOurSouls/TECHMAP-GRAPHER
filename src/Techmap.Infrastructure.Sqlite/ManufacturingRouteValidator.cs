@@ -333,15 +333,15 @@ internal static class ManufacturingRouteValidator
         }
         if (value.TryGetProperty("drawingCopy", out var drawingCopy))
         {
-            ValidateDrawingCopy(drawingCopy, path + ".drawingCopy");
+            ValidateDrawingCopy(drawingCopy, path + ".drawingCopy", allowDetachedDrawingEndpoints: false);
         }
         if (value.TryGetProperty("isolatedDrawingCopy", out var isolatedDrawingCopy))
         {
-            ValidateDrawingCopy(isolatedDrawingCopy, path + ".isolatedDrawingCopy");
+            ValidateDrawingCopy(isolatedDrawingCopy, path + ".isolatedDrawingCopy", allowDetachedDrawingEndpoints: true);
         }
     }
 
-    private static void ValidateDrawingCopy(JsonElement value, string path)
+    private static void ValidateDrawingCopy(JsonElement value, string path, bool allowDetachedDrawingEndpoints)
     {
         RequireExact(value, "document", "hiddenObjectIds");
         var design = value.GetProperty("document");
@@ -374,7 +374,10 @@ internal static class ManufacturingRouteValidator
             }
         }
         Inspect(design, 0);
-        SqliteHarnessDesignDocumentStore.ValidateEmbeddedDesign(design);
+        // A detached route drawing represents free wire ends with the
+        // synthetic `isolated:<wireId>:<side>` endpoint contract. These IDs
+        // are intentionally absent from the copied connector collection.
+        SqliteHarnessDesignDocumentStore.ValidateEmbeddedDesign(design, allowDetachedDrawingEndpoints);
         var hidden = value.GetProperty("hiddenObjectIds");
         if (hidden.ValueKind != JsonValueKind.Array || hidden.GetArrayLength() > MaximumReferences)
             throw Invalid("Invalid drawing copy hidden objects.", path + ".hiddenObjectIds");

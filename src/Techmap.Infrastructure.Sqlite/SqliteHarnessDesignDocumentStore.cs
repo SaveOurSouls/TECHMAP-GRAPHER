@@ -349,7 +349,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
     }
 
     /** Shared design checks for a route's isolated drawing copy. Caller must exclude manufacturingRoute. */
-    internal static void ValidateEmbeddedDesign(JsonElement root)
+    internal static void ValidateEmbeddedDesign(JsonElement root, bool allowDetachedDrawingEndpoints = false)
     {
             TemplateContactNumberingValidator.ValidateDesign(root);
             HarnessPhysicalTopologyValidator.Validate(root);
@@ -358,7 +358,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
             ValidateDrawingPlacements(root);
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);
-            ElectricalGraphValidator.Validate(root);
+            ElectricalGraphValidator.Validate(root, allowDetachedDrawingEndpoints);
     }
 
     private static void ValidateDrawingPlacements(JsonElement root)
