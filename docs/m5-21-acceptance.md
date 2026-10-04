@@ -14,7 +14,8 @@
 - Self-contained `win-x64` publish, manifest и `Techmap.Server.exe
   --verify-package` — успешно (`TECHMAP_PACKAGE_STATUS=ok`).
 - Полный .NET прогон прошёл Domain/Architecture, но завис на Web-тестах в общей
-  среде и был остановлен; portable smoke-test отдельно не выполнялся.
+  среде и был остановлен; при исходной сборке portable smoke-test отдельно не
+  выполнялся. Повторная проверка portable приведена ниже.
 
 ## Артефакт
 
@@ -22,3 +23,22 @@
 - ZIP: `artifacts/final-chats-20261004-m5-21/TECHMAP-GRAPHER-0.63.32-m5-21-review-win-x64.zip`.
 - Размер: 63 264 029 байт.
 - SHA-256: `459F9BA69EBBB51789CA6AF622920B895E5EDA13660920E4F03FABE764C3BE9C`.
+
+## Повторная проверка готового ZIP — 05.10.2026
+
+- Срез `d90b0054baadc95c14e97812b145e550cabebb7d` подтверждён через Git и
+  опубликован в `origin/codex/restore-20260918-0235`. Все четыре заявленных
+  изменения включены; для трёх cherry-pick проверен stable patch-id, `b751572`
+  уже был в базе. Новая сборка и повторное применение кода не требуются.
+- Независимо проверены 275 файлов manifest непосредственно внутри ZIP;
+  версия, размер и SHA-256 архива совпадают с исходным протоколом.
+- Распакованный manifest и `Techmap.Server.exe --verify-package` — PASS.
+- Штатный `test-portable-package.ps1` — PASS, `Status=ok`, `Modes=7`;
+  путь с кириллицей и пробелом проверен. Первый запуск в sandbox остановился
+  из-за запрета чтения Windows ACL; повторный запуск вне sandbox прошёл все
+  проверки без изменения ZIP.
+- Исходные клиентские тесты, TypeScript, Vite и self-contained publish не
+  повторялись: готовый срез не менялся. Ограничение полного .NET Web-прогона
+  сохраняется; ручная приёмка владельца не подменяется portable-проверками.
+- Полные SHA, команды, абсолютные пути и ограничения записаны в
+  [журнале интеграции](coordination/integration-log.md).
