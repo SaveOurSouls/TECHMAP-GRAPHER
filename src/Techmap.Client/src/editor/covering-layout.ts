@@ -189,28 +189,40 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const pipeWidth=groupedWidth??(segment?drawingPipeWidth(document,segment):joiningPipeWidth(document,joining!)),lanes=segment?segmentWireLanes(document,segment.id):[];
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
    const automaticBandage=covering.width===0&&coveringKind(covering)==="band";
+   const lowerCoverings=joining?[]:coverings.slice(0,order);
+   // OP shells are independent authored objects. An overlapping predecessor
+   // marks this layer as installed over an OP shell, but must not become a
+   // geometry support: changing one inspector width must leave every other
+   // OP shell unchanged.
+   const overOpCovering=!!joining&&coverings.slice(0,order).some(lower=>lower.spans.some(ls=>{
+      const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&r.from<to&&r.to>from;
+    }));
+   // Thread bandage already has its own automatic 2% allowance. Do not
+   // apply a second allowance when it is installed over an OP shell.
+   const widthMultiplier=(automaticBandage||(overOpCovering&&coveringKind(covering)!=="band"))?1.02:1;
    const halfAt=(fraction:number):number=>{
     if(groupedWidth!==undefined)return groupedWidth/2;
     let width=pipeWidth;
     if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=joining?Math.max(width,bundle):bundle;
-    // Array order is the physical stacking order; any lower surface remains enclosed.
-    for(const lower of coverings.slice(0,order)) {
+    // Array order encloses ordinary P coatings. OP coatings intentionally
+    // do not inherit one another's contours; their width fields are local.
+    for(const lower of lowerCoverings) {
      if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;})) {
       width=Math.max(lower.width*scale,width+coveringClearance);
      }
     }
-    return (width+.5*scale)/2*(automaticBandage?1.02:1);
+    return (width+.5*scale)/2*widthMultiplier;
    };
-   const boundaries=[0,1,...route.envelope.map(sample=>(sample.at-route.before)/route.length),...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
+   const boundaries=[0,1,...route.envelope.map(sample=>(sample.at-route.before)/route.length),...lowerCoverings.flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
    const fitted=encloseWidthProfiles(
      coveringWidthProfile(route.min*route.length,route.max*route.length,boundaries.map(f=>f*route.length),distance=>halfAt(distance/route.length)),
-     supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
+     joining?[]:supportsBySegment.get(s.segmentId)??[],coveringClearance/2);
    // The width field controls the largest diameter. Every smaller diameter
    // grows with it, at 1/ratio of the increment per adjacent support level.
    const levels=[...new Set(fitted.map(p=>p.halfWidth))].sort((a,b)=>b-a);
-   const growth=Math.max(0,covering.width*scale/2-(levels[0]??0));
+   const growth=Math.max(0,covering.width*scale*widthMultiplier/2-(levels[0]??0));
    const profile=fitted.map(p=>({...p,halfWidth:p.halfWidth+growth/Math.pow(diameterRatio,levels.indexOf(p.halfWidth))}));
-   ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
+   if(!joining)ownSupports.push({segmentId:s.segmentId,support:{from:from*route.length,to:to*route.length,profile}});
    const stops=[...profile.map(p=>route.before+p.at),...[...coveringControlFractions(document,s.segmentId),...pipeBundleProjectionStops(document,s.segmentId,covering.id)].map(f=>route.before+f*route.length)];
    const display=drawingRouteSection(route.points,hasJoiningPipeProjection(document,s.segmentId)?0:drawingBendRadius(document),route.before+from*route.length,route.before+to*route.length,stops);
    const projected=display.map(p=>projectPipeBundlePoint(document,s.segmentId,(p.distance-route.before)/route.length,p.point,covering.id));

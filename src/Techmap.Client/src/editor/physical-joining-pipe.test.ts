@@ -330,6 +330,21 @@ it("keeps an OP covering independent from a member P covering width",()=>{
  expect(afterPacking).toEqual(beforePacking);
  expect(changed.physicalTopology!.coverings![1]).toEqual(opCover);
 });
+it("keeps overlapping OP shell widths local and gives non-band overlays one 2% allowance",()=>{
+  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+  const shell=(id:string,width:number,kind:"heat-shrink"|"metal-braid"|"band")=>({id,name:id,kind,width,color:"#445566",lengthMm:null,spans:[{segmentId:"op",from:0,to:1}]});
+  const inner=shell("inner",20,"heat-shrink"),outer=shell("outer",20,"metal-braid"),band=shell("band",0,"band");
+  const base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[inner,outer]}};
+  const outerBefore=coveringScene(base).find(object=>object.id==="outer")!;
+  expect(outerBefore.width).toBeCloseTo(20.4);
+  const changed={...base,physicalTopology:{...base.physicalTopology!,coverings:[{...inner,width:36},outer]}};
+  const outerAfter=coveringScene(changed).find(object=>object.id==="outer")!;
+  expect(outerAfter.width).toBeCloseTo(outerBefore.width);
+  expect(outerAfter.paths).toEqual(outerBefore.paths);
+  const automatic={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[shell("base",0,"heat-shrink"),shell("plain",0,"metal-braid")]}};
+  const automaticBand={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[shell("base",0,"heat-shrink"),band]}};
+  expect(coveringScene(automatic).find(object=>object.id==="plain")!.width).toBeCloseTo(coveringScene(automaticBand).find(object=>object.id==="band")!.width);
+});
 
 it("keeps each OP lane nearest to its connector when members are added above the axis",()=>{
  const d=fixture(),nodes=d.physicalTopology!.nodes.map(node=>node.id==="c"||node.id==="d"?{...node,position:{...node.position,y:-100}}:node);
