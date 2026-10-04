@@ -34,3 +34,8 @@
 - Браузерный Chrome/Playwright QA стенд: `graphs=11`, три сценария стабильности по 4.4 с, в каждом `polls=2`, `changed=0`, `replaced=0`; проверены undo, source/isolated, opacity, новая изоляция до Save, актуальный callback, Save обеих копий, Cancel и отсутствие API writes.
 - Клиентский Vitest: 173 файла, 1697 тестов; TypeScript и Vite production build прошли; `git diff --check` прошёл.
 - Приёмка на исходном проекте жгута со скриншотов и packaged-приложении остаётся за владельцем; стенд использует синтетический graph с опубликованным шаблоном.
+
+Код: `b2d3325c2196b332c1d2fc119e356008bc41474e`; browser QA выполнялся на этом срезе.
+Запуск стенда: `node src/Techmap.Client/node_modules/vite/bin/vite.js --config scripts/qa-route-fragment-flicker-vite.config.mjs`.
+Запуск проверки: задать `PLAYWRIGHT_PATH` на установленный пакет Playwright, затем `node scripts/qa-route-fragment-flicker-playwright.cjs`.
+`QA_CHROME` выбирает Chrome, `QA_URL` — URL стенда, `QA_SHOTS` — каталог диагностического скриншота.
