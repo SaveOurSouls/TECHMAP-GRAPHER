@@ -1,7 +1,15 @@
 import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
+import type { RouteRow } from "../manufacturing/route-model";
 
 export type RouteV2NodeKind = "semiFinished" | "assembly" | "final";
+
+export interface RouteV2Drawing {
+  readonly backgroundOpacity: number;
+  readonly drawingCopy?: RouteDrawingCopy;
+  readonly isolatedDrawingCopy?: RouteDrawingCopy;
+}
 
 export interface RouteV2Node {
   readonly id: string;
@@ -12,6 +20,7 @@ export interface RouteV2Node {
   readonly x: number;
   readonly y: number;
   readonly operatorConfirmed: boolean;
+  readonly drawing?: RouteV2Drawing;
 }
 
 export interface RouteV2Edge {
@@ -67,6 +76,13 @@ export function parseRouteV2(value: unknown): RouteV2Document | null {
     x: Number.isFinite(node.x) ? Number(node.x) : 36,
     y: Number.isFinite(node.y) ? Number(node.y) : 36,
     operatorConfirmed: Boolean(node.operatorConfirmed),
+    ...(node.drawing && typeof node.drawing === "object" && Number.isFinite(node.drawing.backgroundOpacity) && Number(node.drawing.backgroundOpacity) >= 0 && Number(node.drawing.backgroundOpacity) <= 1 ? {
+      drawing: {
+        backgroundOpacity: Number(node.drawing.backgroundOpacity),
+        ...(node.drawing.drawingCopy ? { drawingCopy: parseRouteDrawingCopy(node.drawing.drawingCopy) } : {}),
+        ...(node.drawing.isolatedDrawingCopy ? { isolatedDrawingCopy: parseRouteDrawingCopy(node.drawing.isolatedDrawingCopy) } : {}),
+      },
+    } : {}),
   })) as RouteV2Node[];
   const ids = new Set(nodes.map(node => node.id));
   const edges = candidate.edges.filter(edge => edge && typeof edge === "object" && typeof edge.id === "string" && typeof edge.from === "string" && typeof edge.to === "string" && ids.has(edge.from) && ids.has(edge.to) && edge.from !== edge.to).map(edge => ({ id: edge.id, from: edge.from, to: edge.to })) as RouteV2Edge[];
@@ -75,4 +91,24 @@ export function parseRouteV2(value: unknown): RouteV2Document | null {
 
 export function routeV2SourceTitle(document: HarnessDesignDocument, ref: RouteSourceRef): string {
   return buildRouteSourceItems(document).find(item => sourceKey(item.ref) === sourceKey(ref))?.title ?? `${ref.kind}:${ref.id}`;
+}
+
+export function routeV2DrawingRow(node: RouteV2Node): RouteRow {
+  return {
+    id: node.id,
+    kind: node.kind === "semiFinished" ? "semiFinished" : "assembly",
+    title: node.title,
+    quantity: node.quantity,
+    comment: "",
+    sourceObjects: node.refs,
+    dependsOn: [],
+    operations: [],
+    presentation: {
+      backgroundOpacity: node.drawing?.backgroundOpacity ?? 1,
+      objects: [],
+      ...(node.drawing?.drawingCopy ? { drawingCopy: node.drawing.drawingCopy } : {}),
+      ...(node.drawing?.isolatedDrawingCopy ? { isolatedDrawingCopy: node.drawing.isolatedDrawingCopy } : {}),
+    },
+    prepared: false,
+  };
 }

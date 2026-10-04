@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createHarnessDesignApi } from "../editor/design-api";
-import { routeV2StorageKey, createInitialRouteV2, parseRouteV2, routeV2SourceTitle, type RouteV2Document, type RouteV2Node } from "./route-v2-model";
-import type { RouteSourceRef } from "../manufacturing/route-source";
+import { routeV2StorageKey, createInitialRouteV2, parseRouteV2, routeV2DrawingRow, routeV2SourceTitle, type RouteV2Document, type RouteV2Node } from "./route-v2-model";
+import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, type AssemblyDrawingPresentation } from "../manufacturing/RouteAssemblyDrawing";
 import "./route-v2.css";
 
 type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void };
@@ -13,7 +14,11 @@ const nodeWidth = 232;
 const nodeHeight = 122;
 
 function readStored(key: string): RouteV2Document | null {
-  try { return parseRouteV2(JSON.parse(window.localStorage.getItem(key) ?? "null")); } catch { return null; }
+  const saved = window.localStorage.getItem(key);
+  if (!saved) return null;
+  const parsed = parseRouteV2(JSON.parse(saved));
+  if (!parsed) throw new Error("Сохранённая схема Маршрут v2 повреждена. Данные браузера не изменены.");
+  return parsed;
 }
 
 function nodeRefs(node: RouteV2Node): readonly RouteSourceRef[] { return node.refs; }
@@ -24,6 +29,8 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose }:
   const [graph, setGraph] = useState<RouteV2Document | null>(null);
   const [sourceDocument, setSourceDocument] = useState<import("../editor/model").HarnessDesignDocument | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [drawingNodeId, setDrawingNodeId] = useState<string | null>(null);
+  const [drawingSaveError, setDrawingSaveError] = useState<string | null>(null);
   const [linkFrom, setLinkFrom] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,10 +51,13 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose }:
 
   useEffect(() => {
     if (!graph) return;
-    try { window.localStorage.setItem(storageKey, JSON.stringify(graph)); } catch { /* local storage is an optional test cache */ }
+    try { window.localStorage.setItem(storageKey, JSON.stringify(graph)); }
+    catch { setError("Не удалось сохранить изменения Маршрут v2 в хранилище браузера."); }
   }, [graph, storageKey]);
 
   const selected = graph?.nodes.find(node => node.id === selectedId) ?? null;
+  const drawingNode = graph?.nodes.find(node => node.id === drawingNodeId) ?? null;
+  const sourceItems = useMemo(() => sourceDocument ? buildRouteSourceItems(sourceDocument) : [], [sourceDocument]);
   const isCompleted = Boolean(graph?.finalNodeId && graph.nodes.find(node => node.id === graph.finalNodeId)?.operatorConfirmed);
   const canvasSize = useMemo(() => {
     const width = Math.max(920, ...(graph?.nodes ?? []).map(node => node.x + nodeWidth + 48));
@@ -112,6 +122,30 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose }:
 
   if (loading) return <section className="route-v2-panel"><div className="route-v2-loading" role="status">Загружаем редактор маршрута v2…</div></section>;
   if (!graph || !sourceDocument) return <section className="route-v2-panel"><p className="route-v2-error" role="alert">{error ?? "Схема жгута недоступна."}</p><button className="secondary-action" type="button" onClick={onClose}>К проекту</button></section>;
+  if (drawingNode) {
+    const row = routeV2DrawingRow(drawingNode);
+    return <>
+      {drawingSaveError && <p className="route-v2-drawing-error" role="alert">{drawingSaveError}</p>}
+      <RouteAssemblyDrawing key={drawingNode.id} row={row} document={sourceDocument} config={config} session={session} projectId={projectId} harnessId={harnessId}
+        items={sourceItems.filter(item => drawingNode.refs.some(ref => ref.kind === item.ref.kind && ref.id === item.ref.id))}
+        onCancel={() => { setDrawingNodeId(null); setDrawingSaveError(null); }}
+        onSave={(presentation: AssemblyDrawingPresentation) => {
+          const next: RouteV2Document = { ...graph, nodes: graph.nodes.map(node => node.id === drawingNode.id ? {
+            ...node,
+            drawing: {
+              backgroundOpacity: presentation.backgroundOpacity,
+              ...(presentation.drawingCopy ? { drawingCopy: presentation.drawingCopy } : {}),
+              ...(presentation.isolatedDrawingCopy ? { isolatedDrawingCopy: presentation.isolatedDrawingCopy } : {}),
+            },
+          } : node) };
+          try { window.localStorage.setItem(storageKey, JSON.stringify(next)); }
+          catch { setDrawingSaveError("Не удалось сохранить рисунок в хранилище браузера. Освободите место и повторите сохранение."); return; }
+          setGraph(next);
+          setDrawingNodeId(null);
+          setDrawingSaveError(null);
+        }} />
+    </>;
+  }
 
   return <section className="route-v2-panel" aria-label="Маршрут v2">
     <nav className="route-v2-nav" aria-label="Редактор тестовой схемы"><button type="button" className="route-home-button" onClick={onClose}>← <span>К проекту</span></button><span className="route-v2-nav-current">Маршрут v2</span><span className="route-v2-nav-note">Визуальный прототип · без расчётов и операций</span></nav>
@@ -127,6 +161,8 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose }:
       <aside className="route-v2-inspector" aria-label="Свойства карточки">
         <div className="route-v2-inspector-heading"><div><p className="eyebrow">КАРТОЧКА</p><h3>{selected?.title ?? "Выберите карточку"}</h3></div>{linkFrom && <button type="button" className="link-button" onClick={() => setLinkFrom(null)}>Отменить связь</button>}</div>
         {!selected ? <p className="route-v2-muted">Кликните карточку, чтобы посмотреть группу полуфабрикатов и зависимости.</p> : <>
+          <button type="button" className="secondary-action route-v2-drawing-action" onClick={() => { setDrawingSaveError(null); setDrawingNodeId(selected.id); }}>Открыть редактор рисунка</button>
+          {selected.drawing?.drawingCopy && <RouteAssemblyDrawingPreview row={routeV2DrawingRow(selected)} document={sourceDocument} config={config} session={session} projectId={projectId} />}
           <label>Название<input value={selected.title} onChange={event => updateSelected({ title: event.target.value })} /></label><label>Количество<div className="route-v2-number"><input type="number" min="1" step="1" value={selected.quantity} onChange={event => updateSelected({ quantity: Math.max(1, Number(event.target.value) || 1) })} /><span>шт.</span></div></label>
           <div className="route-v2-list"><strong>Состав карточки</strong>{nodeRefs(selected).length ? nodeRefs(selected).map(ref => <span key={`${ref.kind}:${ref.id}`}>{routeV2SourceTitle(sourceDocument, ref)}</span>) : <span className="route-v2-muted">Полуфабрикаты будут добавлены как независимые входы.</span>}</div>
           <div className="route-v2-list"><strong>Зависимости</strong>{graph.edges.filter(edge => edge.to === selected.id).map(edge => <span key={edge.id}>{graph.nodes.find(node => node.id === edge.from)?.title ?? edge.from}</span>)}{!graph.edges.some(edge => edge.to === selected.id) && <span className="route-v2-muted">Нет входящих связей</span>}</div>
