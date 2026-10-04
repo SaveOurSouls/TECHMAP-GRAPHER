@@ -80,6 +80,7 @@ import { useEditorReferenceCatalog, useTerminalArticleLookup, useWireDatabaseLoo
 import { hydrateTerminalDetails, resolveTerminalDetails } from "./terminal-details";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
+import type { HarnessSectionId } from "./HarnessSectionNavigation";
 import { CableSelectionPanel } from "./CableSelectionPanel";
 import { E4ConnectorInspector } from "./E4ConnectorInspector";
 import { resolveConnectedWireMaterials } from "./resolve-wire-materials";
@@ -132,6 +133,7 @@ export interface HarnessDesignEditorProps {
   readonly onClose?: () => void;
   readonly onViewChange?: (view: HarnessEditorView) => void;
   readonly onRouteRequest?: () => void;
+  readonly onSectionChange?: (section: HarnessSectionId) => void | Promise<void>;
   /** Edits an independent drawing copy in memory until the operator explicitly saves it. */
   readonly localCopy?: {
     readonly initialDocument: HarnessDesignDocument;
@@ -816,6 +818,7 @@ export function HarnessDesignEditor({
   onClose,
   onViewChange,
   onRouteRequest,
+  onSectionChange,
   localCopy,
 }: HarnessDesignEditorProps) {
   // Subscribe the scene projection as well as the left-panel editor to the
@@ -2229,6 +2232,10 @@ export function HarnessDesignEditor({
         }}
         onRouteRequest={!localCopy && onRouteRequest ? async () => {
           if (await flushSave()) onRouteRequest();
+        } : undefined}
+        onSectionChange={!localCopy && onSectionChange ? async section => {
+          if (section === "e4" || section === "drawing") return;
+          if (await flushSave()) await onSectionChange(section);
         } : undefined}
         onSelectedObjectChange={(objectId) => {
           setRelatedSourceIds([]);

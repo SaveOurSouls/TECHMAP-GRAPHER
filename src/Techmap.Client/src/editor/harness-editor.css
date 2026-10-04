@@ -612,7 +612,10 @@
 
 /* Editor docks fill the viewport; only the document and panel bodies scroll. */
 .harness-editor { border:0; border-radius:0; box-shadow:none; }
-.harness-editor .he-header { grid-template-columns:minmax(100px,1fr) auto auto auto; gap:14px; }
+.harness-editor .he-header { grid-template-columns:minmax(0,1fr) auto; gap:14px; }
+.harness-editor .he-header > .harness-section-navigation { grid-column:1; }
+.harness-editor .he-header > .he-save-state { grid-column:2; }
+.harness-editor .he-header-panels { display:none; }
 .he-inspector-toggle { padding:7px 10px; border:1px solid #527485; border-radius:6px; background:#284f61; color:#d5e9ef; font:600 11px Arial,sans-serif; cursor:pointer; }
 .he-inspector-content { min-width:0; overflow-x:hidden; }
 .he-right-panel { min-width:0; }
@@ -655,13 +658,11 @@
 @media(max-width:650px) {
   .harness-editor { grid-template-rows:92px minmax(0,1fr); }
   .harness-editor .he-header { grid-template-columns:minmax(0,1fr) auto; grid-template-rows:44px 44px; gap:0 8px; }
-  .he-view-tabs { grid-column:1; grid-row:2; }
-  .he-view-tabs button { flex:1; min-width:0; padding:0 5px; font-size:11px; }
+  .harness-editor .he-header > .harness-section-navigation { grid-column:1 / -1; grid-row:2; min-height:36px; }
   .he-header-identity { grid-column:1; grid-row:1; }
   .he-header-identity span { font-size:8px; }
   .he-header-identity strong { font-size:12px; }
   .he-save-state { grid-column:2; grid-row:1; font-size:10px; padding:4px; }
-  .he-inspector-toggle { grid-column:2; grid-row:2; padding:7px 5px; font-size:10px; }
   .he-workspace { grid-template-columns:44px 30px minmax(0,1fr) 0px; }
   .he-toolbar { padding:6px 2px; }
   .he-tool { width:39px; }

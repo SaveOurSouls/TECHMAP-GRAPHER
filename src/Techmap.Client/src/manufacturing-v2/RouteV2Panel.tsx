@@ -5,9 +5,10 @@ import { createHarnessDesignApi } from "../editor/design-api";
 import { routeV2StorageKey, createInitialRouteV2, parseRouteV2, routeV2DrawingRow, routeV2SourceTitle, type RouteV2Document, type RouteV2Node } from "./route-v2-model";
 import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, type AssemblyDrawingPresentation } from "../manufacturing/RouteAssemblyDrawing";
+import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
 import "./route-v2.css";
 
-type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void };
+type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void; onSectionChange?: (section: HarnessSectionId) => void | Promise<void> };
 
 const id = (prefix: string) => `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
 const nodeWidth = 232;
@@ -23,7 +24,7 @@ function readStored(key: string): RouteV2Document | null {
 
 function nodeRefs(node: RouteV2Node): readonly RouteSourceRef[] { return node.refs; }
 
-export function RouteV2Panel({ config, session, projectId, harnessId, onClose }: Props) {
+export function RouteV2Panel({ config, session, projectId, harnessId, onClose, onSectionChange }: Props) {
   const api = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
   const storageKey = useMemo(() => routeV2StorageKey(projectId, harnessId), [projectId, harnessId]);
   const [graph, setGraph] = useState<RouteV2Document | null>(null);
@@ -148,7 +149,7 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose }:
   }
 
   return <section className="route-v2-panel" aria-label="Маршрут v2">
-    <nav className="route-v2-nav" aria-label="Редактор тестовой схемы"><button type="button" className="route-home-button" onClick={onClose}>← <span>К проекту</span></button><span className="route-v2-nav-current">Маршрут v2</span><span className="route-v2-nav-note">Визуальный прототип · без расчётов и операций</span></nav>
+    <HarnessSectionNavigation active="route-v2" onHome={onClose} onNavigate={section => onSectionChange?.(section)} />
     <header className="route-v2-header"><div><p className="eyebrow">ТЕСТОВАЯ СХЕМА · СВЕРХУ ВНИЗ</p><h2>Маршрут v2</h2><p>Карточки полуфабрикатов, сборок и зависимостей остаются отдельными от старого маршрута.</p></div><div className="route-v2-actions"><button type="button" className="secondary-action" disabled={!selectedId} onClick={() => setLinkFrom(selectedId)}>Связать с карточкой</button><button type="button" className="secondary-action" disabled={!selectedId} onClick={addAssembly}>+ Сборка</button><button type="button" className="secondary-action" disabled={!selectedId} onClick={addIndependent}>+ Отдельный полуфабрикат</button><button type="button" className="secondary-action" disabled={Boolean(graph.finalNodeId)} onClick={addFinal}>Финальная карточка</button></div></header>
     {error && <p className="route-v2-error" role="alert">{error}</p>}
     <div className="route-v2-workspace">

@@ -4,14 +4,15 @@ import type { RuntimeConfig } from "../runtime-config";
 import { createInitialRouteV2, parseRouteV2, routeV2StorageKey } from "../manufacturing-v2/route-v2-model";
 import { createHarnessDesignApi } from "../editor/design-api";
 import { createUmlFromRouteV2, documentMinutes, nodeMinutes, operationMinutes, parseUml, umlId, umlStorageKey, type UmlDocument, type UmlNode, type UmlOperation } from "./uml-model";
+import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
 import "./uml.css";
 
-type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void };
+type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void; onSectionChange?: (section: HarnessSectionId) => void | Promise<void> };
 const nodeWidth = 236;
 const nodeHeight = 128;
 const readJson = (key: string): unknown => { try { return JSON.parse(window.localStorage.getItem(key) ?? "null"); } catch { return null; } };
 
-export function UmlPanel({ config, session, projectId, harnessId, onClose }: Props) {
+export function UmlPanel({ config, session, projectId, harnessId, onClose, onSectionChange }: Props) {
   const api = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
   const key = useMemo(() => umlStorageKey(projectId, harnessId), [projectId, harnessId]);
   const [document, setDocument] = useState<UmlDocument | null>(null);
@@ -53,7 +54,7 @@ export function UmlPanel({ config, session, projectId, harnessId, onClose }: Pro
   if (loading) return <section className="uml-panel"><div className="uml-loading" role="status">Загружаем UML-редактор…</div></section>;
   if (!document) return <section className="uml-panel"><p className="uml-error" role="alert">{error ?? "UML-схема недоступна."}</p><button className="secondary-action" type="button" onClick={onClose}>К проекту</button></section>;
   return <section className="uml-panel" aria-label="UML схема зависимостей">
-    <nav className="uml-nav" aria-label="Редактор UML"><button type="button" className="route-home-button" onClick={onClose}>← <span>К проекту</span></button><span className="uml-nav-current">UML</span><span className="uml-nav-note">Ручной граф зависимостей · рисунки V2 не редактируются</span></nav>
+    <HarnessSectionNavigation active="uml" onHome={onClose} onNavigate={section => onSectionChange?.(section)} />
     <header className="uml-header"><div><p className="eyebrow">ТЕСТОВАЯ СХЕМА · DAG</p><h2>UML зависимостей</h2><p>Добавляйте блоки и связи вручную или импортируйте подтверждённый процесс из «Маршрут v2».</p></div><div className="uml-actions"><button className="secondary-action" type="button" onClick={() => setLinkFrom(selectedId)} disabled={!selectedId}>Связать с блоком</button><button className="secondary-action" type="button" onClick={addBlock}>+ Добавить блок</button><button className="primary-action" type="button" onClick={() => void importV2()}>Импортировать из Маршрут v2</button></div></header>
     {error && <p className="uml-error" role="alert">{error}</p>}
     <div className="uml-summary"><span>Блоки <strong>{document.nodes.length}</strong></span><span>Связи <strong>{document.edges.length}</strong></span><span>Общее время <strong>{Math.round(documentMinutes(document) * 10) / 10} мин</strong></span></div>
