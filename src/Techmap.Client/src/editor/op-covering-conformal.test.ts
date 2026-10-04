@@ -8,6 +8,7 @@ import { createJoiningPipe } from "./physical-joining-pipes";
 import { joiningPipeDisplaySamples } from "./physical-joining-pipe-projection";
 import { drawingPipeWidth } from "./drawing-thickness";
 import { drawingRouteHitPoints } from "./drawing-route-path";
+import { coveringRoute } from "./physical-coverings";
 import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 
 function fixture(reverse = false, side: "from" | "to" = "to", continuous = false): HarnessDesignDocument {
@@ -79,6 +80,53 @@ function crossings(polygon: readonly Point[]) {
     }
   }
   return result;
+}
+
+function longestTerminalEdge(polygon: readonly Point[], document: HarnessDesignDocument, side: "from" | "to") {
+  const route = coveringRoute(document, "op")!;
+  const span = document.physicalTopology!.coverings![0]!.spans[0]!;
+  const at = route.before + Math.max(route.min, Math.min(route.max, span[side])) * route.length;
+  const samples = (["from", "core", "to"] as const).flatMap(side => route.envelope.filter(p => p.side === side));
+  const sections = samples.flatMap((b, index) => {
+    const a = samples[index - 1];
+    if (!a || a.side !== b.side || b.at - a.at < 1e-7 || at < a.at - 1e-7 || at > b.at + 1e-7) return [];
+    const t = (at - a.at) / (b.at - a.at), sign = side === "from" ? -1 : 1;
+    const centers = a.members.map((member, i) => ({ x: member.point.x + (b.members[i]!.point.x - member.point.x) * t,
+      y: member.point.y + (b.members[i]!.point.y - member.point.y) * t }));
+    const directions = a.members.map((member, i) => ({ x: sign * (b.members[i]!.point.x - member.point.x),
+      y: sign * (b.members[i]!.point.y - member.point.y) }));
+    const mean = { x: directions.reduce((sum, p) => sum + p.x, 0), y: directions.reduce((sum, p) => sum + p.y, 0) };
+    return [{ centers, directions: [...directions, mean] }];
+  });
+  return polygon.reduce((maximum, point, index) => {
+    const next = polygon[(index + 1) % polygon.length]!, edgeLength = distance(point, next);
+    if (edgeLength < 1e-7) return maximum;
+    const middle = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
+    const cap = sections.some(({ centers, directions }) => centers.some(p => distance(p, middle) < 80) &&
+      directions.some(d => {
+        const length = Math.hypot(d.x, d.y);
+        if (length < 1e-7) return false;
+        const parallel = Math.abs((next.x - point.x) * d.x + (next.y - point.y) * d.y) / length;
+        const outside = Math.max(...centers.map(p => ((middle.x - p.x) * d.x + (middle.y - p.y) * d.y) / length));
+        return parallel < .01 && outside > -.01;
+      }));
+    return cap ? Math.max(maximum, edgeLength) : maximum;
+  }, 0);
+}
+function terminalFrontProjection(polygon: readonly Point[], path: readonly Point[], side: "from" | "to") {
+  const endpoint = side === "from" ? path[0]! : path.at(-1)!;
+  const adjacent = side === "from" ? path.find(point => distance(point, endpoint) > 1e-7)!
+    : [...path].reverse().find(point => distance(point, endpoint) > 1e-7)!;
+  const length = distance(endpoint, adjacent) || 1;
+  const direction = { x: (endpoint.x - adjacent.x) / length, y: (endpoint.y - adjacent.y) / length };
+  return Math.max(...polygon.map(point => point.x * direction.x + point.y * direction.y));
+}
+
+function spanFixture(source: HarnessDesignDocument, from: number, to: number): HarnessDesignDocument {
+  const shell = source.physicalTopology!.coverings![0]!;
+  return { ...source, physicalTopology: { ...source.physicalTopology!, coverings: [
+    { ...shell, spans: [{ segmentId: "op", from, to }] },
+  ] } };
 }
 
 function assertConformal(document: HarnessDesignDocument, side: "from" | "to") {
@@ -217,5 +265,56 @@ describe("OP envelope contour", () => {
     expect(pointInside(polygon, { x: 50, y: 0 })).toBe(true);
     expect(pointInside(polygon, { x: 50, y: 100 })).toBe(true);
     expect(pointInside(polygon, { x: 50, y: 50 })).toBe(false);
+  });
+});
+
+describe("OP continuation transverse fronts", () => {
+  it.each([["from", -.55, 1], ["to", 0, 1.7]] as const)("uses a straight common front at the mid-station %s boundary", (side, from, to) => {
+    for (const reverse of [false, true]) {
+      const document = spanFixture(fixture(reverse, side), from, to);
+      const object = coveringScene(document)[0]!;
+      const surface = coveringSurfaces(object)[0]!;
+      expect(longestTerminalEdge(surface.polygon, document, side), `reverse=${reverse}`).toBeGreaterThan(10);
+      expect(crossings(surface.polygon)).toEqual([]);
+    }
+  });
+
+  it.each([["from", -.55, -.5501, 1], ["to", 1.7, 1.7001, 0]] as const)(
+    "moves the %s front continuously across a sample boundary", (side, boundary, moved, fixed) => {
+      const source = fixture(false, side);
+      const before = coveringSurfaces(coveringScene(spanFixture(source,
+        side === "from" ? boundary : fixed, side === "to" ? boundary : 1))[0]!)[0]!;
+      const after = coveringSurfaces(coveringScene(spanFixture(source,
+        side === "from" ? moved : fixed, side === "to" ? moved : 1))[0]!)[0]!;
+      const delta = Math.abs(terminalFrontProjection(after.polygon, after.path, side) -
+        terminalFrontProjection(before.polygon, before.path, side));
+      expect(delta).toBeLessThan(.5);
+      expect(delta).toBeGreaterThan(0);
+    });
+
+  it.each([[.9, 1.22], [1.05, 1.2], [-.6, -.4]] as const)(
+    "squares both span ends at arbitrary from/to tail positions (%s, %s)", (from, to) => {
+      const document = spanFixture(fixture(), from, to);
+      const surface = coveringSurfaces(coveringScene(document)[0]!)[0]!;
+      expect(longestTerminalEdge(surface.polygon, document, "from")).toBeGreaterThan(10);
+      expect(longestTerminalEdge(surface.polygon, document, "to")).toBeGreaterThan(10);
+      expect(crossings(surface.polygon)).toEqual([]);
+    });
+
+  it("keeps straight transverse fronts for nested shells on both extended ends", () => {
+    const source = fixture();
+    const shell = source.physicalTopology!.coverings![0]!;
+    const document = { ...source, physicalTopology: { ...source.physicalTopology!, coverings: [
+      { ...shell, id: "inner", width: 0, spans: [{ segmentId: "op", from: -.55, to: 1.7 }] },
+      { ...shell, id: "outer", width: 8, spans: [{ segmentId: "op", from: -.55, to: 1.7 }] },
+    ] } };
+    const objects = coveringScene(document);
+    for (const side of ["from", "to"] as const) {
+      for (const object of objects) {
+        const surface = coveringSurfaces(object)[0]!;
+        expect(longestTerminalEdge(surface.polygon, document, side)).toBeGreaterThan(24);
+        expect(crossings(surface.polygon)).toEqual([]);
+      }
+    }
   });
 });

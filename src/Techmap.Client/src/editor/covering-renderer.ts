@@ -16,34 +16,9 @@ export const coveringTextureUrls: Readonly<Record<string, string>> = {
   Rubber002: rubberTexture, Fabric061: fabricTexture, Metal049A: metalTexture,
 };
 
-export function coveringTextureTransform(style: Required<CoveringStyle>, tile: HTMLCanvasElement, surface: CoveringSurface): DOMMatrix {
+export function coveringTextureTransform(style: Required<CoveringStyle>, tile: HTMLCanvasElement, _surface?: CoveringSurface): DOMMatrix {
  const base = .5 * style.textureScale * 64 / tile.width;
- if (!surface.conformal || surface.path.length < 2)
-   return new DOMMatrix().rotate(style.textureRotation).scale(base);
- // Estimate the local shell radius at route samples.  A constant-width OP
- // keeps the ordinary material transform; only a real spread receives a
- // deformation proportional to its width variation.
- const radii = surface.path.map((center, index) => {
-  const before = surface.path[Math.max(0, index - 1)]!, after = surface.path[Math.min(surface.path.length - 1, index + 1)]!;
-  const dx = after.x - before.x, dy = after.y - before.y, length = Math.hypot(dx, dy) || 1;
-  const nx = -dy / length, ny = dx / length;
-  const tangent = {x: dx / length, y: dy / length};
-  const window = Math.max(1, length * .75);
-  const local = surface.polygon.filter(point => Math.abs((point.x - center.x) * tangent.x + (point.y - center.y) * tangent.y) <= window);
-  return Math.max(...(local.length ? local : surface.polygon).map(point => Math.abs((point.x - center.x) * nx + (point.y - center.y) * ny)));
- });
- const minimum = Math.max(1e-3, Math.min(...radii));
- const maximum = Math.max(...radii);
- const spread = Math.max(0, Math.min(3, maximum / minimum - 1));
- if (spread < .08) return new DOMMatrix().rotate(style.textureRotation).scale(base);
- // OP contours are a surface, rather than a circular pipe. Align the material
- // with its route and stretch it in both surface directions. This keeps the
- // same source texture while preventing a cylindrical stripe from surviving
- // on a widened support cell.
- const first = surface.path[0]!, last = surface.path.at(-1)!;
- const angle = Math.atan2(last.y - first.y, last.x - first.x) * 180 / Math.PI;
- const along = 1 + spread * .8, across = 1 + spread * 1.1;
- return new DOMMatrix().rotate(angle + style.textureRotation).scale(base * along, base * across);
+ return new DOMMatrix().rotate(style.textureRotation).scale(base);
 }
 export function warmCoveringTextures(invalidate:()=>void,objects:readonly EditorSceneObject[]=[]):()=>void {
   listeners.add(invalidate);
@@ -109,7 +84,7 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
       // this keeps background and thread/braid colour independently editable.
       const tile=materialTexture(image,style.textureTint,context,style.textureScale);
       const pattern=context.createPattern(tile,"repeat");
-      if(pattern){pattern.setTransform(coveringTextureTransform(style,tile,surface));context.save();context.fillStyle=pattern;context.fill();context.restore();}
+      if(pattern){pattern.setTransform(coveringTextureTransform(style,tile));context.save();context.fillStyle=pattern;context.fill();context.restore();}
     }
     const tile=hatchTile(style);
     if(tile){const pattern=context.createPattern(tile,"repeat");if(pattern){pattern.setTransform(new DOMMatrix().rotate(style.hatchRotation).scale(style.hatchSpacing/32));context.fillStyle=pattern;context.fill();}}
@@ -118,7 +93,7 @@ export function drawCoveringSurface(context:CanvasRenderingContext2D,object:Edit
       context.save();context.clip();drawCatalogHatch(context,style.hatchCode,style.hatchSpacing/10,style.hatchRotation,style.hatchColor,style.hatchLineWidth,{x,y,width:Math.max(...xs)-x,height:Math.max(...ys)-y});context.restore();
     }
     if(object.metadata?.volumeShading === "true") {
-      if(surface.conformal) drawConformalVolumeSurface(context,polygon,surface.path);
+      if(surface.conformal) drawConformalVolumeSurface(context,polygon,surface.path,surface.ridges);
       else drawVolumeSurface(context,polygon,surface.path);
     }
     if(object.metadata?.coveringKind === "band" && style.texture!=="none")

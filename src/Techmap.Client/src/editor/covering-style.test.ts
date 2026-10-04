@@ -19,7 +19,7 @@ it("shades sleeve bands from local centre points",()=>{
 it("continues conformal volume shading through the filled OP gap",()=>{
  const fills:string[]=[];const stops:number[]=[];
  const gradient={addColorStop:(offset:number)=>stops.push(offset)};
- const state={fillStyle:"",save:()=>undefined,restore:()=>undefined,beginPath:()=>undefined,moveTo:()=>undefined,lineTo:()=>undefined,closePath:()=>undefined,fill:()=>fills.push(state.fillStyle),createLinearGradient:()=>gradient};
+ const state={fillStyle:"",save:()=>undefined,restore:()=>undefined,beginPath:()=>undefined,moveTo:()=>undefined,lineTo:()=>undefined,closePath:()=>undefined,clip:()=>undefined,fill:()=>fills.push(state.fillStyle),createLinearGradient:()=>gradient};
  drawConformalVolumeSurface(state as unknown as CanvasRenderingContext2D,[{x:0,y:-10},{x:100,y:-20},{x:180,y:20},{x:0,y:10}],[{x:0,y:0},{x:100,y:0},{x:180,y:0}]);
  expect(fills).toHaveLength(2);
  expect(fills[0]).toBe("rgba(0,0,0,.20)");
@@ -73,17 +73,16 @@ it("renders fill, texture, hatch and outline independently with separate transfo
   drawCoveringSurface(ctx,coveringScene(d)[0]!,false);
   expect(fills).toEqual(["#ffffff"]);expect(transforms).toHaveLength(0);
 });
-it("stretches conformal material only when the OP contour widens",()=>{
- class Matrix { sx=1;sy=1; rotate(_:number){return this;} scale(x:number,y=x){this.sx*=x;this.sy*=y;return this;} }
+it("preserves the configured texture scale and rotation on an expanded vertical OP contour",()=>{
+ class Matrix { angle=0;sx=1;sy=1; rotate(degrees:number){this.angle=degrees;return this;} scale(x:number,y=x){this.sx*=x;this.sy*=y;return this;} }
  vi.stubGlobal("DOMMatrix",Matrix);
  const tile={width:64} as HTMLCanvasElement;
- const base={texture:"Metal049A",textureScale:1,textureRotation:0,hatch:"none",hatchColor:"#000000",hatchLineWidth:1,hatchSpacing:4,hatchRotation:0,lineColor:"#000000"} as Required<CoveringStyle>;
- const straight={conformal:true,path:[{x:0,y:0},{x:100,y:0}],polygon:[{x:0,y:-10},{x:100,y:-10},{x:100,y:10},{x:0,y:10}]} as const;
- const spread={...straight,polygon:[{x:0,y:-10},{x:100,y:-35},{x:100,y:35},{x:0,y:10}]} as const;
- const regular=coveringTextureTransform(base,tile,straight) as unknown as Matrix;
- const stretched=coveringTextureTransform(base,tile,spread) as unknown as Matrix;
- expect(stretched.sx).toBeGreaterThan(regular.sx);
- expect(stretched.sy).toBeGreaterThan(regular.sy);
+ const configured={texture:"Metal049A",textureScale:2.5,textureRotation:-30,hatch:"none",hatchColor:"#000000",hatchLineWidth:1,hatchSpacing:4,hatchRotation:0,lineColor:"#000000"} as Required<CoveringStyle>;
+ const expandedVerticalSurface={conformal:true,path:[{x:0,y:0},{x:0,y:100}],polygon:[{x:-35,y:0},{x:35,y:0},{x:35,y:100},{x:-35,y:100}]} as const;
+ const transform=coveringTextureTransform(configured,tile,expandedVerticalSurface) as unknown as Matrix;
+ expect(transform.angle).toBe(-30);
+ expect(transform.sx).toBe(2.5*32/64);
+ expect(transform.sy).toBe(2.5*32/64);
 });
 it.each(["parallel","cross","dots"] as const)("draws %s in the requested hatch color",hatch=>{
   const ctx=new Proxy({},{get:(t,k)=>k in t?Reflect.get(t,k):vi.fn(),set:(t,k,v)=>{Reflect.set(t,k,v);return true;}}) as CanvasRenderingContext2D;

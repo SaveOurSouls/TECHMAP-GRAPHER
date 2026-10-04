@@ -1,4 +1,5 @@
 import type { Point } from "./model";
+import { drawCoveringRelief, type CoveringRidge } from "./covering-relief";
 
 const bands = [.9, .78, .66, .54, .42, .3, .18];
 
@@ -37,27 +38,30 @@ export function drawVolumeSurface(context: CanvasRenderingContext2D, polygon: re
 }
 
 /**
- * Paints the volume of a conformal OP shell.  A conformal contour can contain
- * support cells between two pipes, so stroking only its centre path leaves
- * those cells unshaded.  The contour receives the same dark base as a normal
- * volume first; a broad directional wash then carries the highlight/shadow
- * through the filled gap while the centre path keeps the material readable.
+ * The shared membrane follows the visible P supports: each support has a
+ * soft crest and the space between them remains an occluded valley. The mask
+ * changes illumination only; the material repeats in its original scale.
  */
 export function drawConformalVolumeSurface(
  context: CanvasRenderingContext2D,
  polygon: readonly Point[],
  center: readonly Point[],
+ ridges: readonly CoveringRidge[] = [],
 ): void {
  if (polygon.length < 3) return;
  context.save();
  context.beginPath();
  polygon.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
  context.closePath();
+ context.clip();
+ // Ridge points are relative to the surface start, so existing scene-copy
+ // translations (polygon + path) carry the lighting with them automatically.
+ if (drawCoveringRelief(context, polygon, ridges, center[0])) { context.restore(); return; }
  context.fillStyle = "rgba(0,0,0,.20)";
  context.fill();
 
- // A linear wash is stable for straight and bent OP sections and, unlike a
- // cylinder stroke, is clipped to every part of the expanded contour.
+ // Older scene snapshots may lack member data. Give their whole contour a
+ // visible cylindrical highlight until the scene is regenerated.
  const first = center[0] ?? polygon[0]!;
  const last = center.at(-1) ?? first;
  const dx = last.x - first.x, dy = last.y - first.y;
@@ -68,9 +72,9 @@ export function drawConformalVolumeSurface(
    ? context.createLinearGradient(first.x - nx * extent, first.y - ny * extent, first.x + nx * extent, first.y + ny * extent)
    : null;
  if (gradient) {
-  gradient.addColorStop(0, "rgba(255,255,255,.10)");
-  gradient.addColorStop(.5, "rgba(255,255,255,.015)");
-  gradient.addColorStop(1, "rgba(0,0,0,.10)");
+  gradient.addColorStop(0, "rgba(255,255,255,0)");
+  gradient.addColorStop(.5, "rgba(255,255,255,.43)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = gradient;
   context.fill();
  }

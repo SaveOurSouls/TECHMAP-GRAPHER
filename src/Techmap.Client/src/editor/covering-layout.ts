@@ -10,9 +10,10 @@ import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransition
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe-projection";
 import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
+import { coveringRidges, type CoveringRidge } from "./covering-relief";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly pointMarker?:boolean; readonly bound:boolean }
-export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean }
+export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean; readonly ridges?:readonly CoveringRidge[] }
 export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
 type TailSample = { readonly at:number; readonly side:"from"|"to"|"core"; readonly members:readonly {readonly point:Point;readonly radius:number}[] };
 type JoiningOutset = {readonly from:number;readonly to:number;readonly width:number};
@@ -22,8 +23,12 @@ function joiningSupportCells(samples:readonly TailSample[],from:number,to:number
  const between=(a:Point,b:Point,t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
  const disk=(point:Point,radius:number):Point[]=>Array.from({length:12},(_,i)=>({
   x:point.x+Math.cos(i*Math.PI/6)*radius,y:point.y+Math.sin(i*Math.PI/6)*radius}));
- for(let i=1;i<samples.length;i++){
-  const a=samples[i-1]!,b=samples[i]!;
+ // At each OP junction the sorted envelope contains equal-distance samples
+ // from both sides. Group them first so those duplicates cannot hide the
+ // first tail section or the whole core when looking for neighbouring cells.
+ const grouped=(["from","core","to"] as const).flatMap(side=>samples.filter(sample=>sample.side===side));
+ for(let i=1;i<grouped.length;i++){
+  const a=grouped[i-1]!,b=grouped[i]!;
   if(a.side!==b.side||a.at>=to||b.at<=from||b.at-a.at<1e-7)continue;
   const first=Math.max(from,a.at),last=Math.min(to,b.at);
   if(last-first<1e-7)continue;
@@ -32,6 +37,54 @@ function joiningSupportCells(samples:readonly TailSample[],from:number,to:number
    const lo=cuts[stop-1]!,hi=cuts[stop]!,start=(lo-a.at)/(b.at-a.at),end=(hi-a.at)/(b.at-a.at);
    const width=Math.max(...outsets.filter(item=>(lo+hi)/2>item.from&&(lo+hi)/2<item.to).map(item=>item.width),0);
    const section:Point[]=[];
+   const capFrom=Math.abs(lo-from)<1e-7;
+   const capTo=Math.abs(hi-to)<1e-7;
+   const startMembers=a.members.map((member,index)=>({
+    point:between(member.point,b.members[index]!.point,start),radius:member.radius+(b.members[index]!.radius-member.radius)*start}));
+   const endMembers=a.members.map((member,index)=>({
+    point:between(member.point,b.members[index]!.point,end),radius:member.radius+(b.members[index]!.radius-member.radius)*end}));
+   const cap=(members:readonly {readonly point:Point;readonly radius:number}[],inside:readonly {readonly point:Point;readonly radius:number}[])=>{
+    if(!members.length||!inside.length)return;
+    const center=(value:readonly {readonly point:Point}[]):Point=>({
+     x:value.reduce((sum,member)=>sum+member.point.x,0)/value.length,
+     y:value.reduce((sum,member)=>sum+member.point.y,0)/value.length});
+    const origin=center(members),next=center(inside),dx=origin.x-next.x,dy=origin.y-next.y,length=Math.hypot(dx,dy)||1;
+    const tangent={x:dx/length,y:dy/length},normal={x:-tangent.y,y:tangent.x};
+    const memberTangents=members.map((member,index)=>{
+     const other=inside[index]!,x=member.point.x-other.point.x,y=member.point.y-other.point.y,size=Math.hypot(x,y);
+     return size>1e-7?{x:x/size,y:y/size}:tangent;
+    });
+    const aligned=memberTangents.every(direction=>direction.x*tangent.x+direction.y*tangent.y>.98);
+    if(!aligned){
+     members.forEach((member,index)=>{
+      const local=memberTangents[index]!,side={x:-local.y,y:local.x},reach=member.radius+width;
+      const front={x:member.point.x+local.x*reach,y:member.point.y+local.y*reach};
+      const back={x:member.point.x-local.x*reach,y:member.point.y-local.y*reach};
+      section.push({x:back.x-side.x*reach,y:back.y-side.y*reach},
+       {x:back.x+side.x*reach,y:back.y+side.y*reach},
+       {x:front.x-side.x*reach,y:front.y-side.y*reach},
+       {x:front.x+side.x*reach,y:front.y+side.y*reach});
+     });
+     return;
+    }
+    const front=Math.max(0,...members.map(member=>(member.point.x-origin.x)*tangent.x+
+      (member.point.y-origin.y)*tangent.y+member.radius+width));
+    const back=Math.min(0,...members.map(member=>(member.point.x-origin.x)*tangent.x+
+      (member.point.y-origin.y)*tangent.y-member.radius-width));
+    const transverse=members.flatMap(member=>{
+      const offset=(member.point.x-origin.x)*normal.x+(member.point.y-origin.y)*normal.y;
+      return [offset-member.radius-width,offset+member.radius+width];
+    });
+    const minimum=Math.min(0,...transverse),maximum=Math.max(0,...transverse);
+    const frontCenter={x:origin.x+tangent.x*front,y:origin.y+tangent.y*front};
+    const backCenter={x:origin.x+tangent.x*back,y:origin.y+tangent.y*back};
+    section.push({x:backCenter.x+normal.x*minimum,y:backCenter.y+normal.y*minimum},
+      {x:backCenter.x+normal.x*maximum,y:backCenter.y+normal.y*maximum},
+      {x:frontCenter.x+normal.x*minimum,y:frontCenter.y+normal.y*minimum},
+      {x:frontCenter.x+normal.x*maximum,y:frontCenter.y+normal.y*maximum});
+   };
+   if(capFrom)cap(startMembers,endMembers);
+   if(capTo)cap(endMembers,startMembers);
    for(let member=0;member<a.members.length;member++){
     const one=a.members[member]!,two=b.members[member]!;
     if(!two)continue;
@@ -186,7 +239,7 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
        : conformalCoveringContour(centerline,widths,widths,supports))
      : polygon;
    surfaces.push({polygon:contour,path:centerline,spanIndex,
-     ...(joining?{conformal:true}:{}),
+     ...(joining?{conformal:true,ridges:coveringRidges(route.envelope,segmentFrom,segmentTo,coveringClearance+growth,centerline[0]!)}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
    for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,dx=part==="from"?q.x-p.x:p.x-q.x,dy=part==="from"?q.y-p.y:p.y-q.y,len=Math.hypot(dx,dy)||1;
