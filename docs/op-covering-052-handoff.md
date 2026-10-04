@@ -2,7 +2,7 @@
 
 Актуальный источник — уточнение REQ-078 от 04.10.2026, новый набор C1–C5. [Требования, план и результаты](op-covering-052-correction.md).
 
-Проверенный кодовый коммит: `e7d0fa11d5b88dc8b899eaa5fc9406952f875e73` (`fix(drawing): preserve OP texture scale and pipe relief`). Коммит локальный: автоматическая проверка разрешений отклонила push в origin; публикация не подтверждена.
+Проверенный кодовый коммит: `e7d0fa11d5b88dc8b899eaa5fc9406952f875e73` (`fix(drawing): preserve OP texture scale and pipe relief`). Код и документация опубликованы в `origin/codex/restore-20260918-0235`; удалённый HEAD после отправки документации — `90716f1c5bedac0b0979f37ac14ea7334975f2b6`.
 
 ## Изменение поведения
 
