@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
-import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, removeSemiFinishedRow, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
+import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, removeRouteRow, removeSemiFinishedRow, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteRow } from "./route-model";
 const sha = "a".repeat(64);
 const row = (id: string, dependsOn: string[] = []): RouteRow => ({
@@ -200,6 +200,13 @@ describe("manufacturing route commands", () => {
     const original = addAssemblyRow(route(row("a")), "assembly", "Сборка", [], ["a"]);
     expect(() => removeSemiFinishedRow(original, "missing")).toThrow("существующий полуфабрикат");
     expect(() => removeSemiFinishedRow(original, "assembly")).toThrow("существующий полуфабрикат");
+  });
+  it("deletes a manually created assembly stage and detaches its downstream users", () => {
+    const original = addAssemblyRow(addAssemblyRow(route(row("a")), "assembly", "Сборка", [], ["a"]), "out", "Выход", [], ["assembly"]);
+    const removed = removeRouteRow(original, "assembly");
+    expect(removed.rows.map(item => item.id)).toEqual(["a", "out"]);
+    expect(removed.rows.find(item => item.id === "out")).toMatchObject({ dependsOn: [], assemblyInputs: [] });
+    expect(removed.rows.find(item => item.id === "out")?.prepared).toBe(false);
   });
   it("copies inherited geometry by stable ID without sharing points or changing source rows", () => {
     const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);

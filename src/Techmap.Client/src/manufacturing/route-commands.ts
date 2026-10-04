@@ -59,11 +59,11 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
   return validate({ ...original, status: "draft", rows: invalidateDescendants([...original.rows, assembly], new Set([newId])) });
 }
 
-/** Remove one independent semi-finished row and detach it from downstream assemblies. */
-export function removeSemiFinishedRow(route: ManufacturingRoute, id: string): ManufacturingRoute {
+/** Remove a route stage and detach it from downstream assemblies. */
+export function removeRouteRow(route: ManufacturingRoute, id: string): ManufacturingRoute {
   const original = validate(route);
   const target = original.rows.find(row => row.id === id);
-  if (!target || target.kind !== "semiFinished") throw new Error("Удалять можно только существующий полуфабрикат.");
+  if (!target) throw new Error("Удалять можно только существующий этап маршрута.");
   const changed = new Set<string>();
   const detached = original.rows.filter(row => row.id !== id).map(row => {
     const dependsOn = row.dependsOn.filter(parent => parent !== id);
@@ -98,6 +98,13 @@ export function removeSemiFinishedRow(route: ManufacturingRoute, id: string): Ma
     };
   });
   return validate({ ...original, status: "draft", rows: invalidateDescendants(cleaned, changed) });
+}
+
+/** Backward-compatible command for callers that explicitly remove a PF. */
+export function removeSemiFinishedRow(route: ManufacturingRoute, id: string): ManufacturingRoute {
+  const target = validate(route).rows.find(row => row.id === id);
+  if (!target || target.kind !== "semiFinished") throw new Error("Удалять можно только существующий полуфабрикат.");
+  return removeRouteRow(route, id);
 }
 
 export function addAssemblyRow(route: ManufacturingRoute, id: string, title: string, sourceRefs: readonly RouteSourceRef[], dependsOn: readonly string[]): ManufacturingRoute {

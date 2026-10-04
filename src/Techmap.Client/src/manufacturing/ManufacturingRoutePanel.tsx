@@ -8,7 +8,7 @@ import { terminalArticleLabel } from "../editor/terminal-article-label";
 import { createReferenceCatalogApi, type ReferenceCatalogSnapshot, type ReferenceCatalogRecord, type ReferenceCatalogSourceSummary } from "../reference-catalog-api";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
-import { addAssemblyInput, addAssemblyRow, generateRoute, mergeRouteRows, removeAssemblyInput, removeSemiFinishedRow, routeRowPresentationConflicts, updateRouteRow } from "./route-commands";
+import { addAssemblyInput, addAssemblyRow, generateRoute, mergeRouteRows, removeAssemblyInput, removeRouteRow, routeRowPresentationConflicts, updateRouteRow } from "./route-commands";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteAssemblyInput, type RouteOperation, type RouteRow } from "./route-model";
 import { buildRouteSourceItems, routeSourceDesignation, type RouteSourceItem, type RouteSourceRef } from "./route-source";
 import { RouteWorkspace } from "./route-workspace";
@@ -130,11 +130,11 @@ export function ManufacturingRoutePanel({ config, session, projectId, harnessId,
   const refreshSource = async () => { setRefreshing(true); await workspace.sync(); setRefreshing(false); };
   const selectedSemiFinished = route?.rows.filter(row => row.kind === "semiFinished" && selectedRows.includes(row.id)).map(row => row.id) ?? [];
   const merge = () => { if (!route || selectedSemiFinished.length < 2) return; try { markRoute(mergeRouteRows(route, selectedSemiFinished, crypto.randomUUID())); setSelectedRows([]); } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось объединить строки."); } };
-  const deleteSemiFinished = (id: string) => {
+  const deleteRouteStage = (id: string) => {
     const current = workspace.getSnapshot().route;
     if (!current || current.status === "completed" || stale || refreshing || sourcePreview) return;
-    try { markRoute(removeSemiFinishedRow(current, id)); setSelectedRows(previous => previous.filter(item => item !== id)); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось удалить полуфабрикат."); }
+    try { markRoute(removeRouteRow(current, id)); setSelectedRows(previous => previous.filter(item => item !== id)); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось удалить этап."); }
   };
   const addAssembly = () => { if (!route) return; try { markRoute(addAssemblyRow(route, crypto.randomUUID(), "Новая сборка", [], [])); } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось добавить сборку."); } };
   const addStageInput = (stage: RouteRow, input: AssemblyInputDraft): boolean => {
@@ -185,7 +185,7 @@ export function ManufacturingRoutePanel({ config, session, projectId, harnessId,
       <div className="manufacturing-route-toolbar"><div><button type="button" className="toolbar-button" aria-label="Объединить выбранные полуфабрикаты в общую операцию" onClick={merge} disabled={selectedSemiFinished.length < 2 || stale || refreshing || !!sourcePreview || completed || photoBusy}>Общая операция для выбранных <span>{selectedSemiFinished.length || ""}</span></button><button type="button" className="toolbar-button" onClick={addAssembly} disabled={stale || refreshing || !!sourcePreview || completed || photoBusy}>+ Добавить сборку</button></div><span>{route.rows.length} {route.rows.length === 1 ? "этап" : "этапов"} · выбрано {selectedSemiFinished.length}</span></div>
       <section className="manufacturing-route-table-card"><div className="route-table-heading"><div><h3>Этапы производства</h3></div><div className="route-table-legend"><span className="legend-dot prepared" /> подготовлено <span className="legend-dot draft" /> требует действий</div></div><div className="route-table route-inline-table" role="table" aria-label="Этапы производственного маршрута">{resource && route.rows.map((row, index) => <RouteRowInline key={row.id} config={config} session={session} projectId={projectId} harnessId={harnessId} componentTemplateViewInstances={row.presentation.drawingCopy ? buildComponentTemplateViewInstances(row.presentation.drawingCopy.document, componentSnapshots) : componentTemplateViewInstances} resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl} row={row} route={route} document={resource.content} sources={sources} ordinal={index + 1}
         disabled={stale || refreshing || !!sourcePreview || completed} selected={selectedRows.includes(row.id)} onSelect={() => toggle(selectedRows, row.id, setSelectedRows)}
-        update={patch => updateRow(row.id, patch)} onDelete={() => deleteSemiFinished(row.id)} onAddInput={input => addStageInput(row, input)} onRemoveInput={inputId => deleteAssemblyInput(row.id, inputId)} setPhotoBusy={value => setPhotoRows(previous => { const next = new Set(previous); if (value) next.add(row.id); else next.delete(row.id); return next; })} />)}{!route.rows.length && <div className="route-table-empty">Добавьте первый этап из чертежа.</div>}</div></section>
+        update={patch => updateRow(row.id, patch)} onDelete={() => deleteRouteStage(row.id)} onAddInput={input => addStageInput(row, input)} onRemoveInput={inputId => deleteAssemblyInput(row.id, inputId)} setPhotoBusy={value => setPhotoRows(previous => { const next = new Set(previous); if (value) next.add(row.id); else next.delete(row.id); return next; })} />)}{!route.rows.length && <div className="route-table-empty">Добавьте первый этап из чертежа.</div>}</div></section>
     </>}
   </section>;
 }
@@ -310,7 +310,7 @@ export function RouteRowInline({ config, session, projectId, harnessId, componen
     </tr>;
   });
   return <article id={`route-row-${row.id}`} className={`route-inline-row ${row.kind === "semiFinished" ? "semi-finished" : "assembly"} ${selected ? "selected" : ""}`} role="row" aria-label={`Этап ${ordinal}: ${row.title}`}>
-    <div className="route-inline-number" role="cell"><label><input type="checkbox" disabled={disabled || row.kind !== "semiFinished"} aria-label={`Выбрать ${row.title}`} checked={selected} onChange={onSelect} /><span>{String(ordinal).padStart(2, "0")}</span></label>{row.kind === "semiFinished" && <button type="button" className="route-row-delete" aria-label={`Удалить полуфабрикат ${row.title}`} title="Удалить полуфабрикат" disabled={disabled} onClick={() => { if (window.confirm(`Удалить полуфабрикат «${row.title}»?`)) onDelete?.(); }}>×</button>}</div>
+    <div className="route-inline-number" role="cell"><label><input type="checkbox" disabled={disabled || row.kind !== "semiFinished"} aria-label={`Выбрать ${row.title}`} checked={selected} onChange={onSelect} /><span>{String(ordinal).padStart(2, "0")}</span></label><button type="button" className="route-row-delete" aria-label={`Удалить этап ${row.title}`} title="Удалить этап" disabled={disabled} onClick={() => { if (window.confirm(`Удалить этап «${row.title}»?`)) onDelete?.(); }}>×</button></div>
     <fieldset className="route-inline-material" role="cell" disabled={disabled} aria-label={`Идентификация этапа ${ordinal}`}>
       <div className="route-identity-panel"><span className={`route-kind ${row.kind}`}>{row.role === "sharedOperation" ? "ОБЩАЯ ОПЕРАЦИЯ" : row.kind === "assembly" ? "СБОРКА" : "ПОЛУФАБРИКАТ"}</span><div className="route-identity-table" role="group" aria-label="Название этапа"><RouteTextField label="Индекс" value={row.index ?? ""} maxLength={128} onChange={value => update({ index: value })} /><RouteTextField label="Название" value={row.title} maxLength={512} required onChange={value => update({ title: value })} /></div><label className="route-prepared-check"><input type="checkbox" checked={row.prepared} onChange={event => update({ prepared: event.target.checked })} />Подготовлен</label><span className={row.prepared ? "route-ready" : "route-draft"}>{row.prepared ? "Готово" : "Черновик"}</span></div>
       {row.dependsOn.length > 0 && <p className="route-dependency">После этапов {row.dependsOn.map(id => route.rows.findIndex(candidate => candidate.id === id) + 1).join(", ")}</p>}
