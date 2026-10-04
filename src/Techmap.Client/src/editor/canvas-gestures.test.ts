@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { CanvasViewport } from "./CanvasViewport";
+import { CanvasViewport, freeWireEndAxes, freeWireEndpointAxis, snapFreeWireEndpointX } from "./CanvasViewport";
 import type { EditorSceneObject } from "./editor-types";
 
 // Exercise the actual event handlers without a browser renderer. Effects install
@@ -98,6 +98,41 @@ it.each([true,false])('only drags explicitly free drawing endpoints (free=%s)',f
  const e={pointerId:1,button:0,clientX:20,clientY:50,currentTarget:target,preventDefault:vi.fn()};
  h.onPointerDown!(e);h.onPointerMove!({...e,clientX:35,clientY:70});h.onPointerUp!({...e,clientX:35,clientY:70});
  if(free){expect(move).toHaveBeenCalledExactlyOnceWith('W','from',{x:35,y:70});expect(preview).toHaveBeenLastCalledWith('W','from',null);}else expect(move).not.toHaveBeenCalled();
+});
+
+it("aligns compatible selected free ends on one vertical axis while preserving Y", () => {
+  const refs = [
+    { wireId: "W1", end: "from" as const, point: { x: 100, y: 30 } },
+    { wireId: "W2", end: "from" as const, point: { x: 102, y: 90 } },
+  ];
+  expect(freeWireEndpointAxis(refs)).toBe(101);
+  expect(freeWireEndAxes(refs)[0]).toMatchObject({ end: "from", wireIds: ["W1", "W2"], minY: 30, maxY: 90 });
+  expect(snapFreeWireEndpointX({ x: 106, y: 30 }, refs, "W1", "from", 8)).toEqual({ x: 102, y: 30 });
+  expect(snapFreeWireEndpointX({ x: 140, y: 30 }, refs, "W1", "from", 8)).toEqual({ x: 140, y: 30 });
+});
+
+it("drags the shared vertical handle with one atomic X update", () => {
+  const move = vi.fn(), moveGroup = vi.fn();
+  const wires: EditorSceneObject[] = [30, 90].map((y, index) => ({
+    id: `W${index + 1}`, kind: "wire", layerId: "wires", label: `W${index + 1}`,
+    x: 0, y: 0, width: 0, height: 0, color: "#222",
+    points: [{ x: 20, y }, { x: 100, y }], metadata: { freeTo: "true", detachedDrawing: "true" },
+  }));
+  const tree = CanvasViewport({ view: "drawing", tool: "select", camera: { zoom: 1, offsetX: 0, offsetY: 0 },
+    objects: wires, layers: [{ id: "wires", label: "Провода", visible: true, locked: false }],
+    selectedObjectId: "W2", selectedObjectIds: ["W1", "W2"], onObjectSelect: vi.fn(),
+    onCatalogDrop: vi.fn(), onCameraChange: vi.fn(), onFreeWireEndpointMove: move,
+    onFreeWireEndpointsXChange: moveGroup });
+  const svg = (tree.props as { children: ReactElement[] }).children.find(child => child?.type === "svg" && (child as any).props["aria-label"] === "Свободные концы проводов")!;
+  expect(JSON.stringify(svg)).toContain('strokeDasharray');
+  const canvas = (tree.props as { children: ReactElement[] }).children.find(child => child?.type === "canvas")!;
+  const handlers = canvas.props as Record<string, (event: any) => void>;
+  const target = { setPointerCapture: vi.fn(), hasPointerCapture: () => true, releasePointerCapture: vi.fn() };
+  const event = { pointerId: 1, button: 0, clientX: 100, clientY: 60, currentTarget: target, preventDefault: vi.fn() };
+  handlers.onPointerDown!(event);
+  handlers.onPointerUp!({ ...event, clientX: 170 });
+  expect(moveGroup).toHaveBeenCalledExactlyOnceWith(["W1", "W2"], "to", 170);
+  expect(move).not.toHaveBeenCalled();
 });
 
 function fixture(){

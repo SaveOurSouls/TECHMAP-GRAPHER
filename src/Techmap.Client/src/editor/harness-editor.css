@@ -761,23 +761,29 @@
 .he-material-name { min-width:0; min-height:27px; display:grid; place-items:center; cursor:pointer; }
 .he-material-name input { box-sizing:border-box; width:15px; height:15px; margin:0; accent-color:#087bad; }
 .he-material-name input:focus-visible { outline:2px solid #4e9dbc; outline-offset:2px; }
-.he-free-wire-ends { min-width:0; margin:8px; padding:9px; display:grid; gap:7px; border:1px solid #b8d5e1; border-left:3px solid #087bad; border-radius:5px; background:#f5fafc; }
+.he-free-wire-ends { min-width:0; margin:8px; padding:8px; display:grid; gap:6px; border:1px solid #b8d5e1; border-left:3px solid #087bad; border-radius:5px; background:#f5fafc; }
 .he-free-wire-heading { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .he-free-wire-heading h3 { min-width:0; margin:0; color:#244d61; font-size:11px; }
 .he-free-wire-heading > span { flex:0 0 auto; min-width:20px; padding:2px 5px; border-radius:10px; background:#e2f0f5; color:#35667a; font-size:9px; text-align:center; }
-.he-free-wire-row { min-width:0; padding:6px; display:grid; gap:5px; border:1px solid #dce8ed; border-radius:4px; background:#fff; }
+.he-free-wire-row { min-width:0; padding:5px; display:grid; gap:4px; border:1px solid #dce8ed; border-radius:4px; background:#fff; }
 .he-free-wire-row > strong { min-width:0; overflow:hidden; color:#31566a; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
 .he-free-wire-end { min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:4px 6px; color:#536e7c; font-size:9px; }
-.he-free-wire-end-label { grid-row:1 / 3; }
+.he-free-wire-end-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .he-free-wire-end select { box-sizing:border-box; width:100%; min-width:0; height:27px; padding:2px 5px; border:1px solid #cbdbe2; border-radius:4px; background:#fff; color:#294e61; font-size:10px; }
-.he-free-wire-end select:focus-visible,.he-free-wire-coordinates input:focus-visible,.he-free-wire-bulk select:focus-visible,.he-free-wire-bulk input:focus-visible { outline:2px solid #4e9dbc; outline-offset:1px; }
-.he-free-wire-coordinates { min-width:0; display:grid; grid-template-columns:1fr 1fr; gap:4px; }
-.he-free-wire-coordinates input,.he-free-wire-bulk input { box-sizing:border-box; width:100%; min-width:0; height:25px; padding:2px 5px; border:1px solid #d3e0e5; border-radius:4px; color:#36586a; font-size:9px; }
+.he-free-wire-end select:focus-visible,.he-free-wire-bulk select:focus-visible { outline:2px solid #4e9dbc; outline-offset:1px; }
 .he-free-wire-bulk { min-width:0; padding-top:6px; display:grid; gap:5px; border-top:1px solid #d9e7ed; }
 .he-free-wire-bulk > strong { color:#486878; font-size:9px; }
-.he-free-wire-bulk > div { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 68px; gap:5px; }
-.he-free-wire-bulk select { min-width:0; height:27px; padding:2px 5px; border:1px solid #cbdbe2; border-radius:4px; background:#fff; color:#294e61; font-size:9px; }
+.he-free-wire-bulk-row { min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:4px 6px; color:#536e7c; font-size:9px; }
+.he-free-wire-bulk-row > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.he-free-wire-bulk select { box-sizing:border-box; width:100%; min-width:0; height:27px; padding:2px 5px; border:1px solid #cbdbe2; border-radius:4px; background:#fff; color:#294e61; font-size:9px; }
 .he-free-wire-ends :disabled { opacity:.55; }
+@media(max-width:650px) {
+  .he-free-wire-ends { margin:5px; padding:7px; gap:5px; }
+  .he-free-wire-heading h3 { font-size:10px; }
+  .he-free-wire-row { padding:4px; }
+  .he-free-wire-end,.he-free-wire-bulk-row { grid-template-columns:38px minmax(0,1fr); gap:3px 5px; }
+  .he-free-wire-end select,.he-free-wire-bulk select { height:26px; font-size:9px; }
+}
 @media(max-width:1100px) {
   .he-workspace { --utility-width:42px; --inspector-width:0px; --material-width:0px; grid-template-columns:54px 42px minmax(0,1fr) 0px 0px; }
   .he-material-panel:not([hidden]) { position:absolute; grid-column:1 / -1; inset:0 0 0 auto; z-index:26; width:min(220px,calc(100% - 42px)); box-shadow:-5px 0 20px #193d5026; }

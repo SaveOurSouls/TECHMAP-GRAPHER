@@ -72,6 +72,7 @@ import { materialObjectGroup } from "./MaterialObjectsPanel";
 export interface CanvasViewportProps {
   readonly onFreeWireEndpointMove?: (wireId:string,end:"from"|"to",point:EditorPoint)=>void;
   readonly onFreeWireEndpointPreview?: (wireId:string,end:"from"|"to",point:EditorPoint|null)=>void;
+  readonly onFreeWireEndpointsXChange?: (wireIds:readonly string[],end:"from"|"to",x:number)=>void;
   readonly onDetachedPairAction?: (wireIds:readonly string[],action:"twist"|"straighten")=>void;
   readonly onFreeWireEndStyleRequest?: (wireId:string,end:"from"|"to")=>void;
   readonly view: HarnessEditorView;
@@ -1863,6 +1864,77 @@ const stripProfilePalette = ["#d6ad65", "#e4ebef", "#a9b7c0", "#7a929e", "#b8c9c
 const stripProfileOutline = "#344b59";
 const stripProfileStrokeWidth = 1.5;
 
+export interface FreeWireEndpointRef {
+  readonly wireId: string;
+  readonly end: "from" | "to";
+  readonly point: EditorPoint;
+}
+
+export interface FreeWireEndAxis {
+  readonly end: "from" | "to";
+  readonly wireIds: readonly string[];
+  readonly x: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
+
+/** Free ends that can share a vertical alignment axis. End orientation and
+ * layer are part of compatibility; Y remains independent while X is shared. */
+export function freeWireEndpointRefs(objects: readonly EditorSceneObject[], selectedIds: ReadonlySet<string>, layers: readonly EditorLayer[]): FreeWireEndpointRef[] {
+  return objects.flatMap(object => {
+    if (object.kind !== "wire" || !selectedIds.has(object.id) || !layers.some(layer => layer.id === object.layerId && layer.visible && !layer.locked)) return [];
+    return (["from", "to"] as const).flatMap(end => {
+      const point = end === "from" ? object.points?.[0] : object.points?.at(-1);
+      return point && object.metadata?.[end === "from" ? "freeFrom" : "freeTo"] === "true"
+        ? [{ wireId: object.id, end, point }]
+        : [];
+    });
+  });
+}
+
+export function freeWireEndAxes(refs: readonly FreeWireEndpointRef[]): FreeWireEndAxis[] {
+  return (["from", "to"] as const).flatMap(end => {
+    const side = refs.filter(ref => ref.end === end);
+    if (side.length < 2) return [];
+    return [{ end, wireIds: side.map(ref => ref.wireId),
+      x: side.reduce((sum, ref) => sum + ref.point.x, 0) / side.length,
+      minY: Math.min(...side.map(ref => ref.point.y)),
+      maxY: Math.max(...side.map(ref => ref.point.y)) }];
+  });
+}
+
+export function freeWireEndpointAxis(refs: readonly FreeWireEndpointRef[]): number | null {
+  return freeWireEndAxes(refs)[0]?.x ?? null;
+}
+
+export function snapFreeWireEndpointX(point: EditorPoint, refs: readonly FreeWireEndpointRef[], wireId: string, end: "from" | "to", tolerance = 8): EditorPoint {
+  const candidates = refs.filter(ref => ref.end === end && ref.wireId !== wireId && Math.abs(ref.point.x - point.x) <= tolerance)
+    .sort((a, b) => Math.abs(a.point.x - point.x) - Math.abs(b.point.x - point.x));
+  return candidates.length ? { x: candidates[0]!.point.x, y: point.y } : point;
+}
+
+export interface WireDrawingEndArtworkPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly rotation: number;
+  readonly scale: number;
+}
+
+/** The artwork's jacket edge is x=222 in its viewBox.  Keeping that edge at
+ * the authored endpoint places all of the terminal outside the wire route. */
+export function wireDrawingEndArtworkPlacement(origin: EditorPoint, adjacent: EditorPoint, drawingWidth: number): WireDrawingEndArtworkPlacement | null {
+  const dx = adjacent.x - origin.x, dy = adjacent.y - origin.y;
+  const length = Math.hypot(dx, dy);
+  if (!length) return null;
+  const scale = Math.min(Math.max(drawingWidth, 3) / 52, length / 280);
+  return {
+    x: origin.x - dx / length * 222 * scale,
+    y: origin.y - dy / length * 222 * scale,
+    rotation: Math.atan2(dy, dx),
+    scale,
+  };
+}
+
 function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: EditorSceneObject, selected: boolean, cache: ComponentTemplateImageCache): void {
   const points = object.points ?? [];
   const styles = object.drawingEndStyles;
@@ -1879,14 +1951,15 @@ function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: Edi
     const svg = renderPartSvg(styles[end], object.color);
     const entry = cache.get('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
     if (entry.state === 'loaded') {
-      const scale = Math.min(Math.max(Number(object.metadata?.drawingWidth ?? 3), 3) / 52, length / 280);
-      context.save(); context.translate(origin.x, origin.y); context.rotate(Math.atan2(dy, dx));
-      context.scale(scale, scale); context.drawImage(entry.image, 0, -120, 1200, 240); context.restore();
+      const placement = wireDrawingEndArtworkPlacement(origin, adjacent, Number(object.metadata?.drawingWidth ?? 3));
+      if (!placement) return;
+      context.save(); context.translate(placement.x, placement.y); context.rotate(placement.rotation);
+      context.scale(placement.scale, placement.scale); context.drawImage(entry.image, 0, -120, 1200, 240); context.restore();
       return;
     }
     const nx = -dy / length, ny = dx / length;
     const depth = Math.min(12, Math.max(5, length * 0.12));
-    const tip = { x: origin.x + dx / length * depth, y: origin.y + dy / length * depth };
+    const tip = { x: origin.x - dx / length * depth, y: origin.y - dy / length * depth };
     context.strokeStyle = selected ? '#1179ac' : '#344b59';
     context.fillStyle = styles[end] === 'tin' ? '#b8c7cc' : styles[end] === 'copper' ? '#ca7e4a' : styles[end] === 'sealed' || styles[end] === 'sealed-pin' ? '#7a929e' : object.color;
     context.lineWidth = 1.2;
@@ -1900,7 +1973,7 @@ function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: Edi
       context.beginPath(); context.arc(tip.x, tip.y, radius * 1.25, 0, Math.PI * 2); context.stroke();
     }
     if (styles[end] === 'sealed-pin') {
-      context.beginPath(); context.moveTo(tip.x, tip.y); context.lineTo(tip.x + dx / length * radius * 2.2, tip.y + dy / length * radius * 2.2); context.stroke();
+      context.beginPath(); context.moveTo(tip.x, tip.y); context.lineTo(tip.x - dx / length * radius * 2.2, tip.y - dy / length * radius * 2.2); context.stroke();
     }
   });
   context.restore();
@@ -2848,7 +2921,7 @@ function e4ConnectorSnapTarget(object: EditorSceneObject): E4ConnectorSnapTarget
 }
 
 export function CanvasViewport({
-  onFreeWireEndpointMove, onFreeWireEndpointPreview, onDetachedPairAction, onFreeWireEndStyleRequest,
+  onFreeWireEndpointMove, onFreeWireEndpointsXChange, onFreeWireEndpointPreview, onDetachedPairAction, onFreeWireEndStyleRequest,
   view,
   tool,
   camera,
@@ -2891,9 +2964,9 @@ export function CanvasViewport({
   onCatalogDrop,
 }: CanvasViewportProps) {
   const frameRef = useRef<HTMLDivElement>(null);
-  const freeEndDrag = useRef<{wireId:string;end:"from"|"to";pointerId:number}|null>(null);
+  const freeEndDrag = useRef<{wireId:string;end:"from"|"to";pointerId:number;group?:readonly FreeWireEndpointRef[]}|null>(null);
   useEffect(()=>{
-    const cancel=(event:KeyboardEvent)=>{if(event.key!=="Escape"||!freeEndDrag.current)return;const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);};
+    const cancel=(event:KeyboardEvent)=>{if(event.key!=="Escape"||!freeEndDrag.current)return;const d=freeEndDrag.current;freeEndDrag.current=null;for(const ref of d.group??[{wireId:d.wireId,end:d.end}])onFreeWireEndpointPreview?.(ref.wireId,ref.end,null);};
     window.addEventListener("keydown",cancel);
     return ()=>window.removeEventListener("keydown",cancel);
   },[onFreeWireEndpointPreview]);
@@ -2938,6 +3011,9 @@ export function CanvasViewport({
     : objects;
   const activeSelectedIds = selectedObjectIds ?? (selectedObjectId ? [selectedObjectId] : []);
   const selectedSet = new Set(activeSelectedIds);
+  const freeEndpointRefs = freeWireEndpointRefs(objects, selectedSet, layers);
+  const freeEndAxes = freeWireEndAxes(freeEndpointRefs);
+  const snapRefs = freeWireEndpointRefs(objects, new Set(objects.map(object => object.id)), layers);
   const pairActionIds=(id:string):readonly string[]=>{
     const selected=objects.filter(o=>o.kind==="wire"&&selectedSet.has(o.id));
     if(selected.length===2)return selected.map(o=>o.id);
@@ -3129,8 +3205,17 @@ export function CanvasViewport({
   };
 
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
-    if(event.button===0&&view==="drawing"&&tool==="select"&&onFreeWireEndpointMove&&!onObjectPick){
+    if(event.button===0&&view==="drawing"&&tool==="select"&&(onFreeWireEndpointMove||onFreeWireEndpointsXChange)&&!onObjectPick){
       const p=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const axis = freeEndAxes.find(axis => Math.abs(axis.x - p.x) <= 8 / camera.zoom &&
+        Math.abs((axis.minY + axis.maxY) / 2 - p.y) <= 9 / camera.zoom);
+      if (axis && onFreeWireEndpointsXChange) {
+        const hit = freeEndpointRefs.find(ref => ref.wireId === axis.wireIds[0] && ref.end === axis.end)!;
+        const axisRefs = freeEndpointRefs.filter(ref => axis.wireIds.includes(ref.wireId) && ref.end === axis.end);
+        event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
+        freeEndDrag.current = { wireId: hit.wireId, end: hit.end, pointerId: event.pointerId, group: axisRefs };
+        return;
+      }
       const hit=objects.filter(o=>o.kind==="wire"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>(["from","to"] as const).flatMap(end=>{
         const point=end==="from"?o.points?.[0]:o.points?.at(-1);
         return o.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true"&&point&&Math.hypot(point.x-p.x,point.y-p.y)<=7/camera.zoom?[{wireId:o.id,end,pointerId:event.pointerId}]:[];
@@ -3469,7 +3554,7 @@ export function CanvasViewport({
   const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
   const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>(g.pointMarker?Math.hypot(point.x-g.point.x,point.y-g.point.y):pointToSegmentDistance(point,{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth}))<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;onFreeWireEndpointPreview?.(d.wireId,d.end,screenToWorld(camera,localPoint(event.clientX,event.clientY)));return;}
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;const raw=screenToWorld(camera,localPoint(event.clientX,event.clientY));if(d.group){for(const ref of d.group)onFreeWireEndpointPreview?.(ref.wireId,ref.end,{x:raw.x,y:ref.point.y});}else{const snapped=snapFreeWireEndpointX(raw,snapRefs,d.wireId,d.end,8/camera.zoom);onFreeWireEndpointPreview?.(d.wireId,d.end,snapped);}return;}
     if(railDraft&&view==="drawing"&&tool==="position-rail"){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),end=snapRailEnd(railDraft.start,point);
       const ids=objects.filter(o=>o.kind==="position-leader"&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})>=0&&railParameter({start:railDraft.start,end,id:"preview",leaderIds:[]},{x:o.x+o.width/2,y:o.y+o.height/2})<=1&&railDistance({start:railDraft.start,end},{x:o.x+o.width/2,y:o.y+o.height/2})<=railCatchDistance/camera.zoom).map(o=>o.id);
@@ -3538,7 +3623,7 @@ export function CanvasViewport({
   };
 
   const endPointer = (event: PointerEvent<HTMLCanvasElement>) => {
-    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);onFreeWireEndpointMove?.(d.wireId,d.end,screenToWorld(camera,localPoint(event.clientX,event.clientY)));if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;const raw=screenToWorld(camera,localPoint(event.clientX,event.clientY));if(d.group&&onFreeWireEndpointsXChange){for(const ref of d.group)onFreeWireEndpointPreview?.(ref.wireId,ref.end,null);onFreeWireEndpointsXChange([...new Set(d.group.map(ref=>ref.wireId))],d.end,raw.x);}else{const snapped=snapFreeWireEndpointX(raw,snapRefs,d.wireId,d.end,8/camera.zoom);onFreeWireEndpointPreview?.(d.wireId,d.end,null);onFreeWireEndpointMove?.(d.wireId,d.end,snapped);}if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current?.kind==="physical-node-connect") {
       const drag=dragRef.current;
@@ -3633,7 +3718,7 @@ export function CanvasViewport({
   };
 
   const cancelPointer = (event: PointerEvent<HTMLCanvasElement>) => {
-    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;onFreeWireEndpointPreview?.(d.wireId,d.end,null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
+    if(freeEndDrag.current?.pointerId===event.pointerId){const d=freeEndDrag.current;freeEndDrag.current=null;for(const ref of d.group??[{wireId:d.wireId,end:d.end}])onFreeWireEndpointPreview?.(ref.wireId,ref.end,null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
     setPhysicalGuide(undefined);
     if (dragRef.current?.pointerId !== event.pointerId) return;
     if(dragRef.current.kind==="covering"){const d=dragRef.current;onCoveringDrag?.(d.objectId,d.spanIndex,d.part,d.start,d.start,"cancel");}
@@ -3891,7 +3976,10 @@ export function CanvasViewport({
       </div>
       {view==="drawing"&&tool.startsWith("dimension")&&<><svg className="he-dimension-targets" aria-hidden="true">{objects.filter(o=>(o.kind==="physical-segment"||o.kind==="wire"&&o.metadata?.physicalRoute!=="true")&&layers.some(l=>l.id===o.layerId&&l.visible)).flatMap(w=>(w.kind==="physical-segment"?pipeSceneEditablePoints(w):w.points??[]).map((p,i)=>i!==0&&i!==(w.kind==="physical-segment"?pipeSceneEditablePoints(w):w.points??[]).length-1?null:<circle key={`${w.id}:${i}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={dimensionStart.some(a=>a.wireId===w.id&&a.index===i)?6:4} fill="white" stroke="#167caf" strokeWidth="2"/>))}</svg><div className="he-dimension-help" role="status">{dimensionMessage||"Выберите два конца участка"}</div></>}
       {hoverGrip&&view==="drawing"&&<svg className="he-covering-grip" aria-hidden="true"><line x1={(hoverGrip.point.x-hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y1={(hoverGrip.point.y-hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} x2={(hoverGrip.point.x+hoverGrip.normal.x*hoverGrip.halfWidth)*camera.zoom+camera.offsetX} y2={(hoverGrip.point.y+hoverGrip.normal.y*hoverGrip.halfWidth)*camera.zoom+camera.offsetY} stroke="#00a9db" strokeWidth="6"/><circle cx={hoverGrip.point.x*camera.zoom+camera.offsetX} cy={hoverGrip.point.y*camera.zoom+camera.offsetY} r="5" fill="white" stroke="#007ca8" strokeWidth="2"/></svg>}
-      {view==="drawing"&&tool==="select"&&onFreeWireEndpointMove&&<svg aria-label="Свободные концы проводов" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>{objects.filter(o=>o.kind==="wire"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>(["from","to"] as const).map(end=>{const p=end==="from"?o.points?.[0]:o.points?.at(-1);return p&&o.metadata?.[end==="from"?"freeFrom":"freeTo"]==="true"?<circle key={`${o.id}:${end}`} cx={p.x*camera.zoom+camera.offsetX} cy={p.y*camera.zoom+camera.offsetY} r={5} fill="white" stroke="#167caf" strokeWidth={2}/>:null;}))}</svg>}
+      {view==="drawing"&&tool==="select"&&(onFreeWireEndpointMove||onFreeWireEndpointsXChange)&&<svg aria-label="Свободные концы проводов" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+        {freeEndpointRefs.map(ref=><circle key={`${ref.wireId}:${ref.end}`} cx={ref.point.x*camera.zoom+camera.offsetX} cy={ref.point.y*camera.zoom+camera.offsetY} r={5} fill="white" stroke="#167caf" strokeWidth={2}/>)}
+        {freeEndAxes.map(axis=>{const y=(axis.minY+axis.maxY)/2;return <g key={`axis:${axis.end}:${axis.wireIds.join(",")}`}><line x1={axis.x*camera.zoom+camera.offsetX} y1={axis.minY*camera.zoom+camera.offsetY-10} x2={axis.x*camera.zoom+camera.offsetX} y2={axis.maxY*camera.zoom+camera.offsetY+10} stroke="#167caf" strokeWidth={1.5} strokeDasharray="5 4"/><circle cx={axis.x*camera.zoom+camera.offsetX} cy={y*camera.zoom+camera.offsetY} r={8} fill="white" stroke="#167caf" strokeWidth={2}/><path d={`M ${axis.x*camera.zoom+camera.offsetX-3} ${y*camera.zoom+camera.offsetY-3} L ${axis.x*camera.zoom+camera.offsetX+3} ${y*camera.zoom+camera.offsetY} L ${axis.x*camera.zoom+camera.offsetX-3} ${y*camera.zoom+camera.offsetY+3}`} fill="none" stroke="#167caf" strokeWidth={1.5}/></g>;})}
+      </svg>}
       {view==="drawing"&&tool==="select"&&<svg aria-label="Изгибы свободных проводов" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>{objects.filter(o=>o.metadata?.detachedDrawing==="true"&&selectedSet.has(o.id)&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>e4Midpoints(o).map(h=><circle key={`${o.id}:${h.index}`} cx={h.point.x*camera.zoom+camera.offsetX} cy={h.point.y*camera.zoom+camera.offsetY} r={4} fill="#1179ac" opacity={.35}/>))}</svg>}
       <CanvasObjectHint target={physicalMenu?null:hoverTarget}/>
       {physicalMenu&&objects.some(o=>o.id===physicalMenu.id)&&<CanvasObjectPopover key={physicalMenu.id+(physicalMenu.wires?":wires":"")} x={physicalMenu.x} y={physicalMenu.y} label={physicalMenu.wires?"Провода пайпа":"Свойства объекта"} onClose={()=>setPhysicalMenu(null)}>

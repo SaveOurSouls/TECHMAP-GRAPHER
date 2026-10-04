@@ -56,6 +56,20 @@ it("keeps the global radius on a wire projected through an OP and its connector 
   drawEditorSceneObject(ctx,wire,false,"drawing");
   expect(arcTo).toHaveBeenCalled();
 });
+it("rounds editable bends of an isolated wire without changing its stored polyline",()=>{
+  const base=fixture(),original=base.wires[0]!;
+  const document={...base,drawingDocuments:{...emptyDrawingDocuments(),bendRadius:36},wires:base.wires.map(wire=>wire.id!==original.id?wire:{
+    ...wire,
+    drawingEndpoints:{from:{x:0,y:0},to:{x:120,y:100}},
+    drawingRoute:[{x:120,y:0}],
+  })};
+  const before=structuredClone(document.wires),wire=designToScene(document,"drawing").find(item=>item.id===original.id)!;
+  expect(wire.routeRadius).toBe(36);
+  const arcTo=vi.fn(),ctx=new Proxy({arcTo},{get:(o,p)=>Reflect.get(o,p)??vi.fn()}) as unknown as CanvasRenderingContext2D;
+  drawEditorSceneObject(ctx,wire,false,"drawing");
+  expect(arcTo).toHaveBeenCalledTimes(1);
+  expect(document.wires).toEqual(before);
+});
 it("creates and drags a sleeve on the visible arc using authored parameters",()=>{
   const d=fixture(),doc={...d,drawingDocuments:{...emptyDrawingDocuments(),bendRadius:40}};
   const points=[{x:0,y:0},{x:100,y:0},{x:100,y:100}];

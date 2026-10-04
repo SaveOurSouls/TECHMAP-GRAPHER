@@ -495,7 +495,10 @@ export function designToScene(
       height: 0,
       color: wire.color,
       points,
-      ...(view === "drawing" ? {routeRadius:wire.drawingEndpoints ? 0 : drawingBendRadius(document)} : {}),
+      // Isolated routes keep their own editable polyline points, but they still
+      // use the drawing bend radius for rendering.  A zero radius made every
+      // detached corner sharp and made the radius control appear ineffective.
+      ...(view === "drawing" ? {routeRadius: drawingBendRadius(document)} : {}),
       ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute||wireDisplay.twisted?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       ...(view === "drawing" && wire.drawingEndStyles ? { drawingEndStyles: wire.drawingEndStyles } : {}),
@@ -1235,11 +1238,11 @@ export function HarnessDesignEditor({
   const [coveringRatioPreview,setCoveringRatioPreview]=useState<number|null>(null);
   const [pairPitchPreview,setPairPitchPreview]=useState<{id:string;step:number}|null>(null);
   const [pipePreview,setPipePreview]=useState<{id:string;index:number;point:{x:number;y:number};mode?:import("./physical-editing").PhysicalDragMode;insert?:boolean}|null>(null);
-  const [freeEndPreview,setFreeEndPreview]=useState<{wireId:string;end:"from"|"to";position:{x:number;y:number}}|null>(null);
+  const [freeEndPreviews,setFreeEndPreviews]=useState<readonly {wireId:string;end:"from"|"to";position:{x:number;y:number}}[]>([]);
   const previewResult = useMemo(() => {
     if (!history) return { document: null, error: null };
-    if(freeEndPreview){
-      try{return {document:applyEditorCommand(history.present,{type:"set-wire-drawing-endpoint",...freeEndPreview}),error:null};}
+    if(freeEndPreviews.length){
+      try{return {document:freeEndPreviews.reduce((document, preview)=>applyEditorCommand(document,{type:"set-wire-drawing-endpoint",...preview}),history.present),error:null};}
       catch(error){return {document:history.present,error:error instanceof Error?error.message:"Не удалось переместить конец провода."};}
     }
     if(pairPitchPreview)return {document:{...history.present,diffPairs:history.present.diffPairs.map(pair=>pair.id===pairPitchPreview.id?{...pair,step:pairPitchPreview.step}:pair)},error:null};
@@ -1314,7 +1317,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, freeEndPreview, drawingPerimeters, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, indexScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
+  }, [history, movePreview, view, pipePreview, freeEndPreviews, drawingPerimeters, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, indexScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -2455,8 +2458,11 @@ export function HarnessDesignEditor({
             run({ type: "remove-screen", screenId: screen.id });
           }
         }}
-        onFreeWireEndpointMove={(wireId,end,position)=>{setFreeEndPreview(null);run({type:"set-wire-drawing-endpoint",wireId,end,position});}}
-        onFreeWireEndpointPreview={(wireId,end,position)=>setFreeEndPreview(position?{wireId,end,position}:null)}
+        onFreeWireEndpointMove={(wireId,end,position)=>{setFreeEndPreviews([]);run({type:"set-wire-drawing-endpoint",wireId,end,position});}}
+        onFreeWireEndpointsXChange={(wireIds,end,x)=>{setFreeEndPreviews([]);run({type:"set-wire-drawing-endpoints-x",wireIds,end,x});}}
+        onFreeWireEndpointPreview={(wireId,end,position)=>setFreeEndPreviews(current=>position
+          ? [...current.filter(preview=>preview.wireId!==wireId||preview.end!==end),{wireId,end,position}]
+          : current.filter(preview=>preview.wireId!==wireId||preview.end!==end))}
         onDetachedPairAction={(wireIds,action)=>run({type:"set-detached-wire-pair",wireIds,action})}
         onWireRoutePointPreview={(id,index,point,mode,insert)=>setPipePreview(point&&(view==="e4"||history.present.wires.some(w=>w.id===id&&w.drawingEndpoints)||history.present.physicalTopology?.segments.some(s=>s.id===id)||history.present.physicalTopology?.joiningPipes?.some(p=>p.id===id))?{id,index,point,mode,insert}:null)}
         onWireRoutePointMove={(wireId, routeIndex, point, mode="carry", insert=false) => {

@@ -194,6 +194,7 @@ export interface HarnessEditorWorkspaceProps {
   readonly onDrawingEndEndpointChange?: (wireId: string, end: "from" | "to", position: EditorPoint) => void;
   readonly onDrawingEndBulkXChange?: (wireIds: readonly string[], end: "from" | "to", x: number) => void;
   readonly onFreeWireEndpointMove?: (wireId: string, end: "from" | "to", point: EditorPoint) => void;
+  readonly onFreeWireEndpointsXChange?: (wireIds: readonly string[], end: "from" | "to", x: number) => void;
   readonly onFreeWireEndpointPreview?: (wireId: string, end: "from" | "to", point: EditorPoint | null) => void;
   readonly onDetachedPairAction?: (wireIds: readonly string[], action: "twist" | "straighten") => void;
   readonly objectProperties?:(objectId:string)=>ReactNode;
@@ -342,6 +343,7 @@ export function HarnessEditorWorkspace({
   onDrawingEndEndpointChange,
   onDrawingEndBulkXChange,
   onFreeWireEndpointMove,
+  onFreeWireEndpointsXChange,
   onFreeWireEndpointPreview,
   onDetachedPairAction,
   objectProperties, onRelatedObjectsSelect,
@@ -799,6 +801,7 @@ export function HarnessEditorWorkspace({
           onPhysicalNodesConnect={onPhysicalNodesConnect}
           onPhysicalNodeConnectToSegment={onPhysicalNodeConnectToSegment}
           onFreeWireEndpointMove={onFreeWireEndpointMove ?? onDrawingEndEndpointChange}
+          onFreeWireEndpointsXChange={onFreeWireEndpointsXChange ?? onDrawingEndBulkXChange}
           onFreeWireEndpointPreview={onFreeWireEndpointPreview}
           onDetachedPairAction={onDetachedPairAction}
           onFreeWireEndStyleRequest={requestFreeWireEndStyle}
