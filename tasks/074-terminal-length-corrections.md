@@ -42,7 +42,7 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: ожидается после изолированного staging в общей рабочей копии.
+- Коммит реализации: `7217377` — `feat(editor): apply terminal L corrections to wire ends`.
 - Проверки и даты: 05.10.2026 — `pnpm --filter @techmap/client typecheck`, production Vite build и профильный Vitest (`terminal-details`, `ObjectInspector`, `drawing-documents`, `route-source`, `cut-diagram`) прошли: 5 файлов, 73/73 теста.
 - Ограничения и открытые вопросы: ручной интерактивный проход в браузере не выполнялся. Полный `pnpm test` не запускался: в общей рабочей копии есть независимые незакоммиченные изменения, в том числе в `canvas-gestures.test.ts`.
 - Решение владельца о приёмке: ожидается.
