@@ -15,7 +15,7 @@ import { projectComponentTemplateView } from "./component-template-view-renderer
 import { materializePlacementRows } from "./component-template-placement";
 import { routeCutReadiness } from "../manufacturing/route-cut-readiness";
 import { DrawingTableWindows } from "./DrawingTableWindows";
-import { drawingLocalDirection, drawingLocalDirectionVector, drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
+import { CONTACT_SIDE_VIEW_PLACEMENT_ID, drawingLocalDirection, drawingLocalDirectionVector, drawingLocalPoint, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments, setDrawingPositionsVisibility } from "./drawing-documents";
@@ -2065,6 +2065,14 @@ export function HarnessDesignEditor({
         revealRequest={revealRequest}
         objectProperties={view==="drawing"?id=>
           <DrawingObjectProperties document={history.present} objectId={id} selectedIds={selectedObjectIds} onCommand={run} instances={componentTemplateViewInstances} wireMaterialOptions={wireLookup.databaseOptions} onSelect={id=>{setSelectedObjectId(id);setSelectedObjectIds([id]);}}
+            contactSideView={(() => { const placement=history.present.connectors.find(connector=>connector.id===id)?.drawingPlacements?.find(item=>item.drawingId===CONTACT_SIDE_VIEW_PLACEMENT_ID); return {exists:!!placement,visible:placement?.visible,scale:placement ? drawingScale([placement],CONTACT_SIDE_VIEW_PLACEMENT_ID) : undefined}; })()}
+            contactSideViewActions={{
+              onAdd:()=>run({type:"set-contact-side-view",connectorId:id}),
+              onSelect:()=>{setSelectedObjectId(id);setSelectedObjectIds([id]);},
+              onShow:()=>run({type:"set-contact-side-view",connectorId:id,visible:true}),
+              onHide:()=>run({type:"set-contact-side-view",connectorId:id,visible:false}),
+              onScaleChange:scale=>run({type:"set-contact-side-view",connectorId:id,scale}),
+            }}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
         documentActions={<>
           {view === "e4" && <>

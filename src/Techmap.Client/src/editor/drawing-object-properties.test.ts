@@ -4,6 +4,7 @@ import {createElement,isValidElement,type ReactElement,type ReactNode} from "rea
 import {PhysicalTopologyPanel} from "./PhysicalTopologyPanel";
 import {PhysicalCoveringsPanel} from "./PhysicalCoveringsPanel";
 import {DrawingObjectProperties,ContactSideViewCard} from "./DrawingObjectProperties";
+import {DrawingScaleControl} from "./DrawingScaleControl";
 import {CanvasObjectHint,CANVAS_HINT_DELAY} from "./CanvasObjectHint";
 import {canvasPopoverPosition,CanvasObjectPopover} from "./CanvasObjectPopover";
 import {physicalFixture} from "./physical-topology-fixture";
@@ -81,6 +82,7 @@ it("shows the published wire database in selected wire properties",()=>{
 it("does not enable library drawing commands for a free connector",()=>{
   const tree=DrawingObjectProperties({document:physicalFixture(),objectId:"A",selectedIds:["A"],instances:[],onCommand:vi.fn(),onSelect:vi.fn()});
   expect(elements(tree).filter(e=>typeof e.props.onChange==="function").every(e=>e.props.disabled===true)).toBe(true);
+  expect(elements(tree).some(e=>e.props["aria-label"]==="Вид со стороны контактов")).toBe(false);
 });
 it("renders the compact contact-side view card for a connector",()=>{
   const d=physicalFixture(),actions={onAdd:vi.fn(),onSelect:vi.fn(),onHide:vi.fn(),onScaleChange:vi.fn()};
@@ -93,9 +95,16 @@ it("exposes status, scale, select and hide actions for an existing contact-side 
   const d=physicalFixture(),actions={onAdd:vi.fn(),onSelect:vi.fn(),onHide:vi.fn(),onScaleChange:vi.fn()};
   const card=ContactSideViewCard({state:{exists:true,visible:true,scale:1.25},actions});
   expect(elements(card).find(e=>e.props["data-status"]==="on-drawing")?.props.children).toBe("На чертеже");
-  const scale=elements(card).find(e=>e.props["aria-label"]==="Масштаб вида со стороны контактов")!;expect(scale.props.value).toBe(1.25);scale.props.onChange({target:{value:"2"}});expect(actions.onScaleChange).toHaveBeenCalledWith(2);
+  const scale=elements(card).find(e=>e.type===DrawingScaleControl)!;expect(scale.props.value).toBe(1.25);scale.props.onChange(2);expect(actions.onScaleChange).toHaveBeenCalledWith(2);
   elements(card).find(e=>e.type==="button"&&e.props.children==="Выделить")!.props.onClick();elements(card).find(e=>e.type==="button"&&e.props.children==="Скрыть")!.props.onClick();
   expect(actions.onSelect).toHaveBeenCalledOnce();expect(actions.onHide).toHaveBeenCalledOnce();
+});
+it("offers to show a hidden contact-side view without discarding its placement",()=>{
+  const actions={onShow:vi.fn()};
+  const card=ContactSideViewCard({state:{exists:true,visible:false,scale:1.25},actions});
+  expect(elements(card).find(e=>e.props["data-status"]==="hidden")?.props.children).toBe("Скрыт");
+  elements(card).find(e=>e.type==="button"&&e.props.children==="Показать")!.props.onClick();
+  expect(actions.onShow).toHaveBeenCalledOnce();
 });
 it("keeps the popup inside viewport edges",()=>{
   expect(canvasPopoverPosition(1200,700,350,400,1280,720)).toEqual({left:922,top:312});

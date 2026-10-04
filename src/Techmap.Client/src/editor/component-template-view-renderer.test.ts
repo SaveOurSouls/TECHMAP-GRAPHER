@@ -486,6 +486,37 @@ describe("contact-side Drawing projection",()=>{
     const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[]).content;
     expect(projectContactSideView({...instance,content:v5},{x:0,y:0},{minX:0,minY:0,maxX:10,maxY:10})).toBeNull();
   });
+
+  it("includes the visible contact-side companion in Drawing selection and fit bounds",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    const contact=rectangle(layer.id);layer.nodes=[contact];
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[]).content;
+    const placed={...instance,content:v5,drawingPlacements:[{drawingId:"view:contact-side",visible:true,offset:{x:220,y:40},scale:1}]};
+    const object:EditorSceneObject={id:instance.objectId,layerId:"connectors",kind:"connector",label:"X1",x:100,y:200,width:60,height:60,color:"#000"};
+    const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
+    const primary=projectComponentTemplateView(placed,"drawing",{x:object.x,y:object.y})!;
+    const contactSide=projectContactSideView(placed,{x:object.x,y:object.y},primary.bounds)!;
+    const point={x:(contactSide.drawing.bounds.minX+contactSide.drawing.bounds.maxX)/2,y:(contactSide.drawing.bounds.minY+contactSide.drawing.bounds.maxY)/2};
+    expect(hitTestEditorScene([object],layers,point,1,"drawing",[placed])).toBe(object.id);
+    const bounds=getEditorSceneBounds([object],layers,"drawing",undefined,[placed])!;
+    expect(bounds.maxX).toBeGreaterThanOrEqual(contactSide.drawing.bounds.maxX);
+    expect(bounds.maxY).toBeGreaterThanOrEqual(contactSide.drawing.bounds.maxY);
+  });
+
+  it("omits a hidden contact-side companion from Drawing selection and fit bounds",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    const contact=rectangle(layer.id);layer.nodes=[contact];
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[]).content;
+    const placed={...instance,content:v5,drawingPlacements:[{drawingId:"view:contact-side",visible:false,offset:{x:220,y:40},scale:1}]};
+    const object:EditorSceneObject={id:instance.objectId,layerId:"connectors",kind:"connector",label:"",x:100,y:200,width:60,height:60,color:"#000"};
+    const layers:EditorLayer[]=[{id:"connectors",label:"Connectors",visible:true,locked:false}];
+    const primary=projectComponentTemplateView(placed,"drawing",{x:object.x,y:object.y})!;
+    const contactSide=projectContactSideView(placed,{x:object.x,y:object.y},primary.bounds)!;
+    const point={x:(contactSide.drawing.bounds.minX+contactSide.drawing.bounds.maxX)/2,y:(contactSide.drawing.bounds.minY+contactSide.drawing.bounds.maxY)/2};
+    expect(hitTestEditorScene([object],layers,point,1,"drawing",[placed])).toBeNull();
+    const bounds=getEditorSceneBounds([object],layers,"drawing",undefined,[placed])!;
+    expect(bounds.maxX).toBeLessThan(contactSide.drawing.bounds.minX);
+  });
 });
 
 it("rotates drawing bounds, hit testing and geometry together",()=>{

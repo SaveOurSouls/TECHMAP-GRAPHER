@@ -16,7 +16,7 @@ import { screenCrossSections, uprightScreenBody, clearScreenSections, type Scree
 import { CanvasObjectPopover } from "./CanvasObjectPopover";
 import { CanvasObjectHint, type CanvasHintTarget } from "./CanvasObjectHint";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";
-import { drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
+import { CONTACT_SIDE_VIEW_PLACEMENT_ID, drawingScale, DRAWING_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { clearDecorationSpans } from "./e4-decoration-spans";
 import {
@@ -55,7 +55,7 @@ import {
 import {
   ComponentTemplateImageCache,
   drawProjectedComponentTemplateView,
-  projectComponentTemplateView,
+  projectComponentTemplateView, projectContactSideView,
   projectE4DrawingCompanion, projectE4DrawingCompanions, shortestDrawingLink,
   type ComponentTemplateViewInstance,
   type ResolveComponentTemplateAssetUrl,
@@ -1586,6 +1586,13 @@ export function hitTestEditorScene(
     const projection = object && instance && view
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
+    const contactSide = object && instance && view === "drawing"
+      ? projectContactSideView(instance, { x: object.x, y: object.y }, projection?.bounds ?? {
+        minX: object.x, minY: object.y, maxX: object.x + object.width, maxY: object.y + object.height,
+      }, resolveComponentTemplateAssetUrl)
+      : null;
+    if (contactSide?.visible && point.x >= contactSide.drawing.bounds.minX - tolerance && point.x <= contactSide.drawing.bounds.maxX + tolerance &&
+        point.y >= contactSide.drawing.bounds.minY - tolerance && point.y <= contactSide.drawing.bounds.maxY + tolerance) return object!.id;
     if (projection && point.x >= projection.bounds.minX - tolerance && point.x <= projection.bounds.maxX + tolerance &&
         point.y >= projection.bounds.minY - tolerance && point.y <= projection.bounds.maxY + tolerance) return object!.id;
     if(view==="drawing"&&object?.kind==="wire"&&object.metadata?.physicalRoute==="true"&&paintOrder.some(o=>o.kind==="physical-segment"&&containsPoint(o,point,tolerance,view)))continue;
@@ -2166,6 +2173,14 @@ export function drawEditorSceneObject(
     if (projection) {
       drawProjectedComponentTemplateView(context, projection, componentTemplateImageCache, selected, minimumStrokePixels);
       drawConnectorContactOverrides(context, object, view, true);
+      if (view === "drawing") {
+        const contactSide = projectContactSideView(componentTemplateViewInstance, { x: object.x, y: object.y }, projection.bounds, resolveComponentTemplateAssetUrl);
+        if (contactSide?.visible) {
+          const [from,to] = contactSide.link;
+          context.save();context.strokeStyle="#7b8996";context.lineWidth=1;context.setLineDash([4,4]);context.beginPath();context.moveTo(from.x,from.y);context.lineTo(to.x,to.y);context.stroke();context.restore();
+          drawProjectedComponentTemplateView(context, contactSide.drawing, componentTemplateImageCache, selected, minimumStrokePixels);
+        }
+      }
       context.restore();
       return;
     }
@@ -2613,6 +2628,12 @@ export function getEditorSceneBounds(
     const projection = instance
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
+    if (instance && view === "drawing") {
+      const contactSide = projectContactSideView(instance,{x:object.x,y:object.y},projection?.bounds??{
+        minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height,
+      },resolveComponentTemplateAssetUrl);
+      if (contactSide?.visible) bounds = expandSceneBounds(bounds,contactSide.drawing.bounds.minX,contactSide.drawing.bounds.minY,contactSide.drawing.bounds.maxX,contactSide.drawing.bounds.maxY);
+    }
     if(view==="drawing"&&object.kind==="connector"&&object.label.trim()&&!objects.some(candidate=>candidate.kind==="object-index"&&candidate.metadata?.indexObjectId===object.id)){
       const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
       bounds=expandSceneBounds(bounds,label.minX,label.minY,label.maxX,label.maxY);
@@ -3488,12 +3509,21 @@ export function CanvasViewport({
     }
     if (tool === "select") {
       const worldPoint = screenToWorld(camera, localPoint(event.clientX, event.clientY));
-      if(view==="e4" && onDrawingMove && event.button===0) {
+      if((view==="e4" || view==="drawing") && onDrawingMove && event.button===0) {
         for(const object of [...objects].reverse()) {
           const layer=layers.find(l=>l.id===object.layerId),instance=componentTemplateViewInstances.find(i=>i.objectId===object.id);
           if(object.kind!=="connector" || !instance || !layer?.visible || layer.locked) continue;
-          const drawing=projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width ?? object.width,resolveComponentTemplateAssetUrl).reverse().find(d=>d.visible && worldPoint.x>=d.bounds.minX && worldPoint.x<=d.bounds.maxX && worldPoint.y>=d.bounds.minY && worldPoint.y<=d.bounds.maxY);
-          if(drawing) {event.currentTarget.setPointerCapture(event.pointerId);onObjectSelect(object.id,false);dragRef.current={kind:"companion",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId:object.id,drawingId:drawing.drawingId,offset:drawing.offset};return;}
+          if(view==="e4") {
+            const drawing=projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width ?? object.width,resolveComponentTemplateAssetUrl).reverse().find(d=>d.visible && worldPoint.x>=d.bounds.minX && worldPoint.x<=d.bounds.maxX && worldPoint.y>=d.bounds.minY && worldPoint.y<=d.bounds.maxY);
+            if(drawing) {event.currentTarget.setPointerCapture(event.pointerId);onObjectSelect(object.id,false);dragRef.current={kind:"companion",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId:object.id,drawingId:drawing.drawingId,offset:drawing.offset};return;}
+          } else {
+            const connectorDrawing=projectComponentTemplateView(instance,"drawing",object,resolveComponentTemplateAssetUrl);
+            const contactSide=projectContactSideView(instance,{x:object.x,y:object.y},connectorDrawing?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height},resolveComponentTemplateAssetUrl);
+            const placement=instance.drawingPlacements?.find(item=>item.drawingId===CONTACT_SIDE_VIEW_PLACEMENT_ID);
+            if(contactSide?.visible && placement && worldPoint.x>=contactSide.drawing.bounds.minX && worldPoint.x<=contactSide.drawing.bounds.maxX && worldPoint.y>=contactSide.drawing.bounds.minY && worldPoint.y<=contactSide.drawing.bounds.maxY) {
+              event.currentTarget.setPointerCapture(event.pointerId);onObjectSelect(object.id,false);dragRef.current={kind:"companion",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId:object.id,drawingId:CONTACT_SIDE_VIEW_PLACEMENT_ID,offset:placement.offset};return;
+            }
+          }
         }
       }
       if (view === "e4") {
@@ -4115,7 +4145,11 @@ export function CanvasViewport({
         const instance=displayInstances.find(i=>i.objectId===object.id);if(!instance)return [];
         const drawings=view==="e4"?projectE4DrawingCompanions(instance,object,getE4ConnectorLayout(object)?.width??object.width,resolveComponentTemplateAssetUrl).filter(d=>d.visible):[];
         const projected=view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
-        const targets=view==="e4"?drawings.map(d=>({id:d.drawingId,x:d.bounds.maxX,y:d.bounds.minY,ax:d.bounds.minX,ay:d.bounds.maxY})) : projected?[{id:DRAWING_VIEW_PLACEMENT_ID,x:projected.bounds.maxX,y:projected.bounds.maxY,ax:object.x,ay:object.y}]:[];
+        const contactSide=view==="drawing"?projectContactSideView(instance,{x:object.x,y:object.y},projected?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height},resolveComponentTemplateAssetUrl):null;
+        const targets=view==="e4"?drawings.map(d=>({id:d.drawingId,x:d.bounds.maxX,y:d.bounds.minY,ax:d.bounds.minX,ay:d.bounds.maxY})) : [
+          ...(projected?[{id:DRAWING_VIEW_PLACEMENT_ID,x:projected.bounds.maxX,y:projected.bounds.maxY,ax:object.x,ay:object.y}]:[]),
+          ...(contactSide?.visible?[{id:CONTACT_SIDE_VIEW_PLACEMENT_ID,x:contactSide.drawing.bounds.maxX,y:contactSide.drawing.bounds.maxY,ax:contactSide.drawing.bounds.minX,ay:contactSide.drawing.bounds.minY}]:[]),
+        ];
         return targets.map(t=><DrawingResizeGrip key={`${object.id}:${t.id}`} x={t.x*camera.zoom+camera.offsetX} y={t.y*camera.zoom+camera.offsetY} vx={(t.x-t.ax)*camera.zoom} vy={(t.y-t.ay)*camera.zoom} scale={drawingScale(instance.drawingPlacements,t.id)} preview={scale=>setScalePreview(scale===null?null:{objectId:object.id,drawingId:t.id,scale})} commit={scale=>onDrawingScale(object.id,t.id,scale)}/>);
       })}
       <div className="he-canvas-status" aria-live="polite">

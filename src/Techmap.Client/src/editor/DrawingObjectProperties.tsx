@@ -29,6 +29,7 @@ export type ContactSideViewState = {
 export type ContactSideViewActions = {
   readonly onAdd?: () => void;
   readonly onSelect?: () => void;
+  readonly onShow?: () => void;
   readonly onHide?: () => void;
   readonly onRemove?: () => void;
   readonly onScaleChange?: (scale: number) => void;
@@ -43,13 +44,12 @@ export function ContactSideViewCard({state,actions}: {state?: ContactSideViewSta
       <strong style={{fontSize:12,color:"#284957"}}>Вид со стороны контактов</strong>
       <span className="he-contact-view-status" data-status={exists ? (visible ? "on-drawing" : "hidden") : "not-added"} style={{fontSize:11,color:exists ? (visible ? "#28734a" : "#687b84") : "#687b84"}}>{exists ? (visible ? "На чертеже" : "Скрыт") : "Не добавлен"}</span>
     </div>
-    {exists&&<label style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>Масштаб
-      <span style={{display:"inline-flex",alignItems:"center",gap:4}}><input aria-label="Масштаб вида со стороны контактов" type="number" min={0.1} max={1000} step="any" value={scale} onChange={event=>actions?.onScaleChange?.(Number(event.target.value))}/><small>%</small></span>
-    </label>}
+    {exists&&<label>Масштаб<DrawingScaleControl value={scale} label="Масштаб вида со стороны контактов" disabled={!actions?.onScaleChange} onChange={value=>actions?.onScaleChange?.(value)}/></label>}
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       {!exists&&<button type="button" className="ui-control" onClick={()=>actions?.onAdd?.()}>Добавить вид со стороны контактов</button>}
       {exists&&<>
         <button type="button" className="ui-control" onClick={()=>actions?.onSelect?.()}>Выделить</button>
+        {!visible&&<button type="button" className="ui-control" onClick={()=>actions?.onShow?.()}>Показать</button>}
         {visible&&<button type="button" className="ui-control" onClick={()=>actions?.onHide?.()}>Скрыть</button>}
         {actions?.onRemove&&<button type="button" className="ui-control" onClick={actions.onRemove}>Удалить</button>}
       </>}
@@ -104,7 +104,7 @@ export function DrawingObjectProperties({document,objectId,selectedIds,onCommand
         onCommand({type:"set-drawing-placement",connectorId:objectId,drawingId:DRAWING_VIEW_PLACEMENT_ID,rotationDegrees,...(bounds?{rotationCenter:{x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2}}:{})});
       }}/><InfoHint>Масштаб и поворот доступны библиотечному рисунку и применяются вместе с контактами и направлениями выходов. Для редактирования самого рисунка откройте библиотеку.</InfoHint>
     </section>}
-    {connector&&<ContactSideViewCard state={contactSideView} actions={contactSideViewActions}/>}
+    {connector?.libraryBinding?.mode==="template"&&<ContactSideViewCard state={contactSideView} actions={contactSideViewActions}/>}
     {wire&&<section className="he-context-fields" aria-label="Свойства провода">
       <label>Цепь<input aria-label="Цепь провода" value={wire.circuit} onChange={e=>onCommand({type:"update-wire",wireId:objectId,circuit:e.target.value})}/></label>
       <label>Цвет<input type="color" aria-label="Цвет провода" value={resolveWireColorHex(wire.color)} onChange={e=>onCommand({type:"update-wire",wireId:objectId,color:e.target.value})}/></label>
