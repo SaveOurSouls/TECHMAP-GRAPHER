@@ -242,11 +242,19 @@ describe("harness editor workspace", () => {
       selectedObjectId: "upper",
       onObjectsChange: vi.fn(),
       onLayersChange: vi.fn(),
+      onClose: vi.fn(),
     }));
 
     expect(markup).toContain("Редактор жгута ЖГ-01");
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
+    expect(markup).toContain("Маршрут");
+    expect(markup).toContain("Маршрут v2");
+    expect(markup).toContain("UML универсальный");
+    const header = markup.match(/<header class="he-header">[\s\S]*?<\/header>/)?.[0] ?? "";
+    expect(header).not.toContain("Объекты");
+    expect(header).not.toContain("Свойства и слои");
+    expect(header).toContain("К проектам");
     expect(markup).toContain("Инструменты редактора");
     expect(markup).toContain("Поле схемы Э4");
     expect(markup).toContain("Свойства");
