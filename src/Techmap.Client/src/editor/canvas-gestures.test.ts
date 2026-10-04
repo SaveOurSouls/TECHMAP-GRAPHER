@@ -1,7 +1,24 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { CanvasViewport, freeWireEndAxes, freeWireEndpointAxis, objectIntersectsSelectionRectangle, selectionRectangleObjectIds, snapFreeWireEndpointX } from "./CanvasViewport";
+import { DrawingResizeGrip } from "./DrawingResizeGrip";
 import type { EditorSceneObject } from "./editor-types";
+
+vi.mock("./component-template-view-renderer", async importOriginal => ({
+  ...await importOriginal<typeof import("./component-template-view-renderer")>(),
+  projectComponentTemplateView: vi.fn((_instance: unknown, _view: unknown, origin: {x:number;y:number}) => ({
+    objectId: "X", snapshotId: "snapshot", viewId: "drawing", viewKind: "drawing",
+    commands: [], bounds: {minX: origin.x, minY: origin.y, maxX: origin.x + 118, maxY: origin.y + 100},
+  })),
+  projectContactSideView: vi.fn((_instance: unknown, origin: {x:number;y:number}) => ({
+    placementId: "view:contact-side", visible: true,
+    drawing: {
+      objectId: "X", snapshotId: "snapshot", viewId: "contact", viewKind: "drawing",
+      commands: [], bounds: {minX: origin.x + 150, minY: origin.y, maxX: origin.x + 250, maxY: origin.y + 100},
+    },
+    link: [{x: origin.x + 118, y: origin.y + 50}, {x: origin.x + 150, y: origin.y + 50}],
+  })),
+}));
 
 // Exercise the actual event handlers without a browser renderer. Effects install
 // the real Escape listener; pointer capture and native events are modeled below.
@@ -203,6 +220,40 @@ it("drags the shared vertical handle with one atomic X update", () => {
   handlers.onPointerUp!({ ...event, clientX: 170 });
   expect(moveGroup).toHaveBeenCalledExactlyOnceWith(["W1", "W2"], "to", 170);
   expect(move).not.toHaveBeenCalled();
+});
+
+it('drags the contact-side companion independently at the canvas zoom',()=>{
+  const move=vi.fn(),select=vi.fn();
+  const placement={drawingId:'view:contact-side',visible:true,offset:{x:150,y:0},scale:1};
+  const instance={objectId:'X',snapshotId:'snapshot',articleVariantId:'variant',content:{} as never,drawingPlacements:[placement]};
+  const object={...connector,x:100,y:80};
+  const props={view:'drawing' as const,tool:'select' as const,camera:{zoom:2,offsetX:0,offsetY:0},objects:[object],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:'X',componentTemplateViewInstances:[instance],onObjectSelect:select,onDrawingMove:move,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()};
+  const tree=CanvasViewport(props);
+  const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!;
+  const handlers=canvas.props as Record<string,(event:any)=>void>;
+  let captured=false;
+  const target={setPointerCapture:vi.fn(()=>{captured=true;}),hasPointerCapture:()=>captured,releasePointerCapture:vi.fn(()=>{captured=false;})};
+  const start={pointerId:7,button:0,clientX:550,clientY:170,currentTarget:target,preventDefault:vi.fn()};
+  handlers.onPointerDown!(start);
+  handlers.onPointerMove!({...start,clientX:590,clientY:210});
+  handlers.onPointerUp!({...start,clientX:590,clientY:210});
+  expect(target.setPointerCapture).toHaveBeenCalledWith(7);
+  expect(move).toHaveBeenCalledExactlyOnceWith('X','view:contact-side',{x:170,y:20});
+  expect(object.x).toBe(100);
+  expect(object.y).toBe(80);
+});
+
+it('routes the contact-side resize grip to its reserved placement only',()=>{
+  const scale=vi.fn();
+  const placement={drawingId:'view:contact-side',visible:true,offset:{x:150,y:0},scale:1};
+  const instance={objectId:'X',snapshotId:'snapshot',articleVariantId:'variant',content:{} as never,drawingPlacements:[placement]};
+  const tree=CanvasViewport({view:'drawing',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[connector],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:'X',componentTemplateViewInstances:[instance],onObjectSelect:vi.fn(),onDrawingScale:scale,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()});
+  const find=(node:any):any[]=>!node||typeof node!=='object'?[]:node.type===DrawingResizeGrip?[node]:[node.props?.children].flat(Infinity).flatMap(find);
+  const grip=find(tree).find(candidate=>candidate.props.x===350);
+  expect(grip).toBeDefined();
+  expect(grip.props.scale).toBe(1);
+  grip.props.commit(1.5);
+  expect(scale).toHaveBeenCalledExactlyOnceWith('X','view:contact-side',1.5);
 });
 
 function fixture(){
