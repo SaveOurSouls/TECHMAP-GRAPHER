@@ -41,6 +41,10 @@ describe("inline route row", () => {
     expect(markup).toContain('<td class="route-metric-cell"><label>Кол-во');
     expect(markup).toContain('class="route-operations-table"');
     expect(markup).toContain('+ Добавить операцию');
+    expect(markup).toContain('class="route-row-delete"');
+    expect(markup).toContain('title="Удалить полуфабрикат"');
+    expect(markup).not.toContain('route-drawing-mode');
+    expect(markup).not.toContain('Режим новой операции');
     expect(markup).not.toContain('Режим операции 1');
     expect(markup).not.toContain('type="radio"');
     expect(markup).not.toContain('class="route-terminal-requirements"');

@@ -59,6 +59,47 @@ export function mergeRouteRows(route: ManufacturingRoute, ids: readonly string[]
   return validate({ ...original, status: "draft", rows: invalidateDescendants([...original.rows, assembly], new Set([newId])) });
 }
 
+/** Remove one independent semi-finished row and detach it from downstream assemblies. */
+export function removeSemiFinishedRow(route: ManufacturingRoute, id: string): ManufacturingRoute {
+  const original = validate(route);
+  const target = original.rows.find(row => row.id === id);
+  if (!target || target.kind !== "semiFinished") throw new Error("Удалять можно только существующий полуфабрикат.");
+  const changed = new Set<string>();
+  const detached = original.rows.filter(row => row.id !== id).map(row => {
+    const dependsOn = row.dependsOn.filter(parent => parent !== id);
+    const assemblyInputs = row.assemblyInputs?.filter(input => input.kind !== "row" || input.rowId !== id);
+    if (dependsOn.length === row.dependsOn.length && assemblyInputs?.length === row.assemblyInputs?.length) return row;
+    changed.add(row.id);
+    return { ...row, dependsOn, ...(assemblyInputs ? { assemblyInputs } : {}) };
+  });
+  // Shared-operation rows are authored manufacturing steps. Keep them even when
+  // deletion leaves one or zero participants; silently removing them loses work.
+  const byId = new Map(detached.map(row => [row.id, row]));
+  const composedFor = (row: RouteRow): Set<string> => {
+    const composed = new Set<string>(), visited = new Set<string>();
+    const visit = (id: string) => {
+      if (visited.has(id)) return;
+      visited.add(id);
+      const current = byId.get(id);
+      if (!current) return;
+      current.sourceObjects.forEach(ref => composed.add(`${ref.kind}:${ref.id}`));
+      current.dependsOn.forEach(visit);
+    };
+    visit(row.id);
+    return composed;
+  };
+  const cleaned = detached.map(row => {
+    const composed = composedFor(row);
+    return {
+      ...row,
+      presentation: { ...row.presentation, objects: row.presentation.objects.filter(item => composed.has(`${item.ref.kind}:${item.ref.id}`)) },
+      ...(row.terminalRequirements ? { terminalRequirements: row.terminalRequirements.filter(item => composed.has(`wire:${item.wireId}`)) } : {}),
+      ...(row.wireBlankSelections ? { wireBlankSelections: row.wireBlankSelections.filter(item => composed.has(`wire:${item.wireId}`)) } : {}),
+    };
+  });
+  return validate({ ...original, status: "draft", rows: invalidateDescendants(cleaned, changed) });
+}
+
 export function addAssemblyRow(route: ManufacturingRoute, id: string, title: string, sourceRefs: readonly RouteSourceRef[], dependsOn: readonly string[]): ManufacturingRoute {
   const original = validate(route);
   return validate({ ...original, status: "draft", rows: [...original.rows, {

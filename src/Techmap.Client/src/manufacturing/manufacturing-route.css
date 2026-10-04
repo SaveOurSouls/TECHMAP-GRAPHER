@@ -221,6 +221,7 @@
 .route-inline-row textarea { min-height: 48px; margin-top: 8px; resize: vertical; }
 .route-inline-row input:focus, .route-inline-row textarea:focus, .route-inline-row select:focus { outline: 0; border-color: #4d9ab7; box-shadow: 0 0 0 3px #4d9ab71c; }
 .route-inline-number label { display: flex; flex-direction: row; align-items: center; gap: 9px; padding-top: 3px; color: #78909d; font-size: 11px; font-variant-numeric: tabular-nums; }
+.route-inline-number { display: flex; align-items: flex-start; gap: 5px; }
 .route-inline-number input { width: 15px; height: 15px; accent-color: var(--route-accent); }
 .route-inline-number span { font-size: 12px; font-weight: 700; }
 .route-inline-material > label + label { margin-top: 7px; }
@@ -936,28 +937,6 @@
   gap: 7px;
   margin: 8px 0 0;
 }
-.route-inline-row.semi-finished .route-operation-add .route-drawing-mode,
-.route-inline-row.assembly .route-operation-add .route-drawing-mode {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  margin: 0;
-  padding: 6px 8px;
-  border: 1px solid #c4dce6;
-  border-radius: 6px;
-  background: #eef8fb;
-}
-.route-inline-row.semi-finished .route-operation-add .route-drawing-mode label,
-.route-inline-row.assembly .route-operation-add .route-drawing-mode label {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  color: var(--route-ink-soft);
-  font-size: 10px;
-  font-weight: 700;
-}
-.route-inline-row.semi-finished .route-operation-add .route-drawing-mode select,
-.route-inline-row.assembly .route-operation-add .route-drawing-mode select { min-width: 0; padding: 5px 6px; font-size: 11px; }
 .route-inline-row.semi-finished .route-operation-add > button,
 .route-inline-row.assembly .route-operation-add > button { width: auto; min-height: 32px; white-space: nowrap; }
 
@@ -1031,3 +1010,24 @@
   .route-inline-row.semi-finished .route-operation-add > button,
   .route-inline-row.assembly .route-operation-add > button { width: 100%; }
 }
+
+
+
+.manufacturing-route-portal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgb(15 34 44 / 46%); color: #183342; }
+.manufacturing-route-dialog.route-operation-chooser-modal { box-sizing: border-box; width: min(75vw, 1100px); height: min(75vh, 760px); min-width: min(420px, calc(100vw - 32px)); min-height: min(360px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #c7d8e1; border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgb(15 34 44 / 28%); }
+.route-operation-chooser-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 17px; border-bottom: 1px solid #dce7ec; }
+.route-operation-chooser-modal-header h2 { margin: 0; color: #183342; font-size: 22px; }
+.route-operation-chooser-modal-header button { width: 34px; height: 34px; padding: 0; font-size: 24px; line-height: 1; }
+.route-operation-chooser-source { display: grid; gap: 5px; margin: 16px 24px 0; color: #486273; font-size: 12px; font-weight: 700; }
+.route-operation-chooser-source select { min-height: 36px; padding: 6px 9px; border: 1px solid #c7d8e1; border-radius: 7px; background: #fff; color: #183342; font: inherit; }
+.route-operation-chooser-modal-body { flex: 1; overflow: auto; padding: 20px 24px 28px; }
+.route-operation-category { margin: 0 0 24px; }
+.route-operation-category h3 { margin: 0 0 10px; color: #183342; font-size: 16px; }
+.route-operation-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 9px; }
+.route-operation-card-grid .route-operation-card { display: flex; align-items: center; gap: 9px; min-height: 62px; padding: 10px; text-align: left; }
+.route-operation-card-grid .route-operation-card > span:nth-child(2) { min-width: 0; }
+.route-operation-card-grid strong, .route-operation-card-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-operation-card-grid small { margin-top: 3px; color: #708493; font-size: 10px; }
+.route-row-delete { width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 5px; color: #a33f3f !important; font-size: 16px; line-height: 1; }
+.route-row-delete:hover:not(:disabled) { border-color: #d68b8b !important; background: #fff2f2 !important; color: #8f2f2f !important; }
+@media (max-width: 620px) { .manufacturing-route-portal { padding: 8px; } .manufacturing-route-dialog.route-operation-chooser-modal { width: 100%; height: calc(100vh - 16px); min-width: 0; min-height: 0; } .route-operation-chooser-modal-header, .route-operation-chooser-modal-body { padding-left: 16px; padding-right: 16px; } .route-operation-chooser-source { margin-left: 16px; margin-right: 16px; } }

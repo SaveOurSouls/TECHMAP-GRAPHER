@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign } from "../editor/model";
-import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
+import { addAssemblyInput, addAssemblyRow, copyAssemblyPresentation, generateRoute, mergeRouteRows, removeAssemblyInput, removeSemiFinishedRow, updateRouteRow, routeRowPresentationConflicts } from "./route-commands";
 import { parseManufacturingRoute, routeRowComposition, type ManufacturingRoute, type RouteRow } from "./route-model";
 const sha = "a".repeat(64);
 const row = (id: string, dependsOn: string[] = []): RouteRow => ({
@@ -176,6 +176,30 @@ describe("manufacturing route commands", () => {
     expect(removed.rows.find(item => item.id === "assembly")?.prepared).toBe(false);
     expect(routeRowComposition(removed, "child").map(ref => ref.id)).toEqual(["a"]);
     expect(() => removeAssemblyInput(removed, "assembly", "missing")).toThrow();
+  });
+  it("deletes one semi-finished row, preserves an authored shared operation and cleans every dependent branch", () => {
+    const grouped = mergeRouteRows(route(row("a"), row("b")), ["a", "b"], "shared");
+    const left = addAssemblyRow(grouped, "left", "Левая ветвь", [], ["shared"]);
+    const diamond = addAssemblyRow(addAssemblyRow(left, "right", "Правая ветвь", [], ["shared"]), "out", "Выход", [], ["left", "right"]);
+    const prepared = diamond.rows.reduce((current, item) => updateRouteRow(current, item.id, { prepared: true }), diamond);
+    const withSavedObjects = updateRouteRow(prepared, "shared", { presentation: { ...prepared.rows.find(item => item.id === "shared")!.presentation, objects: [
+      { ref: { kind: "wire", id: "a" }, points: [{ x: 1, y: 1 }], hidden: false },
+      { ref: { kind: "wire", id: "b" }, points: [{ x: 2, y: 2 }], hidden: false },
+    ] } });
+    const removed = removeSemiFinishedRow(withSavedObjects, "a");
+    expect(removed.rows.map(item => item.id)).toEqual(["b", "shared", "left", "right", "out"]);
+    expect(removed.rows.find(item => item.id === "shared")).toMatchObject({
+      role: "sharedOperation", dependsOn: ["b"], assemblyInputs: [{ rowId: "b" }], prepared: false,
+    });
+    expect(removed.rows.filter(item => ["shared", "left", "right", "out"].includes(item.id)).every(item => !item.prepared)).toBe(true);
+    expect(removed.rows.flatMap(item => item.presentation.objects).map(item => item.ref.id)).not.toContain("a");
+    expect(removed.rows.flatMap(item => item.terminalRequirements ?? []).map(item => item.wireId)).not.toContain("a");
+    expect(routeRowComposition(removed, "out").map(ref => ref.id)).toEqual(["b"]);
+  });
+  it("rejects deletion targets that are absent or are not semi-finished", () => {
+    const original = addAssemblyRow(route(row("a")), "assembly", "Сборка", [], ["a"]);
+    expect(() => removeSemiFinishedRow(original, "missing")).toThrow("существующий полуфабрикат");
+    expect(() => removeSemiFinishedRow(original, "assembly")).toThrow("существующий полуфабрикат");
   });
   it("copies inherited geometry by stable ID without sharing points or changing source rows", () => {
     const original = addAssemblyRow(route(row("a"), row("b")), "assembly", "Сборка", [], ["a", "b"]);
