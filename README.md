@@ -6,6 +6,7 @@
 
 - [Как вести разработку с Codex: чаты, рисунки, требования, задачи и исправления](docs/guide-working-with-codex.md)
 - [Порядок работы с требованиями, задачами, статусом и параллельными чатами](docs/project-workflow.md)
+- [Координация чатов и агента-сборщика](docs/coordination/README.md), [реестр чатов](docs/coordination/chat-registry.md)
 - [Восстановленные требования](docs/requirements.md), [архитектура](docs/architecture.md), [архитектурные решения](docs/decisions/README.md)
 - [Последний проверенный статус](status.md), [очередь задач](tasks/README.md), [протокол M5/ZIP](docs/m5-07-acceptance.md)
 
