@@ -19,6 +19,6 @@
 ## Журнал
 
 - Диагноз: сортировка по среднему поперечному offset не сохраняет порядок при инверсии концов; оболочка строится поверх деградировавшего контура.
-- Коммит: `8fb6e7e` (`fix(drawing): keep OP lanes stable across endpoint order`)
+- Коммит: `b751572` (`fix(drawing): keep OP lanes stable across endpoint order`)
 - Проверки: 7 файлов / 268 клиентских тестов Vitest, профильный срез 41/41, TypeScript `tsc --noEmit`, `git diff --check`.
 - Ограничения: исходный файл жгута владельца не приложен; packaged-проверка остаётся открытой.
