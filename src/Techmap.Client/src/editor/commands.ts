@@ -5,6 +5,7 @@ import { drawingPhysicalScale, drawingWireWidth } from "./drawing-thickness";
 import { parseOuterDiameter } from "./model";
 import { reconcileDrawingDimensions, pipeMeasuredWireLength, segmentDimensionKey, type DimensionMode } from "./drawing-dimensions";
 import { validDrawingScale } from "./drawing-scale";
+import { CONTACT_SIDE_VIEW_PLACEMENT_ID } from "./drawing-scale";
 import { reconcileDrawingDocuments, validateDrawingDocuments, type DrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { prunePhysicalTopology, removePhysicalSegment } from "./physical-topology";
@@ -99,6 +100,8 @@ export type EditorCommand =
   | { readonly type: "update-joining-pipe"; readonly pipeId:string; readonly start?:Point; readonly end?:Point; readonly mode?:"flat"|"round"; readonly width?:number; readonly color?:string; readonly opacity?:number; readonly volumeShading?:boolean }
   | { readonly type: "add-connector"; readonly connector: ConnectorInstance }
   | { readonly type: "set-drawing-placement"; readonly connectorId:string; readonly drawingId:string; readonly scale?:number; readonly rotationDegrees?:number; readonly rotationCenter?:Point; readonly visible?:boolean; readonly offset?:Point }
+  /** Creates, updates or removes the reserved Drawing copy of the E4 contact-side view. */
+  | { readonly type: "set-contact-side-view"; readonly connectorId:string; readonly visible?:boolean; readonly offset?:Point; readonly scale?:number; readonly rotationDegrees?:number; readonly remove?:boolean }
   | { readonly type: "use-e4-table"; readonly connectorId: string }
   | { readonly type: "refresh-template-terminals"; readonly connectorId: string; readonly catalog: NonNullable<ConnectorInstance["terminalCatalog"]> }
   | { readonly type: "move-connector"; readonly connectorId: string; readonly view: EditorView; readonly position: Point; readonly physicalDragMode?:PhysicalDragMode }
@@ -394,6 +397,20 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           positions={...positions,drawing:{x:center.x+x*Math.cos(angle)-y*Math.sin(angle),y:center.y+x*Math.sin(angle)+y*Math.cos(angle)}};
         }
         return {...connector,positions,drawingPlacements:[...(connector.drawingPlacements ?? []).filter(p=>p.drawingId!==command.drawingId),{...previous,...(command.visible===undefined ? {} : {visible:command.visible}),...(command.offset ? {offset:command.offset} : {}),...(command.scale===undefined?{}:{scale:command.scale}),...(command.rotationDegrees===undefined?{}:{rotationDegrees:command.rotationDegrees})}]};
+      });
+    case "set-contact-side-view":
+      return updateConnector(document,command.connectorId,connector=>{
+        if(connector.libraryBinding?.mode!=="template") throw new Error("Вид со стороны контактов доступен библиотечному компоненту.");
+        if(command.remove) {
+          return {...connector,drawingPlacements:(connector.drawingPlacements??[]).filter(placement=>placement.drawingId!==CONTACT_SIDE_VIEW_PLACEMENT_ID)};
+        }
+        if(command.offset && (!Number.isFinite(command.offset.x) || !Number.isFinite(command.offset.y))) throw new Error("Некорректное положение вида со стороны контактов.");
+        if(command.rotationDegrees!==undefined && (!Number.isFinite(command.rotationDegrees)||Math.abs(command.rotationDegrees)>360))throw new Error("Угол вида: от −360 до 360°.");
+        if(command.scale!==undefined&&!validDrawingScale(command.scale)) throw new Error("Масштаб вида: 5–2000%.");
+        const previous=connector.drawingPlacements?.find(placement=>placement.drawingId===CONTACT_SIDE_VIEW_PLACEMENT_ID);
+        const initial={drawingId:CONTACT_SIDE_VIEW_PLACEMENT_ID,visible:true,offset:{x:160,y:0},scale:1};
+        const next={...(previous??initial),...(command.visible===undefined?{}:{visible:command.visible}),...(command.offset?{offset:command.offset}:{}),...(command.scale===undefined?{}:{scale:command.scale}),...(command.rotationDegrees===undefined?{}:{rotationDegrees:command.rotationDegrees})};
+        return {...connector,drawingPlacements:[...(connector.drawingPlacements??[]).filter(placement=>placement.drawingId!==CONTACT_SIDE_VIEW_PLACEMENT_ID),next]};
       });
     case "move-connector":
       {

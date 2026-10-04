@@ -5,7 +5,7 @@ import { createConnectorInstanceFromComponentTemplate } from "./component-templa
 import { createEmptyHarnessDesign } from "./model";
 import { createTemplateContentV5FromEditor } from "../component-library/template-model-v5";
 import { createE4ConnectorSeriesTableFromV3 } from "../component-library/e4-connector-series-table";
-import { projectE4DrawingCompanions, shortestDrawingLink } from "./component-template-view-renderer";
+import { projectContactSideView, projectE4DrawingCompanions, shortestDrawingLink } from "./component-template-view-renderer";
 import { describe, expect, it, vi } from "vitest";
 import { newTemplateContentV3 } from "../component-library/template-commands-v3";
 import type { TemplateContentV3, TemplateNodeV3 } from "../component-library/template-model-v3";
@@ -460,6 +460,31 @@ describe("independent E4 companion drawings",()=>{
     expect(shortestDrawingLink(table,{minX:140,minY:10,maxX:200,maxY:40})).toEqual([{x:100,y:25},{x:140,y:25}]);
     expect(shortestDrawingLink(table,{minX:120,minY:80,maxX:200,maxY:100})).toEqual([{x:100,y:50},{x:120,y:80}]);
     const [a,b]=shortestDrawingLink(table,{minX:20,minY:10,maxX:40,maxY:20});expect(a).toEqual(b);
+  });
+});
+
+describe("contact-side Drawing projection",()=>{
+  it("projects the pinned E4 drawing with its contact labels and wire colours as an independently placed companion",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    const contact=rectangle(layer.id);
+    layer.nodes=[contact];
+    const table=createE4ConnectorSeriesTableFromV3(content);
+    const v5=createTemplateContentV5FromEditor(content,table,[]).content;
+    const source={minX:100,minY:200,maxX:160,maxY:260};
+    const placed=projectContactSideView({...instance,content:v5,drawingPlacements:[{drawingId:"view:contact-side",visible:true,offset:{x:220,y:-40},scale:2}]},{x:100,y:200},source)!;
+    expect(placed.placementId).toBe("view:contact-side");
+    expect(placed.visible).toBe(true);
+    expect(placed.drawing.viewKind).toBe("drawing");
+    expect(placed.drawing.bounds.minX).toBeGreaterThan(300);
+    expect(placed.drawing.bounds.maxX-placed.drawing.bounds.minX).toBeGreaterThan(20);
+    expect(placed.link).toEqual(shortestDrawingLink(source,placed.drawing.bounds));
+  });
+
+  it("does not project a contact-side view until the reserved placement is created",()=>{
+    const {content,instance}=fixture(),view=content.views[1]!,layer=view.layers[0]!;
+    view.layers[0]!.nodes.push(rectangle(layer.id));
+    const v5=createTemplateContentV5FromEditor(content,createE4ConnectorSeriesTableFromV3(content),[]).content;
+    expect(projectContactSideView({...instance,content:v5},{x:0,y:0},{minX:0,minY:0,maxX:10,maxY:10})).toBeNull();
   });
 });
 

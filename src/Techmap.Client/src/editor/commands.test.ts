@@ -1891,6 +1891,30 @@ describe("E4 drawing placement history",()=>{
   });
 });
 
+describe("contact-side drawing view",()=>{
+  it("creates a reserved independent placement without moving the connector and preserves it through history",()=>{
+    const connector=templateConnector(),document={...createEmptyHarnessDesign(),connectors:[connector]};
+    const history=createEditorHistory(document);
+    const added=executeEditorCommand(history,{type:"set-contact-side-view",connectorId:connector.id});
+    const moved=executeEditorCommand(added,{type:"set-contact-side-view",connectorId:connector.id,offset:{x:340,y:-90},scale:1.75,rotationDegrees:30});
+    const placement=moved.present.connectors[0]!.drawingPlacements?.find(item=>item.drawingId==="view:contact-side");
+    expect(placement).toEqual({drawingId:"view:contact-side",visible:true,offset:{x:340,y:-90},scale:1.75,rotationDegrees:30});
+    expect(moved.present.connectors[0]!.positions).toEqual(connector.positions);
+    expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(moved.present))).connectors[0]!.drawingPlacements).toEqual([placement]);
+    expect(undoEditorCommand(moved).present).toEqual(added.present);
+    expect(undoEditorCommand(added).present).toEqual(document);
+  });
+
+  it("rejects invalid contact-side placement and removes only the reserved view",()=>{
+    const connector=templateConnector(),document={...createEmptyHarnessDesign(),connectors:[{...connector,drawingPlacements:[{drawingId:"drawing-1",visible:true,offset:{x:5,y:7}}]}]};
+    expect(()=>applyEditorCommand(document,{type:"set-contact-side-view",connectorId:connector.id,scale:20.1})).toThrow(/Масштаб/);
+    expect(()=>applyEditorCommand(document,{type:"set-contact-side-view",connectorId:connector.id,offset:{x:NaN,y:0}})).toThrow(/положение/);
+    const withView=applyEditorCommand(document,{type:"set-contact-side-view",connectorId:connector.id});
+    const removed=applyEditorCommand(withView,{type:"set-contact-side-view",connectorId:connector.id,remove:true});
+    expect(removed.connectors[0]!.drawingPlacements).toEqual([{drawingId:"drawing-1",visible:true,offset:{x:5,y:7}}]);
+  });
+});
+
 it("C1 reroutes an automatic neighbour to admit the second pin without moving tables",()=>{
  const left=createConnector("l","XS1",2,{x:25,y:20});
  const rightBase=createConnector("r","XS2",4,{x:700,y:44});

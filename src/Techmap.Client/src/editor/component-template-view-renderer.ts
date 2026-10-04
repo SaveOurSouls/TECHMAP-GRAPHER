@@ -1,6 +1,6 @@
 import { materializeE4ConnectorArticle } from "../component-library/e4-connector-series-table";
 import { contactShapeLabel, contactLabelColor } from "../component-library/contact-shape";
-import { drawingScale, drawingRotation } from "./drawing-scale";
+import { CONTACT_SIDE_VIEW_PLACEMENT_ID, drawingScale, drawingRotation } from "./drawing-scale";
 import { materializeGenerator } from "../component-library/drawing-generator";
 import { projectTemplateContentV5TableToV1 } from "../component-library/template-model-v5";
 import type { ConnectorDrawingPlacement } from "./model";
@@ -84,6 +84,19 @@ export interface ProjectedComponentTemplateView {
   readonly viewKind: HarnessEditorView;
   readonly commands: readonly ProjectedComponentTemplateCommand[];
   readonly bounds: ComponentTemplateViewBounds;
+}
+
+/**
+ * A separately selectable contact-side copy on the Drawing and the shortest
+ * thin companion link back to its source connector.  `visible` is kept
+ * separate from the projection so the properties card can describe a hidden
+ * existing placement without drawing or hit-testing it.
+ */
+export interface ContactSideViewProjection {
+  readonly placementId: typeof CONTACT_SIDE_VIEW_PLACEMENT_ID;
+  readonly visible: boolean;
+  readonly drawing: ProjectedComponentTemplateView;
+  readonly link: readonly [ComponentTemplateProjectionOrigin, ComponentTemplateProjectionOrigin];
 }
 
 const identity = (): ComponentTemplateTransform => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
@@ -315,6 +328,7 @@ export function projectComponentTemplateView(
   origin: ComponentTemplateProjectionOrigin,
   resolveAssetUrl?: ResolveComponentTemplateAssetUrl,
   drawingTarget: DrawingTarget = viewKind,
+  placementId: string | undefined = drawingTarget === "drawing" ? "view:drawing" : undefined,
 ): ProjectedComponentTemplateView | null {
   // A v5 E4 table is always rendered by the schematic editor. Its drawing is
   // projected separately as a companion, never as a replacement for that table.
@@ -327,7 +341,7 @@ export function projectComponentTemplateView(
       const runtime = { ...content, drawingGenerators: undefined, views: generated.content.views, logicalContacts: generated.content.logicalContacts,
         articleDrawings: [...(content.articleDrawings ?? []).filter(d => !(d.articleVariantId === instance.articleVariantId && d.target === drawingTarget)),
           { articleVariantId: instance.articleVariantId, target: drawingTarget, viewId: generated.view.id, nodeIds: generated.view.layers.flatMap(l => l.nodes.map(n => n.id)), contactPointIds: generated.view.contactPoints.map(p => p.id) }] };
-      return projectComponentTemplateView({ ...instance, content: runtime }, viewKind, origin, resolveAssetUrl, drawingTarget);
+      return projectComponentTemplateView({ ...instance, content: runtime }, viewKind, origin, resolveAssetUrl, drawingTarget, placementId);
     }
   }
   const binding=instance.content.schemaVersion===5 ? findArticleDrawing(instance.content.articleDrawings,instance.articleVariantId,drawingTarget) : undefined;
@@ -353,8 +367,8 @@ export function projectComponentTemplateView(
     const repeatedGroupIds = new Set(occurrences.keys());
     const assetIds = new Set(instance.content.assets.map(asset => asset.assetId));
     const commands: ProjectedComponentTemplateCommand[] = [];
-    const scale=drawingTarget==="drawing" ? drawingScale(instance.drawingPlacements) : 1;
-    const angle=drawingTarget==="drawing"?drawingRotation(instance.drawingPlacements)*Math.PI/180:0;
+    const scale=placementId === undefined ? 1 : drawingScale(instance.drawingPlacements,placementId);
+    const angle=placementId === undefined ? 0 : drawingRotation(instance.drawingPlacements,placementId)*Math.PI/180;
     const worldOrigin = {...translation(origin.x, origin.y),a:scale*Math.cos(angle),b:scale*Math.sin(angle),c:-scale*Math.sin(angle),d:scale*Math.cos(angle)};
 
     for (const layer of view.layers) {
@@ -427,6 +441,34 @@ export function projectComponentTemplateView(
   } catch {
     return null;
   }
+}
+
+/**
+ * Projects the exact pinned E4 contact drawing onto the harness Drawing.
+ * The E4 target preserves template contact labels and `fillFromWire` colours;
+ * the reserved placement owns only position, scale, rotation and visibility.
+ */
+export function projectContactSideView(
+  instance: ComponentTemplateViewInstance,
+  origin: ComponentTemplateProjectionOrigin,
+  connectorBounds: ComponentTemplateViewBounds,
+  resolveAssetUrl?: ResolveComponentTemplateAssetUrl,
+): ContactSideViewProjection | null {
+  const placement = instance.drawingPlacements?.find(item => item.drawingId === CONTACT_SIDE_VIEW_PLACEMENT_ID);
+  if (!placement) return null;
+  const drawing = projectComponentTemplateView(
+    instance, "drawing", {
+      x: origin.x + (placement?.offset.x ?? 0),
+      y: origin.y + (placement?.offset.y ?? 0),
+    }, resolveAssetUrl, "e4", CONTACT_SIDE_VIEW_PLACEMENT_ID,
+  );
+  if (!drawing) return null;
+  return {
+    placementId: CONTACT_SIDE_VIEW_PLACEMENT_ID,
+    visible: placement.visible,
+    drawing,
+    link: shortestDrawingLink(connectorBounds, drawing.bounds),
+  };
 }
 
 export interface E4DrawingCompanion extends ProjectedComponentTemplateView {
