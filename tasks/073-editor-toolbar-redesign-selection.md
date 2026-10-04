@@ -1,6 +1,6 @@
 # 073. Выбор редизайна панели инструментов редактора
 
-- **Статус:** implemented; narrow visual QA blocked by browser viewport limit
+- **Статус:** ready_for_audit; narrow visual QA blocked by browser viewport limit
 - **Владелец / чат:** основной агент `/root`
 - **Источник запроса:** поручение владельца от 04.10.2026; визуальное свидетельство C1 — `C:\Users\anqla\AppData\Local\Temp\codex-clipboard-ecee1b56-3423-48d9-9261-8f19bb2b692b.png`
 - **Требования:** REQ-077; сохраняет REQ-074
@@ -58,3 +58,24 @@
   проверки. Новый CSS добавлен отдельным завершающим блоком без изменения
   чужого `.he-free-wire-*` hunk.
 - Решение владельца о приёмке: выбран вариант «Контекстная лента» 04.10.2026.
+
+## Handoff для следующего ZIP — 05.10.2026
+
+- **Статус передачи:** `ready_for_audit`; владелец ещё не подтвердил `accepted`.
+- **Коммит панели:**
+  `fbef55e9ca56552300f45a9b48db133d6b72e5e1` (`feat(editor): add contextual
+  toolbar ribbon`). Он уже входит в актуальный интеграционный HEAD
+  `744d122973ce9af7bb2d7f3ea0631bb3bbb6228c`; повторное применение запрещено
+  как дубликат.
+- **Зависимости Route v2:**
+  `94058911c887aba6001fad497f7d289a4be56963` (карточки/инспектор) и
+  `63227429f1b246c921b0385744ac873534cbf7f4` (вход в редактор) уже являются
+  предками `fbef55e` и текущего HEAD.
+- **Повторные проверки объединённого HEAD:** Vitest — 182 файла / 1778 тестов,
+  включая `EditorToolbar.test.tsx` и V2 model/artwork/composition; TypeScript,
+  Vite production build и `git diff --check HEAD` прошли.
+- **Ограничения сборки:** отсутствуют ZIP, portable и packaged-прогон этой
+  цепочки; C1 подтверждён только в Э4 и Чертёже на 717 × 884, а 390 px и
+  горизонтальная прокрутка фактически не проверены; `design-qa.md` остаётся
+  `final result: blocked`. В baseline не включать чужие незакоммиченные
+  route-commands, requirements, lock-файлы, индекс задач и `_m5_21_build/`.
