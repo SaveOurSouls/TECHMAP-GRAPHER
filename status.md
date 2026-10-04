@@ -97,6 +97,17 @@ TypeScript, Vite production build и staged diff check. Локальная .NET 
 вернул `ok`. Изолированный хост не содержит проектов, поэтому ручная приёмка
 таблицы на исходном жгуте остаётся открытой.
 
+# Проверенный срез карточки 050 — 04.10.2026
+
+`StartupFailureReporter.SafeLogRoots` теперь переживает отказ ACL/Win32 при
+канонизации существующего предка: используются лексические пути и независимые
+fallback-каталоги `%LOCALAPPDATA%`/`%TEMP%`. Это устраняет вторичный
+`UnauthorizedAccessException` в tampered-package startup-error сценарии.
+
+Проверки и ограничения записаны в [карточке 050](tasks/050-portable-startup-error-fallback.md).
+Полный self-contained ZIP и семь portable-режимов после этого изменения ещё не
+перезапускались.
+
 # Локально проверенный срез карточки 049 — 03.10.2026
 
 REQ-077 и карточка [051](tasks/051-top-toolbar-design.md) добавляют верхнюю

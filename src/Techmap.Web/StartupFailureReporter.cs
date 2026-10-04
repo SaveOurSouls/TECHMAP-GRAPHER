@@ -119,16 +119,37 @@ public static class StartupFailureReporter
 
         var configuredLogRoot = logRootOverride ?? ReadLogRoot(arguments);
         var candidates = new List<string>();
+        string? physicalDataRoot = null;
+        string? lexicalDataRoot = null;
+        if (dataRoot is not null)
+        {
+            TryResolvePhysicalPath(dataRoot, out physicalDataRoot);
+            try
+            {
+                lexicalDataRoot = Path.GetFullPath(dataRoot, programRoot);
+            }
+            catch (Exception error) when (
+                error is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // Invalid untrusted paths are never used for logging.
+            }
+        }
+
         if (dataRoot is not null && !string.IsNullOrWhiteSpace(configuredLogRoot))
         {
             try
             {
-                var physicalDataRoot = DataRootLease.ResolveProspectiveDirectoryPath(dataRoot);
                 var fullLogRoot = Path.GetFullPath(configuredLogRoot, programRoot);
-                var physicalLogRoot = DataRootLease.ResolveProspectiveDirectoryPath(fullLogRoot);
-                if (!PathsOverlap(physicalDataRoot, physicalLogRoot))
+                if (physicalDataRoot is not null &&
+                    TryResolvePhysicalPath(fullLogRoot, out var physicalLogRoot) &&
+                    !PathsOverlap(physicalDataRoot, physicalLogRoot))
                 {
                     candidates.Add(physicalLogRoot);
+                }
+                else if (physicalDataRoot is null && lexicalDataRoot is not null &&
+                    !PathsOverlap(lexicalDataRoot, fullLogRoot))
+                {
+                    candidates.Add(fullLogRoot);
                 }
             }
             catch (Exception error) when (
@@ -140,27 +161,101 @@ public static class StartupFailureReporter
 
         if (dataRoot is not null)
         {
-            var physicalDataRoot = DataRootLease.ResolveProspectiveDirectoryPath(dataRoot);
-            foreach (var fallback in new[]
-                     {
-                         $"{Path.TrimEndingDirectorySeparator(physicalDataRoot)}-startup-errors",
-                         Path.Combine(
-                             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                             "TECHMAP-GRAPHER",
-                             "logs"),
-                         Path.Combine(Path.GetTempPath(), "TECHMAP-GRAPHER", "logs"),
-                     })
+            var fallbackRoots = new List<string>();
+            if (physicalDataRoot is not null)
             {
-                var physicalFallback = DataRootLease.ResolveProspectiveDirectoryPath(fallback);
-                if (!PathsOverlap(physicalDataRoot, physicalFallback) &&
-                    !candidates.Contains(physicalFallback, StringComparer.OrdinalIgnoreCase))
+                fallbackRoots.Add(
+                    $"{Path.TrimEndingDirectorySeparator(physicalDataRoot)}-startup-errors");
+            }
+            else if (lexicalDataRoot is not null)
+            {
+                fallbackRoots.Add(
+                    $"{Path.TrimEndingDirectorySeparator(lexicalDataRoot)}-startup-errors");
+            }
+
+            fallbackRoots.AddRange(
+                [
+                    Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "TECHMAP-GRAPHER",
+                        "logs"),
+                    Path.Combine(Path.GetTempPath(), "TECHMAP-GRAPHER", "logs"),
+                ]);
+
+            foreach (var fallback in fallbackRoots)
+            {
+                if (physicalDataRoot is not null)
                 {
-                    candidates.Add(physicalFallback);
+                    if (TryResolvePhysicalPath(fallback, out var physicalFallback))
+                    {
+                        if (PathsOverlap(physicalDataRoot, physicalFallback))
+                        {
+                            continue;
+                        }
+
+                        if (!candidates.Contains(physicalFallback, StringComparer.OrdinalIgnoreCase))
+                        {
+                            candidates.Add(physicalFallback);
+                        }
+                        continue;
+                    }
+
+                    // A fallback may itself have an ACL-restricted ancestor.
+                    // Its lexical path is still safe to use for these fixed,
+                    // independent locations after the physical overlap check
+                    // could not be performed.
+                    try
+                    {
+                        if (!PathsOverlap(physicalDataRoot, fallback) &&
+                            !candidates.Contains(fallback, StringComparer.OrdinalIgnoreCase))
+                        {
+                            candidates.Add(fallback);
+                        }
+                    }
+                    catch (Exception error) when (
+                        error is ArgumentException or NotSupportedException or PathTooLongException)
+                    {
+                        // Invalid environment paths are skipped.
+                    }
+                    continue;
+                }
+
+                // ACL-restricted data roots cannot be canonicalised. Keep the
+                // fallback independent by checking the lexical paths and let
+                // TryWriteLog perform the final writability check.
+                try
+                {
+                    if (!PathsOverlap(dataRoot, fallback) &&
+                        !candidates.Contains(fallback, StringComparer.OrdinalIgnoreCase))
+                    {
+                        candidates.Add(fallback);
+                    }
+                }
+                catch (Exception error) when (
+                    error is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    // Invalid environment paths are skipped.
                 }
             }
         }
 
         return candidates;
+    }
+
+    private static bool TryResolvePhysicalPath(string path, out string resolved)
+    {
+        try
+        {
+            resolved = DataRootLease.ResolveProspectiveDirectoryPath(path);
+            return true;
+        }
+        catch (Exception error) when (
+            error is IOException or UnauthorizedAccessException or
+                ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            resolved = string.Empty;
+            return false;
+        }
     }
 
     private static string? TryWriteLog(Exception exception, IReadOnlyList<string> candidates)
