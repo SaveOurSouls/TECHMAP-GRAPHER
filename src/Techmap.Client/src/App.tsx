@@ -27,6 +27,7 @@ import { ManufacturingRoutePanel } from "./manufacturing/ManufacturingRoutePanel
 import { RouteV2Panel } from "./manufacturing-v2/RouteV2Panel";
 import { UmlPanel } from "./uml/UmlPanel";
 import { InfoHint } from "./InfoHint";
+import type { HarnessSectionId } from "./editor/HarnessSectionNavigation";
 
 const ComponentLibrary = lazy(async () => {
   const module = await import("./component-library/ComponentLibrary");
@@ -67,9 +68,9 @@ const harnessTabs = [
 ] as const;
 const testHarnessTabs = [
   { id: "route-v2", label: "Маршрут v2", description: "Визуальная последовательность полуфабрикатов" },
-  { id: "uml", label: "UML", description: "Ручная схема зависимостей и операций" },
+  { id: "uml", label: "UML универсальный", description: "Ручная схема зависимостей и операций" },
 ] as const;
-export type HarnessTab = typeof harnessTabs[number]["id"] | typeof testHarnessTabs[number]["id"];
+export type HarnessTab = HarnessSectionId;
 const statusLabels: Readonly<Record<ProjectStatus, string>> = {
   draft: "Черновик",
   active: "В работе",
@@ -417,6 +418,13 @@ export function App({ config, session }: AppProps) {
     return true;
   };
 
+  const navigateHarnessSection = (section: HarnessSectionId): void => {
+    if (!selectedHarness) return;
+    setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, section));
+    setEditorOpen(true);
+    setEditorReveal(undefined);
+  };
+
   const createProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canStartMutation()) return;
@@ -685,13 +693,13 @@ export function App({ config, session }: AppProps) {
   }, [selectedHarness]);
 
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route-v2") {
-    return <RouteV2Panel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} />;
+    return <RouteV2Panel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onSectionChange={navigateHarnessSection} />;
   }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "uml") {
-    return <UmlPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} />;
+    return <UmlPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onSectionChange={navigateHarnessSection} />;
   }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route") {
-    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} />;
+    return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} onSectionChange={navigateHarnessSection} />;
   }
   if (editorOpen && selectedProject && selectedHarness && (activeHarnessTab === "e4" || activeHarnessTab === "drawing")) {
     return (
@@ -704,7 +712,7 @@ export function App({ config, session }: AppProps) {
         initialView={activeHarnessTab}
         harnessQuantity={selectedHarness.quantity}
         initialReveal={editorReveal}
-        onClose={() => {setEditorOpen(false); setEditorReveal(undefined);}}
+        onClose={returnToProjectMenu}
         onViewChange={(view) => setActiveHarnessTabs((current) => rememberHarnessTab(
           current,
           selectedHarness.harnessId,
@@ -715,6 +723,7 @@ export function App({ config, session }: AppProps) {
           selectedHarness.harnessId,
           "route",
         ))}
+        onSectionChange={navigateHarnessSection}
       />
     );
   }

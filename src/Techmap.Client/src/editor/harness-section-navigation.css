@@ -1,0 +1,99 @@
+.harness-section-navigation {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 4px 8px;
+  background: #193d50;
+  border-bottom: 1px solid #2a5367;
+}
+
+.harness-section-links {
+  min-width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.harness-section-navigation button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #bdd2db;
+  font: 700 11px/1.25 "Segoe UI", Arial, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.harness-section-navigation button:hover:not(:disabled) {
+  border-color: #527889;
+  background: #244d60;
+  color: #fff;
+}
+
+.harness-section-navigation button.active,
+.harness-section-navigation button[aria-current="page"] {
+  border-color: #00a0b7;
+  background: #00a0b7;
+  color: #fff;
+}
+
+.harness-section-navigation button:disabled {
+  cursor: default;
+}
+
+.harness-section-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  border-color: #527889 !important;
+  background: #244d60 !important;
+  color: #d8edf2 !important;
+}
+
+.harness-section-home > span:first-child {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.harness-editor .harness-section-navigation {
+  width: 100%;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.harness-editor .harness-section-navigation button {
+  color: #b9d0da;
+}
+
+.harness-editor .harness-section-navigation button.active,
+.harness-editor .harness-section-navigation button[aria-current="page"] {
+  color: #fff;
+}
+
+.manufacturing-route-panel > .harness-section-navigation {
+  margin: -28px clamp(-52px, -3vw, -20px) 16px;
+  padding-inline: clamp(20px, 3vw, 52px);
+}
+
+.route-v2-panel > .harness-section-navigation,
+.uml-panel > .harness-section-navigation {
+  margin: -18px -22px 18px;
+  padding-inline: 22px;
+}
+
+.he-save-state-utility {
+  align-self: flex-start;
+  width: max-content;
+  min-height: 29px;
+  padding: 5px 8px;
+  border: 1px solid #c8dbe3;
+  background: #fff;
+  color: #2a596d;
+}

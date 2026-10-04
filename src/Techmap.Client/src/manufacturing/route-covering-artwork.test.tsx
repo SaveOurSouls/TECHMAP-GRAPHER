@@ -21,9 +21,34 @@ describe("route covering artwork", () => {
     expect(markup).toContain("pattern");
     expect(markup).toContain("<image");
     expect(markup).toContain("Metal049A");
+    // The vector weave and volume overlay keep the preview legible when the
+    // catalogue image is unavailable in an exported/generated SVG.
+    expect(markup).toContain("linearGradient");
+    expect(markup).toContain("#e7f0f3");
+    expect(markup).toContain("#172a34");
     expect(markup).toContain("240 мм");
     expect(markup).not.toContain("<text");
     expect(markup).not.toContain(" rx=");
+  });
+
+  it("keeps the metal braid as a clean autonomous rectangle", () => {
+    const markup = renderToStaticMarkup(createElement(RouteCoveringArtwork, { covering }));
+    expect(markup).toContain('viewBox="0 0 560 120"');
+    expect(markup).toContain('fill="url(#covering-metal-braid');
+    expect(markup).toContain('pointer-events="none"');
+    expect(markup).not.toContain("<polyline");
+    expect(markup).not.toContain("<text");
+    expect(markup).not.toContain(" rx=");
+  });
+
+  it("keeps the metal weave visible when the catalogue raster is unavailable", () => {
+    const markup = renderToStaticMarkup(createElement(RouteCoveringArtwork, {
+      covering: { ...covering, style: { ...covering.style, texture: `asset:${"a".repeat(64)}` } },
+    }));
+    expect(markup).not.toContain("<image");
+    expect(markup).toContain("#e7f0f3");
+    expect(markup).toContain("#172a34");
+    expect(markup).toContain("linearGradient");
   });
 
   it("renders automatic thread bandage as transverse fibres", () => {

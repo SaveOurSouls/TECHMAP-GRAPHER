@@ -20,9 +20,10 @@ import { wireBlankDraft, wireBlankEndLabels, wireBlankSourceId, type WireBlankEn
 import { WireBlankPreview } from "../WireBlankCatalogEditor";
 import { matchWireBlank } from "./route-wire-blank";
 import { RouteOperationChooser } from "./RouteOperationChooser";
+import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
 import "./manufacturing-route.css";
 
-type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => boolean | void; onViewChange?: (view: "e4" | "drawing") => void; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void };
+type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => boolean | void; onViewChange?: (view: "e4" | "drawing") => void; onSectionChange?: (section: HarnessSectionId) => void | Promise<void>; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void };
 type AssemblyInputDraft = { kind: "source"; ref: RouteSourceRef } | { kind: "row"; rowId: string };
 
 function sourceKey(ref: RouteSourceRef): string { return `${ref.kind}:${ref.id}`; }
@@ -60,7 +61,7 @@ function sourceLabel(ref: RouteSourceRef): string {
   return ref.kind === "wire" ? "Провод" : ref.kind === "cable" ? "Кабель" : ref.kind === "covering" ? "Оболочка" : "Разъём";
 }
 
-export function ManufacturingRoutePanel({ config, session, projectId, harnessId, onClose, onViewChange, onNavigationGuard }: Props) {
+export function ManufacturingRoutePanel({ config, session, projectId, harnessId, onClose, onViewChange, onSectionChange, onNavigationGuard }: Props) {
   const designApi = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
   const referenceApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const componentPlacementApi = useMemo(() => createComponentPlacementApi(config, session), [config, session]);
@@ -168,12 +169,7 @@ export function ManufacturingRoutePanel({ config, session, projectId, harnessId,
   const preparedCount = route?.rows.filter(row => row.prepared).length ?? 0;
   const introducedCount = route?.rows.reduce((sum, row) => sum + row.sourceObjects.length, 0) ?? 0;
   return <section className="manufacturing-route-panel" aria-label="Производственный маршрут">
-    {onViewChange && <nav className="route-view-navigation" aria-label="Представление жгута">
-      {onClose && <button type="button" className="route-home-button" disabled={refreshing || photoBusy} onClick={() => void closeToProject()} aria-label="Вернуться к проекту">← <span>К проекту</span></button>}
-      <button type="button" disabled={refreshing || photoBusy} onClick={async () => { if (await guard()) onViewChange("e4"); }}>Схема Э4</button>
-      <button type="button" disabled={refreshing || photoBusy} onClick={async () => { if (await guard()) onViewChange("drawing"); }}>Чертёж</button>
-      <button type="button" aria-current="page">Маршрут</button>
-    </nav>}
+    {onViewChange && <HarnessSectionNavigation active="route" disabled={refreshing || photoBusy} onHome={() => void closeToProject()} onNavigate={async section => { if (await guard()) { if (section === "e4" || section === "drawing") onViewChange(section); else await onSectionChange?.(section); } }} />}
     <header className="manufacturing-route-header"><div className="route-heading"><div className="route-heading-mark" aria-hidden="true"><span /><span /><span /></div><div><p className="eyebrow">M5 · МАРШРУТНАЯ КАРТА</p><h2>Маршрут производства</h2><p className="manufacturing-route-status" role="status"><span className={`route-status-dot ${saving ? "saving" : error ? "error" : ""}`} />{saving ? "Сохраняем…" : error ? "Есть ошибки" : dirty ? "Есть несохранённые изменения" : "Все изменения сохранены"} <span>·</span> {resource?.harnessQuantity ?? 1} шт. в заказе</p></div></div>
       <div className="manufacturing-route-actions">{route && (completed ? <><span className="route-ready">Маршрут завершён</span><button type="button" disabled={saving} onClick={() => markRoute({ ...route, status: "draft" })}>Продолжить</button></> : <button type="button" className="finish-action" disabled={stale || refreshing || photoBusy || !!sourcePreview} onClick={() => void finish()}>Закончить маршрут</button>)}{route && <button type="button" className="ghost-action" onClick={() => void refreshSource()} disabled={saving || refreshing}>Синхронизировать</button>}<button type="button" className="primary-action" onClick={() => void persist()} disabled={!route || saving || !dirty || stale || refreshing}>Сохранить</button>{onClose && <button type="button" className="ghost-action" disabled={refreshing || photoBusy} onClick={() => void closeToProject()}>Выйти</button>}</div>
     </header>
