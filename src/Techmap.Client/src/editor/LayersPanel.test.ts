@@ -17,6 +17,10 @@ describe("layers panel", () => {
 
     expect(markup).toContain('aria-label="Скрыть слой Провода"');
     expect(markup).toContain('aria-label="Показать слой Размеры"');
+    expect(markup).toContain('aria-label="Заблокировать слой Провода"');
+    expect(markup).toContain('class="he-layer-lock-icon"');
+    expect(markup).not.toContain("◌");
+    expect(markup).not.toContain("●");
     expect(markup).toContain("Скрыть");
     expect(markup).toContain("Показать");
     expect(markup).toContain('class="he-layer-row is-hidden"');

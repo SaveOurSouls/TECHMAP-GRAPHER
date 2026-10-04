@@ -323,9 +323,11 @@
 .he-layer-row.is-hidden .he-layer-name { color: #89969d; }
 .he-drag-handle { color: #a0adb4; font-size: 16px; cursor: grab; }
 .he-layer-name { overflow: hidden; color: #355365; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.he-layer-control { width: 24px; height: 25px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #a2adb3; cursor: pointer; }
-.he-layer-control:hover { background: #eaf2f5; color: #4a7083; }
-.he-layer-control.active { color: #257a9e; }
+.he-layer-control { width: 28px; height: 25px; padding: 0; display: grid; place-items: center; border: 1px solid #d4e1e6; border-radius: 4px; background: #f8fbfc; color: #78909b; cursor: pointer; }
+.he-layer-control:hover { border-color: #a9c6d2; background: #eaf2f5; color: #315f74; }
+.he-layer-control.active { border-color: #b8d6e1; background: #eef7fa; color: #257a9e; }
+.he-layer-lock-icon { width: 15px; height: 15px; display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+.he-layer-lock-icon circle { fill: currentColor; stroke: none; }
 .he-layer-visibility { min-width: 67px; height: 25px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid #d4e1e6; border-radius: 4px; background: #f8fbfc; color: #687c86; font-size: 9px; cursor: pointer; }
 .he-layer-visibility:hover { border-color: #a9c6d2; background: #eaf2f5; color: #315f74; }
 .he-layer-visibility.active { border-color: #b8d6e1; background: #eef7fa; color: #257a9e; }
@@ -646,7 +648,7 @@
 @media(max-width:1300px) { .he-catalog-hint { display:none; } .he-catalog-header { grid-template-columns:auto minmax(0,1fr); } }
 @media(max-width:1100px) {
   .he-workspace { --utility-width:42px; --inspector-width:0px; }
-  .he-utility-panel.open { position:absolute; inset:0 auto 0 54px; z-index:25; width:min(270px,calc(100% - 54px)); box-shadow:5px 0 20px #193d5026; }
+  .he-utility-panel.open { position:absolute; inset:0 auto 0 54px; z-index:25; box-sizing:border-box; width:244px; max-width:calc(100% - 54px); overflow:hidden; box-shadow:5px 0 20px #193d5026; }
   .he-right-panel { position:absolute; inset:0 0 0 auto; z-index:25; width:min(300px,calc(100% - 54px)); box-shadow:-5px 0 20px #193d5026; }
   .harness-editor .he-header { gap:8px; padding:0 10px; }
   .he-view-tabs button { min-width:80px; padding:0 10px; }
@@ -665,7 +667,7 @@
   .he-toolbar { padding:6px 2px; }
   .he-tool { width:39px; }
   .he-utility-panel.closed { width:30px; }
-  .he-utility-panel.open { left:44px; width:min(270px,calc(100% - 44px)); }
+  .he-utility-panel.open { left:44px; width:244px; max-width:calc(100% - 44px); }
   .he-catalog-header { display:flex; flex-wrap:wrap; gap:4px; padding:4px 6px; }
   .he-catalog-toggle { padding:0; font-size:10px; }
   .he-catalog-search { width:100%; }

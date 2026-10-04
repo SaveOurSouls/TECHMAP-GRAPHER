@@ -14,6 +14,17 @@ export function resolveLayerDropIndex(layers: readonly EditorLayer[], layerId: s
   return sourceIndex >= 0 && sourceIndex < dropIndex ? dropIndex - 1 : dropIndex;
 }
 
+function LayerLockIcon({ locked }: { readonly locked: boolean }) {
+  return (
+    <svg className="he-layer-lock-icon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path className="he-layer-lock-shackle" d={locked ? "M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10" : "M8 10V7.8a4.2 4.2 0 0 1 7.6-2.5"} />
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <circle cx="12" cy="14" r="1.15" />
+      <path d="M12 15.1v2.2" />
+    </svg>
+  );
+}
+
 export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove, onIsolate }: LayersPanelProps) {
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -104,7 +115,7 @@ export function LayersPanel({ layers, onVisibilityToggle, onLockToggle, onMove, 
                 title={layer.locked ? "Разблокировать" : "Заблокировать"}
                 onClick={() => onLockToggle(layer.id)}
               >
-                {layer.locked ? "●" : "◌"}
+                <LayerLockIcon locked={layer.locked} />
               </button>
             </li>
             <li
