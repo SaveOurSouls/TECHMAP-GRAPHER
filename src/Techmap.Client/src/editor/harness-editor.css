@@ -682,11 +682,10 @@
 
 /* Compact drawing-copy header and inspector controls at narrow route widths. */
 @media(max-width:650px) {
-  .harness-editor .he-header:has(> .he-back:last-child) { grid-template-columns:minmax(0,1fr) auto; }
+.harness-editor .he-header:has(> .he-back:last-child) { grid-template-columns:minmax(0,1fr) auto; }
   .harness-editor .he-header:has(> .he-back:last-child) .he-header-identity { grid-column:1; grid-row:1; }
-  .harness-editor .he-header:has(> .he-back:last-child) .he-inspector-toggle { grid-column:1; grid-row:2; justify-self:start; }
   .harness-editor .he-header:has(> .he-back:last-child) .he-save-state { grid-column:2; grid-row:2; justify-self:end; white-space:nowrap; }
-  .harness-editor .he-header:has(> .he-back:last-child) > .he-back:last-child { grid-column:2; grid-row:1; justify-self:end; width:auto; padding:0 9px; font-size:11px; }
+.harness-editor .he-header:has(> .he-back:last-child) > .he-back:last-child { grid-column:2; grid-row:1; justify-self:end; width:auto; padding:0 9px; font-size:11px; }
   .he-right-panel { overflow:hidden; }
   .he-layers-panel { min-width:0; padding:9px 7px; }
   .he-layer-row {

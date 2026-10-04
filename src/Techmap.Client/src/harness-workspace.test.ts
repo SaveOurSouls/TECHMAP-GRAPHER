@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { canLeaveProject, HarnessDocumentTabs, rememberHarnessTab } from "./App";
+import { HarnessSectionNavigation, harnessSectionItems } from "./editor/HarnessSectionNavigation";
 import type { HarnessSummary } from "./project-api";
 
 const harness: HarnessSummary = {
@@ -31,6 +32,7 @@ describe("harness workspace", () => {
     expect(markup).toContain("Маршрут");
     expect(markup).toContain("Маршрут v2");
     expect(markup).toContain("UML");
+    expect(markup).toContain("UML универсальный");
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Геометрия, размеры и технические требования");
@@ -45,6 +47,19 @@ describe("harness workspace", () => {
     state = rememberHarnessTab(state, "harness-a", "e4");
 
     expect(state).toEqual({ "harness-a": "e4", "harness-b": "route" });
+  });
+
+  it("renders the five-way editor navigation and project return", () => {
+    const markup = renderToStaticMarkup(createElement(HarnessSectionNavigation, {
+      active: "route-v2",
+      onNavigate: vi.fn(),
+      onHome: vi.fn(),
+    }));
+
+    expect(harnessSectionItems).toHaveLength(5);
+    for (const item of harnessSectionItems) expect(markup).toContain(item.label);
+    expect(markup).toContain("К проектам");
+    expect(markup).toContain('aria-current="page"');
   });
 
   it("blocks project-menu return when the draft confirmation is declined", () => {

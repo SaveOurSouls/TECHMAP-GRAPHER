@@ -40,6 +40,7 @@ import { ObjectInspector } from "./ObjectInspector";
 import type { CableInstance, WireEndStripProfiles } from "./model";
 import type { WireBlankEnd } from "../WireBlankCatalog";
 import { FreeWireEndsPanel } from "./FreeWireEndsPanel";
+import { HarnessSectionNavigation, type HarnessSectionId } from "./HarnessSectionNavigation";
 import "./harness-editor.css";
 
 const defaultLayers: readonly EditorLayer[] = [
@@ -170,6 +171,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly onViewChange?: (view: HarnessEditorView) => void;
   /** Opens the manufacturing route document from the editor header. */
   readonly onRouteRequest?: () => void;
+  /** Switches to any harness document from the shared editor navigation. */
+  readonly onSectionChange?: (section: HarnessSectionId) => void | Promise<void>;
   readonly onObjectsChange?: (objects: readonly EditorSceneObject[]) => void;
   readonly onLayersChange?: (layers: readonly EditorLayer[]) => void;
   readonly onSelectedObjectChange?: (objectId: string | null) => void;
@@ -373,6 +376,7 @@ export function HarnessEditorWorkspace({
   previewMessage,
   onClose,
   onRouteRequest,
+  onSectionChange,
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
   const [tool, setTool] = useState<EditorTool>("select");
@@ -634,31 +638,33 @@ export function HarnessEditorWorkspace({
   return (
     <section className="harness-editor" data-harness-id={harnessId} aria-label={`Редактор жгута ${harnessDesignation}`} onFocusCapture={selectEditorTextField}>
       <header className="he-header">
-        <div className="he-header-identity">
-          {onClose && <button className="he-back" type="button" onClick={onClose} aria-label="Вернуться к проекту">←</button>}
-          <div>
-            <span>ПРОЕКТ / ЖГУТ</span>
-            <strong>{harnessDesignation}</strong>
+        {!localCopyControls ? (
+          <HarnessSectionNavigation
+            active={view}
+            onNavigate={async section => {
+              if (section === "e4" || section === "drawing") changeView(section);
+              else if (section === "route" && onRouteRequest) await onRouteRequest();
+              else await onSectionChange?.(section);
+            }}
+            onHome={onClose}
+          />
+        ) : (
+          <div className="he-header-identity">
+            <div>
+              <span>ПРОЕКТ / ЖГУТ</span>
+              <strong>{harnessDesignation}</strong>
+            </div>
           </div>
-        </div>
-        {!localCopyControls && <div className="he-view-tabs" role="tablist" aria-label="Представление жгута">
-          <button type="button" role="tab" aria-selected={view === "e4"} className={view === "e4" ? "active" : ""} onClick={() => changeView("e4")}>Схема Э4</button>
-          <button type="button" role="tab" aria-selected={view === "drawing"} className={view === "drawing" ? "active" : ""} onClick={() => changeView("drawing")}>Чертёж</button>
-          {onRouteRequest && <button type="button" role="tab" aria-selected={false} className="he-route-tab" onClick={onRouteRequest}>Маршрут</button>}
-        </div>}
-        <div className="he-header-panels">
-          <button className="he-material-toggle" type="button" aria-expanded={materialPanelOpen} aria-controls="he-material-panel" onClick={() => { setMaterialPanelOpen(open => !open); if (window.innerWidth <= 1100) { setInspectorOpen(false); setUtilityPanelOpen(false); } }}>Объекты</button>
-          <button className="he-inspector-toggle" type="button" aria-expanded={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) { setMaterialPanelOpen(false); setUtilityPanelOpen(false); } }}>Свойства и слои</button>
-        </div>
-        <button
+        )}
+        {localCopyControls && <button
           className={`he-save-state ${saveState}`}
           type="button"
           onClick={onSaveRequest}
-          disabled={!onSaveRequest || (!localCopyControls && (saveState === "saved" || saveState === "saving"))}
+          disabled={!onSaveRequest || saveState === "saved" || saveState === "saving"}
           title={saveState === "error" ? "Повторить сохранение" : "Сохранить сейчас"}
         >
-          <span aria-hidden="true" />{localCopyControls ? "Сохранить фрагмент" : saveLabels[saveState]}
-        </button>
+          <span aria-hidden="true" />Сохранить фрагмент
+        </button>}
         {localCopyControls && <button className="he-back" type="button" onClick={localCopyControls.onCancel}>Отмена</button>}
       </header>
 
@@ -684,6 +690,23 @@ export function HarnessEditorWorkspace({
             }}
           >Объекты</button>}
           <div className="he-utility-content" id="he-utility-content" hidden={!utilityPanelOpen}>
+            {!localCopyControls && <button
+              className={`he-save-state he-save-state-utility ${saveState}`}
+              type="button"
+              onClick={onSaveRequest}
+              disabled={!onSaveRequest || saveState === "saved" || saveState === "saving"}
+              title={saveState === "error" ? "Повторить сохранение" : "Сохранить сейчас"}
+            >
+              <span aria-hidden="true" />{saveLabels[saveState]}
+            </button>}
+            {!localCopyControls && <section className="he-utility-section he-controls-section" aria-label="Панели редактора">
+              <button type="button" className="ui-control he-control-action" aria-pressed={materialPanelOpen} onClick={() => { setMaterialPanelOpen(open => !open); if (window.innerWidth <= 1100) { setInspectorOpen(false); } }}>
+                {materialPanelOpen ? "Скрыть объекты" : "Показать объекты"}
+              </button>
+              <button type="button" className="ui-control he-control-action" aria-pressed={inspectorOpen} onClick={() => { setInspectorOpen(open => !open); if (window.innerWidth <= 1100) { setMaterialPanelOpen(false); } }}>
+                {inspectorOpen ? "Скрыть свойства и слои" : "Показать свойства и слои"}
+              </button>
+            </section>}
             <div className="he-view-options">
               <InfoHint>Перемещайте точки свободно. Удерживайте Ctrl для привязки к углам с шагом 30°. Shift меняет редактирование соседних плеч; Ctrl и Shift можно удерживать вместе.</InfoHint>
             </div>
