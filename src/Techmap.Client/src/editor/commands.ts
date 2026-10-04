@@ -58,6 +58,7 @@ import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
+import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
@@ -102,6 +103,7 @@ export type EditorCommand =
   | { readonly type: "remove-cable"; readonly cableId: string }
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-wire-strip-profile"; readonly wireId: string; readonly end: "from" | "to"; readonly profile: WireStripProfileBinding | null }
+  | { readonly type: "set-wire-drawing-end-style"; readonly wireId: string; readonly end: "from" | "to"; readonly style: WireBlankEnd }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -848,6 +850,19 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           }
           return { ...wire, stripProfiles: Object.freeze(stripProfiles) };
         }, "Провод не найден."),
+      };
+    case "set-wire-drawing-end-style":
+      if (!wireBlankEnds.includes(command.style)) throw new Error("Режим отображения конца провода задан неверно.");
+      return {
+        ...document,
+        wires: replaceRequired(document.wires, command.wireId, (wire) => ({
+          ...wire,
+          drawingEndStyles: {
+            from: wire.drawingEndStyles?.from ?? "cut",
+            to: wire.drawingEndStyles?.to ?? "cut",
+            [command.end]: command.style,
+          },
+        }), "Провод не найден."),
       };
     case "set-e4-wire-label-position": {
       const changed = {

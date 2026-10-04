@@ -44,3 +44,7 @@
 
 .route-full-drawing__migration { margin: 0; padding: 7px 12px; background: #fff5d9; color: #664d1c; font-size: 12px; }
 .route-full-drawing:has(.route-full-drawing__migration) .harness-editor { height: calc(100dvh - 42px); }
+.route-fragment-mode { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; color: #456170; font-size: 12px; }
+.route-fragment-mode button { border: 1px solid #bfd2db; border-radius: 5px; padding: 6px 10px; background: #fff; color: #294b5c; cursor: pointer; }
+.route-fragment-mode button.active { border-color: #2f718d; background: #e8f3f7; color: #153f52; font-weight: 700; }
+.route-fragment-mode button:disabled { opacity: .55; cursor: not-allowed; }

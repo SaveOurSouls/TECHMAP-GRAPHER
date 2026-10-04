@@ -252,6 +252,15 @@
 .he-property-form .he-toggle-field { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .he-toggle-field input { width: 15px; height: 15px; margin: 0; accent-color: var(--he-accent); }
 .he-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.he-wire-strip-profile { display: grid; gap: 7px; margin: 0; padding: 9px; border: 1px solid #c8dbe3; border-radius: 7px; background: #f7fbfc; }
+.he-wire-strip-profile legend { padding: 0 3px; font-size: 10px; font-weight: 700; color: #355463; }
+.he-wire-strip-profile button { min-width: 0; padding: 7px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #c2d5dc; border-radius: 5px; background: #fff; color: #355463; font-size: 10px; cursor: pointer; }
+.he-wire-strip-profile button.active { border-color: #1c83ad; box-shadow: inset 0 0 0 1px #1c83ad; background: #edf8fc; }
+.he-wire-strip-profile small { color: #607783; font-size: 9px; line-height: 1.35; }
+.he-wire-end-style { display: grid; gap: 7px; margin: 0; padding: 9px; border: 1px solid #c8dbe3; border-radius: 7px; background: #f7fbfc; }
+.he-wire-end-style legend { padding: 0 3px; font-size: 10px; font-weight: 700; color: #355463; }
+.he-wire-end-style select { width: 100%; min-width: 0; }
+.he-wire-end-style small { color: #607783; font-size: 9px; line-height: 1.35; }
 .he-wire-length-status { padding: 10px 11px; display: grid; gap: 4px; border: 1px solid; border-radius: 7px; font-size: 10px; line-height: 1.35; }
 .he-wire-length-status strong { font-size: 12px; }
 .he-wire-length-status small { font-size: 9px; font-weight: 700; }

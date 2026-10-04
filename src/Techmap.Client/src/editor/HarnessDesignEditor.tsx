@@ -138,6 +138,9 @@ export interface HarnessDesignEditorProps {
     readonly onCancel: () => void;
     readonly onHiddenObjectIdsChange?: (ids: readonly string[]) => void;
     readonly onBackgroundOpacityChange?: (opacity: number) => void;
+    readonly onDraftChange?: (document: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => void;
+    /** Creates a detached material fragment from the current working copy. */
+    readonly onIsolateObjects?: (document: HarnessDesignDocument, objectIds: readonly string[]) => HarnessDesignDocument | null;
   };
 }
 
@@ -460,8 +463,8 @@ export function designToScene(
     };
   });
   const wires: EditorSceneObject[] = document.wires.flatMap((wire, index) => {
-    const start = contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds,drawingConnectorIds);
-    const end = contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds,drawingConnectorIds);
+    const start = view === "drawing" && wire.drawingEndpoints ? wire.drawingEndpoints.from : contactPointForWire(document, wire.from, wire.to, view, materializedConnectorIds,drawingConnectorIds);
+    const end = view === "drawing" && wire.drawingEndpoints ? wire.drawingEndpoints.to : contactPointForWire(document, wire.to, wire.from, view, materializedConnectorIds,drawingConnectorIds);
     if (!start || !end) return [];
     const physicalPoints = view === "drawing" ? physicalWirePoints(document, wire.id, start, end) : null;
     const wireDisplay = view === "drawing" && physicalPoints ? physicalWireDisplay(document,wire.id,start,end) : undefined;
@@ -490,6 +493,7 @@ export function designToScene(
       ...(view === "drawing" ? {routeRadius:drawingBendRadius(document)} : {}),
       ...(wireDisplay ? {paths:wireDisplay.selectionPaths,visibleWireStrokes:roundRoute||wireDisplay.twisted?wireDisplay.visibleStrokes:wireDisplay.paths.map(points=>({points,width:wireWidth}))} : {}),
       ...(view === "drawing" && wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
+      ...(view === "drawing" && wire.drawingEndStyles ? { drawingEndStyles: wire.drawingEndStyles } : {}),
       metadata: {
         ...(localVolume !== undefined ? { volumeShading: String(localVolume) } : {}),
         drawingWidth:String(wireWidth),
@@ -885,6 +889,11 @@ export function HarnessDesignEditor({
   const materialResolutionGeneration = useRef<number | null>(null);
 
   useEffect(() => { historyRef.current = history; }, [history]);
+  const draftChangeRef = useRef(localCopy?.onDraftChange);
+  draftChangeRef.current = localCopy?.onDraftChange;
+  useEffect(() => {
+    if (history) draftChangeRef.current?.(history.present, hiddenObjectIds, backgroundOpacity);
+  }, [history?.present, hiddenObjectIds, backgroundOpacity]);
   useEffect(() => { resourceRef.current = resource; }, [resource]);
   useEffect(() => setView(localCopy ? "drawing" : initialView), [initialView, localCopy]);
 
@@ -1866,6 +1875,21 @@ export function HarnessDesignEditor({
   };
 
   const positionsVisible = !!history?.present.drawingDocuments?.leaders.some(leader => !leader.hidden);
+  const isolateLocalObjects = (objectIds: readonly string[]) => {
+    if (!localCopy?.onIsolateObjects) return;
+    const current = historyRef.current?.present;
+    if (!current) return;
+    const detached = localCopy.onIsolateObjects(current, objectIds);
+    if (!detached) return;
+    const next = createEditorHistory(detached);
+    historyRef.current = next;
+    setHistory(next);
+    setHiddenObjectIds([]);
+    setBackgroundOpacity(0);
+    setSelectedObjectId(null);
+    setSelectedObjectIds([]);
+    setMessage("Создан изолированный фрагмент. Его геометрия не связана с исходным маршрутом.");
+  };
 
   return (
     <div className={`he-host ${placementBusy ? "is-placement-busy" : ""}`}>
@@ -2074,6 +2098,7 @@ export function HarnessDesignEditor({
           hiddenObjectIds, backgroundOpacity,
           onHiddenObjectIdsChange: ids => { setHiddenObjectIds(ids); localCopy.onHiddenObjectIdsChange?.(ids); },
           onBackgroundOpacityChange: opacity => { setBackgroundOpacity(opacity); localCopy.onBackgroundOpacityChange?.(opacity); },
+          onObjectsIsolate: localCopy.onIsolateObjects ? isolateLocalObjects : undefined,
           onCancel: localCopy.onCancel,
         } : undefined}
         onDrawingScale={(connectorId,drawingId,scale)=>run({type:"set-drawing-placement",connectorId,drawingId,scale})}
@@ -2179,6 +2204,10 @@ export function HarnessDesignEditor({
         activeWireStripEnd={activeWireStripEnd}
         onActiveWireStripEndChange={setActiveWireStripEnd}
         onWireStripProfileClear={(wireId, end) => run({ type: "set-wire-strip-profile", wireId, end, profile: null })}
+        drawingEndStyles={selectedObjectIds.length === 1
+          ? history.present.wires.find((wire) => wire.id === selectedObjectIds[0])?.drawingEndStyles
+          : undefined}
+        onDrawingEndStyleChange={(wireId, end, style) => run({ type: "set-wire-drawing-end-style", wireId, end, style })}
         onRelatedObjectsSelect={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}
         onObjectMove={(objectId, point, mode="carry") => {
           const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters,drawingSnaps);

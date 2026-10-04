@@ -293,6 +293,7 @@ internal static class ManufacturingRouteValidator
         var keys = new List<string> { "backgroundOpacity", "objects" };
         if (value.TryGetProperty("drawingObjects", out _)) keys.Add("drawingObjects");
         if (value.TryGetProperty("drawingCopy", out _)) keys.Add("drawingCopy");
+        if (value.TryGetProperty("isolatedDrawingCopy", out _)) keys.Add("isolatedDrawingCopy");
         RequireExact(value, keys.ToArray());
         var opacity = Number(value, "backgroundOpacity", path + ".backgroundOpacity");
         if (!double.IsFinite(opacity) || opacity < 0 || opacity > 1) throw Invalid("Route background opacity must be between 0 and 1.", path + ".backgroundOpacity");
@@ -333,6 +334,10 @@ internal static class ManufacturingRouteValidator
         if (value.TryGetProperty("drawingCopy", out var drawingCopy))
         {
             ValidateDrawingCopy(drawingCopy, path + ".drawingCopy");
+        }
+        if (value.TryGetProperty("isolatedDrawingCopy", out var isolatedDrawingCopy))
+        {
+            ValidateDrawingCopy(isolatedDrawingCopy, path + ".isolatedDrawingCopy");
         }
     }
 

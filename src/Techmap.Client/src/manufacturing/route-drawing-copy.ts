@@ -1,8 +1,88 @@
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "../editor/model";
+import type { EditorSceneObject } from "../editor/editor-types";
 
 export interface RouteDrawingCopy {
   readonly document: Omit<HarnessDesignDocument, "manufacturingRoute">;
   readonly hiddenObjectIds: readonly string[];
+}
+
+/**
+ * Creates the second, self-contained copy used by the Route "Изолировать"
+ * action.  A scene selection may contain a physical segment instead of its
+ * material wire; both forms are accepted.  Physical routing is deliberately
+ * discarded.  The selected wires remain ordinary drawing wires and keep their
+ * immutable material and end-strip profiles. Endpoint coordinates are stored
+ * separately, so connectors that were not selected are never pulled into the
+ * detached copy.
+ */
+export function createIndependentIsolatedDocument(
+  source: HarnessDesignDocument,
+  scene: readonly EditorSceneObject[],
+  selectedObjectIds: readonly string[],
+): HarnessDesignDocument | null {
+  const selected = new Set(selectedObjectIds);
+  const wireIds = new Set<string>();
+  const connectorIds = new Set<string>();
+  for (const object of scene) {
+    if (!selected.has(object.id)) continue;
+    if (object.kind === "wire") wireIds.add(object.id);
+    if (object.kind === "connector") connectorIds.add(object.id);
+    if (object.kind === "physical-segment") for (const wireId of object.pipe?.wireIds ?? []) wireIds.add(wireId);
+  }
+  if (!wireIds.size && !connectorIds.size) return null;
+
+  const connectors = source.connectors.filter(connector => connectorIds.has(connector.id));
+  const sceneById = new Map(scene.map(object => [object.id, object]));
+  const wires = source.wires.filter(wire => wireIds.has(wire.id)).map(wire => ({
+    ...wire,
+    // The endpoint shape remains backwards-compatible, but these identities
+    // are deliberately synthetic and have no connector in the detached doc.
+    from: { connectorId: `isolated:${wire.id}:from`, contactId: "free" },
+    to: { connectorId: `isolated:${wire.id}:to`, contactId: "free" },
+    // No source bend handles are carried into the detached fragment.
+    // E4 remains available for the copied connector contacts; drawing geometry
+    // is detached through drawingEndpoints below.
+    e4Route: wire.e4Route,
+    e4RouteMode: wire.e4RouteMode ?? "auto",
+    drawingRoute: [],
+    ...(sceneById.get(wire.id)?.points?.length && sceneById.get(wire.id)!.points!.length >= 2 ? {
+      drawingEndpoints: {
+        from: { ...sceneById.get(wire.id)!.points![0]! },
+        to: { ...sceneById.get(wire.id)!.points!.at(-1)! },
+      },
+    } : {}),
+    drawingEndStyles: wire.drawingEndStyles ?? { from: "cut", to: "cut" },
+  }));
+  if (!wires.length && !connectors.length) return null;
+  const wireSet = new Set(wires.map(wire => wire.id));
+  const cables = source.cables.filter(cable => cable.memberWireIds.every(id => wireSet.has(id)));
+  const documents = source.drawingDocuments;
+  const isolated: HarnessDesignDocument = {
+    schemaVersion: source.schemaVersion,
+    ...(source.requiredWriterContractVersion === undefined ? {} : { requiredWriterContractVersion: source.requiredWriterContractVersion }),
+    connectors,
+    wires,
+    cables,
+    junctions: [],
+    diffPairs: [],
+    screens: [],
+    views: source.views,
+    ...(source.customWireColors ? { customWireColors: source.customWireColors } : {}),
+    ...(documents ? {
+      drawingDocuments: {
+        ...documents,
+        dimensions: [],
+        leaders: [],
+        rails: [],
+        bomOrder: [],
+        bomText: {},
+        specificationItems: documents.specificationItems?.filter(item => !item.objectId || wireSet.has(item.objectId) || connectorIds.has(item.objectId)),
+      },
+    } : {}),
+  };
+  // parseHarnessDesignDocument normalizes defaults and validates that no
+  // dangling source references survived the projection.
+  return parseHarnessDesignDocument(isolated);
 }
 
 const maximumCopyBytes = 1024 * 1024;

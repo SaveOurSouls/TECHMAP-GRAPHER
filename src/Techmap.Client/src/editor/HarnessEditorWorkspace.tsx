@@ -38,6 +38,7 @@ import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection
 import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
 import type { CableInstance, WireEndStripProfiles } from "./model";
+import type { WireBlankEnd } from "../WireBlankCatalog";
 import "./harness-editor.css";
 
 const defaultLayers: readonly EditorLayer[] = [
@@ -155,6 +156,7 @@ export interface HarnessEditorWorkspaceProps {
     readonly backgroundOpacity: number;
     readonly onHiddenObjectIdsChange: (ids: readonly string[]) => void;
     readonly onBackgroundOpacityChange: (opacity: number) => void;
+    readonly onObjectsIsolate?: (objectIds: readonly string[]) => void;
     readonly onCancel: () => void;
   };
   readonly backgroundObjects?: readonly EditorSceneObject[];
@@ -178,6 +180,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
+  readonly drawingEndStyles?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>;
+  readonly onDrawingEndStyleChange?: (wireId: string, end: "from" | "to", style: WireBlankEnd) => void;
   readonly objectProperties?:(objectId:string)=>ReactNode;
   readonly onObjectPick?:(objectId:string|null)=>void;
   readonly onObjectPickCancel?:()=>void;
@@ -319,6 +323,8 @@ export function HarnessEditorWorkspace({
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
   onWireStripProfileClear,
+  drawingEndStyles,
+  onDrawingEndStyleChange,
   objectProperties, onRelatedObjectsSelect,
   onObjectMove,
   onObjectMovePreview, onDrawingMove, onDrawingScale,
@@ -461,6 +467,10 @@ export function HarnessEditorWorkspace({
 
   const isolateCopyObjects = (objectIds: readonly string[]) => {
     if (!localCopyControls || !objectIds.length) return;
+    if (localCopyControls.onObjectsIsolate) {
+      localCopyControls.onObjectsIsolate(objectIds);
+      return;
+    }
     const isolatedIds = new Set(objectIds);
     const layerIds = new Set(objects.filter(object => isolatedIds.has(object.id)).map(object => object.layerId));
     if (!layerIds.size) return;
@@ -739,6 +749,8 @@ export function HarnessEditorWorkspace({
                   activeWireStripEnd={activeWireStripEnd}
                   onActiveWireStripEndChange={onActiveWireStripEndChange}
                   onWireStripProfileClear={onWireStripProfileClear}
+                  drawingEndStyles={drawingEndStyles}
+                  onDrawingEndStyleChange={onDrawingEndStyleChange}
                 />
               )
             ) : (

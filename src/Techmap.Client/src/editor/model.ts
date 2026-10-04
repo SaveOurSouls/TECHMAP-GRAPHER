@@ -11,6 +11,7 @@ import type { PhysicalTopology } from "./physical-topology-model";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { clearDecorationSpans } from "./e4-decoration-spans";
+import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 
 export type EditorView = "e4" | "drawing";
 
@@ -343,6 +344,14 @@ export interface WireInstance {
   readonly materialBinding?: WireMaterialBinding;
   /** Exact immutable stripping profiles selected independently for both wire ends. */
   readonly stripProfiles?: WireEndStripProfiles;
+  /**
+   * Endpoints for an isolated drawing wire. They intentionally do not imply
+   * an electrical or physical connection and are used only in the drawing
+   * view; ordinary wires omit this field.
+   */
+  readonly drawingEndpoints?: Readonly<{ from: Point; to: Point }>;
+  /** Presentation of free ends in an isolated drawing copy. */
+  readonly drawingEndStyles?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>;
   /** Physical source length. Null means that the wire is intentionally incomplete. */
   readonly lengthMm: number | null;
   /** Signed technological correction at the `from` end, in millimetres. */
@@ -761,7 +770,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
         }
       } else {
         const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
-        if (!connector?.contacts.some((contact) => contact.id === endpoint.contactId)) {
+        if (!connector?.contacts.some((contact) => contact.id === endpoint.contactId) && !wire.drawingEndpoints) {
           throw new Error("Провод ссылается на отсутствующую точку подключения.");
         }
       }
@@ -778,7 +787,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
     ...document,
     wires: document.wires.map((wire, index) => {
       const wireRecord = requireRecord(wireValues[index], "Провод задан неверно.");
-      if (wireRecord.e4Route !== undefined) return wire;
+      if (wireRecord.e4Route !== undefined || wire.drawingEndpoints) return wire;
       const start = wireEndpointE4Anchor(document, wire.from);
       const end = wireEndpointE4Anchor(document, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
@@ -788,7 +797,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   for (const [index, wireValue] of wireValues.entries()) {
     const wireRecord = requireRecord(wireValue, "Провод задан неверно.");
     const wire = document.wires[index]!;
-    if (wireRecord.e4Route !== undefined) {
+    if (wireRecord.e4Route !== undefined && !wire.drawingEndpoints) {
       const start = wireEndpointE4Anchor(document, wire.from);
       const end = wireEndpointE4Anchor(document, wire.to);
       if (!start || !end) throw new Error("Точки подключения маршрута Э4 не найдены.");
@@ -1626,6 +1635,17 @@ function parseWire(value: unknown): WireInstance {
     ? defaultWireCutRoundingStepMm
     : validateWireRoundingStep(requireNumber(record.cutRoundingStepMm, "Шаг округления длины резки"));
   calculateWireCutLength({ lengthMm, endCorrectionFromMm, endCorrectionToMm, cutRoundingStepMm });
+  const drawingEndpoints = record.drawingEndpoints === undefined ? undefined : (() => {
+    const endpoints = requireRecord(record.drawingEndpoints, "Свободные концы рисунка заданы неверно.");
+    return { from: parsePoint(endpoints.from), to: parsePoint(endpoints.to) };
+  })();
+  const drawingEndStyles = record.drawingEndStyles === undefined ? undefined : (() => {
+    const styles = requireRecord(record.drawingEndStyles, "Режимы отображения концов заданы неверно.");
+    if (!wireBlankEnds.includes(styles.from as WireBlankEnd) || !wireBlankEnds.includes(styles.to as WireBlankEnd)) {
+      throw new Error("Режим отображения конца провода задан неверно.");
+    }
+    return { from: styles.from as WireBlankEnd, to: styles.to as WireBlankEnd };
+  })();
   return {
     id: requireText(record.id, "ID провода"),
     from: parseEndpoint(record.from),
@@ -1638,6 +1658,8 @@ function parseWire(value: unknown): WireInstance {
       ? undefined : parseWireMaterialBinding(record.materialBinding),
     stripProfiles: record.stripProfiles === undefined
       ? undefined : parseWireEndStripProfiles(record.stripProfiles),
+    ...(drawingEndpoints ? { drawingEndpoints } : {}),
+    ...(drawingEndStyles ? { drawingEndStyles } : {}),
     lengthMm,
     endCorrectionFromMm,
     endCorrectionToMm,

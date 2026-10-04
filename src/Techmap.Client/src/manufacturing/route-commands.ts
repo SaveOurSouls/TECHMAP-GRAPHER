@@ -144,7 +144,7 @@ export function copyAssemblyPresentation(route: ManufacturingRoute, assemblyId: 
     }));
   };
   visit(assemblyId);
-  return { ...row.presentation, objects: [...objects.values()], ...(row.presentation.drawingObjects ? { drawingObjects: row.presentation.drawingObjects.map(object => ({ ...object, points: object.points.map(point => ({ ...point })) })) } : {}), ...(row.presentation.drawingCopy ? { drawingCopy: parseRouteDrawingCopy(row.presentation.drawingCopy) } : {}) };
+  return { ...row.presentation, objects: [...objects.values()], ...(row.presentation.drawingObjects ? { drawingObjects: row.presentation.drawingObjects.map(object => ({ ...object, points: object.points.map(point => ({ ...point })) })) } : {}), ...(row.presentation.drawingCopy ? { drawingCopy: parseRouteDrawingCopy(row.presentation.drawingCopy) } : {}), ...(row.presentation.isolatedDrawingCopy ? { isolatedDrawingCopy: parseRouteDrawingCopy(row.presentation.isolatedDrawingCopy) } : {}) };
 }
 
 export function updateRouteRow(route: ManufacturingRoute, id: string, patch: Partial<Omit<RouteRow, "id">>): ManufacturingRoute {

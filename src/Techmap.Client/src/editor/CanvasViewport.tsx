@@ -1853,6 +1853,40 @@ const stripProfilePalette = ["#d6ad65", "#e4ebef", "#a9b7c0", "#7a929e", "#b8c9c
 const stripProfileOutline = "#344b59";
 const stripProfileStrokeWidth = 1.5;
 
+function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: EditorSceneObject, selected: boolean): void {
+  const points = object.points ?? [];
+  const styles = object.drawingEndStyles;
+  if (!styles || points.length < 2) return;
+  context.save();
+  const radius = Math.max(2.5, Number(object.metadata?.drawingWidth ?? 2) * (selected ? 0.9 : 0.75));
+  (['from', 'to'] as const).forEach((end) => {
+    const origin = end === 'from' ? points[0]! : points[points.length - 1]!;
+    const adjacent = end === 'from' ? points[1]! : points[points.length - 2]!;
+    const dx = adjacent.x - origin.x, dy = adjacent.y - origin.y;
+    const length = Math.hypot(dx, dy);
+    if (!length || styles[end] === 'cut') return;
+    const nx = -dy / length, ny = dx / length;
+    const depth = Math.min(12, Math.max(5, length * 0.12));
+    const tip = { x: origin.x + dx / length * depth, y: origin.y + dy / length * depth };
+    context.strokeStyle = selected ? '#1179ac' : '#344b59';
+    context.fillStyle = styles[end] === 'tin' ? '#d6ad65' : styles[end] === 'sealed' || styles[end] === 'sealed-pin' ? '#7a929e' : object.color;
+    context.lineWidth = 1.2;
+    context.beginPath();
+    context.moveTo(origin.x + nx * radius, origin.y + ny * radius);
+    context.lineTo(tip.x + nx * radius * 1.2, tip.y + ny * radius * 1.2);
+    context.lineTo(tip.x - nx * radius * 1.2, tip.y - ny * radius * 1.2);
+    context.lineTo(origin.x - nx * radius, origin.y - ny * radius);
+    context.closePath(); context.fill(); context.stroke();
+    if (styles[end] === 'terminal' || styles[end] === 'sealed' || styles[end] === 'sealed-pin') {
+      context.beginPath(); context.arc(tip.x, tip.y, radius * 1.25, 0, Math.PI * 2); context.stroke();
+    }
+    if (styles[end] === 'sealed-pin') {
+      context.beginPath(); context.moveTo(tip.x, tip.y); context.lineTo(tip.x + dx / length * radius * 2.2, tip.y + dy / length * radius * 2.2); context.stroke();
+    }
+  });
+  context.restore();
+}
+
 function drawWireStripProfiles(
   context: CanvasRenderingContext2D,
   object: EditorSceneObject,
@@ -1932,6 +1966,7 @@ export function drawEditorSceneObject(
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
     for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth,radius:undefined}))){traceDrawingRoute(context,stroke.points,stroke.radius??object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
     drawWireStripProfiles(context, object, selected);
+    drawWireDrawingEndStyles(context, object, selected);
     context.restore();return;
   }
   if (object.kind === "physical-node") {

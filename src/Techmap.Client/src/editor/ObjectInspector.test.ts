@@ -138,7 +138,7 @@ describe("wire object inspector", () => {
     expect(markup).toContain('aria-label="Позиция материала провода"');
   });
 
-  it("keeps the drawing inspector free of the removed strip profile card", () => {
+  it("offers an end selector for a drawing wire strip profile", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "drawing",
       selectedObject: wireObject({ lengthKnown: "false" }),
@@ -164,10 +164,11 @@ describe("wire object inspector", () => {
       },
     }));
 
-    expect(markup).not.toContain('aria-label="Профиль разделки провода"');
-    expect(markup).not.toContain('aria-selected="true"');
-    expect(markup).not.toContain("BNC / RG58");
-    expect(markup).not.toContain("Ступень, мм");
+    expect(markup).toContain("Оконцовка свободного конца");
+    expect(markup).toContain('aria-label="Начало провода: BNC / RG58"');
+    expect(markup).toContain('aria-label="Конец провода: профиль не выбран"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("Очистить оконцовку");
   });
 
   it("keeps strip profiles out of E4 and explains an empty drawing end", () => {
@@ -180,8 +181,8 @@ describe("wire object inspector", () => {
       view: "drawing", selectedObject: wireObject({ lengthKnown: "false" }), disabled: true, onChange: vi.fn(),
       activeWireStripEnd: "to", onActiveWireStripEndChange: vi.fn(),
     }));
-    expect(drawing).not.toContain("Профиль не выбран");
-    expect(drawing).not.toContain("дважды щёлкните профиль разделки");
+    expect(drawing).toContain("профиль не выбран");
+    expect(drawing).toContain("дважды щёлкните профиль полуфабриката");
     expect(drawing).toContain("disabled");
   });
 

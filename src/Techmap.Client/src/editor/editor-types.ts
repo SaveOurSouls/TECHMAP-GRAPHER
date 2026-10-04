@@ -1,4 +1,5 @@
 import type { WireEndStripProfiles } from "./model";
+import type { WireBlankEnd } from "../WireBlankCatalog";
 
 export type HarnessEditorView = "e4" | "drawing";
 
@@ -64,6 +65,8 @@ export interface EditorSceneObject {
   readonly routeRadius?: number;
   /** End-treatment presentation shares the wire identity and drawing layer. */
   readonly stripProfiles?: WireEndStripProfiles;
+  /** Presentation-only end treatment for an independent drawing wire. */
+  readonly drawingEndStyles?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>;
   readonly pipe?: PhysicalPipeSceneData;
   readonly port?: PhysicalPortSceneData;
   readonly metadata?: Readonly<Record<string, string>>;

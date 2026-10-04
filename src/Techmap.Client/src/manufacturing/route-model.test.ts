@@ -25,6 +25,13 @@ describe("manufacturing route contract", () => {
     expect(route([semiFinished])?.rows[0]?.presentation.drawingCopy?.document).toEqual(copy.document);
     expect(route([semiFinished])?.rows[0]?.wireBlankSelections).toEqual(semiFinished.wireBlankSelections);
   });
+  it("keeps the source and isolated drawing copies side by side", () => {
+    const copy = createRouteDrawingCopy(createEmptyHarnessDesign(), []);
+    const parsed = route([{ ...row("assembly", [], []), kind: "assembly", presentation: { backgroundOpacity: .25, objects: [], drawingCopy: copy, isolatedDrawingCopy: copy } }])!;
+    expect(parsed.rows[0]!.presentation.drawingCopy?.document).toEqual(copy.document);
+    expect(parsed.rows[0]!.presentation.isolatedDrawingCopy?.document).toEqual(copy.document);
+    expect(parsed.rows[0]!.presentation.isolatedDrawingCopy).not.toBe(parsed.rows[0]!.presentation.drawingCopy);
+  });
   it("accepts a diamond and composes shared ancestors once", () => {
     const parsed = route([row("a"), row("b", ["a"], [ref("b")]), row("c", ["a"], [ref("c")]), row("d", ["b", "c"], [])])!;
     expect(routeRowComposition(parsed, "d").map(item => item.id)).toEqual(["a", "b", "c"]);

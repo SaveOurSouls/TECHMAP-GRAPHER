@@ -43,6 +43,16 @@ public sealed class ManufacturingRouteValidatorTests
     }
 
     [Fact]
+    public void Isolated_drawing_copy_is_validated_as_a_second_snapshot()
+    {
+        var graph = BaseRoute();
+        var copy = JsonNode.Parse("""{"schemaVersion":1,"connectors":[],"wires":[],"cables":[],"junctions":[],"diffPairs":[],"screens":[],"views":{"drawing":{"layers":[],"wireCrossingStyle":"none"},"e4":{"layers":[],"wireCrossingStyle":"none"}}}""")!;
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"] = new JsonObject { ["document"] = copy.DeepClone(), ["hiddenObjectIds"] = new JsonArray() };
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["isolatedDrawingCopy"] = new JsonObject { ["document"] = copy, ["hiddenObjectIds"] = new JsonArray() };
+        Validate(graph);
+    }
+
+    [Fact]
     public void Semi_finished_row_accepts_an_independent_drawing_copy()
     {
         var graph = BaseRoute();

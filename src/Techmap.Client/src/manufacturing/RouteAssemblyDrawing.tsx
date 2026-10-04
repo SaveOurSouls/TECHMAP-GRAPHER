@@ -11,7 +11,7 @@ import type { RouteSourceItem, RouteSourceRef } from "./route-source";
 import type { RuntimeConfig } from "../runtime-config";
 import type { LocalSession } from "../local-session";
 import { useCoveringAssets, withCoveringTextureUrls } from "../editor/covering-assets";
-import { createRouteDrawingCopy, migrateLegacyRouteDrawingCopy, legacyRouteDrawingCopyWarnings } from "./route-drawing-copy";
+import { createIndependentIsolatedDocument, createRouteDrawingCopy, migrateLegacyRouteDrawingCopy, legacyRouteDrawingCopyWarnings, type RouteDrawingCopy } from "./route-drawing-copy";
 import "./route-assembly-drawing.css";
 
 export type AssemblyDrawingPresentation = RouteRow["presentation"];
@@ -94,11 +94,12 @@ export function assemblyDrawingScene(scene: readonly EditorSceneObject[], states
 }
 
 export function RouteAssemblyDrawingPreview({ row, document: sourceDocument, config, session, projectId, componentTemplateViewInstances = EMPTY_INSTANCES, resolveComponentTemplateAssetUrl }: Pick<RouteAssemblyDrawingProps, "row" | "document" | "config" | "session" | "projectId" | "componentTemplateViewInstances" | "resolveComponentTemplateAssetUrl">) {
-  const document = row.presentation.drawingCopy?.document ?? sourceDocument;
-  const localTemplateViews = useLocalCopyTemplateViews(row.presentation.drawingCopy ? document : undefined,
-    config, session, projectId, !!row.presentation.drawingCopy, componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
-  const previewInstances = row.presentation.drawingCopy ? localTemplateViews.instances : componentTemplateViewInstances;
-  const previewAssetUrl = row.presentation.drawingCopy ? localTemplateViews.resolveAssetUrl : resolveComponentTemplateAssetUrl;
+  const activeCopy = row.presentation.isolatedDrawingCopy ?? row.presentation.drawingCopy;
+  const document = activeCopy?.document ?? sourceDocument;
+  const localTemplateViews = useLocalCopyTemplateViews(activeCopy ? document : undefined,
+    config, session, projectId, !!activeCopy, componentTemplateViewInstances, resolveComponentTemplateAssetUrl);
+  const previewInstances = activeCopy ? localTemplateViews.instances : componentTemplateViewInstances;
+  const previewAssetUrl = activeCopy ? localTemplateViews.resolveAssetUrl : resolveComponentTemplateAssetUrl;
   const textures = useCoveringAssets(config, session, projectId, !!document.drawingDocuments?.coveringLibrary?.textures.length, document.drawingDocuments?.coveringLibrary?.textures.map(texture => texture.sha256).join(",") ?? "");
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useMemo(() => withCoveringTextureUrls(designToScene(document, "drawing"), textures.urls).map(object =>
@@ -106,10 +107,10 @@ export function RouteAssemblyDrawingPreview({ row, document: sourceDocument, con
       ? { ...object, metadata: { ...object.metadata, volumeShading: object.metadata?.volumeShading ?? String(document.drawingDocuments?.volumeShading !== false) } }
       : object), [document, textures.urls]);
   const objects = useMemo(() => {
-    if (!row.presentation.drawingCopy) return assemblyDrawingScene(scene, row.presentation.drawingObjects ?? []);
-    const hidden = new Set(row.presentation.drawingCopy.hiddenObjectIds);
+    if (!activeCopy) return assemblyDrawingScene(scene, row.presentation.drawingObjects ?? []);
+    const hidden = new Set(activeCopy.hiddenObjectIds);
     return scene.filter(object => !hidden.has(object.id));
-  }, [scene, row.presentation]);
+  }, [scene, row.presentation, activeCopy]);
   const layers = useMemo(() => document.views.drawing.layers.map(layer => ({ id: layer.id, label: layer.name, visible: layer.visible, locked: true })), [document]);
   const cache = useRef(new ComponentTemplateImageCache());
   useEffect(() => {
@@ -134,20 +135,42 @@ export function RouteAssemblyDrawingPreview({ row, document: sourceDocument, con
 }
 
 export function RouteAssemblyDrawing({ row, document, config, session, projectId, harnessId, onSave, onCancel }: RouteAssemblyDrawingProps) {
-  const [initialCopy] = useState(() => row.presentation.drawingCopy
-    ? createRouteDrawingCopy(row.presentation.drawingCopy.document, row.presentation.drawingCopy.hiddenObjectIds)
-    : migrateLegacyRouteDrawingCopy(document, row.presentation.drawingObjects ?? []));
-  const legacyWarnings = useMemo(() => row.presentation.drawingCopy ? [] : legacyRouteDrawingCopyWarnings(document, row.presentation.drawingObjects ?? []), [document, row.presentation.drawingCopy, row.presentation.drawingObjects]);
+  const [mode, setMode] = useState<"source" | "isolated">(row.presentation.isolatedDrawingCopy ? "isolated" : "source");
+  const sourceSnapshot = useRef<RouteDrawingCopy | null>(null);
+  const [isolatedDraft, setIsolatedDraft] = useState<RouteDrawingCopy | null>(null);
+  const activePersistedCopy = mode === "isolated" ? isolatedDraft ?? row.presentation.isolatedDrawingCopy : row.presentation.drawingCopy;
+  const initialCopy = useMemo(() => activePersistedCopy
+    ? createRouteDrawingCopy(activePersistedCopy.document, activePersistedCopy.hiddenObjectIds)
+    : migrateLegacyRouteDrawingCopy(document, row.presentation.drawingObjects ?? []), [activePersistedCopy, document, row.presentation.drawingObjects]);
+  const legacyWarnings = useMemo(() => activePersistedCopy ? [] : legacyRouteDrawingCopyWarnings(document, row.presentation.drawingObjects ?? []), [document, activePersistedCopy, row.presentation.drawingObjects]);
   const localCopy = useMemo(() => ({
     initialDocument: initialCopy.document, hiddenObjectIds: initialCopy.hiddenObjectIds,
     backgroundOpacity: row.presentation.backgroundOpacity,
+    onDraftChange: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[]) => {
+      if (mode === "isolated") setIsolatedDraft(createRouteDrawingCopy(copy, hiddenObjectIds));
+    },
     onSave: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => onSave({
-      ...row.presentation, backgroundOpacity, drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds),
-    }), onCancel,
-  }), [initialCopy, row.presentation, onSave, onCancel]);
+      ...row.presentation, backgroundOpacity,
+      ...(mode === "isolated"
+        ? { drawingCopy: sourceSnapshot.current ?? row.presentation.drawingCopy ?? createRouteDrawingCopy(document), isolatedDrawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds) }
+        : { drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds) }),
+    }),
+    onIsolateObjects: (copy: HarnessDesignDocument, objectIds: readonly string[]) => {
+      if (mode === "source") sourceSnapshot.current = createRouteDrawingCopy(copy, initialCopy.hiddenObjectIds);
+      const isolated = createIndependentIsolatedDocument(copy, designToScene(copy, "drawing"), objectIds);
+      if (isolated) { setIsolatedDraft(createRouteDrawingCopy(isolated)); setMode("isolated"); }
+      return isolated;
+    },
+    onCancel,
+  }), [initialCopy, row.presentation, mode, document, onSave, onCancel]);
   return <section className="route-full-drawing" aria-label={`Копия чертежа этапа ${row.title}`}>
+    {(row.presentation.drawingCopy || row.presentation.isolatedDrawingCopy) && <div className="route-fragment-mode" role="group" aria-label="Версия фрагмента">
+      <span>Версия</span>
+      <button type="button" className={mode === "source" ? "active" : ""} aria-pressed={mode === "source"} onClick={() => setMode("source")}>Исходная копия</button>
+      <button type="button" className={mode === "isolated" ? "active" : ""} aria-pressed={mode === "isolated"} disabled={!row.presentation.isolatedDrawingCopy} onClick={() => setMode("isolated")}>Изолированный фрагмент</button>
+    </div>}
     {legacyWarnings.length > 0 && <p className="route-full-drawing__migration" role="status">Старый рисунок: расположение {legacyWarnings.length} объектов восстановлено из чертежа. Проверьте их положение перед сохранением. Отмена сохранит прежний рисунок.</p>}
     <HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId}
-      harnessDesignation={row.title} initialView="drawing" localCopy={localCopy} />
+      key={mode} harnessDesignation={row.title} initialView="drawing" localCopy={localCopy} />
   </section>;
 }
