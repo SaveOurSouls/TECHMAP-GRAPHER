@@ -44,6 +44,15 @@ Ancestry Route v2 проверена: `6322742` → `9405891` → `fbef55e` → 
 
 ## Предварительный прогон clean базы — 05.10.2026
 
+После прогона получен fix handoff Route v2
+`f7623b9fc8d791219a562051d826fc4ef82c7023`: Git-проверка PASS, SHA пока не
+переносился. Источник подтвердил browser Cancel/Save и tsc/Vitest 182/1776/Vite
+на snapshot `744d122` + два fix-файла. API-deps `6064bb92`, `8676a1e9`,
+`7fc3af2f` уже входят в чистую integration ancestry. Source QA не заменяет
+прогон окончательного объединённого HEAD; требуется аудиторское решение.
+390 px не перепроверен (fix ≥651px), packaged/portable/server/user harness
+и owner acceptance остаются открытыми.
+
 Сборщик выполнил разрешённые подготовительные проверки на точном HEAD
 `4ebe93c55966f179b0bb2410dde5938785fb1a3e`; код/скрипты/версия совпадают с
 `60d30576872e5bb280bf996be4fa8c6f16cd3f6c`, tracked working tree clean.

@@ -134,6 +134,36 @@ handoff, he-back fix + browser QA и итоговое аудиторское р�
 dirty worktree и `_m5_21_build` не используются. 390 px/user harness/owner
 manual acceptance остаются открытыми.
 
+### Финальный fix handoff Route v2 — 05.10.2026
+
+Передан `f7623b9fc8d791219a562051d826fc4ef82c7023`, parent
+`b6574f665284e12d3c961018b1cf967245c00508`. `git show --check` и scoped diff
+проверены: два V2-кодовых файла (`RouteV2Panel.tsx`, `route-v2.css`) и три
+документа (handoff-071, карточки 066/071). SHA отсутствует в integration HEAD,
+пока не переносился. История `6322742 → 9405891 → fbef55e` уже подтверждена
+и не применяется повторно.
+
+Источник: snapshot `744d122` + побайтово сверенные два fix-файла; tsc, Vitest
+182/1776, Vite, scoped/staged diff check — PASS. Browser Cancel/Save — PASS;
+скриншот `artifacts/route-v2-audit-20261005/cancel-save-fixed.jpg` найден в
+основном репозитории. Сборщик сам browser QA не выполнял; ожидается аудит.
+Fix действует ≥651px; 390px, исходный жгут, packaged/portable/server и owner
+manual acceptance открыты. V2 localStorage-прототип.
+
+Полные API-deps `6064bb92e5728996028e7f2d4c9b4ac1e0135edc`,
+`8676a1e9a538c7c55735eefa3195313782b80e23`,
+`7fc3af2f266067a8ed60b1144d833b6ef12693e7` проверены: все уже предки текущей
+чистой ветки, ни один не предок `d90b005`. На этой базе повторно не применять;
+для альтернативной M5-21 эквиваленты/API сверяются с аудитором, ancestry не
+достаточно для нового cherry-pick. ZIP до итогового решения не публикуется.
+
+Независимый read-only review и stable patch-id сборщика подтверждают:
+`8676a1e9` точно эквивалентен уже включённому в M5-21
+`8b63dbf6d92f913a5bfaac7835cad22ba0f4ea1d`. Для `6064bb92` точный эквивалент
+не найден, а `7fc3af2f` не эквивалентен `fb80d0d`; эти различия проверяются
+при альтернативной базе M5-21. На текущей чистой `60d3057` все зависимости
+уже есть. Это предварительный review, не итоговое разрешение на ZIP.
+
 ### Исправление порядка ancestry Route v2 — 05.10.2026
 
 Корректная цепочка: `63227429f1b246c921b0385744ac873534cbf7f4` →
