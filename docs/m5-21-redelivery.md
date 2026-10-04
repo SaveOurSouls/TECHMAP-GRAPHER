@@ -23,8 +23,41 @@
 
 ## Состояние
 
-Подготовка версии завершена. Итоговые проверки и параметры нового архива
-будут внесены после штатной сборки; успешный результат пока не заявляется.
+Новая поставка завершена. Commit версии `fe9c6180e6b3985df234356926716d28f7f160ec`
+отправлен перед сборкой. Код клиента и сервера совпадает с `d90b005`; во время
+сборки отдельным commit `4958d8d09750e7cfd81207bff830c604f69da695` зафиксирован
+локальный помощник скачивания, не входящий в бинарный пакет.
+
+## Проверки и архив
+
+- Штатный `scripts/build-package.ps1 -Configuration Release -ArtifactSlice
+  m5-21-redelivery-v0.63.33` — PASS, `CI=true`, `DOTNET_PROCESSOR_COUNT=1`.
+- Клиент: 178 файлов / 1743 теста; TypeScript и Vite production build — PASS.
+- Locked win-x64 restore, 1112 функциональных .NET тестов (0 failures/skips),
+  отдельный performance-тест 1/1 и self-contained single-file publish — PASS.
+- При генерации SBOM вне sandbox Git отказал по ownership. SBOM повторно
+  сформирован штатным `generate-sbom.ps1` с доступной Git-историей, commit
+  `4958d8d`, creation time `2026-10-04T22:44:14Z`; manifest пересчитан и ZIP
+  переупакован до выдачи. Клиент/сервер и версия при этом не менялись.
+- Manifest (275 файлов), `Techmap.Server.exe --verify-package` и семь portable
+  режимов — PASS. Результат: `Status=ok`, `Modes=7`; путь с кириллицей/пробелом
+  `artifacts/portable033/Проверка пакета с пробелом/TECHMAP-GRAPHER`.
+- Первый portable-прогон в длинном тестовом каталоге дошёл до takeover и
+  остановился на `MoveFileExW` / Win32 error 3 при публикации SQLite-файла.
+  После сокращения тестового пути тот же ZIP полностью прошёл. Длинные пути
+  остаются ограничением; отдельного исправления кода в этой поставке нет.
+- Архив: `TECHMAP-GRAPHER-0.63.33-m5-21-review-win-x64.zip`.
+- Абсолютный путь выдачи:
+  `C:\Users\anqla\OneDrive\Документы\ChatGPT\HARNESSTECHMAPGRAPHER\TECHMAP-GRAPHER-0.63.33-m5-21-review-win-x64.zip`.
+- Размер: **63 264 152 байт**.
+- SHA-256: `D5100FCC261123EC422AB46ECD6083C8E396FD555D54E6611815B194BFED8722`.
+- HTTP download в браузере Codex реально сохранил файл
+  `C:\Users\anqla\Downloads\TECHMAP-GRAPHER-0.63.33-m5-21-review-win-x64 (1).zip`;
+  расширение `.zip`, размер и SHA-256 совпали. Суффикс `(1)` добавлен браузером.
+- По последнему указанию владельца выдаётся непосредственно ZIP в чате;
+  локальный HTTP helper остановлен, HTML не является результатом поставки.
+- Исходные dirty worktree и прежние ZIP сохранены. Ручная приёмка владельцем
+  и исходный пользовательский жгут не проверялись; `accepted` не назначался.
 
 ## Скачивание с сохранением имени
 
