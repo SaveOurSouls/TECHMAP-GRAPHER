@@ -88,5 +88,12 @@
 .route-v2-error { padding:10px 12px; border-left:3px solid #b84646; border-radius:4px; background:#fff3f3; color:#7d3030; font-size:12px; }
 .route-v2-drawing-error { position:fixed; z-index:101; top:12px; right:16px; max-width:min(440px,calc(100vw - 32px)); margin:0; padding:10px 14px; border:1px solid #d89090; border-radius:6px; background:#fff3f3; color:#843434; box-shadow:0 5px 18px rgb(80 20 20 / 15%); font-size:12px; }
 .route-v2-loading { min-height:300px; display:grid; place-items:center; color:#71808e; font-size:13px; }
+/* The local drawing editor has a third header action; keep Cancel above the ribbon. */
+@media (min-width:651px) {
+  .route-v2-drawing-host .harness-editor .he-header { grid-template-columns:minmax(0,1fr) auto auto; grid-template-rows:1fr; }
+  .route-v2-drawing-host .harness-editor .he-header-identity { grid-column:1; grid-row:1; }
+  .route-v2-drawing-host .harness-editor .he-header > .he-save-state { grid-column:2; grid-row:1; white-space:nowrap; }
+  .route-v2-drawing-host .harness-editor .he-header > .he-back { grid-column:3; grid-row:1; width:auto; padding:0 12px; font-size:12px; }
+}
 .route-v2-panel button:focus-visible,.route-v2-dialog button:focus-visible { outline:2px solid #2681ad; outline-offset:2px; }
 @media (max-width:900px) { .route-v2-panel{padding:12px}.route-v2-header { align-items:flex-start; flex-direction:column; }.route-v2-actions { justify-content:flex-start; }.route-v2-canvas-scroll { max-height:65vh; }.route-v2-settings-fields{grid-template-columns:1fr 100px}.route-v2-settings-fields>button{grid-column:1 / -1}.route-v2-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}.route-v2-dialog-content{padding:16px}.route-v2-footer{align-items:flex-start;flex-direction:column} }

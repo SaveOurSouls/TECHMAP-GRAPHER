@@ -146,7 +146,7 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose, o
 
   if (loading) return <section className="route-v2-panel"><div className="route-v2-loading" role="status">Загружаем редактор маршрута v2…</div></section>;
   if (!graph || !sourceDocument) return <section className="route-v2-panel"><p className="route-v2-error" role="alert">{error ?? "Схема жгута недоступна."}</p><button className="secondary-action" type="button" onClick={onClose}>К проекту</button></section>;
-  if (drawingNode) return <>
+  if (drawingNode) return <div className="route-v2-drawing-host">
     {drawingSaveError && <p className="route-v2-drawing-error" role="alert">{drawingSaveError}</p>}
     <RouteAssemblyDrawing key={drawingNode.id} row={routeV2DrawingRow(drawingNode)} document={sourceDocument} config={config} session={session} projectId={projectId} harnessId={harnessId}
       items={sources.filter(item => drawingNode.refs.some(ref => sourceKey(ref) === sourceKey(item.ref)))}
@@ -156,7 +156,7 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose, o
         if (!saved) { setDrawingSaveError("Не удалось сохранить рисунок в хранилище браузера."); throw new Error("Рисунок не сохранён в хранилище браузера."); }
         setDrawingNodeId(null); setDrawingSaveError(null);
       }} />
-  </>;
+  </div>;
 
   const sourceTitle = (ref: RouteSourceRef) => sources.find(item => sourceKey(item.ref) === sourceKey(ref))?.title ?? ref.id;
   const renderSource = (ref: RouteSourceRef) => <RouteV2SourceArtwork document={sourceDocument} ref={ref} textureUrls={textures.urls} item={sources.find(item => sourceKey(item.ref) === sourceKey(ref))} />;
