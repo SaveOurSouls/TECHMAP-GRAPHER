@@ -109,6 +109,31 @@ Test counts 1776 и 1778 не сводятся в единый результа�
 HEAD. Handoff 071/073 относит проверки к `744d122`; для финальной сборочной
 базы будут отдельно записаны её HEAD, команды и фактические счётчики.
 
+### Предварительные проверки clean HEAD — 05.10.2026
+
+После разрешения координатора выполнены проверки точного
+`4ebe93c55966f179b0bb2410dde5938785fb1a3e` (код `60d3057`): frozen offline
+install PASS; Vitest 182 файла / 1776 PASS; TypeScript/Vite PASS; locked
+win-x64 restore PASS; Domain 54/54 PASS, Architecture 3/3 PASS; self-contained
+single-file win-x64 publish PASS. Это самостоятельные результаты сборщика,
+не объединение source test counts. Точные команды и логи записаны в
+[протоколе M5-22](../m5-22-acceptance.md).
+
+Полный functional `dotnet test` — FAIL на компиляции Web-tests, exit 1,
+CS8997 в `ManufacturingRouteValidatorTests.cs:59`. Рабочая копия clean;
+`git show 60d3057` содержит ту же ошибку. Прежнее предположение о только
+незакоммиченном dirt источника исправлено. Независимый аудит подтвердил
+repair-коммит `b43c63beb8b92aafdd0f42369c366984815a018e` из ancestry M5-21:
+raw-string newlines и null-forgiving `.AsObject()`. Для итогового аудита нужен
+только patch тестового файла; коммит целиком также меняет версию и acceptance.
+Код пока не переносился.
+
+Publish лежит в ignored `artifacts/m5-22-preflight/publish-check` и не выдаётся.
+ZIP/manifest/семь portable-проверок ещё не выполнены; ожидаются contact-side
+handoff, he-back fix + browser QA и итоговое аудиторское решение. Основной
+dirty worktree и `_m5_21_build` не используются. 390 px/user harness/owner
+manual acceptance остаются открытыми.
+
 ### Исправление порядка ancestry Route v2 — 05.10.2026
 
 Корректная цепочка: `63227429f1b246c921b0385744ac873534cbf7f4` →

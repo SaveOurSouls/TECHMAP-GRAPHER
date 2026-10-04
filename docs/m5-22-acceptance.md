@@ -41,3 +41,40 @@ toolbar перехватывает клик по кнопке «Отмена» �
 Ancestry Route v2 проверена: `6322742` → `9405891` → `fbef55e` → база.
 Запись порядка исправлена в checklist и журнале этой сборочной копии;
 общий состав пакета ещё не зафиксирован.
+
+## Предварительный прогон clean базы — 05.10.2026
+
+Сборщик выполнил разрешённые подготовительные проверки на точном HEAD
+`4ebe93c55966f179b0bb2410dde5938785fb1a3e`; код/скрипты/версия совпадают с
+`60d30576872e5bb280bf996be4fa8c6f16cd3f6c`, tracked working tree clean.
+Контактный вид, новые handoff-doc SHA и he-back fix ещё не интегрированы.
+
+| Команда | Фактический результат сборщика |
+| --- | --- |
+| `pnpm install --frozen-lockfile --offline` (`CI=true`) | PASS |
+| `pnpm --filter @techmap/client test` | PASS: 182 файла / 1776 тестов |
+| `pnpm --filter @techmap/client build` | PASS: TypeScript `tsc --noEmit` и Vite production; штатные heic-to fs/path/crypto и chunk >500 kB warnings |
+| `dotnet restore Techmap-Grapher.slnx --locked-mode --runtime win-x64 -p:NuGetAudit=false` | PASS |
+| `dotnet test Techmap-Grapher.slnx --configuration Release --no-restore --filter 'FullyQualifiedName!~ReferenceCatalogSearchPerformanceTests' -- --minimum-expected-tests 1` | FAIL, exit 1: Web-tests не компилируются, CS8997, `ManufacturingRouteValidatorTests.cs:59` |
+| `dotnet test tests/Techmap.Domain.Tests/Techmap.Domain.Tests.csproj --configuration Release --no-restore -- --minimum-expected-tests 1` | PASS: 54/54 |
+| `dotnet test tests/Techmap.Architecture.Tests/Techmap.Architecture.Tests.csproj --configuration Release --no-restore -- --minimum-expected-tests 1` | PASS: 3/3 |
+| `dotnet publish src/Techmap.Web/Techmap.Web.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:DebugType=None --output artifacts/m5-22-preflight/publish-check` | PASS; только предварительный publish, не готовый пакет |
+
+Логи сохранены вне Git в `artifacts/m5-22-preflight/`: `vitest.log`,
+`client-build.log`, `dotnet-restore.log`, `dotnet-functional.log`,
+`dotnet-domain.log`, `dotnet-architecture.log`, `dotnet-publish.log`.
+.NET тесты выполнялись с разрешённым повышением доступа для локальных
+процессов/SQLite/Windows ACL; отказа automatic review не было.
+
+Проверка Git и независимый аудит подтвердили compile blocker в committed
+`60d3057`, а не только в source dirt. Исправление уже в M5-20
+`b43c63beb8b92aafdd0f42369c366984815a018e`: корректные newlines raw string и
+null-forgiving перед `.AsObject()`. Его узкий тестовый patch пока не переносился
+и требует включения в итоговый аудит; version/acceptance части этого коммита
+не относятся к новому пакету. Прежнее описание этого ограничения как только
+постороннего dirt не является результатом текущего прогона.
+
+Это не финальная приёмка M5-22. Новый ZIP, manifest verification, performance
+Web-test и семь portable-режимов ещё не выполнены. Нужны fix he-back с
+подтверждённым browser QA, итоговый аудит состава и собственный прогон финального
+HEAD. 390 px ribbon QA, пользовательский жгут и owner manual acceptance открыты.
