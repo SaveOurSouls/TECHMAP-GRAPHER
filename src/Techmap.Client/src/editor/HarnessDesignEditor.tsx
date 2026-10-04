@@ -140,7 +140,7 @@ export interface HarnessDesignEditorProps {
     readonly onBackgroundOpacityChange?: (opacity: number) => void;
     readonly onDraftChange?: (document: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => void;
     /** Creates a detached material fragment from the current working copy. */
-    readonly onIsolateObjects?: (document: HarnessDesignDocument, objectIds: readonly string[]) => HarnessDesignDocument | null;
+    readonly onIsolateObjects?: (document: HarnessDesignDocument, objectIds: readonly string[], scene?: readonly EditorSceneObject[]) => HarnessDesignDocument | null;
   };
 }
 
@@ -483,7 +483,7 @@ export function designToScene(
       id: wire.id,
       layerId: wire.layerIds[view],
       kind: "wire" as const,
-      label: `${wire.circuit || `W${index + 1}`}${view === "drawing" && !physicalPoints && !wire.drawingRoute.length ? " · маршрут не задан" : ""}`,
+      label: `${wire.circuit || `W${index + 1}`}${view === "drawing" && !wire.drawingEndpoints && !physicalPoints && !wire.drawingRoute.length ? " · маршрут не задан" : ""}`,
       x: 0,
       y: 0,
       width: 0,
@@ -498,7 +498,7 @@ export function designToScene(
         ...(localVolume !== undefined ? { volumeShading: String(localVolume) } : {}),
         drawingWidth:String(wireWidth),
         physicalRoute: String(!!physicalPoints),
-        routeMissing: String(view === "drawing" && !physicalPoints && wire.drawingRoute.length === 0),
+        routeMissing: String(view === "drawing" && !wire.drawingEndpoints && !physicalPoints && wire.drawingRoute.length === 0),
         lengthKnown: String(cutLength.isComplete),
         lengthMm: cutLength.sourceLengthMm === null ? "" : String(cutLength.sourceLengthMm),
         endCorrectionFromMm: String(cutLength.endCorrectionFromMm),
@@ -506,6 +506,8 @@ export function designToScene(
         cutRoundingStepMm: String(cutLength.cutRoundingStepMm),
         cutLengthMm: cutLength.cutLengthMm === null ? "" : String(cutLength.cutLengthMm),
         materialStatus: cutLength.materialConsumptionMm === null ? "excluded" : "included",
+        freeFrom: String(!!wire.drawingEndpoints && !document.connectors.some(connector => connector.id === wire.from.connectorId)),
+        freeTo: String(!!wire.drawingEndpoints && !document.connectors.some(connector => connector.id === wire.to.connectorId)),
         materialSourceKey: wire.materialBinding?.sourceKey ?? "",
         materialRecordId: wire.materialBinding?.recordId ?? "",
         wireMark: [wire.from,wire.to].flatMap(end=>"connectorId" in end
@@ -1322,6 +1324,7 @@ export function HarnessDesignEditor({
     if (view !== "drawing" || !history || placementBusy || placementPending) return;
     const pending = history.present.connectors.filter(c=>!initializedExits.current.has(c.id));
     if(!pending.length)return;
+    if (localCopy) return;
     const topology = ensureConnectorExits(history.present);
     if (topology === history.present.physicalTopology || run({ type: "set-physical-topology", topology }))
       history.present.connectors.forEach(c=>initializedExits.current.add(c.id));
@@ -1881,7 +1884,7 @@ export function HarnessDesignEditor({
     if (!localCopy?.onIsolateObjects) return;
     const current = historyRef.current?.present;
     if (!current) return;
-    const detached = localCopy.onIsolateObjects(current, objectIds);
+    const detached = localCopy.onIsolateObjects(current, objectIds, scene);
     if (!detached) return;
     const next = createEditorHistory(detached);
     historyRef.current = next;
@@ -2207,10 +2210,10 @@ export function HarnessDesignEditor({
         activeWireStripEnd={activeWireStripEnd}
         onActiveWireStripEndChange={setActiveWireStripEnd}
         onWireStripProfileClear={(wireId, end) => run({ type: "set-wire-strip-profile", wireId, end, profile: null })}
-        drawingEndStyles={selectedObjectIds.length === 1
-          ? history.present.wires.find((wire) => wire.id === selectedObjectIds[0])?.drawingEndStyles
-          : undefined}
         onDrawingEndStyleChange={(wireId, end, style) => run({ type: "set-wire-drawing-end-style", wireId, end, style })}
+        onDrawingEndStylesChange={(wireIds, end, style) => run({ type: "set-wire-drawing-end-styles", wireIds, end, style })}
+        onDrawingEndEndpointChange={(wireId, end, position) => run({ type: "set-wire-drawing-endpoint", wireId, end, position })}
+        onDrawingEndBulkXChange={(wireIds, end, x) => run({ type: "set-wire-drawing-endpoints-x", wireIds, end, x })}
         onRelatedObjectsSelect={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}
         onObjectMove={(objectId, point, mode="carry") => {
           const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters,drawingSnaps);

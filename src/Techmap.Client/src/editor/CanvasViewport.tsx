@@ -1,3 +1,4 @@
+import { renderPartSvg } from "../wire-blank-artwork.mjs";
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
@@ -1853,23 +1854,32 @@ const stripProfilePalette = ["#d6ad65", "#e4ebef", "#a9b7c0", "#7a929e", "#b8c9c
 const stripProfileOutline = "#344b59";
 const stripProfileStrokeWidth = 1.5;
 
-function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: EditorSceneObject, selected: boolean): void {
+function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: EditorSceneObject, selected: boolean, cache: ComponentTemplateImageCache): void {
   const points = object.points ?? [];
   const styles = object.drawingEndStyles;
   if (!styles || points.length < 2) return;
   context.save();
   const radius = Math.max(2.5, Number(object.metadata?.drawingWidth ?? 2) * (selected ? 0.9 : 0.75));
   (['from', 'to'] as const).forEach((end) => {
+    if (object.metadata?.[`free${end === "from" ? "From" : "To"}`] === "false") return;
     const origin = end === 'from' ? points[0]! : points[points.length - 1]!;
     const adjacent = end === 'from' ? points[1]! : points[points.length - 2]!;
     const dx = adjacent.x - origin.x, dy = adjacent.y - origin.y;
     const length = Math.hypot(dx, dy);
     if (!length || styles[end] === 'cut') return;
+    const svg = renderPartSvg(styles[end], object.color);
+    const entry = cache.get('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+    if (entry.state === 'loaded') {
+      const scale = Math.min(Math.max(Number(object.metadata?.drawingWidth ?? 3), 3) / 52, length / 280);
+      context.save(); context.translate(origin.x, origin.y); context.rotate(Math.atan2(dy, dx));
+      context.scale(scale, scale); context.drawImage(entry.image, 0, -120, 1200, 240); context.restore();
+      return;
+    }
     const nx = -dy / length, ny = dx / length;
     const depth = Math.min(12, Math.max(5, length * 0.12));
     const tip = { x: origin.x + dx / length * depth, y: origin.y + dy / length * depth };
     context.strokeStyle = selected ? '#1179ac' : '#344b59';
-    context.fillStyle = styles[end] === 'tin' ? '#d6ad65' : styles[end] === 'sealed' || styles[end] === 'sealed-pin' ? '#7a929e' : object.color;
+    context.fillStyle = styles[end] === 'tin' ? '#b8c7cc' : styles[end] === 'copper' ? '#ca7e4a' : styles[end] === 'sealed' || styles[end] === 'sealed-pin' ? '#7a929e' : object.color;
     context.lineWidth = 1.2;
     context.beginPath();
     context.moveTo(origin.x + nx * radius, origin.y + ny * radius);
@@ -1966,7 +1976,7 @@ export function drawEditorSceneObject(
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
     for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth,radius:undefined}))){traceDrawingRoute(context,stroke.points,stroke.radius??object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
     drawWireStripProfiles(context, object, selected);
-    drawWireDrawingEndStyles(context, object, selected);
+    drawWireDrawingEndStyles(context, object, selected, componentTemplateImageCache);
     context.restore();return;
   }
   if (object.kind === "physical-node") {
@@ -2030,6 +2040,7 @@ export function drawEditorSceneObject(
       if (view === "drawing" && object.kind === "wire") {
         if(object.metadata?.volumeShading === "true") drawVolumeStroke(context,Number(object.metadata?.drawingWidth??3));
         drawWireStripProfiles(context, object, selected);
+        drawWireDrawingEndStyles(context, object, selected, componentTemplateImageCache);
       }
       if (selected) {
         context.fillStyle = "#ffffff";

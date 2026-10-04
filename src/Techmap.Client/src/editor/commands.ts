@@ -60,6 +60,22 @@ import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 
+function isFreeDrawingEnd(document: HarnessDesignDocument, wire: WireInstance, end: "from" | "to"): boolean {
+  if (!wire.drawingEndpoints) return false;
+  const endpoint = end === "from" ? wire.from : wire.to;
+  return !document.connectors.some(connector => connector.id === endpoint.connectorId);
+}
+
+function assertNoLockedDrawingWires(document: HarnessDesignDocument, wires: readonly WireInstance[]): void {
+  const locked = wires.some(wire => document.views.drawing.layers.some(layer => layer.id === wire.layerIds.drawing && layer.locked));
+  if (locked) throw new Error("Слой выбранного провода заблокирован.");
+}
+
+function assertEditableFreeDrawingEnd(document: HarnessDesignDocument, wire: WireInstance, end: "from" | "to"): void {
+  if (!isFreeDrawingEnd(document, wire, end)) throw new Error("Изменить можно только свободный конец независимого провода.");
+  assertNoLockedDrawingWires(document, [wire]);
+}
+
 export type EditorCommand =
   | {readonly type:"edit-e4-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly mode:PhysicalDragMode;readonly insert?:boolean}
   | {readonly type:"add-visible-pipe-dimension";readonly id:string;readonly segmentId:string;readonly from:number;readonly to:number;readonly pointCount:number;readonly mode:DimensionMode;readonly auxiliary?:boolean}
@@ -104,6 +120,9 @@ export type EditorCommand =
   | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-wire-strip-profile"; readonly wireId: string; readonly end: "from" | "to"; readonly profile: WireStripProfileBinding | null }
   | { readonly type: "set-wire-drawing-end-style"; readonly wireId: string; readonly end: "from" | "to"; readonly style: WireBlankEnd }
+  | { readonly type: "set-wire-drawing-endpoint"; readonly wireId: string; readonly end: "from" | "to"; readonly position: Point }
+  | { readonly type: "set-wire-drawing-end-styles"; readonly wireIds: readonly string[]; readonly end: "from" | "to"; readonly style: WireBlankEnd }
+  | { readonly type: "set-wire-drawing-endpoints-x"; readonly wireIds: readonly string[]; readonly end: "from" | "to"; readonly x: number }
   | { readonly type: "set-e4-wire-label-position"; readonly wireId: string; readonly position: number }
   | { readonly type: "reconnect-wire"; readonly wireId: string; readonly end: "from" | "to"; readonly endpoint: WireEndpoint }
   | { readonly type: "set-wire-route"; readonly wireId: string; readonly route: readonly Point[] }
@@ -382,9 +401,26 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           positions: { ...connector.positions, [command.view]: command.position },
         }), "Соединитель не найден."),
       };
-      if (command.view !== "e4") return command.physicalDragMode
-        ? carryPhysicalExits(document,moved,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
-        : moved;
+      if (command.view !== "e4") {
+        const connector = document.connectors.find(c => c.id === command.connectorId)!;
+        const delta = { x: command.position.x - connector.positions.drawing.x, y: command.position.y - connector.positions.drawing.y };
+        let shiftedWiresChanged = false;
+        const shiftedWires = moved.wires.map(wire => {
+          if (!wire.drawingEndpoints) return wire;
+          const fromAttached = wire.from.connectorId === command.connectorId;
+          const toAttached = wire.to.connectorId === command.connectorId;
+          if (!fromAttached && !toAttached) return wire;
+          shiftedWiresChanged = true;
+          return { ...wire, drawingEndpoints: {
+            from: fromAttached ? { x: wire.drawingEndpoints.from.x + delta.x, y: wire.drawingEndpoints.from.y + delta.y } : wire.drawingEndpoints.from,
+            to: toAttached ? { x: wire.drawingEndpoints.to.x + delta.x, y: wire.drawingEndpoints.to.y + delta.y } : wire.drawingEndpoints.to,
+          } };
+        });
+        const shifted = shiftedWiresChanged ? { ...moved, wires: shiftedWires } : moved;
+        return command.physicalDragMode
+          ? carryPhysicalExits(document,shifted,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
+          : shifted;
+      }
       if(command.physicalDragMode){
         const connector=document.connectors.find(c=>c.id===command.connectorId)!;
         if(document.views.e4.layers.some(l=>l.locked&&(l.id===connector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===connector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
@@ -855,15 +891,45 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if (!wireBlankEnds.includes(command.style)) throw new Error("Режим отображения конца провода задан неверно.");
       return {
         ...document,
-        wires: replaceRequired(document.wires, command.wireId, (wire) => ({
+        wires: replaceRequired(document.wires, command.wireId, (wire) => {
+          assertEditableFreeDrawingEnd(document, wire, command.end);
+          return ({
           ...wire,
           drawingEndStyles: {
             from: wire.drawingEndStyles?.from ?? "cut",
             to: wire.drawingEndStyles?.to ?? "cut",
             [command.end]: command.style,
           },
-        }), "Провод не найден."),
+        }); }, "Провод не найден."),
       };
+    case "set-wire-drawing-end-styles": {
+      if (!wireBlankEnds.includes(command.style)) throw new Error("Режим отображения конца провода задан неверно.");
+      const targets = document.wires.filter(wire => command.wireIds.includes(wire.id));
+      if (targets.length !== new Set(command.wireIds).size) throw new Error("Один из выбранных проводов не найден.");
+      const editable = targets.filter(wire => isFreeDrawingEnd(document, wire, command.end));
+      assertNoLockedDrawingWires(document, editable);
+      const ids = new Set(editable.map(wire => wire.id));
+      return { ...document, wires: document.wires.map(wire => ids.has(wire.id) ? ({ ...wire, drawingEndStyles: { from: wire.drawingEndStyles?.from ?? "cut", to: wire.drawingEndStyles?.to ?? "cut", [command.end]: command.style } }) : wire) };
+    }
+    case "set-wire-drawing-endpoints-x": {
+      if (!Number.isFinite(command.x)) throw new Error("Координата X должна быть конечным числом.");
+      const targets = document.wires.filter(wire => command.wireIds.includes(wire.id) && isFreeDrawingEnd(document, wire, command.end));
+      assertNoLockedDrawingWires(document, targets);
+      return { ...document, wires: document.wires.map(wire => {
+        const endpoints = wire.drawingEndpoints;
+        if (!targets.includes(wire) || !endpoints) return wire;
+        const current = endpoints[command.end];
+        return { ...wire, drawingEndpoints: { ...endpoints, [command.end]: { x: command.x, y: current.y } } };
+      }) };
+    }
+    case "set-wire-drawing-endpoint":
+      if (!Number.isFinite(command.position.x) || !Number.isFinite(command.position.y)) throw new Error("Координаты конца должны быть конечными числами.");
+      return { ...document, wires: replaceRequired(document.wires, command.wireId, wire => {
+        assertEditableFreeDrawingEnd(document, wire, command.end);
+        const endpoints = wire.drawingEndpoints;
+        if (!endpoints) throw new Error("Свободный конец доступен только у независимого провода.");
+        return { ...wire, drawingEndpoints: { from: endpoints.from, to: endpoints.to, [command.end]: command.position } };
+      }, "Провод не найден.") };
     case "set-e4-wire-label-position": {
       const changed = {
         ...document,

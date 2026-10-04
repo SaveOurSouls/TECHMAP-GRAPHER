@@ -1,5 +1,6 @@
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "../editor/model";
 import type { EditorSceneObject } from "../editor/editor-types";
+import type { WireBlankEnd } from "../WireBlankCatalog";
 
 export interface RouteDrawingCopy {
   readonly document: Omit<HarnessDesignDocument, "manufacturingRoute">;
@@ -19,6 +20,7 @@ export function createIndependentIsolatedDocument(
   source: HarnessDesignDocument,
   scene: readonly EditorSceneObject[],
   selectedObjectIds: readonly string[],
+  inheritedEndStyles?: ReadonlyMap<string, Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>>,
 ): HarnessDesignDocument | null {
   const selected = new Set(selectedObjectIds);
   const wireIds = new Set<string>();
@@ -33,26 +35,43 @@ export function createIndependentIsolatedDocument(
 
   const connectors = source.connectors.filter(connector => connectorIds.has(connector.id));
   const sceneById = new Map(scene.map(object => [object.id, object]));
-  const wires = source.wires.filter(wire => wireIds.has(wire.id)).map(wire => ({
-    ...wire,
-    // The endpoint shape remains backwards-compatible, but these identities
-    // are deliberately synthetic and have no connector in the detached doc.
-    from: { connectorId: `isolated:${wire.id}:from`, contactId: "free" },
-    to: { connectorId: `isolated:${wire.id}:to`, contactId: "free" },
-    // No source bend handles are carried into the detached fragment.
-    // E4 remains available for the copied connector contacts; drawing geometry
-    // is detached through drawingEndpoints below.
-    e4Route: wire.e4Route,
-    e4RouteMode: wire.e4RouteMode ?? "auto",
-    drawingRoute: [],
-    ...(sceneById.get(wire.id)?.points?.length && sceneById.get(wire.id)!.points!.length >= 2 ? {
-      drawingEndpoints: {
-        from: { ...sceneById.get(wire.id)!.points![0]! },
-        to: { ...sceneById.get(wire.id)!.points!.at(-1)! },
-      },
-    } : {}),
-    drawingEndStyles: wire.drawingEndStyles ?? { from: "cut", to: "cut" },
-  }));
+  const selectedWires = source.wires.filter(wire => wireIds.has(wire.id));
+  const anchors = selectedWires.map(wire => {
+    const points = sceneById.get(wire.id)?.points;
+    if (!points || points.length < 2) throw new Error("Не удалось определить концы выбранного провода. Дождитесь загрузки рисунка.");
+    return { wire, from: points[0]!, to: points.at(-1)!, fromRetained: connectorIds.has(wire.from.connectorId), toRetained: connectorIds.has(wire.to.connectorId) };
+  });
+  const allPoints = anchors.flatMap(item => [item.from, item.to]);
+  const leftBoundary = allPoints.length ? Math.min(...allPoints.map(point => point.x)) : 0;
+  const rightBoundary = Math.max(leftBoundary + 160, ...allPoints.map(point => point.x));
+  const retainedX = anchors.flatMap(item => [...(item.fromRetained ? [item.from.x] : []), ...(item.toRetained ? [item.to.x] : [])]);
+  const freeLeft = Math.min(leftBoundary, ...retainedX.map(x => x - 160));
+  const freeRight = Math.max(rightBoundary, ...retainedX.map(x => x + 160));
+  const freeWires = anchors.filter(item => !item.fromRetained && !item.toRetained)
+    .sort((a, b) => a.from.y - b.from.y || a.wire.id.localeCompare(b.wire.id));
+  const laneSpacing = Math.max(14, ...anchors.map(item => Number(sceneById.get(item.wire.id)?.metadata?.drawingWidth ?? 3) * 2 + 6));
+  const laneOrigin = freeWires[0]?.from.y ?? 0;
+  const wires = anchors.map(({ wire, from, to, fromRetained, toRetained }) => {
+    let endpointFrom = { ...from }, endpointTo = { ...to };
+    if (fromRetained && !toRetained) {
+      endpointTo = { x: to.x < from.x ? freeLeft : freeRight, y: from.y };
+    } else if (toRetained && !fromRetained) {
+      endpointFrom = { x: from.x > to.x ? freeRight : freeLeft, y: to.y };
+    } else if (!fromRetained && !toRetained) {
+      const y = laneOrigin + freeWires.findIndex(item => item.wire.id === wire.id) * laneSpacing;
+      endpointFrom = { x: from.x <= to.x ? leftBoundary : rightBoundary, y };
+      endpointTo = { x: from.x <= to.x ? rightBoundary : leftBoundary, y };
+    }
+    return {
+      ...wire,
+      from: fromRetained ? wire.from : { connectorId: `isolated:${wire.id}:from`, contactId: "free" },
+      to: toRetained ? wire.to : { connectorId: `isolated:${wire.id}:to`, contactId: "free" },
+      colorSource: null,
+      drawingRoute: [],
+      drawingEndpoints: { from: endpointFrom, to: endpointTo },
+      drawingEndStyles: wire.drawingEndStyles ?? inheritedEndStyles?.get(wire.id) ?? { from: "cut" as const, to: "cut" as const },
+    };
+  });
   if (!wires.length && !connectors.length) return null;
   const wireSet = new Set(wires.map(wire => wire.id));
   const cables = source.cables.filter(cable => cable.memberWireIds.every(id => wireSet.has(id)));

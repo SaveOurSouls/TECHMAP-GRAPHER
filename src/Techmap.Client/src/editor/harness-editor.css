@@ -261,6 +261,15 @@
 .he-wire-end-style legend { padding: 0 3px; font-size: 10px; font-weight: 700; color: #355463; }
 .he-wire-end-style select { width: 100%; min-width: 0; }
 .he-wire-end-style small { color: #607783; font-size: 9px; line-height: 1.35; }
+.he-free-wire-ends { display: grid; gap: 8px; padding: 9px; border-bottom: 1px solid #d5e2e8; }
+.he-free-wire-ends h3 { margin: 0; font-size: 11px; color: #355463; }
+.he-free-wire-row { display: grid; gap: 6px; padding: 7px; border: 1px solid #d5e2e8; border-radius: 6px; }
+.he-free-wire-row label, .he-free-wire-bulk { display: grid; gap: 3px; font-size: 9px; color: #55707c; }
+.he-free-wire-row select, .he-free-wire-bulk select { min-width: 0; }
+.he-free-wire-coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.he-free-wire-coordinates input { width: 100%; box-sizing: border-box; }
+.he-free-wire-bulk { grid-template-columns: 1fr 1fr; gap: 5px; }
+.he-free-wire-bulk strong { grid-column: 1 / -1; font-size: 10px; color: #355463; }
 .he-wire-length-status { padding: 10px 11px; display: grid; gap: 4px; border: 1px solid; border-radius: 7px; font-size: 10px; line-height: 1.35; }
 .he-wire-length-status strong { font-size: 12px; }
 .he-wire-length-status small { font-size: 9px; font-weight: 700; }

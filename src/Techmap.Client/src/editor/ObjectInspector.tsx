@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EditorSceneObject, HarnessEditorView } from "./editor-types";
 import type { WireEndStripProfiles } from "./model";
-import { wireBlankEnds, wireBlankEndLabels, type WireBlankEnd } from "../WireBlankCatalog";
 import { builtInWireColors } from "./wire-reference-catalog";
 import { WireDatabasePicker } from "./WireDatabasePicker";
 import type { WireDatabaseOption } from "./wire-database";
@@ -21,8 +20,6 @@ export interface ObjectInspectorProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
-  readonly drawingEndStyles?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>;
-  readonly onDrawingEndStyleChange?: (wireId: string, end: "from" | "to", style: WireBlankEnd) => void;
 }
 
 function finiteNumber(value: string, fallback: number): number {
@@ -85,8 +82,6 @@ export function ObjectInspector({
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
   onWireStripProfileClear,
-  drawingEndStyles,
-  onDrawingEndStyleChange,
 }: ObjectInspectorProps) {
   if (!selectedObject) {
     return (
@@ -144,17 +139,6 @@ export function ObjectInspector({
               <small>Выберите конец и дважды щёлкните профиль полуфабриката в справочнике.</small>
             </fieldset>
           )}
-          {onDrawingEndStyleChange && drawingEndStyles && <fieldset className="he-wire-end-style" aria-label="Режим отображения концов провода">
-            <legend>Отображение свободных концов</legend>
-            <div className="he-field-pair">
-              {(["from", "to"] as const).map((end) => <label key={end}>{end === "from" ? "Начало" : "Конец"}
-                <select aria-label={`Режим отображения ${end === "from" ? "начала" : "конца"} провода`} value={drawingEndStyles[end]} disabled={disabled} onChange={(event) => onDrawingEndStyleChange(selectedObject.id, end, event.target.value as WireBlankEnd)}>
-                  {wireBlankEnds.map(style => <option key={style} value={style}>{wireBlankEndLabels[style]}</option>)}
-                </select>
-              </label>)}
-            </div>
-            <small>Режим влияет только на рисунок независимого провода.</small>
-          </fieldset>}
           <label className="he-toggle-field">
             <input
               type="checkbox"

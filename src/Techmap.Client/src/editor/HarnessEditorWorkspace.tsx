@@ -39,6 +39,7 @@ import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
 import type { CableInstance, WireEndStripProfiles } from "./model";
 import type { WireBlankEnd } from "../WireBlankCatalog";
+import { FreeWireEndsPanel } from "./FreeWireEndsPanel";
 import "./harness-editor.css";
 
 const defaultLayers: readonly EditorLayer[] = [
@@ -180,8 +181,10 @@ export interface HarnessEditorWorkspaceProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
-  readonly drawingEndStyles?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>;
   readonly onDrawingEndStyleChange?: (wireId: string, end: "from" | "to", style: WireBlankEnd) => void;
+  readonly onDrawingEndStylesChange?: (wireIds: readonly string[], end: "from" | "to", style: WireBlankEnd) => void;
+  readonly onDrawingEndEndpointChange?: (wireId: string, end: "from" | "to", position: EditorPoint) => void;
+  readonly onDrawingEndBulkXChange?: (wireIds: readonly string[], end: "from" | "to", x: number) => void;
   readonly objectProperties?:(objectId:string)=>ReactNode;
   readonly onObjectPick?:(objectId:string|null)=>void;
   readonly onObjectPickCancel?:()=>void;
@@ -323,8 +326,10 @@ export function HarnessEditorWorkspace({
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
   onWireStripProfileClear,
-  drawingEndStyles,
   onDrawingEndStyleChange,
+  onDrawingEndStylesChange,
+  onDrawingEndEndpointChange,
+  onDrawingEndBulkXChange,
   objectProperties, onRelatedObjectsSelect,
   onObjectMove,
   onObjectMovePreview, onDrawingMove, onDrawingScale,
@@ -735,6 +740,7 @@ export function HarnessEditorWorkspace({
           </div>
           <div className="he-inspector-content">
             {typeof relationPanel==="function"?relationPanel(tool,setTool):relationPanel}
+            {view === "drawing" && inspectorTab === "properties" && onDrawingEndStyleChange && onDrawingEndStylesChange && onDrawingEndEndpointChange && <FreeWireEndsPanel objects={objects} selectedIds={selectedObjectIds} disabled={selectedWireIds.some(id => layers.some(layer => layer.locked && layer.id === objects.find(object => object.id === id)?.layerId))} onStyle={onDrawingEndStyleChange} onStyles={onDrawingEndStylesChange} onEndpoint={onDrawingEndEndpointChange} onBulkX={onDrawingEndBulkXChange} />}
             {inspectorTab === "properties" ? (
               propertyInspector ?? (
                 <ObjectInspector
@@ -749,8 +755,6 @@ export function HarnessEditorWorkspace({
                   activeWireStripEnd={activeWireStripEnd}
                   onActiveWireStripEndChange={onActiveWireStripEndChange}
                   onWireStripProfileClear={onWireStripProfileClear}
-                  drawingEndStyles={drawingEndStyles}
-                  onDrawingEndStyleChange={onDrawingEndStyleChange}
                 />
               )
             ) : (

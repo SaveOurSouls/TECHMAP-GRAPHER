@@ -61,3 +61,49 @@ it("round-trips the isolated snapshot through route Save/reopen parsing", () => 
   expect(reopened.document.wires[0]!.drawingRoute).toEqual([]);
   expect(reopened.document.wires[0]!.id).toBe("W1");
 });
+
+it("retains selected connector identity and assigns deterministic parallel lanes", () => {
+  const source = physicalFixture();
+  const scene = designToScene(source, "drawing");
+  const connector = source.connectors[0]!;
+  const wires = source.wires.slice(0, 2);
+  const multi = { ...source, wires, physicalTopology: undefined };
+  const multiScene = scene.filter(object => object.id === connector.id || (object.kind === "wire" && wires.some(w => w.id === object.id)));
+  const isolated = createIndependentIsolatedDocument(multi, multiScene, [connector.id, ...wires.map(w => w.id)]);
+  expect(isolated!.connectors[0]!.id).toBe(connector.id);
+  expect(isolated!.wires.every(w => w.from.connectorId === connector.id)).toBe(true);
+  expect(isolated!.connectors[0]).toMatchObject(connector);
+  expect(isolated!.wires.every(w => w.drawingRoute.length === 0)).toBe(true);
+  expect(isolated!.wires[0]!.drawingRoute).toEqual([]);
+  const endpoints = isolated!.wires.map(w => w.drawingEndpoints!);
+  expect(new Set(endpoints.map(e => e.to.x)).size).toBe(1);
+  expect(new Set(endpoints.map(e => e.to.y)).size).toBe(2);
+  expect(endpoints.every(e => e.from.y === e.to.y)).toBe(true);
+  expect(designToScene(isolated!, "drawing").filter(o => o.kind === "wire").every(o => o.metadata?.routeMissing === "false")).toBe(true);
+});
+
+
+it("creates distinct horizontal lanes without connectors and inherits end treatments", () => {
+  const source = physicalFixture(), before = structuredClone(source);
+  const inherited = new Map([["W1", { from: "tin" as const, to: "sealed" as const }]]);
+  const isolated = createIndependentIsolatedDocument(source, designToScene(source, "drawing"), ["W1", "W2"], inherited)!;
+  const ends = isolated.wires.map(w => w.drawingEndpoints!);
+  expect(new Set(ends.map(e => e.from.x)).size).toBe(1);
+  expect(new Set(ends.map(e => e.to.x)).size).toBe(1);
+  expect(new Set(ends.map(e => e.from.y)).size).toBe(2);
+  expect(ends.every(e => e.from.y === e.to.y)).toBe(true);
+  expect(isolated.wires[0]!.drawingEndStyles).toEqual(inherited.get("W1"));
+  expect(source).toEqual(before);
+  expect(parseRouteDrawingCopy(createRouteDrawingCopy(isolated)).document.wires).toEqual(isolated.wires);
+});
+
+it("preserves explicit end edits over inherited styles and both selected attachments", () => {
+  const source = physicalFixture();
+  const explicit = { ...source, wires: source.wires.map(w => ({ ...w, drawingEndStyles: { from: "copper" as const, to: "terminal" as const } })) };
+  const scene = designToScene(explicit, "drawing");
+  const isolated = createIndependentIsolatedDocument(explicit, scene, ["A", "B", "W1"], new Map([["W1", { from: "cut", to: "cut" }]]))!;
+  expect(isolated.wires[0]!.from).toEqual(source.wires[0]!.from);
+  expect(isolated.wires[0]!.to).toEqual(source.wires[0]!.to);
+  expect(isolated.wires[0]!.drawingEndStyles).toEqual({ from: "copper", to: "terminal" });
+  expect(isolated.wires[0]!.drawingEndpoints!.from).toEqual(scene.find(o => o.id === "W1")!.points![0]);
+});

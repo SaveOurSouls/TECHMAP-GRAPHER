@@ -163,3 +163,12 @@ describe("set-wire-strip-profile command", () => {
     expect(document.wires[0]!.stripProfiles).toBeUndefined();
   });
 });
+
+describe("free drawing end commands", () => {
+  it("updates a free endpoint and rejects non-finite coordinates", () => {
+    const document = { ...createEmptyHarnessDesign(), wires: [{ ...createWire("free", { connectorId: "isolated:free:from", contactId: "free" }, { connectorId: "isolated:free:to", contactId: "free" }), drawingEndpoints: { from: { x: 1, y: 2 }, to: { x: 10, y: 2 } } }] };
+    const changed = applyEditorCommand(document, { type: "set-wire-drawing-endpoint", wireId: "free", end: "from", position: { x: 5, y: 6 } });
+    expect(changed.wires[0]!.drawingEndpoints?.from).toEqual({ x: 5, y: 6 });
+    expect(() => applyEditorCommand(document, { type: "set-wire-drawing-endpoint", wireId: "free", end: "from", position: { x: Number.NaN, y: 6 } })).toThrow(/конечными/);
+  });
+});

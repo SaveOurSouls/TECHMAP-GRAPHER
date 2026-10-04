@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HarnessDesignDocument, Point } from "../editor/model";
+import type { WireBlankEnd } from "../WireBlankCatalog";
 import type { EditorSceneObject } from "../editor/editor-types";
 import { fitEditorCameraToBounds } from "../editor/editor-camera";
 import { HarnessDesignEditor, designToScene, useLocalCopyTemplateViews } from "../editor/HarnessDesignEditor";
@@ -23,6 +24,8 @@ export interface RouteAssemblyDrawingProps {
   readonly sources?: readonly RouteSourceItem[]; readonly items: readonly RouteSourceItem[];
   readonly componentTemplateViewInstances?: readonly ComponentTemplateViewInstance[];
   readonly resolveComponentTemplateAssetUrl?: ResolveComponentTemplateAssetUrl;
+  /** End treatments selected for wires produced by the current semi-finished stage. */
+  readonly inheritedEndStyles?: ReadonlyMap<string, Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>>;
   readonly onSave: (presentation: AssemblyDrawingPresentation) => void; readonly onCancel: () => void;
 }
 const refKey = (ref: RouteSourceRef): string => `${ref.kind}:${ref.id}`;
@@ -134,41 +137,59 @@ export function RouteAssemblyDrawingPreview({ row, document: sourceDocument, con
   return <>{localTemplateViews.error && <p role="status">{localTemplateViews.error}</p>}<canvas ref={canvas} className="route-assembly-drawing__preview" role="img" aria-label={`Фрагмент сборки ${row.title}`} /></>;
 }
 
-export function RouteAssemblyDrawing({ row, document, config, session, projectId, harnessId, onSave, onCancel }: RouteAssemblyDrawingProps) {
+export function RouteAssemblyDrawing({ row, document, config, session, projectId, harnessId, onSave, onCancel, inheritedEndStyles }: RouteAssemblyDrawingProps) {
   const [mode, setMode] = useState<"source" | "isolated">(row.presentation.isolatedDrawingCopy ? "isolated" : "source");
   const sourceSnapshot = useRef<RouteDrawingCopy | null>(null);
-  const [isolatedDraft, setIsolatedDraft] = useState<RouteDrawingCopy | null>(null);
-  const activePersistedCopy = mode === "isolated" ? isolatedDraft ?? row.presentation.isolatedDrawingCopy : row.presentation.drawingCopy;
-  const initialCopy = useMemo(() => activePersistedCopy
-    ? createRouteDrawingCopy(activePersistedCopy.document, activePersistedCopy.hiddenObjectIds)
-    : migrateLegacyRouteDrawingCopy(document, row.presentation.drawingObjects ?? []), [activePersistedCopy, document, row.presentation.drawingObjects]);
-  const legacyWarnings = useMemo(() => activePersistedCopy ? [] : legacyRouteDrawingCopyWarnings(document, row.presentation.drawingObjects ?? []), [document, activePersistedCopy, row.presentation.drawingObjects]);
+  const draftOpacity = useRef({ source: row.presentation.backgroundOpacity, isolated: row.presentation.backgroundOpacity });
+  // Drafts are kept in refs while the editor is open. Updating localCopy's
+  // initialDocument on every pointer move remounts the editor and clears the
+  // asynchronously loaded connector artwork, which was the source of the
+  // visible connector flicker in isolation mode.
+  const isolatedDraft = useRef<RouteDrawingCopy | null>(null);
+  const initialCopy = useMemo(() => {
+    const activeCopy = mode === "isolated"
+      ? isolatedDraft.current ?? row.presentation.isolatedDrawingCopy
+      : sourceSnapshot.current ?? row.presentation.drawingCopy;
+    return activeCopy ? createRouteDrawingCopy(activeCopy.document, activeCopy.hiddenObjectIds)
+      : migrateLegacyRouteDrawingCopy(document, row.presentation.drawingObjects ?? []);
+  }, [mode, document, row.presentation.drawingCopy, row.presentation.isolatedDrawingCopy, row.presentation.drawingObjects]);
+  const legacyWarnings = useMemo(() => mode === "isolated" || row.presentation.drawingCopy ? []
+    : legacyRouteDrawingCopyWarnings(document, row.presentation.drawingObjects ?? []), [document, mode, row.presentation.drawingCopy, row.presentation.drawingObjects]);
   const localCopy = useMemo(() => ({
     initialDocument: initialCopy.document, hiddenObjectIds: initialCopy.hiddenObjectIds,
-    backgroundOpacity: row.presentation.backgroundOpacity,
-    onDraftChange: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[]) => {
-      if (mode === "isolated") setIsolatedDraft(createRouteDrawingCopy(copy, hiddenObjectIds));
+    backgroundOpacity: draftOpacity.current[mode],
+    onDraftChange: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => {
+      const draft = createRouteDrawingCopy(copy, hiddenObjectIds);
+      draftOpacity.current[mode] = backgroundOpacity;
+      if (mode === "isolated") isolatedDraft.current = draft;
+      else sourceSnapshot.current = draft;
     },
     onSave: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => onSave({
       ...row.presentation, backgroundOpacity,
       ...(mode === "isolated"
         ? { drawingCopy: sourceSnapshot.current ?? row.presentation.drawingCopy ?? createRouteDrawingCopy(document), isolatedDrawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds) }
-        : { drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds) }),
+        : { drawingCopy: createRouteDrawingCopy(copy, hiddenObjectIds),
+          ...(isolatedDraft.current ? { isolatedDrawingCopy: isolatedDraft.current } : {}) }),
     }),
-    onIsolateObjects: (copy: HarnessDesignDocument, objectIds: readonly string[]) => {
-      if (mode === "source") sourceSnapshot.current = createRouteDrawingCopy(copy, initialCopy.hiddenObjectIds);
-      const isolated = createIndependentIsolatedDocument(copy, designToScene(copy, "drawing"), objectIds);
-      if (isolated) { setIsolatedDraft(createRouteDrawingCopy(isolated)); setMode("isolated"); }
+    onIsolateObjects: (copy: HarnessDesignDocument, objectIds: readonly string[], actualScene?: readonly EditorSceneObject[]) => {
+      if (mode === "source") sourceSnapshot.current = createRouteDrawingCopy(copy, sourceSnapshot.current?.hiddenObjectIds ?? initialCopy.hiddenObjectIds);
+      const isolated = createIndependentIsolatedDocument(
+        copy,
+        actualScene ?? designToScene(copy, "drawing"),
+        objectIds,
+        inheritedEndStyles,
+      );
+      if (isolated) { isolatedDraft.current = createRouteDrawingCopy(isolated); draftOpacity.current.isolated = 0; setMode("isolated"); }
       return isolated;
     },
     onCancel,
-  }), [initialCopy, row.presentation, mode, document, onSave, onCancel]);
+  }), [initialCopy, row.presentation, mode, document, inheritedEndStyles, onSave, onCancel]);
   return <section className="route-full-drawing" aria-label={`Копия чертежа этапа ${row.title}`}>
-    {(row.presentation.drawingCopy || row.presentation.isolatedDrawingCopy) && <div className="route-fragment-mode" role="group" aria-label="Версия фрагмента">
+    <div className="route-fragment-mode" role="group" aria-label="Версия фрагмента">
       <span>Версия</span>
       <button type="button" className={mode === "source" ? "active" : ""} aria-pressed={mode === "source"} onClick={() => setMode("source")}>Исходная копия</button>
-      <button type="button" className={mode === "isolated" ? "active" : ""} aria-pressed={mode === "isolated"} disabled={!row.presentation.isolatedDrawingCopy} onClick={() => setMode("isolated")}>Изолированный фрагмент</button>
-    </div>}
+      <button type="button" className={mode === "isolated" ? "active" : ""} aria-pressed={mode === "isolated"} disabled={!isolatedDraft.current && !row.presentation.isolatedDrawingCopy} onClick={() => setMode("isolated")}>Изолированный фрагмент</button>
+    </div>
     {legacyWarnings.length > 0 && <p className="route-full-drawing__migration" role="status">Старый рисунок: расположение {legacyWarnings.length} объектов восстановлено из чертежа. Проверьте их положение перед сохранением. Отмена сохранит прежний рисунок.</p>}
     <HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId}
       key={mode} harnessDesignation={row.title} initialView="drawing" localCopy={localCopy} />
