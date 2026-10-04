@@ -248,6 +248,12 @@
 .he-property-form .he-toggle-field { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .he-toggle-field input { width: 15px; height: 15px; margin: 0; accent-color: var(--he-accent); }
 .he-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.he-terminal-correction-field { display: grid; gap: 5px; min-width: 0; }
+.he-terminal-correction-buttons { display: flex; align-items: center; gap: 4px; min-width: 0; color: #617783; font-size: 9px; font-weight: 700; }
+.he-terminal-correction-buttons span { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.he-terminal-correction-buttons button { min-width: 31px; height: 24px; padding: 2px 5px; border: 1px solid #a7c4d1; border-radius: 5px; background: #f4fafc; color: #2d718d; font: 700 10px Arial, sans-serif; cursor: pointer; }
+.he-terminal-correction-buttons button:hover:not(:disabled) { border-color: #4d95b3; background: #e7f4f8; }
+.he-terminal-correction-buttons button:disabled { cursor: default; opacity: .5; }
 .he-wire-length-status { padding: 10px 11px; display: grid; gap: 4px; border: 1px solid; border-radius: 7px; font-size: 10px; line-height: 1.35; }
 .he-wire-length-status strong { font-size: 12px; }
 .he-wire-length-status small { font-size: 9px; font-weight: 700; }

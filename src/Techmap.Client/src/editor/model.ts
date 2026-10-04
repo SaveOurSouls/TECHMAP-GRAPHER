@@ -233,7 +233,15 @@ export interface ConnectorContact {
   readonly contactType: string;
   readonly circuit: string;
   readonly terminalArticle: string;
-  readonly terminalDetails?: { readonly manufacturer: string; readonly series: string; readonly description: string; readonly article?: string };
+  readonly terminalDetails?: {
+    readonly manufacturer: string;
+    readonly series: string;
+    readonly description: string;
+    readonly article?: string;
+    /** Catalog L+ and L- snapshots, in millimetres. L- is stored as a signed value. */
+    readonly lengthPlusMm?: number | null;
+    readonly lengthMinusMm?: number | null;
+  };
   readonly wire: string;
   readonly wireSection?: string;
   readonly wireDiameterMm?: number;
@@ -2095,7 +2103,16 @@ function parseTerminalDetails(value: unknown): NonNullable<ConnectorContact["ter
     series: requireString(record.series, "Серия терминала"),
     description: requireString(record.description, "Описание терминала"),
     ...(record.article === undefined ? {} : { article: requireString(record.article, "Артикул терминала") }),
+    ...(record.lengthPlusMm === undefined ? {} : { lengthPlusMm: optionalCorrection(record.lengthPlusMm, "L+") }),
+    ...(record.lengthMinusMm === undefined ? {} : { lengthMinusMm: optionalCorrection(record.lengthMinusMm, "L-") }),
   };
+}
+
+function optionalCorrection(value: unknown, name: string): number | null {
+  if (value === null) return null;
+  const parsed = requireNumber(value, name);
+  if (Math.abs(parsed) > 1_000_000_000) throw new Error(`${name} терминала задана неверно.`);
+  return parsed;
 }
 
 function requireString(value: unknown, name: string): string {

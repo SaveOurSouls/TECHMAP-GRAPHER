@@ -77,7 +77,7 @@ import {
 } from "./materialized-contact-representation";
 import type { ComponentTemplateViewInstance } from "./component-template-view-renderer";
 import { useEditorReferenceCatalog, useTerminalArticleLookup, useWireDatabaseLookup } from "./editor-reference-catalog";
-import { hydrateTerminalDetails, resolveTerminalDetails } from "./terminal-details";
+import { hydrateTerminalDetails, resolveTerminalDetails, wireEndTerminalCorrections } from "./terminal-details";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import type { HarnessSectionId } from "./HarnessSectionNavigation";
@@ -1864,8 +1864,12 @@ export function HarnessDesignEditor({
       ? [from, to].find((endpoint) => !isJunctionEndpoint(endpoint) && !isScreenEndpoint(endpoint) &&
         endpoint.contactId === colorContact.id)
       : !isJunctionEndpoint(from) && !isScreenEndpoint(from) ? from : undefined;
+    // A newly connected end starts with the terminal's L+ allowance.  The
+    // inspector keeps the resulting value editable and can replace it with L-.
+    const terminalCorrections = wireEndTerminalCorrections(history.present, { from, to }, terminalLookup.records);
     const wire = createWire(
-      id, from, to, null, circuit, resolveWireColorHex(colorName), 0, 0, 1,
+      id, from, to, null, circuit, resolveWireColorHex(colorName),
+      terminalCorrections.from?.plusMm ?? 0, terminalCorrections.to?.plusMm ?? 0, 1,
       colorSource ? { connectorId: colorSource.connectorId, contactId: colorSource.contactId } : undefined,
     );
     const start = wireEndpointE4Anchor(history.present, from);
@@ -1877,6 +1881,12 @@ export function HarnessDesignEditor({
   const selectedCable = history.present.cables.find((cable) =>
     cable.memberWireIds.length === selectedWireIds.length &&
     cable.memberWireIds.every((wireId) => selectedWireIds.includes(wireId))) ?? null;
+  const selectedWireForCorrections = selectedObjectId
+    ? history.present.wires.find(wire => wire.id === selectedObjectId)
+    : undefined;
+  const selectedTerminalCorrections = selectedWireForCorrections
+    ? wireEndTerminalCorrections(history.present, selectedWireForCorrections, terminalLookup.records)
+    : undefined;
   const selectedWiresLocked = selectedWireIds.some((wireId) => {
     const wire = history.present.wires.find((item) => item.id === wireId);
     return wire ? history.present.views.drawing.layers.some((layer) => layer.id === wire.layerIds.drawing && layer.locked) : false;
@@ -2043,6 +2053,11 @@ export function HarnessDesignEditor({
         catalogHasMore={catalog.hasMore}
         selectedObjectId={selectedObjectId}
         selectedObjectIds={selectedObjectIds}
+        terminalCorrections={selectedTerminalCorrections}
+        onTerminalCorrectionApply={(wireId, end, correctionMm) => run({
+          type: "update-wire", wireId,
+          ...(end === "from" ? { endCorrectionFromMm: correctionMm } : { endCorrectionToMm: correctionMm }),
+        })}
         highlightedObjectIds={joiningPipeDraft&&history.present.physicalTopology?joiningPipeDraftHighlights(history.present,joiningPipeDraft):[...related.wireIds,...related.componentIds,...relatedSourceIds]}
         foregroundWireIds={relatedSourceIds.length?related.wireIds:selectedObjectIds.filter(id=>history.present.wires.some(wire=>wire.id===id))}
         onObjectPick={view==='drawing'&&joiningPipeDraft?id=>{if(id&&history.present.physicalTopology)setJoiningPipeDraft(toggleJoiningPipeMember(history.present,joiningPipeDraft,id));}:undefined}
@@ -2349,11 +2364,19 @@ export function HarnessDesignEditor({
               return contact ? { connectorId: target.connectorId, contactId: contact.id } : null;
             })();
           if (!endpoint) return;
-          run({
+          const existing = history.present.wires.find(item => item.id === wireId);
+          const terminalCorrection = existing
+            ? wireEndTerminalCorrections(history.present, { ...existing, [end]: endpoint }, terminalLookup.records)[end]?.plusMm
+            : undefined;
+          const reconnected = run({
             type: "reconnect-wire",
             wireId,
             end,
             endpoint,
+          });
+          if (reconnected && terminalCorrection !== undefined && terminalCorrection !== null) run({
+            type: "update-wire", wireId,
+            ...(end === "from" ? { endCorrectionFromMm: terminalCorrection } : { endCorrectionToMm: terminalCorrection }),
           });
           setSelectedObjectId(wireId);
           setSelectedObjectIds([wireId]);
@@ -2374,7 +2397,9 @@ export function HarnessDesignEditor({
             Math.hypot(junction.position.x - point.x, junction.position.y - point.y) < 0.01);
           const junctionId = existingJunction?.id ?? crypto.randomUUID();
           const toEndpoint = createJunctionEndpoint(junctionId);
-          const base = createWire(wireId, fromEndpoint, toEndpoint, null, targetWire.circuit);
+          const terminalCorrections = wireEndTerminalCorrections(history.present, { from: fromEndpoint, to: toEndpoint }, terminalLookup.records);
+          const base = createWire(wireId, fromEndpoint, toEndpoint, null, targetWire.circuit, "#334155",
+            terminalCorrections.from?.plusMm ?? 0, terminalCorrections.to?.plusMm ?? 0);
           const start = wireEndpointE4Anchor(history.present, fromEndpoint);
           const branchWire = start ? {
             ...base,

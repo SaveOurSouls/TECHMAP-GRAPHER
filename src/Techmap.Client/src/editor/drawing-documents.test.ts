@@ -87,6 +87,11 @@ describe("drawing tables and position leaders",()=>{
     const cable={id:"K",memberWireIds:["W1","W2"],materialBinding:{...material,entityType:"cable" as const},lengthMm:200,endCorrectionFromMm:0,endCorrectionToMm:0,cutRoundingStepMm:1};
     expect(buildDrawingBom({...doc,cables:[cable]},2).filter(r=>r.unit==="м").map(r=>r.objectIds)).toEqual([["W3"],["K"]]);
   });
+  it("uses the measured length plus both signed terminal corrections in the specification",()=>{
+    const d=physicalFixture(),wire={...d.wires[0]!,lengthMm:100.1,endCorrectionFromMm:1.25,endCorrectionToMm:-.35,cutRoundingStepMm:.001,materialBinding:material};
+    const row=buildDrawingBom({...d,wires:[wire]},2).find(item=>item.objectIds.includes(wire.id));
+    expect(row).toMatchObject({amount:.202,unit:"м"});
+  });
   it("retains unknown length and never counts graphics as additional material",()=>{
     const d=physicalFixture();
     const rows=buildDrawingBom({...d,wires:d.wires.map(w=>({...w,lengthMm:null})),physicalTopology:{...d.physicalTopology!,coverings:[{id:"cover",name:"shell",width:14,color:"#123456",lengthMm:100,spans:[{segmentId:"S0",from:0,to:1}]}]}});

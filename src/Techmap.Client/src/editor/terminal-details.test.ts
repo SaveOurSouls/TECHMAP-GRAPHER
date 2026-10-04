@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createBuiltInConnectorInstance, connectorSeriesCatalogId } from "./connector-series-demo";
-import { applyEditorCommand } from "./commands";
+import { applyEditorCommand, createWire } from "./commands";
 import { createEmptyHarnessDesign, parseHarnessDesignDocument } from "./model";
-import { hydrateTerminalDetails, resolveTerminalDetails, terminalDetailsFromRecord } from "./terminal-details";
+import { hydrateTerminalDetails, resolveTerminalDetails, terminalDetailsFromRecord, wireEndTerminalCorrections } from "./terminal-details";
 
 const record = {
   recordId: "record", entityType: "terminal", sourceKey: "T-001", sourceLocation: null,
@@ -54,5 +54,30 @@ describe("terminal details", () => {
     expect(same.connectors[0]!.contacts[0]!.terminalDetails).toEqual(contact.terminalDetails);
     const changed = applyEditorCommand(document, { type: "update-contact", connectorId: connector.id, contactId: contact.id, terminalArticle: "T-002" });
     expect(changed.connectors[0]!.contacts[0]!.terminalDetails).toBeUndefined();
+  });
+
+  it("uses the terminal L+ by default and exposes L- as its signed counterpart for each connected end", () => {
+    const from = createBuiltInConnectorInstance(connectorSeriesCatalogId("jst-xh"), { id: "X1", designation: "X1", partNumber: "XHP-2", e4Position: { x: 0, y: 0 } });
+    const to = createBuiltInConnectorInstance(connectorSeriesCatalogId("jst-xh"), { id: "X2", designation: "X2", partNumber: "XHP-2", e4Position: { x: 200, y: 0 } });
+    const records = [
+      { ...record, sourceKey: "T-FROM", payload: { ...record.payload, reelArticle: "T-FROM", lengthPlusMm: "1,25", lengthMinusMm: "0.5" } },
+      { ...record, sourceKey: "T-TO", payload: { ...record.payload, reelArticle: "T-TO", lengthPlusMm: -2, lengthMinusMm: -0.75 } },
+    ];
+    const document = {
+      ...createEmptyHarnessDesign(),
+      connectors: [
+        { ...from, contacts: [{ ...from.contacts[0]!, terminalArticle: "T-FROM", terminalDetails: terminalDetailsFromRecord(records[0]!) }] },
+        { ...to, contacts: [{ ...to.contacts[0]!, terminalArticle: "T-TO", terminalDetails: terminalDetailsFromRecord(records[1]!) }] },
+      ],
+    };
+    const wire = createWire("W1", { connectorId: from.id, contactId: from.contacts[0]!.id }, { connectorId: to.id, contactId: to.contacts[0]!.id }, 100);
+    const corrections = wireEndTerminalCorrections(document, wire, records);
+
+    expect(corrections).toEqual({
+      from: { terminalArticle: "T-FROM", plusMm: 1.25, minusMm: -0.5 },
+      to: { terminalArticle: "T-TO", plusMm: 2, minusMm: -0.75 },
+    });
+    expect({ ...wire, endCorrectionFromMm: corrections.from!.plusMm!, endCorrectionToMm: corrections.to!.plusMm! })
+      .toMatchObject({ endCorrectionFromMm: 1.25, endCorrectionToMm: 2 });
   });
 });

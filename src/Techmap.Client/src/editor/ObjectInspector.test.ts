@@ -61,6 +61,27 @@ describe("wire object inspector", () => {
     expect(markup).toContain("Длина готова для карты резки");
   });
 
+  it("shows L+ and L- beside both connected wire ends without disabling manual correction fields", () => {
+    const markup = renderToStaticMarkup(createElement(ObjectInspector, {
+      view: "drawing",
+      selectedObject: wireObject({ lengthKnown: "true", lengthMm: "100", endCorrectionFromMm: "1", endCorrectionToMm: "2", cutLengthMm: "103" }),
+      disabled: false,
+      onChange: vi.fn(),
+      onTerminalCorrectionApply: vi.fn(),
+      terminalCorrections: {
+        from: { terminalArticle: "T-A", plusMm: 1, minusMm: -0.5 },
+        to: { terminalArticle: "T-B", plusMm: 2, minusMm: -0.75 },
+      },
+    }));
+
+    expect(inputTag(markup, "Поправка начала, мм")).toContain('value="1"');
+    expect(inputTag(markup, "Поправка конца, мм")).toContain('value="2"');
+    expect(markup).toContain('aria-label="Подставить L+ для начала провода"');
+    expect(markup).toContain('aria-label="Подставить L- для начала провода"');
+    expect(markup).toContain('aria-label="Подставить L+ для конца провода"');
+    expect(markup).toContain('aria-label="Подставить L- для конца провода"');
+  });
+
   it("does not expose drawing length controls on the E4 schematic", () => {
     const markup = renderToStaticMarkup(createElement(ObjectInspector, {
       view: "e4",

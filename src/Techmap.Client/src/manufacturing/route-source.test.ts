@@ -56,6 +56,12 @@ describe("manufacturing route source", () => {
     expect(JSON.stringify(source)).toBe(before);
   });
 
+  it("carries the measured length plus both terminal corrections into the connection scheme", () => {
+    const source = fixture();
+    const wire = { ...source.wires[0]!, lengthMm: 100.1, endCorrectionFromMm: 1.25, endCorrectionToMm: -0.35, cutRoundingStepMm: 0.001 };
+    expect(buildRouteSourceItems({ ...source, wires: [wire], cables: [] })[0]).toMatchObject({ lengthMm: 101 });
+  });
+
   it("keeps unknown physical lengths unknown and handles junction ends without borrowing terminals", () => {
     const source = fixture(), wire = source.wires[0]!;
     const junctionWire = { ...wire, from: { junctionId: "j", connectorId: "" as const, contactId: "" as const }, colorSource: null, materialBinding: undefined, lengthMm: null };

@@ -4,6 +4,7 @@ import type { WireEndStripProfiles } from "./model";
 import { builtInWireColors } from "./wire-reference-catalog";
 import { WireDatabasePicker } from "./WireDatabasePicker";
 import type { WireDatabaseOption } from "./wire-database";
+import type { TerminalLengthCorrectionOptions, WireEndTerminalCorrections } from "./terminal-details";
 
 export interface ObjectInspectorProps {
   readonly view: HarnessEditorView;
@@ -20,6 +21,8 @@ export interface ObjectInspectorProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
+  readonly terminalCorrections?: WireEndTerminalCorrections;
+  readonly onTerminalCorrectionApply?: (wireId: string, end: "from" | "to", correctionMm: number) => void;
 }
 
 function finiteNumber(value: string, fallback: number): number {
@@ -70,6 +73,34 @@ function WireCorrectionInput({
   </label>;
 }
 
+function TerminalCorrectionButtons({
+  end,
+  correction,
+  disabled,
+  onApply,
+}: {
+  readonly end: "from" | "to";
+  readonly correction?: TerminalLengthCorrectionOptions;
+  readonly disabled: boolean;
+  readonly onApply?: (end: "from" | "to", correctionMm: number) => void;
+}) {
+  if (!correction || !onApply) return null;
+  const label = end === "from" ? "начала" : "конца";
+  return <div className="he-terminal-correction-buttons" aria-label={`Поправка терминала ${label}`}>
+    <span>Терминал {correction.terminalArticle}</span>
+    <button type="button" disabled={disabled || correction.plusMm === null}
+      aria-label={`Подставить L+ для ${label} провода`}
+      title={correction.plusMm === null ? "В терминале не задано L+" : `Подставить +${correction.plusMm} мм`}
+      onClick={() => correction.plusMm !== null && onApply(end, correction.plusMm)}
+    >L+</button>
+    <button type="button" disabled={disabled || correction.minusMm === null}
+      aria-label={`Подставить L- для ${label} провода`}
+      title={correction.minusMm === null ? "В терминале не задано L-" : `Подставить ${correction.minusMm} мм`}
+      onClick={() => correction.minusMm !== null && onApply(end, correction.minusMm)}
+    >L−</button>
+  </div>;
+}
+
 export function ObjectInspector({
   view,
   selectedObject,
@@ -82,6 +113,8 @@ export function ObjectInspector({
   activeWireStripEnd = "from",
   onActiveWireStripEndChange,
   onWireStripProfileClear,
+  terminalCorrections,
+  onTerminalCorrectionApply,
 }: ObjectInspectorProps) {
   if (!selectedObject) {
     return (
@@ -170,24 +203,32 @@ export function ObjectInspector({
             />
           </label>
           <div className="he-field-pair">
-            <WireCorrectionInput
-              key={`${selectedObject.id}:from`}
-              label="Поправка начала, мм"
-              value={selectedObject.metadata?.endCorrectionFromMm ?? "0"}
-              disabled={disabled}
-              onCommit={(value) => onChange(selectedObject.id, {
-                metadata: { ...selectedObject.metadata, endCorrectionFromMm: value },
-              })}
-            />
-            <WireCorrectionInput
-              key={`${selectedObject.id}:to`}
-              label="Поправка конца, мм"
-              value={selectedObject.metadata?.endCorrectionToMm ?? "0"}
-              disabled={disabled}
-              onCommit={(value) => onChange(selectedObject.id, {
-                metadata: { ...selectedObject.metadata, endCorrectionToMm: value },
-              })}
-            />
+            <div className="he-terminal-correction-field">
+              <WireCorrectionInput
+                key={`${selectedObject.id}:from`}
+                label="Поправка начала, мм"
+                value={selectedObject.metadata?.endCorrectionFromMm ?? "0"}
+                disabled={disabled}
+                onCommit={(value) => onChange(selectedObject.id, {
+                  metadata: { ...selectedObject.metadata, endCorrectionFromMm: value },
+                })}
+              />
+              <TerminalCorrectionButtons end="from" correction={terminalCorrections?.from} disabled={disabled}
+                onApply={(end, correctionMm) => onTerminalCorrectionApply?.(selectedObject.id, end, correctionMm)} />
+            </div>
+            <div className="he-terminal-correction-field">
+              <WireCorrectionInput
+                key={`${selectedObject.id}:to`}
+                label="Поправка конца, мм"
+                value={selectedObject.metadata?.endCorrectionToMm ?? "0"}
+                disabled={disabled}
+                onCommit={(value) => onChange(selectedObject.id, {
+                  metadata: { ...selectedObject.metadata, endCorrectionToMm: value },
+                })}
+              />
+              <TerminalCorrectionButtons end="to" correction={terminalCorrections?.to} disabled={disabled}
+                onApply={(end, correctionMm) => onTerminalCorrectionApply?.(selectedObject.id, end, correctionMm)} />
+            </div>
           </div>
           <label>
             Шаг округления длины резки, мм

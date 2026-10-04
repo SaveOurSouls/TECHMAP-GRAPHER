@@ -38,6 +38,7 @@ import type { E4DifferentialPairState, E4ScreenState } from "./e4-wire-selection
 import { LayersPanel } from "./LayersPanel";
 import { ObjectInspector } from "./ObjectInspector";
 import type { CableInstance, WireEndStripProfiles } from "./model";
+import type { WireEndTerminalCorrections } from "./terminal-details";
 import type { WireBlankEnd } from "../WireBlankCatalog";
 import { FreeWireEndsPanel } from "./FreeWireEndsPanel";
 import { HarnessSectionNavigation, type HarnessSectionId } from "./HarnessSectionNavigation";
@@ -189,6 +190,8 @@ export interface HarnessEditorWorkspaceProps {
   readonly activeWireStripEnd?: "from" | "to";
   readonly onActiveWireStripEndChange?: (end: "from" | "to") => void;
   readonly onWireStripProfileClear?: (wireId: string, end: "from" | "to") => void;
+  readonly terminalCorrections?: WireEndTerminalCorrections;
+  readonly onTerminalCorrectionApply?: (wireId: string, end: "from" | "to", correctionMm: number) => void;
   readonly onDrawingEndStyleChange?: (wireId: string, end: "from" | "to", style: WireBlankEnd) => void;
   readonly onDrawingEndStylesChange?: (wireIds: readonly string[], end: "from" | "to", style: WireBlankEnd) => void;
   readonly onDrawingEndEndpointChange?: (wireId: string, end: "from" | "to", position: EditorPoint) => void;
@@ -372,6 +375,7 @@ export function HarnessEditorWorkspace({
   onWireRoutePointMove, onWireRoutePointPreview,
   onWireRoutePointRemove,
   onCanvasDoubleClick, onPhysicalContextAction, onPhysicalNodesConnect, onPhysicalNodeConnectToSegment,
+  terminalCorrections, onTerminalCorrectionApply,
   propertyInspector,
   canvasEditor,
   diagnostics = [],
@@ -835,6 +839,8 @@ export function HarnessEditorWorkspace({
                   activeWireStripEnd={activeWireStripEnd}
                   onActiveWireStripEndChange={onActiveWireStripEndChange}
                   onWireStripProfileClear={onWireStripProfileClear}
+                  terminalCorrections={terminalCorrections}
+                  onTerminalCorrectionApply={onTerminalCorrectionApply}
                 />
               )
             ) : (
