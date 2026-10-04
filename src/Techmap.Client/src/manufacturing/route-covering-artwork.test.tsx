@@ -25,4 +25,16 @@ describe("route covering artwork", () => {
     expect(markup).not.toContain("<text");
     expect(markup).not.toContain(" rx=");
   });
+
+  it("renders automatic thread bandage as transverse fibres", () => {
+    const markup = renderToStaticMarkup(createElement(RouteCoveringArtwork, {
+      covering: { name: "Нитевый бандаж", color: "#ffffff", kind: "band" as const, lengthMm: 400, style: undefined },
+    }));
+    expect(markup).toContain('data-covering-texture="auto"');
+    // The band pattern contains repeated vertical strokes. They remain
+    // visible even when the raster reference has not loaded yet.
+    expect(markup).toMatch(/M-?\d+(?:\.\d+)? -\d+(?:\.\d+)?V/);
+    expect(markup).not.toContain("<text");
+    expect(markup).not.toContain(" rx=");
+  });
 });
