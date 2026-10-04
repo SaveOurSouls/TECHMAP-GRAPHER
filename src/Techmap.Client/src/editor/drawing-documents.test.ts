@@ -9,6 +9,7 @@ const material:WireMaterialBinding={sourceId:"source",snapshotId:"00000000-0000-
 import { dimensionRouteKey, measuredWireLength, validateDrawingDimensions } from "./drawing-dimensions";
 import { tableWindowPosition, tableWindowStyle, resizeTableWindow } from "./DrawingTableWindows";
 import { snapDrawingPoint, type DrawingOutline } from "../component-library/drawing-geometry";
+import { buildDrawingObjectIndices } from "./drawing-object-indices";
 
 describe("authored canvas graphics",()=>{
  it("applies angular, corner, contour, and circle tangent snaps according to enabled settings",()=>{
@@ -81,10 +82,10 @@ describe("drawing tables and position leaders",()=>{
   it("keeps source versions separate, sums exactly and excludes material cable members",()=>{
     const d=physicalFixture();
     const doc={...d,wires:d.wires.map((w,i)=>({...w,lengthMm:100.1,cutRoundingStepMm:.001,materialBinding:i===2?{...material,snapshotSha256:"c".repeat(64)}:material}))};
-    const rows=buildDrawingBom(doc,3).filter(r=>r.unit==="м"&&!r.key.includes("physical-channel"));
+    const rows=buildDrawingBom(doc,3).filter(r=>r.unit==="м");
     expect(rows).toHaveLength(2);expect(rows[0]).toMatchObject({amount:.6006,objectIds:["W1","W2"]});expect(rows[1]!.amount).toBe(.3003);
     const cable={id:"K",memberWireIds:["W1","W2"],materialBinding:{...material,entityType:"cable" as const},lengthMm:200,endCorrectionFromMm:0,endCorrectionToMm:0,cutRoundingStepMm:1};
-    expect(buildDrawingBom({...doc,cables:[cable]},2).filter(r=>r.unit==="м"&&!r.key.includes("physical-channel")).map(r=>r.objectIds)).toEqual([["W3"],["K"]]);
+    expect(buildDrawingBom({...doc,cables:[cable]},2).filter(r=>r.unit==="м").map(r=>r.objectIds)).toEqual([["W3"],["K"]]);
   });
   it("retains unknown length and never counts graphics as additional material",()=>{
     const d=physicalFixture();
@@ -152,11 +153,15 @@ describe("drawing tables and position leaders",()=>{
 
 });
 
-it("counts abstract and off-drawing specification items once, retains identity on assignment and supports Undo",()=>{
+it("omits abstract specification objects and pipeline segments while retaining material rows and Undo",()=>{
  const d=physicalFixture(),item={id:"glue",kind:"manual" as const,type:"Клей",designation:"",name:"Клей",amount:2.5,unit:"г" as const,note:""};
  const documents={...emptyDrawingDocuments(),specificationItems:[item,{...item,id:"clamp",kind:"abstract" as const,type:"Хомут",name:"Хомут",unit:"шт." as const,amount:2,position:{x:40,y:60}}]};
  const h=executeEditorCommand(createEditorHistory(d),{type:"set-drawing-documents",documents});
- expect(buildDrawingBom(h.present,3).find(r=>r.objectIds.includes("glue"))).toMatchObject({amount:7.5,unit:"г"});
+ const bom=buildDrawingBom(h.present,3);
+ expect(bom.find(r=>r.objectIds.includes("glue"))).toMatchObject({amount:7.5,unit:"г"});
+ expect(bom.some(r=>r.objectIds.includes("clamp"))).toBe(false);
+ expect(bom.some(r=>r.designation.startsWith("S")&&r.name==="Канал")).toBe(false);
+ expect(bom.every(r=>!r.name.includes("Абстрактный канал"))).toBe(true);
  expect(drawingDocumentScene(h.present).filter(o=>o.kind==="specification-item").map(o=>o.id)).toEqual(["clamp"]);
  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(h.present))).drawingDocuments).toEqual(documents);
  const before=buildDrawingBom(h.present).find(r=>r.objectIds.includes("glue"))!;
@@ -164,6 +169,53 @@ it("counts abstract and off-drawing specification items once, retains identity o
  expect(buildDrawingBom(changed).find(r=>r.objectIds.includes("glue"))!.key).toBe(before.key);
  expect(undoEditorCommand(h).present).toEqual(d);
  expect(()=>parseHarnessDesignDocument({...d,drawingDocuments:{...documents,specificationItems:[item,item]}})).toThrow();
+});
+
+it("uses readable wire and covering indices and carries material attributes into BOM",()=>{
+ const base=physicalFixture();
+ const connectors=base.connectors.map(c=>({...c,contacts:c.contacts.map((contact,index)=>({...contact,terminalArticle:index===0?"3:JST|14:SPH-002T-P0.5S|0:|3:PHR":"",...(index===0?{terminalDetails:{manufacturer:"JST",series:"PHR",description:"Клемма обжимная",article:"SPH-002T-P0.5S"}}:{}),wire:"UL1061",wireSection:"24 AWG",color:"красный"}))}));
+ const wires=base.wires.map((wire,index)=>({...wire,circuit:`W${index+1}`,materialBinding:{...material,sourceKey:"UL1061-24AWG",displayName:"UL1061 24AWG"}}));
+ const document={...base,connectors,wires,physicalTopology:{...base.physicalTopology!,coverings:[{id:"cover-1",name:"Термоусадка",kind:"heat-shrink" as const,width:8,color:"#123456",lengthMm:50,spans:[{segmentId:"S0",from:0,to:1}]}]}};
+ const rows=buildDrawingBom(document);
+ expect(rows.find(row=>row.objectIds.includes("W1"))).toMatchObject({index:"W1, W2, W3",designation:"UL1061-24AWG — UL1061, 24 AWG, красный",name:"UL1061 24AWG, цвет красный"});
+ expect(rows.find(row=>row.objectIds.includes("cover-1"))?.index).toBe("ТУ1");
+ expect(rows.find(row=>row.designation.includes("SPH-002T-P0.5S"))).toMatchObject({designation:"SPH-002T-P0.5S",name:"JST · PHR · Клемма обжимная"});
+ expect(buildDrawingObjectIndices([{id:"W1",kind:"wire",metadata:{circuit:"W1"}},{id:"cover-1",kind:"physical-covering",metadata:{coveringKind:"heat-shrink"}}])).toEqual(new Map([["W1","W1"],["cover-1","ТУ1"]]));
+});
+
+it("keeps differently colored wires on the same material in separate BOM rows",()=>{
+ const base=physicalFixture();
+ const connectors=base.connectors.map(connector=>({...connector,contacts:connector.contacts.map(contact=>({...contact,color:({"A:contact:1":"красный","B:contact:1":"красный","A:contact:2":"синий","C:contact:1":"синий"} as Record<string,string>)[contact.id]??""}))}));
+ const wires=base.wires.slice(0,2).map(wire=>({...wire,materialBinding:material,lengthMm:100}));
+ const rows=buildDrawingBom({...base,connectors,wires}).filter(row=>row.unit==="м");
+ expect(rows).toHaveLength(2);
+ expect(rows.map(row=>[row.index,row.amount,row.designation])).toEqual([
+  ["W1",.1,"SAME — красный"],
+  ["W2",.1,"SAME — синий"],
+ ]);
+ expect(rows.every(row=>JSON.parse(row.key)[0]==="material")).toBe(true);
+});
+
+it("keeps plain covering article keys and hides unbound internal IDs",()=>{
+ const base=physicalFixture();
+ const id="f0f0f0f0-f0f0-40f0-80f0-f0f0f0f0f0f0";
+ const doc={...base,wires:[{...base.wires[0]!,id,materialBinding:undefined}],physicalTopology:{...base.physicalTopology!,coverings:[
+  {id:"plain-cover",name:"Термоусадка",width:8,color:"#123456",lengthMm:50,spans:[{segmentId:"S0",from:0,to:1}],material:{sourceId:"source",snapshotId:"00000000-0000-4000-8000-000000000001",snapshotSha256:"a".repeat(64),recordId:"b".repeat(64),entityType:"protective-covering" as const,sourceKey:"HS-ARTICLE",displayName:"Термоусадка 3/1"}},
+ ]}};
+ const wireRow=buildDrawingBom(doc).find(row=>row.objectIds.includes(id));
+ expect(wireRow).toMatchObject({designation:"—",index:"W1"});
+ expect(wireRow?.designation).not.toContain(id);
+ expect(buildDrawingBom(doc).find(row=>row.objectIds.includes("plain-cover"))).toMatchObject({designation:"HS-ARTICLE — Термоусадка 3/1",index:"ТУ1"});
+});
+
+it("uses saved material display names when a length-prefixed article key is malformed",()=>{
+ const base=physicalFixture();
+ const binding={...material,sourceKey:"6:UL1007 #10",displayName:"UL1007 28AWG"};
+ const wire={...base.wires[0]!,materialBinding:binding};
+ const covering={id:"cover",name:"Термоусадка",kind:"heat-shrink" as const,width:8,color:"#123456",lengthMm:50,spans:[{segmentId:"S0",from:0,to:1}],material:{...material,entityType:"protective-covering" as const,sourceKey:"6:HS-301",displayName:"HS-301, 3/1 мм"}};
+ const doc={...base,wires:[wire],physicalTopology:{...base.physicalTopology!,coverings:[covering]}};
+ expect(buildDrawingBom(doc).find(row=>row.objectIds.includes(wire.id))?.designation).toBe("UL1007 28AWG");
+ expect(buildDrawingBom(doc).find(row=>row.objectIds.includes("cover"))?.designation).toBe("HS-301 — 3/1 мм");
 });
 
 
@@ -216,4 +268,21 @@ it("toggles all position annotations together and restores missing positions",()
 it.each([{hidden:"yes"},{anchorLocal:{x:null,y:1}},{anchorLocal:{x:1e8,y:0}}])("rejects invalid persisted leader attachment %j",patch=>{
  const doc=physicalFixture(),docs=addDrawingPositions(doc);
  expect(()=>parseHarnessDesignDocument({...doc,drawingDocuments:{...docs,leaders:[{...docs.leaders[0],...patch}]}})).toThrow();
+});
+
+it("migrates legacy material keys without losing order, edits, leaders or rails when colors split",()=>{
+ const base=physicalFixture();
+ const connectors=base.connectors.map(c=>({...c,contacts:c.contacts.map(p=>({...p,color:p.id.endsWith(':1')?'red':'blue'}))}));
+ const raw={...base,connectors,wires:base.wires.slice(0,2).map(w=>({...w,materialBinding:material}))};
+ const rows=buildDrawingBom(raw).filter(row=>row.unit==='м');
+ const legacyKey=JSON.stringify(JSON.parse(rows[0]!.key).slice(0,6));
+ const documents={...emptyDrawingDocuments(),bomOrder:[legacyKey],bomText:{[legacyKey]:{name:'Authored',note:'Keep me',index:'Custom'}},leaders:raw.wires.map((w,i)=>({id:`L${i}`,objectId:w.id,rowKey:legacyKey,anchorOffset:{x:0,y:0},circle:{x:40+i*30,y:50}})),rails:[{id:'rail',start:{x:0,y:50},end:{x:200,y:50},leaderIds:['L0','L1']}]};
+ const before={...raw,drawingDocuments:documents},next=reconcileDrawingDocuments(before,before);
+ expect(next.drawingDocuments!.bomOrder).toEqual(rows.map(row=>row.key));
+ expect(next.drawingDocuments!.leaders.map(l=>l.rowKey)).toEqual(rows.map(row=>row.key));
+ expect(next.drawingDocuments!.rails).toEqual(documents.rails);
+ const migrated=buildDrawingBom(next).filter(row=>row.unit==='м');
+ expect(migrated.map(row=>row.name)).toEqual(['Authored','Authored']);
+ expect(migrated.map(row=>row.index)).toEqual(['Custom','W2']);
+ expect(reconcileDrawingDocuments(next,next)).toBe(next);
 });

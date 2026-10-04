@@ -1,3 +1,4 @@
+import { drawingTableColumnWidths } from "./drawing-table-column-widths";
 import {validateCoveringLibrary,type CoveringLibrary} from "./covering-library";
 import { drawingObjectPerimeter, type DrawingPerimeters } from "./drawing-object-perimeter";
 import {initialLinearLeader} from "./drawing-leader-placement";
@@ -12,6 +13,8 @@ import { movePositionLeaderOnRails, movePositionRail } from "./position-rail";
 import { connectionTableColumnLabels, getConnectionTableSettings, type ConnectionTableColumnId } from "./connection-table-settings";
 import { builtInWireColors, resolveWireColorHex } from "./wire-reference-catalog";
 import { snapDrawingTranslation, type DrawingOutline, type DrawingSnaps } from "../component-library/drawing-geometry";
+import { buildDrawingObjectIndices } from "./drawing-object-indices";
+import { terminalArticleLabel } from "./terminal-article-label";
 export { createPositionRail } from "./position-rail";
 
 export interface DrawingTable { readonly id: string; readonly kind: "bom" | "connections" | "cut"; readonly position: Point; readonly dock?: "left" | "right" | "top" | "bottom"; readonly width?: number; readonly height?: number }
@@ -32,12 +35,18 @@ export interface DrawingSpecificationItem {
 }
 export type DrawingGraphicKind="contact"|"line"|"polyline"|"rectangle"|"ellipse"|"bezier"|"closedContour"|"text";
 export interface DrawingGraphic {readonly id:string;readonly view:"drawing"|"e4";readonly kind:DrawingGraphicKind;readonly points:readonly Point[];readonly text?:string;readonly angle?:number;readonly color?:string;readonly width?:number}
-export interface DrawingDocuments { readonly graphics?:readonly DrawingGraphic[]; readonly coveringLibrary?:CoveringLibrary; readonly pipeOpacity?:number; readonly physicalScale?:number; readonly leaderScale?:number; readonly dimensionScale?:number; readonly minimumCoveringOverlapPx?:number; /** Extra visible width at each OP/P covering transition edge, in drawing pixels. */ readonly opCoveringEdgePx?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
+export interface DrawingDocuments { readonly graphics?:readonly DrawingGraphic[]; readonly coveringLibrary?:CoveringLibrary; readonly pipeOpacity?:number; readonly physicalScale?:number; readonly indexScale?:number; readonly indexOffsets?:Record<string,Point>; readonly leaderScale?:number; readonly dimensionScale?:number; readonly minimumCoveringOverlapPx?:number; /** Extra visible width at each OP/P covering transition edge, in drawing pixels. */ readonly opCoveringEdgePx?:number; readonly bendRadius?:number; /** Ratio between adjacent covering diameters (1:x). */ readonly coveringDiameterRatio?:number; readonly dimensionMode?:DimensionMode; readonly showDimensions?:boolean; readonly volumeShading?:boolean; readonly dimensions?:readonly DrawingDimension[]; readonly tables: readonly DrawingTable[]; readonly leaders: readonly PositionLeader[]; readonly rails?: readonly PositionRail[]; readonly bomOrder: readonly string[]; readonly bomText?: Record<string, {index?:string;designation?:string;name?:string;note?:string}>; readonly specificationItems?: readonly DrawingSpecificationItem[] }
 export const emptyDrawingDocuments = (): DrawingDocuments => ({ tables: [], leaders: [], bomOrder: [], specificationItems: [] });
 export interface BomRow {
   readonly key: string; readonly position: number; readonly index: string; readonly designation: string; readonly name: string;
   readonly amount: number | null; readonly unit: "шт." | "м" | "г" | "кг" | "л"; readonly note: string;
   readonly objectIds: readonly string[]; readonly sourceIdentity: string;
+}
+
+/** Material rows historically ended at sourceKey, before per-wire attributes. */
+function legacyMaterialRowKey(key:string):string {
+  try { const parts:unknown=JSON.parse(key);return Array.isArray(parts)&&parts[0]==="material"&&parts.length===7?JSON.stringify(parts.slice(0,6)):key; }
+  catch { return key; }
 }
 
 /** Remove stale annotation references after an object or BOM row changes.
@@ -51,6 +60,13 @@ export function reconcileDrawingDocuments(previous: HarnessDesignDocument, next:
   const oldDocs = previous.drawingDocuments;
   const oldRows = oldDocs ? buildDrawingBom(previous) : [];
   const newRows = buildDrawingBom(next);
+  const legacyRows = (key:string) => {
+    if(newRows.some(row=>row.key===key))return [];
+    const legacy=newRows.filter(row=>legacyMaterialRowKey(row.key)===key);
+    if(legacy.length)return legacy;
+    const old=oldRows.find(row=>row.key===key);
+    return old?newRows.filter(row=>rowFamily(row.key)===rowFamily(key)&&row.objectIds.some(id=>old.objectIds.includes(id))):[];
+  };
   const remap = new Map<string, string>();
   const rowFamily = (key: string): string => {
     const kind = JSON.parse(key)[0] as string;
@@ -69,7 +85,8 @@ export function reconcileDrawingDocuments(previous: HarnessDesignDocument, next:
   }
   const validRows = new Set(newRows.map(row => row.key));
   const leaders = docs.leaders.flatMap(leader => {
-    const rowKey = remap.get(leader.rowKey) ?? leader.rowKey;
+    const legacy = legacyRows(leader.rowKey).find(row=>row.objectIds.includes(leader.objectId));
+    const rowKey = legacy?.key ?? remap.get(leader.rowKey) ?? leader.rowKey;
     const row = newRows.find(candidate => candidate.key === rowKey && candidate.objectIds.includes(leader.objectId));
     const objectExists = drawingObjectOrigin(next, leader.objectId) !== null;
     return objectExists && row ? [{ ...leader, rowKey }] : [];
@@ -77,16 +94,24 @@ export function reconcileDrawingDocuments(previous: HarnessDesignDocument, next:
   const leaderIds = new Set(leaders.map(leader => leader.id));
   const rails = docs.rails?.map(rail => ({ ...rail, leaderIds: rail.leaderIds.filter(id => leaderIds.has(id)) }))
     .filter((rail, index) => rail.leaderIds.length > 0 || docs.rails![index]!.leaderIds.length === 0);
-  const bomOrder = docs.bomOrder.map(key => remap.get(key) ?? key).filter(key => validRows.has(key));
+  const bomOrder = [...new Set(docs.bomOrder.flatMap(key => {
+    const legacy=legacyRows(key);return legacy.length?legacy.map(row=>row.key):[remap.get(key)??key];
+  }).filter(key => validRows.has(key)))];
   const bomText = docs.bomText ? Object.fromEntries(Object.entries(docs.bomText).reduce<[string, NonNullable<DrawingDocuments["bomText"]>[string]][]>((items, [key, value]) => {
-    const nextKey = remap.get(key) ?? key;
-    if (validRows.has(nextKey)) items.push([nextKey, value]);
+    const legacy=legacyRows(key);
+    if(legacy.length){for(const [index,row] of legacy.entries()){
+      const {index:oldIndex,...text}=value;
+      items.push([row.key,{...text,...(index===0&&oldIndex!==undefined?{index:oldIndex}:{}),...docs.bomText?.[row.key]}]);
+    }}else{
+      const nextKey = remap.get(key) ?? key;
+      if (validRows.has(nextKey)) items.push([nextKey, value]);
+    }
     return items;
   }, [])) : undefined;
   if (leaders.length === docs.leaders.length && leaders.every((leader, index) => leader.rowKey === docs.leaders[index]!.rowKey) &&
       bomOrder.length === docs.bomOrder.length && bomOrder.every((key, index) => key === docs.bomOrder[index]) &&
       (!rails || rails.length === docs.rails?.length && rails.every((rail, index) => rail.leaderIds.length === docs.rails![index]!.leaderIds.length)) &&
-      (!bomText || Object.keys(bomText).length === Object.keys(docs.bomText ?? {}).length && ![...remap.keys()].some(key => key in (docs.bomText ?? {})))) return next;
+      (!bomText || Object.keys(bomText).length === Object.keys(docs.bomText ?? {}).length && Object.keys(bomText).every(key=>key in (docs.bomText??{})) && ![...remap.keys()].some(key => key in (docs.bomText ?? {})))) return next;
   return { ...next, drawingDocuments: { ...docs, leaders, ...(rails ? { rails } : {}), bomOrder, ...(bomText ? { bomText } : {}) } };
 }
 const keyOf = (...values: unknown[]) => JSON.stringify(values);
@@ -102,6 +127,26 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     if(amount!==null) row.amountMicros+=BigInt(Math.round(amount*1e6));
     rows.set(key,row);
   };
+  const indexedObjects = buildDrawingObjectIndices([
+    ...document.wires.map((w, index) => ({ id: w.id, kind: "wire", metadata: { index: `W${index + 1}` } })),
+    ...document.cables.map(c => ({ id: c.id, kind: "cable" })),
+    ...(document.physicalTopology?.coverings ?? []).map(c => ({ id: c.id, kind: "physical-covering", metadata: { coveringKind: c.kind ?? (/термоусад/i.test(c.name) ? "heat-shrink" : "") } })),
+  ]);
+  const decodeArticleParts = (article: string): string[] => {
+    const parts: string[] = [];
+    let offset = 0;
+    while (offset < article.length) {
+      const colon = article.indexOf(":", offset);
+      if (colon < 0 || !/^\d+$/.test(article.slice(offset, colon))) return [];
+      const length = Number(article.slice(offset, colon)), end = colon + 1 + length;
+      if (!Number.isSafeInteger(length) || end > article.length) return [];
+      parts.push(article.slice(colon + 1, end));
+      if (end === article.length) return parts;
+      if (article[end] !== "|") return [];
+      offset = end + 1;
+    }
+    return [];
+  };
   for(const c of document.connectors) {
     const b=c.libraryBinding;
     const key=b?.mode==="template" ? keyOf("connector",b.templateId,b.templateVersion,b.versionSha256,b.article.sourceId,b.article.entityType,b.article.articleKey) : b?.mode==="series" ? keyOf("series",b.seriesId,c.partNumber) : keyOf("free",c.id);
@@ -109,26 +154,55 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     add(key,c.id,c.partNumber || "—",`${c.contacts.length} конт. — ${description}`,1,"шт.",b?.mode==="template"?`Библиотека v${b.templateVersion}`:b?.mode==="series"?"Встроенная серия":"Без библиотечной привязки",c.designation);
     for(const contact of c.contacts) if(contact.terminalArticle) {
       const identity=b?.mode==="template" ? keyOf("terminal",b.templateId,b.templateVersion,b.versionSha256,contact.terminalArticle,c.terminalCatalog?.versionSha256 ?? "") : keyOf("terminal-unpinned",c.id,contact.id);
-      add(identity,c.id,contact.terminalArticle,"Контакт",1,"шт.",b?.mode==="template"?"Контакт закреплённой серии":"Терминал без закреплённого источника",`${c.designation}:${contact.number}`);
+      const article = contact.terminalDetails?.article || terminalArticleLabel(contact.terminalArticle);
+      const name = contact.terminalDetails
+        ? [contact.terminalDetails.manufacturer, contact.terminalDetails.series, contact.terminalDetails.description].filter(Boolean).join(" · ")
+        : [decodeArticleParts(contact.terminalArticle)[0], decodeArticleParts(contact.terminalArticle)[3]].filter(Boolean).join(" · ") || "Терминал";
+      add(identity,c.id,article,name,1,"шт.",b?.mode==="template"?"Контакт закреплённой серии":"Терминал без закреплённого источника",`${c.designation}:${contact.number}`);
     }
   }
   const cableMembers=new Set(document.cables.flatMap(c=>c.memberWireIds));
   for(const blank of [...document.wires.filter(w=>!cableMembers.has(w.id)),...document.cables]) {
-    const b=blank.materialBinding, key=b?materialKey("material",b):keyOf("material-unpinned",blank.id);
+    const b=blank.materialBinding;
     const cut=calculateWireCutLength(blank).cutLengthMm;
-    add(key,blank.id,b?.sourceKey ?? ("circuit" in blank?blank.circuit || blank.id:blank.id),b?.displayName ?? "Материал не назначен",cut===null?null:cut/1000,"м",b?"По длине заготовки":"Нет закреплённого материала","circuit" in blank?blank.circuit || blank.id:blank.id);
+    const relatedWires = "circuit" in blank ? [blank] : blank.memberWireIds.map(id => document.wires.find(w => w.id === id)).filter((w): w is NonNullable<typeof w> => !!w);
+    const contacts = relatedWires.flatMap(w => [w.from, w.to].flatMap(endpoint => {
+      if (!("connectorId" in endpoint)) return [];
+      const connector = document.connectors.find(item => item.id === endpoint.connectorId);
+      const contact = connector?.contacts.find(item => item.id === endpoint.contactId);
+      return contact ? [contact] : [];
+    }));
+    const marks = [...new Set(contacts.map(contact => contact.wire.trim()).filter(Boolean))];
+    const sections = [...new Set(contacts.map(contact => contact.wireSection?.trim() ?? "").filter(Boolean))];
+    const colors = [...new Set(contacts.map(contact => [contact.color, contact.secondaryColor].filter(Boolean).join("/")).filter(Boolean))];
+    const attributes = [marks.join("/"), sections.join("/"), colors.join("/")].filter(Boolean).join(", ");
+    const key=b ? keyOf(...JSON.parse(materialKey("material",b)) as unknown[],attributes) : keyOf("material-unpinned",blank.id);
+    const article = b?.sourceKey ?? "";
+    const index = "circuit" in blank ? relatedWires.map(w => indexedObjects.get(w.id)).filter(Boolean).join(", ") : indexedObjects.get(blank.id) ?? "";
+    const articleParts = decodeArticleParts(article);
+    const readableArticle = articleParts.length ? articleParts.filter(Boolean).join(" ") : /^\d+:/.test(article) ? b?.displayName ?? "—" : article;
+    const designation = b ? [readableArticle, attributes].filter(Boolean).join(" — ") : attributes || "—";
+    const colorName = colors.length ? `, цвет ${colors.join("/")}` : "";
+    add(key,blank.id,designation,`${b?.displayName ?? "Материал не назначен"}${colorName}`,cut===null?null:cut/1000,"м",b?"По длине заготовки":"Нет закреплённого материала",index);
     for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===blank.id)??[])rows.get(key)!.objectIds.add(segment.id);
   }
-  for(const c of document.physicalTopology?.coverings ?? []) add(c.material?materialKey("protection",c.material):keyOf("protection-unpinned",c.id),c.id,c.material?.sourceKey ?? c.name,c.material?.displayName ?? c.name,coveringMeasuredLength(document,c)===null?null:coveringMeasuredLength(document,c)!/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен",c.name);
-  for(const item of document.drawingDocuments?.specificationItems ?? []) {
-    const key=keyOf("specification",item.id);
-    add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || (item.kind === "abstract" ? "Абстрактная позиция" : "Дополнительная позиция"));
-    for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===item.id)??[])rows.get(key)!.objectIds.add(segment.id);
+  for(const c of document.physicalTopology?.coverings ?? []) {
+    const encoded = c.material?.sourceKey ?? "";
+    const parts = decodeArticleParts(encoded);
+    const article = parts.length ? parts.filter(Boolean).join(" ") : encoded ? /^\d+:/.test(encoded) ? c.material?.displayName ?? "—" : encoded : "—";
+    const detailName = c.material?.displayName.trim() ?? "";
+    const detailSuffix = detailName && detailName !== article
+      ? detailName.replace(new RegExp(`^${article.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?:[·—,-]\\s*)?`, "i"), "").trim()
+      : "";
+    const designation = detailSuffix ? `${article} — ${detailSuffix}` : article;
+    const key = c.material ? materialKey("protection",c.material) : keyOf("protection-unpinned",c.id);
+    add(key,c.id,designation,c.material?.displayName ?? c.name,coveringMeasuredLength(document,c)===null?null:coveringMeasuredLength(document,c)!/1000,"м",c.material?"Защитное покрытие":"Материал защиты не назначен",indexedObjects.get(c.id) ?? c.name);
   }
-  for(const [index,segment] of (document.physicalTopology?.segments??[]).entries()){
-    const assigned=segment.specificationItemId;
-    if(assigned&&(document.drawingDocuments?.specificationItems?.some(i=>i.id===assigned)||document.cables.some(c=>c.id===assigned)))continue;
-    add(keyOf("physical-channel",segment.id),segment.id,"S"+(index+1),"Канал",null,"м",assigned?"Позиция спецификации отсутствует":"Абстрактный канал · материал не назначен");
+  for(const item of document.drawingDocuments?.specificationItems ?? []) {
+    if (item.kind === "abstract") continue;
+    const key=keyOf("specification",item.id);
+    add(key,item.id,item.designation,item.name,item.amount,item.unit,item.note || "Дополнительная позиция");
+    for(const segment of document.physicalTopology?.segments.filter(s=>s.specificationItemId===item.id)??[])rows.get(key)!.objectIds.add(segment.id);
   }
   const order=document.drawingDocuments?.bomOrder ?? [];
   const keys=[...rows.keys()].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?Number.MAX_SAFE_INTEGER:ai)-(bi<0?Number.MAX_SAFE_INTEGER:bi);});
@@ -237,6 +311,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   if(d.dimensionMode!==undefined&&!["horizontal","vertical","aligned","path"].includes(d.dimensionMode))return fail();
   if(d.coveringLibrary!==undefined)validateCoveringLibrary(d.coveringLibrary);
   if(d.bendRadius!==undefined&&(typeof d.bendRadius!=="number"||!Number.isFinite(d.bendRadius)||d.bendRadius<0||d.bendRadius>200))return fail();
+  if(d.indexScale!==undefined&&(typeof d.indexScale!=="number"||!Number.isFinite(d.indexScale)||d.indexScale<.25||d.indexScale>4))return fail();
   if(d.leaderScale!==undefined&&(typeof d.leaderScale!=="number"||!Number.isFinite(d.leaderScale)||d.leaderScale<.25||d.leaderScale>4))return fail();
   if(d.dimensionScale!==undefined&&(!Number.isFinite(d.dimensionScale)||d.dimensionScale<.25||d.dimensionScale>4))return fail();
   if(d.minimumCoveringOverlapPx!==undefined&&(!Number.isFinite(d.minimumCoveringOverlapPx)||d.minimumCoveringOverlapPx<20||d.minimumCoveringOverlapPx>500))return fail();
@@ -246,6 +321,7 @@ export function validateDrawingDocuments(value:unknown,document:HarnessDesignDoc
   const ids=new Set([...document.connectors.map(c=>c.id),...document.wires.map(w=>w.id),...document.cables.map(c=>c.id),...document.physicalTopology?.nodes.map(n=>n.id)??[],...document.physicalTopology?.segments.map(s=>s.id)??[],...document.physicalTopology?.coverings?.map(c=>c.id)??[]]);
   const text=(s:unknown,max=128)=>typeof s==="string"&&s.trim().length>0&&s.length<=max;
   const point=(p:Point)=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e7&&Math.abs(p.y)<=1e7;
+  if(d.indexOffsets!==undefined){if(!d.indexOffsets||typeof d.indexOffsets!=="object"||Array.isArray(d.indexOffsets)||Object.keys(d.indexOffsets).length>50000)return fail();for(const [id,offset] of Object.entries(d.indexOffsets))if(!text(id)||!point(offset))return fail();}
   if(d.graphics!==undefined){if(!Array.isArray(d.graphics)||d.graphics.length>10000)return fail();for(const candidate of d.graphics){const g=candidate as DrawingGraphic|null,counts:Record<DrawingGraphicKind,{min:number;max:number}>={contact:{min:1,max:1},line:{min:2,max:2},polyline:{min:2,max:256},rectangle:{min:2,max:2},ellipse:{min:2,max:2},bezier:{min:4,max:4},closedContour:{min:3,max:256},text:{min:1,max:1}};const range=g&&counts[g.kind];if(!g||!text(g.id)||ids.has(g.id)||!(g.view==="drawing"||g.view==="e4")||!range||!Array.isArray(g.points)||g.points.length<range.min||g.points.length>range.max||g.points.some((p:Point)=>!point(p))||g.kind==="text"&&(!text(g.text,1024)||g.angle!==undefined&&!Number.isFinite(g.angle))||g.kind!=="text"&&(g.text!==undefined||g.angle!==undefined)||g.color!==undefined&&(!/^#[0-9a-f]{6}$/i.test(g.color))||g.width!==undefined&&(!Number.isFinite(g.width)||g.width<.2||g.width>100))return fail();ids.add(g.id);}}
   for(const t of [...d.tables,...d.leaders]){if(!t||!text(t.id)||ids.has(t.id))return fail();ids.add(t.id);}
   for(const t of d.tables)if(!["bom","connections","cut"].includes(t.kind)||!point(t.position)||(t.dock!==undefined&&!["left","right","top","bottom"].includes(t.dock))||
@@ -276,7 +352,7 @@ export function drawingDocumentScene(document:HarnessDesignDocument,quantity=1,p
     const connectionColumns = connectionTableColumns();
     const headers=t.kind==="bom"?["Поз.","Индекс","Обозначение","Наименование","Кол-во","Примечание"]:connectionColumns.map(column => column.label);
     const values=t.kind==="bom"?rows.map(r=>[String(r.position),r.index,r.designation,r.name,`${r.amount ?? "—"} ${r.unit}`,r.note]):document.wires.map((w,index)=>connectionColumns.map(column => connectionTableValue(document,w,column.id,index)));
-    const widths=t.kind==="bom"?[45,130,140,240,95,200]:connectionColumns.map(column => column.id === "from" || column.id === "to" ? 180 : column.id === "color" ? 100 : column.id === "marking" ? 120 : 100);
+    const widths=t.kind==="bom"?drawingTableColumnWidths(headers,values):connectionColumns.map(column => column.id === "from" || column.id === "to" ? 180 : column.id === "color" ? 100 : column.id === "marking" ? 120 : 100);
     return {id:t.id,kind:"drawing-table",layerId:"dimensions",label:t.kind==="bom"?`Спецификация · ${quantity} жгут(а)`:"Таблица соединений",x:t.position.x,y:t.position.y,width:widths.reduce((a,b)=>a+b,0),height:52+values.length*32,color:"#365568",metadata:{rowObjectIds:JSON.stringify(t.kind==="bom"?rows.map(r=>r.objectIds):document.wires.map(w=>[w.id])),headers:JSON.stringify(headers),rows:JSON.stringify(values),widths:JSON.stringify(widths)}};
   });
   const scale=d.leaderScale??1,radius=12*scale,anchorRadius=4*scale;

@@ -233,6 +233,7 @@ export interface ConnectorContact {
   readonly contactType: string;
   readonly circuit: string;
   readonly terminalArticle: string;
+  readonly terminalDetails?: { readonly manufacturer: string; readonly series: string; readonly description: string; readonly article?: string };
   readonly wire: string;
   readonly wireSection?: string;
   readonly wireDiameterMm?: number;
@@ -1166,6 +1167,7 @@ function parseConnector(value: unknown): ConnectorInstance {
       contactType: optionalString(contact.contactType, "Тип контакта"),
       circuit: requireString(contact.circuit, "Цепь контакта"),
       terminalArticle: optionalString(contact.terminalArticle, "Артикул терминала"),
+      ...(contact.terminalDetails === undefined ? {} : { terminalDetails: parseTerminalDetails(contact.terminalDetails) }),
       wire: optionalString(contact.wire, "Провод контакта"),
       ...(contact.wireDiameterMm === undefined ? {} : {wireDiameterMm:parseOuterDiameter(contact.wireDiameterMm)}),
       ...(contact.wireSection === undefined ? {} : { wireSection: optionalString(contact.wireSection, "Сечение провода") }),
@@ -2080,6 +2082,16 @@ function parsePoint(value: unknown): Point {
 function requireRecord(value: unknown, message: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(message);
   return value as Record<string, unknown>;
+}
+
+function parseTerminalDetails(value: unknown): NonNullable<ConnectorContact["terminalDetails"]> {
+  const record = requireRecord(value, "Данные терминала заданы неверно.");
+  return {
+    manufacturer: requireString(record.manufacturer, "Производитель терминала"),
+    series: requireString(record.series, "Серия терминала"),
+    description: requireString(record.description, "Описание терминала"),
+    ...(record.article === undefined ? {} : { article: requireString(record.article, "Артикул терминала") }),
+  };
 }
 
 function requireString(value: unknown, name: string): string {

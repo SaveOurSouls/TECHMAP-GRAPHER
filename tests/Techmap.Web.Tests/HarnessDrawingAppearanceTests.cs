@@ -147,6 +147,45 @@ public sealed class HarnessDrawingAppearanceTests
         var root=Fixture();root["drawingDocuments"]!["leaderScale"]=scale;Validate(root);
     }
     [Theory]
+    [InlineData(.25)][InlineData(1)][InlineData(4)]
+    public void Accepts_index_scale_and_relative_offsets(double scale)
+    {
+        var root=Fixture();root["drawingDocuments"]!["indexScale"]=scale;
+        root["drawingDocuments"]!["indexOffsets"]=JsonNode.Parse("""{"A":{"x":-125.5,"y":230},"C":{"x":0,"y":-20}}""");
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("0")][InlineData("0.249")][InlineData("4.01")][InlineData("null")][InlineData("\"2\"")][InlineData("true")]
+    public void Rejects_invalid_index_scale(string value)
+    {
+        var root=Fixture();root["drawingDocuments"]!["indexScale"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Theory]
+    [InlineData("null")][InlineData("[]")][InlineData("{\"A\":null}")]
+    [InlineData("{\"A\":{\"x\":0}}")][InlineData("{\"A\":{\"x\":10000001,\"y\":0}}")]
+    [InlineData("{\"\":{\"x\":0,\"y\":0}}")][InlineData("{\"A\":{\"x\":\"3\",\"y\":0}}")]
+    public void Rejects_invalid_index_offsets(string value)
+    {
+        var root=Fixture();root["drawingDocuments"]!["indexOffsets"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Fact]
+    public void Accepts_saved_terminal_description()
+    {
+        var root=Fixture();root["connectors"]![0]!["contacts"]![0]!["terminalDetails"]=JsonNode.Parse("""{"manufacturer":"JST","series":"PH","description":"Female crimp contact","article":"SPH-002T"}""");
+        Validate(root);
+    }
+    [Theory]
+    [InlineData("null")][InlineData("[]")][InlineData("{}")]
+    [InlineData("{\"manufacturer\":3,\"series\":\"PH\",\"description\":\"Contact\"}")]
+    [InlineData("{\"manufacturer\":\"JST\",\"series\":\"PH\",\"description\":\"Contact\",\"article\":false}")]
+    public void Rejects_invalid_terminal_description(string value)
+    {
+        var root=Fixture();root["connectors"]![0]!["contacts"]![0]!["terminalDetails"]=JsonNode.Parse(value);
+        Assert.Throws<HarnessDesignDocumentException>(()=>Validate(root));
+    }
+    [Theory]
     [InlineData("0")][InlineData("0.249")][InlineData("4.01")][InlineData("null")][InlineData("\"2\"")][InlineData("true")]
     public void Rejects_invalid_leader_scale(string value)
     {

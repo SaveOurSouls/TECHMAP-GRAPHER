@@ -38,6 +38,12 @@ describe("editor reference catalog", () => {
     expect(item.referenceDisplayName).toBe(item.title);
     expect(item.sourceKey).toBe("internal-key");
   });
+  it("keeps protective covering mark, size and color in the pinned display name", () => {
+    const item = referenceRecordToEditorCatalogItem(source("technology-protection"), record("protective-covering", "HS-3-1", {
+      Марка: "ТУТ", Сечение: "3/1 мм", Цвет: "чёрный",
+    }));
+    expect(item.referenceDisplayName).toBe("ТУТ · 3/1 мм · чёрный");
+  });
   it("exposes exact immutable component template versions for placement", () => {
     const template = {
       templateId: "12345678-1234-4123-8123-123456789abc",

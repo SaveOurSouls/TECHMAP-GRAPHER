@@ -100,7 +100,7 @@ export type EditorCommand =
   | { readonly type: "apply-connector-article"; readonly connectorId: string; readonly partNumber: string; readonly contacts: readonly ConnectorContact[]; readonly libraryBinding: ConnectorLibraryBinding }
   | { readonly type: "apply-template-article"; readonly connectorId: string; readonly connector: ConnectorInstance }
   | { readonly type: "flip-connector-orientation"; readonly connectorId: string }
-  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly wire?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly materialBinding?: WireMaterialBinding | null; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
+  | { readonly type: "update-contact"; readonly connectorId: string; readonly contactId: string; readonly nameOverride?: string; readonly number?: number; readonly contactType?: string; readonly circuit?: string; readonly terminalArticle?: string; readonly terminalDetails?: ConnectorContact["terminalDetails"]; readonly wire?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly materialBinding?: WireMaterialBinding | null; readonly color?: string; readonly secondaryColor?: string; readonly connectionStatus?: ConnectorContactStatus; readonly customValues?: Readonly<Record<string, string>> }
   | { readonly type: "reset-contact-color-auto"; readonly connectorId: string; readonly contactId: string }
   | { readonly type: "add-contact"; readonly connectorId: string; readonly contact: ConnectorContact }
   | { readonly type: "remove-contact"; readonly connectorId: string; readonly contactId: string }
@@ -615,6 +615,9 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
               contact,
               normalizeValue(command.terminalArticle, "Артикул терминала"),
             ),
+          terminalDetails: command.terminalArticle === undefined ? contact.terminalDetails
+            : command.terminalArticle === contact.terminalArticle ? command.terminalDetails ?? contact.terminalDetails
+              : command.terminalDetails,
           ...((command.wire!==undefined||command.wireSection!==undefined||command.wireDiameterMm!==undefined)?{wireDiameterMm:command.wireDiameterMm==null?undefined:parseOuterDiameter(command.wireDiameterMm)}:{}),
           wire: command.wire === undefined ? contact.wire : normalizeValue(command.wire, "Провод контакта"),
           ...(command.wireSection === undefined ? {} : { wireSection: normalizeValue(command.wireSection, "Сечение провода") }),

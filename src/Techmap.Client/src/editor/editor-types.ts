@@ -12,7 +12,7 @@ export type EditorTool =
   | "graphic-contact" | "graphic-line" | "graphic-polyline" | "graphic-rectangle" | "graphic-ellipse" | "graphic-bezier" | "graphic-closed-contour" | "graphic-text"
   | "dimension-auxiliary" | "dimension" | "dimension-horizontal" | "dimension-vertical" | "position-rail";
 
-export type EditorObjectKind = "specification-item" | "connector" | "wire" | "text" | "dimension" | "graphic-contact" | "graphic-line" | "graphic-polyline" | "graphic-rectangle" | "graphic-ellipse" | "graphic-bezier" | "graphic-closed-contour" | "graphic-text" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor" | "position-rail" | "rail-handle";
+export type EditorObjectKind = "specification-item" | "connector" | "wire" | "text" | "dimension" | "graphic-contact" | "graphic-line" | "graphic-polyline" | "graphic-rectangle" | "graphic-ellipse" | "graphic-bezier" | "graphic-closed-contour" | "graphic-text" | "physical-node" | "physical-segment" | "physical-covering" | "drawing-table" | "position-leader" | "leader-anchor" | "position-rail" | "rail-handle" | "object-index";
 
 export interface EditorPoint {
   readonly x: number;

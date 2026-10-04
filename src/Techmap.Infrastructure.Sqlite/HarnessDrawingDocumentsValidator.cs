@@ -21,7 +21,17 @@ internal static class HarnessDrawingDocumentsValidator
         }
         if(root.TryGetProperty("connectors",out var connectors)&&connectors.ValueKind==JsonValueKind.Array)
             foreach(var connector in connectors.EnumerateArray())if(connector.TryGetProperty("contacts",out var contacts)&&contacts.ValueKind==JsonValueKind.Array)
-                foreach(var contact in contacts.EnumerateArray())Diameter(contact,"wireDiameterMm");
+                foreach(var contact in contacts.EnumerateArray())
+                {
+                    Diameter(contact,"wireDiameterMm");
+                    if(contact.TryGetProperty("terminalDetails",out var details))
+                    {
+                        if(details.ValueKind!=JsonValueKind.Object)throw Invalid();
+                        foreach(var field in new[]{"manufacturer","series","description"})
+                            if(!details.TryGetProperty(field,out var value)||value.ValueKind!=JsonValueKind.String||value.GetString()!.Length>1024)throw Invalid();
+                        if(details.TryGetProperty("article",out var article)&&(article.ValueKind!=JsonValueKind.String||article.GetString()!.Length>1024))throw Invalid();
+                    }
+                }
         if(root.TryGetProperty("wires",out var wires)&&wires.ValueKind==JsonValueKind.Array)
             foreach(var wire in wires.EnumerateArray())if(wire.TryGetProperty("materialBinding",out var material))Diameter(material,"outerDiameterMm");
         if(!root.TryGetProperty("drawingDocuments",out var d))return;
@@ -29,6 +39,17 @@ internal static class HarnessDrawingDocumentsValidator
         if(d.TryGetProperty("coveringLibrary",out var coveringLibrary))HarnessCoveringLibraryValidator.Validate(coveringLibrary);
         if(d.TryGetProperty("dimensionMode",out var mode)&&(mode.ValueKind!=JsonValueKind.String||mode.GetString() is not ("horizontal" or "vertical" or "aligned" or "path")))throw Invalid();
         if(d.TryGetProperty("bendRadius",out var radius)&&(radius.ValueKind!=JsonValueKind.Number||!radius.TryGetDouble(out var radiusValue)||!double.IsFinite(radiusValue)||radiusValue<0||radiusValue>200))throw Invalid();
+        if(d.TryGetProperty("indexScale",out var indexScale)&&(indexScale.ValueKind!=JsonValueKind.Number||!indexScale.TryGetDouble(out var indexFactor)||!double.IsFinite(indexFactor)||indexFactor<.25||indexFactor>4))throw Invalid();
+        if(d.TryGetProperty("indexOffsets",out var indexOffsets))
+        {
+            if(indexOffsets.ValueKind!=JsonValueKind.Object)throw Invalid();
+            var count=0;
+            foreach(var offset in indexOffsets.EnumerateObject())
+            {
+                if(++count>50000||string.IsNullOrWhiteSpace(offset.Name)||offset.Name.Length>128)throw Invalid();
+                Point(indexOffsets,offset.Name);
+            }
+        }
         if(d.TryGetProperty("leaderScale",out var leaderScale)&&(leaderScale.ValueKind!=JsonValueKind.Number||!leaderScale.TryGetDouble(out var leaderFactor)||!double.IsFinite(leaderFactor)||leaderFactor<.25||leaderFactor>4))throw Invalid();
         if(d.TryGetProperty("physicalScale",out var scale)&&(scale.ValueKind!=JsonValueKind.Number||!scale.TryGetDouble(out var factor)||!double.IsFinite(factor)||factor<.2||factor>8))throw Invalid();
         if(d.TryGetProperty("pipeOpacity",out var pipeOpacity)&&(pipeOpacity.ValueKind!=JsonValueKind.Number||!pipeOpacity.TryGetDouble(out var alpha)||!double.IsFinite(alpha)||alpha<0||alpha>1))throw Invalid();

@@ -51,6 +51,7 @@ export interface E4ConnectorInspectorProps {
   }[];
   readonly onTemplateArticleSelect?: (articleVariantId: string) => void;
   readonly terminalArticles?: readonly string[];
+  readonly terminalDetails?: (article: string) => ConnectorContact["terminalDetails"];
   readonly onTerminalSearch?: (query: string) => void;
   readonly wireOptions?: readonly WireDatabaseOption[];
   readonly wireMaterialOptions?: readonly WireDatabaseOption[];
@@ -271,6 +272,7 @@ export function E4ConnectorInspector({
   templateArticleOptions = [],
   onTemplateArticleSelect,
   terminalArticles = [],
+  terminalDetails,
   onTerminalSearch,
   wireOptions = builtInWireOptions,
   wireMaterialOptions,
@@ -357,6 +359,7 @@ export function E4ConnectorInspector({
       contactType: patch.contactType,
       circuit: patch.circuit,
       terminalArticle: patch.terminalArticle,
+      terminalDetails: patch.terminalArticle === undefined ? undefined : terminalDetails?.(patch.terminalArticle),
       wire: patch.wire,
       wireSection: patch.wireSection,
       wireDiameterMm: patch.wireDiameterMm,
@@ -602,7 +605,7 @@ export function E4ConnectorInspector({
                         updateContact(contact, { customValues: { ...contact.customValues, [column.id.slice(7)]: event.target.value } });
                       } else {
                         const patch = column.id === "contactType" ? { contactType: event.target.value }
-                          : column.id === "circuit" ? { circuit: event.target.value }
+                        : column.id === "circuit" ? { circuit: event.target.value }
                             : column.id === "terminal" ? { terminalArticle: event.target.value }
                               : column.id === "wire" ? { wire: event.target.value }
                                 : column.id === "wireSection" ? { wireSection: event.target.value }

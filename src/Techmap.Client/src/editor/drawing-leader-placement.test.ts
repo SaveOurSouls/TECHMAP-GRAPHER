@@ -41,7 +41,8 @@ it("uses the same left-side anchor for a wire and cable when electrical endpoint
  expect(initialLinearLeader({...d,cables:[cable]},"cable")).toEqual(normal);
 });
 it("creates a leader at the chosen material cross section and retains manual edits and serialization",()=>{
- const d=straight(),documents=addDrawingPositions(d),leader=documents.leaders.find(l=>l.objectId==="pipe")!;
+ const base=straight(),d={...base,physicalTopology:{...base.physicalTopology,coverings:[{id:"cover",name:"Термоусадка",width:12,color:"#333333",lengthMm:null,spans:[{segmentId:"pipe",from:0,to:1}]}]}},documents=addDrawingPositions(d),leader=documents.leaders.find(l=>l.objectId==="cover")!;
+ expect(documents.leaders.some(l=>l.objectId==="pipe")).toBe(false);
  const saved=applyEditorCommand(d,{type:"set-drawing-documents",documents});
  expect(drawingDocumentScene(saved).find(o=>o.id===leader.id)!.points![0]!.x).toBeCloseTo(200);
  const changed=moveDrawingAnnotation(saved,leader.id+":anchor",{x:696,y:-4})!;

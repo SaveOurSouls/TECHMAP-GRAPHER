@@ -111,6 +111,11 @@ export function hiddenIdsForIsolatedObjects(objects: readonly EditorSceneObject[
       supportIds.add(object.id);
     }
   }
+  for (const object of objects) if (object.kind === "object-index") {
+    const ownerId = object.metadata?.indexObjectId ?? "";
+    if (isolated.has(ownerId)) isolated.add(object.id);
+    if (isolated.has(object.id)) isolated.add(ownerId);
+  }
   return objects.filter(object => !isolated.has(object.id) && !supportIds.has(object.id)).map(object => object.id);
 }
 

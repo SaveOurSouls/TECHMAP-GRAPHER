@@ -18,6 +18,7 @@ import { drawingLocalDirection, drawingLocalDirectionVector, drawingLocalPoint, 
 import { DrawingScaleControl } from "./DrawingScaleControl";
 import { DrawingDocumentsPanel } from "./DrawingDocumentsPanel";
 import { addDrawingPositions, createPositionRail, drawingDocumentScene, moveDrawingAnnotation, reconcileDrawingDocuments, setDrawingPositionsVisibility } from "./drawing-documents";
+import { alignDrawingConnectorIndexes, drawingObjectIndexScene, moveDrawingIndex } from "./drawing-indices";
 import { type PhysicalCovering, coveringMaterial, standardCovering, standardCoveringOver } from "./physical-coverings";
 import { PhysicalTopologyPanel } from "./PhysicalTopologyPanel";
 import { routePhysicalWires } from "./physical-wire-routing";
@@ -75,6 +76,7 @@ import {
 } from "./materialized-contact-representation";
 import type { ComponentTemplateViewInstance } from "./component-template-view-renderer";
 import { useEditorReferenceCatalog, useTerminalArticleLookup, useWireDatabaseLookup } from "./editor-reference-catalog";
+import { hydrateTerminalDetails, resolveTerminalDetails } from "./terminal-details";
 import type { EditorCatalogItem, EditorLayer as UiLayer, EditorSceneObject, HarnessEditorView } from "./editor-types";
 import { HarnessEditorWorkspace, type EditorSaveState } from "./HarnessEditorWorkspace";
 import { CableSelectionPanel } from "./CableSelectionPanel";
@@ -544,7 +546,8 @@ export function designToScene(
   const physical = view === "drawing" ? physicalTopologyScene(document) : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
   const drawingPhysical= view === "drawing" ? orderPhysicalScene(document,[...physical,...wires,...coverings]) : [];
-  return [...connectors, ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...drawingDocumentScene(document,quantity,perimeters,view)];
+  const objects=[...connectors, ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...drawingDocumentScene(document,quantity,perimeters,view)];
+  return view === "drawing" ? [...objects,...drawingObjectIndexScene(document,objects)] : objects;
 }
 
 type WireUpdateCommand = Extract<EditorCommand, { readonly type: "update-wire" }>;
@@ -914,6 +917,18 @@ export function HarnessDesignEditor({
     setHistory(next);
   }, [history, placementBusy, placementPending, wireLookup.databaseOptions]);
 
+  // Descriptive catalog data enriches legacy contacts without changing their
+  // selected articles or adding user-visible undo steps. Keep history coherent.
+  useEffect(() => {
+    if (!history || !terminalLookup.records.length || placementBusy || placementPending) return;
+    const present = hydrateTerminalDetails(history.present, terminalLookup.records);
+    if (present === history.present) return;
+    const next = { present, past: history.past.map(doc => hydrateTerminalDetails(doc, terminalLookup.records)),
+      future: history.future.map(doc => hydrateTerminalDetails(doc, terminalLookup.records)) };
+    historyRef.current = next;
+    setHistory(next);
+  }, [history, terminalLookup.records, placementBusy, placementPending]);
+
   const refreshComponentGraph = useCallback(async (editorGeneration: number): Promise<void> => {
     const requestGeneration = ++componentGraphRequestGeneration.current;
     try {
@@ -1167,13 +1182,16 @@ export function HarnessDesignEditor({
     if (!history) return;
     const availableObjectIds = new Set([
       ...history.present.connectors.map((item) => item.id),
+      ...history.present.connectors.map((item) => `object-index:${item.id}`),
       ...history.present.wires.map((item) => item.id),
+      ...history.present.wires.map((item) => `object-index:${item.id}`),
       ...history.present.drawingDocuments?.specificationItems?.map(i=>i.id) ?? [],
       ...history.present.drawingDocuments?.tables.map(t=>t.id) ?? [],
       ...history.present.drawingDocuments?.dimensions?.map(d=>d.id)??[],
       ...history.present.drawingDocuments?.leaders.flatMap(l=>[l.id,`${l.id}:anchor`]) ?? [],
       ...history.present.drawingDocuments?.rails?.flatMap(r=>[r.id,`${r.id}:start`,`${r.id}:end`]) ?? [],
       ...history.present.physicalTopology?.coverings?.map(c => c.id) ?? [],
+      ...history.present.physicalTopology?.coverings?.map(c => `object-index:${c.id}`) ?? [],
       ...history.present.physicalTopology?.nodes.map(n => n.id) ?? [],
       ...history.present.physicalTopology?.segments.map(n => n.id) ?? [],
       ...history.present.physicalTopology?.joiningPipes?.flatMap(p=>[p.id,`${p.id}:from`,`${p.id}:to`])??[],
@@ -1203,6 +1221,7 @@ export function HarnessDesignEditor({
   const [pipeOpacityPreview,setPipeOpacityPreview]=useState<number|null>(null);
   const [bendRadiusPreview,setBendRadiusPreview]=useState<number|null>(null);
   const [leaderScalePreview,setLeaderScalePreview]=useState<number|null>(null);
+  const [indexScalePreview,setIndexScalePreview]=useState<number|null>(null);
   const [dimensionScalePreview,setDimensionScalePreview]=useState<number|null>(null);
   const [minimumOverlapPreview,setMinimumOverlapPreview]=useState<number|null>(null);
   const [opCoveringEdgePreview,setOpCoveringEdgePreview]=useState<number|null>(null);
@@ -1214,6 +1233,7 @@ export function HarnessDesignEditor({
     if(pairPitchPreview)return {document:{...history.present,diffPairs:history.present.diffPairs.map(pair=>pair.id===pairPitchPreview.id?{...pair,step:pairPitchPreview.step}:pair)},error:null};
     if(bendRadiusPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius:bendRadiusPreview}},error:null};
     if(leaderScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale:leaderScalePreview}},error:null};
+    if(indexScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),indexScale:indexScalePreview}},error:null};
     if(dimensionScalePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale:dimensionScalePreview}},error:null};
     if(minimumOverlapPreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),minimumCoveringOverlapPx:minimumOverlapPreview}},error:null};
     if(opCoveringEdgePreview!==null)return {document:{...history.present,drawingDocuments:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),opCoveringEdgePx:opCoveringEdgePreview}},error:null};
@@ -1232,6 +1252,11 @@ export function HarnessDesignEditor({
     }
     if (!movePreview) return { document: history.present, error: null };
     try {
+      if(movePreview.objectId.startsWith("object-index:")){
+        const indexScene=alignDrawingConnectorIndexes(history.present,designToScene(history.present,"drawing"),componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
+        const index=moveDrawingIndex(history.present,movePreview.objectId,movePreview.point,indexScene);
+        if(index)return {document:{...history.present,drawingDocuments:index},error:null};
+      }
       const annotation=moveDrawingAnnotation(history.present,movePreview.objectId,movePreview.point,drawingPerimeters);
       if(annotation)return {document:{...history.present,drawingDocuments:annotation},error:null};
       const topology = history.present.physicalTopology;
@@ -1273,7 +1298,7 @@ export function HarnessDesignEditor({
         error: error instanceof Error ? error.message : "Трассировка невозможна.",
       };
     }
-  }, [history, movePreview, view, pipePreview, drawingPerimeters, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
+  }, [history, movePreview, view, pipePreview, drawingPerimeters, componentTemplateViewInstances, resolveComponentTemplateAssetUrl, coveringPreview, thicknessPreview, pipeOpacityPreview, leaderScalePreview, indexScalePreview, dimensionScalePreview, minimumOverlapPreview, opCoveringEdgePreview, bendRadiusPreview, coveringRatioPreview, pairPitchPreview]);
 
   const routingIssues = useMemo(() => view === "e4" && history
     ? e4RoutingIssues(history.present) : [], [history?.present, view]);
@@ -1445,7 +1470,7 @@ export function HarnessDesignEditor({
     const rows=materializePlacementRows(instance.content,instance.articleVariantId);
     return {...connector,libraryBinding:{...binding,snapshot:{...binding.snapshot,contacts:binding.snapshot.contacts.map(contact=>({...contact,representations:rows.find(r=>r.key===contact.logicalContactId)?.representations??[]}))}}};
   })};
-  const scene = designToScene(
+  const scene = alignDrawingConnectorIndexes(drawingDocument, designToScene(
     drawingDocument,
     view,
     diagnosticObjectIds,
@@ -1453,7 +1478,7 @@ export function HarnessDesignEditor({
     harnessQuantity,
     drawingTemplateIds,
     drawingPerimeters,
-  );
+  ),componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
   const layers = toUiLayers(history.present, view);
   const selectedConnector = view === "e4" && selectedObjectId
     ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
@@ -2025,6 +2050,7 @@ export function HarnessDesignEditor({
           <DrawingRangeControl label="Диаметры 1:" unit="" digits={1} accessibleLabel="Соотношение диаметров оболочек" min={1.1} max={4} step={.1} value={coveringRatioPreview??history.present.drawingDocuments?.coveringDiameterRatio??2} onPreview={setCoveringRatioPreview} onCommit={coveringDiameterRatio=>{if(coveringDiameterRatio!==(history.present.drawingDocuments?.coveringDiameterRatio??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),coveringDiameterRatio}});}} hint="Глобальное правило 1:x для соседних оболочек. При увеличении ширины переходы сохраняют форму; локальные ширины и материал не меняются."/>
           <DrawingRangeControl label="Радиус" accessibleLabel="Радиус изгибов чертежа" min={0} max={200} step={1} digits={0} unit="" value={bendRadiusPreview??drawingBendRadius(history.present)} onPreview={setBendRadiusPreview} onCommit={bendRadius=>{if(bendRadius!==drawingBendRadius(history.present))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),bendRadius}});}} hint="Радиус в координатах чертежа: 0 — острый угол. На коротких плечах радиус автоматически уменьшается. Заданные длины проводов и точки перегиба сохраняются."/>
           <DrawingRangeControl label="Позиции" accessibleLabel="Масштаб позиционных обозначений" min={.25} max={4} step={.05} value={leaderScalePreview??history.present.drawingDocuments?.leaderScale??1} onPreview={setLeaderScalePreview} onCommit={leaderScale=>{if(leaderScale!==(history.present.drawingDocuments?.leaderScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),leaderScale}});}} hint="Размер кружков, номеров и точек выносок. Ручное положение сохраняется. Escape отменяет изменение; отпускание ползунка сохраняет его одним шагом отмены."/>
+          <DrawingRangeControl label="Индексы ×" accessibleLabel="Масштаб индексов объектов" min={.25} max={4} step={.05} value={indexScalePreview??history.present.drawingDocuments?.indexScale??1} onPreview={setIndexScalePreview} onCommit={indexScale=>{if(indexScale!==(history.present.drawingDocuments?.indexScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),indexScale}});}} hint="Общий размер индексов соединителей, проводов и оболочек. Размер сохраняется в этом чертеже."/>
           <DrawingRangeControl label="Размеры ×" accessibleLabel="Масштаб размерных обозначений" min={.25} max={4} step={.05} value={dimensionScalePreview??history.present.drawingDocuments?.dimensionScale??1} onPreview={setDimensionScalePreview} onCommit={dimensionScale=>{if(dimensionScale!==(history.present.drawingDocuments?.dimensionScale??1))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),dimensionScale}});}} hint="Общий размер текста, стрелок, точек и линий размеров. Значения длин и привязки не меняются."/>
           <DrawingRangeControl label="Мин. нахлёст" accessibleLabel="Минимальная длина новой оболочки поверх оболочки" min={20} max={500} step={5} digits={0} unit="px" value={minimumOverlapPreview??history.present.drawingDocuments?.minimumCoveringOverlapPx??100} onPreview={setMinimumOverlapPreview} onCommit={minimumCoveringOverlapPx=>{if(minimumCoveringOverlapPx!==(history.present.drawingDocuments?.minimumCoveringOverlapPx??100))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),minimumCoveringOverlapPx}});}} hint="Новая оболочка занимает 5% длины нижней, но не меньше заданного значения; если нижняя короче, покрывается доступный участок."/>
           <DrawingRangeControl label="Выступ ОП" accessibleLabel="Ширина выступа оболочки ОП на переходе" min={0} max={24} step={1} digits={0} unit="px" value={opCoveringEdgePreview??history.present.drawingDocuments?.opCoveringEdgePx??2} onPreview={setOpCoveringEdgePreview} onCommit={opCoveringEdgePx=>{if(opCoveringEdgePx!==(history.present.drawingDocuments?.opCoveringEdgePx??2))run({type:"set-drawing-documents",documents:{...(history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]}),opCoveringEdgePx}});}} hint="Дополнительная ширина краёв оболочки на переходе ОП↔П. Нулевое значение убирает выступ; значение сохраняется в этом чертеже."/>
@@ -2123,6 +2149,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
+            terminalDetails={(article) => resolveTerminalDetails(article, terminalLookup.records)}
             wireOptions={wireLookup.options} wireMaterialOptions={wireLookup.databaseOptions} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
@@ -2152,6 +2179,7 @@ export function HarnessDesignEditor({
             templateArticleOptions={selectedTemplateArticleOptions}
             onTemplateArticleSelect={selectTemplateArticle}
             terminalArticles={terminalLookup.articles}
+            terminalDetails={(article) => resolveTerminalDetails(article, terminalLookup.records)}
             wireOptions={wireLookup.options} wireMaterialOptions={wireLookup.databaseOptions} wireLookupMessage={wireLookup.message} onWireSearch={wireLookup.search}
             onTerminalSearch={terminalLookup.search}
             wireColors={editorWireColors}
@@ -2216,6 +2244,8 @@ export function HarnessDesignEditor({
         onDrawingEndBulkXChange={(wireIds, end, x) => run({ type: "set-wire-drawing-endpoints-x", wireIds, end, x })}
         onRelatedObjectsSelect={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}
         onObjectMove={(objectId, point, mode="carry") => {
+          const index=moveDrawingIndex(history.present,objectId,point,scene);
+          if(index){run({type:"set-drawing-documents",documents:index});return;}
           const annotation=moveDrawingAnnotation(history.present,objectId,point,drawingPerimeters,drawingSnaps);
           if(annotation){run({type:"set-drawing-documents",documents:annotation});return;}
           const topology = history.present.physicalTopology;

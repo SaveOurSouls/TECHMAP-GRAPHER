@@ -279,6 +279,13 @@ export function referenceRecordToEditorCatalogItem(
     if (name) details.push(name);
     if (section) details.push(section);
     if (color) details.push(color);
+  } else if (record.entityType === "protective-covering") {
+    const name = firstValue(payload, "name", "Название", "Наименование", "productName", "series", "Серия", "mark", "Марка");
+    const size = firstValue(payload, "size", "Размер", "crossSection", "section", "Сечение", "wallThicknessMm", "thicknessMm", "diameterMm", "innerDiameterMm");
+    const color = firstValue(payload, "color", "Цвет");
+    if (name) details.push(name);
+    if (size) details.push(size);
+    if (color) details.push(color);
   } else {
     const name = firstValue(payload, "name", "productName", "series", "manufacturer");
     if (name) details.push(name);
@@ -299,6 +306,8 @@ export function referenceRecordToEditorCatalogItem(
     referenceDisplayName: record.entityType === "wire" || record.entityType === "cable"
       ? source.id === "technology-wires" ? wireDatabaseOption(record).label
         : firstValue(payload, "name", "Название", "mark", "Марка", "series", "Серия") ?? record.sourceKey
+      : record.entityType === "protective-covering"
+        ? [...new Set([firstValue(payload, "name", "Название", "Наименование", "productName", "series", "Серия", "mark", "Марка"), firstValue(payload, "size", "Размер", "crossSection", "section", "Сечение", "wallThicknessMm", "thicknessMm", "diameterMm", "innerDiameterMm"), firstValue(payload, "color", "Цвет")].filter((value): value is string => !!value))].join(" · ") || record.sourceKey
       : undefined,
     outerDiameterMm:catalogOuterDiameter(payload),
     coaxTerminationCandidate,
@@ -375,6 +384,7 @@ export interface EditorReferenceCatalogState {
 
 export interface TerminalArticleLookupState {
   readonly articles: readonly string[];
+  readonly records: readonly ReferenceCatalogSearchRecord[];
   readonly search: (query: string) => void;
 }
 
@@ -389,7 +399,18 @@ export function useTerminalArticleLookup(
   const [query, setQuery] = useState<string | null>(null);
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
   const [articles, setArticles] = useState<readonly string[]>([]);
+  const [records, setRecords] = useState<readonly ReferenceCatalogSearchRecord[]>([]);
   const generation = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void api.getActive("technology-terminals").then(snapshot => {
+      if (controller.signal.aborted || !snapshot) return;
+      setRecords(snapshot.records.filter(record => record.entityType === "terminal"));
+      setArticles(snapshot.records.filter(record => record.entityType === "terminal").map(record => record.sourceKey));
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [api]);
 
   useEffect(() => {
     if (query === null) return;
@@ -412,14 +433,13 @@ export function useTerminalArticleLookup(
       cursor: null,
     }, controller.signal).then((page) => {
       if (generation.current !== currentGeneration) return;
+      setRecords(current => [...new Map([...current, ...page.items].map(item => [item.sourceKey, item])).values()]);
       setArticles([...new Set(page.items.map((item) => item.sourceKey))]);
-    }).catch(() => {
-      if (!controller.signal.aborted && generation.current === currentGeneration) setArticles([]);
-    });
+    }).catch(() => undefined);
     return () => controller.abort();
   }, [api, debouncedQuery]);
 
-  return { articles, search: setQuery };
+  return { articles, records, search: setQuery };
 }
 
 const pageSize = 30;

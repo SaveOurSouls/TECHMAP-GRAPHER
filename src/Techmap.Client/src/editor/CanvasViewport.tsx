@@ -939,6 +939,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if (object.kind === "object-index") return point.x >= object.x - tolerance && point.x <= object.x + object.width + tolerance && point.y >= object.y - tolerance && point.y <= object.y + object.height + tolerance;
   if(object.kind.startsWith("graphic-")){const p=object.points??[],width=Number(object.metadata?.graphicWidth??2)/2+tolerance,k=object.metadata?.graphicKind;if(k==="contact")return !!p[0]&&Math.hypot(point.x-p[0].x,point.y-p[0].y)<=Math.max(6,width);if(k==="text")return point.x>=object.x-tolerance&&point.x<=object.x+Math.max(30,object.label.length*8)+tolerance&&point.y>=object.y-20-tolerance&&point.y<=object.y+8+tolerance;if(k==="rectangle")return point.x>=Math.min(p[0]?.x??0,p[1]?.x??0)-tolerance&&point.x<=Math.max(p[0]?.x??0,p[1]?.x??0)+tolerance&&point.y>=Math.min(p[0]?.y??0,p[1]?.y??0)-tolerance&&point.y<=Math.max(p[0]?.y??0,p[1]?.y??0)+tolerance;return p.slice(1).some((v,i)=>pointToSegmentDistance(point,p[i]!,v)<=width)||k==="closedContour"&&pointToSegmentDistance(point,p.at(-1)!,p[0]!)<=width;}
   if(object.kind==="position-rail")return !!object.points?.[0]&&!!object.points?.[1]&&pointToSegmentDistance(point,object.points[0],object.points[1])<=tolerance;
   if(object.kind==="dimension"&&object.metadata?.boundDimension==="true"&&Math.hypot(point.x-object.x,point.y-object.y+7)<=Math.max(16,tolerance))return true;
@@ -1487,7 +1488,7 @@ export function objectsInPaintOrder(
   const artwork = result.filter((object) => object.kind !== "physical-node");
   // Drawing connector pictures are underlays; preserve user order within each pass.
   return view === "drawing"
-    ? [...artwork.filter(object => object.kind === "connector"), ...artwork.filter(object => object.kind !== "connector"), ...connectionPoints]
+    ? [...artwork.filter(object => object.kind === "connector"), ...artwork.filter(object => object.kind !== "connector" && object.kind !== "object-index"), ...connectionPoints, ...artwork.filter(object => object.kind === "object-index")]
     : [...artwork, ...connectionPoints];
 }
 
@@ -1552,6 +1553,10 @@ export function hitTestEditorScene(
   const paintOrder = objectsInPaintOrder(objects, layers, view);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   const tolerance = 7 / zoom;
+  if (view === "drawing") {
+    const objectIndex = [...paintOrder].reverse().find(object => object.kind === "object-index" && containsPoint(object, point, tolerance, view));
+    if (objectIndex) return objectIndex.id;
+  }
   const node = [...paintOrder].reverse().find(o => o.kind === "physical-node" && containsPoint(o, point, tolerance, view));
   if (node) return node.id;
   if (view === "drawing") {
@@ -1941,6 +1946,18 @@ export function drawEditorSceneObject(
   minimumStrokePixels = 0,
 ) {
   context.save();
+  if (object.kind === "object-index") {
+    const scale = Number(object.metadata?.indexScale ?? 1);
+    context.font = `700 ${13 * scale}px Inter, Arial, sans-serif`;
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    const padX = 4 * scale, height = 18 * scale, width = Math.max(object.width, context.measureText(object.label).width + padX * 2);
+    context.fillStyle = "rgba(255,255,255,.94)";
+    context.fillRect(object.x, object.y, width, height);
+    context.fillStyle = selected ? "#1179ac" : object.color;
+    context.fillText(object.label, object.x + padX, object.y + height / 2);
+    context.restore(); return;
+  }
   if(object.kind.startsWith("graphic-")){const p=object.points??[],kind=object.metadata?.graphicKind;context.strokeStyle=selected?"#1179ac":object.color;context.fillStyle=context.strokeStyle;context.lineWidth=selected?Number(object.metadata?.graphicWidth??2)+1:Number(object.metadata?.graphicWidth??2);context.lineCap="round";context.lineJoin="round";context.beginPath();if(kind==="contact"){const q=p[0]!;context.arc(q.x,q.y,5,0,Math.PI*2);context.moveTo(q.x-9,q.y);context.lineTo(q.x+9,q.y);context.moveTo(q.x,q.y-9);context.lineTo(q.x,q.y+9);context.stroke();}else if(kind==="text"){const q=p[0]!;context.translate(q.x,q.y);context.rotate(Number(object.metadata?.graphicAngle??0)*Math.PI/180);context.font="16px Arial";context.fillText(object.metadata?.graphicText??object.label,0,0);context.restore();return;}else if(kind==="rectangle"){const a=p[0]!,b=p[1]!;context.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(a.x-b.x),Math.abs(a.y-b.y));}else if(kind==="ellipse"){const a=p[0]!,b=p[1]!;context.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.abs(a.x-b.x)/2,Math.abs(a.y-b.y)/2,0,0,Math.PI*2);context.stroke();}else if(kind==="bezier"&&p.length===4){context.moveTo(p[0]!.x,p[0]!.y);context.bezierCurveTo(p[1]!.x,p[1]!.y,p[2]!.x,p[2]!.y,p[3]!.x,p[3]!.y);context.stroke();}else{p.forEach((q,i)=>i?context.lineTo(q.x,q.y):context.moveTo(q.x,q.y));if(kind==="closedContour")context.closePath();context.stroke();}context.restore();return;}
   if(object.kind==="drawing-table") {
     const widths=JSON.parse(object.metadata?.widths ?? "[]") as number[],headers=JSON.parse(object.metadata?.headers ?? "[]") as string[],rows=JSON.parse(object.metadata?.rows ?? "[]") as string[][];
@@ -2451,7 +2468,7 @@ export function getEditorSceneBounds(
     const projection = instance
       ? projectComponentTemplateView(instance, view, { x: object.x, y: object.y }, resolveComponentTemplateAssetUrl)
       : null;
-    if(view==="drawing"&&object.kind==="connector"&&object.label.trim()){
+    if(view==="drawing"&&object.kind==="connector"&&object.label.trim()&&!objects.some(candidate=>candidate.kind==="object-index"&&candidate.metadata?.indexObjectId===object.id)){
       const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
       bounds=expandSceneBounds(bounds,label.minX,label.minY,label.maxX,label.maxY);
     }
@@ -2741,11 +2758,11 @@ export function redrawCanvas(
     if (selectedObjectIds.has(object.id)) drawSelectedConnectorContacts(context, object, view, camera.zoom);
   }
   if(view==="drawing"){
+    const indexed=new Set(objects.filter(object=>object.kind==="object-index").map(object=>object.metadata?.indexObjectId));
     context.save();context.fillStyle="#17384b";context.font="700 13px Inter, Arial, sans-serif";
     for(const object of objectsInPaintOrder(objects,layers,view)){
-      if(object.kind!=="connector"||!object.label.trim())continue;
-      const instance=componentViews.get(object.id);
-      const projection=instance?projectComponentTemplateView(instance,"drawing",{x:object.x,y:object.y},resolveComponentTemplateAssetUrl):null;
+      if(object.kind!=="connector"||!object.label.trim()||indexed.has(object.id))continue;
+      const instance=componentViews.get(object.id),projection=instance?projectComponentTemplateView(instance,"drawing",{x:object.x,y:object.y},resolveComponentTemplateAssetUrl):null;
       const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
       context.fillText(label.text,label.x,label.y);
     }
@@ -3401,7 +3418,7 @@ export function CanvasViewport({
       const object = objects.find((item) => item.id === objectId);
       const layer = object ? layers.find((item) => item.id === object.layerId) : null;
       if(object?.kind==="physical-segment"&&layer?.locked!==true){const controls=pipeSceneControls(object);const index=projectOntoPolyline(controls,worldPoint).index;onPipeIntervalSelect?.(object.id,Math.max(0,index-1),index);}
-      if (object && (object.kind.startsWith("graphic-") || object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle" || object.kind === "physical-segment" && object.pipe?.role === "joining-pipe") && layer?.locked !== true && onObjectMove) {
+      if (object && (object.kind.startsWith("graphic-") || object.kind === "object-index" || object.kind === "dimension" || object.kind === "connector" || object.kind === "specification-item" || object.kind === "physical-node" || object.kind === "drawing-table" || object.kind === "position-leader" || object.kind === "leader-anchor" || object.kind === "position-rail" || object.kind === "rail-handle" || object.kind === "physical-segment" && object.pipe?.role === "joining-pipe") && layer?.locked !== true && onObjectMove) {
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = {
           kind: "object",
