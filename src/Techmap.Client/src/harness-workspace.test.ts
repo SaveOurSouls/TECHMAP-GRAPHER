@@ -19,7 +19,7 @@ const harness: HarnessSummary = {
 };
 
 describe("harness workspace", () => {
-  it("renders three harness-scoped tabs and opens the selected editor", () => {
+  it("renders the three persisted tabs and two isolated test editors", () => {
     const markup = renderToStaticMarkup(createElement(HarnessDocumentTabs, {
       harness,
       activeTab: "drawing",
@@ -29,6 +29,8 @@ describe("harness workspace", () => {
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Маршрут");
+    expect(markup).toContain("Маршрут v2");
+    expect(markup).toContain("UML");
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Геометрия, размеры и технические требования");

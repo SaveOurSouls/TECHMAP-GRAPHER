@@ -24,6 +24,8 @@ import { HarnessCutListPanel } from "./HarnessCutListPanel";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RouteDrawingsPanel } from "./RouteDrawingsPanel";
 import { ManufacturingRoutePanel } from "./manufacturing/ManufacturingRoutePanel";
+import { RouteV2Panel } from "./manufacturing-v2/RouteV2Panel";
+import { UmlPanel } from "./uml/UmlPanel";
 import { InfoHint } from "./InfoHint";
 
 const ComponentLibrary = lazy(async () => {
@@ -63,7 +65,11 @@ const harnessTabs = [
   { id: "drawing", label: "Чертёж", description: "Геометрия, размеры и технические требования" },
   { id: "route", label: "Маршрут", description: "Последовательность операций изготовления" },
 ] as const;
-export type HarnessTab = typeof harnessTabs[number]["id"];
+const testHarnessTabs = [
+  { id: "route-v2", label: "Маршрут v2", description: "Визуальная последовательность полуфабрикатов" },
+  { id: "uml", label: "UML", description: "Ручная схема зависимостей и операций" },
+] as const;
+export type HarnessTab = typeof harnessTabs[number]["id"] | typeof testHarnessTabs[number]["id"];
 const statusLabels: Readonly<Record<ProjectStatus, string>> = {
   draft: "Черновик",
   active: "В работе",
@@ -152,7 +158,7 @@ export function HarnessDocumentTabs({
   onTabChange,
   onOpen,
 }: HarnessDocumentTabsProps) {
-  const openTab = (tab: typeof harnessTabs[number]) => {
+  const openTab = (tab: typeof harnessTabs[number] | typeof testHarnessTabs[number]) => {
     onTabChange(tab.id);
     onOpen?.(tab.id);
   };
@@ -177,6 +183,23 @@ export function HarnessDocumentTabs({
           </span>
         </button>;
       })}
+      {testHarnessTabs.map((tab) => (
+        <button
+          id={`harness-document-${harness.harnessId}-${tab.id}`}
+          className={activeTab === tab.id ? "harness-document-button active test-harness-document-button" : "harness-document-button test-harness-document-button"}
+          type="button"
+          aria-pressed={activeTab === tab.id}
+          onClick={() => openTab(tab)}
+          key={tab.id}
+        >
+          <span className={`document-icon ${tab.id}`} aria-hidden="true" />
+          <span className="harness-document-button-copy">
+            <strong>{tab.label}</strong>
+            <span>{tab.description}</span>
+            <small>Тестовый режим</small>
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -661,10 +684,16 @@ export function App({ config, session }: AppProps) {
     if (selectedHarness) setEditHarnessQuantity(String(selectedHarness.quantity));
   }, [selectedHarness]);
 
+  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route-v2") {
+    return <RouteV2Panel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} />;
+  }
+  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "uml") {
+    return <UmlPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} />;
+  }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route") {
     return <ManufacturingRoutePanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onViewChange={view => setActiveHarnessTabs(current => rememberHarnessTab(current, selectedHarness.harnessId, view))} />;
   }
-  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab !== "route") {
+  if (editorOpen && selectedProject && selectedHarness && (activeHarnessTab === "e4" || activeHarnessTab === "drawing")) {
     return (
       <HarnessDesignEditor
         config={config}
