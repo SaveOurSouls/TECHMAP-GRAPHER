@@ -540,3 +540,6 @@ REQ-078 по новому набору C1–C5: шаг и угол фактур�
 независимому изолированному фрагменту, уточнению объединённых ПФ, исправлению
 ширины оболочки и рельефа ОП. Полный клиентский прогон: 1673/1673 теста;
 TypeScript и Vite production build прошли.
+ZIP: `artifacts/final-chats-20261004-m5-17/TECHMAP-GRAPHER-0.63.28-m5-17-review-win-x64.zip`,
+SHA-256 `5647A9566EAC92299BD711AA0A38F9DEA4043267EABA7F7406D537A051541867`;
+manifest, `--verify-package` и 7 portable-режимов прошли.
