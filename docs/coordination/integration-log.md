@@ -76,6 +76,24 @@ ea3a562`. Ожидаются финальные handoff чатов Э4, конт
   Исходная dirty ветка (по handoff ahead 37/behind 10), чужие файлы и
   `_m5_21_build` исключены. До финального аудита общий ZIP не собирается.
 
+### Получен общий handoff 071/073 — 05.10.2026
+
+- Статус панели и Route v2: `ready_for_audit`. Документальный HEAD
+  `6e4dbf5091d0f9d291e159c601e83bc16ecf386d`; его родитель `0c5e2a2`,
+  изменены только карточки 071/073. SHA отсутствует в integration HEAD,
+  не переносился; при подтверждении его нельзя применять дважды.
+- Кодовые SHA `63227429f1b246c921b0385744ac873534cbf7f4`,
+  `94058911c887aba6001fad497f7d289a4be56963`,
+  `fbef55e9ca56552300f45a9b48db133d6b72e5e1` уже предки integration HEAD.
+  Сборщик: `git show --check`, родители и ancestry — PASS; повторных переносов нет.
+- Источник: client 1778/1778, typecheck/build, diff checks — PASS;
+  сборщик тесты/сборки не повторял.
+- Ограничения: ZIP/portable/packaged и owner acceptance открыты; 390 px ribbon
+  QA заблокирована browser viewport; данные V2 браузерные, исходный жгут не
+  проверен. Dirty restore-ветка (по передаче ahead 36/behind 10) и посторонние
+  requirements/route-commands/lock/tasks/README/_m5_21_build исключены.
+- Ожидаются handoff контактного вида и итоговый аудит. Сборка ZIP не запускается.
+
 ### Исправление порядка ancestry Route v2 — 05.10.2026
 
 Корректная цепочка: `63227429f1b246c921b0385744ac873534cbf7f4` →
