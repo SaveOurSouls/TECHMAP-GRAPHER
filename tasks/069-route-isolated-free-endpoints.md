@@ -27,6 +27,6 @@
 ## Журнал результата
 
 - Диагноз: `route-drawing-copy.ts` создаёт синтетические endpoint IDs без connector shells; ошибка возникает при серверной валидации `isolatedDrawingCopy` во время сохранения маршрута.
-- Коммит кода/документации: `0deea63` (`fix(route): validate isolated free endpoints`).
+- Коммит кода/документации: `8af2dc9` (`fix(route): validate isolated free endpoints`).
 - Проверки и даты: 04.10.2026 — клиентский Vitest 7/7; `git diff --check`; серверный тест заблокирован NU1900.
 - Ограничения и открытые вопросы: ручная проверка на пользовательском маршруте и packaged-приложении не входит в автоматический тест.
