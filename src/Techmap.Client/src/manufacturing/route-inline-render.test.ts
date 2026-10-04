@@ -132,6 +132,21 @@ describe("inline route row", () => {
     expect(markup).toContain('min="0" max="100" step="1"');
   });
 
+  it("renders an automatic covering row as an isolated block with only its centered length", () => {
+    const document = { ...createEmptyHarnessDesign(), physicalTopology: { snap: false, nodes: [], segments: [], routes: [], coverings: [{ id: "cover", name: "Металлическая плетёнка", kind: "metal-braid" as const, width: 12, color: "#73838d", lengthMm: 200, spans: [], style: { texture: "Metal049A" as const, hatch: "none" as const } }] } };
+    const route = generateRoute(document, "a".repeat(64), 1);
+    const markup = renderToStaticMarkup(createElement(RouteRowInline, {
+      config, session, projectId: "p", harnessId: "h", row: route.rows[0]!, route, document, sources: buildRouteSourceItems(document), ordinal: 1,
+      disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
+    }));
+    expect(markup).not.toContain("Фон жгута");
+    expect(markup).not.toContain("Геометрия жгута");
+    expect(markup).not.toContain("Добавить изгиб");
+    expect(markup).toContain('text-anchor="middle"');
+    expect(markup).toContain("200 мм");
+    expect(markup).not.toContain("route-point-handle");
+  });
+
   it("shows an empty assembly with its own add-resource action and saved fragment", () => {
     const document = createEmptyHarnessDesign();
     const route = addAssemblyRow(generateRoute(document, "a".repeat(64), 1), "assembly", "Сборка", [], []);

@@ -21,11 +21,10 @@ describe("route covering artwork", () => {
     expect(markup).toContain("pattern");
     expect(markup).toContain("<image");
     expect(markup).toContain("Metal049A");
-    // The vector weave and volume overlay keep the preview legible when the
-    // catalogue image is unavailable in an exported/generated SVG.
+    // The catalogue image and volume overlay keep the preview legible in the
+    // generated SVG.
     expect(markup).toContain("linearGradient");
-    expect(markup).toContain("#e7f0f3");
-    expect(markup).toContain("#172a34");
+    expect(markup).toContain("<image");
     expect(markup).toContain("240 мм");
     expect(markup).not.toContain("<text");
     expect(markup).not.toContain(" rx=");
@@ -51,14 +50,25 @@ describe("route covering artwork", () => {
     expect(markup).toContain("linearGradient");
   });
 
-  it("renders automatic thread bandage as transverse fibres", () => {
+  it("uses the pinned project asset instead of the generic metal fallback", () => {
+    const hash = "a".repeat(64);
     const markup = renderToStaticMarkup(createElement(RouteCoveringArtwork, {
-      covering: { name: "Нитевый бандаж", color: "#ffffff", kind: "band" as const, lengthMm: 400, style: undefined },
+      covering: { ...covering, style: { ...covering.style, texture: `asset:${hash}` } },
+      textureUrls: { [hash]: "/project/metal-braid.png" },
     }));
-    expect(markup).toContain('data-covering-texture="auto"');
-    // The band pattern contains repeated vertical strokes. They remain
-    // visible even when the raster reference has not loaded yet.
-    expect(markup).toMatch(/M-?\d+(?:\.\d+)? -\d+(?:\.\d+)?V/);
+    expect(markup).toContain("/project/metal-braid.png");
+    expect(markup).not.toContain("#e7f0f3");
+    expect(markup).not.toContain("#172a34");
+  });
+
+  it("uses the pinned thread-bandage asset without overlaying generic fibres", () => {
+    const hash = "b".repeat(64);
+    const markup = renderToStaticMarkup(createElement(RouteCoveringArtwork, {
+      covering: { name: "Нитевый бандаж", color: "#ffffff", kind: "band" as const, lengthMm: 400, style: { texture: `asset:${hash}` } },
+      textureUrls: { [hash]: "/project/thread-bandage.png" },
+    }));
+    expect(markup).toContain("/project/thread-bandage.png");
+    expect(markup).not.toMatch(/M-?\d+(?:\.\d+)? -\d+(?:\.\d+)?V/);
     expect(markup).not.toContain("<text");
     expect(markup).not.toContain(" rx=");
   });

@@ -15,7 +15,7 @@ export function coveringArtworkDescriptor(covering: Pick<PhysicalCovering, "name
 
 /** A compact rectangular sleeve swatch for the route table. The route drawing
  * remains the source of geometry; this is only a legible material preview. */
-export function RouteCoveringArtwork({ covering, width = 560, height = 120 }: { readonly covering: Pick<PhysicalCovering, "name" | "color" | "style" | "kind" | "lengthMm">; readonly width?: number; readonly height?: number }): ReactElement {
+export function RouteCoveringArtwork({ covering, textureUrls = {}, width = 560, height = 120 }: { readonly covering: Pick<PhysicalCovering, "name" | "color" | "style" | "kind" | "lengthMm">; readonly textureUrls?: Readonly<Record<string, string>>; readonly width?: number; readonly height?: number }): ReactElement {
   const reactId = useId();
   const style = resolvedCoveringStyle(covering.style);
   const descriptor = coveringArtworkDescriptor(covering);
@@ -25,7 +25,9 @@ export function RouteCoveringArtwork({ covering, width = 560, height = 120 }: { 
   const color = /^#[0-9a-f]{6}$/i.test(covering.color ?? "") ? covering.color! : "#aebfc9";
   const texture = style.texture === "none" ? null : style.texture;
   const textureFile = coveringTextureFile(descriptor.kind, covering.style);
-  const textureUrl = textureFile ? coveringTextureUrls[textureFile] : undefined;
+  const textureUrl = texture?.startsWith("asset:") ? textureUrls[texture.slice(6)] : textureFile ? coveringTextureUrls[textureFile] : undefined;
+  const vectorMetalFallback = descriptor.kind === "metal-braid" && texture && !textureUrl;
+  const vectorThreadFallback = descriptor.kind === "band" && texture && !textureUrl;
   const tileSize = Math.max(16, 64 / style.textureScale);
   // The route artwork is an SVG snapshot and does not have the canvas
   // centreline that the editor uses for drawThreadBand.  A dedicated
@@ -65,10 +67,10 @@ export function RouteCoveringArtwork({ covering, width = 560, height = 120 }: { 
       createElement("pattern", { id, width: tileSize, height: tileSize, patternUnits: "userSpaceOnUse", patternTransform: `rotate(${style.textureRotation})`, key: "pattern" },
         createElement("rect", { width: tileSize, height: tileSize, fill: color }),
         textureUrl && createElement("image", { href: textureUrl, width: tileSize, height: tileSize, preserveAspectRatio: "xMidYMid slice", opacity: .82 }),
-        descriptor.kind === "metal-braid" && texture && createElement("path", { d: braidDiagonal, fill: "none", stroke: "#e7f0f3", strokeOpacity: .52, strokeWidth: Math.max(1, tileSize / 18) }),
-        descriptor.kind === "metal-braid" && texture && createElement("path", { d: braidDiagonalReverse, fill: "none", stroke: "#172a34", strokeOpacity: .66, strokeWidth: Math.max(1, tileSize / 22) }),
-        descriptor.kind === "band" && texture && createElement("path", { d: threadLines, stroke: "#263640", strokeOpacity: .28, strokeWidth: threadWidth * 1.9 }),
-        descriptor.kind === "band" && texture && createElement("path", { d: threadLines, stroke: style.textureTint, strokeOpacity: .78, strokeWidth: threadWidth }),
+        vectorMetalFallback && createElement("path", { d: braidDiagonal, fill: "none", stroke: "#e7f0f3", strokeOpacity: .52, strokeWidth: Math.max(1, tileSize / 18) }),
+        vectorMetalFallback && createElement("path", { d: braidDiagonalReverse, fill: "none", stroke: "#172a34", strokeOpacity: .66, strokeWidth: Math.max(1, tileSize / 22) }),
+        vectorThreadFallback && createElement("path", { d: threadLines, stroke: "#263640", strokeOpacity: .28, strokeWidth: threadWidth * 1.9 }),
+        vectorThreadFallback && createElement("path", { d: threadLines, stroke: style.textureTint, strokeOpacity: .78, strokeWidth: threadWidth }),
         texture && style.hatch !== "none" && style.hatch !== "dots" && createElement("path", { d: `M-${tileSize * .2} ${tileSize}L${tileSize} -${tileSize * .2}M${tileSize * .3} ${tileSize * 1.3}L${tileSize * 1.3} ${tileSize * .3}`, stroke: style.textureTint, strokeOpacity: .34, strokeWidth: Math.max(1, style.hatchSpacing / 3) }),
         texture && style.hatch === "dots" && createElement("circle", { cx: tileSize / 2, cy: tileSize / 2, r: Math.max(1, style.hatchSpacing / 4), fill: style.textureTint, fillOpacity: .4 }),
       ),
