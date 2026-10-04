@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {createEmptyHarnessDesign,type HarnessDesignDocument} from "./model";
 import {createJoiningPipe,joiningPipePoints} from "./physical-joining-pipes";
-import {joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
+import {joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipePacking,joiningPipeTransitionHandles,joiningPipeWidth,projectJoiningPipePoint} from "./physical-joining-pipe-projection";
 import {editJoiningPipeBend,moveJoiningPipe} from "./physical-joining-pipe-editing";
 import {parsePhysicalTopology} from "./physical-topology-validation";
 import {coveringScene,moveCovering} from "./covering-layout";
@@ -315,6 +315,20 @@ it("reversed pipes follow the OP direction with fixed endpoints",()=>{
  expect(op.members[1]!.reverse).toBe(true);
  const a=projectJoiningPipePoint(next,"p1",.4,{x:360,y:100});expect(a.x).toBeCloseTo(360);expect(a.y).toBeCloseTo(.25);
  expect(joiningPipeDisplaySamples(next,"p1")![0]!.point).toEqual({x:600,y:100});
+});
+it("keeps an OP covering independent from a member P covering width",()=>{
+ const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op");
+ const memberCover={id:"member-cover",name:"Термоусадка",width:7,color:"#334455",lengthMm:null,spans:[{segmentId:"p0",from:0,to:1}]};
+ const opCover={id:"op-cover",name:"Термоусадка",width:0,color:"#445566",lengthMm:null,spans:[{segmentId:"op",from:0,to:1}]};
+ const base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op],coverings:[memberCover,opCover]}};
+ const before=coveringScene(base),beforeOp=before.find(object=>object.id==="op-cover")!,beforeMember=before.find(object=>object.id==="member-cover")!,beforePacking=joiningPipePacking(base,op);
+ const changed={...base,physicalTopology:{...base.physicalTopology!,coverings:[{...memberCover,width:14},opCover]}};
+ const after=coveringScene(changed),afterOp=after.find(object=>object.id==="op-cover")!,afterMember=after.find(object=>object.id==="member-cover")!,afterPacking=joiningPipePacking(changed,op);
+ expect(afterMember.width).toBeGreaterThan(beforeMember.width);
+ expect(afterOp.width).toBeCloseTo(beforeOp.width);
+ expect(afterOp.paths).toEqual(beforeOp.paths);
+ expect(afterPacking).toEqual(beforePacking);
+ expect(changed.physicalTopology!.coverings![1]).toEqual(opCover);
 });
 
 it("keeps each OP lane nearest to its connector when members are added above the axis",()=>{

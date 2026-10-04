@@ -28,7 +28,7 @@ function fixture(kind:CoveringKind):HarnessDesignDocument {
  segments:[{id:"S0",from:"NA",to:"J",path:{kind:"routed",points:[]},width:10}],routes:[],
  coverings:[cover("lower",30,.3,.7),cover("upper",0,.1,.9)]}};
 }
-it.each<CoveringKind>(["heat-shrink","nylon","braid","metal-braid","tape","band"])("%s follows both lower sleeve boundaries with Z contours and preserved identities",kind=>{
+it.each<CoveringKind>(["heat-shrink","nylon","braid","metal-braid","tape"])("%s follows both lower sleeve boundaries with Z contours and preserved identities",kind=>{
  const doc=fixture(kind),before=JSON.stringify(doc),surface=coveringSurfaces(coveringScene(doc)[1]!)[0]!;
  const left=surface.polygon.slice(0,surface.path.length);
  expect(left).toEqual([{x:30,y:5.25},{x:85,y:5.25},{x:90,y:15.25},{x:210,y:15.25},{x:215,y:5.25},{x:270,y:5.25}]);

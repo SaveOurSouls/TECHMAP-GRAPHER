@@ -50,11 +50,11 @@ export function joiningPipePacking(document:HarnessDesignDocument,pipe:PhysicalJ
     const key=(startOffset+endOffset)/2;
     return {member,index,key};
   }).sort((a,b)=>a.key-b.key||a.member.segmentIds.join("\u0000").localeCompare(b.member.segmentIds.join("\u0000")));
-  const packed=packPipeBundle(ordered.map(({index,member})=>({id:String(index),diameter:Math.max(.5*scale,...member.segmentIds.map(id=>{
-    let width=drawingPipeWidth(document,t.segments.find(s=>s.id===id)!);
-    for(const c of t.coverings??[])if(!c.bundle&&c.spans.some(s=>s.segmentId===id))width=Math.max(c.width*scale,width+.5*scale);
-    return width;
-  }))})),pipe.mode);
+  // The OP lane is an independent physical object. A separately selected
+  // covering on a member P must not resize the OP when its authored width is
+  // edited; lower covering surfaces are handled by coveringScene itself.
+  const packed=packPipeBundle(ordered.map(({index,member})=>({id:String(index),diameter:Math.max(.5*scale,...member.segmentIds.map(id=>
+    drawingPipeWidth(document,t.segments.find(s=>s.id===id)!)))})),pipe.mode);
   const byId=new Map(packed.members.map(member=>[member.id,member]));
   return {...packed,members:pipe.members.map((_,index)=>byId.get(String(index))!)};
 }

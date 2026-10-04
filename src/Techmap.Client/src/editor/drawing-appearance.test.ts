@@ -141,6 +141,14 @@ describe("covering surfaces and editing",()=>{
 });
 
 describe("compact pipe and covering widths",()=>{
+ it("makes an automatic thread bandage 2% wider than the same automatic base",()=>{
+  const lower=sleeve({id:"lower",width:14,spans:[{segmentId:"S0",from:0,to:1}]}),
+    plain=sleeve({id:"top",name:"Оплётка",kind:"braid",width:0,spans:[{segmentId:"S0",from:0,to:1}]}),
+    band=sleeve({id:"top",name:"Нитевый бандаж",kind:"band",width:0,spans:[{segmentId:"S0",from:0,to:1}]}),
+    plainScene=coveringScene(covered([lower,plain])),bandScene=coveringScene(covered([lower,band]));
+  expect(bandScene.find(item=>item.id==="top")!.width).toBeCloseTo(plainScene.find(item=>item.id==="top")!.width*1.02,8);
+  expect(coveringScene(covered([lower,sleeve({id:"explicit",name:"Нитевый бандаж",kind:"band",width:33,spans:[{segmentId:"S0",from:0,to:1}]})])).find(item=>item.id==="explicit")!.width).toBe(33);
+ });
  it("fits mixed wire diameters tightly and follows changes in routed membership",()=>{
   const base=straight(),d={...base,connectors:base.connectors.map(c=>({...c,contacts:c.contacts.map((p,i)=>({...p,wireDiameterMm:i===0?1:2}))}))},s=d.physicalTopology!.segments[0]!;
   const lanes=segmentWireLanes(d,s.id),bundle=lanes.reduce((sum,l)=>sum+l.width,0)+(lanes.length-1)*.25;

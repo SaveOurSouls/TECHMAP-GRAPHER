@@ -188,16 +188,18 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const groupedWidth=bundleSections.get(covering.id)?.width;
    const pipeWidth=groupedWidth??(segment?drawingPipeWidth(document,segment):joiningPipeWidth(document,joining!)),lanes=segment?segmentWireLanes(document,segment.id):[];
    const bundle=lanes.length?2*Math.max(...lanes.map(l=>Math.abs(l.offset)+l.width/2)):pipeWidth;
+   const automaticBandage=covering.width===0&&coveringKind(covering)==="band";
    const halfAt=(fraction:number):number=>{
     if(groupedWidth!==undefined)return groupedWidth/2;
     let width=pipeWidth;
     if(coveringKind(covering)==="heat-shrink"&&(fraction<0||fraction>1)) width=joining?Math.max(width,bundle):bundle;
     // Array order is the physical stacking order; any lower surface remains enclosed.
     for(const lower of coverings.slice(0,order)) {
-     if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;}))
+     if(lower.spans.some(ls=>{const r=resolvedCoveringSpan(document,ls);return ls.segmentId===s.segmentId&&fraction>=r.from&&fraction<=r.to;})) {
       width=Math.max(lower.width*scale,width+coveringClearance);
+     }
     }
-    return (width+.5*scale)/2;
+    return (width+.5*scale)/2*(automaticBandage?1.02:1);
    };
    const boundaries=[0,1,...route.envelope.map(sample=>(sample.at-route.before)/route.length),...coverings.slice(0,order).flatMap(lower=>lower.spans.filter(ls=>ls.segmentId===s.segmentId).flatMap(ls=>{const r=resolvedCoveringSpan(document,ls);return [r.from,r.to];}))];
    const fitted=encloseWidthProfiles(
