@@ -56,10 +56,12 @@ public sealed class ManufacturingRouteValidatorTests
     public void Isolated_drawing_copy_accepts_only_its_reserved_free_endpoints()
     {
         var graph = BaseRoute();
-        var copy = JsonNode.Parse("""{"schemaVersion":1,"connectors":[],"wires":[
+        var copy = JsonNode.Parse("""
+          {"schemaVersion":1,"connectors":[],"wires":[
           {"id":"detached","from":{"connectorId":"isolated:detached:from","contactId":"free"},"to":{"connectorId":"isolated:detached:to","contactId":"free"}}],
           "cables":[],"junctions":[],"diffPairs":[],"screens":[],
-          "views":{"drawing":{"layers":[],"wireCrossingStyle":"none"},"e4":{"layers":[],"wireCrossingStyle":"none"}}}""")!;
+          "views":{"drawing":{"layers":[],"wireCrossingStyle":"none"},"e4":{"layers":[],"wireCrossingStyle":"none"}}}
+          """)!;
         var presentation = new JsonObject { ["document"] = copy, ["hiddenObjectIds"] = new JsonArray() };
         graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["isolatedDrawingCopy"] = presentation;
 
@@ -67,7 +69,7 @@ public sealed class ManufacturingRouteValidatorTests
 
         graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!["drawingCopy"] = presentation.DeepClone();
         Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
-        graph["manufacturingRoute"]!["rows"]![1]!["presentation"].AsObject().Remove("drawingCopy");
+        graph["manufacturingRoute"]!["rows"]![1]!["presentation"]!.AsObject().Remove("drawingCopy");
 
         copy["wires"]![0]!["from"]!["contactId"] = "other";
         Assert.Throws<HarnessDesignDocumentException>(() => Validate(graph));
