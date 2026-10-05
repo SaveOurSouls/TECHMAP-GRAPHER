@@ -1,5 +1,31 @@
 # Журнал интеграции
 
+## Полная интеграция M5-22 — актуальное поручение 05.10.2026
+
+Финальные handoff подтверждены, ожидания в историческом разделе ниже закрыты.
+Полный состав до упаковки зафиксирован в [m5-22-manifest.md](m5-22-manifest.md):
+Route v2 и Cancel fix, L+/L−, Э4, независимые оболочки ОП, контекстная панель,
+полная contact-side цепочка до `36a96d5`, навигация, artwork, все продуктовые
+дельты M5-21 и подтверждённые CAD/JST файлы. Artwork `8676a1e`/`7fc3af2` и
+navigation `42b0cfa`/`d34aaab`/`6064bb9` уже exact ancestors; не дублировались.
+
+Контактный вид: source `8d810e5 → 35e38c3 → 19bc543 → 832c5c3 → d43f542 →
+36a96d5` перенесён как `c8570b9 → f01e8f6 → ef7410e → 819f208 → 2cb06a4 →
+f331ed1`. E4 docs `0c5e2a2` → `e92bf88`; общий handoff `6e4dbf5` → `6a8f435`;
+JST `4e4d186` → `44a78dc`; Route test repair `b43c63b` (только тест) → `12db684`.
+Конфликты requirements, status, canvas gestures и task071 разрешены без потери
+обеих сторон. Коллизии карточек устранены: contact 076/REQ-107,
+stage deletion 077/REQ-108; terminal 074/REQ-105 и PF table 057/REQ-083 сохранены.
+
+Результаты до финальной упаковки: contact 150/150, layer/route 32/32,
+полный client 183 файла / 1790 тестов, TypeScript/Vite, профильный server
+StartupFailureReporter + ManufacturingRouteValidator 57/57, Git diff check и
+PowerShell parse builder — PASS. Старые layer-order arrows не возвращены поверх
+нового DnD; адаптированы constrained panel/замок/общий delete. Startup fallback
+побайтно соответствует source `ea3a562`. Новая версия `0.63.34-m5-22-review`.
+Финальный code SHA и package gates записываются в протоколе после сборки.
+Статус не `accepted`: owner acceptance, user harness и narrow UI 390px открыты.
+
 Сборщик добавляет строку после каждого применённого handoff. Один коммит задачи может появиться только один раз в статусе `integrated`.
 
 ## Подготовка общего M5-22 — 05.10.2026

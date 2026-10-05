@@ -104,6 +104,13 @@ foreach ($file in @("LICENSE", "README.md", "package.json", "esbuild.mjs", "src"
 $examplesRoot = Join-Path $packageRoot "Examples"
 New-Item -ItemType Directory -Force -Path $examplesRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "package\Examples\README.txt") -Destination $examplesRoot
+# Include the confirmed reusable drawing assets without importing them into a user's catalog.
+$libraryAssetsRoot = Join-Path $packageRoot "LibraryAssets"
+New-Item -ItemType Directory -Force -Path $libraryAssetsRoot | Out-Null
+foreach ($assetDirectory in @("connector-cad-assets", "jst-sh-assets")) {
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot "design\$assetDirectory") `
+        -Destination $libraryAssetsRoot -Recurse
+}
 & (Join-Path $repositoryRoot "scripts\generate-reference-example.ps1") `
     -OutputPath (Join-Path $examplesRoot "reference-catalog.xlsx") | Out-Host
 

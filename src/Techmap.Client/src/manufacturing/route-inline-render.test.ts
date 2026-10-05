@@ -42,7 +42,7 @@ describe("inline route row", () => {
     expect(markup).toContain('class="route-operations-table"');
     expect(markup).toContain('+ Добавить операцию');
     expect(markup).toContain('class="route-row-delete"');
-    expect(markup).toContain('title="Удалить полуфабрикат"');
+    expect(markup).toContain('title="Удалить этап"');
     expect(markup).not.toContain('route-drawing-mode');
     expect(markup).not.toContain('Режим новой операции');
     expect(markup).not.toContain('Режим операции 1');
@@ -110,6 +110,7 @@ describe("inline route row", () => {
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain("ОБЩАЯ ОПЕРАЦИЯ");
+    expect(markup).toContain('aria-label="Удалить этап Общая операция');
     expect(markup).toContain("Участники общей операции");
     expect(markup).not.toContain("Состав сборки");
     expect(markup).not.toContain("route-material-table-scroll");
@@ -155,6 +156,7 @@ describe("inline route row", () => {
       disabled: false, selected: false, onSelect: () => {}, update: () => {}, setPhotoBusy: () => {},
     }));
     expect(markup).toContain("Состав сборки");
+    expect(markup).toContain('aria-label="Удалить этап Сборка"');
     expect(markup).toContain('+ Добавить');
     expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).not.toContain("Перетащите карточку сюда");

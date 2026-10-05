@@ -87,3 +87,14 @@ null-forgiving перед `.AsObject()`. Его узкий тестовый patc
 Web-test и семь portable-режимов ещё не выполнены. Нужны fix he-back с
 подтверждённым browser QA, итоговый аудит состава и собственный прогон финального
 HEAD. 390 px ribbon QA, пользовательский жгут и owner manual acceptance открыты.
+# Актуальный полный состав M5-22 — 05.10.2026
+
+Этот раздел заменяет предварительные ожидания ниже. Состав подтверждён в
+[manifest](coordination/m5-22-manifest.md), версия `0.63.34-m5-22-review`.
+Контактный вид перенесён до `36a96d5`; missing M5-21 product deltas восстановлены
+без возврата устаревшей layout и версий. Cancel fix уже входит как `8fc4558`.
+Artwork `8676a1e` и `7fc3af2` — exact ancestors и проверенный код.
+До упаковки: полный клиент 183/1790, TypeScript/Vite; scoped contact150,
+route/layers32; server startup+route57; builder parse и diff check — PASS.
+Итоговый build/package/portable результат будет добавлен после штатной сборки.
+Открыто: ручная приёмка владельцем, исходный жгут, visual390px; V2 localStorage.
