@@ -23,7 +23,11 @@ StartupFailureReporter + ManufacturingRouteValidator 57/57, Git diff check и
 PowerShell parse builder — PASS. Старые layer-order arrows не возвращены поверх
 нового DnD; адаптированы constrained panel/замок/общий delete. Startup fallback
 побайтно соответствует source `ea3a562`. Новая версия `0.63.34-m5-22-review`.
-Финальный code SHA и package gates записываются в протоколе после сборки.
+Финальный code SHA `8e15df7046a79fa6b2c299d5a9dff091d4dfd0fb`.
+Штатный builder: 183/1790 client, 1117 server, performance 1/1, publish,
+SBOM/manifest 340 файлов — PASS. Portable: 7/7 PASS. ZIP 63 957 754 bytes,
+SHA-256 `686131376F371CBE0CDA990140A1B3F8FA0530E59D3FA6A4BC591E2A4E890C8D`.
+Сборочный путь: `artifacts/m5-22-034/TECHMAP-GRAPHER-0.63.34-m5-22-review-win-x64.zip`.
 Статус не `accepted`: owner acceptance, user harness и narrow UI 390px открыты.
 
 Сборщик добавляет строку после каждого применённого handoff. Один коммит задачи может появиться только один раз в статусе `integrated`.

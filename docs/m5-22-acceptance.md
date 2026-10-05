@@ -96,5 +96,12 @@ HEAD. 390 px ribbon QA, пользовательский жгут и owner manua
 Artwork `8676a1e` и `7fc3af2` — exact ancestors и проверенный код.
 До упаковки: полный клиент 183/1790, TypeScript/Vite; scoped contact150,
 route/layers32; server startup+route57; builder parse и diff check — PASS.
-Итоговый build/package/portable результат будет добавлен после штатной сборки.
-Открыто: ручная приёмка владельцем, исходный жгут, visual390px; V2 localStorage.
+Итоговый code commit: `8e15df7046a79fa6b2c299d5a9dff091d4dfd0fb`.
+Штатный builder `scripts/build-package.ps1 -ArtifactSlice m5-22-034` прошёл:
+183 client-файла / 1790 тестов, TypeScript/Vite, 1117 серверных тестов,
+performance 1/1, self-contained win-x64 publish, SBOM и manifest (340 файлов).
+ZIP: `TECHMAP-GRAPHER-0.63.34-m5-22-review-win-x64.zip`, 63 957 754 байта,
+SHA-256 `686131376F371CBE0CDA990140A1B3F8FA0530E59D3FA6A4BC591E2A4E890C8D`.
+`test-portable-package.ps1` подтвердил 7/7 режимов из пути с пробелами и
+кириллицей. Архивная копия в корне workspace сверена побайтно с build ZIP.
+Открыто: ручная приёмка владельцем, исходный жгут и visual390px; V2 localStorage.
