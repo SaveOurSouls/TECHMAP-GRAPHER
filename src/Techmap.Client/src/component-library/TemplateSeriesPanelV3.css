@@ -82,6 +82,8 @@
 :is(.series-v3-article-table, .series-v3-terminal-table) :is(th, td):not(:last-child) { border-right: 1px solid #e0e6eb; }
 :is(.series-v3-article-table, .series-v3-terminal-table) tbody tr:not(:last-child) td { border-bottom: 1px solid #e0e6eb; }
 :is(.series-v3-article-table, .series-v3-terminal-table) tbody tr:nth-child(even) { background: #fafcfd; }
+:is(.series-v3-article-table) tbody tr { cursor: pointer; }
+:is(.series-v3-article-table) tbody tr:focus-visible { outline: 2px solid #287b9f; outline-offset: -2px; }
 :is(.series-v3-article-table, .series-v3-terminal-table) tbody tr:hover { background: #edf8fb; }
 .series-v3-article-table tbody tr.selected { background: #c9f1f7; }
 .series-v3-article-table tr.selected td:first-child { box-shadow: inset 3px 0 #2185a5; }

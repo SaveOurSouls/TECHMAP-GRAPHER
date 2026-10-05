@@ -441,7 +441,17 @@ function ArticleVariantsTable({ independentE4, content, compatibleTerminals, sel
         <th aria-label="Действия" />
       </tr></thead>
       <tbody>{content.articleVariants.map(variant => <tr key={variant.id}
-        className={variant.id === selectedArticleVariantId ? "selected" : undefined} onClick={() => onSelect?.(variant.id)} onFocus={() => onSelect?.(variant.id)}>
+        className={variant.id === selectedArticleVariantId ? "selected" : undefined}
+        data-article-variant-id={variant.id}
+        aria-label={`Открыть таблицу Э4 артикула ${variant.articleKey}`}
+        tabIndex={0}
+        onClick={() => onSelect?.(variant.id)}
+        onFocus={() => onSelect?.(variant.id)}
+        onKeyDown={event => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onSelect?.(variant.id);
+        }}>
         <td><div className="series-v3-article-identity"><button type="button" className="series-v3-select-article" aria-label={`Открыть артикул ${variant.articleKey}`} aria-pressed={variant.id === selectedArticleVariantId} onClick={() => onSelect?.(variant.id)}>▸</button><VariantIdentityEditor variant={variant} onUpdate={onUpdate} /></div></td>
         {content.contactTypeGroups.map(group => {
           const editor = articleContactGroupEditorValueV3(content, variant.id, group.id);
@@ -456,7 +466,7 @@ function ArticleVariantsTable({ independentE4, content, compatibleTerminals, sel
         })}
         <td className="series-v3-row-actions">
           <button type="button" className="series-v3-delete-article" aria-label={`Удалить артикул ${variant.articleKey}`}
-            onClick={() => onDelete(variant.id)}>×</button>
+            onClick={event => { event.stopPropagation(); onDelete(variant.id); }}>×</button>
         </td>
       </tr>)}</tbody>
     </table>
