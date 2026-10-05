@@ -75,3 +75,34 @@ d90b005` выявил только семь неэквивалентных ст�
   жгут, визуальная narrow QA 390px; V2 остаётся localStorage-прототипом.
 - Длинные Windows пути — известное ограничение takeover. Все семь portable gates
   проверяются из отдельного короткого корня с пробелами и кириллицей.
+
+## Итоговый coverage и ZIP M5-22-036 — 05.10.2026
+
+Предыдущая таблица фиксирует состав интеграционного кода `8e15df7` и M5-22-034.
+Для последнего release candidate выполнена дополнительная сверка зарегистрированных
+рабочих чатов и завершённых коммитов; все оставшиеся продуктовые дельты разрешены
+в HEAD `b9b6c24f3597cef6d3306ff23d87136090f8a1b7` или подтверждены эквивалентом.
+Полный gate и внешние worktree refs перечислены в
+[`release-coverage.md`](release-coverage.md).
+
+| Дополнительная работа | Исходный commit / Thread | Решение для M5-22-036 |
+| --- | --- | --- |
+| M1-01 startup failure | `85a99ac`, `56f550f` / `01a0931b…` | Основа `85a99ac` в ancestry. Поздний `56f550f` заменён текущим более полным `StartupFailureReporter` и startup tests. |
+| M1-07 exact units | `76da503` / `01a093e1…` | `CutLengthCalculator.cs` совпадает по blob `0f46ef75…`; точные единицы и тесты присутствуют в текущем HEAD. |
+| M3-04 E4 placement/preview | `e0c0116e130e829775eecd68d7750184c9ede75a` | Современные placement/preview поведения покрыты текущей архитектурой и тестами; keyboard, Enter/Space, доступные метаданные строки и защита delete от ложного выбора восстановлены с тестами в `93ab279`. |
+| Position rails | `fd6a4b8`, `b8e5d1e`, ветка `ad33b10` / `01a0dee2…` | Оба функциональных коммита ancestry; текущий regression test включён. Повторно branch tip не переносить. |
+| M3-04 version-only update | `67688b0` | Только старый appVersion; superseded версией M5-22-036. |
+
+Финальная сборка создана из branch `codex/integration-m5-22`, HEAD
+`b9b6c24f3597cef6d3306ff23d87136090f8a1b7`, appVersion
+`0.63.36-m5-22-review`. ZIP:
+`artifacts/m5-22-036/TECHMAP-GRAPHER-0.63.36-m5-22-review-win-x64.zip`,
+62,184,587 bytes, SHA-256
+`D3663B4ADEA10A5963BDBE789E5AE949C40DF523B320AA7B23A2206F9BF51A02`.
+Client 183 files / 1790 tests, server 1117 tests, performance 1/1, manifest
+verification and portable 7/7 passed. The manifest lists 339 payload files; the
+extracted package contains 340 files including `PACKAGE-MANIFEST.json`.
+
+Release coverage gate: **PASS**. M5-22 owner acceptance, source-harness QA and
+390px visual review remain open product acceptance items; they are recorded in
+the acceptance/status docs and are not omitted completed chat handoffs.
