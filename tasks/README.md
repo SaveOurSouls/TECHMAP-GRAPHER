@@ -94,3 +94,5 @@
 
 | 071 | [Управление карточками и инспектор V2](071-route-v2-card-actions-and-inspector.md) | ready-for-review | REQ-099–REQ-103: включено в M5-22; owner acceptance и визуальная проверка 390 px остаются открытыми. |
 | 078 | [Единая навигационная плашка разделов жгута](078-unified-harness-section-navigation.md) | ready-for-review | REQ-098: навигация включена в M5-22; ручная packaged-проверка и owner acceptance открыты. |
+
+| 079 | [Обязательный handoff и покрытие ZIP](079-chat-handoff-and-release-coverage.md) | ready-for-review | REQ-109: handoff рабочих чатов и release coverage до ZIP; M5-22 coverage gate ожидает подтверждения сборщика. |
