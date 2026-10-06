@@ -38,10 +38,10 @@ Release coverage: ожидаемый релиз или причина явног
 `release-coverage.md`. Рабочий чат не заявляет «интегрировано» или «вошло в ZIP»;
 это подтверждается только проверкой интеграционной ветки.
 
-## 081 — Приоритет точек над оболочками
+## 082 — Приоритет выбора узлов поверх оболочек
 
 ```text
-Карточка: 081 — Приоритет точек над оболочками при выборе
+Карточка: 082 — Приоритет выбора узлов поверх оболочек
 Статус: ready-for-review
 Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
 Ветка: codex/covering-point-priority
@@ -51,7 +51,7 @@ Worktree: C:\Users\Василий Костромин\.codex\worktrees\covering-p
 Изменённые файлы:
 - src/Techmap.Client/src/editor/CanvasViewport.tsx: узел блокирует раннее перетаскивание и hover-ручку оболочки.
 - src/Techmap.Client/src/editor/drawing-paint-order.test.ts: регрессия для приоритета точки и выбора оболочки вне неё.
-- docs/requirements.md, tasks/081-covering-point-selection-priority.md, tasks/README.md, docs/coordination/chat-registry.md: REQ-111, карточка и реестр.
+- docs/requirements.md, tasks/082-covering-junction-selection-priority.md, tasks/README.md, docs/coordination/chat-registry.md: REQ-112, карточка и реестр.
 
 Проверки:
 - pnpm exec vitest run: PASS, 183 файлов / 1791 тестов.
