@@ -335,3 +335,17 @@ coverage указывают `pending (await integration)`. C1–C5 ручная 
 `CanvasViewport.tsx` и `drawing-paint-order.test.ts` совпадают с source.
 Оба handoff включены в coverage следующего ZIP. Ручные C1–C5 исходного жгута
 и packaged Windows UI остаются открытыми и не блокируют Git coverage.
+
+## 06.10.2026 — подтверждение handoff карточки 083
+
+Сборщик проверил handoff карточки 083 «Маршрут v2: карточки, состав C2 и
+изолированный рисунок». Коммиты `bfb0906` (дизайн C2), `97d4a56` (реализация) и `ab801fc` (поиск/входящие результаты)
+существуют в Git, имеют чистый `git show --check` для кодового commit и оба
+являются предками интеграционного HEAD `2dc0817`. Профильные проверки из handoff
+(Vitest 185 файлов / 1803 теста, TypeScript, Vite build и `git diff --check`)
+зафиксированы рабочим чатом. Карточка включена в coverage как ancestor.
+
+Общий ZIP gate не открыт: release coverage всё ещё содержит pending handoff
+карточки 084 (Route v3, отдельная ветка/worktree). Поэтому новый ZIP не
+собирался; версия `0.63.37-m5-22-review` совпадает с предыдущим артефактом
+`m5-22-037`.

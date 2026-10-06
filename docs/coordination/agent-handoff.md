@@ -81,7 +81,7 @@ Release coverage: следующий ZIP; требуется подтвержд�
 Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
 Ветка: codex/integration-m5-22
 Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
-Коммиты для интеграции: bfb0906 97d4a56
+Коммиты для интеграции: bfb0906 97d4a56 ab801fc
 
 Изменённые файлы:
 - docs/design/route-v2-c2-material-picker.md: дизайн C2 с разделением сырья/полуфабрикатов, hints, портами, isolated preview и resize.
@@ -92,21 +92,21 @@ Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утил�
 - src/Techmap.Client/src/manufacturing/RouteAssemblyDrawing.tsx, route-assembly-drawing.css, route-drawing-lifecycle.test.ts: сохранение текущего вида без изменений.
 
 Проверки:
-- .\\node_modules\\.bin\\vitest.cmd run: PASS, 185 файлов / 1802 теста.
+- .\\node_modules\\.bin\\vitest.cmd run: PASS, 185 файлов / 1803 теста.
 - pnpm run typecheck: PASS.
 - pnpm run build: PASS.
 - git diff --check: PASS.
 
 Зависимости/порядок:
-- Дизайн `bfb0906` перед кодом `97d4a56`; localStorage version 1 обратно совместим.
+- Дизайн `bfb0906` перед кодом `97d4a56`, корректировка `ab801fc`; localStorage version 1 обратно совместим.
 
 Ограничения и ручная приёмка:
 - Ручная проверка C1/C2 на исходном жгуте, packaged UI и проверка ZIP остаются за сборщиком/владельцем.
 - Route v2 сохраняет localStorage-прототип; серверный контракт не менялся.
 
 Статус handoff: передан сборщику
-Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+Release coverage: 083 included (ancestor); общий ZIP gate blocked pending 084
 
 Примечание сборщику:
-- Собирать после включения `bfb0906` и `97d4a56`; не включать незакоммиченный `tasks/084-route-v3-graphical-snapshots.md` другого чата.
+- Собирать после включения `bfb0906`, `97d4a56` и `ab801fc`; не включать незакоммиченный `tasks/084-route-v3-graphical-snapshots.md` другого чата.
 ```

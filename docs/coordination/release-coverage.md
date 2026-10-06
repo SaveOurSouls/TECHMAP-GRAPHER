@@ -91,4 +91,4 @@ represent missing completed chat handoffs.
 | 082 — Приоритет выбора узлов поверх оболочек | `01a1119f-326d-7863-be97-7d30800b20db` | `37a8d0a5b2b42c33f049284a6f135c99e551c357`, corrected handoff `e345f5f2d1edcde6408be7c46ff1b66ec3ee4a8b` | Code equivalent `7aaaf46`; source blobs verified; corrected handoff identity confirmed | included (M5-22-037) |
 | 084 — Маршрут v3: графические слепки и генерация по зависимостям | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | ожидается handoff | задача зарегистрирована; отдельная ветка/worktree ожидается от рабочего чата | pending |
 
-| 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок | `01a0ee02-09d6-7790-98a3-d74947735e63` | `bfb0906`, `97d4a56` | оба SHA проверены через `git show`; ancestry текущего HEAD после push | pending builder confirmation |
+| 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок | `01a0ee02-09d6-7790-98a3-d74947735e63` | `bfb0906`, `97d4a56`, `ab801fc` | все SHA проверены через `git show`; все являются предками `ab801fc` (builder confirmation 06.10.2026) | included (ancestor; ZIP gate blocked by pending 084) |

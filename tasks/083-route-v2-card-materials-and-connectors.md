@@ -33,9 +33,9 @@
 ## Журнал результата
 
 - Коммит дизайна: `bfb0906`
-- Коммит кода: `97d4a56`
+- Коммит кода: `97d4a56`, `ab801fc`
 - Handoff сборщику: `docs/coordination/agent-handoff.md` (передан)
-- Интеграционный commit/эквивалент: —
-- ZIP / release coverage: —
-- Проверки и даты: 06.10.2026 — Vitest 185 файлов / 1802 теста, TypeScript, Vite build, diff-check PASS
+- Интеграционный commit/эквивалент: `ab801fc` подтверждён сборщиком; ZIP gate заблокирован pending карточки 084
+- ZIP / release coverage: blocked: pending карточка 084; 083 включена как ancestor
+- Проверки и даты: 06.10.2026 — Vitest 185 файлов / 1803 теста, TypeScript, Vite build, diff-check PASS
 - Ограничения и открытые вопросы: packaged UI и исходный жгут требуют ручной приёмки.
