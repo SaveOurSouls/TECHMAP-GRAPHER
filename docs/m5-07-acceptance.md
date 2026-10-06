@@ -519,3 +519,21 @@ Windows x64 ZIP:
 Штатный `scripts/build-package.ps1` завершился успешно: 159 файлов / 1558 клиентских тестов, TypeScript, Vite production build, 1053 Release .NET-теста и self-contained win-x64 publish. `verify-package.ps1` подтвердил 254 файла манифеста. `test-portable-package.ps1` подтвердил все 7 portable-режимов из `C:\Temp\TECHMAP-portable-20261002-bindings-op-exits`, включая путь с кириллицей и пробелами.
 
 Ограничения: ручная UI-приёмка V1–V4 и полного Ctrl/Shift жеста в пользовательском документе не выполнена; локальные видео не декодировались доступными средствами. V4 подтверждён ограниченной геометрической регрессией. П/ОП в редакторе рисунка маршрута отображаются фоном, а не сохраняются отдельными объектами фрагмента. ZIP остаётся вне Git.
+# Пакет 06.10.2026 — M5-22-038 / Route v3
+
+Кодовый HEAD: `0423d13` (интеграция Route v3 `9c15918`, финальный handoff
+`0cfb983`, `2174599`). Версия: `0.63.38-m5-22-review`.
+
+ZIP: `artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`  
+Размер: **63 980 511 байт**  
+SHA-256: `2BF1D3DF4889DBEE2DADFC8E88798359D5EA71BD8C746BFC1B108DBB964AE9AE`
+
+Проверки: штатный `scripts/build-package.ps1` — PASS (186 клиентских файлов,
+1812 клиентских тестов, TypeScript/Vite build, 1117 .NET-тестов, self-contained
+win-x64 publish); `verify-package.ps1` — PASS (339 записей манифеста, 340 файлов
+пакета); `test-portable-package.ps1` — PASS, 7/7 режимов.
+
+Ограничения: ручная приёмка владельцем на исходном жгуте не выполнялась; Route v3
+хранит слепки в localStorage и не переносит их между браузерами. Прямой запуск из
+кириллического пути ранее имел `UnauthorizedAccessException`; portable-проверка
+этого среза прошла штатно. ZIP остаётся вне Git.
