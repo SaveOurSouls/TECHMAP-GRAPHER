@@ -72,3 +72,41 @@ Release coverage: следующий ZIP; требуется подтвержд�
 Примечание сборщику:
 - Нет миграций и серверных изменений. Если `CanvasViewport.tsx` был изменён параллельно, сохранить общий predicate `coveringDragBlockedByPhysicalNode` в раннем обработчике оболочки и в hover.
 ```
+
+## 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок
+
+```text
+Карточка: 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты для интеграции: bfb0906 97d4a56
+
+Изменённые файлы:
+- docs/design/route-v2-c2-material-picker.md: дизайн C2 с разделением сырья/полуфабрикатов, hints, портами, isolated preview и resize.
+- docs/requirements.md, tasks/083-route-v2-card-materials-and-connectors.md, tasks/README.md, docs/coordination/chat-registry.md: REQ-113–119 и регистрация карточки.
+- src/Techmap.Client/src/manufacturing-v2/route-v2-model.ts: размеры, входящие результаты, порты, preferred isolated copy и assembly inputs.
+- src/Techmap.Client/src/manufacturing-v2/RouteV2Panel.tsx, route-v2.css: C2, точки связи, красный link mode, resize, inline hints и isolated preview.
+- src/Techmap.Client/src/manufacturing-v2/route-v2-c2-model.test.ts, route-v2-ui.test.ts: профильные регрессии.
+- src/Techmap.Client/src/manufacturing/RouteAssemblyDrawing.tsx, route-assembly-drawing.css, route-drawing-lifecycle.test.ts: сохранение текущего вида без изменений.
+
+Проверки:
+- .\\node_modules\\.bin\\vitest.cmd run: PASS, 185 файлов / 1802 теста.
+- pnpm run typecheck: PASS.
+- pnpm run build: PASS.
+- git diff --check: PASS.
+
+Зависимости/порядок:
+- Дизайн `bfb0906` перед кодом `97d4a56`; localStorage version 1 обратно совместим.
+
+Ограничения и ручная приёмка:
+- Ручная проверка C1/C2 на исходном жгуте, packaged UI и проверка ZIP остаются за сборщиком/владельцем.
+- Route v2 сохраняет localStorage-прототип; серверный контракт не менялся.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Собирать после включения `bfb0906` и `97d4a56`; не включать незакоммиченный `tasks/084-route-v3-graphical-snapshots.md` другого чата.
+```
