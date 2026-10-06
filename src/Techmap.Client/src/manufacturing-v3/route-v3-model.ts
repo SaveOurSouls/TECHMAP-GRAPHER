@@ -1,0 +1,144 @@
+import type { HarnessDesignDocument } from "../editor/model";
+import type { EditorSceneObject } from "../editor/editor-types";
+import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { createRouteDrawingCopy, parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
+
+export interface RouteV3Fragment {
+  readonly id: string;
+  readonly title: string;
+  readonly mode: "source" | "isolated";
+  readonly refs: readonly RouteSourceRef[];
+  /** Source scene IDs, independent of edits to the isolated drawing. */
+  readonly objectIds: readonly string[];
+  readonly backgroundOpacity: number;
+  readonly drawingCopy: RouteDrawingCopy;
+  readonly isolatedDrawingCopy?: RouteDrawingCopy;
+  readonly createdAt: string;
+}
+export interface RouteV3Node {
+  readonly id: string;
+  readonly kind: "semiFinished" | "assembly" | "final";
+  readonly title: string;
+  readonly fragmentIds: readonly string[];
+  readonly refs: readonly RouteSourceRef[];
+  readonly x: number;
+  readonly y: number;
+}
+export interface RouteV3Document {
+  readonly version: 1;
+  readonly preparedRefs: readonly RouteSourceRef[];
+  readonly fragments: readonly RouteV3Fragment[];
+  readonly nodes: readonly RouteV3Node[];
+  readonly edges: readonly { id: string; from: string; to: string }[];
+  readonly generated: boolean;
+  readonly backgroundOpacity: number;
+}
+export const refKey = (ref: RouteSourceRef): string => `${ref.kind}:${ref.id}`;
+export const routeV3StorageKey = (projectId: string, harnessId: string): string => `techmap.route-v3.${projectId}.${harnessId}`;
+export const fragmentDrawingCopy = (fragment: RouteV3Fragment): RouteDrawingCopy => fragment.isolatedDrawingCopy ?? fragment.drawingCopy;
+
+export function createInitialRouteV3(source: HarnessDesignDocument): RouteV3Document {
+  return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2 };
+}
+export function appendRouteV3Fragment(document: RouteV3Document, fragment: RouteV3Fragment): RouteV3Document {
+  if (!fragment.objectIds.length) throw new Error("Выберите объекты для слепка.");
+  const exists = document.fragments.some(item => item.id === fragment.id);
+  return { ...document, fragments: exists ? document.fragments.map(item => item.id === fragment.id ? fragment : item) : [...document.fragments, fragment], generated: false, nodes: [], edges: [] };
+}
+export function removeRouteV3Fragment(document: RouteV3Document, id: string): RouteV3Document {
+  return { ...document, fragments: document.fragments.filter(item => item.id !== id), nodes: [], edges: [], generated: false };
+}
+export function revealedRouteV3Ids(document: RouteV3Document): string[] {
+  return [...new Set(document.fragments.flatMap(fragment => fragment.objectIds))];
+}
+
+/** Resolve only explicitly selected physical objects, never merely highlighted ones. */
+export function captureRouteV3Selection(source: HarnessDesignDocument, scene: readonly EditorSceneObject[], selected: readonly string[]) {
+  const ids = new Set(selected.filter(id => scene.some(object => object.id === id)));
+  for (const object of scene) {
+    if (!ids.has(object.id)) continue;
+    if (object.metadata?.indexObjectId) ids.add(object.metadata.indexObjectId);
+    if (object.kind === "physical-segment") for (const wireId of object.pipe?.wireIds ?? []) ids.add(wireId);
+  }
+  // Index labels are part of the same visual object and must follow its visibility.
+  for (const object of scene) if (object.metadata?.indexObjectId && ids.has(object.metadata.indexObjectId)) ids.add(object.id);
+  const refs = buildRouteSourceItems(source).filter(item => ids.has(item.ref.id) || item.ref.kind === "cable" && source.cables.find(cable => cable.id === item.ref.id)?.memberWireIds.some(wireId => ids.has(wireId))).map(item => item.ref);
+  return { objectIds: [...ids], refs, drawingCopy: createRouteDrawingCopy(source, scene.filter(object => !ids.has(object.id)).map(object => object.id)) };
+}
+
+/** Every selected source object depends on its latest earlier saved state. */
+export function generateRouteV3(document: RouteV3Document, source?: HarnessDesignDocument, _sceneIds: readonly string[] = []): RouteV3Document {
+  const nodes: RouteV3Node[] = [];
+  const edges: { id: string; from: string; to: string }[] = [];
+  const owner = new Map<string, string>();
+  const depths = new Map<string, number>();
+  const rows = new Map<number, number>();
+  const addNode = (node: Omit<RouteV3Node, "x" | "y">, parents: readonly string[]) => {
+    const depth = parents.length ? 1 + Math.max(...parents.map(id => depths.get(id) ?? 0)) : 0;
+    const column = rows.get(depth) ?? 0;
+    nodes.push({ ...node, x: 32 + column * 304, y: 32 + depth * 280 });
+    rows.set(depth, column + 1); depths.set(node.id, depth);
+    for (const from of parents) edges.push({ id: `edge:${from}:${node.id}`, from, to: node.id });
+  };
+  for (const kind of ["wire", "cable", "covering"] as const) {
+    const refs = document.preparedRefs.filter(ref => ref.kind === kind);
+    if (!refs.length) continue;
+    const id = `prepared:${kind}`;
+    addNode({ id, kind: "semiFinished", title: kind === "wire" ? "Нарезанные провода" : kind === "covering" ? "Нарезанные оболочки" : "Нарезанные кабели", refs, fragmentIds: [] }, []);
+    for (const ref of refs) owner.set(refKey(ref), id);
+  }
+  for (const fragment of document.fragments) {
+    const parents = new Set(fragment.refs.map(ref => owner.get(refKey(ref))).filter((id): id is string => !!id));
+    // A PF is indivisible. Partial reuse would falsely claim its complete assembly.
+    const keys = new Set(fragment.refs.map(refKey));
+    for (const parent of parents) {
+      const prior = nodes.find(node => node.id === parent)!;
+      if (prior.fragmentIds.length && prior.refs.some(ref => !keys.has(refKey(ref)))) throw new Error(`«${fragment.title}» использует часть полуфабриката «${prior.title}». Включите его полный состав в слепок.`);
+    }
+    const nodeId = `fragment:${fragment.id}`;
+    addNode({ id: nodeId, kind: parents.size ? "assembly" : "semiFinished", title: fragment.title, refs: fragment.refs, fragmentIds: [fragment.id] }, [...parents]);
+    for (const ref of fragment.refs) owner.set(refKey(ref), nodeId);
+  }
+  // No fictitious completed harness when some material is still unrepresented.
+  const allRefs = source ? buildRouteSourceItems(source).map(item => item.ref) : [];
+  const captured = new Set(document.fragments.flatMap(fragment => fragment.refs.map(refKey)));
+  // Scene projections also contain derived labels, dimensions and topology
+  // helpers. They are not production inputs, so they must not prevent the
+  // final route once every addressable source ref is represented.
+  if (allRefs.length && allRefs.every(ref => captured.has(refKey(ref)))) {
+    const leaves = nodes.filter(node => node.fragmentIds.length && !edges.some(edge => edge.from === node.id)).map(node => node.id);
+    addNode({ id: "route-v3:final", kind: "final", title: "Готовый жгут", refs: allRefs, fragmentIds: [] }, leaves);
+  }
+  return { ...document, nodes, edges, generated: true };
+}
+
+/** Reject the whole draft instead of silently dropping damaged snapshots. */
+export function parseRouteV3(value: unknown): RouteV3Document | null {
+  try {
+    const v = value as RouteV3Document;
+    if (!v || v.version !== 1 || !Array.isArray(v.fragments) || v.fragments.length > 500 || !Array.isArray(v.preparedRefs) || !Array.isArray(v.nodes) || !Array.isArray(v.edges) || typeof v.generated !== "boolean") return null;
+    const opacity = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+    const text = (n: unknown): n is string => typeof n === "string" && n.trim().length > 0 && n.length <= 512;
+    const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
+    if (!opacity(v.backgroundOpacity) || !refs(v.preparedRefs)) return null;
+    const ids = new Set<string>();
+    const fragments: RouteV3Fragment[] = [];
+    for (const f of v.fragments) {
+      if (!f || !text(f.id) || ids.has(f.id) || !text(f.title) || !["source", "isolated"].includes(f.mode) || !refs(f.refs) || !Array.isArray(f.objectIds) || !f.objectIds.length || f.objectIds.some((id: unknown) => !text(id)) || !opacity(f.backgroundOpacity) || !text(f.createdAt)) return null;
+      const drawingCopy = parseRouteDrawingCopy(f.drawingCopy);
+      const isolatedDrawingCopy = f.isolatedDrawingCopy === undefined ? undefined : parseRouteDrawingCopy(f.isolatedDrawingCopy);
+      if (f.mode === "isolated" && !isolatedDrawingCopy) return null;
+      fragments.push({ ...f, objectIds: [...new Set(f.objectIds)], drawingCopy, ...(isolatedDrawingCopy ? { isolatedDrawingCopy } : {}) }); ids.add(f.id);
+    }
+    const nodeIds = new Set<string>();
+    for (const node of v.nodes) {
+      if (!node || !text(node.id) || nodeIds.has(node.id) || !text(node.title) || !["semiFinished", "assembly", "final"].includes(node.kind) || !refs(node.refs) || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !Array.isArray(node.fragmentIds) || node.fragmentIds.some((id: unknown) => !ids.has(String(id)))) return null;
+      nodeIds.add(node.id);
+    }
+    const visited = new Set<string>(), visiting = new Set<string>(), edgeIds = new Set<string>();
+    for (const edge of v.edges) { if (!edge || !text(edge.id) || edgeIds.has(edge.id) || !nodeIds.has(edge.from) || !nodeIds.has(edge.to) || edge.from === edge.to) return null; edgeIds.add(edge.id); }
+    const visit = (id: string): boolean => { if (visiting.has(id)) return false; if (visited.has(id)) return true; visiting.add(id); if (v.edges.filter(e => e.from === id).some(e => !visit(e.to))) return false; visiting.delete(id); visited.add(id); return true; };
+    if ([...nodeIds].some(id => !visit(id))) return null;
+    return { ...v, fragments };
+  } catch { return null; }
+}

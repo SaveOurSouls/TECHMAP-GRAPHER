@@ -31,6 +31,7 @@ describe("harness workspace", () => {
     expect(markup).toContain("Чертёж");
     expect(markup).toContain("Маршрут");
     expect(markup).toContain("Маршрут v2");
+    expect(markup).toContain("Маршрут v3");
     expect(markup).toContain("UML");
     expect(markup).toContain("UML универсальный");
     expect(markup).toContain('role="group"');
@@ -56,7 +57,7 @@ describe("harness workspace", () => {
       onHome: vi.fn(),
     }));
 
-    expect(harnessSectionItems).toHaveLength(5);
+    expect(harnessSectionItems).toHaveLength(6);
     for (const item of harnessSectionItems) expect(markup).toContain(item.label);
     expect(markup).toContain("К проектам");
     expect(markup).toContain('aria-current="page"');

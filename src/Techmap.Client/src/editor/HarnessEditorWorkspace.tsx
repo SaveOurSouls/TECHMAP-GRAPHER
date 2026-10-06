@@ -166,6 +166,9 @@ export interface HarnessEditorWorkspaceProps {
     readonly onHiddenObjectIdsChange: (ids: readonly string[]) => void;
     readonly onBackgroundOpacityChange: (opacity: number) => void;
     readonly onObjectsIsolate?: (objectIds: readonly string[]) => void;
+    readonly onObjectsSave?: (objectIds: readonly string[]) => void;
+    readonly captureSelection?: boolean;
+    readonly allowCleanSave?: boolean;
     readonly onCancel: () => void;
   };
   readonly backgroundObjects?: readonly EditorSceneObject[];
@@ -593,8 +596,8 @@ export function HarnessEditorWorkspace({
   };
 
   const viewportObjects = useMemo(
-    () => objects.filter((object) => (view !== "e4" || object.kind !== "dimension") && !localCopyControls?.hiddenObjectIds.includes(object.id)),
-    [objects, view, localCopyControls?.hiddenObjectIds],
+    () => objects.filter((object) => (view !== "e4" || object.kind !== "dimension") && (localCopyControls?.captureSelection || !localCopyControls?.hiddenObjectIds.includes(object.id))),
+    [objects, view, localCopyControls?.hiddenObjectIds, localCopyControls?.captureSelection],
   );
   const rememberViewportSize = useCallback((size: EditorViewportSize) => {
     setViewportSize((current) => current.width === size.width && current.height === size.height ? current : size);
@@ -670,12 +673,12 @@ export function HarnessEditorWorkspace({
           className={`he-save-state ${saveState}`}
           type="button"
           onClick={onSaveRequest}
-          disabled={!onSaveRequest || saveState === "saved" || saveState === "saving"}
+          disabled={!onSaveRequest || (localCopyControls?.captureSelection ? !selectedObjectIds.length : saveState === "saving" || (!localCopyControls?.allowCleanSave && saveState === "saved"))}
           title={saveState === "error" ? "Повторить сохранение" : "Сохранить сейчас"}
         >
-          <span aria-hidden="true" />Сохранить фрагмент
+          <span aria-hidden="true" />{localCopyControls.captureSelection ? "Сохранить выбранные" : "Сохранить фрагмент"}
         </button>}
-        {localCopyControls && <button className="he-back" type="button" onClick={localCopyControls.onCancel}>Отмена</button>}
+        {localCopyControls && <button className="he-back" type="button" onClick={localCopyControls.onCancel}>{localCopyControls.captureSelection ? "К маршруту" : "Отмена"}</button>}
       </header>
 
       <div className={`he-workspace ${view === "drawing" ? "he-workspace-drawing" : ""} ${utilityPanelOpen ? "he-utility-open" : "he-utility-closed"} ${inspectorOpen ? "he-inspector-open" : "he-inspector-closed"} ${materialPanelOpen ? "he-material-open" : "he-material-closed"}`}>
@@ -722,10 +725,11 @@ export function HarnessEditorWorkspace({
             </div>
             {localCopyControls && <section className="he-utility-section he-controls-section" aria-label="Видимость фрагмента">
               <h3>Видимость фрагмента</h3>
-              <button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => selectedObjectIds.includes(object.id)).map(object => object.id).length
+              {!localCopyControls.captureSelection && <><button type="button" className="ui-control he-control-action" onClick={() => localCopyControls.onHiddenObjectIdsChange(objects.filter(object => selectedObjectIds.includes(object.id)).map(object => object.id).length
                 ? [...new Set([...localCopyControls.hiddenObjectIds, ...selectedObjectIds])] : localCopyControls.hiddenObjectIds)} disabled={!selectedObjectIds.length}>Скрыть выбранные</button>
               <button type="button" className="ui-control he-control-action" onClick={() => isolateCopyObjects(selectedObjectIds)} disabled={!selectedObjectIds.length}>Только выбранные</button>
-              <button type="button" className="ui-control he-control-action" onClick={showAllCopyObjects}>Показать все</button>
+              <button type="button" className="ui-control he-control-action" onClick={showAllCopyObjects}>Показать все</button></>}
+              {localCopyControls.captureSelection && <><button type="button" className="ui-control" onClick={() => selectObjectGroup(objects.map(object => object.id), "replace")}>Выделить всё</button><button type="button" className="ui-control" disabled={!selectedObjectIds.length} onClick={() => isolateCopyObjects(selectedObjectIds)}>Изолировать выбранные</button></>}
               <label>Фон жгута: {Math.round(localCopyControls.backgroundOpacity * 100)}%
                 <input type="range" min="0" max="100" value={Math.round(localCopyControls.backgroundOpacity * 100)} onChange={event => localCopyControls.onBackgroundOpacityChange(Number(event.target.value) / 100)} />
               </label>
@@ -765,6 +769,7 @@ export function HarnessEditorWorkspace({
           foregroundWireIds={foregroundWireIds}
           backgroundObjects={backgroundObjects}
           backgroundOpacity={backgroundOpacity}
+          dimmedObjectIds={localCopyControls?.captureSelection ? localCopyControls.hiddenObjectIds.filter(id => !selectedObjectIds.includes(id)) : undefined}
           cables={cables}
           e4Overlays={e4Overlays}
           e4RoutingMode={e4RoutingMode}
@@ -783,6 +788,7 @@ export function HarnessEditorWorkspace({
           onObjectSelect={selectObject}
           onObjectGroupSelect={selectObjectGroup}
           onObjectsIsolate={localCopyControls ? isolateCopyObjects : undefined}
+          onObjectsSave={localCopyControls?.onObjectsSave}
           objectProperties={objectProperties}
           onObjectPick={onObjectPick}
           onObjectPickCancel={onObjectPickCancel}
@@ -897,7 +903,7 @@ export function HarnessEditorWorkspace({
             hiddenObjectIds={localCopyControls?.hiddenObjectIds ?? []}
             selectedObjectIds={selectedObjectIds}
             onObjectSelect={selectObject}
-            onVisibilityChange={localCopyControls ? (objectId, visible) => {
+            onVisibilityChange={localCopyControls && !localCopyControls.captureSelection ? (objectId, visible) => {
               const object = objects.find(item => item.id === objectId);
               if (visible && object && layers.some(layer => layer.id === object.layerId && !layer.visible)) {
                 changeLayers(layers.map(layer => layer.id === object.layerId ? { ...layer, visible: true } : layer));

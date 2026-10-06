@@ -146,6 +146,12 @@ export interface HarnessDesignEditorProps {
     readonly onDraftChange?: (document: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => void;
     /** Creates a detached material fragment from the current working copy. */
     readonly onIsolateObjects?: (document: HarnessDesignDocument, objectIds: readonly string[], scene?: readonly EditorSceneObject[]) => HarnessDesignDocument | null;
+    readonly onObjectsSave?: (document: HarnessDesignDocument, objectIds: readonly string[], scene: readonly EditorSceneObject[]) => void;
+    /** Allow an existing isolated copy to be committed without a geometry edit. */
+    readonly allowCleanSave?: boolean;
+    /** Capture selection on the dimmed drawing without changing its geometry. */
+    readonly captureSelection?: boolean;
+    readonly revealedObjectIds?: readonly string[];
   };
 }
 
@@ -1470,6 +1476,13 @@ export function HarnessDesignEditor({
     return () => window.removeEventListener("keydown", keydown);
   }, [editingObjectId, run, selectedObjectIds,joiningPipeDraft]);
 
+  useEffect(() => {
+    if (!localCopy?.captureSelection || !localCopy.revealedObjectIds || !history) return;
+    const revealed = new Set(localCopy.revealedObjectIds);
+    const ids = designToScene(history.present, "drawing").filter(object => !revealed.has(object.id)).map(object => object.id);
+    setHiddenObjectIds(current => current.length === ids.length && current.every((id,index) => id === ids[index]) ? current : ids);
+  }, [localCopy?.captureSelection, localCopy?.revealedObjectIds, history?.present]);
+
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
   }
@@ -2115,7 +2128,7 @@ export function HarnessDesignEditor({
             {(["connections","cut","bom"] as const).map(kind=><button type="button" className="ui-control he-document-action" key={kind} disabled={kind==="cut"&&!routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").ready} title={kind==="cut"?routeCutReadiness(history.present,resource.sourceFingerprint,saveState!=="saved").message:undefined} onClick={()=>{if(kind!=="connections"&&view!=="drawing"){setView("drawing");onViewChange?.("drawing");}const documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};if(!documents.tables.some(t=>t.kind===kind))run({type:"set-drawing-documents",documents:{...documents,tables:[...documents.tables,{id:crypto.randomUUID(),kind,position:{x:20,y:20},dock:"bottom",width:960,height:300}]}});}}><span className="he-doc-icon"><DocumentIcon kind={kind} /></span>{kind==="bom"?"Спецификация":kind==="cut"?"Карта резки":"Таблица соединений"}</button>)}
           </section>
         </>}
-        drawingWindows={camera=><DrawingTableWindows connectionTableSettings={connectionTableSettings} sourceFingerprint={resource.sourceFingerprint} wireOptions={wireLookup.options} wireDatabaseOptions={wireLookup.databaseOptions} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
+        drawingWindows={localCopy?.captureSelection ? undefined : camera=><DrawingTableWindows connectionTableSettings={connectionTableSettings} sourceFingerprint={resource.sourceFingerprint} wireOptions={wireLookup.options} wireDatabaseOptions={wireLookup.databaseOptions} onWireSearch={wireLookup.search} perimeters={drawingPerimeters} view={view} document={history.present} camera={camera} quantity={harnessQuantity} revision={resource.revision} unsaved={saveState!=="saved"} selectedIds={[...selectedObjectIds,...related.rowIds]} onChange={documents=>run({type:"set-drawing-documents",documents})} onCommand={run} onReveal={ids=>{setRelatedSourceIds(ids);setSelectedObjectId(null);setSelectedObjectIds([]);}}/>}
         onDimensionCreate={(wireId,from,to,pointCount,mode,auxiliary)=>{
           const wire=history.present.wires.find(w=>w.id===wireId),segment=history.present.physicalTopology?.segments.find(s=>s.id===wireId);if(!wire&&!segment)return;
           const id=crypto.randomUUID(),documents=history.present.drawingDocuments??{tables:[],leaders:[],bomOrder:[]};
@@ -2162,7 +2175,11 @@ export function HarnessDesignEditor({
         componentTemplateViewInstances={componentTemplateViewInstances}
         resolveComponentTemplateAssetUrl={resolveComponentTemplateAssetUrl}
         saveState={saveState}
-        onSaveRequest={localCopy ? () => {
+        onSaveRequest={localCopy?.captureSelection ? () => {
+          const current = historyRef.current?.present;
+          if (current) { try { localCopy.onObjectsSave?.(current, selectedObjectIds, scene); }
+            catch (error) { setMessage(error instanceof Error ? error.message : "Не удалось сохранить слепок."); } }
+        } : localCopy ? () => {
           const current = historyRef.current?.present;
           if (current) {
             try {
@@ -2176,10 +2193,16 @@ export function HarnessDesignEditor({
           }
         } : () => void flushSave()}
         localCopyControls={localCopy ? {
-          hiddenObjectIds, backgroundOpacity,
+          hiddenObjectIds, backgroundOpacity, captureSelection: localCopy.captureSelection, allowCleanSave: localCopy.allowCleanSave,
           onHiddenObjectIdsChange: ids => { setHiddenObjectIds(ids); localCopy.onHiddenObjectIdsChange?.(ids); },
           onBackgroundOpacityChange: opacity => { setBackgroundOpacity(opacity); localCopy.onBackgroundOpacityChange?.(opacity); },
           onObjectsIsolate: localCopy.onIsolateObjects ? isolateLocalObjects : undefined,
+          onObjectsSave: localCopy.onObjectsSave ? (objectIds => {
+            const current = historyRef.current?.present;
+            if (!current) return;
+            try { localCopy.onObjectsSave?.(current, objectIds, scene); }
+            catch (error) { setMessage(error instanceof Error ? error.message : "Не удалось сохранить слепок."); }
+          }) : undefined,
           onCancel: localCopy.onCancel,
         } : undefined}
         onDrawingScale={(connectorId,drawingId,scale)=>run({type:"set-drawing-placement",connectorId,drawingId,scale})}

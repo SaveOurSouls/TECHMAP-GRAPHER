@@ -193,6 +193,7 @@ export function RouteAssemblyDrawing({ row, document, config, session, projectId
     initialDocument: initialCopy.document,
     hiddenObjectIds: initialCopy.hiddenObjectIds,
     backgroundOpacity: editor.backgroundOpacity,
+    allowCleanSave: mode === "isolated",
     onDraftChange: (copy: HarnessDesignDocument, hiddenObjectIds: readonly string[], backgroundOpacity: number) => {
       const draft = createRouteDrawingCopy(copy, hiddenObjectIds);
       if (mode === "isolated") {
