@@ -745,14 +745,14 @@ server startup+route57, diff check и PowerShell parse PASS. Штатная pack
 
 # Последний проверенный срез M5-22-037 — 06.10.2026
 
-HEAD $code, версия  .63.37-m5-22-review. Карточки 080–082 включены в
-docs/coordination/release-coverage.md. Штатная Windows x64 сборка, manifest и
+HEAD `4621a2090d22938b82ee14e8722136a045298b2d`, версия `0.63.37-m5-22-review`. Карточки 080–082 включены в
+`docs/coordination/release-coverage.md`. Штатная Windows x64 сборка, manifest и
 portable-проверки завершены успешно.
 
-ZIP: $zipRel; **62 185 519 байт**; SHA-256
-$sha.
+ZIP: `artifacts/m5-22-037/TECHMAP-GRAPHER-0.63.37-m5-22-review-win-x64.zip`; **62 185 519 байт**; SHA-256
+`C626BADD228191D27F39502788D143A5D3E11855610DE4995FA96DE32A321B66`.
 
 Проверки: клиент 183 файла / 1795 тестов, TypeScript, Vite, сервер 1117 тестов,
 performance 1/1, self-contained publish, manifest 339 записей и portable 7/7 —
 PASS. Ручная UI/packaged приёмка владельца, исходный жгут и 390px visual QA
-остаются открытыми; длинные Windows-пути могут дать UnauthorizedAccessException.
+остаются открытыми; длинные Windows-пути могут дать `UnauthorizedAccessException`.

@@ -109,9 +109,9 @@ the acceptance/status docs and are not omitted completed chat handoffs.
 
 ## M5-22-037 release record — 06.10.2026
 
-Code HEAD: $code; appVersion:  .63.37-m5-22-review.
-ZIP: $zipRel; size $bytes bytes; SHA-256 $sha.
+Code HEAD: `4621a2090d22938b82ee14e8722136a045298b2d`; appVersion: `0.63.37-m5-22-review`.
+ZIP: `artifacts/m5-22-037/TECHMAP-GRAPHER-0.63.37-m5-22-review-win-x64.zip`; size `62 185 519` bytes; SHA-256 `C626BADD228191D27F39502788D143A5D3E11855610DE4995FA96DE32A321B66`.
 Manifest verification: 339 payload entries / 340 package files — PASS.
-Portable verification: 7/7 PASS from C:\Temp\TECHMAP-portable-m5-22-037.
+Portable verification: 7/7 PASS from `C:\Temp\TECHMAP-portable-m5-22-037`.
 Cards 080, 081 and 082 are included in release coverage; 081/082 are recorded as
-verified equivalents in docs/coordination/release-coverage.md.
+verified equivalents in `docs/coordination/release-coverage.md`.
