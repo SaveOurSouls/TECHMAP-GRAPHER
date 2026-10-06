@@ -46,7 +46,7 @@ Release coverage: ожидаемый релиз или причина явног
 Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
 Ветка: codex/route-v3
 Worktree: C:\Users\Василий Костромин\.codex\worktrees\route-v3\Утилита для картинок
-Коммиты для интеграции: будет указан после фиксации
+Коммиты для интеграции: 9c15918
 
 Изменённые файлы:
 - src/Techmap.Client/src/manufacturing-v3/*: отдельная модель, редактор слепков, галерея и генерация DAG маршрута.
