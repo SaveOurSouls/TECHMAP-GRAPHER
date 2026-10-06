@@ -98,4 +98,4 @@
 | 079 | [Обязательный handoff и покрытие ZIP](079-chat-handoff-and-release-coverage.md) | ready-for-review | REQ-109: M5-22 handoffs сверены с HEAD `b9b6c24`; ZIP 0.63.36 прошёл manifest и portable 7/7. |
 
 | 080 | [Редактирование точек изгиба пайпов](080-edit-pipe-bend-points.md) | in-progress | REQ-110: рабочий чат исправляет перемещение и удаление изгибов в C1/C2 и Т-ветвлении; handoff и release coverage обязательны. |
-| 081 | [Транзит через соединитель и выходы из защитной оболочки](081-connector-transit-and-covering-exits.md) | in-progress | REQ-111, C1–C5: маршрут через физически подключённый X4 и видимые выходы проводов из нейлонки; обтягивание не меняется. |
+| 081 | [Транзит через соединитель и выходы из защитной оболочки](081-connector-transit-and-covering-exits.md) | ready-for-review | REQ-111, C1–C5: маршрут через явно назначенный транзит X4 и видимые выходы проводов из нейлонки; [handoff](../docs/coordination/handoff-081.md) передан сборщику, обтягивание не меняется. |
