@@ -38,6 +38,42 @@ Release coverage: ожидаемый релиз или причина явног
 `release-coverage.md`. Рабочий чат не заявляет «интегрировано» или «вошло в ZIP»;
 это подтверждается только проверкой интеграционной ветки.
 
+## 084 — Маршрут v3: графические слепки и генерация по зависимостям
+
+```text
+Карточка: 084 — Маршрут v3: графические слепки и генерация по зависимостям
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/route-v3
+Worktree: C:\Users\Василий Костромин\.codex\worktrees\route-v3\Утилита для картинок
+Коммиты для интеграции: будет указан после фиксации
+
+Изменённые файлы:
+- src/Techmap.Client/src/manufacturing-v3/*: отдельная модель, редактор слепков, галерея и генерация DAG маршрута.
+- src/Techmap.Client/src/App.tsx, src/Techmap.Client/src/editor/*: отдельная вкладка v3, скрытый фон 20%, контекстные «Изолировать»/«Сохранить» и сохранение чистого изолированного слепка.
+- docs/architecture.md, docs/decisions/0016-route-v3-graphical-snapshots.md, tasks/084-route-v3-graphical-snapshots.md: архитектура, ADR и карточка.
+
+Проверки:
+- pnpm run test: PASS (184 файла / 1804 теста).
+- pnpm run typecheck: PASS.
+- pnpm run build: PASS.
+- pnpm exec vitest run src/manufacturing-v3/route-v3-model.test.ts: PASS (9 тестов).
+- Playwright fallback smoke: PASS (desktop, reload, 390px, без API writes; Browser plugin отсутствует).
+- git diff --check: PASS.
+
+Зависимости/порядок:
+- База 9217d6a; после интеграции Route v2/редакторных изменений.
+
+Ограничения и ручная приёмка:
+- Нужны ручная проверка владельца, packaged UI и исходного жгута после интеграции; ZIP не собирался.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Маршрут v2 не изменён. Временный Playwright QA сохранён вне репозитория; дополнительные API-записи не выполняются.
+```
+
 
 ## 082 — Приоритет выбора узлов поверх оболочек
 

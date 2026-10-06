@@ -25,6 +25,7 @@ import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RouteDrawingsPanel } from "./RouteDrawingsPanel";
 import { ManufacturingRoutePanel } from "./manufacturing/ManufacturingRoutePanel";
 import { RouteV2Panel } from "./manufacturing-v2/RouteV2Panel";
+import { RouteV3Panel } from "./manufacturing-v3/RouteV3Panel";
 import { UmlPanel } from "./uml/UmlPanel";
 import { InfoHint } from "./InfoHint";
 import type { HarnessSectionId } from "./editor/HarnessSectionNavigation";
@@ -68,6 +69,7 @@ const harnessTabs = [
 ] as const;
 const testHarnessTabs = [
   { id: "route-v2", label: "Маршрут v2", description: "Визуальная последовательность полуфабрикатов" },
+  { id: "route-v3", label: "Маршрут v3", description: "Слепки фрагментов и зависимости сборки" },
   { id: "uml", label: "UML универсальный", description: "Ручная схема зависимостей и операций" },
 ] as const;
 export type HarnessTab = HarnessSectionId;
@@ -694,6 +696,9 @@ export function App({ config, session }: AppProps) {
 
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route-v2") {
     return <RouteV2Panel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onSectionChange={navigateHarnessSection} />;
+  }
+  if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "route-v3") {
+    return <RouteV3Panel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onSectionChange={navigateHarnessSection} />;
   }
   if (editorOpen && selectedProject && selectedHarness && activeHarnessTab === "uml") {
     return <UmlPanel config={config} session={session} projectId={selectedProject.projectId} harnessId={selectedHarness.harnessId} onClose={returnToProjectMenu} onSectionChange={navigateHarnessSection} />;

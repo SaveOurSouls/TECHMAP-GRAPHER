@@ -6,6 +6,7 @@ export const harnessSectionItems = [
   { id: "drawing", label: "Чертёж" },
   { id: "route", label: "Маршрут" },
   { id: "route-v2", label: "Маршрут v2" },
+  { id: "route-v3", label: "Маршрут v3" },
   { id: "uml", label: "UML универсальный" },
 ] as const;
 
