@@ -98,7 +98,7 @@
 | 079 | [Обязательный handoff и покрытие ZIP](079-chat-handoff-and-release-coverage.md) | ready-for-review | REQ-109: M5-22 handoffs сверены с HEAD `b9b6c24`; ZIP 0.63.36 прошёл manifest и portable 7/7. |
 
 | 080 | [Редактирование точек изгиба пайпов](080-edit-pipe-bend-points.md) | ready-for-review | REQ-110: код `7d51a67`, handoff `c34f1d6`, проверки PASS; сборщик должен подтвердить ancestry и coverage. |
-| 081 | [Транзит через соединитель и выходы из защитной оболочки](081-connector-transit-and-covering-exits.md) | ready-for-review | REQ-111: verified equivalent `5eeb02f`, handoff `ca55a20`/`e918e18`; C1–C5 исходного жгута и packaged UI остаются открытыми. |
+| 081 | [Транзит через соединитель и выходы из защитной оболочки](081-connector-transit-and-covering-exits.md) | accepted | REQ-111: принято владельцем; включено в M5-22-037 через verified equivalent `5eeb02f`, handoff `ca55a20`/`e918e18`; C1–C5 и packaged UI остаются ограничениями пакета. |
 | 082 | [Приоритет выбора узлов поверх оболочек](082-covering-junction-selection-priority.md) | accepted | REQ-112: принято владельцем; включено в M5-22-037 через verified equivalent `7aaaf46`, handoff `e345f5f`; C1 и packaged UI остаются ограничениями пакета. |
 
 | 083 | [Маршрут v2: карточки, состав C2 и изолированный рисунок](083-route-v2-card-materials-and-connectors.md) | in-progress | REQ-113–119: дизайн C2, точки связи, разделение сырья/полуфабрикатов, isolated preview, resize и сохранение без изменений. |
