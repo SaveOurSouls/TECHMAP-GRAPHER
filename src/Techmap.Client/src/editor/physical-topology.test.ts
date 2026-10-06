@@ -212,3 +212,20 @@ it("distributes wires to shortest channels, preserves pinned routes and supports
  const noExit={...t,nodes:t.nodes.map(n=>n.connectorId==="A"?{...n,wireIds:[]}:n)};
  expect(routePhysicalWires(d,noExit).routes.some(r=>r.wireId==="W1"||r.wireId==="W2")).toBe(false);
 });
+
+it("routes a wire through a physically connected intermediate connector",async()=>{
+ const {routePhysicalWires}=await import("./physical-topology");
+ const base=physicalFixture(),t={...base.physicalTopology!,nodes:[
+   {id:"from",connectorId:"A",position:{x:150,y:40},wireIds:["W1"]},
+   {id:"x4",connectorId:"C",position:{x:150,y:40},transitWireIds:["W1"]},
+   {id:"to",connectorId:"B",position:{x:150,y:40},wireIds:["W1"]},
+ ],segments:[
+   {id:"A-X4",from:"from",to:"x4",path:{kind:"polyline" as const,points:[]}},
+   {id:"X4-B",from:"x4",to:"to",path:{kind:"polyline" as const,points:[]}},
+ ],routes:[]};
+ const routed=routePhysicalWires(base,t);
+ expect(routed.routes.find(route=>route.wireId==="W1")?.steps).toEqual([
+   {segmentId:"A-X4",reverse:false},{segmentId:"X4-B",reverse:false},
+ ]);
+ expect(routed.routes.some(route=>route.wireId==="W2"||route.wireId==="W3")).toBe(false);
+});
