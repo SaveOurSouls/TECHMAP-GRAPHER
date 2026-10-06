@@ -77,3 +77,14 @@ The earlier `m5-22-035` archive remains a blocked candidate and is superseded by
 this verified `m5-22-036` slice. Owner acceptance, source-harness QA and the
 390px visual review remain open in the M5-22 acceptance record; they do not
 represent missing completed chat handoffs.
+
+## Ожидающие рабочие чаты после M5-22
+
+Следующий ZIP пока **заблокирован** до завершения рабочих чатов, получения их
+проверенных commit SHA и подтверждения интеграции сборщиком. Регистрация не
+означает, что изменения уже входят в собираемый HEAD.
+
+| Карточка / чат | Thread ID | Исходные commit SHA | Доказательство против code HEAD | Coverage |
+| --- | --- | --- | --- | --- |
+| 080 — Редактирование точек изгиба пайпов | `01a11190-8a49-7423-a35d-6e75df977c8e` | ожидается handoff | нет; задача в работе | pending |
+| 081 — Трассировка проводов через X4 и выход из оболочки | `01a1119a-83a3-7ad2-8b8f-bffd2668c411` | ожидается handoff | нет; задача в работе | pending |
