@@ -38,7 +38,7 @@
 
 ## Журнал результата
 
-- Коммиты: `7d51a673a0cba9d0654dd54d1f2c28472a8cf984` (код, `fix(drawing): edit generated pipe bends`); follow-up commit добавит удаление внешних станций перехода ОП и приоритет ближайшей точки; `c34f1d61dfb2844482730fd538eca20de3b4ac60` (handoff-документация).
+- Коммиты: `7d51a673a0cba9d0654dd54d1f2c28472a8cf984` (код, `fix(drawing): edit generated pipe bends`); `3df8ce6` (follow-up: удаление внешних станций перехода ОП и приоритет ближайшей точки); `c34f1d61dfb2844482730fd538eca20de3b4ac60` (handoff-документация).
 - Handoff сборщику: передан 06.10.2026; оба SHA опубликованы в origin.
 - Интеграционный commit/эквивалент: code commit и handoff являются предками текущего `codex/integration-m5-22` HEAD `c34f1d61dfb2844482730fd538eca20de3b4ac60`; подтверждение сборщика pending.
 - ZIP / release coverage: следующий кодовый срез; pending до подтверждения сборщика.

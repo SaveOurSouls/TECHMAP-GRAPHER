@@ -1,5 +1,41 @@
 # Шаблон handoff от чата задачи
 
+## 080 — Follow-up: точка перехода ОП
+
+```text
+Карточка: 080 — Редактирование точек изгиба пайпов
+Статус: ready-for-review (follow-up)
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты для интеграции: 3df8ce6
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/commands.ts: явная очистка внешней станции перехода ОП.
+- src/Techmap.Client/src/editor/HarnessDesignEditor.tsx: удаление outerEnter/outerExit по видимой ручке.
+- src/Techmap.Client/src/editor/CanvasViewport.tsx: выбор ближайшей ручки при совпадении пайпов.
+- src/Techmap.Client/src/editor/physical-joining-pipe.test.ts: регрессия перемещения/удаления точки.
+- tasks/080-edit-pipe-bend-points.md: журнал follow-up.
+
+Проверки:
+- pnpm --dir src\\Techmap.Client test: PASS (186 файлов / 1813 тестов)
+- pnpm --dir src\\Techmap.Client typecheck: PASS
+- pnpm --dir src\\Techmap.Client build: PASS
+- git diff --check: PASS
+
+Зависимости/порядок:
+- После 7d51a673a0cba9d0654dd54d1f2c28472a8cf984.
+
+Ограничения и ручная приёмка:
+- Исходный жгут C1 и packaged Windows UI владельцем вручную не проверены.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Изменение не затрагивает электрические связи, ID маршрутов и производственные длины.
+```
+
 Скопируйте блок в сообщение чату-сборщику после успешных обязательных проверок.
 Handoff обязателен для статуса `ready-for-review`; без него задача остаётся
 `in-progress` либо `blocked` и не считается переданной сборщику.
