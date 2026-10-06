@@ -3645,7 +3645,10 @@ export function CanvasViewport({
       if (view === "drawing") {
         const pipes=objects.filter(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).sort((a,b)=>Number(b.pipe?.role==="joining-pipe")-Number(a.pipe?.role==="joining-pipe"));
         const nodeHit=objects.some(o=>o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible)&&containsPoint(o,worldPoint,7/camera.zoom,view));
-        const corner=nodeHit?undefined:pipes.map(o=>({o,index:hitTestWireRoutePoint(o,worldPoint,camera.zoom)})).find(h=>h.index!==null);
+        const corner=nodeHit?undefined:pipes.map(o=>({o,index:hitTestWireRoutePoint(o,worldPoint,camera.zoom)}))
+          .filter((hit):hit is {o:EditorSceneObject;index:number}=>hit.index!==null)
+          .map(hit=>({ ...hit, distance:Math.hypot(worldPoint.x-(hit.o.pipe?.handles[hit.index]!.x??Infinity),worldPoint.y-(hit.o.pipe?.handles[hit.index]!.y??Infinity)) }))
+          .sort((a,b)=>a.distance-b.distance)[0];
         const middle=corner||nodeHit?undefined:pipes.flatMap(o=>pipeMidpoints(o).map(h=>({...h,o}))).find(h=>Math.hypot(h.point.x-worldPoint.x,h.point.y-worldPoint.y)<=7/camera.zoom);
         const pipe=corner?.o??middle?.o,index=corner?.index??middle?.index;
         if(pipe&&index!==null&&index!==undefined){
