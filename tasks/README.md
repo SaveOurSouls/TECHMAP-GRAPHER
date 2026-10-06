@@ -98,5 +98,5 @@
 | 079 | [Обязательный handoff и покрытие ZIP](079-chat-handoff-and-release-coverage.md) | ready-for-review | REQ-109: M5-22 handoffs сверены с HEAD `b9b6c24`; ZIP 0.63.36 прошёл manifest и portable 7/7. |
 
 | 080 | [Редактирование точек изгиба пайпов](080-edit-pipe-bend-points.md) | ready-for-review | REQ-110: код `7d51a67`, handoff `c34f1d6`, проверки PASS; сборщик должен подтвердить ancestry и coverage. |
-| 081 | [Трассировка проводов через X4 и выход из оболочки](081-x4-wire-routing-and-cover-exits.md) | in-progress | REQ-111: рабочий чат исправляет трассировку через X4 и выход проводов из нейлоновой оболочки; обтягивание не затрагивать; handoff и release coverage обязательны. |
+| 081 | [Транзит через соединитель и выходы из защитной оболочки](081-connector-transit-and-covering-exits.md) | ready-for-review | REQ-111: handoff рабочего чата подтверждён; commits `fdc5c7c`, `ebcf790`, `b207b1f` ожидают integration ancestry-проверки; C1–C5 исходного жгута остаются открытыми. |
 | 082 | [Приоритет выбора узлов поверх оболочек](082-covering-junction-selection-priority.md) | in-progress | REQ-112: точки соединения и Т-ветвления для оболочек П/ОП выбираются приоритетнее; контур оболочки за пределами узла остаётся выбираемым; handoff обязателен. |

@@ -311,3 +311,13 @@ typecheck, build и `git diff --check` — PASS. Ограничения: руч�
 приоритету выбора точки (REQ-112 / карточка 082), но были переданы сборщику как
 карточка 081 / REQ-111. Они не являются предками integration HEAD `09e00f2`.
 Сборщик запросил исправленный handoff; 081/X4 остаётся отдельной pending задачей.
+
+Сборщик подтвердил корректный handoff 081 чата `01a1119a-83a3-7ad2-8b8f-bffd2668c411`:
+код `fdc5c7c7e1121d91f21f7a0ffb1c8e06ebc4d534`, документационные commits
+`ebcf790be27d7ae8701b7aed86bb952c3a1db2b0` и
+`b207b1f206b7dc3467c2a4479224fc857d31e781`. SHA и `git show --check`
+проверены; commits ещё не входят в integration HEAD `2b63d16`. Реестр и
+coverage указывают `pending (await integration)`. C1–C5 ручная проверка
+исходного жгута остаётся открытой. Черновая карточка
+`081-x4-wire-routing-and-cover-exits.md` заменена указателем на актуальную
+карточку рабочего чата `081-connector-transit-and-covering-exits.md`.
