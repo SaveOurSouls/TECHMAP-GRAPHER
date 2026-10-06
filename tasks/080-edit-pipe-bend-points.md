@@ -1,12 +1,12 @@
 # 080. Редактирование точек изгиба пайпов
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** рабочий чат «Исправить редактирование точек изгиб», Thread ID `01a11190-8a49-7423-a35d-6e75df977c8e`
 - **Источник запроса:** поручение владельца от 06.10.2026 и C1–C3
 - **Требования:** REQ-110
 - **Решения:** ADR-0011, если применяется к владению authored bends
 - **Зависимости:** задачи 032, 054, 060, 064, 068, 070, 072; текущие модели physical topology и joining pipe
-- **Владелец файлов:** рабочий чат назначает точные пути в handoff; координатор не меняет кодовые файлы
+- **Владелец файлов:** `src/Techmap.Client/src/editor/physical-editing.ts`, `physical-route-point-command.ts`, `physical-scene.ts`, `physical-joining-pipe.test.ts`, `physical-topology.test.ts`, `op-drag-regression.test.ts`
 - **Чат / Thread ID:** зарегистрирован в `docs/coordination/chat-registry.md`
 - **Release coverage:** следующий ZIP; сборщик проверяет ancestry/equivalent и добавляет строку в coverage
 
@@ -38,10 +38,10 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: —
-- Handoff сборщику: —
-- Интеграционный commit/эквивалент: —
-- ZIP / release coverage: pending
-- Проверки и даты: —
-- Ограничения и открытые вопросы: ручная проверка владельца и исходного жгута после интеграции
-- Решение владельца о приёмке: —
+- Коммит кода: `7d51a673a0cba9d0654dd54d1f2c28472a8cf984` (`fix(drawing): edit generated pipe bends`).
+- Handoff сборщику: готов к передаче; кодовый коммит находится на ветке `codex/integration-m5-22`.
+- Интеграционный commit/эквивалент: pending — подтверждает сборщик.
+- ZIP / release coverage: следующий кодовый срез; pending до проверки ancestry сборщиком.
+- Проверки 06.10.2026: `pnpm --dir src\\Techmap.Client test` — PASS, 183 файлов / 1792 теста; `pnpm --dir src\\Techmap.Client typecheck` — PASS; `pnpm --dir src\\Techmap.Client build` — PASS; `git diff --check` — PASS.
+- Ограничения и открытые вопросы: не выполнена ручная проверка на исходном жгуте C1–C3 и packaged Windows-приложении. Vite сообщает штатные предупреждения об externalized `fs`/`path`/`crypto` зависимости `heic-to` и chunk >500 kB.
+- Решение владельца о приёмке: не зафиксировано.
