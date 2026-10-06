@@ -322,6 +322,10 @@ coverage указывают `pending (await integration)`. C1–C5 ручная 
 `081-x4-wire-routing-and-cover-exits.md` заменена указателем на актуальную
 карточку рабочего чата `081-connector-transit-and-covering-exits.md`.
 
+Владелец принял карточку 082 «Приоритет выбора точки соединения» 06.10.2026.
+Статус карточки и чата обновлён на `accepted`; интеграция подтверждена в
+M5-22-037 через verified equivalent `7aaaf46` и corrected handoff `e345f5f`.
+
 ## 06.10.2026 — интеграция карточек 081 и 082
 
 Карточка 081 (`REQ-111`) интегрирована из `fdc5c7c` как `5eeb02f`; её
