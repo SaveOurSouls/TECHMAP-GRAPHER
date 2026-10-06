@@ -301,5 +301,7 @@ worktree и архивов.
 проверены через `git show` и являются предками текущего
 `codex/integration-m5-22`. Проверки рабочего чата: клиентские тесты 183/1792,
 typecheck, build и `git diff --check` — PASS. Ограничения: ручной исходный
-жгут C1–C3 и packaged Windows UI не проверены. Coverage остаётся pending до
-явного подтверждения интеграции сборщиком.
+жгут C1–C3 и packaged Windows UI не проверены. Независимая проверка сборщика
+профильных тестов (9 файлов / 188 тестов) и чистого integration worktree прошла;
+карточка включена в coverage как ancestor/builder-confirmed. Общий next-ZIP gate
+остаётся BLOCKED только из-за ожидающих handoff карточек 081 и 082.

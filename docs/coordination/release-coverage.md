@@ -86,6 +86,6 @@ represent missing completed chat handoffs.
 
 | Карточка / чат | Thread ID | Исходные commit SHA | Доказательство против code HEAD | Coverage |
 | --- | --- | --- | --- | --- |
-| 080 — Редактирование точек изгиба пайпов | `01a11190-8a49-7423-a35d-6e75df977c8e` | `7d51a673a0cba9d0654dd54d1f2c28472a8cf984`, `c34f1d61dfb2844482730fd538eca20de3b4ac60` | оба SHA — предки текущего integration HEAD `c34f1d61dfb2844482730fd538eca20de3b4ac60`; сборщик ещё не подтвердил | pending (builder confirmation) |
+| 080 — Редактирование точек изгиба пайпов | `01a11190-8a49-7423-a35d-6e75df977c8e` | `7d51a673a0cba9d0654dd54d1f2c28472a8cf984`, `c34f1d61dfb2844482730fd538eca20de3b4ac60` | `git show --check` PASS; оба SHA — предки HEAD `72b672d`; сборщик подтвердил | included (ancestry; ZIP pending 081/082) |
 | 081 — Трассировка проводов через X4 и выход из оболочки | `01a1119a-83a3-7ad2-8b8f-bffd2668c411` | ожидается handoff | нет; задача в работе | pending |
 | 082 — Приоритет выбора узлов поверх оболочек | `01a1119f-326d-7863-be97-7d30800b20db` | ожидается handoff | нет; задача в работе | pending |
