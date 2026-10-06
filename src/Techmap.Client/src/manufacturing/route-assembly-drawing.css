@@ -48,3 +48,4 @@
 .route-fragment-mode button { border: 1px solid #bfd2db; border-radius: 5px; padding: 6px 10px; background: #fff; color: #294b5c; cursor: pointer; }
 .route-fragment-mode button.active { border-color: #2f718d; background: #e8f3f7; color: #153f52; font-weight: 700; }
 .route-fragment-mode button:disabled { opacity: .55; cursor: not-allowed; }
+.route-full-drawing__actions { display: flex; justify-content: flex-end; padding: 0 12px 8px; }

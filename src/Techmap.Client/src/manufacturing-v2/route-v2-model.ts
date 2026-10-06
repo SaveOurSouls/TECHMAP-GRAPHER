@@ -1,7 +1,15 @@
 import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
 import { parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
-import type { RouteRow } from "../manufacturing/route-model";
+import type { RouteAssemblyInput, RouteRow } from "../manufacturing/route-model";
+
+/** Layout defaults are kept here so older localStorage documents can be read without migration. */
+export const ROUTE_V2_NODE_DEFAULT_WIDTH = 280;
+export const ROUTE_V2_NODE_DEFAULT_HEIGHT = 264;
+export const ROUTE_V2_NODE_MIN_WIDTH = 220;
+export const ROUTE_V2_NODE_MIN_HEIGHT = 170;
+export const ROUTE_V2_NODE_MAX_WIDTH = 720;
+export const ROUTE_V2_NODE_MAX_HEIGHT = 720;
 
 export type RouteV2NodeKind = "semiFinished" | "assembly" | "final";
 
@@ -19,6 +27,11 @@ export interface RouteV2Node {
   readonly quantity: number;
   readonly x: number;
   readonly y: number;
+  /** Optional in the persisted shape for backwards compatibility; readers apply safe defaults. */
+  readonly width?: number;
+  readonly height?: number;
+  /** IDs of route cards whose result is consumed by this card. */
+  readonly inputNodeIds?: readonly string[];
   readonly operatorConfirmed: boolean;
   readonly drawing?: RouteV2Drawing;
 }
@@ -38,6 +51,13 @@ export interface RouteV2Document {
 }
 
 const sourceKey = (ref: RouteSourceRef) => `${ref.kind}:${ref.id}`;
+const clampSize = (value: unknown, fallback: number, min: number, max: number): number => {
+  const numeric = typeof value === "number" ? value : Number.NaN;
+  return Number.isFinite(numeric) ? Math.min(max, Math.max(min, numeric)) : fallback;
+};
+const parseNodeIds = (value: unknown): string[] => Array.isArray(value)
+  ? [...new Set(value.filter((id): id is string => typeof id === "string" && Boolean(id.trim())))]
+  : [];
 
 export function routeV2StorageKey(projectId: string, harnessId: string): string {
   return `techmap.route-v2.${projectId}.${harnessId}`;
@@ -61,6 +81,8 @@ export function createInitialRouteV2(document: HarnessDesignDocument): RouteV2Do
     quantity: 1,
     x: 36 + (index % 3) * 318,
     y: 36 + Math.floor(index / 3) * 330,
+    width: ROUTE_V2_NODE_DEFAULT_WIDTH,
+    height: ROUTE_V2_NODE_DEFAULT_HEIGHT,
     operatorConfirmed: false,
   }));
   return { version: 1, layoutVersion: 2, nodes, edges: [], finalNodeId: null };
@@ -99,6 +121,8 @@ export function parseRouteV2(value: unknown): RouteV2Document | null {
     }
     const oldX = Number.isFinite(node.x) ? Number(node.x) : 36;
     const oldY = Number.isFinite(node.y) ? Number(node.y) : 36;
+    const size = routeV2NodeSize(node);
+    const inputNodeIds = parseNodeIds(node.inputNodeIds);
     return {
       id: node.id,
       kind: node.kind === "assembly" || node.kind === "final" ? node.kind : "semiFinished",
@@ -107,6 +131,9 @@ export function parseRouteV2(value: unknown): RouteV2Document | null {
       quantity: Number.isFinite(node.quantity) && Number(node.quantity) > 0 ? Number(node.quantity) : 1,
       x: isLegacyLayout ? Math.max(12, (oldX - 36) * 318 / 280 + 36) : oldX,
       y: isLegacyLayout ? Math.max(12, (oldY - 36) * 330 / 174 + 36) : oldY,
+      width: size.width,
+      height: size.height,
+      ...(inputNodeIds.length ? { inputNodeIds } : {}),
       operatorConfirmed: Boolean(node.operatorConfirmed),
       ...(drawing ? { drawing } : {}),
     } satisfies RouteV2Node;
@@ -124,7 +151,14 @@ function appendNode(graph: RouteV2Document, node: RouteV2Node): RouteV2Document 
 /** Remove a card, all incident links, and clear the final marker when needed. */
 export function removeRouteV2Node(graph: RouteV2Document, id: string): RouteV2Document {
   if (!graph.nodes.some(node => node.id === id)) return graph;
-  return { ...graph, nodes: graph.nodes.filter(node => node.id !== id), edges: graph.edges.filter(edge => edge.from !== id && edge.to !== id), finalNodeId: graph.finalNodeId === id ? null : graph.finalNodeId };
+  return {
+    ...graph,
+    nodes: graph.nodes.filter(node => node.id !== id).map(node => node.inputNodeIds?.includes(id)
+      ? { ...node, inputNodeIds: node.inputNodeIds.filter(inputId => inputId !== id) }
+      : node),
+    edges: graph.edges.filter(edge => edge.from !== id && edge.to !== id),
+    finalNodeId: graph.finalNodeId === id ? null : graph.finalNodeId,
+  };
 }
 
 /** Remove one dependency edge by ID. */
@@ -166,11 +200,65 @@ export function setRouteV2NodeRefs(graph: RouteV2Document, id: string, refs: rea
   return { ...graph, nodes: graph.nodes.map(node => node.id === id ? { ...node, refs: unique } : node) };
 }
 
+/** Explicitly replace card inputs. IDs are retained as stable graph references and deduplicated. */
+export function setRouteV2NodeInputs(graph: RouteV2Document, id: string, inputNodeIds: readonly string[]): RouteV2Document {
+  if (!graph.nodes.some(node => node.id === id)) return graph;
+  const unique = [...new Set(inputNodeIds.filter(value => typeof value === "string" && value.trim() && value !== id))];
+  return { ...graph, nodes: graph.nodes.map(node => node.id === id ? { ...node, ...(unique.length ? { inputNodeIds: unique } : { inputNodeIds: undefined }) } : node) };
+}
+
+/** Results available in the material picker: only semi-finished cards linked into this card. */
+export function routeV2IncomingSemiFinishedNodes(graph: RouteV2Document, currentNodeId: string): readonly RouteV2Node[] {
+  const byId = new Map(graph.nodes.map(node => [node.id, node]));
+  const seen = new Set<string>();
+  const result: RouteV2Node[] = [];
+  for (const edge of graph.edges) {
+    if (edge.to !== currentNodeId || seen.has(edge.from)) continue;
+    const node = byId.get(edge.from);
+    if (!node || node.kind !== "semiFinished") continue;
+    seen.add(node.id);
+    result.push(node);
+  }
+  return result;
+}
+
+/** Alias with a picker-oriented name used by the Route v2 UI. */
+export const routeV2AvailableSemiFinishedNodes = routeV2IncomingSemiFinishedNodes;
+
+/** Raw specification inputs. This intentionally excludes results of other route cards. */
+export function routeV2RawSourceItems(document: HarnessDesignDocument) {
+  return buildRouteSourceItems(document);
+}
+
+/** Prefer an isolated drawing whenever a card has one saved. */
+export function routeV2PreferredDrawingCopy(node: Pick<RouteV2Node, "drawing">): RouteDrawingCopy | undefined {
+  return node.drawing?.isolatedDrawingCopy ?? node.drawing?.drawingCopy;
+}
+
+export function routeV2NodeSize(node: Pick<RouteV2Node, "width" | "height">): { width: number; height: number } {
+  return {
+    width: clampSize(node.width, ROUTE_V2_NODE_DEFAULT_WIDTH, ROUTE_V2_NODE_MIN_WIDTH, ROUTE_V2_NODE_MAX_WIDTH),
+    height: clampSize(node.height, ROUTE_V2_NODE_DEFAULT_HEIGHT, ROUTE_V2_NODE_MIN_HEIGHT, ROUTE_V2_NODE_MAX_HEIGHT),
+  };
+}
+
+export function routeV2ResizeNodeSize(width: number, height: number): { width: number; height: number } {
+  return {
+    width: clampSize(width, ROUTE_V2_NODE_DEFAULT_WIDTH, ROUTE_V2_NODE_MIN_WIDTH, ROUTE_V2_NODE_MAX_WIDTH),
+    height: clampSize(height, ROUTE_V2_NODE_DEFAULT_HEIGHT, ROUTE_V2_NODE_MIN_HEIGHT, ROUTE_V2_NODE_MAX_HEIGHT),
+  };
+}
+
+export function routeV2ConnectionPort(node: Pick<RouteV2Node, "x" | "y" | "width" | "height">, side: "top" | "bottom"): { x: number; y: number } {
+  const size = routeV2NodeSize(node);
+  return { x: node.x + size.width / 2, y: node.y + (side === "top" ? 0 : size.height) };
+}
+
 /** Create an assembly card with no inherited refs and connect its parent. */
 export function addRouteV2Assembly(graph: RouteV2Document, parentId: string, nodeId: string, edgeId: string): RouteV2Document {
   if (!graph.nodes.some(node => node.id === parentId) || !nodeId || !edgeId || graph.nodes.some(node => node.id === nodeId) || graph.edges.some(edge => edge.id === edgeId)) return graph;
   const parent = graph.nodes.find(node => node.id === parentId)!;
-  const node: RouteV2Node = { id: nodeId, kind: "assembly", title: `Сборка ${graph.nodes.filter(item => item.kind === "assembly").length + 1}`, refs: [], quantity: 1, x: parent.x, y: Math.max(...graph.nodes.map(item => item.y)) + 330, operatorConfirmed: false };
+  const node: RouteV2Node = { id: nodeId, kind: "assembly", title: `Сборка ${graph.nodes.filter(item => item.kind === "assembly").length + 1}`, refs: [], quantity: 1, x: parent.x, y: Math.max(...graph.nodes.map(item => item.y)) + 330, width: ROUTE_V2_NODE_DEFAULT_WIDTH, height: ROUTE_V2_NODE_DEFAULT_HEIGHT, operatorConfirmed: false };
   return { ...appendNode(graph, node), edges: [...graph.edges, { id: edgeId, from: parentId, to: nodeId }] };
 }
 
@@ -179,7 +267,7 @@ export function addRouteV2Final(graph: RouteV2Document, nodeId: string, edgeIds:
   if (graph.finalNodeId || !nodeId || graph.nodes.some(node => node.id === nodeId)) return graph;
   const parents = graph.nodes.filter(node => !graph.edges.some(edge => edge.from === node.id));
   if (new Set(edgeIds).size !== edgeIds.length || edgeIds.some(id => !id || graph.edges.some(edge => edge.id === id))) return graph;
-  const node: RouteV2Node = { id: nodeId, kind: "final", title: "Готовый жгут · финальная карточка", refs: [], quantity: 1, x: 48, y: graph.nodes.length ? Math.max(...graph.nodes.map(item => item.y)) + 350 : 36, operatorConfirmed: false };
+  const node: RouteV2Node = { id: nodeId, kind: "final", title: "Готовый жгут · финальная карточка", refs: [], quantity: 1, x: 48, y: graph.nodes.length ? Math.max(...graph.nodes.map(item => item.y)) + 350 : 36, width: ROUTE_V2_NODE_DEFAULT_WIDTH, height: ROUTE_V2_NODE_DEFAULT_HEIGHT, operatorConfirmed: false };
   const edges = parents.map((parent, index) => ({ id: edgeIds[index] ?? `${nodeId}:from:${parent.id}`, from: parent.id, to: nodeId }));
   if (edges.some(edge => graph.edges.some(existing => existing.id === edge.id)) || new Set(edges.map(edge => edge.id)).size !== edges.length) return graph;
   return { ...appendNode(graph, node), edges: [...graph.edges, ...edges], finalNodeId: nodeId };
@@ -190,6 +278,7 @@ export function routeV2SourceTitle(document: HarnessDesignDocument, ref: RouteSo
 }
 
 export function routeV2DrawingRow(node: RouteV2Node): RouteRow {
+  const assemblyInputs: RouteAssemblyInput[] = (node.inputNodeIds ?? []).map((rowId, index) => ({ id: `node-${index + 1}-${rowId}`, kind: "row", rowId }));
   return {
     id: node.id,
     kind: node.kind === "semiFinished" ? "semiFinished" : "assembly",
@@ -198,6 +287,7 @@ export function routeV2DrawingRow(node: RouteV2Node): RouteRow {
     comment: "",
     sourceObjects: node.refs,
     dependsOn: [],
+    ...(assemblyInputs.length ? { assemblyInputs } : {}),
     operations: [],
     presentation: {
       backgroundOpacity: node.drawing?.backgroundOpacity ?? 1,

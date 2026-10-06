@@ -48,6 +48,12 @@ it("retains editor identity during isolated edits and restores both unsaved draf
   const switchTo = (tree: ReactElement, label: string) => find(tree, node => node.type === "button" && node.props.children === label).props.onClick();
   let tree = render();
   const initial = localCopy(tree).initialDocument;
+  // A local snapshot can be saved even when the editor history is still
+  // pristine. This is required for preserving the current view of a regular
+  // (non-isolated) fragment.
+  find(tree, node => node.type === "button" && node.props.children === "Сохранить текущий вид").props.onClick();
+  expect(save).toHaveBeenCalledOnce();
+  save.mockClear();
   const isolatedDraft = { ...initial, connectors: initial.connectors.map(connector => ({ ...connector, designation: "EDITED ISOLATED" })) };
   localCopy(tree).onDraftChange!(isolatedDraft, ["hidden"], 0.2);
   tree = render();

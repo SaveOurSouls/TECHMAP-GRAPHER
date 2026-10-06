@@ -230,11 +230,30 @@ export function RouteAssemblyDrawing({ row, document, config, session, projectId
     },
     onCancel: () => latestCancelRef.current(),
   }), [copies, editor]);
+  // The editor's generic save control is intentionally disabled while its
+  // history is marked as saved. A route drawing is a local snapshot, though,
+  // so saving the current view is valid even when the operator has not moved
+  // an object in this editing session. Keep this action here so the snapshot
+  // can be persisted without manufacturing a no-op editor command.
+  const saveCurrentView = () => {
+    const latestPresentation = latestRowRef.current.presentation;
+    const sourceCopy = copies.source;
+    const isolatedCopy = copies.isolated ?? latestPresentation.isolatedDrawingCopy;
+    latestSaveRef.current({
+      ...latestPresentation,
+      backgroundOpacity: mode === "isolated" ? copies.isolatedOpacity : copies.sourceOpacity,
+      drawingCopy: sourceCopy,
+      ...(isolatedCopy ? { isolatedDrawingCopy: isolatedCopy } : {}),
+    });
+  };
   return <section className="route-full-drawing" aria-label={`Копия чертежа этапа ${row.title}`}>
     <div className="route-fragment-mode" role="group" aria-label="Версия фрагмента">
       <span>Версия</span>
       <button type="button" className={mode === "source" ? "active" : ""} aria-pressed={mode === "source"} onClick={() => switchMode("source")}>Исходная копия</button>
       <button type="button" className={mode === "isolated" ? "active" : ""} aria-pressed={mode === "isolated"} disabled={!copies.isolated} onClick={() => switchMode("isolated")}>Изолированный фрагмент</button>
+    </div>
+    <div className="route-full-drawing__actions">
+      <button type="button" className="ui-control" onClick={saveCurrentView}>Сохранить текущий вид</button>
     </div>
     {legacyWarnings.length > 0 && <p className="route-full-drawing__migration" role="status">Старый рисунок: расположение {legacyWarnings.length} объектов восстановлено из чертежа. Проверьте их положение перед сохранением. Отмена сохранит прежний рисунок.</p>}
     <HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId}
