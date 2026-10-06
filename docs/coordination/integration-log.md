@@ -321,3 +321,17 @@ coverage указывают `pending (await integration)`. C1–C5 ручная 
 исходного жгута остаётся открытой. Черновая карточка
 `081-x4-wire-routing-and-cover-exits.md` заменена указателем на актуальную
 карточку рабочего чата `081-connector-transit-and-covering-exits.md`.
+
+## 06.10.2026 — интеграция карточек 081 и 082
+
+Карточка 081 (`REQ-111`) интегрирована из `fdc5c7c` как `5eeb02f`; её
+документальные handoff-коммиты перенесены как `ca55a20` и `e918e18`.
+`git show --check` для всех source SHA прошёл. В `physical-topology.test.ts`
+сохранена также отдельная регрессия карточки 080, поэтому этот объединённый
+тестовый файл не сравнивается побайтно с исходным SHA 081.
+
+Исправленный handoff `e345f5f` подтверждает, что `37a8d0a` относится к
+карточке 082 (`REQ-112`), а не к 081. Код интегрирован как `7aaaf46`; blobs
+`CanvasViewport.tsx` и `drawing-paint-order.test.ts` совпадают с source.
+Оба handoff включены в coverage следующего ZIP. Ручные C1–C5 исходного жгута
+и packaged Windows UI остаются открытыми и не блокируют Git coverage.
