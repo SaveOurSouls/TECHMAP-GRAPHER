@@ -96,3 +96,5 @@
 | 078 | [Единая навигационная плашка разделов жгута](078-unified-harness-section-navigation.md) | ready-for-review | REQ-098: навигация включена в M5-22; ручная packaged-проверка и owner acceptance открыты. |
 
 | 079 | [Обязательный handoff и покрытие ZIP](079-chat-handoff-and-release-coverage.md) | ready-for-review | REQ-109: M5-22 handoffs сверены с HEAD `b9b6c24`; ZIP 0.63.36 прошёл manifest и portable 7/7. |
+
+| 080 | [Редактирование точек изгиба пайпов](080-edit-pipe-bend-points.md) | in-progress | REQ-110: рабочий чат исправляет перемещение и удаление изгибов в C1/C2 и Т-ветвлении; handoff и release coverage обязательны. |
