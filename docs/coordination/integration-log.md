@@ -305,3 +305,16 @@ typecheck, build и `git diff --check` — PASS. Ограничения: руч�
 профильных тестов (9 файлов / 188 тестов) и чистого integration worktree прошла;
 карточка включена в coverage как ancestor/builder-confirmed. Общий next-ZIP gate
 остаётся BLOCKED только из-за ожидающих handoff карточек 081 и 082.
+
+## 06.10.2026 — handoff карточки 082
+
+Рабочий чат `01a1119f-326d-7863-be97-7d30800b20db` передал карточку 082
+(`REQ-112`) в `ready-for-review`. Кодовый commit `37a8d0a`
+(`fix(drawing): prioritize connection points over coverings`) добавляет общий
+predicate приоритета physical-node в раннюю обработку перетаскивания и hover
+оболочки; регрессия сохраняет выбор оболочки вне точки. Рабочий чат сообщил:
+профильный Vitest 4/4, полный клиентский Vitest 183 файлов / 1791 тестов,
+TypeScript, Vite build и `git diff --check` — PASS. Сборщик должен выполнить
+`git show --check`, подтвердить ancestry/equivalent в code HEAD и обновить
+coverage. До этого следующая поставка остаётся BLOCKED; ручная проверка C1 на
+исходном жгуте и packaged Windows UI не выполнена.
