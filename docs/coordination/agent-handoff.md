@@ -37,3 +37,37 @@ Release coverage: ожидаемый релиз или причина явног
 Сборщик подтверждает или отклоняет handoff в `integration-log.md` и
 `release-coverage.md`. Рабочий чат не заявляет «интегрировано» или «вошло в ZIP»;
 это подтверждается только проверкой интеграционной ветки.
+
+## 081 — Приоритет точек над оболочками
+
+```text
+Карточка: 081 — Приоритет точек над оболочками при выборе
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/covering-point-priority
+Worktree: C:\Users\Василий Костромин\.codex\worktrees\covering-point-priority\Утилита для картинок
+Коммиты для интеграции: 37a8d0a
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/CanvasViewport.tsx: узел блокирует раннее перетаскивание и hover-ручку оболочки.
+- src/Techmap.Client/src/editor/drawing-paint-order.test.ts: регрессия для приоритета точки и выбора оболочки вне неё.
+- docs/requirements.md, tasks/081-covering-point-selection-priority.md, tasks/README.md, docs/coordination/chat-registry.md: REQ-111, карточка и реестр.
+
+Проверки:
+- pnpm exec vitest run: PASS, 183 файлов / 1791 тестов.
+- pnpm run typecheck: PASS.
+- pnpm run build: PASS.
+- git diff --check: PASS.
+
+Зависимости/порядок:
+- Базовый commit cfe3503; переносить после текущей интеграции M5-22 либо как проверенный эквивалент.
+
+Ограничения и ручная приёмка:
+- Проверить C1 в исходном жгуте после интеграции; Vite сообщает о существующем крупном chunk.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Нет миграций и серверных изменений. Если `CanvasViewport.tsx` был изменён параллельно, сохранить общий predicate `coveringDragBlockedByPhysicalNode` в раннем обработчике оболочки и в hover.
+```
