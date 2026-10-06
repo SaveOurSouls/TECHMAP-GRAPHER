@@ -31,7 +31,7 @@
 ## Журнал результата
 
 - Коммит кода: `fdc5c7c7e1121d91f21f7a0ffb1c8e06ebc4d534` (`fix: route wires through authorized connector transit`), опубликован в `origin/codex/pipe-junction-cover-exits`
-- Handoff сборщику: передан после документального коммита
+- Handoff сборщику: [handoff-081](../docs/coordination/handoff-081.md)
 - Интеграционный commit/эквивалент: —
 - ZIP / release coverage: pending
 - Проверки и дата 06.10.2026: полный клиентский Vitest — 183 файлов / 1792 теста; `pnpm client:typecheck`; `pnpm client:build`; `git diff --check` — PASS.
