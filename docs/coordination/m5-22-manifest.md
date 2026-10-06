@@ -1,5 +1,25 @@
 # Полный manifest M5-22 — 05.10.2026
 
+## M5-22-038 — актуальный remote-срез 06.10.2026
+
+Новая сборочная база: `f410e43df8048765c933eebfba8a50b778c88aa6`
+(`docs: record M5-22-038 package acceptance`). Ветка
+`codex/integration-m5-22`; рабочая копия чистая после фиксации этого
+документального среза. Версия из `package/VERSION.json` —
+`0.63.38-m5-22-review`; предыдущий архив M5-22-037 не переиспользуется.
+
+### Новые remote refs и решение аудитора
+
+| Карточка | Исходные refs | Доказательство против `f410e43` | Решение |
+| --- | --- | --- | --- |
+| 082 — приоритет точки поверх оболочки | `37a8d0a5b2b42c33f049284a6f135c99e551c357`, `03d74749040ffe72dcd84c2ee3d4eb7be5114578`, `3a519798bdf6dab7f2a242e6400b2b3c87be8a98`, `e345f5f2d1edcde6408be7c46ff1b66ec3ee4a8b` | `git show --check` PASS; кодовые blobs `CanvasViewport.tsx` и `drawing-paint-order.test.ts` совпадают с ancestor-equivalent `7aaaf46`; e345 подтверждает правильный ID/coverage | Код повторно не применять. В manifest/log сохранена исправленная identity `082/REQ-112`; устаревшие статусы 081 не переносить. |
+| 081 — transit через connector | `fdc5c7c7e1121d91f21f7a0ffb1c8e06ebc4d534`, `ebcf790be27d7ae8701b7aed86bb952c3a1db2b0`, `b207b1f206b7dc3467c2a4479224fc857d31e781` | `git show --check` PASS; код покрыт ancestor-equivalent `5eeb02f`; handoff docs уже представлены `ca55a20`/`e918e18`; текущий topology test сохраняет регрессию 080 | Код и stale docs не дублировать. Release coverage — `included (verified equivalent)`; C1–C5 packaged/source-harness остаются ручным ограничением. |
+| 084 — Route v3 snapshots | `9c159188e5bfecb53b0d6add188d7bf07ecfa1dd`, `0cfb983ca3232ffa73972b3d32d9280889425526`, `2174599de5bcb494dc2c5bc5b1ff762b0b905764` | `9c15918` и `0cfb983` — ancestors `f410e43`; `2174599` меняет только финальные docs/ADR/task статусы, при этом ADR/task уже совпадают с HEAD, registry уже `ready-for-review` | Код повторно не применять. Coverage переносится в этот manifest; owner acceptance и packaged UI остаются отдельными gates. |
+
+Все refs прошли `git show --check`; отдельные исходные ветки не считаются
+частью ZIP сверх указанного ancestry/equivalence. `git diff --check` на
+`f410e43` — PASS. Новые проверки и точные SHA ZIP добавляются после сборки.
+
 Версия: `0.63.34-m5-22-review`. Ветка: `codex/integration-m5-22`.
 Worktree: `C:\Users\anqla\OneDrive\Документы\ChatGPT\HARNESSTECHMAPGRAPHER\_m5_22_safe`.
 Основа: `60d30576872e5bb280bf996be4fa8c6f16cd3f6c`; ранее выданный пакет:

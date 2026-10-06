@@ -91,3 +91,23 @@ represent missing completed chat handoffs.
 | 082 — Приоритет выбора узлов поверх оболочек | `01a1119f-326d-7863-be97-7d30800b20db` | `37a8d0a5b2b42c33f049284a6f135c99e551c357`, corrected handoff `e345f5f2d1edcde6408be7c46ff1b66ec3ee4a8b` | Code equivalent `7aaaf46`; source blobs verified; corrected handoff identity confirmed | included (M5-22-037) |
 | 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок | `01a0ee02-09d6-7790-98a3-d74947735e63` | `bfb0906`, `97d4a56`, `ab801fc` | все SHA — предки integration HEAD | included (ancestor) |
 | 084 — Маршрут v3: графические слепки и генерация по зависимостям | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | `9c15918`, handoff `0cfb983` | оба SHA включены merge в integration HEAD; handoff в `agent-handoff.md` | included (ancestor) |
+
+### m5-22-038 — 06.10.2026 (подготовка покрытия)
+
+- **Integration branch:** `codex/integration-m5-22`
+- **Code HEAD:** `f410e43df8048765c933eebfba8a50b778c88aa6`
+- **Coverage detail:** [`m5-22-manifest.md`](m5-22-manifest.md), раздел M5-22-038
+- **Registry/audit snapshot:** 06.10.2026, refs audit after `fetch origin --prune`
+- **Handoff rows checked:** 3/3 new refs; all `git show --check` PASS
+- **Pending or unknown:** `0` for Git inclusion; owner/manual acceptance remains a separate release gate
+- **Exceptions:** 082 and 081 included through verified ancestor-equivalents; 084 code is ancestor, docs already current in registry/task/ADR
+- **ZIP:** pending final builder run from this HEAD
+- **Size / SHA-256:** pending final builder run
+- **PACKAGE-MANIFEST / portable:** pending final builder run
+- **Gate:** `READY_FOR_BUILD`; not `accepted`
+
+| Карточка | Исходные SHA | Доказательство | Coverage |
+| --- | --- | --- | --- |
+| 082 | `37a8d0a`, `03d7474`, `3a51979`, `e345f5f` | code exact file match/equivalent `7aaaf46`; corrected identity in audit | included (equivalent) |
+| 081 | `fdc5c7c`, `ebcf790`, `b207b1f` | code equivalent `5eeb02f`; docs `ca55a20`/`e918e18` already ancestry | included (equivalent) |
+| 084 | `9c15918`, `0cfb983`, `2174599` | first two ancestors; final ref docs-only and current registry/task/ADR match | included (ancestor + docs coverage) |

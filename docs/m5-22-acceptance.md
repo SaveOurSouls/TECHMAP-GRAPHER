@@ -166,3 +166,16 @@ PASS** из `C:\Temp\TECHMAP-portable-m5-22-037`.
 visual QA при 390 px не выполнены; Route V2 остаётся браузерным `localStorage`
 прототипом. Длинные Windows-пути могут дать `UnauthorizedAccessException`; ZIP
 остаётся вне Git.
+# M5-22-038 — новый проверочный срез от `f410e43` — 06.10.2026
+
+Сборка выполняется только из чистой интеграционной базы
+`f410e43df8048765c933eebfba8a50b778c88aa6`, версия
+`0.63.38-m5-22-review`. Последние refs проверены: covering 082 и pipe 081
+уже представлены verified equivalents (`7aaaf46`, `5eeb02f`), Route v3 code
+(`9c15918`, handoff `0cfb983`) — ancestry. Устаревшие document-only refs не
+перенесены целиком; актуальная coverage зафиксирована в manifest/release log.
+
+ZIP, manifest, portable gates и итоговый code SHA будут записаны ниже после
+завершения штатного builder. Это не owner acceptance: ручная C1–C5 packaged
+проверка исходного жгута, 390px visual QA и решение владельца остаются отдельными
+gates.
