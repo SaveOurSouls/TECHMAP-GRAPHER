@@ -1601,6 +1601,19 @@ export function hitTestEditorScene(
   return null;
 }
 
+/** Connection points are direct editing anchors and always win over a sleeve. */
+export function coveringDragBlockedByPhysicalNode(
+  objects: readonly EditorSceneObject[],
+  layers: readonly EditorLayer[],
+  point: EditorPoint,
+  zoom: number,
+  view: HarnessEditorView,
+): boolean {
+  return objects.some(object => object.kind === "physical-node" &&
+    layers.some(layer => layer.id === object.layerId && layer.visible && !layer.locked) &&
+    containsPoint(object, point, 7 / zoom, view));
+}
+
 function roundedRectangle(
   context: CanvasRenderingContext2D,
   x: number,
@@ -3412,9 +3425,14 @@ export function CanvasViewport({
     }
     if(event.button===0&&view==="drawing"&&tool==="select"&&!event.ctrlKey&&!event.shiftKey&&onCoveringDrag){
       const point=screenToWorld(camera,localPoint(event.clientX,event.clientY)),grip=gripAt(point);
-      const pipeGrip=objects.some(o=>o.metadata?.joiningPipe&&o.kind==="physical-node"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&containsPoint(o,point,7/camera.zoom,view))||objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
+      // A connection point is a direct editing anchor.  Test every physical
+      // node here, not just generated OP nodes: this handler runs before the
+      // general scene hit-test, so otherwise a sleeve would steal clicks and
+      // hover from ordinary connector exits and T junctions.
+      const nodeHit=coveringDragBlockedByPhysicalNode(objects,layers,point,camera.zoom,view);
+      const pipeGrip=nodeHit||objects.some(o=>o.kind==="physical-segment"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&(hitTestWireRoutePoint(o,point,camera.zoom)!==null||pipeMidpoints(o).some(h=>Math.hypot(h.point.x-point.x,h.point.y-point.y)<=7/camera.zoom)));
       const cover=[...objects].reverse().find(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)&&coveringHit(o,point,4/camera.zoom)!==null);
-      if((grip?.part.startsWith("transition-")||!pipeGrip)&&(grip||cover)){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
+      if(!nodeHit&&(grip?.part.startsWith("transition-")||!pipeGrip)&&(grip||cover)){const objectId=grip?.objectId??cover!.id,spanIndex=grip?.spanIndex??coveringHit(cover!,point,4/camera.zoom)!;
         setHoverGrip(null);
         onObjectSelect(objectId,false);event.currentTarget.setPointerCapture(event.pointerId);dragRef.current={kind:"covering",pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,objectId,spanIndex,part:grip?.part??"body",start:point};return;}
     }
@@ -3740,7 +3758,12 @@ export function CanvasViewport({
       const object=objects.find(o=>o.id===id),eligible=object&&["connector","wire","physical-node","physical-segment","physical-covering"].includes(object.kind);
       setHoverTarget(previous=>!eligible?null:previous?.id===id&&Math.hypot(previous.x-event.clientX,previous.y-event.clientY)<4?previous:{id:object.id,label:object.label||"Объект",x:event.clientX,y:event.clientY});
     }else setHoverTarget(null);
-    if (!drag) {const hit=view==="drawing"&&tool==="select"?gripAt(screenToWorld(camera,localPoint(event.clientX,event.clientY))):null;setHoverGrip(hit);event.currentTarget.style.cursor=hit?"ew-resize":"";return;}
+    if (!drag) {
+      const point=screenToWorld(camera,localPoint(event.clientX,event.clientY));
+      const nodeHit=view==="drawing"&&coveringDragBlockedByPhysicalNode(objects,layers,point,camera.zoom,view);
+      const hit=view==="drawing"&&tool==="select"&&!nodeHit?gripAt(point):null;
+      setHoverGrip(hit);event.currentTarget.style.cursor=hit?"ew-resize":"";return;
+    }
     if(drag.pointerId !== event.pointerId)return;
     if(drag.kind==="physical-node-connect") {
       if(inlineObjectDragMoved(event.clientX-drag.clientX,event.clientY-drag.clientY)) drag.moved=true;

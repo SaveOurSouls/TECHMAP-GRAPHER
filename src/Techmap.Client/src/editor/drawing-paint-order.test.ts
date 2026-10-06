@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { drawingConnectorIndexLabel, getEditorSceneBounds, hitTestEditorScene, objectsInPaintOrder, redrawCanvas } from "./CanvasViewport";
+import { coveringDragBlockedByPhysicalNode, drawingConnectorIndexLabel, getEditorSceneBounds, hitTestEditorScene, objectsInPaintOrder, redrawCanvas } from "./CanvasViewport";
 import type { EditorLayer, EditorSceneObject } from "./editor-types";
 
 const layers: EditorLayer[] = [
@@ -21,6 +21,15 @@ const pipe: EditorSceneObject = {
 };
 const joiningPipe: EditorSceneObject = {
   ...pipe, id: "OP1", label: "OP1", pipe: { role: "joining-pipe", authoredPoints: pipe.points!, controls: pipe.points!, handles: [], midpoints: [], wireIds: [] },
+};
+const covering: EditorSceneObject = {
+  id: "C1", kind: "physical-covering", layerId: "wire", label: "Оболочка", color: "#445566",
+  x: 20, y: 10, width: 100, height: 20,
+  metadata: { surfaces: JSON.stringify([{ polygon: [{ x: 20, y: 10 }, { x: 120, y: 10 }, { x: 120, y: 30 }, { x: 20, y: 30 }] }]) },
+};
+const junction: EditorSceneObject = {
+  id: "J1", kind: "physical-node", layerId: "wire", label: "Узел", color: "#1179ac",
+  x: 65, y: 15, width: 10, height: 10,
 };
 afterEach(() => vi.unstubAllGlobals());
 
@@ -66,4 +75,11 @@ it("selects a physical pipe before its covered wire, while leaving an uncovered 
   expect(hitTestEditorScene([wire, pipe], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("P1");
   expect(hitTestEditorScene([wire, joiningPipe], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("OP1");
   expect(hitTestEditorScene([wire], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("W1");
+});
+
+it("gives connection points priority over a covering while its uncovered boundary stays selectable", () => {
+  expect(hitTestEditorScene([covering, junction], layers, { x: 70, y: 20 }, 1, "drawing")).toBe("J1");
+  expect(hitTestEditorScene([covering, junction], layers, { x: 120, y: 20 }, 1, "drawing")).toBe("C1");
+  expect(coveringDragBlockedByPhysicalNode([covering, junction], layers, { x: 70, y: 20 }, 1, "drawing")).toBe(true);
+  expect(coveringDragBlockedByPhysicalNode([covering, junction], layers, { x: 120, y: 20 }, 1, "drawing")).toBe(false);
 });
