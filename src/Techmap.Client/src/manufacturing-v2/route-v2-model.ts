@@ -207,7 +207,7 @@ export function setRouteV2NodeInputs(graph: RouteV2Document, id: string, inputNo
   return { ...graph, nodes: graph.nodes.map(node => node.id === id ? { ...node, ...(unique.length ? { inputNodeIds: unique } : { inputNodeIds: undefined }) } : node) };
 }
 
-/** Results available in the material picker: only semi-finished cards linked into this card. */
+/** Results available in the material picker: non-final cards linked into this card. */
 export function routeV2IncomingSemiFinishedNodes(graph: RouteV2Document, currentNodeId: string): readonly RouteV2Node[] {
   const byId = new Map(graph.nodes.map(node => [node.id, node]));
   const seen = new Set<string>();
@@ -215,7 +215,10 @@ export function routeV2IncomingSemiFinishedNodes(graph: RouteV2Document, current
   for (const edge of graph.edges) {
     if (edge.to !== currentNodeId || seen.has(edge.from)) continue;
     const node = byId.get(edge.from);
-    if (!node || node.kind !== "semiFinished") continue;
+    // A semi-finished result can be produced by either an explicit PФ card or
+    // an assembly card. The final card is the completed harness and is never a
+    // selectable material input.
+    if (!node || node.kind === "final") continue;
     seen.add(node.id);
     result.push(node);
   }

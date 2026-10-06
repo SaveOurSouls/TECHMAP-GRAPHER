@@ -35,11 +35,14 @@ describe("Route v2 C2 model contract", () => {
   });
 
   it("exposes only incoming semi-finished cards and stores selected IDs separately from raw refs", () => {
-    let graph: RouteV2Document = { version: 1 as const, nodes: [node("raw", "semiFinished"), node("incoming", "semiFinished"), node("outgoing", "semiFinished"), node("assembly")], edges: [], finalNodeId: null };
+    let graph: RouteV2Document = { version: 1 as const, nodes: [node("raw", "semiFinished"), node("incoming", "semiFinished"), node("incoming-assembly"), node("finished", "assembly"), node("outgoing", "semiFinished"), node("assembly")], edges: [], finalNodeId: "finished" };
+    graph = { ...graph, nodes: graph.nodes.map(item => item.id === "finished" ? { ...item, kind: "final" as const } : item) };
     graph = addRouteV2Edge(graph, "in", "incoming", "assembly");
+    graph = addRouteV2Edge(graph, "in-assembly", "incoming-assembly", "assembly");
+    graph = addRouteV2Edge(graph, "in-final", "finished", "assembly");
     graph = addRouteV2Edge(graph, "out", "assembly", "outgoing");
     graph = setRouteV2NodeInputs(graph, "assembly", ["incoming", "incoming", "missing", "assembly"]);
-    expect(routeV2IncomingSemiFinishedNodes(graph, "assembly").map(item => item.id)).toEqual(["incoming"]);
+    expect(routeV2IncomingSemiFinishedNodes(graph, "assembly").map(item => item.id)).toEqual(["incoming", "incoming-assembly"]);
     expect(graph.nodes.find(item => item.id === "assembly")?.inputNodeIds).toEqual(["incoming", "missing"]);
     expect(removeRouteV2Node(graph, "incoming").nodes.find(item => item.id === "assembly")?.inputNodeIds).toEqual(["missing"]);
   });

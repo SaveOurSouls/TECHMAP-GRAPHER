@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeV2GalleryVersions } from "./RouteV2Panel";
+import { filterRouteV2IncomingSemiFinished, routeV2GalleryVersions } from "./RouteV2Panel";
 import { routeV2ConnectionPort, routeV2NodeSize, routeV2ResizeNodeSize, routeV2IncomingSemiFinishedNodes, type RouteV2Document, type RouteV2Node } from "./route-v2-model";
 
 const node = (patch: Partial<RouteV2Node> = {}): RouteV2Node => ({
@@ -29,5 +29,12 @@ describe("Route v2 card UI contracts", () => {
       finalNodeId: "other",
     };
     expect(routeV2IncomingSemiFinishedNodes(graph, "assembly").map(item => item.id)).toEqual(["source"]);
+  });
+
+  it("applies the C2 query to incoming semi-finished cards and their refs", () => {
+    const cards = [node({ id: "pf-1", kind: "semiFinished", title: "Нарезанные провода", refs: [{ kind: "wire", id: "W-01" }] }), node({ id: "pf-2", kind: "semiFinished", title: "Оболочки", refs: [{ kind: "covering", id: "OP-02" }] })];
+    expect(filterRouteV2IncomingSemiFinished(cards, "провода").map(item => item.id)).toEqual(["pf-1"]);
+    expect(filterRouteV2IncomingSemiFinished(cards, "op-02").map(item => item.id)).toEqual(["pf-2"]);
+    expect(filterRouteV2IncomingSemiFinished(cards, "нет")).toEqual([]);
   });
 });

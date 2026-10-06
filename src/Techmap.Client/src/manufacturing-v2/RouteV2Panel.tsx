@@ -47,6 +47,13 @@ export function routeV2GalleryVersions(node: Pick<RouteV2Node, "drawing">): read
   return node.drawing?.isolatedDrawingCopy ? ["isolated"] : node.drawing?.drawingCopy ? ["source"] : [];
 }
 
+/** Apply the same C2 search field to incoming semi-finished results. */
+export function filterRouteV2IncomingSemiFinished(nodes: readonly RouteV2Node[], query: string): readonly RouteV2Node[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return nodes;
+  return nodes.filter(node => (node.title + " " + node.refs.map(ref => ref.id).join(" ")).toLocaleLowerCase().includes(normalized));
+}
+
 export function RouteV2Panel({ config, session, projectId, harnessId, onClose, onSectionChange }: Props) {
   const api = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
   const storageKey = useMemo(() => routeV2StorageKey(projectId, harnessId), [projectId, harnessId]);
@@ -94,6 +101,7 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose, o
   const rawSources = useMemo(() => sourceDocument ? routeV2RawSourceItems(sourceDocument) : [], [sourceDocument]);
   const incomingSemiFinished = useMemo(() => selectedId && graph ? routeV2IncomingSemiFinishedNodes(graph, selectedId) : [], [graph, selectedId]);
   const filteredSources = useMemo(() => rawSources.filter(item => (item.title + " " + item.material + " " + item.materialArticle).toLocaleLowerCase().includes(query.toLocaleLowerCase().trim())), [rawSources, query]);
+  const filteredIncomingSemiFinished = useMemo(() => filterRouteV2IncomingSemiFinished(incomingSemiFinished, query), [incomingSemiFinished, query]);
   const isCompleted = Boolean(graph?.finalNodeId && graph.nodes.find(node => node.id === graph.finalNodeId)?.operatorConfirmed);
   const canvasSize = { width: Math.max(940, ...(graph?.nodes ?? []).map(node => node.x + nodeSize(node).width + 48)), height: Math.max(580, ...(graph?.nodes ?? []).map(node => node.y + nodeSize(node).height + 48)) };
 
@@ -250,9 +258,9 @@ export function RouteV2Panel({ config, session, projectId, harnessId, onClose, o
             {filteredSources.map(item => { const checked = selected.refs.some(ref => sourceKey(ref) === sourceKey(item.ref)); return <label className={"route-v2-ref-choice " + (checked ? "checked" : "")} key={sourceKey(item.ref)}><input type="checkbox" aria-label={"Включить сырьё " + item.title} checked={checked} onChange={event => { const include = event.target.checked; updateGraph(current => { const node = current.nodes.find(node => node.id === selected.id)!; return setRouteV2NodeRefs(current, node.id, include ? [...node.refs, item.ref] : node.refs.filter(ref => sourceKey(ref) !== sourceKey(item.ref))); }); }} /><span><strong>{item.title}</strong><small>{routeSourceDesignation(item)} · {item.lengthMm == null ? "Длина не задана" : item.lengthMm + " мм"}</small></span></label>; })}
             {!filteredSources.length && <p className="route-v2-empty">Сырьё не найдено.</p>}
           </div></section>
-          <section className="route-v2-material-group" aria-labelledby="route-v2-semi-heading"><h5 id="route-v2-semi-heading">Полуфабрикаты <span>{incomingSemiFinished.length}</span></h5><div className="route-v2-source-choices">
-            {incomingSemiFinished.map(item => { const checked = selected.inputNodeIds?.includes(item.id) ?? false; return <label className={"route-v2-ref-choice route-v2-node-choice " + (checked ? "checked" : "")} key={item.id}><input type="checkbox" aria-label={"Включить полуфабрикат " + item.title} checked={checked} onChange={event => { const next = new Set(selected.inputNodeIds ?? []); if (event.target.checked) next.add(item.id); else next.delete(item.id); updateGraph(current => setRouteV2NodeInputs(current, selected.id, [...next])); }} /><span><strong>{item.title}</strong><small>{item.refs.length} объект(ов) · {item.quantity} шт.</small></span></label>; })}
-            {!incomingSemiFinished.length && <p className="route-v2-empty">Подключите входящую карточку стрелкой.</p>}
+          <section className="route-v2-material-group" aria-labelledby="route-v2-semi-heading"><h5 id="route-v2-semi-heading">Полуфабрикаты <span>{filteredIncomingSemiFinished.length}</span></h5><div className="route-v2-source-choices">
+            {filteredIncomingSemiFinished.map(item => { const checked = selected.inputNodeIds?.includes(item.id) ?? false; return <label className={"route-v2-ref-choice route-v2-node-choice " + (checked ? "checked" : "")} key={item.id}><input type="checkbox" aria-label={"Включить полуфабрикат " + item.title} checked={checked} onChange={event => { const next = new Set(selected.inputNodeIds ?? []); if (event.target.checked) next.add(item.id); else next.delete(item.id); updateGraph(current => setRouteV2NodeInputs(current, selected.id, [...next])); }} /><span><strong>{item.title}</strong><small>{item.refs.length} объект(ов) · {item.quantity} шт.</small></span></label>; })}
+            {!filteredIncomingSemiFinished.length && <p className="route-v2-empty">{incomingSemiFinished.length ? "Полуфабрикаты не найдены." : "Подключите входящую карточку стрелкой."}</p>}
           </div></section>
         </div>
         {selected.refs.filter(ref => !sources.some(item => sourceKey(item.ref) === sourceKey(ref))).map(ref => <button key={sourceKey(ref)} type="button" className="secondary-action" onClick={() => updateGraph(current => setRouteV2NodeRefs(current, selected.id, selected.refs.filter(item => sourceKey(item) !== sourceKey(ref))))}>Убрать отсутствующий объект {ref.id}</button>)}
