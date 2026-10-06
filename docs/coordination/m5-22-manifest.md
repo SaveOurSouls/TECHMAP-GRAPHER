@@ -20,6 +20,18 @@
 частью ZIP сверх указанного ancestry/equivalence. `git diff --check` на
 `f410e43` — PASS. Новые проверки и точные SHA ZIP добавляются после сборки.
 
+### Итог сборки M5-22-038
+
+Пакет собран из code HEAD `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`
+(документальный commit после базы `f410e43`). Версия
+`0.63.38-m5-22-review`; ZIP
+`artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip` —
+63 980 096 байт, SHA-256
+`0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
+`verify-package.ps1`: 339 manifest entries / 340 package files — PASS;
+`test-portable-package.ps1`: 7/7 — PASS. Копия в корне workspace проверена
+с тем же размером и SHA. Owner acceptance не выводится автоматически.
+
 Версия: `0.63.34-m5-22-review`. Ветка: `codex/integration-m5-22`.
 Worktree: `C:\Users\anqla\OneDrive\Документы\ChatGPT\HARNESSTECHMAPGRAPHER\_m5_22_safe`.
 Основа: `60d30576872e5bb280bf996be4fa8c6f16cd3f6c`; ранее выданный пакет:

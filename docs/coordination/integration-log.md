@@ -382,3 +382,18 @@ M5-22-037 через verified equivalent `7aaaf46` и corrected handoff `e345f5f
 коммита будет выполнен полный client/server/package/portable прогон. Owner
 acceptance, packaged C1–C5 исходного жгута и visual 390px остаются отдельными
 ограничениями и не выводятся автоматически из зелёных тестов.
+
+## 06.10.2026 — M5-22-038 package result
+
+Клиент: **186 файлов / 1813 тестов**, typecheck и Vite production build —
+PASS. Сервер: **1117 тестов**, performance **1/1**, self-contained win-x64
+publish — PASS. Manifest: **339 записей / 340 файлов**, verify-package — PASS.
+Portable: **7/7 PASS** из `artifacts/portable038`.
+
+Code HEAD пакета: `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`.
+ZIP: `artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`;
+63 980 096 bytes; SHA-256
+`0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
+В GitHub отправлен базовый coverage commit `4be527d`; финальная запись
+журнала отправляется отдельным документальным commit. Owner acceptance,
+исходный жгут C1–C5 и 390px visual QA остаются открытыми.

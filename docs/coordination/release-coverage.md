@@ -92,19 +92,19 @@ represent missing completed chat handoffs.
 | 083 — Маршрут v2: карточки, состав C2 и изолированный рисунок | `01a0ee02-09d6-7790-98a3-d74947735e63` | `bfb0906`, `97d4a56`, `ab801fc` | все SHA — предки integration HEAD | included (ancestor) |
 | 084 — Маршрут v3: графические слепки и генерация по зависимостям | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | `9c15918`, handoff `0cfb983` | оба SHA включены merge в integration HEAD; handoff в `agent-handoff.md` | included (ancestor) |
 
-### m5-22-038 — 06.10.2026 (подготовка покрытия)
+### m5-22-038 — 06.10.2026 (проверенный ZIP)
 
 - **Integration branch:** `codex/integration-m5-22`
-- **Code HEAD:** `f410e43df8048765c933eebfba8a50b778c88aa6`
+- **Code HEAD:** `4be527d45f81ae1daf4aa4b72d0a1a7573bff542` (исходная кодовая база `f410e43df8048765c933eebfba8a50b778c88aa6`)
 - **Coverage detail:** [`m5-22-manifest.md`](m5-22-manifest.md), раздел M5-22-038
 - **Registry/audit snapshot:** 06.10.2026, refs audit after `fetch origin --prune`
 - **Handoff rows checked:** 3/3 new refs; all `git show --check` PASS
 - **Pending or unknown:** `0` for Git inclusion; owner/manual acceptance remains a separate release gate
 - **Exceptions:** 082 and 081 included through verified ancestor-equivalents; 084 code is ancestor, docs already current in registry/task/ADR
-- **ZIP:** pending final builder run from this HEAD
-- **Size / SHA-256:** pending final builder run
-- **PACKAGE-MANIFEST / portable:** pending final builder run
-- **Gate:** `READY_FOR_BUILD`; not `accepted`
+- **ZIP:** `artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `63,980,096 / 0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`
+- **PACKAGE-MANIFEST / portable:** `PASS; 339 manifest entries / 340 files; 7/7 portable`
+- **Gate:** `PASS` for Git/reproducible package coverage; owner acceptance is separate and remains open
 
 | Карточка | Исходные SHA | Доказательство | Coverage |
 | --- | --- | --- | --- |
