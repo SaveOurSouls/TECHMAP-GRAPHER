@@ -106,3 +106,12 @@ extracted package contains 340 files including `PACKAGE-MANIFEST.json`.
 Release coverage gate: **PASS**. M5-22 owner acceptance, source-harness QA and
 390px visual review remain open product acceptance items; they are recorded in
 the acceptance/status docs and are not omitted completed chat handoffs.
+
+## M5-22-037 release record — 06.10.2026
+
+Code HEAD: $code; appVersion:  .63.37-m5-22-review.
+ZIP: $zipRel; size $bytes bytes; SHA-256 $sha.
+Manifest verification: 339 payload entries / 340 package files — PASS.
+Portable verification: 7/7 PASS from C:\Temp\TECHMAP-portable-m5-22-037.
+Cards 080, 081 and 082 are included in release coverage; 081/082 are recorded as
+verified equivalents in docs/coordination/release-coverage.md.

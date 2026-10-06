@@ -144,3 +144,25 @@ SHA-256 `686131376F371CBE0CDA990140A1B3F8FA0530E59D3FA6A4BC591E2A4E890C8D`.
 `test-portable-package.ps1` подтвердил 7/7 режимов из пути с пробелами и
 кириллицей. Архивная копия в корне workspace сверена побайтно с build ZIP.
 Открыто: ручная приёмка владельцем, исходный жгут и visual390px; V2 localStorage.
+
+# M5-22 — проверенный ZIP с интеграцией карточек 080–082, 06.10.2026
+
+Кодовый HEAD: $code (chore: bump package version for M5-22-037). Версия
+ .63.37-m5-22-review; исправления 081 и 082 входят в HEAD как проверенные
+эквиваленты 5eeb02f и 7aaaf46, handoff-документы — ca55a20, 918e18 и
+corrected 345f5f. Дублирующая карточка  81-covering-point-selection-priority.md
+удалена; актуальная карточка 081 —  81-connector-transit-and-covering-exits.md.
+
+ZIP собран штатным scripts/build-package.ps1 -ArtifactSlice m5-22-037:
+$zipRel; размер **62 185 519 байт**; SHA-256 $sha.
+
+Проверки: client pnpm --dir src/Techmap.Client test — 183 файла / 1795 тестов;
+TypeScript и Vite — PASS; штатный builder: 1117 серверных тестов и performance
+1/1 — PASS; self-contained Windows x64 publish — PASS; erify-package.ps1 —
+PASS, 339 записей манифеста (340 файлов); 	est-portable-package.ps1 — **7/7
+PASS** из C:\Temp\TECHMAP-portable-m5-22-037.
+
+Ограничения: ручная UI/packaged приёмка владельца, C1–C5 на исходном жгуте и
+visual QA при 390 px не выполнены; Route V2 остаётся браузерным localStorage
+прототипом. Длинные Windows-пути могут дать UnauthorizedAccessException; ZIP
+остаётся вне Git.

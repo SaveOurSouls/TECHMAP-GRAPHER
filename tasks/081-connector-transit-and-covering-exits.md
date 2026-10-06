@@ -8,7 +8,7 @@
 - **Зависимости:** REQ-008–REQ-010, задачи 035, 054, 060, 063
 - **Владелец файлов:** `physical-wire-routing.ts`, `physical-wire-geometry.ts`, профильные тесты; эта карточка и связанные записи в требованиях/реестре
 - **Чат / Thread ID:** зарегистрирован в `docs/coordination/chat-registry.md`
-- **Release coverage:** следующий ZIP; handoff обязателен до включения
+- **Release coverage:** included in M5-22-037; verified equivalent `5eeb02f`, handoff `ca55a20`/`e918e18`.
 
 ## Результат и границы
 

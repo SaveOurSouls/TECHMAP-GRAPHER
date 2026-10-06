@@ -9,7 +9,7 @@
 - **Владелец файлов:** `src/Techmap.Client/src/editor/CanvasViewport.tsx`, `src/Techmap.Client/src/editor/drawing-paint-order.test.ts`, эта карточка и связанная документация
 - **Чат / Thread ID:** зарегистрирован в `docs/coordination/chat-registry.md`
 - **Worktree:** `C:\Users\Василий Костромин\.codex\worktrees\covering-point-priority\Утилита для картинок`; ветка `codex/covering-point-priority`, исходный commit `cfe35037bca20dbaafc999890737b8af182ff353`
-- **Release coverage:** следующий ZIP; сборщик проверяет ancestry/equivalent и добавляет строку в coverage
+- **Release coverage:** included in M5-22-037; verified equivalent `7aaaf46`, corrected handoff `e345f5f`.
 
 ## Результат и границы
 
