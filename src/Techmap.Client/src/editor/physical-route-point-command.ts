@@ -37,7 +37,11 @@ export function resolvePhysicalRoutePointCommand(
     }
     const authoredIndex=pipe.authoredHandleIndices?.[index];
     if(authoredIndex===-1)return null;
-    const points=physicalEditablePoints(document,segment),at=authoredIndex??index+1;
+    // The displayed handle may be a generated corner of a newly created P in
+    // an OP.  Resolve it against the complete automatic source route so the
+    // first edit materializes that exact corner instead of treating the grip
+    // as a fixed OP station.
+    const points=physicalEditablePoints(document,segment,true),at=authoredIndex??index+1;
     if(at<=0||at>=points.length-1)return null;
     const initial=unprojectPipeBundleEdit(document,id,points[at]!,target);
     return {type:"edit-physical-bend",segmentId:id,index:at-1,position:initial,mode,insert:false,displayPosition:target};
