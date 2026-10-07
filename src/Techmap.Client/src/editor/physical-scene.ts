@@ -64,6 +64,18 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const editable = projectPipeBundleControls(document, segment.id, authored);
     const display = pipeBundleDisplaySamples(document, segment.id);
     const route=physicalSegmentPoints(document,segment);
+    // Route painting rounds sharp authored corners. Keep ordinary physical
+    // segment grips on that same visible route; OP member stations and bundled
+    // projections already own their display coordinates and must not be
+    // re-projected here.
+    const painted = display?.map(sample=>sample.point)??route;
+    const radius = display&&!joiningPipeDisplaySamples(document,segment.id)?0:drawingBendRadius(document);
+    const alignToPaintedRoute = (point: EditorPoint) => {
+      if (joiningPipeMemberControls(document,segment.id) || hasPipeBundleProjection(document,segment.id)) return point;
+      const samples = drawingRouteSamples(painted, radius).map(sample => sample.point);
+      return samples.reduce((best, candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <
+        Math.hypot(best.x - point.x, best.y - point.y) ? candidate : best, point);
+    };
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
     const generatedControls=joiningPipeMemberControls(document,segment.id);
     type SceneControl={fraction:number;point:EditorPoint;controlled:boolean;authoredIndex?:number;authoredRegion?:JoiningPipeBendRegion;connection?:boolean;boundary?:"outerEnter"|"axisEnter"|"axisExit"|"outerExit";lead?:"enter"|"exit";memberIndex?:number;transition?:{readonly memberIndex:number;readonly side:"enter"|"exit"}};
@@ -72,7 +84,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>{
       const fixed=joiningPipeAuthoredHandle(document,segment.id,index),fraction=fixed?.fraction??projectOntoPolyline(route,authored[index+1]!).fraction;
       const authoredRegion=member?.authoredBendRegions?.find(entry=>entry.segmentId===segment.id&&entry.bendIndex===index)?.region;
-      return {fraction,point:fixed?.point??point,authoredIndex:index+1,authoredRegion,
+      return {fraction,point:alignToPaintedRoute(fixed?.point??point),authoredIndex:index+1,authoredRegion,
         // OP axis stations are derived controls.  A fresh member P, however,
         // still owns its automatically generated outer corners and must expose
         // them to the first move/delete gesture.
@@ -100,8 +112,6 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const joiningBoundaryHandleData=mergedHandles.flatMap((handle,index)=>handle.boundary?[{index,memberIndex:handle.memberIndex!,boundary:handle.boundary}]:[]);
     const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>handle.controlled?[index]:[]);
     const routeControls:SceneControl[]=[{fraction:0,point:editable[0]!,controlled:false},...mergedHandles,{fraction:1,point:editable.at(-1)!,controlled:false}];
-    const painted=display?.map(sample=>sample.point)??route;
-    const radius=display&&!joiningPipeDisplaySamples(document,segment.id)?0:drawingBendRadius(document);
     const rounded=drawingRouteSamples(painted,radius);
     const pointAtDistance=(distance:number):EditorPoint=>{
       const next=rounded.findIndex(sample=>sample.distance>=distance);

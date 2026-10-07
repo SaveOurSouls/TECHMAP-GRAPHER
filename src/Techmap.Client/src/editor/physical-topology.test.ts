@@ -218,6 +218,19 @@ it("keeps a split OP member bend editable after creating a T branch",()=>{
  expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(history.present))).physicalTopology).toEqual(history.present.physicalTopology);
  expect(undoEditorCommand(history).present).toBe(branched);
 });
+it("places an ordinary bend grip on the rounded painted route and preserves its drag delta",()=>{
+ const source=physicalFixture(),segment=source.physicalTopology!.segments.find(item=>item.id==="S0")!;
+ const document={...source,drawingDocuments:{...source.drawingDocuments!,bendRadius:24},physicalTopology:{...source.physicalTopology!,
+   segments:source.physicalTopology!.segments.map(item=>item.id===segment.id?{...item,path:{kind:"polyline" as const,points:[{x:220,y:80}]}}:item)}};
+ const scene=physicalTopologyScene(document).find(item=>item.id===segment.id)!;
+ const grip=scene.pipe!.handles[0]!;
+ const painted=scene.points!;
+ const nearest=Math.min(...painted.map(point=>Math.hypot(point.x-grip.x,point.y-grip.y)));
+ expect(nearest).toBeLessThan(1e-6);
+ const command=resolvePhysicalRoutePointCommand(document,segment.id,0,{x:grip.x+15,y:grip.y-8},"carry");
+ expect(command).toMatchObject({type:"edit-physical-bend",segmentId:segment.id,index:0});
+ expect((command as any).position).toEqual({x:235,y:72});
+});
 it("distributes wires to shortest channels, preserves pinned routes and supports separate exits for double crimp",async()=>{
  const {routePhysicalWires}=await import("./physical-topology");const base=physicalFixture();const d={...base,wires:base.wires.map(w=>w.id==="W2"?{...w,from:base.wires[0]!.from,e4Route:createOrthogonalE4Route(wireEndpointE4Anchor(base,base.wires[0]!.from)!,wireEndpointE4Anchor(base,w.to)!)}:w)};
  let t={...d.physicalTopology!,nodes:[...d.physicalTopology!.nodes,{id:"NA2",connectorId:"A",position:{x:160,y:70},wireIds:["W2"]}],segments:[...d.physicalTopology!.segments,{id:"direct",from:"NA2",to:"NC",path: { kind: "routed" as const, points: [] }}],routes:[]};

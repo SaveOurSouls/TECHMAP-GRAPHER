@@ -1,12 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { physicalFixture } from "./physical-topology-fixture";
 import { buildDrawingBom, emptyDrawingDocuments } from "./drawing-documents";
-import { drawingObjectIndexScene, moveDrawingIndex } from "./drawing-indices";
+import { alignDrawingConnectorIndexes, drawingObjectIndexScene, moveDrawingIndex } from "./drawing-indices";
 import type { EditorSceneObject } from "./editor-types";
+import type { ComponentTemplateViewInstance } from "./component-template-view-renderer";
 import { parseHarnessDesignDocument } from "./model";
 import { executeEditorCommand, createEditorHistory, redoEditorCommand, undoEditorCommand } from "./history";
 import { hitTestEditorScene, redrawCanvas } from "./CanvasViewport";
 import { hiddenIdsForIsolatedObjects } from "./HarnessEditorWorkspace";
+
+vi.mock("./component-template-view-renderer", async importOriginal => ({
+  ...await importOriginal<typeof import("./component-template-view-renderer")>(),
+  // The visible library picture is deliberately displaced from the connector's
+  // legacy scene box, reproducing a rotated/offset library drawing.
+  projectComponentTemplateView: vi.fn((_instance: unknown, _view: unknown, origin: {x:number;y:number}) => ({
+    objectId: "A", snapshotId: "snapshot", viewId: "drawing", viewKind: "drawing" as const, commands: [],
+    bounds: { minX: origin.x + 120, minY: origin.y + 25, maxX: origin.x + 190, maxY: origin.y + 55 },
+  })),
+}));
 
 const sceneObject = (id: string, kind: EditorSceneObject["kind"], points?: readonly {x:number;y:number}[]): EditorSceneObject => ({
   id, kind, layerId: "wires", label: id, x: 0, y: 0, width: 80, height: 30, color: "#333", points,
@@ -44,6 +55,23 @@ describe("drawing object indices", () => {
     expect(anchor && label).toBeTruthy();
     const angle = Math.acos(Math.abs((label!.y-anchor!.y) / Math.hypot(label!.x-anchor!.x,label!.y-anchor!.y)));
     expect(angle).toBeLessThanOrEqual(Math.PI / 18 + 1e-8);
+  });
+
+  it("anchors a library connector index to its painted bounds, including after a drag", () => {
+    const document = { ...physicalFixture(), drawingDocuments: emptyDrawingDocuments() };
+    const connector = { ...sceneObject("A", "connector"), x: 10, y: 20, width: 80, height: 30 };
+    const instance = { objectId: "A", snapshotId: "snapshot", articleVariantId: "article", content: {} } as ComponentTemplateViewInstance;
+    const initial = drawingObjectIndexScene(document, [connector]);
+    const aligned = alignDrawingConnectorIndexes(document, [...initial, connector], [instance]);
+    const label = aligned.find(object => object.id === "object-index:A")!;
+    expect(label.points?.[0]).toEqual({ x: 200, y: 60 });
+    expect(label.metadata).toMatchObject({ indexOwnerMinX: "130", indexOwnerMaxX: "200" });
+
+    const movedDocs = moveDrawingIndex(document, label.id, { x: 250, y: 65 }, aligned)!;
+    const moved = alignDrawingConnectorIndexes({ ...document, drawingDocuments: movedDocs }, [...initial, connector], [instance])
+      .find(object => object.id === label.id)!;
+    expect(moved.points?.[0]).toEqual({ x: 200, y: 60 });
+    expect(moved.x).toBeGreaterThan(200);
   });
 
   it("uses real BOM indices and preserves drag offsets through save, parent movement, and history", () => {
