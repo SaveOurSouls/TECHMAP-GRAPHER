@@ -36,6 +36,40 @@ Release coverage: следующий ZIP; требуется подтвержд�
 - Изменение не затрагивает электрические связи, ID маршрутов и производственные длины.
 ```
 
+## 080 — Follow-up: ручка на округлённой проекции
+
+```text
+Карточка: 080 — Редактирование точек изгиба пайпов
+Статус: ready-for-review (follow-up)
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты для интеграции: 17914c2
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/pipe-bundle-projection.ts: ручки берутся из sampled route, используемого отрисовкой.
+- src/Techmap.Client/src/editor/pipe-bundle-projection.test.ts: регресс для общей точки и округлённого пайпа.
+- tasks/080-edit-pipe-bend-points.md: журнал follow-up.
+
+Проверки:
+- pnpm --dir src\\Techmap.Client test: PASS (186 файлов / 1814 тестов)
+- pnpm --dir src\\Techmap.Client typecheck: PASS
+- pnpm --dir src\\Techmap.Client build: PASS
+- git diff --check: PASS
+
+Зависимости/порядок:
+- После 3df8ce65d18ec0807be746bb6f43c201ec0ccb8e.
+
+Ограничения и ручная приёмка:
+- Исходный жгут C1–C3 и packaged Windows UI владельцем вручную не проверены.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Электрические связи, маршруты и производственные длины не меняются; меняется только экранная координата ручки и обратное преобразование редактирования.
+```
+
 Скопируйте блок в сообщение чату-сборщику после успешных обязательных проверок.
 Handoff обязателен для статуса `ready-for-review`; без него задача остаётся
 `in-progress` либо `blocked` и не считается переданной сборщику.
