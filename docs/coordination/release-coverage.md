@@ -111,3 +111,5 @@ represent missing completed chat handoffs.
 | 082 | `37a8d0a`, `03d7474`, `3a51979`, `e345f5f` | code exact file match/equivalent `7aaaf46`; corrected identity in audit | included (equivalent) |
 | 081 | `fdc5c7c`, `ebcf790`, `b207b1f` | code equivalent `5eeb02f`; docs `ca55a20`/`e918e18` already ancestry | included (equivalent) |
 | 084 | `9c15918`, `0cfb983`, `2174599` | first two ancestors; final ref docs-only and current registry/task/ADR match | included (ancestor + docs coverage) |
+
+| 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | ожидается | Чат active; задача зарегистрирована как REQ-121 / `tasks/085-drawing-dimension-properties.md`; commit и handoff отсутствуют | pending |
