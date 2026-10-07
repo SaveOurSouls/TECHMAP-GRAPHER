@@ -216,3 +216,17 @@ Release coverage: 083 included (ancestor); общий ZIP gate blocked pending 0
 Примечание сборщику:
 - Собирать после включения `bfb0906`, `97d4a56` и `ab801fc`; не включать незакоммиченный `tasks/084-route-v3-graphical-snapshots.md` другого чата.
 ```
+
+```text
+Карточка: 080 — Редактирование точек изгиба пайпов (follow-up C1)
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Коммиты для подтверждения coverage: 17914c2d19271315fccd70077e870faffaf3dec8 e40ffd09b0f770665eedafb445bce209e60de056
+
+Изменение: handle generated bend controls now follows the same sampled/rounded route as the visible pipe bundle; inverse projection remains in place for editing authored geometry.
+Проверки рабочего чата: client tests 1814/1814, typecheck, build, diff-check — PASS (reported by worker).
+Git coordinator check: both commits resolve, `git show --check` PASS, both are ancestors of current integration HEAD `e40ffd09b0f770665eedafb445bce209e60de056`.
+Ограничения: source harness C1–C3 and packaged Windows UI were not manually checked.
+Требуется от сборщика: explicitly confirm follow-up row in release coverage; base card 080 was already included in M5-22-037.
+```
