@@ -1,6 +1,6 @@
 # 080. Редактирование точек изгиба пайпов
 
-- **Статус:** ready-for-review (follow-up integrated; builder coverage confirmed)
+- **Статус:** ready-for-review (new follow-up; release coverage pending)
 - **Владелец / чат:** рабочий чат «Исправить редактирование точек изгиб», Thread ID `01a11190-8a49-7423-a35d-6e75df977c8e`
 - **Источник запроса:** поручение владельца от 06.10.2026 и C1–C3
 - **Требования:** REQ-110
@@ -8,7 +8,7 @@
 - **Зависимости:** задачи 032, 054, 060, 064, 068, 070, 072; текущие модели physical topology и joining pipe
 - **Владелец файлов:** `src/Techmap.Client/src/editor/physical-editing.ts`, `physical-route-point-command.ts`, `physical-scene.ts`, `physical-joining-pipe.test.ts`, `physical-topology.test.ts`, `op-drag-regression.test.ts`
 - **Чат / Thread ID:** зарегистрирован в `docs/coordination/chat-registry.md`
-- **Release coverage:** следующий ZIP; кодовый commit и handoff находятся в текущем integration HEAD, сборщик должен подтвердить интеграцию
+- **Release coverage:** следующий ZIP; текущий срез M5-22-040 не включает новый follow-up; сборщик должен подтвердить его coverage до следующей сборки
 
 ## Результат и границы
 
@@ -74,5 +74,8 @@
 разъёма и обычного скруглённого изгиба.
 
 Проверки 07.10.2026: полный клиентский Vitest — PASS (187 файлов / 1828 тестов),
-typecheck — PASS, Vite build — PASS, `git diff --check` — PASS. Ограничение:
-ручная проверка исходного жгута и packaged Windows UI остаётся за сборщиком.
+typecheck — PASS, Vite build — PASS, `git diff --check` — PASS. Кодовый commit
+`d971f0d` и handoff `eff2e27` являются предками текущего integration HEAD
+`eff2e27`; оба проходят `git show --check`. Сборщик должен подтвердить inclusion
+в следующий ZIP. Ограничение: ручная проверка исходного жгута и packaged Windows
+UI остаётся за сборщиком.
