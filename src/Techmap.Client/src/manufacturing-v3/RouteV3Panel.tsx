@@ -13,6 +13,8 @@ import type { RouteRow } from "../manufacturing/route-model";
 import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
 import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
 import { appendRouteV3Fragment, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, refKey, removeRouteV3Fragment, revealedRouteV3Ids, routeV3StorageKey, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
+import { RouteV3Graph } from "./RouteV3Graph";
+import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
 import "../manufacturing-v2/route-v2.css";
 import "./route-v3.css";
 
@@ -53,6 +55,7 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<RouteV3Fragment | null>(null);
+  const [drawingNode, setDrawingNode] = useState<RouteV3Node | null>(null);
   const [preview, setPreview] = useState<RouteV3Node | null>(null);
   const sources = useMemo(() => buildRouteSourceItems(source), [source]);
   const sourceScene = useMemo(() => designToScene(source, "drawing"), [source]);
@@ -93,16 +96,36 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
     onCancel: () => setGraphical(false),
   };
   const openGraphical = () => { setOpenedOnce(true); setGraphical(true); };
-  const generate = () => { try { persist(generateRouteV3(current.current, source, sourceScene.map(object => object.id))); setGraphical(false); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сгенерировать маршрут."); } };
+  const generate = () => { if (current.current.graphEdited && !window.confirm("Пересоздать маршрут из слепков? Ручные карточки, связи, размеры и операции будут заменены.")) return; try { persist(generateRouteV3(current.current, source, sourceScene.map(object => object.id))); setGraphical(false); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сгенерировать маршрут."); } };
   const showFragment = (fragment: RouteV3Fragment) => <RouteAssemblyDrawingPreview row={{ ...fragmentRow(fragment), presentation: { objects: [], backgroundOpacity: 0, drawingCopy: fragmentDrawingCopy(fragment) } }} document={source} config={config} session={session} projectId={projectId} />;
   const artwork = (ref: RouteSourceRef) => <RouteV2SourceArtwork document={source} ref={ref} item={sources.find(item => refKey(item.ref) === refKey(ref))} textureUrls={textures.urls} />;
   const finalRow: RouteRow = { id: "final", kind: "assembly", title: "Готовый жгут", sourceObjects: sources.map(item => item.ref), dependsOn: [], comment: "", operations: [], prepared: false, presentation: { backgroundOpacity: 0, objects: [], drawingCopy: createRouteDrawingCopy(source) } };
-  const nodeArtwork = (node: RouteV3Node) => node.kind === "final" ? <RouteAssemblyDrawingPreview row={finalRow} document={source} config={config} session={session} projectId={projectId} /> : node.fragmentIds.length ? route.fragments.filter(fragment => node.fragmentIds.includes(fragment.id)).map(fragment => <div key={fragment.id}>{showFragment(fragment)}</div>) : node.refs.map(ref => <div key={refKey(ref)}>{artwork(ref)}</div>);
-  const initialNodes = useMemo(() => generateRouteV3({ ...initial, fragments: [] }).nodes, [initial]);
-  const nodes = route.generated ? route.nodes : initialNodes;
-  const edges = route.generated ? route.edges : [];
-  const width = Math.max(940, ...nodes.map(node => node.x + 304));
-  const height = Math.max(520, ...nodes.map(node => node.y + 280));
+  const board = useMemo(() => refreshRouteV3(editableRouteV3(route.nodes.length || route.graphEdited ? route : { ...route, nodes: generateRouteV3({ ...route, fragments: [] }).nodes })), [route]);
+  const nodeArtwork = (node: RouteV3Node): ReactNode => {
+    if (node.drawing) return <RouteAssemblyDrawingPreview row={{ ...finalRow, title: node.title, sourceObjects: node.refs, presentation: { objects: [], ...node.drawing } }} document={source} config={config} session={session} projectId={projectId} />;
+    const keys = new Set(node.refs.map(refKey));
+    const fragments = route.fragments.filter(f => node.fragmentIds.includes(f.id) && f.refs.every(ref => keys.has(refKey(ref))));
+    const covered = new Set(fragments.flatMap(f => f.refs.map(refKey)));
+    if (node.kind === "final" && sources.every(s => keys.has(refKey(s.ref)))) return <RouteAssemblyDrawingPreview row={finalRow} document={source} config={config} session={session} projectId={projectId} />;
+    // Keep a saved PF image when passing its full result through a dependency.
+    const pictures: RouteV3Node[] = [], visited = new Set<string>();
+    const collectPictures = (target: RouteV3Node) => {
+      for (const edge of board.edges.filter(e => e.to === target.id && target.inputNodeIds?.includes(e.from))) {
+        if (visited.has(edge.from)) continue;
+        visited.add(edge.from);
+        const input = board.nodes.find(n => n.id === edge.from)!;
+        if (!input.refs.length || !input.refs.every(r => keys.has(refKey(r))) || !input.refs.some(r => !covered.has(refKey(r)))) continue;
+        if (input.drawing || input.fragmentIds.length) { pictures.push(input); for (const ref of input.refs) covered.add(refKey(ref)); }
+        else collectPictures(input);
+      }
+    };
+    collectPictures(node);
+    return <>{fragments.map(f => <div key={f.id}>{showFragment(f)}</div>)}{pictures.map(n => <div key={n.id}>{nodeArtwork(n)}<small>{n.title}</small></div>)}{node.refs.filter(ref => !covered.has(refKey(ref))).map(ref => <div key={refKey(ref)}>{artwork(ref)}<small>{sources.find(s => refKey(s.ref) === refKey(ref))?.title ?? ref.id}</small></div>)}</>;
+  };
+  const editNodeDrawing = (node: RouteV3Node) => {
+    const fragment = route.fragments.find(f => node.fragmentIds.includes(f.id));
+    setDrawingNode({ ...node, drawing: node.drawing ?? (fragment ? { backgroundOpacity: fragment.backgroundOpacity, drawingCopy: fragment.drawingCopy, isolatedDrawingCopy: fragment.isolatedDrawingCopy } : { backgroundOpacity: 0, drawingCopy: captureRouteV3Selection(source, sourceScene, node.refs.map(ref => ref.id)).drawingCopy }) });
+  };
   return <section className="route-v3-panel" aria-label="Маршрут v3">
     <HarnessSectionNavigation active="route-v3" onHome={onClose} onNavigate={section => onSectionChange?.(section)} />
     <header className="route-v3-header"><div><p className="eyebrow">{graphical ? "СЛЕПКИ ПОСЛЕДОВАТЕЛЬНОСТИ СБОРКИ" : "ПОСЛЕДОВАТЕЛЬНОСТЬ СБОРКИ"}</p><h2>{graphical ? "Графический маршрут" : "Маршрут v3"}</h2><p>{graphical ? `Раскрыто ${sourceScene.length - hidden.length} из ${sourceScene.length} объектов · слепков ${route.fragments.length}` : route.generated ? "Маршрут построен по составу сохранённых слепков." : "Нарезанные заготовки готовы. Соберите слепки в графическом маршруте."}</p></div><div className="route-v3-actions">{graphical ? <><button className="secondary-action" onClick={() => setGraphical(false)}>К маршруту</button><button className="primary-action" disabled={!route.fragments.length} onClick={generate}>Сгенерировать</button></> : <button className="primary-action" onClick={openGraphical}>Графический маршрут</button>}</div></header>
@@ -111,11 +134,7 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
     <div hidden={graphical}>
       {!route.generated && route.fragments.length > 0 && <p role="status">Слепки сохранены. Нажмите «Сгенерировать» в графическом маршруте для обновления зависимостей.</p>}
       {route.generated && !route.nodes.some(node => node.kind === "final") && <p role="status">Маршрут частичный: сохраните оставшиеся объекты для финального жгута.</p>}
-      <div className="route-v3-route-scroll"><div className="route-v3-route-grid" style={{ width, height }}>
-        <svg className="route-v3-route-edges" style={{ width, height }} aria-label="Зависимости полуфабрикатов"><defs><marker id="route-v3-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" /></marker></defs>{edges.map(edge => { const from = nodes.find(node => node.id === edge.from)!; const to = nodes.find(node => node.id === edge.to)!; return <path key={edge.id} d={`M${from.x + 138},${from.y + 234} V${from.y + 252} H${to.x + 138} V${to.y}`} markerEnd="url(#route-v3-arrow)" />; })}</svg>
-        {nodes.map(node => <article className={`route-v3-node ${node.kind}`} style={{ left: node.x, top: node.y }} key={node.id}><span className="route-v3-node-kicker">{node.kind === "final" ? "ФИНАЛ" : node.kind === "assembly" ? "СБОРКА" : "ПОЛУФАБРИКАТ"}</span><strong>{node.title}</strong><button className="route-v3-node-gallery" aria-label={`Просмотреть ${node.title}`} onClick={() => setPreview(node)}>{nodeArtwork(node)}</button><small>{node.refs.length} комплектующих</small><button className="link-button" onClick={() => setPreview(node)}>Состав и рисунок</button></article>)}
-        {!nodes.length && <p className="route-v3-empty">В чертеже пока нет заготовок. Откройте графический маршрут для выбора объектов.</p>}
-      </div></div>
+      <RouteV3Graph graph={board} source={source} save={next => persist({ ...next, graphEdited: true })} artwork={nodeArtwork} preview={setPreview} editDrawing={editNodeDrawing} />
     </div>
     <div hidden={!graphical}>
       {openedOnce && <div className="route-v3-layout"><div className="route-v3-editor"><div className="route-v3-editor-toolbar"><label>Название нового слепка<input value={title} maxLength={120} placeholder="Например, Установка соединителя X1" onChange={event => setTitle(event.target.value)} /></label><span>Выберите объекты кнопками списка или рамкой; ПКМ → «Изолировать» / «Сохранить».</span></div><HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId} harnessDesignation="Графический маршрут v3" initialView="drawing" localCopy={localCopy} /></div>
@@ -123,6 +142,7 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
       </div>}
     </div>
     {editing && <Dialog label={`Редактор слепка ${editing.title}`} editor onClose={() => setEditing(null)}><div className="route-v2-drawing-host"><RouteAssemblyDrawing key={editing.id} config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={fragmentRow(editing)} items={sources.filter(item => editing.refs.some(ref => refKey(ref) === refKey(item.ref)))} onCancel={() => setEditing(null)} onSave={presentation => { persist(appendRouteV3Fragment(current.current, { ...editing, drawingCopy: presentation.drawingCopy ?? editing.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy, mode: presentation.isolatedDrawingCopy ? "isolated" : "source", backgroundOpacity: presentation.backgroundOpacity })); setEditing(null); setTitle(""); }} /></div></Dialog>}
+    {drawingNode && <Dialog label={`Рисунок карточки ${drawingNode.title}`} editor onClose={() => setDrawingNode(null)}><RouteAssemblyDrawing config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={{ ...finalRow, id: drawingNode.id, title: drawingNode.title, sourceObjects: drawingNode.refs, presentation: { objects: [], backgroundOpacity: 0, ...drawingNode.drawing } }} items={sources.filter(s => drawingNode.refs.some(r => refKey(r) === refKey(s.ref)))} onCancel={() => setDrawingNode(null)} onSave={presentation => { persist({ ...board, graphEdited: true, nodes: board.nodes.map(n => n.id === drawingNode.id ? { ...n, drawing: { backgroundOpacity: presentation.backgroundOpacity, drawingCopy: presentation.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy } } : n) }); setDrawingNode(null); }} /></Dialog>}
     {preview && <Dialog label={preview.title} onClose={() => setPreview(null)}><header className="route-v3-preview-heading"><h3>{preview.title}</h3><button className="secondary-action" onClick={() => setPreview(null)}>Закрыть</button></header><div className="route-v3-large-preview">{nodeArtwork(preview)}</div><ul className="route-v3-preview-list">{preview.refs.map(ref => <li key={refKey(ref)}>{sources.find(item => refKey(item.ref) === refKey(ref))?.title ?? ref.id}</li>)}</ul></Dialog>}
   </section>;
 }

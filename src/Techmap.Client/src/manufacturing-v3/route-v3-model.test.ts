@@ -9,6 +9,21 @@ function fragment(id: string, objectIds: string[]): RouteV3Fragment {
   return { ...captureRouteV3Selection(source, scene, objectIds), id, title: id, mode: "source", backgroundOpacity: .2, createdAt: "2026-10-06" };
 }
 describe("Route v3 snapshot workflow", () => {
+  it("preserves edited cards across snapshot saves/removal until explicit regeneration", () => {
+    const initial = createInitialRouteV3(source);
+    const generated = generateRouteV3(appendRouteV3Fragment(initial, fragment("one", ["W1"])));
+    const edited = { ...generated, graphEdited: true, nodes: generated.nodes.map(n => ({ ...n, width: 510 })) };
+    const saved = appendRouteV3Fragment(edited, fragment("two", ["W2"]));
+    expect(saved.nodes).toEqual(edited.nodes);
+    expect(saved.edges).toEqual(edited.edges);
+    expect(saved.generated).toBe(false);
+    const removed = removeRouteV3Fragment(saved, "one");
+    expect(removed.nodes).toHaveLength(edited.nodes.length);
+    expect(parseRouteV3(JSON.parse(JSON.stringify(removed)))).not.toBeNull();
+    expect(generateRouteV3(removed).graphEdited).toBe(false);
+    expect(generateRouteV3(removed).nodes.every(n => n.width === undefined)).toBe(true);
+    expect(parseRouteV3({ ...removed, graphEdited: "true" })).toBeNull();
+  });
   it("starts with wire blanks and dimmed opacity", () => {
     const initial = createInitialRouteV3(source);
     expect(initial.backgroundOpacity).toBe(.2);
