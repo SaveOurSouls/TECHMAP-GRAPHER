@@ -364,3 +364,43 @@ M5-22-037 через verified equivalent `7aaaf46` и corrected handoff `e345f5f
 `01a0ee02-09d6-7790-98a3-d74947735e63`, карточке 083 / REQ-113–119.
 Задача уже включена в M5-22-037; статус карточки и чата обновлён на
 `accepted`. Packaged UI и исходный жгут остаются открытыми проверками пакета.
+
+## 06.10.2026 — аудит удалённых refs после fetch
+
+После успешного `fetch origin --prune` проверены refs относительно `integration HEAD f410e43df8048765c933eebfba8a50b778c88aa6`. Для всех трёх веток `git diff --check` прошёл.
+
+- `codex/covering-point-priority` (`e345f5f2d1edcde6408be7c46ff1b66ec3ee4a8b`): source code `37a8d0a` не является прямым предком HEAD, но его verified equivalent уже интегрирован как `7aaaf46`; handoff `e345f5f` учтён. Повторный cherry-pick не нужен. Owner C1/manual acceptance остаётся открытой.
+- `codex/pipe-junction-cover-exits` (`b207b1f206b7dc3467c2a4479224fc857d31e781`): source code `fdc5c7c` не является прямым предком HEAD, но verified equivalent `5eeb02f` уже интегрирован; document handoffs учтены как `ca55a20` и `e918e18`. Повторный cherry-pick не нужен. C1–C5 packaged/source-harness acceptance остаётся открытой.
+- `codex/route-v3` (`2174599de5bcb494dc2c5bc5b1ff762b0b905764`): code snapshot `9c15918` уже является предком HEAD; текущая ветка добавляет только документационные уточнения ADR и карточки 084. Изменения должны пройти release-coverage review; новый ZIP автоматически не объявляется готовым.
+
+Решение аудита: 081 и 082 считать покрытыми verified equivalents без повторной интеграции; 084 оставить pending до подтверждения release coverage и ручной приёмки владельца. Никакие файлы кода и ZIP в рамках аудита не менялись.
+
+## 06.10.2026 — M5-22-038: подтверждение состава перед сборкой
+
+Актуальная чистая база — `f410e43df8048765c933eebfba8a50b778c88aa6`,
+версия `0.63.38-m5-22-review`. Аудит refs завершён: `37a8d0a` покрыт
+`7aaaf46`, `fdc5c7c` покрыт `5eeb02f`, `9c15918` и `0cfb983` уже ancestry.
+`e345f5f`, `ebcf790`, `b207b1f` и `2174599` не cherry-pick'аются целиком:
+их актуальные identity/coverage отражены в `m5-22-manifest.md`, а старые
+конфликтующие статусы сохранены только как история.
+
+Кодовых изменений от этих refs в новую ветку не добавлялось. Текущая
+фактическая рабочая копия содержит только этот документальный аудит; после
+коммита будет выполнен полный client/server/package/portable прогон. Owner
+acceptance, packaged C1–C5 исходного жгута и visual 390px остаются отдельными
+ограничениями и не выводятся автоматически из зелёных тестов.
+
+## 06.10.2026 — M5-22-038 package result
+
+Клиент: **186 файлов / 1813 тестов**, typecheck и Vite production build —
+PASS. Сервер: **1117 тестов**, performance **1/1**, self-contained win-x64
+publish — PASS. Manifest: **339 записей / 340 файлов**, verify-package — PASS.
+Portable: **7/7 PASS** из `artifacts/portable038`.
+
+Code HEAD пакета: `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`.
+ZIP: `artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`;
+63 980 096 bytes; SHA-256
+`0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
+В GitHub отправлен базовый coverage commit `4be527d`; финальная запись
+журнала отправляется отдельным документальным commit. Owner acceptance,
+исходный жгут C1–C5 и 390px visual QA остаются открытыми.

@@ -166,3 +166,29 @@ PASS** из `C:\Temp\TECHMAP-portable-m5-22-037`.
 visual QA при 390 px не выполнены; Route V2 остаётся браузерным `localStorage`
 прототипом. Длинные Windows-пути могут дать `UnauthorizedAccessException`; ZIP
 остаётся вне Git.
+# M5-22-038 — новый проверочный срез от `f410e43` — 06.10.2026
+
+Сборка выполняется только из чистой интеграционной базы
+`f410e43df8048765c933eebfba8a50b778c88aa6`, версия
+`0.63.38-m5-22-review`. Последние refs проверены: covering 082 и pipe 081
+уже представлены verified equivalents (`7aaaf46`, `5eeb02f`), Route v3 code
+(`9c15918`, handoff `0cfb983`) — ancestry. Устаревшие document-only refs не
+перенесены целиком; актуальная coverage зафиксирована в manifest/release log.
+
+ZIP, manifest, portable gates и итоговый code SHA будут записаны ниже после
+завершения штатного builder. Это не owner acceptance: ручная C1–C5 packaged
+проверка исходного жгута, 390px visual QA и решение владельца остаются отдельными
+gates.
+
+## Результат M5-22-038
+
+Пакет собран из `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`, исходная база
+`f410e43df8048765c933eebfba8a50b778c88aa6`. ZIP:
+`TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`, 63 980 096 байт,
+SHA-256 `0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
+
+Проверки: client 186/1813, typecheck, Vite, server 1117, performance 1/1,
+self-contained publish, manifest 339/340 и portable 7/7 — PASS. Архив в корне
+workspace сверён по размеру и SHA. Это review-пакет, не автоматическая owner
+acceptance: ручные C1–C5 packaged/source-harness, 390px visual QA и исходный
+жгут остаются ограничениями.

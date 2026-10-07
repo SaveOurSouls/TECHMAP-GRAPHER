@@ -762,3 +762,12 @@ PASS. Ручная UI/packaged приёмка владельца, исходны
 REQ-113–REQ-119: Route v2 получил дизайн C2 и реализацию разделения сырья/полуфабрикатов по входящим стрелкам, верхние/нижние точки связи с красным режимом референса, сохраняемый resize карточек, приоритет изолированного рисунка и активное сохранение обычной копии без изменений. Коммиты дизайна `bfb0906`, кода `97d4a56` и корректировки `ab801fc`; handoff/coverage `0ac4094`.
 
 Проверки: Vitest — 185 файлов / 1803 теста, TypeScript, Vite production build и `git diff --check` прошли 06.10.2026. Ручная проверка C1/C2, исходного жгута и packaged ZIP остаётся открытой; Route v2 хранит данные в localStorage. ZIP gate заблокирован pending карточкой 084; сборщик подтвердил включение 083 в coverage.
+# M5-22-038 — проверенный пакет remote-среза — 06.10.2026
+
+Кодовая база `f410e43df8048765c933eebfba8a50b778c88aa6`; документальный
+coverage commit `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`. Новые refs covering
+082/pipe 081 покрыты проверенными эквивалентами, Route v3 уже ancestry.
+Версия `0.63.38-m5-22-review`; client 186/1813, server 1117, performance 1/1,
+typecheck/Vite, self-contained publish, manifest 339/340 и portable 7/7 PASS.
+ZIP SHA-256: `0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
+Owner acceptance, исходный жгут и 390px visual QA открыты.
