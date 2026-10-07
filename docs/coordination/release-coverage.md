@@ -112,4 +112,5 @@ represent missing completed chat handoffs.
 | 081 | `fdc5c7c`, `ebcf790`, `b207b1f` | code equivalent `5eeb02f`; docs `ca55a20`/`e918e18` already ancestry | included (equivalent) |
 | 084 | `9c15918`, `0cfb983`, `2174599` | first two ancestors; final ref docs-only and current registry/task/ADR match | included (ancestor + docs coverage) |
 
-| 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | `723ff99350476255dcdae2de5442cf761c9720c2` | Кодовый commit в ветке `codex/integration-m5-22`; сборщик должен подтвердить ancestry либо проверенный эквивалент в code HEAD нового ZIP | pending builder confirmation |
+| 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | `723ff99350476255dcdae2de5442cf761c9720c2`, handoff `7241134db77f2b8ecfdf96d13e92513eaa814a68` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
+| 086 — Карточки UML в Route v3 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | `0a3c04a0480b7eee1820b56cc2450a8f6ec5c83d`, handoff `6e274c42dd5a7082dc9bb9233b82e0cebd0f8a3a` | оба SHA включены merge в integration HEAD; `git show --check` PASS | included (ancestor) |

@@ -32,6 +32,46 @@ Release coverage: следующий ZIP; требуется подтвержд�
 
 Примечание сборщику:
 - Миграция добавляет слой при чтении старого документа. Электрические связи не меняются; изменяемая длина размера продолжает использовать существующий доменный пересчёт длины материала.
+
+## 086 — Карточки UML и зависимости в Маршруте v3
+
+```text
+Карточка: 086 — Карточки UML и зависимости в Маршруте v3
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/route-v3-uml
+Worktree: C:\Users\Василий Костромин\.codex\worktrees\route-v3\Утилита для картинок
+Коммит для интеграции: 0a3c04a0480b7eee1820b56cc2450a8f6ec5c83d
+
+Изменённые файлы:
+- src/Techmap.Client/src/manufacturing-v3/RouteV3Graph.tsx,
+  route-v3-graph.css, route-v3-graph.ts: UML-карточки, resize, точки,
+  cursor-arrow, delete, плюс/вставка в разрыв, настройки и операции.
+- src/Techmap.Client/src/manufacturing-v3/RouteV3Panel.tsx: подключение графа,
+  сохранение рисунка карточки и защита ручного графа от сохранения слепка.
+- src/Techmap.Client/src/manufacturing-v3/route-v3-model.ts/.test.ts: размеры,
+  состав, graphEdited, миграция, парсер и регрессии старых документов.
+- src/Techmap.Client/src/manufacturing-v3/route-v3-graph.test.ts: 7 регрессий DAG.
+- docs/decisions/0017-route-v3-editable-dependencies.md, tasks/086-route-v3-uml-cards.md,
+  docs/requirements.md, docs/coordination/{chat-registry,release-coverage}.md.
+
+Проверки:
+- pnpm run test: PASS, 187 файлов / 1822 теста.
+- pnpm run typecheck: PASS.
+- pnpm run build: PASS.
+- git diff --check: PASS.
+- Playwright fallback (Browser plugin unavailable), fixture 5186: PASS desktop
+  1600x1050 and mobile 390x844; resize/content fill, plus leaf/insertion,
+  operations, composition propagation and edge delete, cursor arrow, cycle
+  rejection, delete cancel/confirm, reload, card drawing save, graphical editor
+  at 20%, fragment save, API writes = 0. Screenshots outside repository.
+
+Ограничения:
+- localStorage-прототип; packaged UI and owner manual source-harness acceptance remain open.
+- ZIP не собирался: он не входил в поручение.
+
+Статус handoff: передан сборщику
+Release coverage: 086 ready-for-review; pending integration into next ZIP.
 ```
 
 ## 080 — Follow-up: точка перехода ОП

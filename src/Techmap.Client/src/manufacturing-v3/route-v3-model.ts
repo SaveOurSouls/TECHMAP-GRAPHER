@@ -2,6 +2,15 @@ import type { HarnessDesignDocument } from "../editor/model";
 import type { EditorSceneObject } from "../editor/editor-types";
 import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
 import { createRouteDrawingCopy, parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
+import type { UmlOperation } from "../uml/uml-model";
+import type { RouteV2Drawing } from "../manufacturing-v2/route-v2-model";
+
+export const ROUTE_V3_NODE_DEFAULT_WIDTH = 280;
+export const ROUTE_V3_NODE_DEFAULT_HEIGHT = 264;
+export const ROUTE_V3_NODE_MIN_WIDTH = 220;
+export const ROUTE_V3_NODE_MIN_HEIGHT = 170;
+export const ROUTE_V3_NODE_MAX_WIDTH = 720;
+export const ROUTE_V3_NODE_MAX_HEIGHT = 720;
 
 export interface RouteV3Fragment {
   readonly id: string;
@@ -23,19 +32,40 @@ export interface RouteV3Node {
   readonly refs: readonly RouteSourceRef[];
   readonly x: number;
   readonly y: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly quantity?: number;
+  readonly inputNodeIds?: readonly string[];
+  readonly operations?: readonly UmlOperation[];
+  readonly operatorConfirmed?: boolean;
+  readonly rawRefs?: readonly RouteSourceRef[];
+  readonly drawing?: RouteV2Drawing;
 }
 export interface RouteV3Document {
   readonly version: 1;
   readonly preparedRefs: readonly RouteSourceRef[];
   readonly fragments: readonly RouteV3Fragment[];
   readonly nodes: readonly RouteV3Node[];
-  readonly edges: readonly { id: string; from: string; to: string }[];
+  readonly edges: readonly { id: string; from: string; to: string; refs?: readonly RouteSourceRef[] }[];
   readonly generated: boolean;
   readonly backgroundOpacity: number;
+  readonly graphEdited?: boolean;
 }
 export const refKey = (ref: RouteSourceRef): string => `${ref.kind}:${ref.id}`;
 export const routeV3StorageKey = (projectId: string, harnessId: string): string => `techmap.route-v3.${projectId}.${harnessId}`;
 export const fragmentDrawingCopy = (fragment: RouteV3Fragment): RouteDrawingCopy => fragment.isolatedDrawingCopy ?? fragment.drawingCopy;
+const clampSize = (value: unknown, fallback: number, min: number, max: number): number => typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+export function routeV3NodeSize(node: Pick<RouteV3Node, "width" | "height">): { width: number; height: number } {
+  return { width: clampSize(node.width, ROUTE_V3_NODE_DEFAULT_WIDTH, ROUTE_V3_NODE_MIN_WIDTH, ROUTE_V3_NODE_MAX_WIDTH), height: clampSize(node.height, ROUTE_V3_NODE_DEFAULT_HEIGHT, ROUTE_V3_NODE_MIN_HEIGHT, ROUTE_V3_NODE_MAX_HEIGHT) };
+}
+export function routeV3ResizeNodeSize(width: number, height: number): { width: number; height: number } {
+  return { width: clampSize(width, ROUTE_V3_NODE_DEFAULT_WIDTH, ROUTE_V3_NODE_MIN_WIDTH, ROUTE_V3_NODE_MAX_WIDTH), height: clampSize(height, ROUTE_V3_NODE_DEFAULT_HEIGHT, ROUTE_V3_NODE_MIN_HEIGHT, ROUTE_V3_NODE_MAX_HEIGHT) };
+}
+export function routeV3ConnectionPort(node: Pick<RouteV3Node, "x" | "y" | "width" | "height">, side: "top" | "bottom"): { x: number; y: number } {
+  const size = routeV3NodeSize(node); return { x: node.x + size.width / 2, y: node.y + (side === "top" ? 0 : size.height) };
+}
+export const routeV3NodeQuantity = (node: Pick<RouteV3Node, "quantity">): number => typeof node.quantity === "number" && Number.isFinite(node.quantity) && node.quantity > 0 ? node.quantity : 1;
+export const routeV3NodeOperations = (node: Pick<RouteV3Node, "operations">): readonly UmlOperation[] => node.operations ?? [];
 
 export function createInitialRouteV3(source: HarnessDesignDocument): RouteV3Document {
   return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2 };
@@ -43,10 +73,10 @@ export function createInitialRouteV3(source: HarnessDesignDocument): RouteV3Docu
 export function appendRouteV3Fragment(document: RouteV3Document, fragment: RouteV3Fragment): RouteV3Document {
   if (!fragment.objectIds.length) throw new Error("Выберите объекты для слепка.");
   const exists = document.fragments.some(item => item.id === fragment.id);
-  return { ...document, fragments: exists ? document.fragments.map(item => item.id === fragment.id ? fragment : item) : [...document.fragments, fragment], generated: false, nodes: [], edges: [] };
+  return { ...document, fragments: exists ? document.fragments.map(item => item.id === fragment.id ? fragment : item) : [...document.fragments, fragment], generated: false, nodes: document.graphEdited ? document.nodes : [], edges: document.graphEdited ? document.edges : [] };
 }
 export function removeRouteV3Fragment(document: RouteV3Document, id: string): RouteV3Document {
-  return { ...document, fragments: document.fragments.filter(item => item.id !== id), nodes: [], edges: [], generated: false };
+  return { ...document, fragments: document.fragments.filter(item => item.id !== id), nodes: document.graphEdited ? document.nodes.map(n => ({ ...n, fragmentIds: n.fragmentIds.filter(f => f !== id) })) : [], edges: document.graphEdited ? document.edges : [], generated: false };
 }
 export function revealedRouteV3Ids(document: RouteV3Document): string[] {
   return [...new Set(document.fragments.flatMap(fragment => fragment.objectIds))];
@@ -76,7 +106,7 @@ export function generateRouteV3(document: RouteV3Document, source?: HarnessDesig
   const addNode = (node: Omit<RouteV3Node, "x" | "y">, parents: readonly string[]) => {
     const depth = parents.length ? 1 + Math.max(...parents.map(id => depths.get(id) ?? 0)) : 0;
     const column = rows.get(depth) ?? 0;
-    nodes.push({ ...node, x: 32 + column * 304, y: 32 + depth * 280 });
+    nodes.push({ ...node, x: 32 + column * 304, y: 32 + depth * 328 });
     rows.set(depth, column + 1); depths.set(node.id, depth);
     for (const from of parents) edges.push({ id: `edge:${from}:${node.id}`, from, to: node.id });
   };
@@ -109,7 +139,7 @@ export function generateRouteV3(document: RouteV3Document, source?: HarnessDesig
     const leaves = nodes.filter(node => node.fragmentIds.length && !edges.some(edge => edge.from === node.id)).map(node => node.id);
     addNode({ id: "route-v3:final", kind: "final", title: "Готовый жгут", refs: allRefs, fragmentIds: [] }, leaves);
   }
-  return { ...document, nodes, edges, generated: true };
+  return { ...document, nodes, edges, generated: true, ...(document.graphEdited !== undefined ? { graphEdited: false } : {}) };
 }
 
 /** Reject the whole draft instead of silently dropping damaged snapshots. */
@@ -117,6 +147,7 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
   try {
     const v = value as RouteV3Document;
     if (!v || v.version !== 1 || !Array.isArray(v.fragments) || v.fragments.length > 500 || !Array.isArray(v.preparedRefs) || !Array.isArray(v.nodes) || !Array.isArray(v.edges) || typeof v.generated !== "boolean") return null;
+    if (v.graphEdited !== undefined && typeof v.graphEdited !== "boolean") return null;
     const opacity = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
     const text = (n: unknown): n is string => typeof n === "string" && n.trim().length > 0 && n.length <= 512;
     const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
@@ -134,9 +165,15 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
     for (const node of v.nodes) {
       if (!node || !text(node.id) || nodeIds.has(node.id) || !text(node.title) || !["semiFinished", "assembly", "final"].includes(node.kind) || !refs(node.refs) || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !Array.isArray(node.fragmentIds) || node.fragmentIds.some((id: unknown) => !ids.has(String(id)))) return null;
       nodeIds.add(node.id);
+      if (node.rawRefs !== undefined && !refs(node.rawRefs)) return null;
+      if (node.operatorConfirmed !== undefined && typeof node.operatorConfirmed !== "boolean") return null;
+      if (node.drawing) { if (!opacity(node.drawing.backgroundOpacity)) return null; if (node.drawing.drawingCopy) parseRouteDrawingCopy(node.drawing.drawingCopy); if (node.drawing.isolatedDrawingCopy) parseRouteDrawingCopy(node.drawing.isolatedDrawingCopy); }
+      if ([node.width, node.height, node.quantity].some(n => n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n <= 0))) return null;
+      if (node.inputNodeIds !== undefined && (!Array.isArray(node.inputNodeIds) || node.inputNodeIds.some((id: unknown) => !text(id)))) return null;
+      if (node.operations !== undefined && (!Array.isArray(node.operations) || node.operations.some((op: UmlOperation) => !op || !text(op.id) || typeof op.title !== "string" || !["running", "static"].includes(op.kind) || [op.lengthMm,op.speedMmPerMinute,op.employees,op.quantity,op.minutesEach].some(n => !Number.isFinite(n) || n < 0)))) return null;
     }
     const visited = new Set<string>(), visiting = new Set<string>(), edgeIds = new Set<string>();
-    for (const edge of v.edges) { if (!edge || !text(edge.id) || edgeIds.has(edge.id) || !nodeIds.has(edge.from) || !nodeIds.has(edge.to) || edge.from === edge.to) return null; edgeIds.add(edge.id); }
+    for (const edge of v.edges) { if (!edge || !text(edge.id) || edgeIds.has(edge.id) || !nodeIds.has(edge.from) || !nodeIds.has(edge.to) || edge.from === edge.to || edge.refs !== undefined && !refs(edge.refs)) return null; edgeIds.add(edge.id); }
     const visit = (id: string): boolean => { if (visiting.has(id)) return false; if (visited.has(id)) return true; visiting.add(id); if (v.edges.filter(e => e.from === id).some(e => !visit(e.to))) return false; visiting.delete(id); visited.add(id); return true; };
     if ([...nodeIds].some(id => !visit(id))) return null;
     return { ...v, fragments };
