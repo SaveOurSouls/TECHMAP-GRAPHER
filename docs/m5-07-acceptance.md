@@ -537,3 +537,20 @@ win-x64 publish); `verify-package.ps1` — PASS (339 записей манифе
 хранит слепки в localStorage и не переносит их между браузерами. Прямой запуск из
 кириллического пути ранее имел `UnauthorizedAccessException`; portable-проверка
 этого среза прошла штатно. ZIP остаётся вне Git.
+# Пакет 07.10.2026 — M5-22-039 / follow-up 080
+
+Кодовый HEAD: `12c3bda` (follow-up code `17914c2d`, handoff `e40ffd09`; coverage
+подтверждён коммитом `7576227`). Версия: `0.63.39-m5-22-review`.
+
+ZIP: `artifacts/m5-22-039/TECHMAP-GRAPHER-0.63.39-m5-22-review-win-x64.zip`  
+Размер: **63 980 972 байт**  
+SHA-256: `E95B6799B02BE6F4434B97F291CE237E616F7AA2F73136C8F463A6302F7F16D9`
+
+Проверки: `scripts/build-package.ps1` — PASS (186 файлов / 1814 клиентских
+тестов, TypeScript/Vite build, 1117 .NET-тестов, self-contained win-x64 publish);
+`verify-package.ps1` — PASS (339 записей манифеста); `test-portable-package.ps1` —
+PASS, 7/7 режимов из ASCII-каталога `C:\Temp\TECHMAP-m5-22-039`.
+
+Ограничения: ручная C1–C3 и packaged UI-приёмка не выполнялась. Запуск portable
+из исходного кириллического пути завершился `Techmap.Server.exe exit 1` до host URL;
+тот же ZIP полностью прошёл 7/7 из ASCII-пути. ZIP остаётся вне Git.
