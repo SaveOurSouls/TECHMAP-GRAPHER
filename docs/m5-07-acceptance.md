@@ -554,3 +554,23 @@ PASS, 7/7 режимов из ASCII-каталога `C:\Temp\TECHMAP-m5-22-039`
 Ограничения: ручная C1–C3 и packaged UI-приёмка не выполнялась. Запуск portable
 из исходного кириллического пути завершился `Techmap.Server.exe exit 1` до host URL;
 тот же ZIP полностью прошёл 7/7 из ASCII-пути. ZIP остаётся вне Git.
+# Пакет 07.10.2026 — M5-22-040 / карточки 085 и 086
+
+Кодовый HEAD: `e7c5a82` (интеграция `f38f8ff`; 085 code `723ff99`, handoff
+`7241134`; 086 code `0a3c04a`, handoff `6e274c4`). Версия
+`0.63.40-m5-22-review`.
+
+ZIP: `artifacts/m5-22-040/TECHMAP-GRAPHER-0.63.40-m5-22-review-win-x64.zip`.
+Размер: **63 995 871 байт**. SHA-256:
+`FE67CCF3ACEB10CED7228703E85597FF8CB31887CD65BB594C41434343B55F1F`.
+
+Штатный `scripts/build-package.ps1` — PASS: 187 клиентских файлов / 1826 тестов,
+TypeScript и production build, 1117 .NET-тестов, один нагрузочный тест,
+self-contained win-x64 publish. `verify-package.ps1` — PASS, 339 записей
+манифеста и 340 файлов пакета. `test-portable-package.ps1` — PASS, 7/7 из
+`C:\Temp\TECHMAP-m5-22-040` (внутри есть путь с кириллицей и пробелами).
+
+Ограничения: C1/C2 на исходном жгуте, ручная packaged UI-приёмка и owner
+acceptance не выполнялись. Route v3 продолжает хранить данные в localStorage.
+Прямой запуск из исходного кириллического пути в этом срезе не проверялся;
+предыдущий срез имел отказ запуска до публикации host URL. ZIP вне Git.
