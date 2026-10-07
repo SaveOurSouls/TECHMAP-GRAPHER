@@ -83,3 +83,13 @@ it("gives connection points priority over a covering while its uncovered boundar
   expect(coveringDragBlockedByPhysicalNode([covering, junction], layers, { x: 70, y: 20 }, 1, "drawing")).toBe(true);
   expect(coveringDragBlockedByPhysicalNode([covering, junction], layers, { x: 120, y: 20 }, 1, "drawing")).toBe(false);
 });
+
+it("keeps material indexes and positional designations above a covering for painting and selection", () => {
+  const materialLayer: EditorLayer = { id: "material-indexes", label: "Индексы материалов и позиции", visible: true, locked: false };
+  const index: EditorSceneObject = { id: "object-index:C1", kind: "object-index", layerId: materialLayer.id, label: "ТУ1", x: 55, y: 12, width: 28, height: 20, color: "#17384b", points: [{ x: 70, y: 20 }, { x: 55, y: 12 }] };
+  const leader: EditorSceneObject = { id: "L1", kind: "position-leader", layerId: materialLayer.id, label: "1", x: 96, y: 8, width: 24, height: 24, color: "#365568", points: [{ x: 70, y: 20 }, { x: 108, y: 20 }] };
+  const annotationLayers = [...layers, materialLayer];
+  expect(objectsInPaintOrder([covering, index, leader], annotationLayers, "drawing").slice(-2).map(object => object.id)).toEqual([index.id, leader.id]);
+  expect(hitTestEditorScene([covering, index, leader], annotationLayers, { x: 60, y: 20 }, 1, "drawing")).toBe(index.id);
+  expect(hitTestEditorScene([covering, index, leader], annotationLayers, { x: 108, y: 20 }, 1, "drawing")).toBe(leader.id);
+});

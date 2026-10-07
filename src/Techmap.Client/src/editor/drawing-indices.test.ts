@@ -37,11 +37,13 @@ describe("drawing object indices", () => {
     const base = physicalFixture(), wire = sceneObject("wire", "wire", [{x:0,y:0},{x:40,y:0}]);
     const document = { ...base, drawingDocuments: emptyDrawingDocuments() };
     const initial = drawingObjectIndexScene(document, [wire])[0]!;
-    const moved = moveDrawingIndex(document, initial.id, {x:100,y:50}, [initial]);
-    expect(moved?.indexOffsets?.wire).toEqual({x:72,y:57});
+    const moved = moveDrawingIndex(document, initial.id, {x:100,y:50}, [wire, initial]);
     const next = drawingObjectIndexScene({ ...document, drawingDocuments: moved! }, [{...wire,points:[{x:10,y:10},{x:50,y:10}]}])[0]!;
-    expect(next.x).toBe(110);
-    expect(next.y).toBe(60);
+    expect(moved?.indexOffsets?.wire).toEqual({x:next.x-Number(next.metadata?.indexBaseX),y:next.y-Number(next.metadata?.indexBaseY)});
+    const [anchor, label] = next.points!;
+    expect(anchor && label).toBeTruthy();
+    const angle = Math.acos(Math.abs((label!.y-anchor!.y) / Math.hypot(label!.x-anchor!.x,label!.y-anchor!.y)));
+    expect(angle).toBeLessThanOrEqual(Math.PI / 18 + 1e-8);
   });
 
   it("uses real BOM indices and preserves drag offsets through save, parent movement, and history", () => {
@@ -55,13 +57,18 @@ describe("drawing object indices", () => {
     const labels = drawingObjectIndexScene(document, objects);
     expect(labels.map(label => label.label)).toEqual(["A", "W1", "ТУ1"]);
     const label = labels.find(item => item.metadata?.indexObjectId === "W1")!;
-    const documents = moveDrawingIndex(document, label.id, {x:100,y:50}, labels)!;
+    const documents = moveDrawingIndex(document, label.id, {x:100,y:50}, [...objects, ...labels])!;
     const history = executeEditorCommand(createEditorHistory(document), { type: "set-drawing-documents", documents });
     const saved = parseHarnessDesignDocument(JSON.parse(JSON.stringify(history.present)));
     const movedWire = { ...objects[1]!, points: [{x:10,y:10},{x:50,y:10}] };
     const afterParentMove = drawingObjectIndexScene(saved, [objects[0]!, movedWire, objects[2]!]).find(item => item.metadata?.indexObjectId === "W1")!;
-    expect(afterParentMove.x).toBe(110);
-    expect(afterParentMove.y).toBe(60);
+    const beforeParentMove = drawingObjectIndexScene(saved, objects).find(item => item.metadata?.indexObjectId === "W1")!;
+    expect(afterParentMove.x).toBeCloseTo(beforeParentMove.x+10);
+    expect(afterParentMove.y).toBeCloseTo(beforeParentMove.y+10);
+    const [anchor, labelPosition] = afterParentMove.points!;
+    expect(anchor && labelPosition).toBeTruthy();
+    const angle = Math.acos(Math.abs((labelPosition!.y-anchor!.y) / Math.hypot(labelPosition!.x-anchor!.x,labelPosition!.y-anchor!.y)));
+    expect(angle).toBeLessThanOrEqual(Math.PI / 18 + 1e-8);
     expect(undoEditorCommand(history).present).toBe(document);
     expect(redoEditorCommand(undoEditorCommand(history)).present.drawingDocuments?.indexOffsets?.W1).toEqual(documents.indexOffsets?.W1);
   });
