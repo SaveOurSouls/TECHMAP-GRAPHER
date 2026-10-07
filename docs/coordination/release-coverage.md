@@ -114,4 +114,4 @@ represent missing completed chat handoffs.
 
 | 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | ожидается | Чат active; задача зарегистрирована как REQ-121 / `tasks/085-drawing-dimension-properties.md`; commit и handoff отсутствуют | pending |
 
-| 086 — Карточки UML в Route v3 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | code + docs handoff below | codex/route-v3-uml | ready-for-review; pending integration |
+| 086 — Карточки UML в Route v3 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | `0a3c04a0480b7eee1820b56cc2450a8f6ec5c83d` | codex/route-v3-uml, handoff в agent-handoff.md | ready-for-review; pending integration |
