@@ -1,5 +1,39 @@
 # Шаблон handoff от чата задачи
 
+## 085 — Свойства размеров и индексы материалов на Чертеже
+
+```text
+Карточка: 085 — Свойства размеров и индексы материалов на Чертеже
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты для интеграции: 723ff99350476255dcdae2de5442cf761c9720c2
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/CanvasViewport.tsx, HarnessEditorWorkspace.tsx: размер и верхние аннотации получают приоритет над жестами пайпов/оболочек; панель свойств открывается при выборе размера.
+- src/Techmap.Client/src/editor/drawing-indices.ts, drawing-documents.ts, model.ts: лидер индекса с точкой и ограничением 10° к нормали; новый мигрируемый слой `material-indexes` для индексов и позиционных выносок.
+- src/Techmap.Client/src/editor/*test.ts: регрессии hit-test, выбора, BOM-метража, верхнего слоя и миграции.
+
+Проверки:
+- pnpm --dir src\Techmap.Client test: PASS (186 файлов / 1818 тестов)
+- pnpm --dir src\Techmap.Client typecheck: PASS
+- pnpm --dir src\Techmap.Client build: PASS
+- git diff --check: PASS
+
+Зависимости/порядок:
+- После caafa91021fbd5e205c65067dcfcad7b4f643e88; кодовый commit уже находится в integration-ветке, однако включение в ZIP подтверждает только сборщик.
+
+Ограничения и ручная приёмка:
+- C1/C2 на исходном жгуте, packaged Windows UI и owner acceptance вручную не проверены. Vite сообщает известные предупреждения `heic-to` и крупного chunk.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Миграция добавляет слой при чтении старого документа. Электрические связи не меняются; изменяемая длина размера продолжает использовать существующий доменный пересчёт длины материала.
+```
+
 ## 080 — Follow-up: точка перехода ОП
 
 ```text

@@ -112,4 +112,4 @@ represent missing completed chat handoffs.
 | 081 | `fdc5c7c`, `ebcf790`, `b207b1f` | code equivalent `5eeb02f`; docs `ca55a20`/`e918e18` already ancestry | included (equivalent) |
 | 084 | `9c15918`, `0cfb983`, `2174599` | first two ancestors; final ref docs-only and current registry/task/ADR match | included (ancestor + docs coverage) |
 
-| 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | ожидается | Чат active; задача зарегистрирована как REQ-121 / `tasks/085-drawing-dimension-properties.md`; commit и handoff отсутствуют | pending |
+| 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | `723ff99350476255dcdae2de5442cf761c9720c2` | Кодовый commit в ветке `codex/integration-m5-22`; сборщик должен подтвердить ancestry либо проверенный эквивалент в code HEAD нового ZIP | pending builder confirmation |
