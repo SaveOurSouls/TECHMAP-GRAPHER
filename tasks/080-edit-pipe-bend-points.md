@@ -1,6 +1,6 @@
 # 080. Редактирование точек изгиба пайпов
 
-- **Статус:** ready-for-review (follow-up handoff submitted; builder confirmation pending)
+- **Статус:** ready-for-review (follow-up integrated; builder coverage confirmed)
 - **Владелец / чат:** рабочий чат «Исправить редактирование точек изгиб», Thread ID `01a11190-8a49-7423-a35d-6e75df977c8e`
 - **Источник запроса:** поручение владельца от 06.10.2026 и C1–C3
 - **Требования:** REQ-110
@@ -41,7 +41,7 @@
 - Коммиты: `7d51a673a0cba9d0654dd54d1f2c28472a8cf984` (код, `fix(drawing): edit generated pipe bends`); `3df8ce6` (follow-up: удаление внешних станций перехода ОП и приоритет ближайшей точки); `17914c2d19271315fccd70077e870faffaf3dec8` (follow-up: ручка следует округлённой проекции пайпа); `c34f1d61dfb2844482730fd538eca20de3b4ac60` (первичная handoff-документация); `e40ffd09b0f770665eedafb445bce209e60de056` (follow-up handoff).
 - Handoff сборщику: follow-up передан 07.10.2026; оба новых SHA опубликованы в origin.
 - Интеграционный commit/эквивалент: новые code и handoff commits являются предками проверенного локального `codex/integration-m5-22` HEAD `e40ffd09b0f770665eedafb445bce209e60de056`; подтверждение сборщика для follow-up pending.
-- ZIP / release coverage: следующий кодовый срез; follow-up pending до подтверждения сборщика.
+- ZIP / release coverage: включено в следующий кодовый срез; follow-up ancestry и handoff подтверждены сборщиком.
 - Проверки 06.10.2026: `pnpm --dir src\\Techmap.Client test` — PASS, 183 файлов / 1792 теста; `pnpm --dir src\\Techmap.Client typecheck` — PASS; `pnpm --dir src\\Techmap.Client build` — PASS; `git diff --check` — PASS.
 - Ограничения и открытые вопросы: не выполнена ручная проверка на исходном жгуте C1–C3 и packaged Windows-приложении. Vite сообщает штатные предупреждения об externalized `fs`/`path`/`crypto` зависимости `heic-to` и chunk >500 kB.
 - Решение владельца о приёмке: не зафиксировано.
