@@ -135,4 +135,4 @@
 
 | Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
 | --- | --- | --- | --- | --- | --- |
-| Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | in-progress; следующий ZIP, handoff pending |
+| Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | ready-for-review; code e47f99e опубликован; handoff в agent-handoff; следующий ZIP pending builder |

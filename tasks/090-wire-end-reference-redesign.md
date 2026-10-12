@@ -30,3 +30,5 @@
 ## Проверенный результат 12.10.2026
 
 Полный Vitest 188/1834, профильные 4/14, TypeScript/Vite, verifier 13/7, XML 20/20 и diff-check PASS. Browser C1/силуэт, terminal/sealed-pin, цвет и загрузка 3/3 PASS. [Протокол и интеграции](../docs/wire-end-090-handoff.md). Commit SHA указывается в agent-handoff после фиксации; приёмка владельца открыта.
+
+Кодовый commit: e47f99e2b8044b85d7703359234477de1f3a0821, опубликован в origin/codex/integration-m5-22. Handoff записан в docs/coordination/agent-handoff.md; coverage ждёт подтверждения сборщика.

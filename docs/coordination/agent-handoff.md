@@ -360,3 +360,15 @@ Git coordinator check: both commits resolve, `git show --check` PASS, both are a
 Ограничения: source harness C1–C3 and packaged Windows UI were not manually checked.
 Требуется от сборщика: explicitly confirm follow-up row in release coverage; base card 080 was already included in M5-22-037.
 ```
+
+## 090 — боковой профиль оконцовок по C1, 12.10.2026
+
+- Чат: `01a13091-f350-7b62-b8b0-9ca77cf1ad58`; REQ-126; статус ready-for-review.
+- Ветка: `codex/integration-m5-22`, основной worktree; origin `git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git`.
+- Кодовый SHA: `e47f99e2b8044b85d7703359234477de1f3a0821`, отправлен в origin.
+- Общий SVG-генератор, 13 рисунков/7 частей, overview/terminal-detail, Canvas scale/anchor и профильные регрессии; чужие незавершённые 089 исключены из коммита, включая общие документы (staged только 090).
+- Проверки: Vitest 188 файлов / 1834 теста; профильные 4/14; tsc/Vite; verifier 13/7; XML 20/20; staged diff-check PASS. Browser стенд 1266×714: C1 и итоговый профиль, terminal/sealed-pin, цвет, изображения 3/3, console 0 PASS.
+- Интеграции: WireBlankPreview → справочник/ManufacturingRoute/v2/v3; Canvas → renderPartSvg. Новая постоянная модель/ADR не требуются.
+- Протокол: `docs/wire-end-090-handoff.md`; карточка: `tasks/090-wire-end-reference-redesign.md`.
+- Ограничения: исходный жгут, packaged UI, 390px и приёмка владельцем открыты; IPC не сертифицирован; фото остаются прежними по контракту. ZIP не запрошен.
+- Передача сборщику: включить кодовый и следующий документальный SHA 090, подтвердить ancestry и coverage перед следующим ZIP. Этот handoff не означает готовность всех соседних задач релиза.
