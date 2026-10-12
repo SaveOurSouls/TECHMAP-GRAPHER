@@ -37,6 +37,8 @@ export interface E4ConnectorInspectorProps {
     readonly onNameVisibilityChange: () => void;
     readonly onNumberChange: (contactId: string, number: string) => void;
     readonly onNameChange: (contactId: string, name: string) => void;
+    readonly seals?: readonly { article: string; color: string; section: string; insulationDiameter: string }[];
+    readonly onSealChange?: (contactId: string, article: string) => void;
   };
   readonly connector: ConnectorInstance;
   readonly onRefreshTerminals?: () => void;
@@ -509,6 +511,11 @@ export function E4ConnectorInspector({
                     : column.id === `custom:${templateNameColumnId}` ? <TemplateNameCell
                     allowEmpty={!templateAuthoring} label={`Назначение, контакт ${contact.number}`} value={templateAuthoring ? templateAuthoring.names[contact.id] ?? "" : value} disabled={disabled || !canvasEditing}
                     onCommit={name => templateAuthoring ? templateAuthoring.onNameChange(contact.id, name) : updateContact(contact, { nameOverride: name })} />
+                    : templateAuthoring && column.id === "custom:seal" ? <select aria-label={`Уплотнитель, контакт ${contact.number}`} value={contact.customValues.seal ?? ""} disabled={disabled}
+                      title="Выберите совместимый уплотнитель серии"
+                      onChange={event => templateAuthoring.onSealChange?.(contact.id, event.currentTarget.value)}>
+                      <option value="">—</option>{(templateAuthoring.seals ?? []).map(seal => <option key={seal.article} value={seal.article}>{seal.article} · {seal.color} · {seal.section} · Ø {seal.insulationDiameter}</option>)}
+                    </select>
                     : templateAuthoring && column.id === "contactType" ? <select aria-label={`Тип, контакт ${contact.number}`} value={contact.contactType} disabled={disabled}
                       onChange={event => updateContact(contact, { contactType: event.target.value })}>
                       <option value="">Не назначен</option>{templateAuthoring.groups.map(group => <option key={group.id} value={group.name}>{group.name}</option>)}

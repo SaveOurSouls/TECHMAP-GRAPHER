@@ -17,7 +17,7 @@ import { hatchKinds, hatchLabels, type DrawingHatch } from "./drawing-hatch";
 import { drawingSelection, articleDrawingView, drawingContactContent, type ArticleDrawing, type DrawingContactBinding, type DrawingTarget, findArticleDrawing, separateLegacyDrawings } from "./drawing-bindings";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { DrawingArrayPanel } from "./DrawingArrayPanel";
-import type { ConnectorSchematicPresentation } from "../editor/model";
+import { parseConnectorSchematic, type ConnectorSchematicPresentation } from "../editor/model";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
@@ -76,12 +76,12 @@ import {
 import { type ContactDirectionV2, type ImageNodeV2, type ParameterValueV2, type TemplateContentV2 as LegacyTemplateContentV2, type TemplateV2Diagnostic } from "./template-model-v2";
 import { type BundlePortV3 as BundlePortV2, type LogicalContactV3 as LogicalContactV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2, type TemplateNodeV3 as TemplateNodeV2, type ViewContactPointV3 as ViewContactPointV2 } from "./template-model-v3";
 import { type TemplateContentV4 } from "./template-model-v4";
-import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3, type TerminalContactTypeBindingV5 } from "./template-model-v5";
+import { createTemplateContentV5FromEditor, projectTemplateContentV5TableToV1, projectTemplateContentV5ToV3, type CompatibleSealV5, type TerminalContactTypeBindingV5 } from "./template-model-v5";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";
 import "./component-library.css";
 
 interface Props { config: RuntimeConfig; session: LocalSession; onNavigationGuard?: (guard: (() => Promise<boolean>) | null) => void; }
-export interface Draft { drawingGenerators?: DrawingGenerator[]; e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
+export interface Draft { drawingGenerators?: DrawingGenerator[]; e4Presentation?: ConnectorSchematicPresentation; articleDrawings?: ArticleDrawing[]; drawingContactBindings?: DrawingContactBinding[]; templateId: string | null; version: number; draftRevision: number; code: string; name: string; assets: TemplateAsset[]; content: TemplateContentV2; compatibleTerminalArticleKeys: ArticleBinding[]; compatibleSeals?: CompatibleSealV5[]; terminalContactTypeBindings: TerminalContactTypeBindingV5[] | null; e4ConnectorTable: E4ConnectorSeriesTable; }
 
 export const TEMPLATE_UNDO_LIMIT = 100;
 export function pushTemplateUndo(stack: readonly TemplateContentV2[], current: TemplateContentV2): TemplateContentV2[] {
@@ -92,7 +92,7 @@ type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "recta
 
 const newDraft = (): Draft => {
   const content = newTemplateContentV2();
-  return { articleDrawings: [], drawingContactBindings: [], templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
+  return { articleDrawings: [], drawingContactBindings: [], templateId: null, version: 0, draftRevision: 0, code: "", name: "Новый компонент", assets: [], content, compatibleTerminalArticleKeys: [], compatibleSeals: [], terminalContactTypeBindings: [], e4ConnectorTable: createE4ConnectorSeriesTableFromV3(content) };
 };
 function loadLibraryRecovery() {
   try { return typeof window === "undefined" ? null : readLibraryDraftRecovery(window.localStorage); }
@@ -500,9 +500,9 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
     }
   }, [draft.content, selectedArticleVariantId]);
   const e4PreviewContent = useMemo(() => {
-    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators).content; }
+    try { return createTemplateContentV5FromEditor(draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators, draft.compatibleSeals ?? []).content; }
     catch { return null; }
-  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators]);
+  }, [draft.content, draft.e4ConnectorTable, draft.compatibleTerminalArticleKeys, draft.terminalContactTypeBindings, draft.e4Presentation, draft.articleDrawings, draft.drawingContactBindings, draft.drawingGenerators, draft.compatibleSeals]);
   const effectivePreviewParameterValues = useMemo<Readonly<Record<string, ParameterValueV2>>>(() => ({
     ...previewParameterValues,
     ...articlePreview.values,
@@ -599,7 +599,7 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
     editSequence.current += 1;
     const compatibleTerminalArticleKeys = terminals?.map(item => ({ ...item })) ?? compatibleTerminalsFromV3(content);
     const projected = applySeriesTerminalsToEditor(content, table ?? createE4ConnectorSeriesTableFromV3(content), compatibleTerminalArticleKeys, bindings);
-    setDraft({ drawingGenerators: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ drawingGenerators: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(item.content) ? item.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(item.content) ? structuredClone(item.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(item.content) ? structuredClone(item.content.drawingContactBindings ?? []) : [], templateId: item.templateId, version: item.version, draftRevision: item.draftRevision, code: item.code, name: item.name, assets: [...item.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys, compatibleSeals: isTemplateContentV5(item.content) ? structuredClone(item.content.compatibleSeals ?? []) : [], terminalContactTypeBindings: bindings?.map(binding => structuredClone(binding)) ?? null, e4ConnectorTable: structuredClone(projected.table) });
     setViewId(content.views[0]!.id); setActiveLayerIds(firstLayerIds(content)); setSelectedId(null); setUndoStack([]);
     setGraphicEditorMode("e4");
     setPendingLogicalContactId(null);
@@ -874,7 +874,7 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
     let v5Content;
     try {
       for(const drawing of working.articleDrawings??[])validateArticleDrawingContacts(working.content,working.e4ConnectorTable,working.drawingContactBindings??[],drawing);
-      v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings, working.drawingGenerators).content;
+      v5Content = createTemplateContentV5FromEditor(working.content, working.e4ConnectorTable, working.compatibleTerminalArticleKeys, working.terminalContactTypeBindings, working.e4Presentation, working.articleDrawings, working.drawingContactBindings, working.drawingGenerators, working.compatibleSeals ?? []).content;
     } catch (caught) { setError(errorText(caught)); return null; }
     const body = { code: working.code.trim(), name: working.name.trim(), articleBindings: articleBindingsFromTemplateV3(working.content), content: v5Content };
     return body;
@@ -925,7 +925,7 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
     const projected = applySeriesTerminalsToEditor(content, table, terminals, bindings);
     const reconciliation = reconcileTemplateEnvelopeAssets(result.content, result.assets);
     if (reconciliation.diagnostics.length) throw new Error(reconciliation.diagnostics[0]!.message);
-    setDraft({ drawingGenerators: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(result.content) ? structuredClone(result.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingContactBindings ?? []) : [], templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
+    setDraft({ drawingGenerators: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingGenerators ?? []) : [], e4Presentation: isTemplateContentV5(result.content) ? result.content.e4Presentation : undefined, articleDrawings: isTemplateContentV5(result.content) ? structuredClone(result.content.articleDrawings ?? []) : [], drawingContactBindings: isTemplateContentV5(result.content) ? structuredClone(result.content.drawingContactBindings ?? []) : [], templateId: result.templateId, version: result.version, draftRevision: 0, code: result.code, name: result.name, assets: [...result.assets], content: structuredClone(projected.content), compatibleTerminalArticleKeys: terminals.map(item => ({ ...item })), compatibleSeals: isTemplateContentV5(result.content) ? structuredClone(result.content.compatibleSeals ?? []) : [], terminalContactTypeBindings: bindings === null ? null : structuredClone(bindings), e4ConnectorTable: structuredClone(projected.table) });
     // Asset mutations change the immutable envelope. Old snapshots could then
     // reintroduce content whose asset list no longer matches the server version.
     if (resetUndo) setUndoStack([]);
@@ -1263,6 +1263,38 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
           independentE4
           content={draft.content}
           compatibleTerminalArticleKeys={draft.compatibleTerminalArticleKeys}
+          compatibleSeals={draft.compatibleSeals}
+          onChangeCompatibleSeals={seals => { setDraft(current => {
+            const presentation = parseConnectorSchematic(current.e4Presentation);
+            const hasSealColumn = presentation.customFields.some(field => field.id === "seal");
+            const availableSeals = new Set(seals.map(seal => seal.article));
+            const withoutRemovedSeal = <T extends { readonly customValues?: Record<string, string> }>(values: T): T => {
+              const customValues = values.customValues;
+              const seal = customValues?.seal;
+              if (!customValues || seal === undefined || seal === "" || availableSeals.has(seal)) return values;
+              const { seal: _seal, ...remainingCustomValues } = customValues;
+              return { ...values, customValues: remainingCustomValues };
+            };
+            return {
+              ...current,
+              compatibleSeals: seals.map(seal => ({ ...seal })),
+              e4ConnectorTable: {
+                ...current.e4ConnectorTable,
+                seriesDefaults: current.e4ConnectorTable.seriesDefaults.map(row => ({
+                  ...row, values: withoutRemovedSeal(row.values),
+                })),
+                articles: current.e4ConnectorTable.articles.map(article => ({
+                  ...article, rows: article.rows.map(row => ({
+                    ...row, overrides: withoutRemovedSeal(row.overrides),
+                  })),
+                })),
+              },
+              ...(hasSealColumn || seals.length === 0 ? {} : { e4Presentation: {
+                ...presentation,
+                customFields: [...presentation.customFields, { id: "seal", label: "Уплотнитель", visible: true }],
+              } }),
+            };
+          }); markDirty(); }}
           onChangeCompatibleTerminalArticleKeys={setCompatibleTerminals}
           terminalContactTypeGroupIds={terminalContactTypeGroupIds}
           onSetTerminalContactTypeGroup={setSeriesTerminalContactType}

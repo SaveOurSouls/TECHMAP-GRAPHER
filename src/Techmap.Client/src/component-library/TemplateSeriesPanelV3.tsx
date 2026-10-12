@@ -6,6 +6,8 @@ import { materializeArticleContactRowsV3 } from "./template-article-contact-rows
 import "./TemplateSeriesPanelV3.css";
 import { InfoHint } from "../InfoHint";
 import { AnchoredPopover } from "../AnchoredPopover";
+import { CompatibleSealsEditor } from "./CompatibleSealsEditor";
+import type { CompatibleSealV5 } from "./template-model-v5";
 
 export interface NewArticleVariantV3Input {
   readonly sourceId: string;
@@ -106,6 +108,8 @@ export interface TemplateSeriesPanelV3Props {
   readonly onSetTerminalContactTypeGroup?: (terminal: ArticleKeyV3, groupId: string | null) => void;
   readonly standardTerminalIdentities?: ReadonlySet<string>;
   readonly onSetSeriesStandardTerminal?: (terminal: ArticleKeyV3, standard: boolean) => void;
+  readonly compatibleSeals?: readonly CompatibleSealV5[];
+  readonly onChangeCompatibleSeals?: (seals: readonly CompatibleSealV5[]) => void;
   readonly onAddContactTypeGroup: (name: string) => void;
   readonly onRenameContactTypeGroup: (groupId: string, name: string) => void;
   readonly onDeleteContactTypeGroup: (groupId: string) => void;
@@ -526,6 +530,7 @@ export function TemplateSeriesPanelV3(props: TemplateSeriesPanelV3Props) {
         </form>
         {props.content.contactTypeGroups.length ? <ul>{props.content.contactTypeGroups.map(group => <GroupNameEditor key={group.id} id={group.id} name={group.name} onRename={props.onRenameContactTypeGroup} onDelete={props.onDeleteContactTypeGroup} />)}</ul> : <p>Типы контактов ещё не добавлены.</p>}
       </section>
+      <CompatibleSealsEditor seals={props.compatibleSeals ?? []} onChange={seals => props.onChangeCompatibleSeals?.(seals)} />
       <SeriesTerminalEditor
         terminals={props.compatibleTerminalArticleKeys ?? []}
         groups={props.content.contactTypeGroups}

@@ -10,6 +10,17 @@ import { applyE4ConnectorRowEdit, materializeE4ConnectorArticle } from "./e4-con
 import type { EditorCommand } from "../editor/commands";
 import type { WireDatabaseOption } from "../editor/wire-database";
 
+const sealField = { id: "seal", label: "Уплотнитель", visible: true } as const;
+
+function hasSealField(presentation: ConnectorSchematicPresentation): boolean {
+  return presentation.customFields.some(field => field.id === sealField.id);
+}
+
+function withSealField(presentation: ConnectorSchematicPresentation, visible: boolean): ConnectorSchematicPresentation {
+  const otherFields = presentation.customFields.filter(field => field.id !== sealField.id);
+  return { ...presentation, customFields: visible ? [...otherFields, sealField] : otherFields };
+}
+
 const labels = { number: "№", contactType: "Тип", circuit: "Цепь", terminal: "Терминал", wire: "Марка", wireSection: "Сечение", color: "Цвет" };
 
 export function E4ArticlePreview({ content, table, articleId, assets, code, name, disabled, onChange, onTableChange, wireLookup }: {
@@ -27,15 +38,20 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
   const [fieldName, setFieldName] = useState("");
   const [scope, setScope] = useState<"article" | "series">("article");
   const presentation = parseConnectorSchematic(content.e4Presentation);
+  const sealVisible = hasSealField(presentation);
+  const previewContent = useMemo(() => ({
+    ...content,
+    e4Presentation: sealVisible ? withSealField(presentation, true) : presentation,
+  }), [content, presentation, sealVisible]);
   const preview = useMemo(() => {
     if (!articleId) return { connector: null, error: null };
     try {
       return { connector: createConnectorInstanceFromComponentTemplateV3({
         templateId: "00000000-0000-4000-8000-000000000001", version: 1, versionSha256: "0".repeat(64),
-        code: code || "Серия", name: name || "Компонент", articleBindings: content.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })), content, assets,
+        code: code || "Серия", name: name || "Компонент", articleBindings: content.articleVariants.map(({ sourceId, entityType, articleKey }) => ({ sourceId, entityType, articleKey })), content: previewContent, assets,
       }, { legacyNumberingPreview: true, id: "library-preview", designation: "XS1", e4Position: { x: 0, y: 0 }, articleVariantId: articleId }), error: null };
     } catch (error) { return { connector: null, error: error instanceof Error ? error.message : "Не удалось построить таблицу." }; }
-  }, [content, articleId, assets, code, name]);
+  }, [content, previewContent, articleId, assets, code, name]);
   const authoringRows = articleId && table.articles.some(article => article.articleVariantId === articleId) ? materializeE4ConnectorArticle(table, articleId).rows : [];
   const authoringNames = Object.fromEntries(authoringRows.map(row => [`library-preview:contact:${row.seriesRowId}`, row.name]));
   const authoringNumbers = Object.fromEntries(authoringRows.map(row => [`library-preview:contact:${row.seriesRowId}`, row.number]));
@@ -90,6 +106,7 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
         <option value="contacts-right">Справа</option><option value="contacts-left">Слева</option>
       </select></label>
       <label><input type="checkbox" checked={showName} disabled={disabled} onChange={toggleName} />Назначение</label>
+      <label><input type="checkbox" checked={sealVisible} disabled={disabled} onChange={event => onChange(withSealField(presentation, event.currentTarget.checked))} />Уплотнитель</label>
       {presentation.baseColumns.map(column => <label key={column.key}><input type="checkbox" checked={column.visible} disabled={disabled}
         onChange={event => onChange({ ...presentation, baseColumns: presentation.baseColumns.map(item => item.key === column.key ? { ...item, visible: event.target.checked } : item) })} />{labels[column.key]}</label>)}
     </div>
@@ -108,6 +125,13 @@ export function E4ArticlePreview({ content, table, articleId, assets, code, name
         <E4ConnectorInspector connector={preview.connector} mode="canvas" disabled={disabled} editing={!disabled} onCommand={command} onEditingChange={() => {}}
           wireOptions={wireLookup?.options} wireMaterialOptions={wireLookup?.databaseOptions} wireLookupMessage={wireLookup?.message} onWireSearch={wireLookup?.search}
           templateAuthoring={{ groups: table.contactTypeGroups, names: authoringNames, numbers: authoringNumbers, showName, onNameVisibilityChange: toggleName,
+            seals: content.compatibleSeals ?? [],
+            onSealChange: (contactId, article) => {
+              const row = authoringRows.find(item => `library-preview:contact:${item.seriesRowId}` === contactId);
+              if (row) onTableChange(applyE4ConnectorRowEdit(table, { articleVariantId: articleId!, seriesRowId: row.seriesRowId, scope,
+                changes: { customValues: { ...row.customValues, seal: article } },
+              }));
+            },
             onNumberChange: (contactId, value) => {
               const row = authoringRows.find(item => `library-preview:contact:${item.seriesRowId}` === contactId);
               if (row) onTableChange(applyE4ConnectorRowEdit(table, { articleVariantId: articleId!, seriesRowId: row.seriesRowId, scope, changes: { number: value } }));
