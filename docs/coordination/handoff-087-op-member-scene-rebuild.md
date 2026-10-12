@@ -3,7 +3,7 @@
 Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
 Ветка: codex/integration-m5-22
 Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
-Коммит для интеграции: pending (будет указан после коммита)
+Коммиты для интеграции: cf34ec5e58ef7cfb725e855eaf09148f9f15a52c; follow-up test commit pending
 
 Изменённые файлы:
 - src/Techmap.Client/src/editor/physical-scene.ts: скрывает незафиксированные точки П, совпавшие с осью ОП, сохраняя явные authoredBendRegions.
