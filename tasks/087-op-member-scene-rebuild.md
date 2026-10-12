@@ -15,6 +15,12 @@
 - Vitest: 187 файлов / 1829 тестов — PASS.
 - TypeScript, Vite build и `git diff --check` — PASS.
 
+## Передача
+
+- Коммиты: `cf34ec5e58ef7cfb725e855eaf09148f9f15a52c`, `e145d2ca6fda6a02724a561b370f4ffc0622d385`; опубликованы в `origin/codex/integration-m5-22`.
+- Handoff: [087](../docs/coordination/handoff-087-op-member-scene-rebuild.md), передан сборщику.
+- Coverage: следующий ZIP; включение подтверждает сборщик по ancestry.
+
 ## Ограничения
 
 Ручная проверка C1 на исходном жгуте и packaged UI остаётся открытой.
