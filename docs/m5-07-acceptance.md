@@ -574,3 +574,22 @@ self-contained win-x64 publish. `verify-package.ps1` — PASS, 339 записе�
 acceptance не выполнялись. Route v3 продолжает хранить данные в localStorage.
 Прямой запуск из исходного кириллического пути в этом срезе не проверялся;
 предыдущий срез имел отказ запуска до публикации host URL. ZIP вне Git.
+# Пакет 12.10.2026 — M5-22-041 / follow-up 080
+
+Кодовый HEAD: `be40369` (follow-up code `d971f0d`, handoff `eff2e27`,
+подтверждение coverage `8c1556a`). Версия: `0.63.41-m5-22-review`.
+
+ZIP: `artifacts/m5-22-041/TECHMAP-GRAPHER-0.63.41-m5-22-review-win-x64.zip`.
+Размер: **63 996 726 байт**. SHA-256:
+`1A10D808D762D1FE09CF552CB0BA9271B6E79BC2627C5BB5BFEB6EE56CEDA264`.
+
+Штатный `scripts/build-package.ps1` — PASS: 187 клиентских файлов / 1828 тестов,
+TypeScript и production build, 1117 .NET-тестов, отдельный нагрузочный тест,
+self-contained win-x64 publish. `verify-package.ps1` — PASS, 339 записей
+манифеста и 340 файлов пакета. `test-portable-package.ps1` — PASS, 7/7 из
+`C:\Temp\TECHMAP-m5-22-041` (внутри есть путь с кириллицей и пробелами).
+
+Ограничения: ручная C1–C3 и packaged UI-приёмка на исходном жгуте не выполнялись.
+Прямой запуск из исходного кириллического пути в этом срезе не проверялся;
+предыдущий срез имел отказ до публикации host URL. ZIP вне Git.
+
