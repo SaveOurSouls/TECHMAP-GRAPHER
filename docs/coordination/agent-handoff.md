@@ -1,5 +1,35 @@
 # Шаблон handoff от чата задачи
 
+## 088 — Маршрут v3: рисунки проводов из Э4
+
+```text
+Карточка: 088 — Маршрут v3: рисунки проводов из Э4
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммит для интеграции: 3c6a5fb0b76fb7a236c30bb55dc385b0a2ea3171
+
+Изменённые файлы:
+- src/Techmap.Client/src/manufacturing-v3/{RouteV3Panel,RouteV3Graph,route-v3-model,route-v3-wire-artwork}.tsx: проекция рисунка провода из Э4, ручной V3 override и явный сброс «Обновить вид проводов по Э4».
+- src/Techmap.Client/src/manufacturing-v3/route-v3.css и route-v3-wire-artwork.test.ts: оформление подписей и регрессии терминала/уплотнителя/пайки, ручного вида и парсинга.
+- docs/requirements.md, tasks/088-route-v3-e4-wire-artwork.md, tasks/README.md, docs/coordination/chat-registry.md: REQ-124, карточка и регистрация.
+
+Проверки:
+- pnpm --dir src\Techmap.Client test: PASS (188 файлов / 1831 тест).
+- Профиль: 3 V3 файла / 19 тестов — PASS.
+- pnpm --dir src\Techmap.Client typecheck: PASS.
+- pnpm --dir src\Techmap.Client build: PASS.
+- git diff --check: PASS.
+
+Ограничения и ручная приёмка:
+- localStorage-прототип; ручные исходный жгут и packaged Windows UI ожидаются.
+- Уплотнитель и пайка определяются по ключам/значениям custom fields Э4 и описанию терминала; при отдельном формальном столбце его нужно связать с этой проекцией.
+
+Статус handoff: передан сборщику; push в origin подтверждён.
+Release coverage: следующий ZIP; подтвердить ancestry SHA в собираемом HEAD.
+```
+
 ## 085 — Свойства размеров и индексы материалов на Чертеже
 
 ```text
