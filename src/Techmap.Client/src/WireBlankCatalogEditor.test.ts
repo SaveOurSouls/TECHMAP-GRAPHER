@@ -39,4 +39,17 @@ describe("wire blank preview", () => {
     expect(renderToStaticMarkup(createElement(WireBlankPreview, { row: { ...row, photoDataUrl: "data:image/png;base64,AAAA" } })))
       .toContain('<img class="wire-blank-preview" src="data:image/png;base64,AAAA"');
   });
+
+  it("shares the C1 side profile and preserves jacket/seal/metal overlap", () => {
+    const sealed = artwork({ ...row, start: "sealed", end: "sealed-pin" });
+    expect(sealed).toContain('data-profile="three-rib-seal"');
+    expect(sealed).toContain('data-profile="socket-contact"');
+    expect(sealed).toContain('data-profile="pin-contact"');
+    const jacket = sealed.indexOf('data-part="terminal-insulation"');
+    const seal = sealed.indexOf('data-part="seal"');
+    const metal = sealed.indexOf('data-part="terminal-shell"');
+    expect(jacket).toBeLessThan(seal);
+    expect(seal).toBeLessThan(metal);
+    expect(sealed).toContain('data-view="side"');
+  });
 });

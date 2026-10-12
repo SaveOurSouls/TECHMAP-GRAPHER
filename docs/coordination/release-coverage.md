@@ -114,3 +114,5 @@ represent missing completed chat handoffs.
 
 | 085 — Свойства размеров и индексы материалов на Чертеже | `01a116cf-8c36-79b3-89ca-57fa146c0046` | `723ff99350476255dcdae2de5442cf761c9720c2`, handoff `7241134db77f2b8ecfdf96d13e92513eaa814a68` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 086 — Карточки UML в Route v3 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | `0a3c04a0480b7eee1820b56cc2450a8f6ec5c83d`, handoff `6e274c42dd5a7082dc9bb9233b82e0cebd0f8a3a` | оба SHA включены merge в integration HEAD; `git show --check` PASS | included (ancestor) |
+
+| 090 — Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | — | зарегистрировано владение, общий renderer и Canvas placement | pending |

@@ -130,3 +130,9 @@
 
 
 | Карточки UML в Маршруте v3 | 086 / REQ-122 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | ready-for-review | Ветка `codex/route-v3-uml`, worktree `C:/Users/Василий Костромин/.codex/worktrees/route-v3/Утилита для картинок`, база caafa91. Владелец manufacturing-v3/* и документов 086; графический редактор/085 не меняются. Commit и handoff после проверок; следующий ZIP pending. |
+
+## Регистрация карточки 090 — 12.10.2026 (МСК)
+
+| Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
+| --- | --- | --- | --- | --- | --- |
+| Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | in-progress; следующий ZIP, handoff pending |

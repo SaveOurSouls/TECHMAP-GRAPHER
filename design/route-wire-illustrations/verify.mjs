@@ -22,6 +22,6 @@ for (const part of ["body", ...artworkEnds]) {
 assert.equal(readdirSync(out).filter(name => name.endsWith(".svg")).length, 13);
 assert.equal(readdirSync(join(out, "parts")).filter(name => name.endsWith(".svg")).length, 7);
 const cut = readFileSync(join(out, "01-cut.svg"), "utf8");
-assert.match(cut, /M220 94V146/);
+assert.match(cut, /M220 109.08V130.92/);
 assert.doesNotMatch(cut, /Q213 101/);
 console.log("Verified 13 illustrations, 7 composable parts, and square cut edges.");

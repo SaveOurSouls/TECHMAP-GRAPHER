@@ -1,4 +1,6 @@
 export const artworkViewBox: string;
+export const artworkWireDiameter: number;
+export const artworkJacketAnchor: number;
 export const artworkEnds: readonly string[];
 export function safeWireColor(value: string): string;
 export function bodyPart(color?: string): string;
