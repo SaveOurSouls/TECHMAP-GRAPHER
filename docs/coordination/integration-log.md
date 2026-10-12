@@ -404,3 +404,19 @@ ZIP: `artifacts/m5-22-038/TECHMAP-GRAPHER-0.63.38-m5-22-review-win-x64.zip`;
 В GitHub отправлен базовый coverage commit `4be527d`; финальная запись
 журнала отправляется отдельным документальным commit. Owner acceptance,
 исходный жгут C1–C5 и 390px visual QA остаются открытыми.
+## 12.10.2026 — coverage для следующего ZIP после M5-22-041
+
+Сборщик проверил handoff карточек 087–090 против integration HEAD `882ed70`:
+
+| Карточка | Код | Handoff | Результат |
+| --- | --- | --- | --- |
+| 087 | `cf34ec5`, `e145d2c` | `dce7105` | все SHA — предки HEAD; `git show --check` PASS |
+| 088 | `3c6a5fb` | `ca49fc3` | оба SHA — предки HEAD; `git show --check` PASS |
+| 089 | `e86aa33`, `11ab633` | `6ce3e2a` | все SHA — предки HEAD; `git show --check` PASS |
+| 090 | `e47f99e` | `47964b2` | оба SHA — предки HEAD; `git show --check` PASS |
+
+Ветка чиста и синхронизирована с origin. Отдельная карточка 091 среди новых
+зарегистрированных задач/hand-off не обнаружена; исторический `REQ-091` к этой
+проверке не относится. Новый код после ZIP M5-22-041 есть. Gate Git coverage
+открыт; packaged UI и ручная проверка на исходном жгуте остаются ограничениями.
+
