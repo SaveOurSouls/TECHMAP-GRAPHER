@@ -1267,11 +1267,18 @@ export function ComponentLibrary({ config, session, onNavigationGuard }: Props) 
           onChangeCompatibleSeals={seals => { setDraft(current => {
             const presentation = parseConnectorSchematic(current.e4Presentation);
             const hasSealColumn = presentation.customFields.some(field => field.id === "seal");
+            const previousSeals = current.compatibleSeals ?? [];
             const availableSeals = new Set(seals.map(seal => seal.article));
+            const renamedSeals = seals.length === previousSeals.length
+              ? new Map(previousSeals.flatMap((seal, index) => seal.article !== seals[index]?.article
+                ? [[seal.article, seals[index]!.article] as const] : []))
+              : new Map<string, string>();
             const withoutRemovedSeal = <T extends { readonly customValues?: Record<string, string> }>(values: T): T => {
               const customValues = values.customValues;
               const seal = customValues?.seal;
-              if (!customValues || seal === undefined || seal === "" || availableSeals.has(seal)) return values;
+              const replacement = seal && renamedSeals.get(seal);
+              if (!customValues || seal === undefined || seal === "" || (!replacement && availableSeals.has(seal))) return values;
+              if (replacement) return { ...values, customValues: { ...customValues, seal: replacement } };
               const { seal: _seal, ...remainingCustomValues } = customValues;
               return { ...values, customValues: remainingCustomValues };
             };
