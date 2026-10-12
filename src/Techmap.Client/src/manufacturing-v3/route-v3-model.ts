@@ -41,6 +41,12 @@ export interface RouteV3Node {
   readonly rawRefs?: readonly RouteSourceRef[];
   readonly drawing?: RouteV2Drawing;
 }
+export interface RouteV3WireArtworkOverride {
+  readonly wireId: string;
+  readonly color?: string;
+  readonly start?: import("../WireBlankCatalog").WireBlankEnd;
+  readonly end?: import("../WireBlankCatalog").WireBlankEnd;
+}
 export interface RouteV3Document {
   readonly version: 1;
   readonly preparedRefs: readonly RouteSourceRef[];
@@ -50,6 +56,8 @@ export interface RouteV3Document {
   readonly generated: boolean;
   readonly backgroundOpacity: number;
   readonly graphEdited?: boolean;
+  /** Sparse V3-only overrides. Missing entry always follows the current E4 model. */
+  readonly wireArtwork?: readonly RouteV3WireArtworkOverride[];
 }
 export const refKey = (ref: RouteSourceRef): string => `${ref.kind}:${ref.id}`;
 export const routeV3StorageKey = (projectId: string, harnessId: string): string => `techmap.route-v3.${projectId}.${harnessId}`;
@@ -69,6 +77,15 @@ export const routeV3NodeOperations = (node: Pick<RouteV3Node, "operations">): re
 
 export function createInitialRouteV3(source: HarnessDesignDocument): RouteV3Document {
   return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2 };
+}
+export function routeV3WireArtworkOverride(document: RouteV3Document, wireId: string): RouteV3WireArtworkOverride | undefined { return document.wireArtwork?.find(value => value.wireId === wireId); }
+export function setRouteV3WireArtworkOverride(document: RouteV3Document, override: RouteV3WireArtworkOverride): RouteV3Document {
+  const current = document.wireArtwork ?? [];
+  return { ...document, wireArtwork: [...current.filter(value => value.wireId !== override.wireId), override] };
+}
+export function resetRouteV3WireArtwork(document: RouteV3Document, wireIds: readonly string[]): RouteV3Document {
+  const ids = new Set(wireIds), current = document.wireArtwork?.filter(value => !ids.has(value.wireId)) ?? [];
+  return { ...document, ...(current.length ? { wireArtwork: current } : { wireArtwork: undefined }) };
 }
 export function appendRouteV3Fragment(document: RouteV3Document, fragment: RouteV3Fragment): RouteV3Document {
   if (!fragment.objectIds.length) throw new Error("Выберите объекты для слепка.");
@@ -152,6 +169,7 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
     const text = (n: unknown): n is string => typeof n === "string" && n.trim().length > 0 && n.length <= 512;
     const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
     if (!opacity(v.backgroundOpacity) || !refs(v.preparedRefs)) return null;
+    if (v.wireArtwork !== undefined && (!Array.isArray(v.wireArtwork) || v.wireArtwork.some(value => !value || !text(value.wireId) || (value.color !== undefined && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.start !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.start)) || (value.end !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.end))) || new Set(v.wireArtwork.map(value => value.wireId)).size !== v.wireArtwork.length)) return null;
     const ids = new Set<string>();
     const fragments: RouteV3Fragment[] = [];
     for (const f of v.fragments) {

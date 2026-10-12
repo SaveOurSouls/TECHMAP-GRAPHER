@@ -11,8 +11,9 @@ import { createIndependentIsolatedDocument, createRouteDrawingCopy } from "../ma
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview } from "../manufacturing/RouteAssemblyDrawing";
 import type { RouteRow } from "../manufacturing/route-model";
 import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
+import { RouteV3WireArtworkPreview } from "./route-v3-wire-artwork";
 import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
-import { appendRouteV3Fragment, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, refKey, removeRouteV3Fragment, revealedRouteV3Ids, routeV3StorageKey, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
+import { appendRouteV3Fragment, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, refKey, removeRouteV3Fragment, revealedRouteV3Ids, routeV3StorageKey, routeV3WireArtworkOverride, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
 import { RouteV3Graph } from "./RouteV3Graph";
 import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
 import "../manufacturing-v2/route-v2.css";
@@ -98,7 +99,7 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
   const openGraphical = () => { setOpenedOnce(true); setGraphical(true); };
   const generate = () => { if (current.current.graphEdited && !window.confirm("Пересоздать маршрут из слепков? Ручные карточки, связи, размеры и операции будут заменены.")) return; try { persist(generateRouteV3(current.current, source, sourceScene.map(object => object.id))); setGraphical(false); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сгенерировать маршрут."); } };
   const showFragment = (fragment: RouteV3Fragment) => <RouteAssemblyDrawingPreview row={{ ...fragmentRow(fragment), presentation: { objects: [], backgroundOpacity: 0, drawingCopy: fragmentDrawingCopy(fragment) } }} document={source} config={config} session={session} projectId={projectId} />;
-  const artwork = (ref: RouteSourceRef) => <RouteV2SourceArtwork document={source} ref={ref} item={sources.find(item => refKey(item.ref) === refKey(ref))} textureUrls={textures.urls} />;
+  const artwork = (ref: RouteSourceRef) => { const item = sources.find(candidate => refKey(candidate.ref) === refKey(ref)); return ref.kind === "wire" && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(route, ref.id)} /> : <RouteV2SourceArtwork document={source} ref={ref} item={item} textureUrls={textures.urls} />; };
   const finalRow: RouteRow = { id: "final", kind: "assembly", title: "Готовый жгут", sourceObjects: sources.map(item => item.ref), dependsOn: [], comment: "", operations: [], prepared: false, presentation: { backgroundOpacity: 0, objects: [], drawingCopy: createRouteDrawingCopy(source) } };
   const board = useMemo(() => refreshRouteV3(editableRouteV3(route.nodes.length || route.graphEdited ? route : { ...route, nodes: generateRouteV3({ ...route, fragments: [] }).nodes })), [route]);
   const nodeArtwork = (node: RouteV3Node): ReactNode => {
