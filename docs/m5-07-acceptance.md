@@ -593,3 +593,24 @@ self-contained win-x64 publish. `verify-package.ps1` — PASS, 339 записе�
 Прямой запуск из исходного кириллического пути в этом срезе не проверялся;
 предыдущий срез имел отказ до публикации host URL. ZIP вне Git.
 
+# Пакет 12.10.2026 — M5-22-042 / карточки 087–090
+
+Кодовый HEAD: `5834373` (последние рабочие code commits: 087 `cf34ec5`,
+`e145d2c`; 088 `3c6a5fb`; 089 `e86aa33`, `11ab633`; 090 `e47f99e`).
+Handoff и release coverage всех четырёх карточек подтверждены в
+`docs/coordination/release-coverage.md` и `integration-log.md`. Версия:
+`0.63.42-m5-22-review`.
+
+ZIP: `artifacts/m5-22-042/TECHMAP-GRAPHER-0.63.42-m5-22-review-win-x64.zip`.
+Размер: **63 982 338 байт**. SHA-256:
+`CAD520262E32C579D6BB0C9D1F2BD8E60173768EAA8FE06AA10A30A1E9D1446B`.
+
+Штатный `scripts/build-package.ps1` — PASS: 188 клиентских файлов / 1834 теста,
+TypeScript и Vite production build, 1117 .NET-тестов, отдельный нагрузочный
+тест, self-contained win-x64 publish. `verify-package.ps1` — PASS, 339 записей
+манифеста и 340 файлов пакета. `test-portable-package.ps1` — PASS, 7/7 из
+`C:\Temp\TECHMAP-m5-22-042` (внутри проверен путь с кириллицей и пробелами).
+
+Ограничения: исходный жгут и packaged UI вручную не проверены; прямой запуск из
+исходного кириллического пути в этом срезе не проверялся. ZIP остаётся вне Git.
+
