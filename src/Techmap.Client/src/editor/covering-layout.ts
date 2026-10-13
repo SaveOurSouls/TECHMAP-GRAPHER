@@ -8,7 +8,7 @@ import { pipeBundleSections } from "./pipe-bundle-section";
 import { pipeBundleAxisPath, pipeBundleCoatingKey } from "./pipe-bundle-model";
 import { pipeBundleProjectionStops, projectPipeBundlePoint, pipeBundleTransitionHandles } from "./pipe-bundle-projection";
 import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
-import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe-projection";
+import {hasJoiningPipeProjection,joiningPipeDisplaySamples,joiningPipeWidth} from "./physical-joining-pipe-projection";
 import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 import { coveringRidges, type CoveringRidge } from "./covering-relief";
 
@@ -111,6 +111,16 @@ function contourEndEdge(polygon:readonly Point[],point:Point,tangent:Point):{fro
  if(plane.length<2)return null;
  const ordered=[...plane].sort((a,b)=>(a.x-b.x)*normal.x+(a.y-b.y)*normal.y);
  return {from:ordered[0]!,to:ordered.at(-1)!};
+}
+function contourContains(contour:readonly Point[],point:Point):boolean {
+ let inside=false;
+ for(let i=0,j=contour.length-1;i<contour.length;j=i++){
+  const a=contour[j]!,b=contour[i]!;
+  const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/(dx*dx+dy*dy||1)));
+  if(Math.hypot(point.x-a.x-t*dx,point.y-a.y-t*dy)<1e-4)return true;
+  if((a.y>point.y)!==(b.y>point.y)&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)inside=!inside;
+ }
+ return inside;
 }
 /** Round generated OP→P transitions after projection. The source route is
  * rounded before projection, but the shoulder points are created afterwards;
@@ -255,16 +265,21 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     outsets.push(outset);ownJoiningOutsets.push({segmentId:s.segmentId,outset});
    }
    const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets):[];
-   const contour=joining
-     ? (from>=-1e-9&&to<=1+1e-9
-       ? squareConformalContourEnds(conformalCoveringContour(centerline,widths,widths,supports),centerline)
-       : conformalCoveringContour(centerline,widths,widths,supports))
-     : polygon;
+   const conformal=joining?conformalCoveringContour(centerline,widths,widths,supports):null;
+   const bounded=!!joining&&from>=-1e-9&&to<=1+1e-9;
+   const axis={x:joining?joining.end.x-joining.start.x:0,y:joining?joining.end.y-joining.start.y:0};
+   const axisContour=bounded?squareConformalContourEnds(conformal!,centerline,axis):null;
+   const memberSamples=bounded?joining!.members.flatMap(member=>member.segmentIds.flatMap(id=>
+     joiningPipeDisplaySamples(document,id)?.filter(sample=>sample.fraction>=from&&sample.fraction<=to).map(sample=>sample.point)??[])):[];
+   // A bent member can loop outside an OP-axis crop. In that case keep the
+   // local transverse cut, which encloses every visible member station.
+   const axisSafe=!!axisContour?.length&&memberSamples.every(point=>contourContains(axisContour,point));
+   const contour=axisSafe?axisContour!:bounded?squareConformalContourEnds(conformal!,centerline):conformal??polygon;
    surfaces.push({polygon:contour,path:centerline,spanIndex,
      ...(joining?{conformal:true,ridges:coveringRidges(route.envelope,segmentFrom,segmentTo,coveringClearance+growth,centerline[0]!)}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
-   for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,dx=part==="from"?q.x-p.x:p.x-q.x,dy=part==="from"?q.y-p.y:p.y-q.y,len=Math.hypot(dx,dy)||1;
+   for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,dx=axisSafe?axis.x:part==="from"?q.x-p.x:p.x-q.x,dy=axisSafe?axis.y:part==="from"?q.y-p.y:p.y-q.y,len=Math.hypot(dx,dy)||1;
     const at=visible[i]!.distance,near=route.envelope.findIndex(sample=>sample.at>=at),a=route.envelope[Math.max(0,near<0?route.envelope.length-1:near-1)],b=route.envelope[near<0?route.envelope.length-1:near];
     const t=a&&b?Math.max(0,Math.min(1,(at-a.at)/(b.at-a.at||1))):0;
     const leftSpread=a&&b?a.leftSpread+(b.leftSpread-a.leftSpread)*t:0,rightSpread=a&&b?a.rightSpread+(b.rightSpread-a.rightSpread)*t:0;

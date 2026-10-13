@@ -52,7 +52,7 @@ function inside(poly: readonly Point[], p: Point): boolean {
 
 /** Trim only a bounded OP span to transverse end caps. Overhanging spans keep
  * their continuation cells so the visible P remains fully enclosed. */
-export function squareConformalContourEnds(contour: readonly Point[], path: readonly Point[]): Point[] {
+export function squareConformalContourEnds(contour: readonly Point[], path: readonly Point[], axis?: Point): Point[] {
  if (contour.length < 3 || path.length < 2) return [...contour];
  const first=path[0]!,last=path.at(-1)!;
  const second=path.find(point=>Math.hypot(point.x-first.x,point.y-first.y)>1e-9);
@@ -68,7 +68,8 @@ export function squareConformalContourEnds(contour: readonly Point[], path: read
   }
   return output;
  };
- const start={x:second.x-first.x,y:second.y-first.y},end={x:last.x-previous.x,y:last.y-previous.y};
+ const start=axis&&Math.hypot(axis.x,axis.y)>1e-9?axis:{x:second.x-first.x,y:second.y-first.y};
+ const end=axis&&Math.hypot(axis.x,axis.y)>1e-9?axis:{x:last.x-previous.x,y:last.y-previous.y};
  return clip(clip(contour,first,start,1),last,end,-1);
 }
 

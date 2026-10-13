@@ -243,6 +243,10 @@ describe("OP envelope contour", () => {
       expect(polygon).toContainEqual(grip.edgeFrom);
       expect(polygon).toContainEqual(grip.edgeTo);
       expect(distance(grip.edgeFrom!, grip.edgeTo!)).toBeGreaterThan(10);
+      const op = spanFixture(fixture(), 0, 1).physicalTopology!.joiningPipes![0]!;
+      const axis = { x: op.end.x - op.start.x, y: op.end.y - op.start.y };
+      const edge = { x: grip.edgeTo!.x - grip.edgeFrom!.x, y: grip.edgeTo!.y - grip.edgeFrom!.y };
+      expect(Math.abs(axis.x * edge.x + axis.y * edge.y)).toBeLessThan(1e-4);
       expect(grip.point.x).toBeCloseTo((grip.edgeFrom!.x + grip.edgeTo!.x) / 2);
       expect(grip.point.y).toBeCloseTo((grip.edgeFrom!.y + grip.edgeTo!.y) / 2);
     }
