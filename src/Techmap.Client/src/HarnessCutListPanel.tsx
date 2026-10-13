@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { HarnessCutList, HarnessCutListApi, HarnessCutListItem } from "./harness-cut-list-api";
+import type { HarnessDesignDocument } from "./editor/model";
+import { groupedCutListPresentation, nextCutListSort, type CutListSortField } from "./editor/cut-list-presentation";
 
 export interface HarnessCutListPanelProps {
   readonly api: HarnessCutListApi;
@@ -21,14 +23,28 @@ function formatCorrection(item: HarnessCutListItem): string {
   return `${format(item.endCorrectionFromMm)} / ${format(item.endCorrectionToMm)} мм`;
 }
 
-export function HarnessCutListTable({ cutList, onReveal, highlightedIds = [] }: { readonly cutList: HarnessCutList; readonly onReveal?: (id: string) => void; readonly highlightedIds?: readonly string[] }) {
+export function HarnessCutListTable({ cutList, document, onReveal, highlightedIds = [] }: { readonly cutList: HarnessCutList; readonly document?: HarnessDesignDocument; readonly onReveal?: (id: string) => void; readonly highlightedIds?: readonly string[] }) {
+  const [filter, setFilter] = useState("");
+  const [sorts, setSorts] = useState<readonly { readonly field: CutListSortField; readonly direction: "asc" | "desc" }[]>([]);
+  const groups = groupedCutListPresentation(cutList.items, document, filter, sorts);
+  const sortButton = (field: CutListSortField, label: string) => {
+    const index = sorts.findIndex(sort => sort.field === field), current = sorts[index];
+    return <button type="button" className="cut-list-sort" onClick={() => setSorts(value => nextCutListSort(value, field))} aria-label={`Сортировать по ${label}`} aria-pressed={index >= 0}>{label}{index >= 0 ? ` ${index + 1}${current!.direction === "desc" ? "↓" : "↑"}` : ""}</button>;
+  };
   return <>
     {cutList.warning && <p className="cut-list-warning" role="note">{cutList.warning}</p>}
     {cutList.items.length === 0 ? <p className="cut-list-empty">В жгуте пока нет проводов.</p> : (
-      <div className="cut-list-scroll">
+      <>
+      <div className="cut-list-controls"><label>Фильтр <input type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="ПФ, марка, цвет, терминал" aria-label="Фильтр карты резки" /></label><span>{sortButton("mark", "Марка")}{sortButton("color", "Цвет")}{sortButton("section", "Сечение")}{sortButton("terminal", "Терминал")}</span></div>
+      {groups.length === 0 ? <p className="cut-list-empty">По фильтру полуфабрикаты не найдены.</p> : <div className="cut-list-scroll">
         <table className="cut-list-table">
           <thead><tr>
-            <th>Цепь / провод</th>
+            <th>Полуфабрикат</th>
+            <th>Марка</th>
+            <th>Сечение</th>
+            <th>Цвет</th>
+            <th>Конец A</th>
+            <th>Конец B</th>
             <th>Исходная длина</th>
             <th>Поправки</th>
             <th>Длина резки</th>
@@ -36,17 +52,18 @@ export function HarnessCutListTable({ cutList, onReveal, highlightedIds = [] }: 
             <th>Общий метраж</th>
             <th>Статус</th>
           </tr></thead>
-          <tbody>{cutList.items.map(item => <tr key={item.wireId} aria-selected={highlightedIds.includes(item.wireId)} className={highlightedIds.includes(item.wireId) ? "is-related" : ""}>
-            <td>{onReveal ? <button type="button" className="ui-control" onClick={() => onReveal(item.wireId)} aria-label={`Показать на чертеже ${item.circuit || item.wireId}`}>{item.circuit || "Без цепи"} ↗</button> : <strong>{item.circuit || "Без цепи"}</strong>}<span>{item.wireId}</span><small>{item.materialDisplayName ?? (item.material === "not-pinned" ? "Материал не закреплён" : item.material)}{item.materialSourceKey && item.materialSourceKey !== item.materialDisplayName ? ` · ${item.materialSourceKey}` : ""}</small></td>
+          <tbody>{groups.flatMap(group => [<tr key={`group:${group.id}`} className="cut-list-group"><th colSpan={12}>{group.title} · {group.rows.length}</th></tr>, ...group.rows.map(({ item, name, mark, section, color, terminalFrom, terminalTo }) => <tr key={item.wireId} aria-selected={highlightedIds.includes(item.wireId)} className={highlightedIds.includes(item.wireId) ? "is-related" : ""}>
+            <td>{onReveal ? <button type="button" className="ui-control" onClick={() => onReveal(item.wireId)} aria-label={`Показать на чертеже ${name}`}>{name} ↗</button> : <strong>{name}</strong>}<span>{item.wireId}</span><small>{item.materialDisplayName ?? (item.material === "not-pinned" ? "Материал не закреплён" : item.material)}{item.materialSourceKey && item.materialSourceKey !== item.materialDisplayName ? ` · ${item.materialSourceKey}` : ""}</small></td>
+            <td>{mark}</td><td>{section}</td><td>{color}</td><td>{terminalFrom}</td><td>{terminalTo}</td>
             <td>{formatMillimetres(item.sourceLengthMm)}</td>
             <td>{formatCorrection(item)}<small>шаг {formatMillimetres(item.roundingStepMm)}</small></td>
             <td>{formatMillimetres(item.cutLengthMm)}</td>
             <td>{item.pieces.toLocaleString("ru-RU")}</td>
             <td>{item.totalMetres === null ? "Не рассчитан" : `${item.totalMetres.toLocaleString("ru-RU", { maximumFractionDigits: 6 })} м`}</td>
             <td><span className={`cut-list-status ${item.status}`}>{item.warnings.includes("length-missing") ? "Нет длины" : item.warnings.includes("material-missing") ? "Нет материала" : "Готово"}</span></td>
-          </tr>)}</tbody>
+          </tr>)])}</tbody>
         </table>
-      </div>
+      </div>}</>
     )}
   </>;
 }

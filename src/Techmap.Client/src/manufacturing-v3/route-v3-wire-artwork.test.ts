@@ -15,7 +15,7 @@ function source() {
 
 it("derives v3 artwork from E4 material, terminal, seal and solder fields", () => {
   const value = routeV3WireArtwork(source(), "W1")!;
-  expect(value).toMatchObject({ mark: "МГТФ", section: "0,35", start: "sealed", end: "tin", automatic: true });
+  expect(value).toMatchObject({ mark: "МГТФ", section: "0,35", start: "sealed", end: "tin", terminalFrom: "TERM-A / да", terminalTo: "лужёная медь", automatic: true });
   expect(value.color).toBe("#D32F2F");
 });
 

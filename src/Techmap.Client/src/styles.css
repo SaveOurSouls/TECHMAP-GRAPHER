@@ -292,11 +292,18 @@ input::placeholder { color: #8795a3; }
 .cut-list-error { border-left-color: #b43f3f; background: #fff3f3; color: #7d3030; }
 .cut-list-loading, .cut-list-empty { margin: 12px 0 0; color: #71808e; font-size: 11px; }
 .cut-list-scroll { margin-top: 12px; overflow: auto; border: 1px solid #dfe6eb; border-radius: 7px; }
+.cut-list-controls { display:flex; align-items:end; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-top:12px; color:#617382; font-size:10px; }
+.cut-list-controls label { display:grid; gap:3px; font-weight:700; }
+.cut-list-controls input { min-width:210px; padding:5px 7px; border:1px solid #c8d9e1; border-radius:5px; color:#38566a; font:inherit; }
+.cut-list-controls>span { display:flex; gap:4px; flex-wrap:wrap; }
+.cut-list-sort { padding:4px 6px; border:1px solid #c8d9e1; border-radius:5px; background:#fff; color:#47687b; font:inherit; cursor:pointer; }
+.cut-list-sort[aria-pressed=true] { border-color:#6da5bd; background:#edf7fa; color:#205c75; font-weight:800; }
 .cut-list-table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
 .cut-list-table th { padding: 7px 8px; background: #edf3f6; color: #456174; text-align: left; }
 .cut-list-table td { padding: 8px; border-top: 1px solid #e5ebef; color: #455b6b; vertical-align: top; font-variant-numeric: tabular-nums; }
 .cut-list-table td:first-child { min-width: 118px; white-space: normal; }
 .cut-list-table td:first-child strong, .cut-list-table td:first-child span, .cut-list-table td small { display: block; }
+.cut-list-table .cut-list-group th { padding:6px 8px; border-top:1px solid #cbdce4; background:#f6fafb; color:#315d72; text-align:left; }
 .cut-list-table td:first-child span { margin-top: 2px; color: #738493; }
 .cut-list-table td small { margin-top: 3px; color: #8a672c; font-size: 9px; }
 .cut-list-status { padding: 3px 6px; border-radius: 8px; background: #e3f4ed; color: #1d7657; font-weight: 800; }

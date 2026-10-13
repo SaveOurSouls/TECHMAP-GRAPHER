@@ -46,7 +46,7 @@ const cutList: HarnessCutList = {
 describe("HarnessCutListPanel", () => {
   it("renders all limited cut-list facts, warnings and incomplete status", () => {
     const markup = renderToStaticMarkup(createElement(HarnessCutListTable, { cutList }));
-    for (const heading of ["Цепь / провод", "Исходная длина", "Поправки", "Длина резки", "Шт.", "Общий метраж", "Статус"]) {
+    for (const heading of ["Полуфабрикат", "Марка", "Сечение", "Цвет", "Конец A", "Конец B", "Исходная длина", "Поправки", "Длина резки", "Шт.", "Общий метраж", "Статус"]) {
       expect(markup).toContain(heading);
     }
     expect(markup).toContain("DATA+");
@@ -58,6 +58,8 @@ describe("HarnessCutListPanel", () => {
     expect(markup).toContain("не является спецификацией материалов");
     expect(markup).toContain("Не задана");
     expect(markup).toContain("Нет длины");
+    expect(markup).toContain("Фильтр карты резки");
+    expect(markup).toContain("Сортировать по Терминал");
   });
 
   it("renders pinned material identity, ready status and each missing-data warning separately", () => {

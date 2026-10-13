@@ -34,7 +34,7 @@ export function HarnessRelationsPanel({ document, projectId, harnessId, quantity
     <details><summary>Карта резки · {list.items.length}</summary>
       <div className="he-relations-actions"><label><input type="checkbox" checked={onlyRelated} onChange={e => setOnlyRelated(e.target.checked)} />Только связанные</label></div>
       <small role="status">{unsaved ? `Текущий документ · не сохранён · база r${revision}` : `Сохранённая ревизия r${revision}`}</small>
-      <HarnessCutListTable cutList={displayed} onReveal={onReveal} highlightedIds={related.rowIds} />
+      <HarnessCutListTable cutList={displayed} document={document} onReveal={onReveal} highlightedIds={related.rowIds} />
     </details></>}
   </section>;
 }
