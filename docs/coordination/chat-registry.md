@@ -165,4 +165,6 @@
 | --- | --- | --- | --- | --- | --- |
 | Чертёж: граница оболочки и витая пара | `/root` | 091 / REQ-127 | `codex/integration-m5-22` / основной worktree | `physical-editing.ts`, `drawing-twisted-pair.ts`, `physical-wire-geometry.ts`, `CanvasViewport.tsx`, профильные тесты и документы 091 | ready-for-review; code `1a76bba` опубликован, handoff передан; следующий ZIP pending builder |
 
+Follow-up 091 (13.10.2026, C1–C4): `/root`, тот же worktree и ветка; владение `drawing-twisted-pair.ts`, `physical-wire-geometry.ts`, `covering-layout.ts`, `covering-renderer.ts`, `CanvasViewport.tsx`, профильные тесты и документы 091. Release coverage: следующий ZIP после нового handoff; `manufacturing-v3/*` принадлежит соседней карточке 095 и исключён.
+
 13.10.2026: follow-up 090 / REQ-126, чат 01a13091-f350-7b62-b8b0-9ca77cf1ad58, codex/integration-m5-22 / основной worktree. Владелец: wire-blank-artwork.mjs, WireBlankCatalogEditor.test.ts, производные SVG/PNG и документы 090. Объём: медь выходит из изоляции в отмеченном C1 стыке. Следующий ZIP: pending follow-up handoff.

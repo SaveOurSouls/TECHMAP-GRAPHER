@@ -5,6 +5,7 @@ import { coveringKind, coveringRoute, resolvedCoveringSpan, trimPolyline } from 
 import { hasPipeBundleProjection, pipeBundleDisplaySamples } from "./pipe-bundle-projection";
 import { drawingBendRadius, drawingRouteHitPoints } from "./drawing-route-path";
 import { physicalTwistedPairPath } from "./drawing-twisted-pair";
+import { joiningPipeDisplaySamples } from "./physical-joining-pipe-projection";
 
 /** Conductors follow the pipe centreline exactly; do not apply another angle snap. */
 export function physicalWirePoints(document: HarnessDesignDocument, wireId: string, start: Point, end: Point): Point[] | null {
@@ -59,7 +60,11 @@ export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string
   const lane=offsetPolyline(points,points.map(()=>offset));
   if(step.reverse)lane.reverse();allPaths.push(lane);
   if(segment.showWires===false){paths.push(null);continue;}
-  const twist=physicalTwistedPairPath(document,segment.id,wireId,points);
+  // Joining-pipe members are painted with a bend radius, while other bundle
+  // projections arrive already sampled. Twist against that same visible arc.
+  const twistCenterline=joiningPipeDisplaySamples(document,segment.id)
+    ? drawingRouteHitPoints(points,drawingBendRadius(document)) : points;
+  const twist=physicalTwistedPairPath(document,segment.id,wireId,twistCenterline);
   twisted ||= twist !== null;
   const twistedPath=twist?(step.reverse?[...twist.path].reverse():twist.path):lane;
   if(twist)allPaths[allPaths.length-1]=[...twistedPath];

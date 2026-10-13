@@ -12,7 +12,7 @@ import {hasJoiningPipeProjection,joiningPipeWidth} from "./physical-joining-pipe
 import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 import { coveringRidges, type CoveringRidge } from "./covering-relief";
 
-export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly pointMarker?:boolean; readonly bound:boolean }
+export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly edgeFrom?:Point; readonly edgeTo?:Point; readonly pointMarker?:boolean; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean; readonly ridges?:readonly CoveringRidge[] }
 export type CoveringDragPart="from"|"to"|"body"|"transition-from"|"transition-to";
 type TailSample = { readonly at:number; readonly side:"from"|"to"|"core"; readonly members:readonly {readonly point:Point;readonly radius:number}[] };
@@ -103,10 +103,14 @@ function joiningSupportCells(samples:readonly TailSample[],from:number,to:number
  }
  return result;
 }
-function endpointGripPoint(polygon:readonly Point[],point:Point,tangent:Point,part:"from"|"to"):Point {
- const facing=polygon.filter(p=>((p.x-point.x)*tangent.x+(p.y-point.y)*tangent.y)*(part==="to"?1:-1)>1e-6);
- const candidates=facing.length?facing:polygon;
- return candidates.reduce((nearest,p)=>Math.hypot(p.x-point.x,p.y-point.y)<Math.hypot(nearest.x-point.x,nearest.y-point.y)?p:nearest,candidates[0]??point);
+function contourEndEdge(polygon:readonly Point[],point:Point,tangent:Point):{from:Point;to:Point}|null {
+ const normal={x:-tangent.y,y:tangent.x};
+ // A bounded conformal OP is clipped to this plane. Pick the actual two
+ // extremal contour vertices on it, not a nearby corner plus a nominal width.
+ const plane=polygon.filter(vertex=>Math.abs((vertex.x-point.x)*tangent.x+(vertex.y-point.y)*tangent.y)<1e-5);
+ if(plane.length<2)return null;
+ const ordered=[...plane].sort((a,b)=>(a.x-b.x)*normal.x+(a.y-b.y)*normal.y);
+ return {from:ordered[0]!,to:ordered.at(-1)!};
 }
 /** Round generated OP→P transitions after projection. The source route is
  * rounded before projection, but the shoulder points are created afterwards;
@@ -264,8 +268,9 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     const at=visible[i]!.distance,near=route.envelope.findIndex(sample=>sample.at>=at),a=route.envelope[Math.max(0,near<0?route.envelope.length-1:near-1)],b=route.envelope[near<0?route.envelope.length-1:near];
     const t=a&&b?Math.max(0,Math.min(1,(at-a.at)/(b.at-a.at||1))):0;
     const leftSpread=a&&b?a.leftSpread+(b.leftSpread-a.leftSpread)*t:0,rightSpread=a&&b?a.rightSpread+(b.rightSpread-a.rightSpread)*t:0;
-    const gripPoint=joining?endpointGripPoint(contour,p,{x:dx/len,y:dy/len},part):p;
-    handles.push({objectId:covering.id,spanIndex,part,point:gripPoint,normal:{x:-dy/len,y:dx/len},halfWidth:Math.max(widths[i]!,leftSpread+coveringClearance),...(joining?{rightHalfWidth:Math.max(widths[i]!,rightSpread+coveringClearance),pointMarker:true}:{}),bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
+    const edge=joining?contourEndEdge(contour,p,{x:dx/len,y:dy/len}):null;
+    const gripPoint=edge?{x:(edge.from.x+edge.to.x)/2,y:(edge.from.y+edge.to.y)/2}:p;
+    handles.push({objectId:covering.id,spanIndex,part,point:gripPoint,normal:{x:-dy/len,y:dx/len},halfWidth:Math.max(widths[i]!,leftSpread+coveringClearance),...(edge?{edgeFrom:edge.from,edgeTo:edge.to}:joining?{rightHalfWidth:Math.max(widths[i]!,rightSpread+coveringClearance),pointMarker:true}:{}),bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }
   if(covering.bundle)handles.push(...pipeBundleTransitionHandles(document,covering.id));
   for(const {segmentId,support} of ownSupports) supportsBySegment.set(segmentId,[...(supportsBySegment.get(segmentId)??[]),support]);

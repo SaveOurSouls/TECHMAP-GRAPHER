@@ -77,12 +77,23 @@ export function physicalTwistedPairPath(
     const a = centerline[index]!, b = centerline[index + 1]!;
     const leg = lengths[index + 1]! - lengths[index]! || 1;
     const t = Math.max(0, Math.min(1, (distance - lengths[index]!) / leg));
-    return { point: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
-      normal: { x: -(b.y - a.y) / leg, y: (b.x - a.x) / leg } };
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  };
+  const normalAt = (distance: number): Point => {
+    // The centreline is already the rounded, sampled pipe route. A normal
+    // taken from a single 2 px chord jumps at every sample (and especially
+    // at OP stations); a symmetric chord gives the coloured lanes a
+    // continuous tangent without changing the authored route or its radius.
+    const reach = Math.min(4, length / 20);
+    const before = frame(Math.max(0, distance - reach));
+    const after = frame(Math.min(length, distance + reach));
+    const dx = after.x - before.x, dy = after.y - before.y;
+    const size = Math.hypot(dx, dy) || 1;
+    return { x: -dy / size, y: dx / size };
   };
   const wire = document.wires.find(item => item.id === wireId)!;
-  return twistRuns(length, group.step * drawingPhysicalScale(document), distance => frame(distance).point,
-    distance => frame(distance).normal, middle, halfGap, drawingWireWidth(document, wire),
+  return twistRuns(length, group.step * drawingPhysicalScale(document), frame,
+    normalAt, middle, halfGap, drawingWireWidth(document, wire),
     wireId === group.wireIds[0], group.variant);
 }
 

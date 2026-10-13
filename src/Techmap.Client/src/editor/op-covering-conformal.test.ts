@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coveringScene, moveCovering } from "./covering-layout";
-import { coveringHit, coveringSurfaces } from "./covering-renderer";
+import { coveringGrips, coveringHit, coveringSurfaces } from "./covering-renderer";
 import { applyEditorCommand, createConnector, createWire } from "./commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, parseHarnessDesignDocument,
   wireEndpointE4Anchor, type HarnessDesignDocument, type Point } from "./model";
@@ -232,6 +232,21 @@ describe("REQ-039: OP shell follows member pipes beyond both ends", () => {
 });
 
 describe("OP envelope contour", () => {
+  it("places each bounded end grip on the painted transverse contour edge", () => {
+    const object = coveringScene(spanFixture(fixture(), 0, 1))[0]!;
+    const polygon = coveringSurfaces(object)[0]!.polygon;
+    const grips = coveringGrips(object).filter(grip => grip.part === "from" || grip.part === "to");
+    expect(grips).toHaveLength(2);
+    for (const grip of grips) {
+      expect(grip.edgeFrom).toBeDefined();
+      expect(grip.edgeTo).toBeDefined();
+      expect(polygon).toContainEqual(grip.edgeFrom);
+      expect(polygon).toContainEqual(grip.edgeTo);
+      expect(distance(grip.edgeFrom!, grip.edgeTo!)).toBeGreaterThan(10);
+      expect(grip.point.x).toBeCloseTo((grip.edgeFrom!.x + grip.edgeTo!.x) / 2);
+      expect(grip.point.y).toBeCloseTo((grip.edgeFrom!.y + grip.edgeTo!.y) / 2);
+    }
+  });
   it("keeps a bounded OP span square at both ends", () => {
     const path = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
     const contour = squareConformalContourEnds(conformalCoveringContour(path, [8, 8], [8, 8], [[
