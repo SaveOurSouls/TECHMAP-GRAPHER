@@ -48,8 +48,21 @@ describe("wire blank preview", () => {
     const jacket = sealed.indexOf('data-part="terminal-insulation"');
     const seal = sealed.indexOf('data-part="seal"');
     const metal = sealed.indexOf('data-part="terminal-shell"');
+    expect(sealed.indexOf('data-part="crimp-strands"')).toBeLessThan(jacket);
     expect(jacket).toBeLessThan(seal);
     expect(seal).toBeLessThan(metal);
     expect(sealed).toContain('data-view="side"');
+  });
+
+  it("masks copper beneath the jacket cut on both sides of every terminal style", () => {
+    for (const end of ["terminal", "sealed", "sealed-pin"] as const) {
+      const svg = artwork({ ...row, start: end, end });
+      const groups = svg.split('data-view="side"').slice(1);
+      expect(groups).toHaveLength(2);
+      for (const side of groups) {
+        expect(side.indexOf('data-part="crimp-strands"')).toBeLessThan(side.indexOf('data-part="terminal-insulation"'));
+        expect(side.indexOf('data-part="terminal-insulation"')).toBeLessThan(side.indexOf('data-part="terminal-shell"'));
+      }
+    }
   });
 });

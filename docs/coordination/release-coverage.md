@@ -118,3 +118,5 @@ represent missing completed chat handoffs.
 | 088 — Маршрут v3: рисунки проводов из Э4 | `01a13071-75d8-75e0-bad6-5e2c1f86f614` | `3c6a5fb0b76fb7a236c30bb55dc385b0a2ea3171`, handoff `ca49fc3` | оба SHA проверены сборщиком как ancestors текущего integration HEAD; `git show --check` PASS | included; pending final ZIP |
 | 089 — Совместимые уплотнители в библиотеке компонентов | `01a13090-15e1-7123-a91d-eecf1a2eb900` | `e86aa33f35bed40bf7d7a98ccc6862b4cadc9468`, `11ab633`, handoff `6ce3e2a` | все code и handoff SHA — предки текущего integration HEAD; `git show --check` PASS | included; pending final ZIP |
 | 090 — Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | `e47f99e2b8044b85d7703359234477de1f3a0821`, handoff `47964b2` | оба SHA проверены сборщиком как ancestors текущего integration HEAD; `git show --check` PASS | included; pending final ZIP |
+
+| 090 follow-up 13.10 — выход меди из изоляции | 01a13091-f350-7b62-b8b0-9ca77cf1ad58 | — | зарегистрирован общий artwork, pending проверки/commit | pending |

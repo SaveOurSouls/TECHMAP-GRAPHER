@@ -32,3 +32,8 @@
 Полный Vitest 188/1834, профильные 4/14, TypeScript/Vite, verifier 13/7, XML 20/20 и diff-check PASS. Browser C1/силуэт, terminal/sealed-pin, цвет и загрузка 3/3 PASS. [Протокол и интеграции](../docs/wire-end-090-handoff.md). Commit SHA указывается в agent-handoff после фиксации; приёмка владельца открыта.
 
 Кодовый commit: e47f99e2b8044b85d7703359234477de1f3a0821, опубликован в origin/codex/integration-m5-22. Handoff записан в docs/coordination/agent-handoff.md; coverage ждёт подтверждения сборщика.
+
+## Уточнение C1 — 13.10.2026
+
+Статус follow-up: ready-for-review. Исходный запрос владельца: в зелёной рамке медные жилы должны выходить из изоляции провода. Наблюдение: медь нарисована поверх синего торца, поэтому кажется выходящей из уплотнителя. Исправить перекрытие в общем генераторе для terminal/sealed/sealed-pin и зеркальной стороны; обновить SVG/PNG, проверить профильные и полные тесты, TypeScript/build, XML/verifier и визуальный стык. ZIP не запрошен.
+Проверено 13.10.2026: Vitest 188/1835, TypeScript/Vite, verifier 13/7, XML 20/20, diff-check и растровые проверки 12/12. Точные SHA follow-up записываются в agent-handoff после коммита.

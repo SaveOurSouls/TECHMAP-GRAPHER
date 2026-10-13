@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240" role="img"><defs><linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e1ad77"/><stop offset="1" stop-color="#c88954"/></linearGradient>
     <linearGradient id="solder" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e6e9eb"/><stop offset="1" stop-color="#a5adb2"/></linearGradient></defs><g data-part="terminal" data-view="side" transform="translate(4 82.83) scale(.42)">
-    <g data-part="terminal-insulation"><path d="M456 62.5H519.05V114.5H456Z" fill="var(--wire-color,#26609e)" stroke="#303438" stroke-width="2"/></g>
     <g data-part="crimp-strands"><path d="M426 87L481 69V88L430 104Z" fill="#c88954"/>
       <path d="M430 90L480 73 M431 94L480 77 M434 97L480 81 M437 100L480 85" stroke="#874721" stroke-width="1.6"/></g>
+    <g data-part="terminal-insulation"><path d="M456 62.5H519.05V114.5H456Z" fill="var(--wire-color,#26609e)" stroke="#303438" stroke-width="2"/></g>
     <g data-part="terminal-shell"><path data-profile="socket-contact" d="M47 74H65V58L70 55H222V71Q222 80 229 80Q237 80 237 71V55H247V67Q247 79 259 82L323 91Q340 91 340 76Q343 80 348 80H429V76
        L430 90Q430 100 439 98L470 84Q481 78 481 67V35H520L525 128L542 133V141H457Q444 140 431 130H84Q79 110 65 110H47Z" fill="#929699" stroke="#303438" stroke-width="2" stroke-linejoin="round"/>
       <path d="M43 76Q42 75 42 80V105Q42 109 47 109V74 M48 109V113Q48 128 73 129H84 M66 57V73 M144 129V102Q144 100 148 100H214V129 M145 110H214 M159 100V129 M201 100V129 M237 55V71 M340 76V91 M429 77V90" fill="none" stroke="#303438" stroke-width="1.5"/>
