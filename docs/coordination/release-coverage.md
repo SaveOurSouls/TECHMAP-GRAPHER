@@ -125,3 +125,14 @@ represent missing completed chat handoffs.
 | 091 — Чертёж: граница оболочки и витая пара | `/root` | code `1a76bbaa8964280362a637c4415e365b16a1588a`, handoff `ac4e2c5` | оба SHA — предки integration HEAD `2ea885b7d79302e5393c552f517f71cea789efbf`; `git show --check` PASS | included (ancestor) |
 | 092 — Свойства полуфабрикатов и карта резки | `/root` | code `89443d6073c47730d181caec9a40b4717baff736`, `f8de2612ebad386b308216953c1e96be4c2f70cc`, handoff `f052577` | все SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 094 — Единица сечения из записи каталога проводов | `/root` | code `dd13db7`, handoff `2ea885b` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
+
+### m5-22-043 — 13.10.2026
+
+- **Integration branch:** `codex/integration-m5-22`
+- **Code HEAD:** `81628571106e0b138db5731b776e5294e6e4aa4d`
+- **Coverage detail:** строки 090 follow-up, 091–094 выше; все handoff подтверждены как ancestors
+- **Pending or unknown:** `0` для Git inclusion
+- **ZIP:** `artifacts/m5-22-043/TECHMAP-GRAPHER-0.63.43-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 012 360 / 5F3A431A4AB0090426A0CA2FB51F04ED068EA1EC9C774F0931B74C38597796C2`
+- **PACKAGE-MANIFEST / portable:** `PASS; 339 записей / 340 файлов; 7/7 из C:\Temp`
+- **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта

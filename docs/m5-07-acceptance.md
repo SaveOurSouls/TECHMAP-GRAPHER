@@ -614,3 +614,25 @@ TypeScript и Vite production build, 1117 .NET-тестов, отдельный 
 Ограничения: исходный жгут и packaged UI вручную не проверены; прямой запуск из
 исходного кириллического пути в этом срезе не проверялся. ZIP остаётся вне Git.
 
+# Пакет 13.10.2026 — M5-22-043 / карточки 090 follow-up, 091–094
+
+Кодовый HEAD: `81628571106e0b138db5731b776e5294e6e4aa4d`.
+Handoff этих карточек подтверждены в `docs/coordination/release-coverage.md`.
+Версия: `0.63.43-m5-22-review`.
+
+ZIP: `artifacts/m5-22-043/TECHMAP-GRAPHER-0.63.43-m5-22-review-win-x64.zip`.
+Размер: **64 012 360 байт**. SHA-256:
+`5F3A431A4AB0090426A0CA2FB51F04ED068EA1EC9C774F0931B74C38597796C2`.
+
+Штатный `scripts/build-package.ps1` — PASS: 193 клиентских файла / 1859
+тестов, TypeScript, production build, полный .NET-набор, отдельный
+performance-тест и self-contained win-x64 publish. `verify-package.ps1` —
+PASS: 339 записей манифеста / 340 файлов. `test-portable-package.ps1` —
+PASS, 7/7 из `C:\Temp\TECHMAP-m5-22-043`; внутри проверен путь с кириллицей
+и пробелами.
+
+Ограничения: прямой запуск из исходного каталога проекта с кириллицей дал
+`UnauthorizedAccessException` при проверке ACL; тот же ZIP успешно прошёл
+portable из `C:\Temp`. Исходный жгут и packaged UI вручную не проверены;
+приёмка владельцем открыта. ZIP находится вне Git.
+

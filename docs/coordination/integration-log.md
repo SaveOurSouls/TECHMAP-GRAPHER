@@ -1,5 +1,14 @@
 # Журнал интеграции
 
+## 13.10.2026 — M5-22-043: итог после диагностики Web.Tests
+
+Первоначальный статус `BLOCKED` ниже закрыт: полный Web.Tests завершился
+успешно примерно за 11 минут. Повторный штатный `build-package.ps1` дошёл до
+ZIP; манифест 339/340 и portable 7/7 из `C:\Temp` прошли. Прямой portable из
+каталога проекта остановился на `UnauthorizedAccessException` при проверке ACL.
+Итоговый размер и SHA-256 записаны в `docs/m5-07-acceptance.md` и release
+coverage. Code HEAD `81628571106e0b138db5731b776e5294e6e4aa4d`.
+
 ## 13.10.2026 — M5-22-043: сборка остановлена на Web.Tests
 
 Coverage карточек 090 follow-up, 091–094 подтверждён в commit `d4da32c`.
