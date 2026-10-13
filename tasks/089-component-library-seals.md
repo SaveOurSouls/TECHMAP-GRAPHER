@@ -32,11 +32,11 @@
 
 ## Журнал результата
 
-- Коммиты кода: `e86aa33f35bed40bf7d7a98ccc6862b4cadc9468`, `11ab633` (follow-up сохранения выбора при переименовании).
-- Проверки рабочего чата: Vitest 188 файлов / 1834 теста, TypeScript, production build, профильные тесты и `git diff --check` — PASS.
-- Handoff сборщику: coordinator handoff внесён в `docs/coordination/agent-handoff.md`; кодовые SHA опубликованы в `origin/codex/integration-m5-22`.
+- Коммиты кода: `e86aa33f35bed40bf7d7a98ccc6862b4cadc9468`, `11ab633` (сохранение выбора при переименовании) и `f10f004da6885723fd2cf6902f9a1d9245c68103` (сохранение уплотнителей, новый экран серии и адаптивный блок).
+- Проверки рабочего чата: Vitest 188 файлов / 1834 теста для исходного среза; follow-up — профилированный Vitest 39/39, `pnpm --dir src/Techmap.Client typecheck`, `pnpm --dir src/Techmap.Client build`, `dotnet test tests/Techmap.Web.Tests --no-restore --filter FullyQualifiedName~ComponentTemplateContentV5ValidatorTests` (17/17) и `git diff --check` — PASS.
+- Handoff сборщику: coordinator handoff внесён в `docs/coordination/agent-handoff.md`; все кодовые SHA опубликованы в `origin/codex/integration-m5-22`.
 - Интеграционный commit/эквивалент: —
-- ZIP / release coverage: следующий ZIP; сборщик должен подтвердить ancestry обоих кодовых SHA и документационный handoff.
+- ZIP / release coverage: следующий ZIP; сборщик должен подтвердить ancestry трёх кодовых SHA и документационного handoff.
 - Проверки и даты: 12.10.2026.
-- Ограничения и открытые вопросы: визуальная проверка через приложение ограничена `UnauthorizedAccessException`; C1–C3 сверены с реализацией, packaged UI не проверен.
+- Ограничения и открытые вопросы: Browser plugin и локальный Playwright недоступны, поэтому C1–C3 сверены с реализацией без рендерной проверки; packaged UI не проверен. Полный клиентский прогон имеет одну постороннюю ошибку `route-inline-render.test.ts` (ожидает устаревший рисунок «После резки», получен «Без разделки»).
 - Решение владельца о приёмке: —
