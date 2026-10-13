@@ -11,7 +11,7 @@
 
 | Роль | Чат | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Release coverage |
 | --- | --- | --- | --- | --- | --- | --- |
-| Библиотека компонентов: совместимые уплотнители | Добавить уплотнители в библиотеку | `01a13090-15e1-7123-a91d-eecf1a2eb900` | 089 / REQ-125 | `codex/integration-m5-22` / основной worktree | `src/Techmap.Client/src/component-library/*`, серверный schema-v5 validator и профильные тесты; координатор владеет карточкой/REQ/реестром | ready-for-review; follow-up `f10f004` опубликован, следующий ZIP ожидает подтверждения сборщика |
+| Библиотека компонентов: совместимые уплотнители | Добавить уплотнители в библиотеку | `01a13090-15e1-7123-a91d-eecf1a2eb900` | 089 / REQ-125 | `codex/integration-m5-22` / основной worktree | `src/Techmap.Client/src/component-library/*`, серверный schema-v5 validator и профильные тесты; координатор владеет карточкой/REQ/реестром | accepted владельцем 13.10.2026; follow-up `f10f004` включён в M5-22-043 |
 
 ## Регистрация карточки 087 — 12.10.2026 (МСК)
 
@@ -156,7 +156,7 @@
 
 | Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
 | --- | --- | --- | --- | --- | --- |
-| Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | ready-for-review; code e47f99e опубликован; handoff в agent-handoff; следующий ZIP pending builder |
+| Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | accepted владельцем 13.10.2026; code `e47f99e`, follow-up `e22862d` и handoff включены в M5-22-043 |
 
 ## Регистрация карточки 091 — 13.10.2026 (МСК)
 
