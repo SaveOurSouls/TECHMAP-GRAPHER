@@ -1,5 +1,39 @@
 # Шаблон handoff от чата задачи
 
+## 094 — единица сечения из записи каталога проводов
+
+```text
+Карточка: 094 — Единица сечения из записи каталога проводов
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты кода: dd13db7
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/{model,wire-database,editor-reference-catalog,editor-types,HarnessDesignEditor}.ts(x): immutable material binding сохраняет sectionUnit, каталог E3:AJ связывает G/I с AWG, явно маркированные поля сохраняют мм².
+- src/Techmap.Client/src/manufacturing/cut-list-properties.ts: V3 и живая карта резки используют сохранённую единицу без преобразования или угадывания по марке.
+- профильные тесты и REQ-130/карточка 094: регрессии для `UL1007 / 30AWG`, мм², serialisation и каталожного выбора.
+
+Проверки:
+- .\node_modules\.bin\vitest.cmd run: PASS, 193 файла / 1859 тестов.
+- pnpm run typecheck: PASS.
+- pnpm run build: PASS.
+- git diff --check: PASS.
+
+Зависимости/порядок:
+- Уточнение REQ-128; не меняет электрические связи, IDs, трассы, длины и производственные параметры.
+
+Ограничения и ручная приёмка:
+- Исходный жгут и packaged UI вручную не проверялись; ZIP не запрашивался.
+
+Статус handoff: передан сборщику.
+Release coverage: следующий ZIP; подтвердить ancestry кода и документационного handoff.
+
+Примечание сборщику:
+- Старый document без sectionUnit остаётся совместимым. Для legacy binding `technology-wires` применяется только документированная семантика E3:AJ (AWG); прочие старые записи не получают выдуманную единицу.
+```
+
 ## 089 — совместимые уплотнители в библиотеке компонентов
 
 ```text
