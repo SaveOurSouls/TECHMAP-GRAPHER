@@ -7,7 +7,7 @@ import { buildRouteSourceItems, routeSourceDesignation, type RouteSourceItem } f
 import { terminalArticleLabel } from "../editor/terminal-article-label";
 import { wireBlankEnds, wireBlankEndLabels } from "../WireBlankCatalog";
 import { routeV3WireArtwork } from "./route-v3-wire-artwork";
-import { refKey, resetRouteV3WireArtwork, routeV3BatchQuantity, routeV3ConnectionPort, routeV3GroupedSourceQuantity, routeV3NodeSize, routeV3OperationFromCatalog, routeV3OperationMinutes, routeV3OperationTimes, routeV3ResizeNodeSize, routeV3SourceGroupKey, routeV3WireArtworkOverride, setRouteV3WireArtworkOverride, type RouteV3Document, type RouteV3Node, type RouteV3Operation } from "./route-v3-model";
+import { refKey, resetRouteV3WireArtwork, routeV3BatchQuantity, routeV3ConnectionPort, routeV3GroupedSourceQuantity, routeV3NodeSize, routeV3OperationFromCatalog, routeV3OperationMinutes, routeV3OperationTimes, routeV3ResizeLayout, routeV3SourceGroupKey, routeV3WireArtworkOverride, setRouteV3WireArtworkOverride, type RouteV3Document, type RouteV3Node, type RouteV3Operation } from "./route-v3-model";
 import { connectRouteV3, deleteRouteV3Edge, deleteRouteV3Node, insertRouteV3Node, refreshRouteV3 } from "./route-v3-graph";
 import { routeV3IsCutCard, routeV3ProcessedQuantity } from "./route-v3-card-quantity";
 import "./route-v3-graph.css";
@@ -107,6 +107,7 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
   const [catalogSnapshot, setCatalogSnapshot] = useState<ReferenceCatalogSnapshot | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [resizeSnap, setResizeSnap] = useState<{ id: string; width: boolean; height: boolean } | null>(null);
   const catalogApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const selected = graph.nodes.find(n => n.id === selectedId);
   const sources = useMemo(() => buildRouteSourceItems(source), [source]);
@@ -144,8 +145,15 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
     if (link && bounds) setLink({ ...link, x: e.clientX - bounds.left, y: e.clientY - bounds.top });
     const g = gesture.current; if (!g) return;
     const a = g.a + e.clientX - g.x, b = g.b + e.clientY - g.y;
-    const patch = g.mode === "move" ? { x: Math.max(12, a), y: Math.max(12, b) } : routeV3ResizeNodeSize(a, b);
-    change(d => ({ ...d, nodes: d.nodes.map(n => n.id === g.id ? { ...n, ...patch } : n) }));
+    if (g.mode === "move") {
+      change(d => ({ ...d, nodes: d.nodes.map(n => n.id === g.id ? { ...n, x: Math.max(12, a), y: Math.max(12, b) } : n) }));
+      return;
+    }
+    change(d => {
+      const layout = routeV3ResizeLayout(d.nodes, g.id, a, b);
+      setResizeSnap({ id: g.id, ...layout.snapped });
+      return { ...d, nodes: layout.nodes };
+    });
   };
   useEffect(() => { const cancel = (e: KeyboardEvent) => { if (e.key === "Escape") setLink(null); }; window.addEventListener("keydown", cancel); return () => window.removeEventListener("keydown", cancel); }, []);
   const plus = (id: string | null) => { const next = crypto.randomUUID(); if (change(d => insertRouteV3Node(d, id, next))) { setLink(null); } };
@@ -171,7 +179,7 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
   return <div className="route-v3-graph">
     <div className="route-v3-graph-toolbar"><button className="secondary-action" onClick={() => plus(null)}>+ Добавить карточку</button><span>{graph.nodes.length} карточек · {graph.edges.length} связей · {time(graph.nodes.reduce((s, n) => s + minutes(n), 0))} мин</span>{link && <><span role="status">Выберите верхнюю точку другой карточки</span><button onClick={() => setLink(null)}>Отменить связь</button></>}</div>
     {error && <p role="alert" className="route-v3-error">{error}</p>}
-    <div className="route-v3-route-scroll"><div ref={canvas} className="route-v3-route-grid" style={{ width, height }} onPointerMove={move} onPointerUp={() => { gesture.current = null; }} onPointerCancel={() => { gesture.current = null; }}>
+    <div className="route-v3-route-scroll"><div ref={canvas} className="route-v3-route-grid" style={{ width, height }} onPointerMove={move} onPointerUp={() => { gesture.current = null; setResizeSnap(null); }} onPointerCancel={() => { gesture.current = null; setResizeSnap(null); }}>
       <svg className="route-v3-graph-edges" width={width} height={height} aria-label="Зависимости полуфабрикатов"><defs><marker id="v3-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8Z" /></marker></defs>{graph.edges.map(edge => {
         const from = graph.nodes.find(n => n.id === edge.from)!, to = graph.nodes.find(n => n.id === edge.to)!;
         const a = routeV3ConnectionPort(from, "bottom"), b = routeV3ConnectionPort(to, "top");
@@ -185,9 +193,10 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
         <button className="route-v3-card-content" aria-label={`Просмотреть ${node.title}`} onClick={() => preview(node)}>{artwork(node)}{!node.refs.length && !node.fragmentIds.length && <span>Состав пуст</span>}</button>
         <div className="route-v3-card-operations"><strong>Операции · {(node.operations ?? []).length}</strong>{(node.operations ?? []).length ? <><span>{(node.operations ?? []).slice(0, 2).map(operation => operation.title).join(" · ")}{(node.operations ?? []).length > 2 ? "…" : ""}</span><small>{duration(completeMinutes(node))} / операцию · {duration(completeMinutes(node) === null ? null : completeMinutes(node)! * routeV3ProcessedQuantity(node, harnessQuantity))} / партию{routeV3IsCutCard(node) ? ` · ${routeV3ProcessedQuantity(node, harnessQuantity)} заготовок` : ""}</small></> : <span>Операции не назначены</span>}</div>
         <button className="route-v3-card-settings" onClick={() => { select(node.id); search(""); }}>Настроить карточку</button>
+        {resizeSnap?.id === node.id && (resizeSnap.width || resizeSnap.height) && <span className="route-v3-card-size-snap" role="status">{resizeSnap.width && "Ширина совпала"}{resizeSnap.width && resizeSnap.height && " · "}{resizeSnap.height && "Высота совпала"}</span>}
         <button className={`route-v3-port bottom ${link?.id === node.id ? "target" : ""}`} aria-label={`Нижняя точка ${node.title}`} onClick={() => { const p = routeV3ConnectionPort(node, "bottom"); setLink({ id: node.id, x: p.x, y: p.y + 30 }); }} />
         <button className="route-v3-card-plus" aria-label={`Добавить карточку после ${node.title}`} onClick={() => plus(node.id)}>+</button>
-        <button className="route-v3-card-resize" aria-label={`Изменить размер ${node.title}`} onPointerDown={e => begin(e, node, "resize")} onKeyDown={e => { const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 20 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -20 : 0; if (!delta) return; e.preventDefault(); const s = routeV3NodeSize(node); change(d => ({ ...d, nodes: d.nodes.map(n => n.id === node.id ? { ...n, ...routeV3ResizeNodeSize(s.width + (e.key.includes("Left") || e.key.includes("Right") ? delta : 0), s.height + (e.key.includes("Up") || e.key.includes("Down") ? delta : 0)) } : n) })); }} />
+        <button className="route-v3-card-resize" aria-label={`Изменить размер ${node.title}`} onPointerDown={e => begin(e, node, "resize")} onKeyDown={e => { const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 20 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -20 : 0; if (!delta) return; e.preventDefault(); const s = routeV3NodeSize(node); change(d => ({ ...d, nodes: routeV3ResizeLayout(d.nodes, node.id, s.width + (e.key.includes("Left") || e.key.includes("Right") ? delta : 0), s.height + (e.key.includes("Up") || e.key.includes("Down") ? delta : 0)).nodes })); }} />
       </article>)}
     </div></div>
     {selected && <Modal label={`Настройки карточки ${selected.title}`} close={() => select(null)}>
@@ -197,7 +206,6 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
       <Composition node={selected} source={source} sources={sources} graph={graph} harnessQuantity={harnessQuantity} updateWireArtwork={updateWireArtwork} resetWireArtwork={() => change(d => resetRouteV3WireArtwork(d, selected.refs.filter(ref => ref.kind === "wire").map(ref => ref.id)))} operations={<Operations node={selected} batchQuantity={routeV3ProcessedQuantity(selected, harnessQuantity)} add={addOperation} choose={id => { setChooser(id); setCategory(null); setCatalogSnapshot(null); setCatalogSourceId(""); }} update={updateOperation} remove={id => update({ operations: selected.operations?.filter(operation => operation.id !== id) })} />} />
       <section className="route-v2-settings-section"><h4>Рисунки полуфабрикатов и фрагменты</h4><button className="route-v3-settings-art" onClick={() => preview(selected)}>{artwork(selected)}</button></section>
       <section className="route-v2-settings-section"><h4>Материалы карточки</h4><input type="search" aria-label="Поиск сырья и полуфабрикатов" value={query} onChange={e => search(e.target.value)} /><div className="route-v2-material-groups"><section><h5>Сырьё</h5><div className="route-v2-source-choices">{sources.filter(s => `${s.title} ${s.material}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(s => <label className="route-v2-ref-choice" key={refKey(s.ref)}><input type="checkbox" aria-label={`Включить сырьё ${s.title}`} checked={(selected.rawRefs ?? selected.refs).some(r => refKey(r) === refKey(s.ref))} onChange={e => update({ rawRefs: e.target.checked ? [...(selected.rawRefs ?? selected.refs), s.ref] : (selected.rawRefs ?? selected.refs).filter(r => refKey(r) !== refKey(s.ref)) })} /><span><strong>{s.title}</strong><small>{routeSourceDesignation(s)}</small></span></label>)}</div></section><section><h5>Полуфабрикаты</h5><div className="route-v2-source-choices">{incoming.filter(n => n.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(n => <label className="route-v2-ref-choice" key={n.id}><input type="checkbox" aria-label={`Включить полуфабрикат ${n.title}`} checked={selected.inputNodeIds?.includes(n.id) ?? true} onChange={e => update({ inputNodeIds: e.target.checked ? [...(selected.inputNodeIds ?? []), n.id] : (selected.inputNodeIds ?? incoming.map(i => i.id)).filter(id => id !== n.id) })} /><span><strong>{n.title}</strong><small>{n.refs.length} объектов · {n.quantity ?? 1} шт.</small></span></label>)}{!incoming.length && <p>Подключите входящую карточку стрелкой.</p>}</div></section></div></section>
-      <section className="route-v2-settings-section"><h4>Зависимости</h4>{graph.edges.filter(e => e.to === selected.id).map(e => <div className="route-v3-dependency" key={e.id}><span>{graph.nodes.find(n => n.id === e.from)?.title} → {selected.title}</span><button onClick={() => setDeleting({ kind: "edge", id: e.id, title: "Зависимость" })}>Удалить связь</button></div>)}<button onClick={() => { const p = routeV3ConnectionPort(selected, "bottom"); setLink({ id: selected.id, x: p.x, y: p.y + 30 }); select(null); }}>Связать с карточкой</button><button onClick={() => plus(selected.id)}>+ Зависимая сборка</button></section>
       {!routeV3IsCutCard(selected) && <Operations node={selected} batchQuantity={routeV3BatchQuantity(selected, harnessQuantity)} add={addOperation} choose={id => { setChooser(id); setCategory(null); setCatalogSnapshot(null); setCatalogSourceId(""); }} update={updateOperation} remove={id => update({ operations: selected.operations?.filter(operation => operation.id !== id) })} />}
       {selected.kind === "final" && <label><input type="checkbox" checked={!!selected.operatorConfirmed} onChange={e => update({ operatorConfirmed: e.target.checked })} />Оператор подтверждает завершение маршрута</label>}
     </Modal>}

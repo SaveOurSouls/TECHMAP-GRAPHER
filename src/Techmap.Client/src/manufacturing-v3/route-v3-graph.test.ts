@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { connectRouteV3, deleteRouteV3Edge, deleteRouteV3Node, editableRouteV3, insertRouteV3Node, refreshRouteV3 } from "./route-v3-graph";
-import { parseRouteV3, routeV3ConnectionPort, routeV3ResizeNodeSize, type RouteV3Document, type RouteV3Node } from "./route-v3-model";
+import { parseRouteV3, ROUTE_V3_CARD_GAP, routeV3ConnectionPort, routeV3ResizeLayout, routeV3ResizeNodeSize, type RouteV3Document, type RouteV3Node } from "./route-v3-model";
 const w1 = { kind: "wire" as const, id: "W1" }, w2 = { kind: "wire" as const, id: "W2" };
 const node = (id: string, refs = [w1]): RouteV3Node => ({ id, title: id, refs, fragmentIds: [], kind: "assembly", x: 30, y: 30 });
 const graph = (): RouteV3Document => ({ version: 1, fragments: [], preparedRefs: [], generated: true, backgroundOpacity: .2, nodes: [node("a", [w1, w2]), node("b"), node("c")], edges: [{ id: "ab", from: "a", to: "b" }, { id: "bc", from: "b", to: "c" }] });
@@ -58,5 +58,21 @@ describe("Route v3 editable dependency graph", () => {
     const saved = { ...d, nodes: d.nodes.map(n => ({ ...n, width: 500, height: 570, quantity: 2, operations: [{ id: "op", title: "Cut", kind: "static" as const, quantity: 3, minutesEach: 2, lengthMm: 0, speedMmPerMinute: 1, employees: 1 }] })) };
     expect(parseRouteV3(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
     expect(parseRouteV3({ ...saved, nodes: [{ ...saved.nodes[0], width: -2 }] })).toBeNull();
+  });
+  it("snaps a resizing card to matching dimensions and cascades overlapping neighbours", () => {
+    const cards = [
+      { ...node("a"), x: 40, y: 40, width: 280, height: 264 },
+      { ...node("b"), x: 330, y: 40, width: 400, height: 300 },
+      { ...node("c"), x: 744, y: 40, width: 280, height: 264 },
+    ];
+    const layout = routeV3ResizeLayout(cards, "a", 393, 292);
+    expect(layout.size).toEqual({ width: 400, height: 300 });
+    expect(layout.snapped).toEqual({ width: true, height: true });
+    expect(layout.nodes.find(card => card.id === "b")!.x).toBe(40 + 400 + ROUTE_V3_CARD_GAP);
+    expect(layout.nodes.find(card => card.id === "c")!.x).toBe(40 + 400 + ROUTE_V3_CARD_GAP + 400 + ROUTE_V3_CARD_GAP);
+  });
+  it("uses the right side when a left collision would leave the board", () => {
+    const layout = routeV3ResizeLayout([{ ...node("a"), x: 12, y: 40, width: 280, height: 264 }, { ...node("b"), x: 30, y: 40, width: 220, height: 170 }], "a", 300, 264);
+    expect(layout.nodes.find(card => card.id === "b")!.x).toBe(12 + 300 + ROUTE_V3_CARD_GAP);
   });
 });

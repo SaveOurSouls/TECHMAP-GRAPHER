@@ -13,6 +13,9 @@ export const ROUTE_V3_NODE_MIN_WIDTH = 220;
 export const ROUTE_V3_NODE_MIN_HEIGHT = 170;
 export const ROUTE_V3_NODE_MAX_WIDTH = 720;
 export const ROUTE_V3_NODE_MAX_HEIGHT = 720;
+export const ROUTE_V3_CARD_GAP = 24;
+export const ROUTE_V3_LAYOUT_MIN_X = 12;
+export const ROUTE_V3_SIZE_SNAP_DISTANCE = 12;
 
 export interface RouteV3Fragment {
   readonly id: string;
@@ -72,6 +75,49 @@ export function routeV3NodeSize(node: Pick<RouteV3Node, "width" | "height">): { 
 }
 export function routeV3ResizeNodeSize(width: number, height: number): { width: number; height: number } {
   return { width: clampSize(width, ROUTE_V3_NODE_DEFAULT_WIDTH, ROUTE_V3_NODE_MIN_WIDTH, ROUTE_V3_NODE_MAX_WIDTH), height: clampSize(height, ROUTE_V3_NODE_DEFAULT_HEIGHT, ROUTE_V3_NODE_MIN_HEIGHT, ROUTE_V3_NODE_MAX_HEIGHT) };
+}
+export interface RouteV3ResizeLayout {
+  readonly nodes: readonly RouteV3Node[];
+  readonly size: { readonly width: number; readonly height: number };
+  readonly snapped: { readonly width: boolean; readonly height: boolean };
+}
+
+const intersects = (a: RouteV3Node, b: RouteV3Node): boolean => {
+  const as = routeV3NodeSize(a), bs = routeV3NodeSize(b);
+  return a.x < b.x + bs.width && a.x + as.width > b.x && a.y < b.y + bs.height && a.y + as.height > b.y;
+};
+
+/** Resize from the bottom-right corner and keep the surrounding board readable.
+ * Colliding cards move sideways with a gap; each such move can cascade into its
+ * own neighbours. The board has a fixed left edge and grows to the right. */
+export function routeV3ResizeLayout(nodes: readonly RouteV3Node[], id: string, width: number, height: number): RouteV3ResizeLayout {
+  const resized = nodes.find(node => node.id === id);
+  if (!resized) return { nodes, size: routeV3ResizeNodeSize(width, height), snapped: { width: false, height: false } };
+  const requested = routeV3ResizeNodeSize(width, height);
+  const nearest = (value: number, dimension: "width" | "height") => nodes.filter(node => node.id !== id).map(node => routeV3NodeSize(node)[dimension]).filter(candidate => Math.abs(candidate - value) <= ROUTE_V3_SIZE_SNAP_DISTANCE).sort((a, b) => Math.abs(a - value) - Math.abs(b - value))[0];
+  const snappedWidth = nearest(requested.width, "width"), snappedHeight = nearest(requested.height, "height");
+  const size = { width: snappedWidth ?? requested.width, height: snappedHeight ?? requested.height };
+  const next = nodes.map(node => node.id === id ? { ...node, ...size } : node);
+  const byId = new Map(next.map(node => [node.id, node]));
+  const pending = [id];
+  const moved = new Set<string>();
+  while (pending.length) {
+    const sourceId = pending.shift()!;
+    const source = byId.get(sourceId)!;
+    for (const candidate of [...byId.values()]) {
+      if (candidate.id === sourceId || !intersects(source, candidate)) continue;
+      const sourceSize = routeV3NodeSize(source), candidateSize = routeV3NodeSize(candidate);
+      const candidateIsLeft = candidate.x + candidateSize.width / 2 < source.x + sourceSize.width / 2;
+      const leftX = source.x - candidateSize.width - ROUTE_V3_CARD_GAP;
+      const x = candidateIsLeft && leftX >= ROUTE_V3_LAYOUT_MIN_X ? leftX : source.x + sourceSize.width + ROUTE_V3_CARD_GAP;
+      if (candidate.x === x || moved.has(`${sourceId}:${candidate.id}:${x}`)) continue;
+      const shifted = { ...candidate, x };
+      byId.set(candidate.id, shifted);
+      moved.add(`${sourceId}:${candidate.id}:${x}`);
+      pending.push(candidate.id);
+    }
+  }
+  return { nodes: next.map(node => byId.get(node.id)!), size, snapped: { width: snappedWidth !== undefined, height: snappedHeight !== undefined } };
 }
 export function routeV3ConnectionPort(node: Pick<RouteV3Node, "x" | "y" | "width" | "height">, side: "top" | "bottom"): { x: number; y: number } {
   const size = routeV3NodeSize(node); return { x: node.x + size.width / 2, y: node.y + (side === "top" ? 0 : size.height) };
