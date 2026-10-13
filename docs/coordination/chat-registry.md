@@ -143,4 +143,10 @@
 | --- | --- | --- | --- | --- | --- |
 | Редизайн оконцовок провода по C1 | `01a13091-f350-7b62-b8b0-9ca77cf1ad58` | 090 / REQ-126 | `codex/integration-m5-22` / основной worktree | wire-blank-artwork.*, artwork assets/generator; только SVG placement в CanvasViewport; тесты и документы 090; не component-library/089 и не manufacturing-v3/088 | ready-for-review; code e47f99e опубликован; handoff в agent-handoff; следующий ZIP pending builder |
 
+## Регистрация карточки 091 — 13.10.2026 (МСК)
+
+| Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
+| --- | --- | --- | --- | --- | --- |
+| Чертёж: граница оболочки и витая пара | `/root` | 091 / REQ-127 | `codex/integration-m5-22` / основной worktree | `physical-editing.ts`, `drawing-twisted-pair.ts`, `physical-wire-geometry.ts`, `CanvasViewport.tsx`, профильные тесты и документы 091 | следующий ZIP; handoff после обязательных проверок |
+
 13.10.2026: follow-up 090 / REQ-126, чат 01a13091-f350-7b62-b8b0-9ca77cf1ad58, codex/integration-m5-22 / основной worktree. Владелец: wire-blank-artwork.mjs, WireBlankCatalogEditor.test.ts, производные SVG/PNG и документы 090. Объём: медь выходит из изоляции в отмеченном C1 стыке. Следующий ZIP: pending follow-up handoff.

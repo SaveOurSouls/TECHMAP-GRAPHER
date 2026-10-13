@@ -7,6 +7,8 @@ import {createEditorHistory,executeEditorCommand,undoEditorCommand} from "./hist
 import {parseHarnessDesignDocument} from "./model";
 import {setPipeIntervalLength} from "./drawing-dimensions";
 import {routePhysicalWires} from "./physical-wire-routing";
+import { coveringGrips } from "./covering-renderer";
+import { coveringScene } from "./covering-layout";
 
 function fixture(){const d=physicalFixture();return {...d,physicalTopology:{...d.physicalTopology!,snap:false,
  nodes:[{id:"a",position:{x:0,y:0}},{id:"b",position:{x:300,y:100}}],routes:[],
@@ -58,6 +60,26 @@ it("moves a node with its nearest shoulder, preserving all distant corners",()=>
  const carry=applyEditorCommand(d,{...command,mode:"carry"}),shift=applyEditorCommand(d,{...command,mode:"adjacent"});
  expect(carry.physicalTopology!.segments[0]!.path.points).toEqual([{x:100,y:30},{x:150,y:70},{x:220,y:70}]);
  expect(shift.physicalTopology!.segments[0]!.path.points).toEqual(d.physicalTopology.segments[0]!.path.points);
+});
+it("keeps a free covering edge at its authored place when a pipe node moves",()=>{
+ const base=fixture(),covering={id:"cover",name:"Нейлонка",width:18,color:"#b19c77",lengthMm:null,
+  spans:[{segmentId:"pipe",from:.32,to:.72,fromAnchor:undefined,toAnchor:undefined}]};
+ const d={...base,physicalTopology:{...base.physicalTopology,coverings:[covering]}};
+ const before=coveringGrips(coveringScene(d)[0]!).find(grip=>grip.part==="to")!.point;
+ const moved=applyEditorCommand(d,{type:"move-physical-node",nodeId:"a",position:{x:20,y:30},mode:"carry"});
+ const next=moved.physicalTopology!.coverings![0]!.spans[0]!;
+ const after=coveringGrips(coveringScene(moved)[0]!).find(grip=>grip.part==="to")!.point;
+ expect(next.toAnchor).toBeUndefined();
+ expect(Math.hypot(after.x-before.x,after.y-before.y)).toBeLessThan(1e-6);
+});
+it("keeps an anchored covering edge attached to the moved node",()=>{
+ const base=fixture(),covering={id:"cover",name:"Нейлонка",width:18,color:"#b19c77",lengthMm:null,
+  spans:[{segmentId:"pipe",from:0,to:.72,fromAnchor:0}]};
+ const d={...base,physicalTopology:{...base.physicalTopology,coverings:[covering]}};
+ const moved=applyEditorCommand(d,{type:"move-physical-node",nodeId:"a",position:{x:20,y:30},mode:"carry"});
+ const start=coveringGrips(coveringScene(moved)[0]!).find(grip=>grip.part==="from")!;
+ expect(moved.physicalTopology!.coverings![0]!.spans[0]!.fromAnchor).toBe(0);
+ expect(start.point).toEqual({x:20,y:30});
 });
 it("moves a pipe's shared shoulder once for two translated exits",()=>{
  const base=fixture(),d={...base,physicalTopology:{...base.physicalTopology,segments:[{...base.physicalTopology.segments[0]!,path:{kind:"polyline" as const,points:[{x:150,y:150}]}}]}};

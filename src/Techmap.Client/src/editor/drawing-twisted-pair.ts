@@ -2,7 +2,7 @@ import type { DiffPairGroup, HarnessDesignDocument, Point } from "./model";
 import { commonParallelSpan, parallelSpanLocal, parallelSpanWorld } from "./e4-parallel-spans";
 import { drawingPhysicalScale, drawingWireWidth, segmentWireLanes } from "./drawing-thickness";
 
-export interface TwistedPairStroke { readonly points: readonly Point[]; readonly width: number; readonly radius?: number }
+export interface TwistedPairStroke { readonly points: readonly Point[]; readonly width: number; readonly radius?: number; readonly lineJoin?: CanvasLineJoin }
 export interface TwistedPairPath { readonly path: Point[]; readonly strokes: TwistedPairStroke[] }
 
 function twistRuns(
@@ -40,10 +40,10 @@ function twistRuns(
   const strokes: TwistedPairStroke[] = [];
   let from = 0;
   for (const gap of gaps) {
-    if (gap.start > from) strokes.push({ points: sample(from, gap.start), width, radius: 0 });
+    if (gap.start > from) strokes.push({ points: sample(from, gap.start), width, radius: 0, lineJoin: "round" });
     from = gap.end;
   }
-  if (from < length) strokes.push({ points: sample(from, length), width, radius: 0 });
+  if (from < length) strokes.push({ points: sample(from, length), width, radius: 0, lineJoin: "round" });
   return { path: sample(0, length), strokes };
 }
 

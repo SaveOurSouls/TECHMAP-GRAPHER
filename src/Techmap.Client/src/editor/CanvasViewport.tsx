@@ -2182,7 +2182,7 @@ export function drawEditorSceneObject(
   }
   if(view==="drawing"&&object.kind==="wire"&&object.paths){
     context.lineJoin="round";context.lineCap="round";const lineWidth=Number(object.metadata?.drawingWidth??2);context.lineWidth=selected?lineWidth+1:lineWidth;
-    for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth,radius:undefined}))){traceDrawingRoute(context,stroke.points,stroke.radius??object.routeRadius);strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
+    for(const stroke of object.visibleWireStrokes??object.paths.map(points=>({points,width:lineWidth,radius:undefined,lineJoin:undefined as CanvasLineJoin|undefined}))){traceDrawingRoute(context,stroke.points,stroke.radius??object.routeRadius);if(stroke.lineJoin)context.lineJoin=stroke.lineJoin;strokeE4Wire(context,object.color,selected?stroke.width+1:stroke.width);if(object.metadata?.volumeShading === "true")drawVolumeStroke(context,stroke.width);}
     drawWireStripProfiles(context, object, selected);
     drawWireDrawingEndStyles(context, object, selected, componentTemplateImageCache);
     context.restore();return;

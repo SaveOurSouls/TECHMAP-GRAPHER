@@ -28,6 +28,7 @@ it("projects a physical E4 pair as alternating colored paths without changing st
   expect(projected.every(wire => wire.visibleWireStrokes!.length > 2)).toBe(true);
   expect(projected.every(wire => wire.routeRadius === 24)).toBe(true);
   expect(projected.every(wire => wire.visibleWireStrokes!.some(stroke => stroke.radius === 0))).toBe(true);
+  expect(projected.every(wire => wire.visibleWireStrokes!.filter(stroke => stroke.radius === 0).every(stroke => stroke.lineJoin === "round"))).toBe(true);
   const ordinary = designToScene({ ...document, diffPairs: [] }, "drawing").find(object => object.id === "W1")!;
   expect(ordinary.visibleWireStrokes!.length).toBeLessThan(projected[0]!.visibleWireStrokes!.length);
   expect(JSON.stringify(document)).toBe(before);
@@ -57,6 +58,23 @@ it("rounds the lead after a twist without rounding away the twist itself", () =>
   };
   drawEditorSceneObject(context, object, false, "drawing");
   expect(calls.filter(call => call === "arcTo")).toHaveLength(1);
+});
+
+it("uses round joins for sharp physical bends inside a twisted run", () => {
+  const base = physicalFixture();
+  const path = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 100 }];
+  const twist = physicalTwistedPairPath({ ...base, diffPairs: [group] }, "S0", "W1", path)!;
+  expect(twist.strokes.length).toBeGreaterThan(1);
+  expect(twist.strokes.every(stroke => stroke.lineJoin === "round")).toBe(true);
+  const joins: CanvasLineJoin[] = [];
+  const context = new Proxy({ lineJoin: "miter" as CanvasLineJoin }, {
+    get: (target, key: string) => key === "lineJoin" ? target.lineJoin : (..._args: unknown[]) => undefined,
+    set: (target, key: string, value) => { if (key === "lineJoin") joins.push(value as CanvasLineJoin); (target as Record<string, unknown>)[key] = value; return true; },
+  }) as unknown as CanvasRenderingContext2D;
+  const object: EditorSceneObject = { id: "W1", kind: "wire", layerId: "wires", label: "", x: 0, y: 0, width: 0, height: 0,
+    color: "#a00", paths: [twist.path], routeRadius: 24, visibleWireStrokes: twist.strokes };
+  drawEditorSceneObject(context, object, false, "drawing");
+  expect(joins).toContain("round");
 });
 
 it("keeps conductors hidden when their physical pipe hides wires", () => {

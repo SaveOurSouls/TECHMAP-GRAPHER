@@ -3,7 +3,7 @@ import type { PhysicalSegment } from "./physical-topology-model";
 import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geometry";
 import { physicalNodePoint } from "./physical-ports";
 import { measuredWireLength } from "./drawing-dimensions";
-import { resolvedCoveringSpan } from "./physical-coverings";
+import { coveringRoute, projectOntoPolyline, resolvedCoveringSpan } from "./physical-coverings";
 import { joiningMemberPoints } from "./physical-joining-pipes";
 import type { JoiningPipeMember } from "./physical-topology-model";
 import { projectPipeBundleControls } from "./pipe-bundle-projection";
@@ -350,6 +350,51 @@ function mergeStraight(points:Point[],map:Map<number,number>) {
   }
 }
 
+function pointOnPolyline(points:readonly Point[],distance:number):Point {
+  let travelled=0;
+  for(let index=1;index<points.length;index++){
+    const a=points[index-1]!,b=points[index]!,length=Math.hypot(b.x-a.x,b.y-a.y);
+    if(distance<=travelled+length||index===points.length-1){
+      const t=length?Math.max(0,Math.min(1,(distance-travelled)/length)):0;
+      return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+    }
+    travelled+=length;
+  }
+  return points[0]??{x:0,y:0};
+}
+
+/** A free sleeve edge is an author-positioned resize boundary, not a node
+ * attachment.  Reproject its former visible point after a carried exit moves
+ * the route.  Bound edges deliberately keep their ordinal point binding. */
+function preserveFreeCoveringEdges(before:HarnessDesignDocument,after:HarnessDesignDocument,segmentId:string):HarnessDesignDocument {
+  const source=before.physicalTopology?.coverings,topology=after.physicalTopology;
+  const oldRoute=coveringRoute(before,segmentId),nextRoute=coveringRoute(after,segmentId);
+  if(!source||!topology||!oldRoute||!nextRoute)return after;
+  const remap=(span:ReturnType<typeof resolvedCoveringSpan>,fraction:number)=>{
+    const point=pointOnPolyline(oldRoute.points,oldRoute.before+fraction*oldRoute.length);
+    const projected=projectOntoPolyline(nextRoute.points,point).fraction;
+    return Math.max(nextRoute.min,Math.min(nextRoute.max,(projected*nextRoute.total-nextRoute.before)/nextRoute.length));
+  };
+  const coverings=topology.coverings?.map(covering=>{
+    const original=source.find(item=>item.id===covering.id);
+    if(!original)return covering;
+    return {...covering,spans:covering.spans.map((span,index)=>{
+      const prior=original.spans[index];
+      if(!prior||span.segmentId!==segmentId||prior.segmentId!==segmentId)return span;
+      const resolved=resolvedCoveringSpan(before,prior);
+      let from=prior.fromAnchor===undefined?remap(resolved,resolved.from):span.from;
+      let to=prior.toAnchor===undefined?remap(resolved,resolved.to):span.to;
+      const minimum=Math.min(.001,(to-from)/4);
+      if(from>=to){
+        if(prior.fromAnchor===undefined)from=to-minimum;
+        else to=from+minimum;
+      }
+      return {...span,from,to};
+    })};
+  });
+  return {...after,physicalTopology:{...topology,coverings}};
+}
+
 export function physicalObjectSnapAnchors(objects:readonly {id:string;kind:string;x:number;y:number;port?:{connectorId?:string}}[],object:{id:string;kind:string;x:number;y:number}):Point[] {
   if(object.kind!=="connector"&&object.kind!=="physical-node")return [];
   const own=object.kind==="physical-node"?[object]:objects.filter(o=>o.kind==="physical-node"&&o.port?.connectorId===object.id);
@@ -465,6 +510,7 @@ export function carryPhysicalExits(before:HarnessDesignDocument,after:HarnessDes
     for(const [i,deltas] of shifts)points[i]=shifted(original[i]!,{x:deltas.reduce((n,d)=>n+d.x,0)/deltas.length,y:deltas.reduce((n,d)=>n+d.y,0)/deltas.length});
     if(mode==="carry")mergeStraight(points,map);
     result=replacePath(result,segment,points,map);
+    result=preserveFreeCoveringEdges(before,result,segment.id);
     const joiningPipes=result.physicalTopology!.joiningPipes?.map(pipe=>({...pipe,members:pipe.members.map(member=>{
       if(!member.segmentIds.includes(segment.id))return member;
       const originalMember=before.physicalTopology!.joiningPipes?.find(item=>item.id===pipe.id)?.members

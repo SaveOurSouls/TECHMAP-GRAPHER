@@ -41,7 +41,7 @@ function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
   if(current.length)result.push(current);
   return result;
 }
-export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number; readonly radius?:number }
+export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number; readonly radius?:number; readonly lineJoin?:CanvasLineJoin }
 export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[]; readonly twisted:boolean }
 export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):PhysicalWireDisplay|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
