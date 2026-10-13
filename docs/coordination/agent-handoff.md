@@ -399,3 +399,37 @@ Git coordinator check: both commits resolve, `git show --check` PASS, both are a
 Проверки: 188 файлов / 1835 тестов, tsc/Vite, verifier 13/7, XML 20/20, diff-check; растровая проверка 12/12 случаев. Увеличенный стык просмотрен.
 Ограничения: исходный жгут и packaged UI не проверены; ZIP не запрошен. M5-22-042 остаётся предыдущим пакетом без follow-up. Сборщику подтвердить SHA follow-up и документальный commit как ancestry перед следующим ZIP.
 Соседняя 091 не входит в эту работу: случайно попавшая регистрационная строка REQ-127 убрана только из Git index документальным commit, исходный рабочий файл 091 сохранён для её владельца.
+
+## 091 — стабильная граница оболочки и витая пара
+
+```text
+Карточка: 091 — Стабильная граница оболочки и витая пара
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммиты для интеграции: 1a76bbaa8964280362a637c4415e365b16a1588a
+
+Изменённые файлы:
+- src/Techmap.Client/src/editor/physical-editing.ts: свободные торцы покрытия перепроецируются после переноса точки П; point-bound торцы не меняют семантику.
+- src/Techmap.Client/src/editor/drawing-twisted-pair.ts, physical-wire-geometry.ts, editor-types.ts, CanvasViewport.tsx: витые stroke-фрагменты запрашивают round join вместо miter.
+- профильные тесты, REQ-127, карточка 091, реестр и статус: регрессии и handoff.
+
+Проверки:
+- pnpm --dir src/Techmap.Client test: PASS (188 файлов / 1838 тестов).
+- pnpm --dir src/Techmap.Client typecheck: PASS.
+- pnpm --dir src/Techmap.Client build: PASS.
+- git diff --check: PASS.
+
+Зависимости/порядок:
+- После 97af06e; нет миграции формата и серверных изменений.
+
+Ограничения и ручная приёмка:
+- Browser plugin и локальный Playwright fallback недоступны; C1–C8 на исходном жгуте и packaged Windows UI ещё не проверены вручную.
+
+Статус handoff: передан сборщику
+Release coverage: следующий ZIP; требуется подтверждение ancestry/equivalent
+
+Примечание сборщику:
+- Проверить 1a76bba как ancestor собираемого HEAD. Изменение сохраняет электрические связи, ID, авторские маршруты и производственные длины.
+```
