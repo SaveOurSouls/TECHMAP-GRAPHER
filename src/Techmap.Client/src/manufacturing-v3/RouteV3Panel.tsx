@@ -13,7 +13,7 @@ import type { RouteRow } from "../manufacturing/route-model";
 import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
 import { RouteV3WireArtworkPreview } from "./route-v3-wire-artwork";
 import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
-import { appendRouteV3Fragment, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, refKey, removeRouteV3Fragment, revealedRouteV3Ids, routeV3StorageKey, routeV3WireArtworkOverride, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
+import { appendRouteV3Fragment, applyRouteV3SourceRefresh, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, previewRouteV3SourceRefresh, refKey, removeRouteV3Fragment, resolveRouteV3SourceDivergence, revealedRouteV3Ids, routeV3StorageKey, routeV3WireArtworkOverride, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
 import { RouteV3Graph } from "./RouteV3Graph";
 import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
 import "../manufacturing-v2/route-v2.css";
@@ -31,24 +31,24 @@ function Dialog({ label, onClose, children, editor = false }: { label: string; o
 export function RouteV3Panel(props: Props) {
   const { config, session, projectId, harnessId } = props;
   const api = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
-  const [loaded, setLoaded] = useState<{ source: HarnessDesignDocument; route: RouteV3Document } | null>(null);
+  const [loaded, setLoaded] = useState<{ source: HarnessDesignDocument; route: RouteV3Document; harnessQuantity: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false; setLoaded(null); setError(null);
     void api.get(projectId, harnessId).then(resource => {
       if (cancelled) return;
       const raw = window.localStorage.getItem(routeV3StorageKey(projectId, harnessId));
-      const route = raw === null ? createInitialRouteV3(resource.content) : parseRouteV3(JSON.parse(raw));
+      const route = raw === null ? createInitialRouteV3(resource.content, resource.harnessQuantity ?? 1) : parseRouteV3(JSON.parse(raw));
       if (!route) throw new Error("Сохранённый Маршрут v3 повреждён. Данные браузера сохранены без изменений.");
-      setLoaded({ source: resource.content, route });
+      setLoaded({ source: resource.content, route, harnessQuantity: resource.harnessQuantity ?? 1 });
     }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : "Не удалось открыть Маршрут v3."); });
     return () => { cancelled = true; };
   }, [api, projectId, harnessId]);
   if (!loaded) return <section className="route-v3-panel"><p role={error ? "alert" : "status"}>{error ?? "Загружаем Маршрут v3…"}</p><button onClick={props.onClose}>К проектам</button></section>;
-  return <Workspace key={`${projectId}:${harnessId}`} {...props} source={loaded.source} initial={loaded.route} />;
+  return <Workspace key={`${projectId}:${harnessId}`} {...props} source={loaded.source} initial={loaded.route} harnessQuantity={loaded.harnessQuantity} />;
 }
 
-function Workspace({ source, initial, config, session, projectId, harnessId, onClose, onSectionChange }: Props & { source: HarnessDesignDocument; initial: RouteV3Document }) {
+function Workspace({ source, initial, harnessQuantity, config, session, projectId, harnessId, onClose, onSectionChange }: Props & { source: HarnessDesignDocument; initial: RouteV3Document; harnessQuantity: number }) {
   const [route, setRoute] = useState(initial);
   const current = useRef(route); current.current = route;
   const [graphical, setGraphical] = useState(false);
@@ -58,6 +58,8 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
   const [editing, setEditing] = useState<RouteV3Fragment | null>(null);
   const [drawingNode, setDrawingNode] = useState<RouteV3Node | null>(null);
   const [preview, setPreview] = useState<RouteV3Node | null>(null);
+  const [refreshOpen, setRefreshOpen] = useState(false);
+  const sourceRefresh = useMemo(() => previewRouteV3SourceRefresh(route, source, harnessQuantity), [route, source, harnessQuantity]);
   const sources = useMemo(() => buildRouteSourceItems(source), [source]);
   const sourceScene = useMemo(() => designToScene(source, "drawing"), [source]);
   const revealed = useMemo(() => revealedRouteV3Ids(route), [route.fragments]);
@@ -67,6 +69,11 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
   const persist = (next: RouteV3Document) => {
     try { window.localStorage.setItem(routeV3StorageKey(projectId, harnessId), JSON.stringify(next)); current.current = next; setRoute(next); setError(null); }
     catch { const message = "Не удалось сохранить Маршрут v3 в браузере. Освободите место и повторите сохранение."; setError(message); throw new Error(message); }
+  };
+  const applySourceRefresh = () => {
+    if (!window.confirm(`Обновить Маршрут v3 по сохранённому Чертежу/Э4? Изменятся исходное сырьё и количества; ${sourceRefresh.divergences.length} расхождений останутся для проверки оператором.`)) return;
+    try { persist(applyRouteV3SourceRefresh(current.current, sourceRefresh)); setRefreshOpen(true); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось обновить маршрут."); }
   };
   const newFragment = (document: HarnessDesignDocument, ids: readonly string[], scene: readonly EditorSceneObject[], isolate: boolean): RouteV3Fragment => {
     const selection = captureRouteV3Selection(document, scene, ids);
@@ -133,9 +140,11 @@ function Workspace({ source, initial, config, session, projectId, harnessId, onC
     {error && <p className="route-v3-error" role="alert">{error}</p>}
     {textures.error && <p role="status">{textures.error}</p>}
     <div hidden={graphical}>
+      {(!route.sourceState || sourceRefresh.changed || !!route.sourceDivergences?.length) && <div className="route-v3-refresh" role="status"><div><strong>{!route.sourceState ? "Свяжите маршрут с текущим Чертежом/Э4" : sourceRefresh.changed ? "Чертёж или Э4 изменились" : route.sourceDivergences?.some(issue => !issue.resolved) ? "Есть расхождения с источником" : "Изменения источника проверены"}</strong><span>{!route.sourceState ? "Для ранее созданного маршрута нет исходной ревизии. Сохраните текущий источник как точку сравнения." : sourceRefresh.changed ? sourceRefresh.divergences.length ? `${sourceRefresh.divergences.length} изменений требуют проверки перед обновлением маршрута.` : "Геометрия или количество изменились без расхождения состава и точек привязки. Карточки сохранятся." : `${route.sourceDivergences?.filter(issue => !issue.resolved).length ?? 0} расхождений ожидают исправления оператором.`}</span></div><div className="route-v3-refresh-actions">{(!route.sourceState || sourceRefresh.changed) && <button type="button" className="primary-action" onClick={applySourceRefresh}>{route.sourceState ? "Проверить и применить обновление" : "Привязать текущий источник"}</button>}<button type="button" className="secondary-action" onClick={() => setRefreshOpen(value => !value)}>{refreshOpen ? "Скрыть список" : "Показать расхождения"}</button></div></div>}
+      {refreshOpen && <div className="route-v3-divergences" aria-label="Расхождения Чертежа и маршрута">{(sourceRefresh.changed ? sourceRefresh.divergences : route.sourceDivergences ?? []).map(issue => { const affected = route.nodes.filter(node => node.refs.some(ref => refKey(ref) === refKey(issue.ref))); const label = sources.find(item => refKey(item.ref) === refKey(issue.ref))?.title ?? `${issue.ref.kind}:${issue.ref.id}`; return <article key={issue.key} className={issue.resolved ? "resolved" : ""}><div><strong>{label}</strong><small>{issue.kind === "added" ? "Добавлен объект" : issue.kind === "removed" ? "Удалён объект" : issue.kind === "attachment" ? "Изменена привязка" : "Изменена спецификация"}</small><span>Карточки: {affected.length ? affected.map(node => node.title).join(", ") : "не назначены"}</span></div><details><summary>Прежнее и новое значение</summary><p>Было: {issue.previous ?? "—"}</p><p>Стало: {issue.current ?? "—"}</p></details>{!sourceRefresh.changed && !issue.resolved && <button type="button" className="secondary-action" onClick={() => persist(resolveRouteV3SourceDivergence(current.current, issue.key))}>Исправлено</button>}</article>; })}{!(sourceRefresh.changed ? sourceRefresh.divergences : route.sourceDivergences ?? []).length && <p>Расхождений нет.</p>}</div>}
       {!route.generated && route.fragments.length > 0 && <p role="status">Слепки сохранены. Нажмите «Сгенерировать» в графическом маршруте для обновления зависимостей.</p>}
       {route.generated && !route.nodes.some(node => node.kind === "final") && <p role="status">Маршрут частичный: сохраните оставшиеся объекты для финального жгута.</p>}
-      <RouteV3Graph graph={board} source={source} save={next => persist({ ...next, graphEdited: true })} artwork={nodeArtwork} preview={setPreview} editDrawing={editNodeDrawing} />
+      <RouteV3Graph graph={board} source={source} config={config} session={session} projectId={projectId} harnessId={harnessId} harnessQuantity={harnessQuantity} save={next => persist({ ...next, graphEdited: true })} artwork={nodeArtwork} preview={setPreview} editDrawing={editNodeDrawing} />
     </div>
     <div hidden={!graphical}>
       {openedOnce && <div className="route-v3-layout"><div className="route-v3-editor"><div className="route-v3-editor-toolbar"><label>Название нового слепка<input value={title} maxLength={120} placeholder="Например, Установка соединителя X1" onChange={event => setTitle(event.target.value)} /></label><span>Выберите объекты кнопками списка или рамкой; ПКМ → «Изолировать» / «Сохранить».</span></div><HarnessDesignEditor config={config} session={session} projectId={projectId} harnessId={harnessId} harnessDesignation="Графический маршрут v3" initialView="drawing" localCopy={localCopy} /></div>

@@ -2,7 +2,9 @@ import type { HarnessDesignDocument } from "../editor/model";
 import type { EditorSceneObject } from "../editor/editor-types";
 import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
 import { createRouteDrawingCopy, parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
-import type { UmlOperation } from "../uml/uml-model";
+import type { RouteV3Operation } from "./route-v3-operations";
+import { validRouteV3Operation } from "./route-v3-operations";
+import { captureRouteV3SourceState, validRouteV3SourceState, validRouteV3SourceDivergence, type RouteV3SourceState, type RouteV3SourceDivergence } from "./route-v3-source-refresh";
 import type { RouteV2Drawing } from "../manufacturing-v2/route-v2-model";
 
 export const ROUTE_V3_NODE_DEFAULT_WIDTH = 280;
@@ -36,7 +38,7 @@ export interface RouteV3Node {
   readonly height?: number;
   readonly quantity?: number;
   readonly inputNodeIds?: readonly string[];
-  readonly operations?: readonly UmlOperation[];
+  readonly operations?: readonly RouteV3Operation[];
   readonly operatorConfirmed?: boolean;
   readonly rawRefs?: readonly RouteSourceRef[];
   readonly drawing?: RouteV2Drawing;
@@ -56,6 +58,8 @@ export interface RouteV3Document {
   readonly generated: boolean;
   readonly backgroundOpacity: number;
   readonly graphEdited?: boolean;
+  readonly sourceState?: RouteV3SourceState;
+  readonly sourceDivergences?: readonly RouteV3SourceDivergence[];
   /** Sparse V3-only overrides. Missing entry always follows the current E4 model. */
   readonly wireArtwork?: readonly RouteV3WireArtworkOverride[];
 }
@@ -73,10 +77,10 @@ export function routeV3ConnectionPort(node: Pick<RouteV3Node, "x" | "y" | "width
   const size = routeV3NodeSize(node); return { x: node.x + size.width / 2, y: node.y + (side === "top" ? 0 : size.height) };
 }
 export const routeV3NodeQuantity = (node: Pick<RouteV3Node, "quantity">): number => typeof node.quantity === "number" && Number.isFinite(node.quantity) && node.quantity > 0 ? node.quantity : 1;
-export const routeV3NodeOperations = (node: Pick<RouteV3Node, "operations">): readonly UmlOperation[] => node.operations ?? [];
+export const routeV3NodeOperations = (node: Pick<RouteV3Node, "operations">): readonly RouteV3Operation[] => node.operations ?? [];
 
-export function createInitialRouteV3(source: HarnessDesignDocument): RouteV3Document {
-  return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2 };
+export function createInitialRouteV3(source: HarnessDesignDocument, harnessQuantity = 1): RouteV3Document {
+  return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2, sourceState: captureRouteV3SourceState(source, harnessQuantity) };
 }
 export function routeV3WireArtworkOverride(document: RouteV3Document, wireId: string): RouteV3WireArtworkOverride | undefined { return document.wireArtwork?.find(value => value.wireId === wireId); }
 export function setRouteV3WireArtworkOverride(document: RouteV3Document, override: RouteV3WireArtworkOverride): RouteV3Document {
@@ -188,12 +192,19 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
       if (node.drawing) { if (!opacity(node.drawing.backgroundOpacity)) return null; if (node.drawing.drawingCopy) parseRouteDrawingCopy(node.drawing.drawingCopy); if (node.drawing.isolatedDrawingCopy) parseRouteDrawingCopy(node.drawing.isolatedDrawingCopy); }
       if ([node.width, node.height, node.quantity].some(n => n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n <= 0))) return null;
       if (node.inputNodeIds !== undefined && (!Array.isArray(node.inputNodeIds) || node.inputNodeIds.some((id: unknown) => !text(id)))) return null;
-      if (node.operations !== undefined && (!Array.isArray(node.operations) || node.operations.some((op: UmlOperation) => !op || !text(op.id) || typeof op.title !== "string" || !["running", "static"].includes(op.kind) || [op.lengthMm,op.speedMmPerMinute,op.employees,op.quantity,op.minutesEach].some(n => !Number.isFinite(n) || n < 0)))) return null;
+      if (node.operations !== undefined && (!Array.isArray(node.operations) || node.operations.some((op: RouteV3Operation) => !validRouteV3Operation(op)))) return null;
     }
     const visited = new Set<string>(), visiting = new Set<string>(), edgeIds = new Set<string>();
     for (const edge of v.edges) { if (!edge || !text(edge.id) || edgeIds.has(edge.id) || !nodeIds.has(edge.from) || !nodeIds.has(edge.to) || edge.from === edge.to || edge.refs !== undefined && !refs(edge.refs)) return null; edgeIds.add(edge.id); }
     const visit = (id: string): boolean => { if (visiting.has(id)) return false; if (visited.has(id)) return true; visiting.add(id); if (v.edges.filter(e => e.from === id).some(e => !visit(e.to))) return false; visiting.delete(id); visited.add(id); return true; };
     if ([...nodeIds].some(id => !visit(id))) return null;
+    if (v.sourceState !== undefined && !validRouteV3SourceState(v.sourceState)) return null;
+    if (v.sourceDivergences !== undefined && (!Array.isArray(v.sourceDivergences) || v.sourceDivergences.some(issue => !validRouteV3SourceDivergence(issue)))) return null;
     return { ...v, fragments };
   } catch { return null; }
 }
+
+export type { RouteV3Operation } from "./route-v3-operations";
+export { routeV3OperationFromCatalog, routeV3OperationMinutes, routeV3OperationTimes, routeV3BatchQuantity, routeV3SourceQuantity, routeV3SourceGroupKey, routeV3GroupedSourceQuantity } from "./route-v3-operations";
+export type { RouteV3SourceState, RouteV3SourceDivergence, RouteV3SourceRefreshPreview } from "./route-v3-source-refresh";
+export { previewRouteV3SourceRefresh, applyRouteV3SourceRefresh, resolveRouteV3SourceDivergence, routeV3HasUnresolvedSourceChanges, captureRouteV3SourceState } from "./route-v3-source-refresh";

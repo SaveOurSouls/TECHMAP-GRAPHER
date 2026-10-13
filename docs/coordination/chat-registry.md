@@ -143,6 +143,14 @@
 
 | Карточки UML в Маршруте v3 | 086 / REQ-122 | `01a111fa-93ab-79b3-9089-7ec8ca14c393` | ready-for-review | Ветка `codex/route-v3-uml`, worktree `C:/Users/Василий Костромин/.codex/worktrees/route-v3/Утилита для картинок`, база caafa91. Владелец manufacturing-v3/* и документов 086; графический редактор/085 не меняются. Commit и handoff после проверок; следующий ZIP pending. |
 
+## Регистрация карточки 093 — 13.10.2026 (МСК)
+
+| Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
+| --- | --- | --- | --- | --- | --- |
+| Координатор | `/root` | 093 / REQ-129 | `codex/integration-m5-22` / основной worktree | docs, task, integration | ready-for-review; SHA в handoff; следующий ZIP pending |
+| Модель обновления и расчётов | `/root/terra` | 093 / REQ-129 | `codex/integration-m5-22` / основной worktree | route-v3-model.ts, route-v3-source-refresh.*, route-v3-operations.*, model tests | завершено; общий handoff координатора |
+| Редизайн карточек и таблицы | `/root/luna` | 093 / REQ-129 | `codex/integration-m5-22` / основной worktree | RouteV3Graph.tsx, route-v3-graph.css, RouteV3Panel.tsx, route-v3-card-quantity.* | завершено; общий handoff координатора |
+
 ## Регистрация карточки 090 — 12.10.2026 (МСК)
 
 | Роль | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Coverage |
