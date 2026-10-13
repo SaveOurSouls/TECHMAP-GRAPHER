@@ -44,7 +44,15 @@ export interface RouteV3Node {
   readonly operations?: readonly RouteV3Operation[];
   readonly operatorConfirmed?: boolean;
   readonly rawRefs?: readonly RouteSourceRef[];
+  /** Stable production products exposed by this card. Cut cards have one per ref; assemblies have one. */
+  readonly products?: readonly RouteV3Product[];
   readonly drawing?: RouteV2Drawing;
+}
+export interface RouteV3Product {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly kind: "source" | "assembly";
+  readonly ref?: RouteSourceRef;
 }
 export interface RouteV3WireArtworkOverride {
   readonly wireId: string;
@@ -234,10 +242,14 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
       if (!node || !text(node.id) || nodeIds.has(node.id) || !text(node.title) || !["semiFinished", "assembly", "final"].includes(node.kind) || !refs(node.refs) || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !Array.isArray(node.fragmentIds) || node.fragmentIds.some((id: unknown) => !ids.has(String(id)))) return null;
       nodeIds.add(node.id);
       if (node.rawRefs !== undefined && !refs(node.rawRefs)) return null;
+      if (node.products !== undefined && (!Array.isArray(node.products) || new Set(node.products.map((product: RouteV3Product) => product?.id)).size !== node.products.length || node.products.some((product: RouteV3Product) => !product || !text(product.id) || product.nodeId !== node.id || !["source", "assembly"].includes(product.kind) || product.kind === "source" && (!product.ref || !refs([product.ref])) || product.kind === "assembly" && product.ref !== undefined))) return null;
       if (node.operatorConfirmed !== undefined && typeof node.operatorConfirmed !== "boolean") return null;
       if (node.drawing) { if (!opacity(node.drawing.backgroundOpacity)) return null; if (node.drawing.drawingCopy) parseRouteDrawingCopy(node.drawing.drawingCopy); if (node.drawing.isolatedDrawingCopy) parseRouteDrawingCopy(node.drawing.isolatedDrawingCopy); }
       if ([node.width, node.height, node.quantity].some(n => n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n <= 0))) return null;
       if (node.inputNodeIds !== undefined && (!Array.isArray(node.inputNodeIds) || node.inputNodeIds.some((id: unknown) => !text(id)))) return null;
+      // Output IDs may refer to a source removed in a later drawing revision.
+      // Keep that assignment in the draft for divergence review; runtime views
+      // only use IDs still present in routeV3Products(node).
       if (node.operations !== undefined && (!Array.isArray(node.operations) || node.operations.some((op: RouteV3Operation) => !validRouteV3Operation(op)))) return null;
     }
     const visited = new Set<string>(), visiting = new Set<string>(), edgeIds = new Set<string>();
@@ -251,6 +263,6 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
 }
 
 export type { RouteV3Operation } from "./route-v3-operations";
-export { routeV3OperationFromCatalog, routeV3OperationMinutes, routeV3OperationTimes, routeV3BatchQuantity, routeV3SourceQuantity, routeV3SourceGroupKey, routeV3GroupedSourceQuantity } from "./route-v3-operations";
+export { routeV3OperationFromCatalog, routeV3OperationMinutes, routeV3OperationTimes, routeV3BatchQuantity, routeV3SourceQuantity, routeV3SourceGroupKey, routeV3GroupedSourceQuantity, routeV3IsCutCard, routeV3Products, routeV3AssignedProductIds, assignRouteV3OperationProducts, routeV3OperationProjectTimes } from "./route-v3-operations";
 export type { RouteV3SourceState, RouteV3SourceDivergence, RouteV3SourceRefreshPreview } from "./route-v3-source-refresh";
 export { previewRouteV3SourceRefresh, applyRouteV3SourceRefresh, resolveRouteV3SourceDivergence, routeV3HasUnresolvedSourceChanges, captureRouteV3SourceState } from "./route-v3-source-refresh";

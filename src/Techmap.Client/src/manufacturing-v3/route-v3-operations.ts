@@ -1,5 +1,6 @@
 import type { HarnessDesignDocument } from "../editor/model";
-import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { buildRouteSourceItems, type RouteSourceRef, type RouteSourceItem } from "../manufacturing/route-source";
+import type { RouteV3Node, RouteV3Product } from "./route-v3-model";
 import type { ReferenceCatalogRecord, ReferenceCatalogSnapshot } from "../reference-catalog-api";
 import type { UmlOperation } from "../uml/uml-model";
 
@@ -19,9 +20,13 @@ export interface RouteV3Operation extends UmlOperation {
   readonly manualWorkTimeSeconds?: number | null;
   readonly manualTakeTimeSeconds?: number | null;
   readonly manualRemoveTimeSeconds?: number | null;
+  readonly outputProductIds?: readonly string[];
+  readonly parallelCapacity?: number;
+  readonly setupTimeSeconds?: number | null;
+  readonly setupGroupKey?: string;
 }
 
-const normKeys = ["feedTimeSecondsPerMeter", "toolCycleTimeSeconds", "toolOperationCount", "additionalTimeSeconds", "manualWorkTimeSeconds", "manualTakeTimeSeconds", "manualRemoveTimeSeconds"] as const;
+const normKeys = ["feedTimeSecondsPerMeter", "toolCycleTimeSeconds", "toolOperationCount", "additionalTimeSeconds", "manualWorkTimeSeconds", "manualTakeTimeSeconds", "manualRemoveTimeSeconds", "setupTimeSeconds"] as const;
 const numberOrNull = (value: unknown): number | null => {
   if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
   if (typeof value === "string" && value.trim()) {
@@ -42,7 +47,7 @@ export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snap
   return {
     id, title: subcategory, kind, lengthMm: 0, speedMmPerMinute: 1, employees: 1, quantity: 1, minutesEach: 0,
     catalogBinding: { sourceId: snapshot.sourceId, snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256, recordId: record.recordId, sourceKey: record.sourceKey, displayName: subcategory },
-    category, subcategory, catalogOperationType: operationType, ...norms,
+    category, subcategory, catalogOperationType: operationType, parallelCapacity: 1, ...norms,
   };
 }
 
@@ -50,6 +55,10 @@ export function validRouteV3Operation(op: RouteV3Operation): boolean {
   if (!op || typeof op.id !== "string" || !op.id.trim() || typeof op.title !== "string" || !["running", "static"].includes(op.kind) || [op.lengthMm, op.speedMmPerMinute, op.employees, op.quantity, op.minutesEach].some(n => typeof n !== "number" || !Number.isFinite(n) || n < 0)) return false;
   if (normKeys.some(key => op[key] !== undefined && op[key] !== null && (typeof op[key] !== "number" || !Number.isFinite(op[key]) || op[key]! < 0))) return false;
   if ([op.category, op.subcategory, op.catalogOperationType].some(value => value !== undefined && (typeof value !== "string" || value.length > 512))) return false;
+  if (op.outputProductIds !== undefined && (!Array.isArray(op.outputProductIds) || new Set(op.outputProductIds).size !== op.outputProductIds.length || op.outputProductIds.some(value => typeof value !== "string" || !value.trim()))) return false;
+  if (op.parallelCapacity !== undefined && (!Number.isInteger(op.parallelCapacity) || op.parallelCapacity < 1)) return false;
+  if (op.setupTimeSeconds !== undefined && op.setupTimeSeconds !== null && (typeof op.setupTimeSeconds !== "number" || !Number.isFinite(op.setupTimeSeconds) || op.setupTimeSeconds < 0)) return false;
+  if (op.setupGroupKey !== undefined && (typeof op.setupGroupKey !== "string" || op.setupGroupKey.length > 512)) return false;
   const binding = op.catalogBinding;
   return !binding || [binding.sourceId, binding.snapshotId, binding.snapshotSha256, binding.recordId, binding.sourceKey, binding.displayName].every(value => typeof value === "string" && value.trim().length > 0 && value.length <= 512);
 }
@@ -89,6 +98,87 @@ export function routeV3OperationTimes(operation: RouteV3Operation, batchQuantity
   };
 }
 export const routeV3OperationMinutes = (operation: RouteV3Operation): number | null => routeV3OperationTimes(operation).operationMinutes;
+
+const productId = (nodeId: string, ref?: RouteSourceRef): string => ref ? `product:${nodeId}:${ref.kind}:${ref.id}` : `product:${nodeId}`;
+export function routeV3IsCutCard(node: RouteV3Node): boolean {
+  return node.kind === "semiFinished" && !node.fragmentIds.length
+    && node.refs.length > 0 && node.refs.every(ref => ref.kind === "wire" || ref.kind === "covering" || ref.kind === "cable");
+}
+export function routeV3Products(node: RouteV3Node): readonly RouteV3Product[] {
+  const cut = node.id.startsWith("prepared:") || routeV3IsCutCard(node);
+  if (!cut && node.products !== undefined) return node.products.length ? node.products : [{ id: productId(node.id), nodeId: node.id, kind: "assembly" as const }];
+  if (cut) {
+    const saved = new Map((node.products ?? []).filter(product => product.kind === "source" && product.ref).map(product => [`${product.ref!.kind}:${product.ref!.id}`, product]));
+    return node.refs.map(ref => saved.get(`${ref.kind}:${ref.id}`) ?? ({ id: productId(node.id, ref), nodeId: node.id, kind: "source" as const, ref }));
+  }
+  return [{ id: productId(node.id), nodeId: node.id, kind: "assembly" as const }];
+}
+export function routeV3AssignedProductIds(node: RouteV3Node, operation: Pick<RouteV3Operation, "outputProductIds">): readonly string[] {
+  const products = routeV3Products(node), assigned = operation.outputProductIds?.filter(id => products.some(product => product.id === id)) ?? [];
+  // A card with a single output is unambiguous even when an older/UI-created
+  // operation persisted an explicit empty selection; keep it automatically assigned.
+  return products.length === 1 ? [products[0]!.id] : assigned;
+}
+export function assignRouteV3OperationProducts(node: RouteV3Node, operationId: string, productIds: readonly string[]): readonly RouteV3Operation[] {
+  const ids = new Set(routeV3Products(node).map(product => product.id));
+  const valid = [...new Set(productIds.filter(id => ids.has(id)))];
+  return (node.operations ?? []).map(operation => operation.id === operationId ? { ...operation, outputProductIds: valid } : operation);
+}
+
+export interface RouteV3OperationProjectTimes extends RouteV3OperationTimes { readonly projectMinutes: number | null; readonly cycles: number | null; readonly setupMinutes: number | null; readonly assignedRefs: readonly RouteSourceRef[]; }
+export function routeV3OperationProjectTimes(operation: RouteV3Operation, node: RouteV3Node, source: HarnessDesignDocument, harnessQuantity: number): RouteV3OperationProjectTimes {
+  const sources = buildRouteSourceItems(source);
+  const products = routeV3Products(node), assigned = routeV3AssignedProductIds(node, operation);
+  const refs = products.filter(product => assigned.includes(product.id)).flatMap(product => product.ref ? [product.ref] : []);
+  const unknown = (): RouteV3OperationProjectTimes => ({ machineMinutes: null, humanMinutes: null, operationMinutes: null, batchMinutes: null, projectMinutes: null, cycles: null, setupMinutes: null, assignedRefs: refs });
+  if (!assigned.length) return unknown();
+  const items = refs.map(ref => sources.find(item => item.ref.kind === ref.kind && item.ref.id === ref.id)).filter((item): item is RouteSourceItem => !!item);
+  if (!refs.length) {
+    const times = routeV3OperationTimes(operation, harnessQuantity);
+    const setupMinutes = operation.setupTimeSeconds == null ? null : operation.setupTimeSeconds / 60;
+    const projectMinutes = times.batchMinutes === null || setupMinutes === null ? null : times.batchMinutes + setupMinutes;
+    return { ...times, batchMinutes: projectMinutes, projectMinutes, cycles: harnessQuantity, setupMinutes, assignedRefs: [] };
+  }
+  if (items.length !== refs.length || !Number.isInteger(harnessQuantity) || harnessQuantity < 1) return unknown();
+  const isWireCut = node.kind === "semiFinished" && !node.fragmentIds.length && refs.length > 0 && refs.every(ref => ref.kind === "wire");
+  const capacity = isWireCut ? operation.parallelCapacity ?? 1 : 1;
+  if (!Number.isInteger(capacity) || capacity < 1) return unknown();
+  // A mode fixes cut length and terminal treatment. Parallel slots may differ in
+  // material, colour and section; a setup is charged for each loaded slot set.
+  const modes = new Map<string, Map<string, { item: RouteSourceItem; units: number }>>();
+  for (const item of items) {
+    const mode = JSON.stringify([item.ref.kind, item.lengthMm, item.terminalFrom, item.terminalTo, item.stripProfiles ?? null]);
+    const parameter = JSON.stringify([item.materialArticle, item.material, item.section, item.color, item.lengthMm, item.terminalFrom, item.terminalTo, item.stripProfiles ?? null]);
+    const group = modes.get(mode) ?? new Map<string, { item: RouteSourceItem; units: number }>();
+    const entry = group.get(parameter);
+    group.set(parameter, { item, units: (entry?.units ?? 0) + harnessQuantity });
+    modes.set(mode, group);
+  }
+  let cycles = 0, setupLoads = 0, operationTotal = 0;
+  let representative: RouteV3OperationTimes | null = null;
+  let complete = true;
+  for (const [, variants] of [...modes].sort(([a], [b]) => a.localeCompare(b))) {
+    const ordered = [...variants].sort(([a], [b]) => a.localeCompare(b));
+    // A setup loads up to P distinct parameter variants. The same loaded set
+    // repeats for all its cycles; 100 identical blanks therefore need one setup.
+    for (let offset = 0; offset < ordered.length; offset += capacity) {
+      const chunk = ordered.slice(offset, offset + capacity);
+      const totalUnits = chunk.reduce((sum, [, entry]) => sum + entry.units, 0);
+      const chunkCycles = Math.ceil(totalUnits / capacity);
+      cycles += chunkCycles;
+      setupLoads += 1;
+      const longest = chunk.map(([, entry]) => routeV3OperationTimes({ ...operation, lengthMm: entry.item.lengthMm ?? Number.NaN }, 1));
+      const perCycle = longest[0];
+      representative ??= perCycle ?? null;
+      const cycle = longest.reduce<RouteV3OperationTimes | null>((best, value) => !best || value.operationMinutes !== null && value.operationMinutes > (best.operationMinutes ?? -1) ? value : best, null);
+      if (!cycle || cycle.operationMinutes === null || chunk.some(([, entry]) => entry.item.lengthMm === null && operation.kind === "running")) complete = false;
+      else operationTotal += cycle.operationMinutes * chunkCycles;
+    }
+  }
+  const setupMinutes = operation.setupTimeSeconds == null ? null : setupLoads * operation.setupTimeSeconds / 60;
+  const projectMinutes = complete && setupMinutes !== null ? operationTotal + setupMinutes : null;
+  return { machineMinutes: representative?.machineMinutes ?? null, humanMinutes: representative?.humanMinutes ?? null, operationMinutes: representative?.operationMinutes ?? null, batchMinutes: projectMinutes, projectMinutes, cycles, setupMinutes, assignedRefs: refs };
+}
 
 export function routeV3BatchQuantity(node: { readonly quantity?: number }, harnessQuantity: number): number {
   const fallback = Number.isFinite(harnessQuantity) && harnessQuantity > 0 ? harnessQuantity : 1;

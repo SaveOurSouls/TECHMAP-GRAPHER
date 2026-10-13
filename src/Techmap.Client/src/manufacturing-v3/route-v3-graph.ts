@@ -1,7 +1,23 @@
-import type { RouteSourceRef } from "../manufacturing/route-source";
 import { refKey, routeV3NodeSize, type RouteV3Document, type RouteV3Node } from "./route-v3-model";
+import type { RouteSourceRef } from "../manufacturing/route-source";
+import { routeV3IsCutCard } from "./route-v3-operations";
 
 const unique = (refs: readonly RouteSourceRef[]) => [...new Map(refs.map(ref => [refKey(ref), ref])).values()];
+const isSeparateBlankCard = (node: RouteV3Node) => node.id.startsWith("prepared:") || routeV3IsCutCard(node);
+export function routeV3EdgeInputRefs(doc: RouteV3Document, edgeId: string): readonly RouteSourceRef[] {
+  const edge = doc.edges.find(value => value.id === edgeId); if (!edge) return [];
+  if (edge.refs) return edge.refs;
+  return doc.nodes.find(node => node.id === edge.from)?.refs ?? [];
+}
+export function setRouteV3EdgeInputRefs(doc: RouteV3Document, edgeId: string, refs: readonly RouteSourceRef[]): RouteV3Document {
+  const edge = doc.edges.find(value => value.id === edgeId); if (!edge) return doc;
+  const from = doc.nodes.find(node => node.id === edge.from); if (!from) return doc;
+  const available = new Set(from.refs.map(refKey));
+  const selected = unique(refs).filter(ref => available.has(refKey(ref)));
+  if (!isSeparateBlankCard(from) && selected.length > 0 && selected.length < from.refs.length) throw new Error("Собранный полуфабрикат передаётся целиком.");
+  const transferAll = !isSeparateBlankCard(from) && selected.length === from.refs.length;
+  return refreshRouteV3({ ...doc, edges: doc.edges.map(value => value.id === edgeId ? { ...value, refs: transferAll ? undefined : selected } : value), nodes: doc.nodes.map(node => node.id === edge.to ? { ...node, operatorConfirmed: false } : node) });
+}
 
 /** Prepared blanks can supply a subset. Assembly edges transfer a whole PF,
  * including later changes to its composition. */
@@ -10,7 +26,7 @@ export function editableRouteV3(doc: RouteV3Document): RouteV3Document {
     const to = doc.nodes.find(n => n.id === edge.to)!;
     if (to.rawRefs !== undefined || edge.refs !== undefined) return edge;
     const from = doc.nodes.find(n => n.id === edge.from)!;
-    if (!from.id.startsWith("prepared:")) return edge;
+    if (!isSeparateBlankCard(from)) return edge;
     const keys = new Set(to.refs.map(refKey));
     return { ...edge, refs: from.refs.filter(ref => keys.has(refKey(ref))) };
   });
@@ -33,7 +49,9 @@ export function routeV3Composition(doc: RouteV3Document): Map<string, readonly R
     const inputs = doc.edges.filter(e => e.to === id && (!node.inputNodeIds || node.inputNodeIds.includes(e.from)));
     const refs = unique([...(node.rawRefs ?? node.refs), ...inputs.flatMap(edge => {
       const allowed = edge.refs && new Set(edge.refs.map(refKey));
-      return visit(edge.from).filter(ref => !allowed || allowed.has(refKey(ref)));
+      const inherited = visit(edge.from);
+      if (!isSeparateBlankCard(byId.get(edge.from)!) && allowed && allowed.size > 0 && allowed.size < inherited.length) throw new Error("Собранный полуфабрикат передаётся целиком.");
+      return inherited.filter(ref => !allowed || allowed.has(refKey(ref)));
     })]);
     visiting.delete(id); result.set(id, refs); return refs;
   };
