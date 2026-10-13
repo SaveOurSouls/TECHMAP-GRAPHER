@@ -16,23 +16,27 @@ internal static class ComponentTemplateContentV5Validator
         "schemaVersion", "views", "logicalContacts", "parameters", "repeaters", "assets",
         "contactTypeGroups", "articleVariants", "compatibleTerminalArticleKeys", "e4ConnectorTable",
     ];
+    private const int MaximumCompatibleSeals = 256;
 
     internal static void Validate(JsonElement content)
     {
-        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings", "e4Presentation", "articleDrawings", "drawingContactBindings", "drawingGenerators");
+        RequireExactPropertiesWithOptional(content, "content", RootProperties, "terminalContactTypeBindings", "compatibleSeals", "e4Presentation", "articleDrawings", "drawingContactBindings", "drawingGenerators");
         if (content.TryGetProperty("e4Presentation", out var presentation)) ValidatePresentation(presentation);
         if (content.GetProperty("schemaVersion").ValueKind != JsonValueKind.Number ||
             !content.GetProperty("schemaVersion").TryGetInt32(out var version) || version != 5)
             Throw("Only component template schemaVersion 5 is supported.", "content.schemaVersion");
 
         var compatible = ValidateCompatibleTerminals(content.GetProperty("compatibleTerminalArticleKeys"));
+        var compatibleSeals = ValidateCompatibleSeals(content);
         var terminalBindings = ValidateTerminalBindings(content, compatible);
         ValidateArticleGroupShapes(content.GetProperty("articleVariants"));
         ValidateTableV2Shape(content.GetProperty("e4ConnectorTable"), compatible);
+        ValidateSelectedSeals(content.GetProperty("e4ConnectorTable"), compatibleSeals);
 
         var projected = JsonNode.Parse(content.GetRawText())!.AsObject();
         projected["schemaVersion"] = 4;
         projected.Remove("compatibleTerminalArticleKeys");
+        projected.Remove("compatibleSeals");
         projected.Remove("terminalContactTypeBindings");
         projected.Remove("e4Presentation");
         projected.Remove("articleDrawings");
@@ -327,6 +331,57 @@ internal static class ComponentTemplateContentV5Validator
             if (!result.Add(identity)) Throw("A compatible terminal article cannot be repeated.", itemPath);
         }
         return result;
+    }
+
+    /// <summary>Validates the optional series index used by the E4 seal column.</summary>
+    private static HashSet<string>? ValidateCompatibleSeals(JsonElement content)
+    {
+        if (!content.TryGetProperty("compatibleSeals", out var values)) return null;
+        const string path = "content.compatibleSeals";
+        if (values.ValueKind != JsonValueKind.Array) Throw("An array is required.", path);
+        if (values.GetArrayLength() > MaximumCompatibleSeals)
+            Throw($"A template cannot contain more than {MaximumCompatibleSeals} compatible seals.", path);
+
+        var articles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var value in values.EnumerateArray())
+        {
+            var itemPath = $"{path}[{index++}]";
+            RequireExactProperties(value, itemPath, "article", "color", "section", "insulationDiameter");
+            var article = RequiredText(value.GetProperty("article"), 512, itemPath + ".article");
+            _ = RequiredText(value.GetProperty("color"), 512, itemPath + ".color");
+            _ = RequiredText(value.GetProperty("section"), 512, itemPath + ".section");
+            _ = RequiredText(value.GetProperty("insulationDiameter"), 512, itemPath + ".insulationDiameter");
+            if (!articles.Add(article)) Throw("A compatible seal article cannot be repeated.", itemPath + ".article");
+        }
+        return articles;
+    }
+
+    private static void ValidateSelectedSeals(JsonElement table, IReadOnlySet<string>? compatibleSeals)
+    {
+        if (compatibleSeals is null) return;
+        const string path = "content.e4ConnectorTable";
+        var defaults = table.GetProperty("seriesDefaults");
+        var defaultIndex = 0;
+        foreach (var row in defaults.EnumerateArray())
+            ValidateSelectedSeal(row.GetProperty("values"), $"{path}.seriesDefaults[{defaultIndex++}].values", compatibleSeals);
+
+        var articleIndex = 0;
+        foreach (var article in table.GetProperty("articles").EnumerateArray())
+        {
+            var rowIndex = 0;
+            foreach (var row in article.GetProperty("rows").EnumerateArray())
+                ValidateSelectedSeal(row.GetProperty("overrides"), $"{path}.articles[{articleIndex}].rows[{rowIndex++}].overrides", compatibleSeals);
+            articleIndex++;
+        }
+    }
+
+    private static void ValidateSelectedSeal(JsonElement values, string path, IReadOnlySet<string> compatibleSeals)
+    {
+        if (!values.TryGetProperty("customValues", out var customValues) || customValues.ValueKind != JsonValueKind.Object ||
+            !customValues.TryGetProperty("seal", out var seal) || seal.ValueKind == JsonValueKind.Null) return;
+        if (seal.ValueKind != JsonValueKind.String || !string.IsNullOrEmpty(seal.GetString()) && !compatibleSeals.Contains(seal.GetString()!))
+            Throw("The selected seal is absent from compatibleSeals.", path + ".customValues.seal");
     }
 
     private static void ValidateArticleGroupShapes(JsonElement variants)

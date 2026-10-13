@@ -16,6 +16,9 @@
 .library-save-state.error { color: #a13d3d; }
 .library-metadata .danger-action { min-height: 34px; padding: 7px 10px; border: 1px solid #d5a9a9; border-radius: 5px; background: #fff4f4; color: #963c3c; font-weight: 750; cursor: pointer; }
 .library-metadata .danger-action:disabled { opacity: .55; cursor: default; }
+.library-new-series { margin: 8px; padding: 18px; display: grid; gap: 6px; border: 1px dashed #a9c5d4; border-radius: 6px; background: #f7fbfc; color: #496274; }
+.library-new-series strong { color: #294f65; font-size: 13px; }
+.library-new-series p { max-width: 620px; margin: 0; font-size: 12px; line-height: 1.5; }
 .library-bindings { border-bottom: 1px solid #dfe6eb; background: #fff; }
 .library-bindings summary { padding: 10px 16px; color: #496274; font-size: 12px; font-weight: 750; cursor: pointer; }
 .library-bindings summary span { margin-left: 5px; padding: 2px 6px; border-radius: 9px; background: #e7f1f5; color: #36708e; font-size: 10px; }

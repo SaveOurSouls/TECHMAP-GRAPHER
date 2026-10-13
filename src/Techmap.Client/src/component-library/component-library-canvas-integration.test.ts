@@ -55,32 +55,9 @@ const config = parseRuntimeConfig({
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 
 describe("ComponentLibrary canvas integration", () => {
-  it("connects all point-editing callbacks to the v3 commands for the selected canvas node", () => {
+  it("does not mount drawing controls before a new series has its first saved version", () => {
     harness.canvasProps = null;
     renderToStaticMarkup(createElement(ComponentLibrary, { config, session }));
-    // Rendering invokes the mocked child synchronously, which TypeScript cannot
-    // infer from the React server renderer call above.
-    const props = harness.canvasProps as unknown as TemplateCanvasV2Props;
-    expect(props).not.toBeNull();
-    expect(props.onNodePointMove).toEqual(expect.any(Function));
-    expect(props.onNodePointInsert).toEqual(expect.any(Function));
-    expect(props.onNodePointDelete).toEqual(expect.any(Function));
-    expect(props.pointAngleMode).toBe("snap-15");
-
-    const view = props.content.views.find(candidate => candidate.id === props.viewId)!;
-    const node = view.layers[0]!.nodes[0]!;
-    props.onNodePointMove!(node.id, 1, 7, -3);
-    props.onNodePointInsert!(node.id, 0, 125, 100);
-    props.onNodePointDelete!(node.id, 1);
-
-    expect(harness.movePoint).toHaveBeenCalledWith(
-      expect.anything(), view.id, view.layers[0]!.id, node.id, 1, 7, -3,
-    );
-    expect(harness.insertPoint).toHaveBeenCalledWith(
-      expect.anything(), view.id, view.layers[0]!.id, node.id, 0, 125, 100,
-    );
-    expect(harness.deletePoint).toHaveBeenCalledWith(
-      expect.anything(), view.id, view.layers[0]!.id, node.id, 1,
-    );
+    expect(harness.canvasProps).toBeNull();
   });
 });

@@ -191,6 +191,22 @@ public sealed class ComponentTemplateContentV5ValidatorTests
     }
 
     [Fact]
+    public void Compatible_seals_are_optional_but_validate_their_shape_and_selected_rows()
+    {
+        var content = ValidContent();
+        content["compatibleSeals"] = new JsonArray(new JsonObject
+        {
+            ["article"] = "7165-0100", ["color"] = "Красный", ["section"] = "0,35–0,5", ["insulationDiameter"] = "1,4–1,8 мм",
+        });
+        content["e4ConnectorTable"]!["seriesDefaults"]![0]!["values"]!["customValues"] = new JsonObject { ["seal"] = "7165-0100" };
+        ComponentTemplateContentV5Validator.Validate(Element(content));
+
+        content["e4ConnectorTable"]!["seriesDefaults"]![0]!["values"]!["customValues"]!["seal"] = "NOT-COMPATIBLE";
+        var error = Assert.Throws<ComponentTemplateException>(() => ComponentTemplateContentV5Validator.Validate(Element(content)));
+        Assert.Equal("content.e4ConnectorTable.seriesDefaults[0].values.customValues.seal", error.Field);
+    }
+
+    [Fact]
     public void E4_rows_do_not_require_graphical_contact_prototypes_but_counts_must_match()
     {
         var content = ValidContent();

@@ -31,16 +31,14 @@ export function CompatibleSealsEditor({ seals, disabled, onChange }: {
   return <section className="series-v3-compatible-seals" aria-label="Совместимые уплотнители">
     <header><div><strong>Совместимые уплотнители</strong><InfoHint>Укажите позиции, которые можно выбрать в строках таблицы Э4 этой серии.</InfoHint></div>
       <button type="button" disabled={disabled} onClick={() => onChange([...seals, newSeal(seals.length)])}>+ Уплотнитель</button></header>
-    {seals.length === 0 ? <p>Совместимые уплотнители пока не заданы.</p> : <div className="series-v3-seal-table-wrap"><table className="series-v3-seal-table">
-      <thead><tr><th>Артикул</th><th>Цвет</th><th>Сечение</th><th>Диаметр изоляции</th><th aria-label="Удалить" /></tr></thead>
-      <tbody>{seals.map((seal, index) => <tr key={`${seal.article}:${index}`}>
-        <td><SealCell value={seal.article} label={`Артикул уплотнителя ${index + 1}`} onCommit={article => update(index, { article })} /></td>
-        <td><SealCell value={seal.color} label={`Цвет уплотнителя ${index + 1}`} onCommit={color => update(index, { color })} /></td>
-        <td><SealCell value={seal.section} label={`Сечение уплотнителя ${index + 1}`} onCommit={section => update(index, { section })} /></td>
-        <td><SealCell value={seal.insulationDiameter} label={`Диаметр изоляции уплотнителя ${index + 1}`} onCommit={insulationDiameter => update(index, { insulationDiameter })} /></td>
-        <td><button type="button" className="series-v3-remove-seal" disabled={disabled} aria-label={`Удалить уплотнитель ${index + 1}`}
-          onClick={() => onChange(seals.filter((_, candidateIndex) => candidateIndex !== index))}>×</button></td>
-      </tr>)}</tbody>
-    </table></div>}
+    {seals.length === 0 ? <p>Совместимые уплотнители пока не заданы.</p> : <div className="series-v3-seal-list">
+      {seals.map((seal, index) => <div className="series-v3-seal-row" key={`${seal.article}:${index}`}>
+        <label className="series-v3-seal-field">Артикул<SealCell value={seal.article} label={`Артикул уплотнителя ${index + 1}`} onCommit={article => update(index, { article })} /></label>
+        <label className="series-v3-seal-field">Цвет<SealCell value={seal.color} label={`Цвет уплотнителя ${index + 1}`} onCommit={color => update(index, { color })} /></label>
+        <label className="series-v3-seal-field">Сечение<SealCell value={seal.section} label={`Сечение уплотнителя ${index + 1}`} onCommit={section => update(index, { section })} /></label>
+        <label className="series-v3-seal-field">Диаметр изоляции<SealCell value={seal.insulationDiameter} label={`Диаметр изоляции уплотнителя ${index + 1}`} onCommit={insulationDiameter => update(index, { insulationDiameter })} /></label>
+        <button type="button" className="series-v3-remove-seal" disabled={disabled} aria-label={`Удалить уплотнитель ${index + 1}`}
+          onClick={() => onChange(seals.filter((_, candidateIndex) => candidateIndex !== index))}>×</button>
+      </div>)}</div>}
   </section>;
 }

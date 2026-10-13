@@ -57,7 +57,9 @@ describe("TemplateSeriesPanelV3", () => {
       content, onAddContactTypeGroup: vi.fn(), onRenameContactTypeGroup: vi.fn(), onDeleteContactTypeGroup: vi.fn(),
       onAddArticleVariants: vi.fn(), onDeleteArticleVariant: vi.fn(), onSetArticleContactGroup: vi.fn(), onRemoveArticleContactGroup: vi.fn(),
       compatibleTerminalArticleKeys: [{ sourceId: "БД.ТЕР", entityType: "terminal", articleKey: "SXH-001T-P0.6" }],
+      compatibleSeals: [{ article: "7165-0100", color: "Красный", section: "0,35–0,5", insulationDiameter: "1,4–1,8 мм" }],
       onChangeCompatibleTerminalArticleKeys: vi.fn(),
+      onChangeCompatibleSeals: vi.fn(),
       selectedArticleVariantId: content.articleVariants[0]!.id,
     }));
     expect(markup).toContain("Настройка серии");
@@ -82,6 +84,10 @@ describe("TemplateSeriesPanelV3", () => {
     expect(markup).toContain("либо укажите 0");
     expect(markup).toContain('aria-invalid="true"');
     expect(markup).toContain("Совместимые терминалы серии");
+    expect(markup).toContain("Совместимые уплотнители");
+    expect(markup).toContain('class="series-v3-seal-list"');
+    expect(markup).toContain('aria-label="Диаметр изоляции уплотнителя 1"');
+    expect(markup).not.toContain('series-v3-seal-table-wrap');
     expect(markup).not.toContain("Артикул для предпросмотра");
     expect(markup).toContain("Один артикул");
     expect(markup).toContain("По шаблону");

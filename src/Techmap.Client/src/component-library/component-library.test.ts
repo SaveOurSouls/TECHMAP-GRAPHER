@@ -21,11 +21,13 @@ const config = parseRuntimeConfig({ configVersion: 1, basePath: "/", apiBasePath
 const session = { csrfNonce: "A".repeat(43), instanceId: "12345678-1234-4123-8123-123456789abc" };
 
 describe("component library UI", () => {
-  it("disables drawing entry without a saved series and always provides a return action", () => {
+  it("keeps a new series screen focused on its required metadata", () => {
     const markup=renderToStaticMarkup(createElement(ComponentLibrary,{config,session}));
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Рисунок<\/button>/);
-    expect(markup).toContain("Сначала выберите серию");
-    expect(markup).toMatch(/<button type="button">В библиотеку<\/button>/);
+    expect(markup).toContain('aria-label="Создание новой серии"');
+    expect(markup).toContain("Создать серию");
+    expect(markup).toContain("Настройки контактов, уплотнителей, терминалов и артикулов станут доступны после сохранения первой версии.");
+    expect(markup).not.toContain("Настройка серии");
+    expect(markup).not.toContain("Редактор графики");
   });
   it("keeps at least 100 Ctrl+Z states", () => {
     let stack: ReturnType<typeof newTemplateContentV3>[] = [];
@@ -148,33 +150,14 @@ describe("component library UI", () => {
     expect(markup).toContain('aria-current="page"');
   });
 
-  it("renders view tabs, primitive tools and versioned save action", () => {
+  it("renders a concise creation screen until the first version exists", () => {
     const markup = renderToStaticMarkup(createElement(ComponentLibrary, { config, session }));
     expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
-    expect(markup).toContain("Схема Э4");
-    expect(markup).toContain("Чертёж");
-    expect(markup).toContain("Прямоугольник");
-    expect(markup).toContain("Эллипс");
-    expect(markup).toContain("Ломаная");
-    expect(markup).toContain("Безье");
-    expect(markup).toContain("Контур");
-    expect(markup).toContain("Привязка угла");
-    expect(markup).toContain("Свободно");
-    expect(markup).toContain('aria-label="Инструменты рисунка"');
-    expect(markup).toContain('data-ribbon-tab="tools"');
-    expect(markup).not.toContain("Диагностика точек подключения");
-    expect(markup).toContain('aria-label="Поле редактирования рисунка"');
-    expect(markup).toContain("Отменить");
-    expect(markup).toContain("Настройка серии");
-    expect(markup).toContain("Типы контактов");
-    expect(markup).not.toContain("Артикул для предпросмотра");
-    expect(markup).not.toContain("e4-table-editor");
-    expect(markup).toContain("БИБЛИОТЕКА СОЕДИНИТЕЛЕЙ");
-    expect(markup).toContain("Изображения");
-    expect(markup).toContain("Контакты");
-    expect(markup).toContain("Слои");
-    expect(markup).toContain("Записать версию");
-    expect(markup).toContain("Изменено");
+    expect(markup).toContain("Новая серия не сохранена");
+    expect(markup).toContain("Создать серию");
+    expect(markup).not.toContain("Схема Э4");
+    expect(markup).not.toContain("Типы контактов");
+    expect(markup).not.toContain('aria-label="Инструменты рисунка"');
   });
 
   it("uses v3 article variants as the saved lookup index and imports legacy bindings once", () => {
