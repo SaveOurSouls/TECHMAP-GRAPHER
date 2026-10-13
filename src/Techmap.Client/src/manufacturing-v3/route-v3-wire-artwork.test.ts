@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { physicalFixture } from "../editor/physical-topology-fixture";
 import { createInitialRouteV3, parseRouteV3, resetRouteV3WireArtwork, setRouteV3WireArtworkOverride } from "./route-v3-model";
-import { routeV3WireArtwork } from "./route-v3-wire-artwork";
+import { routeV3WireArtwork, routeV3WireMaterial } from "./route-v3-wire-artwork";
 
 function source() {
   const base = physicalFixture();
@@ -17,6 +17,8 @@ it("derives v3 artwork from E4 material, terminal, seal and solder fields", () =
   const value = routeV3WireArtwork(source(), "W1")!;
   expect(value).toMatchObject({ mark: "МГТФ", section: "0,35", start: "sealed", end: "tin", terminalFrom: "TERM-A / да", terminalTo: "лужёная медь", automatic: true });
   expect(value.color).toBe("#D32F2F");
+  expect(value.name).toBe("Провод МГТФ");
+  expect(routeV3WireMaterial(source(), "W1")).toBe("МГТФ · 0,35 · красный");
 });
 
 it("keeps the manual V3 end and colour until the user explicitly resets to E4", () => {

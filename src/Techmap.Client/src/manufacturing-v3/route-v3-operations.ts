@@ -34,8 +34,8 @@ const label = (payload: Readonly<Record<string, unknown>>, key: string): string 
 
 export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snapshot: ReferenceCatalogSnapshot, id: string): RouteV3Operation {
   if (record.entityType !== "operation") throw new Error("Выберите запись БД.ОП.");
-  const category = label(record.payload, "name") || "Без категории";
-  const subcategory = label(record.payload, "operationType") || label(record.payload, "instruction") || label(record.payload, "machine") || category;
+  const category = label(record.payload, "operationType") || "Без типа";
+  const subcategory = label(record.payload, "name") || label(record.payload, "instruction") || label(record.payload, "machine") || `Операция № ${record.sourceKey}`;
   const operationType = label(record.payload, "operationType");
   const kind = operationType.toLocaleLowerCase("ru").includes("погон") ? "running" : "static";
   const norms = Object.fromEntries(normKeys.map(key => [key, numberOrNull(record.payload[key])])) as Pick<RouteV3Operation, typeof normKeys[number]>;

@@ -8,6 +8,12 @@ const record = (type: string, payload: Record<string, unknown>): ReferenceCatalo
 const norm = { feedTimeSecondsPerMeter: 4, toolCycleTimeSeconds: 3, toolOperationCount: 2, additionalTimeSeconds: 5, manualWorkTimeSeconds: 7, manualTakeTimeSeconds: 2, manualRemoveTimeSeconds: 1 };
 
 describe("Route v3 БД.ОП time and quantity contract", () => {
+  it("keeps the operation name as the title and the catalog type separately", () => {
+    const operation = routeV3OperationFromCatalog(record("Погонный", norm), snapshot, "op");
+    expect(operation.title).toBe("Резка");
+    expect(operation.catalogOperationType).toBe("Погонный");
+    expect(operation.category).toBe("Погонный");
+  });
   it("pins the catalog snapshot and calculates a running operation in seconds per metre", () => {
     const operation = { ...routeV3OperationFromCatalog(record("Погонный", norm), snapshot, "op"), lengthMm: 2500 };
     expect(operation.catalogBinding).toMatchObject({ sourceId: "technology-operations", snapshotId: "snapshot", recordId: "record", sourceKey: "007" });

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { physicalFixture } from "../editor/physical-topology-fixture";
-import { displayWireSection, wireMarkWithoutSection, wireSemiFinishedProperties } from "./cut-list-properties";
+import { compactWireEnd, displayWireSection, wireMarkWithoutSection, wireSemiFinishedProperties } from "./cut-list-properties";
 
 function document() {
   const base = physicalFixture();
@@ -40,4 +40,14 @@ it("uses the saved catalogue section unit even when the original value was numer
   };
 
   expect(wireSemiFinishedProperties(selected, "W1")?.section).toBe("30AWG");
+});
+
+it("uses the catalogue mark for the wire name and omits an absent seal", () => {
+  const base = document();
+  const withoutSeal = { ...base, connectors: base.connectors.map(connector => ({ ...connector, contacts: connector.contacts.map(contact => ({
+    ...contact, customValues: {}, terminalArticle: contact.number === 1 ? "SXH-002T-P0.6" : contact.terminalArticle,
+  })) })) };
+  const value = wireSemiFinishedProperties(withoutSeal, "W1")!;
+  expect(value).toMatchObject({ name: "Провод UL1007", mark: "UL1007", section: "28AWG", terminalFrom: "SXH-002T-P0.6", terminalTo: "SXH-002T-P0.6" });
+  expect(compactWireEnd(undefined, "cut")).toBe("Без разделки");
 });

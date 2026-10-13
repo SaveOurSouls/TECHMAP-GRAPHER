@@ -28,6 +28,15 @@ function Dialog({ label, onClose, children, editor = false }: { label: string; o
   useEffect(() => { ref.current?.showModal(); return () => ref.current?.close(); }, []);
   return <dialog ref={ref} className={editor ? "route-v3-dialog editor" : "route-v3-dialog"} aria-label={label} onCancel={event => { event.preventDefault(); onClose(); }}>{children}</dialog>;
 }
+function ArtworkTile({ children, zoomEnabled = false }: { children: ReactNode; zoomEnabled?: boolean }) {
+  const [zoomed, setZoomed] = useState(false);
+  return <div className={`route-v3-artwork-tile${zoomEnabled ? " can-zoom" : ""}${zoomed ? " zoomed" : ""}`}
+    role={zoomEnabled ? "button" : undefined} tabIndex={zoomEnabled ? 0 : undefined}
+    aria-label={zoomEnabled ? zoomed ? "Уменьшить рисунок и подпись" : "Увеличить рисунок и подпись" : undefined}
+    aria-pressed={zoomEnabled ? zoomed : undefined}
+    onClick={zoomEnabled ? () => setZoomed(value => !value) : undefined}
+    onKeyDown={zoomEnabled ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setZoomed(value => !value); } } : undefined}>{children}</div>;
+}
 export function RouteV3Panel(props: Props) {
   const { config, session, projectId, harnessId } = props;
   const api = useMemo(() => createHarnessDesignApi(config, session), [config, session]);
@@ -109,12 +118,12 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   const artwork = (ref: RouteSourceRef) => { const item = sources.find(candidate => refKey(candidate.ref) === refKey(ref)); return ref.kind === "wire" && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(route, ref.id)} /> : <RouteV2SourceArtwork document={source} ref={ref} item={item} textureUrls={textures.urls} />; };
   const finalRow: RouteRow = { id: "final", kind: "assembly", title: "Готовый жгут", sourceObjects: sources.map(item => item.ref), dependsOn: [], comment: "", operations: [], prepared: false, presentation: { backgroundOpacity: 0, objects: [], drawingCopy: createRouteDrawingCopy(source) } };
   const board = useMemo(() => refreshRouteV3(editableRouteV3(route.nodes.length || route.graphEdited ? route : { ...route, nodes: generateRouteV3({ ...route, fragments: [] }).nodes })), [route]);
-  const nodeArtwork = (node: RouteV3Node): ReactNode => {
-    if (node.drawing) return <RouteAssemblyDrawingPreview row={{ ...finalRow, title: node.title, sourceObjects: node.refs, presentation: { objects: [], ...node.drawing } }} document={source} config={config} session={session} projectId={projectId} />;
+  const nodeArtwork = (node: RouteV3Node, zoomEnabled = false): ReactNode => {
+    if (node.drawing) return <ArtworkTile zoomEnabled={zoomEnabled}><RouteAssemblyDrawingPreview row={{ ...finalRow, title: node.title, sourceObjects: node.refs, presentation: { objects: [], ...node.drawing } }} document={source} config={config} session={session} projectId={projectId} /></ArtworkTile>;
     const keys = new Set(node.refs.map(refKey));
     const fragments = route.fragments.filter(f => node.fragmentIds.includes(f.id) && f.refs.every(ref => keys.has(refKey(ref))));
     const covered = new Set(fragments.flatMap(f => f.refs.map(refKey)));
-    if (node.kind === "final" && sources.every(s => keys.has(refKey(s.ref)))) return <RouteAssemblyDrawingPreview row={finalRow} document={source} config={config} session={session} projectId={projectId} />;
+    if (node.kind === "final" && sources.every(s => keys.has(refKey(s.ref)))) return <ArtworkTile zoomEnabled={zoomEnabled}><RouteAssemblyDrawingPreview row={finalRow} document={source} config={config} session={session} projectId={projectId} /></ArtworkTile>;
     // Keep a saved PF image when passing its full result through a dependency.
     const pictures: RouteV3Node[] = [], visited = new Set<string>();
     const collectPictures = (target: RouteV3Node) => {
@@ -128,7 +137,10 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
       }
     };
     collectPictures(node);
-    return <>{fragments.map(f => <div key={f.id}>{showFragment(f)}</div>)}{pictures.map(n => <div key={n.id}>{nodeArtwork(n)}<small>{n.title}</small></div>)}{node.refs.filter(ref => !covered.has(refKey(ref))).map(ref => <div key={refKey(ref)}>{artwork(ref)}<small>{sources.find(s => refKey(s.ref) === refKey(ref))?.title ?? ref.id}</small></div>)}</>;
+    // Artwork components already render their own material and endpoint details.
+    // Keep each tile as one zoomable unit so the image and its text scale together
+    // in the preview dialog without repeating the source title underneath.
+    return <>{fragments.map(f => <ArtworkTile zoomEnabled={zoomEnabled} key={f.id}>{showFragment(f)}</ArtworkTile>)}{pictures.map(n => <ArtworkTile zoomEnabled={zoomEnabled} key={n.id}>{nodeArtwork(n)}</ArtworkTile>)}{node.refs.filter(ref => !covered.has(refKey(ref))).map(ref => <ArtworkTile zoomEnabled={zoomEnabled} key={refKey(ref)}>{artwork(ref)}</ArtworkTile>)}</>;
   };
   const editNodeDrawing = (node: RouteV3Node) => {
     const fragment = route.fragments.find(f => node.fragmentIds.includes(f.id));
@@ -153,6 +165,6 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
     </div>
     {editing && <Dialog label={`Редактор слепка ${editing.title}`} editor onClose={() => setEditing(null)}><div className="route-v2-drawing-host"><RouteAssemblyDrawing key={editing.id} config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={fragmentRow(editing)} items={sources.filter(item => editing.refs.some(ref => refKey(ref) === refKey(item.ref)))} onCancel={() => setEditing(null)} onSave={presentation => { persist(appendRouteV3Fragment(current.current, { ...editing, drawingCopy: presentation.drawingCopy ?? editing.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy, mode: presentation.isolatedDrawingCopy ? "isolated" : "source", backgroundOpacity: presentation.backgroundOpacity })); setEditing(null); setTitle(""); }} /></div></Dialog>}
     {drawingNode && <Dialog label={`Рисунок карточки ${drawingNode.title}`} editor onClose={() => setDrawingNode(null)}><RouteAssemblyDrawing config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={{ ...finalRow, id: drawingNode.id, title: drawingNode.title, sourceObjects: drawingNode.refs, presentation: { objects: [], backgroundOpacity: 0, ...drawingNode.drawing } }} items={sources.filter(s => drawingNode.refs.some(r => refKey(r) === refKey(s.ref)))} onCancel={() => setDrawingNode(null)} onSave={presentation => { persist({ ...board, graphEdited: true, nodes: board.nodes.map(n => n.id === drawingNode.id ? { ...n, drawing: { backgroundOpacity: presentation.backgroundOpacity, drawingCopy: presentation.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy } } : n) }); setDrawingNode(null); }} /></Dialog>}
-    {preview && <Dialog label={preview.title} onClose={() => setPreview(null)}><header className="route-v3-preview-heading"><h3>{preview.title}</h3><button className="secondary-action" onClick={() => setPreview(null)}>Закрыть</button></header><div className="route-v3-large-preview">{nodeArtwork(preview)}</div><ul className="route-v3-preview-list">{preview.refs.map(ref => <li key={refKey(ref)}>{sources.find(item => refKey(item.ref) === refKey(ref))?.title ?? ref.id}</li>)}</ul></Dialog>}
+    {preview && <Dialog label={preview.title} onClose={() => setPreview(null)}><header className="route-v3-preview-heading"><h3>{preview.title}</h3><button className="secondary-action" onClick={() => setPreview(null)}>Закрыть</button></header><div className="route-v3-large-preview">{nodeArtwork(preview, true)}</div></Dialog>}
   </section>;
 }

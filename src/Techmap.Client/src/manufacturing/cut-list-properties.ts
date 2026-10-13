@@ -2,6 +2,7 @@ import { wireBlankEndLabels, type WireBlankEnd } from "../WireBlankCatalog";
 import type { ConnectorContact, HarnessDesignDocument, WireEndpoint } from "../editor/model";
 import { terminalArticleLabel } from "../editor/terminal-article-label";
 import { buildRouteSourceItems } from "./route-source";
+import { formatWireName } from "./wire-display-formatters";
 
 export interface WireSemiFinishedProperties {
   readonly name: string;
@@ -78,6 +79,7 @@ export function compactWireEnd(contact: ConnectorContact | undefined, illustrate
   const article = contact?.terminalDetails?.article?.trim() || (contact?.terminalArticle ? terminalArticleLabel(contact.terminalArticle).trim() : "");
   if (!article) return compactEndLabels[illustratedEnd];
   const seal = sealOf(contact!);
+  if (!seal) return article;
   return side === "from" ? `${article} / ${seal}` : `${seal} / ${article}`;
 }
 
@@ -91,7 +93,7 @@ export function wireSemiFinishedProperties(document: HarnessDesignDocument, wire
   const storedUnit = wire.materialBinding?.sectionUnit
     ?? (wire.materialBinding?.sourceId === "technology-wires" ? "awg" : undefined);
   const section = displayWireSection(rawSection, `${material} ${wire.materialBinding?.sourceKey ?? ""}`, storedUnit);
-  const name = source.title || wire.circuit.trim() || wire.id;
+  const name = formatWireName(wireMarkWithoutSection(material, section));
   return {
     name,
     mark: wireMarkWithoutSection(material, section), section,

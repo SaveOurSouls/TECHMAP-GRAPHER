@@ -4,6 +4,7 @@ import { resolveWireColorHex } from "../editor/wire-reference-catalog";
 import type { HarnessDesignDocument } from "../editor/model";
 import { buildRouteSourceItems, type RouteSourceItem } from "../manufacturing/route-source";
 import { automaticWireEnd, compactWireEnd, displayWireSection, wireMarkWithoutSection, wireSemiFinishedProperties } from "../manufacturing/cut-list-properties";
+import { formatWireMaterial, formatWireName, formatWireTerminalPair } from "../manufacturing/wire-display-formatters";
 import type { RouteV3WireArtworkOverride } from "./route-v3-model";
 
 /** E4 owns source material and end preparation. A V3 override is intentionally
@@ -21,9 +22,13 @@ export function routeV3WireArtwork(document: HarnessDesignDocument, wireId: stri
   const properties = wireSemiFinishedProperties(document, wireId, { from: override?.start ?? automaticWireEnd(from), to: override?.end ?? automaticWireEnd(to) });
   return {
     wireId, start: override?.start ?? automaticWireEnd(from), end: override?.end ?? automaticWireEnd(to), color: override?.color ?? resolveWireColorHex(item.color || wire.color || ""),
-    name: properties?.name ?? item.title, mark: properties?.mark ?? wireMarkWithoutSection(item.material, item.section), section: properties?.section ?? displayWireSection(item.section, item.material),
+    name: properties?.name ?? formatWireName(wireMarkWithoutSection(item.material, item.section)), mark: properties?.mark ?? wireMarkWithoutSection(item.material, item.section), section: properties?.section ?? displayWireSection(item.section, item.material),
     colorLabel: item.color || wire.color || "Цвет не назначен", terminalFrom: properties?.terminalFrom ?? compactWireEnd(from, override?.start ?? automaticWireEnd(from), "from"), terminalTo: properties?.terminalTo ?? compactWireEnd(to, override?.end ?? automaticWireEnd(to), "to"), automatic: !override,
   };
+}
+export function routeV3WireMaterial(document: HarnessDesignDocument, wireId: string): string {
+  const properties = wireSemiFinishedProperties(document, wireId);
+  return properties ? formatWireMaterial(properties.mark, properties.section, properties.color) : "Материал не назначен";
 }
 export function RouteV3WireArtworkPreview({ document, item, override }: { readonly document: HarnessDesignDocument; readonly item: RouteSourceItem; readonly override?: RouteV3WireArtworkOverride }) {
   const artwork = routeV3WireArtwork(document, item.ref.id, override);
@@ -31,8 +36,8 @@ export function RouteV3WireArtworkPreview({ document, item, override }: { readon
   const row: WireBlank = { id: artwork.wireId, index: artwork.wireId, title: artwork.name, color: artwork.color, start: artwork.start, end: artwork.end, templateId: "01-cut", photoDataUrl: null, originalPayload: {} };
   return <span className="route-v3-wire-artwork" data-wire-artwork={artwork.automatic ? "e4" : "manual"}>
     <WireBlankPreview row={row} />
-    <small className="route-v3-wire-artwork__name">ПФ: {artwork.name}</small>
+    <small className="route-v3-wire-artwork__name">{artwork.name}</small>
     <small className="route-v3-wire-artwork__details">{artwork.mark} · {artwork.section} · <i style={{ backgroundColor: artwork.color }} aria-hidden="true" />{artwork.colorLabel}</small>
-    <small className="route-v3-wire-artwork__ends">{artwork.terminalFrom} — {artwork.terminalTo}</small>
+    <small className="route-v3-wire-artwork__ends">{formatWireTerminalPair(artwork.terminalFrom, artwork.terminalTo)}</small>
   </span>;
 }
