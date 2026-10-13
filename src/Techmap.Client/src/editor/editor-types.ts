@@ -139,6 +139,8 @@ export interface EditorCatalogItem {
   readonly entityType?: string;
   readonly referenceDisplayName?: string;
   readonly outerDiameterMm?:number;
+  /** Exact section unit published with a selected wire/cable record. */
+  readonly sectionUnit?: "awg" | "mm2";
   readonly coaxTerminationCandidate?: CoaxTerminationCatalogCandidate;
   /** Library template metadata used when placing connector instances. */
   readonly templateKind?: "series" | "free";

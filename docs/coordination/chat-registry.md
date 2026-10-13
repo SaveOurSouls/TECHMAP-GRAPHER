@@ -4,6 +4,7 @@
 
 | Роль | Чат | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Release coverage |
 | --- | --- | --- | --- | --- | --- | --- |
+| Координатор: единица сечения | `/root` | текущий чат | 094 / REQ-130 | `codex/integration-m5-22` / основной worktree | wire database, модель привязки, свойства резки и профильные тесты; документация карточки/REQ | in-progress; следующий ZIP |
 | Полуфабрикаты V3 и карта резки | Текущий чат | `/root` | 092 / REQ-128 | `codex/integration-m5-22` / основной worktree | `HarnessCutListPanel.*`, `editor/live-cut-list.ts`, новая проекция свойств, `manufacturing-v3/route-v3-wire-artwork.*`, профильные тесты; не изменять активные `component-library/*` карточки 089 | следующий ZIP; handoff и подтверждение сборщика ожидаются |
 
 ## Регистрация карточки 089 — 12.10.2026 (МСК)

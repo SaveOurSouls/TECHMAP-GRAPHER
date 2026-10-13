@@ -598,6 +598,7 @@ export function wireMaterialUpdateFromCatalogItem(
         entityType: item.entityType,
         sourceKey: item.sourceKey,
         displayName: item.referenceDisplayName || item.sourceKey,
+        ...(item.sectionUnit === undefined ? {} : { sectionUnit: item.sectionUnit }),
     ...(item.outerDiameterMm===undefined?{}:{outerDiameterMm:item.outerDiameterMm}),
       },
     },
@@ -704,6 +705,7 @@ export function cableMaterialUpdateFromCatalogItem(
     sourceId: item.sourceId, snapshotId: item.snapshotId, snapshotSha256: item.snapshotSha256,
     recordId: item.recordId, entityType: "cable", sourceKey: item.sourceKey,
     displayName: item.referenceDisplayName || item.sourceKey,
+    ...(item.sectionUnit === undefined ? {} : { sectionUnit: item.sectionUnit }),
     ...(item.outerDiameterMm===undefined?{}:{outerDiameterMm:item.outerDiameterMm}),
   } } };
 }

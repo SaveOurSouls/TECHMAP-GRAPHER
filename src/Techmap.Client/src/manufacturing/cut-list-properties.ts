@@ -21,10 +21,12 @@ const compactEndLabels: Readonly<Record<WireBlankEnd, string>> = {
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Keeps the unit stored by the selected wire record. It deliberately never converts AWG to mm² or back. */
-export function displayWireSection(section: string, reference = ""): string {
+export function displayWireSection(section: string, reference = "", unit?: "awg" | "mm2"): string {
   const value = section.trim();
   if (!value) return "Сечение не назначено";
   if (/awg/iu.test(value) || /(?:мм|mm)\s*[²2]/iu.test(value)) return value;
+  if (unit === "awg") return `${value}AWG`;
+  if (unit === "mm2") return `${value} мм²`;
   const escaped = escape(value.replace(/,/g, "__comma__")).replace(/__comma__/g, "[,.]");
   if (new RegExp(`(?:^|[^0-9])${escaped}\\s*awg`, "iu").test(reference)) return `${value}AWG`;
   if (new RegExp(`(?:^|[^0-9])${escaped}\\s*(?:мм|mm)\\s*[²2]`, "iu").test(reference)) return `${value} мм²`;
@@ -86,7 +88,9 @@ export function wireSemiFinishedProperties(document: HarnessDesignDocument, wire
   const from = contactAt(document, wire.from), to = contactAt(document, wire.to);
   const material = source.material || from?.wire || to?.wire || "";
   const rawSection = source.section || from?.wireSection || to?.wireSection || "";
-  const section = displayWireSection(rawSection, `${material} ${wire.materialBinding?.sourceKey ?? ""}`);
+  const storedUnit = wire.materialBinding?.sectionUnit
+    ?? (wire.materialBinding?.sourceId === "technology-wires" ? "awg" : undefined);
+  const section = displayWireSection(rawSection, `${material} ${wire.materialBinding?.sourceKey ?? ""}`, storedUnit);
   const name = source.title || wire.circuit.trim() || wire.id;
   return {
     name,

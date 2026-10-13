@@ -13,7 +13,7 @@ import {
 } from "../component-library/component-template-api";
 import { builtInConnectorTemplates } from "./connector-series-demo";
 import { normalizeWireStripProfileBinding } from "./model";
-import { wireDatabaseOption, formatWireSection, builtInWireOptions, isSelectableWirePayload, type WireDatabaseOption } from "./wire-database";
+import { wireDatabaseOption, wireSectionUnit, formatWireSection, builtInWireOptions, isSelectableWirePayload, type WireDatabaseOption } from "./wire-database";
 import type {
   CoaxTerminationCatalogCandidate,
   CoaxTerminationCatalogDiagnostic,
@@ -309,6 +309,9 @@ export function referenceRecordToEditorCatalogItem(
       : record.entityType === "protective-covering"
         ? [...new Set([firstValue(payload, "name", "Название", "Наименование", "productName", "series", "Серия", "mark", "Марка"), firstValue(payload, "size", "Размер", "crossSection", "section", "Сечение", "wallThicknessMm", "thicknessMm", "diameterMm", "innerDiameterMm"), firstValue(payload, "color", "Цвет")].filter((value): value is string => !!value))].join(" · ") || record.sourceKey
       : undefined,
+    ...(record.entityType === "wire" || record.entityType === "cable"
+      ? (() => { const sectionUnit = wireSectionUnit(payload); return sectionUnit ? { sectionUnit } : {}; })()
+      : {}),
     outerDiameterMm:catalogOuterDiameter(payload),
     coaxTerminationCandidate,
   };

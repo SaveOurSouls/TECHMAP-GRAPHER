@@ -34,9 +34,10 @@ describe("editor reference catalog", () => {
     const item = referenceRecordToEditorCatalogItem(source("technology-wires"), record("wire", "internal-key", {
       Марка: "TEST", Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22",
     }));
-    expect(item.title).toBe("TEST · 3Cx0,5 | 2Px0,22");
+    expect(item.title).toBe("TEST · 3Cx0,5AWG | 2Px0,22AWG");
     expect(item.referenceDisplayName).toBe(item.title);
     expect(item.sourceKey).toBe("internal-key");
+    expect(item.sectionUnit).toBe("awg");
   });
   it("keeps protective covering mark, size and color in the pinned display name", () => {
     const item = referenceRecordToEditorCatalogItem(source("technology-protection"), record("protective-covering", "HS-3-1", {

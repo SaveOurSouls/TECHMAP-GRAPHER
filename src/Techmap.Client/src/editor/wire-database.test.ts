@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWireSection, wireDatabaseOption, filterWireOptions, wireMarkChoices, wireSectionChoices, isSelectableWirePayload } from "./wire-database";
+import { formatWireSection, wireDatabaseOption, filterWireOptions, wireMarkChoices, wireSectionChoices, isSelectableWirePayload, wireSectionUnit } from "./wire-database";
 import { createBuiltInConnectorInstance } from "./connector-series-demo";
 import { createEmptyHarnessDesign, parseHarnessDesignDocument, connectorContactPosition, createOrthogonalE4Route, wireEndpointE4Anchor } from "./model";
 import { createWire } from "./commands";
@@ -9,14 +9,17 @@ import { getE4ConnectorLayout } from "./CanvasViewport";
 
 describe("wire database", () => {
   it.each(["1C", "1С", " 1 с "])("shows only the core section for %s", Core => {
-    expect(formatWireSection({ Core, "Сечение C": "0,35" })).toBe("0,35");
+    expect(formatWireSection({ Core, "Сечение C": "0,35" })).toBe("0,35AWG");
   });
-  it("combines core and pair sections without adding assumed units", () => {
-    expect(formatWireSection({ Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22" })).toBe("3Cx0,5 | 2Px0,22");
-    expect(formatWireSection({ Core: "1C", "Сечение C": "30", Pair: "1E", "Сечение P": "28" })).toBe("1Cx30 | 1Ex28");
+  it("keeps the source column unit on each selected section", () => {
+    expect(formatWireSection({ Core: "3C", "Сечение C": 0.5, Pair: "2P", "Сечение P": "0,22" })).toBe("3Cx0,5AWG | 2Px0,22AWG");
+    expect(formatWireSection({ Core: "1C", "Сечение C": "30", Pair: "1E", "Сечение P": "28" })).toBe("1Cx30AWG | 1Ex28AWG");
     expect(formatWireSection({ Core: "2С", "Сечение C": "24AWG" })).toBe("2Сx24AWG");
-    expect(formatWireSection({ Core: "0C", Pair: "2P", "Сечение P": 0.12 })).toBe("2Px0,12");
-  expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3Cx0,5");
+    expect(formatWireSection({ Core: "0C", Pair: "2P", "Сечение P": 0.12 })).toBe("2Px0,12AWG");
+    expect(formatWireSection({ Core: "3C", "Сечение C": "0,5", Pair: "0P", "Сечение P": "0" })).toBe("3Cx0,5AWG");
+    expect(formatWireSection({ Core: "1C", "Сечение C": "0,35", "Единица сечения C": "мм²" })).toBe("0,35 мм²");
+    expect(wireSectionUnit({ Core: "1C", "Сечение C": "30" })).toBe("awg");
+    expect(wireSectionUnit({ Core: "1C", "Сечение C": "0,35", "Единица сечения C": "мм²" })).toBe("mm2");
   expect(isSelectableWirePayload({ Марка: "Монтажный провод" })).toBe(false);
   expect(isSelectableWirePayload({ Марка: "UL1007", Core: "1C", "Сечение C": 30 })).toBe(true);
   });
@@ -28,7 +31,7 @@ describe("wire database", () => {
       Марка: "TEST", Core: "3C", "Сечение C": 0.5, Цвет: "синий",
     } });
     expect(red.mark).toBe("TEST");
-    expect(red.section).toBe("0,35");
+    expect(red.section).toBe("0,35AWG");
     expect(red.detail).toContain("Артикул: 0007");
     expect(red.detail).toContain("монтажный многожильный провод");
     expect(red.color).toBe("красный");
@@ -36,14 +39,14 @@ describe("wire database", () => {
   });
   it("filters marks and complex sections in both directions using the full catalog", () => {
     const options = [
-      { id: "a", mark: "МГТФ", section: "0,35", label: "МГТФ · 0,35", detail: "" },
-      { id: "b", mark: "МГТФ", section: "0,5", label: "МГТФ · 0,5", detail: "" },
-      { id: "c", mark: "НВ-4", section: "0,35", label: "НВ-4 · 0,35", detail: "" },
+      { id: "a", mark: "МГТФ", section: "0,35 мм²", label: "МГТФ · 0,35 мм²", detail: "" },
+      { id: "b", mark: "МГТФ", section: "0,5 мм²", label: "МГТФ · 0,5 мм²", detail: "" },
+      { id: "c", mark: "НВ-4", section: "0,35 мм²", label: "НВ-4 · 0,35 мм²", detail: "" },
       { id: "d", mark: "UL2725", section: "3Cx0,5 | 2Px0,22", label: "UL2725", detail: "" },
       { id: "e", mark: "UL2725", section: "3Cx0,5 | 1Px0,22", label: "UL2725", detail: "" },
     ];
     expect(filterWireOptions(options, "", "0.35").map(option => option.mark)).toEqual(["МГТФ", "НВ-4"]);
-    expect(wireSectionChoices(options, "МГТФ")).toEqual(["0,35", "0,5"]);
+    expect(wireSectionChoices(options, "МГТФ")).toEqual(["0,35 мм²", "0,5 мм²"]);
     expect(wireMarkChoices(options, "")).toEqual(["МГТФ", "НВ-4", "UL2725"]);
     expect(wireMarkChoices(options, "", "0,35")).toEqual(["МГТФ", "НВ-4"]);
     expect(wireSectionChoices(options, "UL2725")).toEqual(["3Cx0,5 | 2Px0,22", "3Cx0,5 | 1Px0,22"]);

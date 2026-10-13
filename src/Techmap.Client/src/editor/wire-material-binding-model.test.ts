@@ -53,6 +53,16 @@ describe("wire material binding document model", () => {
     expect(Object.isFrozen(parsed.wires[0]!.materialBinding)).toBe(true);
   });
 
+  it("keeps the section unit saved with a selected catalogue record", () => {
+    const source = documentWithWire();
+    const parsed = parseHarnessDesignDocument({
+      ...source,
+      wires: [{ ...source.wires[0]!, materialBinding: binding({ sectionUnit: "awg" }) }],
+    });
+
+    expect(parsed.wires[0]!.materialBinding?.sectionUnit).toBe("awg");
+  });
+
   it.each([
     ["empty source", { sourceId: "" }],
     ["long source", { sourceId: "s".repeat(129) }],
@@ -63,6 +73,7 @@ describe("wire material binding document model", () => {
     ["unsupported entity", { entityType: "terminal" }],
     ["long source key", { sourceKey: "k".repeat(513) }],
     ["long display name", { displayName: "n".repeat(257) }],
+    ["invalid section unit", { sectionUnit: "inch" }],
   ])("rejects %s", (_name, overrides) => {
     const source = documentWithWire();
     expect(() => parseHarnessDesignDocument({

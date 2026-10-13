@@ -390,6 +390,8 @@ export interface WireColorSource {
  */
 export interface WireMaterialBinding {
   readonly outerDiameterMm?: number;
+  /** Unit belonging to the selected catalogue section; it is never converted. */
+  readonly sectionUnit?: "awg" | "mm2";
   readonly sourceId: string;
   readonly snapshotId: string;
   readonly snapshotSha256: string;
@@ -1768,6 +1770,10 @@ function parseWireMaterialBinding(value: unknown): WireMaterialBinding {
   }
   return Object.freeze({
     ...(record.outerDiameterMm===undefined?{}:{outerDiameterMm:parseOuterDiameter(record.outerDiameterMm)}),
+    ...(record.sectionUnit === undefined ? {} : {
+      sectionUnit: record.sectionUnit === "awg" || record.sectionUnit === "mm2"
+        ? record.sectionUnit : (() => { throw new Error("Единица сечения материала провода задана неверно."); })(),
+    }),
     sourceId: requireBoundedText(record.sourceId, "Источник материала провода", 128),
     snapshotId: parseNonEmptyGuid(record.snapshotId, "ID снимка материала провода"),
     snapshotSha256: parseSha256(record.snapshotSha256, "Хэш снимка материала провода"),
