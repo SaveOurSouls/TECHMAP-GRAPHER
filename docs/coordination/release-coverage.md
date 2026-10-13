@@ -121,4 +121,4 @@ represent missing completed chat handoffs.
 
 | 090 follow-up 13.10 — выход меди из изоляции | 01a13091-f350-7b62-b8b0-9ca77cf1ad58 | e22862d0051f54dec3629787dc84eb3b38296111 | опубликован, handoff записан | pending builder confirmation |
 
-| 093 — Route v3: обновление исходника и операции карточек | `/root`, исполнители `/root/terra` и `/root/luna` | фиксируется после коммита | `tasks/093-route-v3-refresh-and-operations-redesign.md`, REQ-129; ветка `codex/integration-m5-22`, основной worktree | ready-for-review; SHA и проверки в `docs/coordination/agent-handoff.md`; следующий ZIP pending |
+| 093 — Route v3: обновление исходника и операции карточек | `/root`, исполнители `/root/terra` и `/root/luna` | `02dc3d60375e84966382ef29ba826679c1d6ceb2` | код в integration HEAD и отправлен в origin; Vitest 193/1856, typecheck, build, Playwright 1440/390 px, diff-check PASS | ready-for-review; следующий ZIP pending, подтверждение сборщика ожидается |

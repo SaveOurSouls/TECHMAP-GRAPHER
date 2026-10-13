@@ -47,7 +47,7 @@
 
 ## Журнал результата
 
-- кодовый коммит: см. запись 093 в `docs/coordination/agent-handoff.md`;
+- кодовый коммит: `02dc3d60375e84966382ef29ba826679c1d6ceb2`, отправлен в origin;
 - проверки: Vitest 193 файла / 1856 тестов, TypeScript, production build, `git diff --check` — PASS; Playwright Chrome 1440/390 px — без ошибок и горизонтальной прокрутки окна;
 - handoff: модель terra и интерфейс luna интегрированы текущим чатом; точный SHA и статус отправки — в журнале handoff;
 - интеграция/ZIP: изменения в `codex/integration-m5-22`; новый ZIP не запрошен и не собран;
