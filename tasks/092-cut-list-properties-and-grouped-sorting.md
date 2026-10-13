@@ -30,6 +30,6 @@
 ## Журнал результата
 
 - Коммит кода: `89443d6073c47730d181caec9a40b4717baff736`.
-- Handoff сборщику: `docs/coordination/agent-handoff.md`; документальный SHA будет добавлен после фиксации handoff.
+- Handoff сборщику: `f8de2612ebad386b308216953c1e96be4c2f70cc` в `docs/coordination/agent-handoff.md`.
 - Проверки и даты: 13.10.2026 — Vitest 190 файлов / 1842 теста, TypeScript, Vite production build, профильные тесты и `git diff --check` PASS.
 - Ограничения: серверная сохранённая карта не получает свойства несохранённого редактора; в Чертежe используется живая текущая проекция.
