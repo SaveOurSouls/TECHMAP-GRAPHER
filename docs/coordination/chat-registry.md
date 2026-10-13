@@ -1,5 +1,13 @@
 # Реестр чатов проекта
 
+## Карточка 097 — 13.10.2026
+
+| Роль | Чат | Ветка / worktree | Файлы | Coverage |
+| --- | --- | --- | --- | --- |
+| Координатор | `/root` | `codex/integration-m5-22`, основной worktree | документы 097/REQ-133, интеграция | ready-for-review; a59174c, следующий ZIP pending |
+| Модель продукции и расчёта | `/root/terra` | тот же worktree | route-v3-operations/model/graph/card-quantity, новые модельные модули и тесты | общий handoff 097 |
+| UI операций и входных ПФ | `/root/luna` | тот же worktree | RouteV3Graph.tsx, route-v3-graph.css, новые UI-модули/тесты | общий handoff 097 |
+
 ## Регистрация карточки 092 — 13.10.2026 (МСК)
 
 | Роль | Чат | Thread ID | Карточка | Ветка / worktree | Владелец файлов | Release coverage |
