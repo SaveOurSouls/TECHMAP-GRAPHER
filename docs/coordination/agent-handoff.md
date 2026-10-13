@@ -1,5 +1,34 @@
 # Шаблон handoff от чата задачи
 
+## 095 — Масштабирование карточек и раздвижение соседей
+
+```text
+Карточка: 095 — Масштабирование карточек и раздвижение соседей
+Статус: ready-for-review
+Репозиторий: git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git
+Ветка: codex/integration-m5-22
+Worktree: C:\Users\Василий Костромин\Documents\ChatGPT\Утилита для картинок
+Коммит кода: 3bd93f4
+
+Изменённые файлы:
+- src/Techmap.Client/src/manufacturing-v3/route-v3-model.ts: привязка размеров, проверка пересечений и каскадное горизонтальное раздвижение с зазором.
+- src/Techmap.Client/src/manufacturing-v3/RouteV3Graph.tsx и route-v3-graph.css: применение раскладки при mouse/keyboard resize, видимый статус совпадения размера, удалён раздел «Зависимости» из настроек.
+- src/Techmap.Client/src/manufacturing-v3/route-v3-graph.test.ts: регрессии для snap, каскада и левой границы.
+
+Проверки:
+- Route v3 Vitest: PASS, 6 файлов / 35 тестов.
+- Полный клиентский Vitest: PASS, 193 файла / 1862 теста.
+- pnpm --dir src/Techmap.Client typecheck: PASS.
+- pnpm --dir src/Techmap.Client build: PASS.
+- git diff --check: PASS.
+
+Ограничения и ручная приёмка:
+- Browser plugin и локальный Playwright отсутствуют. Локальный Vite UI остановился на повреждённой runtime-конфигурации до загрузки Route v3; C1/C2 на исходном жгуте и packaged UI не проверены вручную.
+
+Статус handoff: передан сборщику.
+Release coverage: следующий ZIP; подтвердить `3bd93f4` как ancestor code HEAD.
+```
+
 ## 094 — единица сечения из записи каталога проводов
 
 ```text
