@@ -636,3 +636,22 @@ PASS, 7/7 из `C:\Temp\TECHMAP-m5-22-043`; внутри проверен пут
 portable из `C:\Temp`. Исходный жгут и packaged UI вручную не проверены;
 приёмка владельцем открыта. ZIP находится вне Git.
 
+# Пакет 14.10.2026 — M5-22-044 / карточки 095–097
+
+Кодовый HEAD: `6da7e7ca75ea9c927daf3226ad8835f1835d54e8`.
+Версия: `0.63.44-m5-22-review`.
+
+ZIP: `artifacts/m5-22-044/TECHMAP-GRAPHER-0.63.44-m5-22-review-win-x64.zip`.
+Размер: **64 022 953 байта**. SHA-256:
+`EE040A161AB764E0929C354CD29CD4AEB931AB080B03D2F6591380314896D25B`.
+
+Штатный `scripts/build-package.ps1` — PASS: 195 клиентских файлов / 1874
+теста, TypeScript, Vite build, полный .NET-набор, performance-тест и
+self-contained win-x64 publish. `verify-package.ps1` — PASS: 339 записей
+манифеста / 340 файлов. `test-portable-package.ps1` — PASS, 7/7 из
+`C:\Temp\TECHMAP-m5-22-044`.
+
+Ограничения: исходный жгут и packaged UI вручную не проверены; прямой запуск
+из кириллического пути может дать `UnauthorizedAccessException` при ACL.
+ZIP вне Git, owner acceptance остаётся отдельным этапом.
+

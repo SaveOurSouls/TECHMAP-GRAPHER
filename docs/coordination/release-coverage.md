@@ -129,6 +129,15 @@ represent missing completed chat handoffs.
 | 094 — Единица сечения из записи каталога проводов | `/root` | code `dd13db7`, handoff `2ea885b` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 096 — Подписи и компоновка полуфабрикатов V3 | `/root`, исполнители `/root/terra` и `/root/luna` | code `b241e811649eaa7224c9db0d15ed13f665b3dc88`, handoff `0bdfdc338798a03db75a394dec133314b35798df` | оба SHA — предки integration HEAD `428ba1f020da11b82e4dced5e58dc559093da597`; `git show --check` PASS | included (ancestor) |
 
+### m5-22-044 — 14.10.2026
+
+- **Code HEAD:** `6da7e7ca75ea9c927daf3226ad8835f1835d54e8`
+- **Handoffs:** 095, 096, 097 и предыдущие release rows подтверждены ancestry
+- **ZIP:** `artifacts/m5-22-044/TECHMAP-GRAPHER-0.63.44-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 022 953 / EE040A161AB764E0929C354CD29CD4AEB931AB080B03D2F6591380314896D25B`
+- **Manifest / portable:** `PASS; 339/340; 7/7`
+- **Gate:** `PASS`; ручная и owner acceptance открыты
+
 ### m5-22-043 — 13.10.2026
 
 - **Integration branch:** `codex/integration-m5-22`
