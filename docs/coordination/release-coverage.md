@@ -127,6 +127,7 @@ represent missing completed chat handoffs.
 | 091 — Чертёж: граница оболочки и витая пара | `/root` | code `1a76bbaa8964280362a637c4415e365b16a1588a`, handoff `ac4e2c5` | оба SHA — предки integration HEAD `2ea885b7d79302e5393c552f517f71cea789efbf`; `git show --check` PASS | included (ancestor) |
 | 092 — Свойства полуфабрикатов и карта резки | `/root` | code `89443d6073c47730d181caec9a40b4717baff736`, `f8de2612ebad386b308216953c1e96be4c2f70cc`, handoff `f052577` | все SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 094 — Единица сечения из записи каталога проводов | `/root` | code `dd13db7`, handoff `2ea885b` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
+| 096 — Подписи и компоновка полуфабрикатов V3 | `/root`, исполнители `/root/terra` и `/root/luna` | code `b241e811649eaa7224c9db0d15ed13f665b3dc88`, handoff `0bdfdc338798a03db75a394dec133314b35798df` | оба SHA — предки integration HEAD `428ba1f020da11b82e4dced5e58dc559093da597`; `git show --check` PASS | included (ancestor) |
 
 ### m5-22-043 — 13.10.2026
 
