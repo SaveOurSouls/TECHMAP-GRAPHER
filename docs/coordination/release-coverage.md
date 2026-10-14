@@ -142,6 +142,16 @@ represent missing completed chat handoffs.
 | 098 — Подписи сырья и иерархия БД.ОП в Route v3 | `/root`, исполнители `/root/terra` и `/root/luna` | code `fc09295`, CSS follow-up `033e669`, handoff `1349f15`, status `c32f925` | все SHA — предки integration HEAD `e71f52a2f905bab8da65651f92554ad71c49895a`; `git show --check` PASS | included (ancestor) |
 | 099 — Проектирование многопроводных оконцовок | `/root` и design subagents | дизайн-only code-free task; handoff `e71f52a` | явно отложено за границы ZIP: реализация не заявлена, ZIP не запрошен | excluded (design-only) |
 
+### m5-22-045 — 14.10.2026
+
+- **Integration branch:** `codex/integration-m5-22`
+- **Code HEAD:** `76f028bcfcdd1dca090ae61ac6a4def3cdc05a9f`
+- **Coverage:** 098 included (ancestor); 099 excluded (design-only); pending/unknown `0`
+- **ZIP:** `artifacts/m5-22-045/TECHMAP-GRAPHER-0.63.45-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 024 728 / B5D8C5AB38E86059101CEDBB94BE70DE46510C3C0A5130FDFDE6232F34D075E2`
+- **Manifest / portable:** `PASS; 339/340; 7/7`
+- **Gate:** `PASS` для Git и package; ручная и owner acceptance открыты
+
 ### m5-22-044 — 14.10.2026
 
 - **Code HEAD:** `6da7e7ca75ea9c927daf3226ad8835f1835d54e8`

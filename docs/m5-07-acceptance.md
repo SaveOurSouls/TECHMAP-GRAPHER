@@ -655,3 +655,24 @@ self-contained win-x64 publish. `verify-package.ps1` — PASS: 339 записе�
 из кириллического пути может дать `UnauthorizedAccessException` при ACL.
 ZIP вне Git, owner acceptance остаётся отдельным этапом.
 
+# Пакет 14.10.2026 — M5-22-045 / карточка 098
+
+Кодовый HEAD: `76f028bcfcdd1dca090ae61ac6a4def3cdc05a9f`.
+Версия: `0.63.45-m5-22-review`. Карточка 098 / REQ-134 включает код
+`fc09295`, CSS follow-up `033e669`, handoff `1349f15` и status `c32f925`.
+Карточка 099 содержит только дизайн и явно вне состава ZIP.
+
+ZIP: `artifacts/m5-22-045/TECHMAP-GRAPHER-0.63.45-m5-22-review-win-x64.zip`.
+Размер: **64 024 728 байт**. SHA-256:
+`B5D8C5AB38E86059101CEDBB94BE70DE46510C3C0A5130FDFDE6232F34D075E2`.
+
+Штатный `scripts/build-package.ps1` — PASS: 195 клиентских файлов / 1877
+тестов, TypeScript, Vite production build, полный .NET-набор, performance-тест
+и self-contained win-x64 publish. `verify-package.ps1` — PASS: 339 записей
+манифеста / 340 файлов. `test-portable-package.ps1` — PASS, 7/7 из
+`C:\Temp\TECHMAP-m5-22-045`.
+
+Ограничения: исходный жгут и packaged UI вручную не проверены; прямой запуск
+из исходного кириллического пути не проверен и ранее давал
+`UnauthorizedAccessException` при ACL. ZIP вне Git, owner acceptance открыта.
+
