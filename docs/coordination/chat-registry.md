@@ -4,7 +4,7 @@
 
 | Роль | Чат / Thread ID | Ветка / worktree | Владелец файлов | Coverage |
 | --- | --- | --- | --- | --- |
-| Координатор | `/root`, `01a13a64-e264-7a03-8198-49dae2c51bee` | `codex/integration-m5-22`, основной | общие Markdown, `docs/design/multi-wire-termination-plan.md` | in-progress; только план и дизайн, без внедрения/ZIP |
+| Координатор | `/root`, `01a13a64-e264-7a03-8198-49dae2c51bee` | `codex/integration-m5-22`, основной | общие Markdown, `docs/design/multi-wire-termination-plan.md` | ready-for-review; `2c69636` опубликован; только план и дизайн, без внедрения/ZIP |
 | Архитектура, Sol | `/root/architecture_sol` | общий worktree | `docs/design/multi-wire-termination-architecture.md` | общий handoff 099 |
 | Рисунки, Sol вместо недоступной Terra | `/root/artwork_sol` | общий worktree | `design/termination-099/*` | общий handoff 099 |
 | Независимая проверка, Luna | `/root/review_luna` | общий worktree | `docs/design/multi-wire-termination-review.md` | общий handoff 099 |
