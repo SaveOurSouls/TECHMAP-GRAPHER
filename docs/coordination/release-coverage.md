@@ -139,6 +139,8 @@ represent missing completed chat handoffs.
 | 092 — Свойства полуфабрикатов и карта резки | `/root` | code `89443d6073c47730d181caec9a40b4717baff736`, `f8de2612ebad386b308216953c1e96be4c2f70cc`, handoff `f052577` | все SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 094 — Единица сечения из записи каталога проводов | `/root` | code `dd13db7`, handoff `2ea885b` | оба SHA — предки integration HEAD; `git show --check` PASS | included (ancestor) |
 | 096 — Подписи и компоновка полуфабрикатов V3 | `/root`, исполнители `/root/terra` и `/root/luna` | code `b241e811649eaa7224c9db0d15ed13f665b3dc88`, handoff `0bdfdc338798a03db75a394dec133314b35798df` | оба SHA — предки integration HEAD `428ba1f020da11b82e4dced5e58dc559093da597`; `git show --check` PASS | included (ancestor) |
+| 098 — Подписи сырья и иерархия БД.ОП в Route v3 | `/root`, исполнители `/root/terra` и `/root/luna` | code `fc09295`, CSS follow-up `033e669`, handoff `1349f15`, status `c32f925` | все SHA — предки integration HEAD `e71f52a2f905bab8da65651f92554ad71c49895a`; `git show --check` PASS | included (ancestor) |
+| 099 — Проектирование многопроводных оконцовок | `/root` и design subagents | дизайн-only code-free task; handoff `e71f52a` | явно отложено за границы ZIP: реализация не заявлена, ZIP не запрошен | excluded (design-only) |
 
 ### m5-22-044 — 14.10.2026
 
