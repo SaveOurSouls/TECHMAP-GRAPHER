@@ -1,0 +1,766 @@
+{
+  "schema": "termination-099/v1",
+  "designStatus": "project-symbols",
+  "units": "viewBox units, illustrative scale",
+  "viewBox": [
+    0,
+    0,
+    220,
+    100
+  ],
+  "colorTokens": {
+    "paper": "#ffffff",
+    "outline": "#334155",
+    "metal": "#dbe5ee",
+    "tin": "#dae5ee",
+    "insulation": "#d95f59",
+    "wire": "#69798a",
+    "anchor": "#1684ba",
+    "copper": "#c98755",
+    "seal": "#59a69b"
+  },
+  "terminationVariants": [
+    "без разделки",
+    "медь",
+    "лужёная медь",
+    "pin",
+    "socket",
+    "pin+seal",
+    "socket+seal",
+    "lug"
+  ],
+  "assets": [
+    {
+      "id": "nki-ring",
+      "name": "НКИ · кольцевой",
+      "kind": "terminal",
+      "geometryFamily": "ring",
+      "views": {
+        "e4": "nki-ring-e4.svg",
+        "drawing": "nki-ring-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Изолированный обжим и кольцевой лепесток",
+      "dimensionFields": "L / L1 / D / B / d1 / P / S",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nvi-fork",
+      "name": "НВИ · вилочный",
+      "kind": "terminal",
+      "geometryFamily": "fork",
+      "views": {
+        "e4": "nvi-fork-e4.svg",
+        "drawing": "nvi-fork-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Открытая вилка без дополнительного порта",
+      "dimensionFields": "L / L1 / D / B / d1 / P / S",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nshvi-single",
+      "name": "НШВИ · одинарный",
+      "kind": "terminal",
+      "geometryFamily": "ferrule",
+      "views": {
+        "e4": "nshvi-single-e4.svg",
+        "drawing": "nshvi-single-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Трубчатая втулка с изолированным раструбом",
+      "dimensionFields": "L / L1 / C / W / A",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nshvi-double",
+      "name": "НШВИ-2 · двойной",
+      "kind": "terminal",
+      "geometryFamily": "ferrule-double",
+      "views": {
+        "e4": "nshvi-double-e4.svg",
+        "drawing": "nshvi-double-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Один общий вход; ×2 — аннотация",
+      "dimensionFields": "L / L1 / C / W / A",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nvsh-alias-pin-blade",
+      "name": "НВШ (alias) · pin blade",
+      "kind": "terminal",
+      "geometryFamily": "blade",
+      "views": {
+        "e4": "nvsh-alias-pin-blade-e4.svg",
+        "drawing": "nvsh-alias-pin-blade-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Предложенная геометрия; расшифровка не утверждается",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": "НВШ",
+      "standardClaim": null
+    },
+    {
+      "id": "din-sc-ring",
+      "name": "DIN / SC · силовой кольцевой",
+      "kind": "terminal",
+      "geometryFamily": "power-ring",
+      "views": {
+        "e4": "din-sc-ring-e4.svg",
+        "drawing": "din-sc-ring-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Медь лужёная; на C3 маркировка SC. DIN не подтверждён",
+      "dimensionFields": "поля каталога C3: d2 / d / D / B / E / L",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "pin-round",
+      "name": "Pin · круглый штырь",
+      "kind": "terminal",
+      "geometryFamily": "pin",
+      "views": {
+        "e4": "pin-round-e4.svg",
+        "drawing": "pin-round-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Боковой вид цилиндрического контакта",
+      "dimensionFields": "проектные поля L / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "socket-round",
+      "name": "Socket · круглая розетка",
+      "kind": "terminal",
+      "geometryFamily": "socket",
+      "views": {
+        "e4": "socket-round-e4.svg",
+        "drawing": "socket-round-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Боковой вид с гнездом; сочленение не порт",
+      "dimensionFields": "проектные поля L / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flat-male",
+      "name": "Flat male · плоский штырь",
+      "kind": "terminal",
+      "geometryFamily": "male",
+      "views": {
+        "e4": "flat-male-e4.svg",
+        "drawing": "flat-male-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Плоская контактная лопатка",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flat-female",
+      "name": "Flat female · плоская розетка",
+      "kind": "terminal",
+      "geometryFamily": "female",
+      "views": {
+        "e4": "flat-female-e4.svg",
+        "drawing": "flat-female-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Сложенный пружинный контакт с гнездом",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag",
+      "name": "Флажковый · угловая розетка",
+      "kind": "terminal",
+      "geometryFamily": "flag",
+      "views": {
+        "e4": "flag-e4.svg",
+        "drawing": "flag-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Контактная часть развёрнута к оси обжима",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-insulated",
+      "name": "Гильза · изолированная",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-insulated",
+      "views": {
+        "e4": "sleeve-insulated-e4.svg",
+        "drawing": "sleeve-insulated-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Два крайних входа; изоляция показана цветом",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-bare",
+      "name": "Гильза · неизолированная",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-bare",
+      "views": {
+        "e4": "sleeve-bare-e4.svg",
+        "drawing": "sleeve-bare-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Два крайних входа; один общий объём гильзы",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-ultrasonic",
+      "name": "Гильза · УЗ сварка",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-ultrasonic",
+      "views": {
+        "e4": "sleeve-ultrasonic-e4.svg",
+        "drawing": "sleeve-ultrasonic-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "УЗ шов — операция, не отдельный порт",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "preparation-none",
+      "name": "Разделка: без разделки",
+      "kind": "preparation",
+      "geometryFamily": "none",
+      "views": {
+        "e4": "preparation-none-e4.svg",
+        "drawing": "preparation-none-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-copper",
+      "name": "Разделка: медь",
+      "kind": "preparation",
+      "geometryFamily": "copper",
+      "views": {
+        "e4": "preparation-copper-e4.svg",
+        "drawing": "preparation-copper-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-tinned-copper",
+      "name": "Разделка: лужёная медь",
+      "kind": "preparation",
+      "geometryFamily": "tinned-copper",
+      "views": {
+        "e4": "preparation-tinned-copper-e4.svg",
+        "drawing": "preparation-tinned-copper-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-pin",
+      "name": "Разделка: pin",
+      "kind": "preparation",
+      "geometryFamily": "pin",
+      "views": {
+        "e4": "preparation-pin-e4.svg",
+        "drawing": "preparation-pin-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-socket",
+      "name": "Разделка: socket",
+      "kind": "preparation",
+      "geometryFamily": "socket",
+      "views": {
+        "e4": "preparation-socket-e4.svg",
+        "drawing": "preparation-socket-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-pin-seal",
+      "name": "Разделка: pin+seal",
+      "kind": "preparation",
+      "geometryFamily": "pin-seal",
+      "views": {
+        "e4": "preparation-pin-seal-e4.svg",
+        "drawing": "preparation-pin-seal-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-socket-seal",
+      "name": "Разделка: socket+seal",
+      "kind": "preparation",
+      "geometryFamily": "socket-seal",
+      "views": {
+        "e4": "preparation-socket-seal-e4.svg",
+        "drawing": "preparation-socket-seal-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-lug",
+      "name": "Разделка: lug",
+      "kind": "preparation",
+      "geometryFamily": "lug",
+      "views": {
+        "e4": "preparation-lug-e4.svg",
+        "drawing": "preparation-lug-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    }
+  ],
+  "references": {
+    "C1": {
+      "image": "codex-clipboard-bbee8c8c-ddbe-40a1-b1c6-01db61a7f201.png",
+      "observed": "НКИ/НВИ: L/L1/D/B/d1/P/S, кольцо и открытая вилка"
+    },
+    "C2": {
+      "image": "codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png",
+      "observed": "трубчатые варианты; НШВИ-2 — расширение проекта; поля L/L1/C/W/A"
+    },
+    "C3": {
+      "image": "codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png",
+      "observed": "трубчатые медные лужёные SC; d2/d/D/B/E/L; DIN не указан"
+    },
+    "C4": {
+      "image": "codex-clipboard-b83f3bf3-8029-4807-a459-21fa6222fbc1.png",
+      "observed": "кольцевые/вилки, butt, bullet, male/female, pin, flag"
+    },
+    "C5": {
+      "image": "codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png",
+      "observed": "визуальное разнообразие ring/fork/round/flat/flag/sleeve"
+    }
+  }
+}
