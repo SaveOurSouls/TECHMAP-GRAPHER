@@ -559,6 +559,14 @@ Release coverage: следующий ZIP; требуется подтвержд�
 - Сборщику: подтвердить `576a20c` и документальный SHA этого handoff как ancestors следующего ZIP HEAD; соседние `manufacturing-v3/*` изменения не входят в этот handoff.
 
 
+## 096 — Подписи и компоновка полуфабрикатов V3, 14.10.2026
+
+- Координатор `/root`, Terra — подписи и форматтеры, Luna — масштаб рисунка и UI; `codex/integration-m5-22`, основной worktree. Статус ready-for-review.
+- Код `b241e811649eaa7224c9db0d15ed13f665b3dc88`; handoff `0bdfdc338798a03db75a394dec133314b35798df`; оба SHA — предки integration HEAD `428ba1f020da11b82e4dced5e58dc559093da597`.
+- REQ-132 / tasks/096: подписи проводов и материалов без UUID-дубликатов, масштаб рисунка вместе с текстом, компактные концы и карточки операций.
+- Проверки: Vitest 194 файлов / 1866 тестов, TypeScript, Vite build, `git diff --check` — PASS. Browser plugin и packaged UI вручную не проверены.
+- Сборщику: подтвердить code и handoff SHA в следующем ZIP; незакоммиченные изменения 095/096 в этот handoff не входят.
+
 ## 097 — Продукция операций, параллельная резка и входные ПФ, 13.10.2026
 
 - Координатор `/root`, Terra — модель, Luna — UI; `codex/integration-m5-22`, основной worktree. Статус ready-for-review.
