@@ -51,3 +51,9 @@ it("uses the catalogue mark for the wire name and omits an absent seal", () => {
   expect(value).toMatchObject({ name: "Провод UL1007", mark: "UL1007", section: "28AWG", terminalFrom: "SXH-002T-P0.6", terminalTo: "SXH-002T-P0.6" });
   expect(compactWireEnd(undefined, "cut")).toBe("Без разделки");
 });
+
+it("formats both terminal sides as article followed by seal", () => {
+  const value = wireSemiFinishedProperties(document(), "W1")!;
+  expect(value.terminalFrom).toBe("TERM-A / SEAL-A");
+  expect(value.terminalTo).toBe("лужёная медь");
+});

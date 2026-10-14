@@ -75,12 +75,17 @@ export function automaticWireEnd(contact: ConnectorContact | undefined): WireBla
 }
 
 /** A terminal stays a terminal in the production text even if its illustration was manually changed. */
-export function compactWireEnd(contact: ConnectorContact | undefined, illustratedEnd: WireBlankEnd, side: "from" | "to" = "from"): string {
+export function compactWireEnd(contact: ConnectorContact | undefined, illustratedEnd: WireBlankEnd, _side: "from" | "to" = "from"): string {
   const article = contact?.terminalDetails?.article?.trim() || (contact?.terminalArticle ? terminalArticleLabel(contact.terminalArticle).trim() : "");
   if (!article) return compactEndLabels[illustratedEnd];
   const seal = sealOf(contact!);
   if (!seal) return article;
-  return side === "from" ? `${article} / ${seal}` : `${seal} / ${article}`;
+  return `${article} / ${seal}`;
+}
+
+export function formatWireTerminalLabel(contact: ConnectorContact | undefined, illustratedEnd: WireBlankEnd, side: "from" | "to"): string {
+  const value = compactWireEnd(contact, illustratedEnd, side);
+  return `${side === "from" ? "Н" : "К"}: ${value}`;
 }
 
 export function wireSemiFinishedProperties(document: HarnessDesignDocument, wireId: string, ends?: Readonly<{ from: WireBlankEnd; to: WireBlankEnd }>): WireSemiFinishedProperties | null {

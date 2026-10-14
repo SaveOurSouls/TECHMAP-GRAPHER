@@ -1,5 +1,6 @@
 import { calculateWireCutLength, type ConnectorContact, type HarnessDesignDocument, type WireEndStripProfiles, type WireEndpoint } from "../editor/model";
 import { coveringMeasuredLength } from "../editor/physical-coverings";
+import { formatWireMaterial, formatStoredWireSection, type WireColorIndicator, formatWireColorIndicator } from "./wire-display-formatters";
 
 export interface RouteSourceRef {
   readonly kind: "wire" | "cable" | "covering" | "connector";
@@ -12,10 +13,12 @@ export interface RouteSourceItem {
   /** Manufacturing cut length in millimetres; never a canvas distance. */
   readonly lengthMm: number | null;
   readonly color: string | null;
+  readonly secondaryColor?: string | null;
   readonly material: string;
   /** Source catalogue article/key for the material, when it is pinned. */
   readonly materialArticle: string;
   readonly section: string;
+  readonly sectionUnit?: "awg" | "mm2";
   readonly terminalFrom: string;
   readonly terminalTo: string;
   readonly stripProfiles?: WireEndStripProfiles;
@@ -41,9 +44,12 @@ export function buildRouteSourceItems(document: HarnessDesignDocument): RouteSou
       title: `${endTitle(wire.from)} → ${endTitle(wire.to)}${wire.circuit.trim() ? ` · ${wire.circuit.trim()}` : ""}`,
       lengthMm: calculateWireCutLength(wire).cutLengthMm,
       color: colorContact?.color.trim() || wire.color.trim() || null,
+      secondaryColor: colorContact?.secondaryColor?.trim() || null,
       material: wire.materialBinding?.displayName || from?.wire.trim() || to?.wire.trim() || "",
       materialArticle: wire.materialBinding?.sourceKey || "",
       section: from?.wireSection?.trim() || to?.wireSection?.trim() || "",
+      ...(wire.materialBinding?.sectionUnit || wire.materialBinding?.sourceId === "technology-wires"
+        ? { sectionUnit: wire.materialBinding.sectionUnit ?? "awg" as const } : {}),
       terminalFrom: from?.terminalArticle ?? "", terminalTo: to?.terminalArticle ?? "",
       ...(wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       ...(cableId ? { cableId } : {}),
@@ -77,4 +83,13 @@ export function routeSourceDesignation(item: RouteSourceItem): string {
   const sectionLabel = section && !normalize(material).includes(normalize(section))
     ? `сечение ${/^\d+(?:[.,]\d+)?$/.test(section) ? `${section} мм²` : section}` : "";
   return [materialLabel || "Материал не назначен", sectionLabel, item.color ? `цвет ${item.color}` : ""].filter(Boolean).join(" · ");
+}
+
+export function routeSourceWireMaterial(item: RouteSourceItem): string {
+  const section = formatStoredWireSection(item.section, `${item.material} ${item.materialArticle}`, item.sectionUnit);
+  return formatWireMaterial(item.material, section, item.color ?? "");
+}
+
+export function routeSourceWireColor(item: RouteSourceItem): WireColorIndicator {
+  return formatWireColorIndicator(item.color ?? "", item.secondaryColor ?? "");
 }

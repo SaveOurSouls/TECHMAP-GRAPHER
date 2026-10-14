@@ -2,9 +2,9 @@ import { WireBlankPreview } from "../WireBlankCatalogEditor";
 import { type WireBlank, type WireBlankEnd } from "../WireBlankCatalog";
 import { resolveWireColorHex } from "../editor/wire-reference-catalog";
 import type { HarnessDesignDocument } from "../editor/model";
-import { buildRouteSourceItems, type RouteSourceItem } from "../manufacturing/route-source";
+import { buildRouteSourceItems, routeSourceWireColor, type RouteSourceItem } from "../manufacturing/route-source";
 import { automaticWireEnd, compactWireEnd, displayWireSection, wireMarkWithoutSection, wireSemiFinishedProperties } from "../manufacturing/cut-list-properties";
-import { formatWireMaterial, formatWireName, formatWireTerminalPair } from "../manufacturing/wire-display-formatters";
+import { formatWireMaterial, formatWireName } from "../manufacturing/wire-display-formatters";
 import type { RouteV3WireArtworkOverride } from "./route-v3-model";
 
 /** E4 owns source material and end preparation. A V3 override is intentionally
@@ -33,11 +33,12 @@ export function routeV3WireMaterial(document: HarnessDesignDocument, wireId: str
 export function RouteV3WireArtworkPreview({ document, item, override }: { readonly document: HarnessDesignDocument; readonly item: RouteSourceItem; readonly override?: RouteV3WireArtworkOverride }) {
   const artwork = routeV3WireArtwork(document, item.ref.id, override);
   if (!artwork) return null;
+  const color = routeSourceWireColor(item);
   const row: WireBlank = { id: artwork.wireId, index: artwork.wireId, title: artwork.name, color: artwork.color, start: artwork.start, end: artwork.end, templateId: "01-cut", photoDataUrl: null, originalPayload: {} };
   return <span className="route-v3-wire-artwork" data-wire-artwork={artwork.automatic ? "e4" : "manual"}>
     <WireBlankPreview row={row} />
     <small className="route-v3-wire-artwork__name">{artwork.name}</small>
-    <small className="route-v3-wire-artwork__details">{artwork.mark} · {artwork.section} · <i style={{ backgroundColor: artwork.color }} aria-hidden="true" />{artwork.colorLabel}</small>
-    <small className="route-v3-wire-artwork__ends">{formatWireTerminalPair(artwork.terminalFrom, artwork.terminalTo)}</small>
+    <small className="route-v3-wire-artwork__details">{artwork.mark} · {artwork.section} · <i className="route-v3-color-swatch" style={{ background: color.background }} aria-hidden="true" />{artwork.colorLabel}</small>
+    <small className="route-v3-wire-artwork__ends"><span>Н: {artwork.terminalFrom || "Без разделки"}</span><span>К: {artwork.terminalTo || "Без разделки"}</span></small>
   </span>;
 }

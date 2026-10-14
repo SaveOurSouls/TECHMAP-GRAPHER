@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign, normalizeCableInstance, type HarnessDesignDocument, type WireMaterialBinding, type WireStripProfileBinding } from "../editor/model";
-import { buildRouteSourceItems, routeSourceDesignation } from "./route-source";
+import { buildRouteSourceItems, routeSourceDesignation, routeSourceWireColor, routeSourceWireMaterial } from "./route-source";
 
 const material: WireMaterialBinding = { sourceId: "wires", snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: "a".repeat(64), recordId: "b".repeat(64), entityType: "wire", sourceKey: "MGT-0.35", displayName: "МГТФ 0,35" };
 const stripping: WireStripProfileBinding = { ...material, entityType: "coax-termination", sourceKey: "strip-1", displayName: "Разделка 1", layers: [{ index: 1, diameterMm: 0.6, stripLengthMm: 5.125 }] };
@@ -75,5 +75,11 @@ describe("manufacturing route source", () => {
     expect(routeSourceDesignation(items[0]!)).toContain("МГТФ 0,35 · арт. MGT-0.35");
     expect(routeSourceDesignation({ ...items[0]!, material: "UL1061 28AWG", materialArticle: "UL1061", section: "28AWG" })).toContain("арт. UL1061");
     expect(routeSourceDesignation({ ...items[0]!, material: "Кабель 3Cx0,5 | 2Px0,22", materialArticle: "CAB-1", section: "3Cx0,5 | 2Px0,22" })).not.toContain("мм²");
+  });
+
+  it("keeps the source color pair and formats wire material without repeating the article", () => {
+    const item = { ...buildRouteSourceItems(fixture())[0]!, material: "UL1007 · 28AWG", materialArticle: "UL1007", section: "28AWG", color: "красный", secondaryColor: "черный" };
+    expect(routeSourceWireMaterial(item)).toBe("UL1007 · 28AWG · красный");
+    expect(routeSourceWireColor(item)).toMatchObject({ primary: "#D32F2F", secondary: "#202124" });
   });
 });
