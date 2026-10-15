@@ -7,7 +7,7 @@
 - **ZIP:** `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`.
 - **Size / SHA-256:** `64 412 661 / BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
 - **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
-- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Чат 111 accepted владельцем 16.10.2026; acceptance 112–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
+- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Чаты 111 и 113 accepted владельцем 16.10.2026; acceptance 112, 114–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
 
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
@@ -34,7 +34,7 @@ REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md)
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): код `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` опубликованы и проверены как предки integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; `git show --check` PASS. Совместный клиент после отката 111: Vitest 215/2277, TypeScript/Vite PASS. Ready-for-review; исправление после M5-22-052 включено в M5-22-053. Исходный жгут и packaged UI не проверены.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный code/handoff `39333794958043e20a95ce7b2a116b8076f324f7` / `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): code `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` интегрированы и подтверждены ancestry в M5-22-053. Общий Vitest 218/2319, TypeScript/Vite PASS. Владелец принял чат 16.10.2026; исходный жгут и packaged UI не проверены. Совместная browser/scene-проверка с карточкой 114 остаётся открытой.
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 

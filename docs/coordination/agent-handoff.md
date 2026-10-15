@@ -37,7 +37,7 @@ Follow-up C1–C4: ready-for-review, база `96829c0`, регистрация 
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, REQ-148, ready-for-review. Code `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы и интегрированы merge `70a41ab` в integration HEAD `0811aff`. PASS: worker Vitest 212/2246, 23 новых регрессии; совместный интеграционный Vitest 215/2279, TypeScript/Vite. Подробный [handoff 113](handoff-113-p1-termination-graphic-scale.md) и [acceptance-протокол](../p1-termination-113-acceptance.md). Совместный scene/browser сценарий 113/114, исходный жгут и packaged UI не проверены; ZIP не заказан, приёмка владельца открыта.
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, REQ-148, принят владельцем 16.10.2026. Первичный code/handoff интегрированы в M5-22-052; follow-up code `18dee2b93a220064f99b87c587d4777c307ae3c7` и handoff `db7c57975a1bd4b5d055add094798725a9569370` включены в M5-22-053. PASS: worker Vitest 212/2246, 23 первичных регрессии; 215/2281 для follow-up уплотнителя; integration Vitest 218/2319, TypeScript/Vite. Подробный [handoff 113](handoff-113-p1-termination-graphic-scale.md) и [acceptance-протокол](../p1-termination-113-acceptance.md). Исходный жгут и packaged UI не проверены; совместный scene/browser сценарий 113/114 остаётся открытым.
 
 ## 116 — наконечники в полуфабрикатах проводов Route V3, 16.10.2026
 
