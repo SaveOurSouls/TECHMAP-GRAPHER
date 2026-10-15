@@ -150,7 +150,11 @@ export function prunePhysicalTopology(document: HarnessDesignDocument): HarnessD
   const t = document.physicalTopology;
   if (!t) return document;
   const nodes = t.nodes.filter(n => !n.connectorId || document.connectors.some(c => c.id === n.connectorId)).map(n=>n.wireIds?{...n,wireIds:n.wireIds.filter(id=>document.wires.some(w=>w.id===id&&(w.from.connectorId===n.connectorId||w.to.connectorId===n.connectorId)))}:n);
-  const segments = t.segments.filter(s => nodes.some(n => n.id === s.from) && nodes.some(n => n.id === s.to));
+  const segments = t.segments.filter(s => nodes.some(n => n.id === s.from) && nodes.some(n => n.id === s.to)).map(s=>{
+    if(!s.excludedWireIds)return s;
+    const excludedWireIds=s.excludedWireIds.filter(id=>document.wires.some(w=>w.id===id));
+    return excludedWireIds.length===s.excludedWireIds.length?s:{...s,excludedWireIds};
+  });
   const routes = t.routes.filter(r => {
     const wire = document.wires.find(w => w.id === r.wireId);
     if (!wire || !r.steps.every(step => segments.some(s => s.id === step.segmentId))) return false;

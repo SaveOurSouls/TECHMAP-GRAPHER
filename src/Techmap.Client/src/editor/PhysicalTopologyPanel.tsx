@@ -6,6 +6,7 @@ import { routePhysicalWires } from "./physical-wire-routing";
 import { emptyPhysicalTopology, type PhysicalDirection, type PhysicalStep, type PhysicalTopology } from "./physical-topology-model";
 import { physicalSegmentPoints } from "./physical-geometry";
 import { splitPhysicalSegment, removePhysicalSegment } from "./physical-topology";
+import { PipeWireMembershipPanel } from './PipeWireMembershipPanel';
 
 export function PhysicalTopologyPanel({ document, selectedIds, selectedId, onChange, onSelect, mode }: {
   mode?:"object"|"actions";
@@ -30,6 +31,7 @@ export function PhysicalTopologyPanel({ document, selectedIds, selectedId, onCha
   return <section className="he-relations" aria-label="Физические ветви">
     {mode!=="object"&&<><header className="ui-section-heading"><strong>Ветви · {t.segments.length}</strong><InfoHint>Выберите соединитель и добавьте общий выход, либо создайте свободный узел. Соедините узлы участками. Выделите два узла с Ctrl и выберите «Пайп» правой кнопкой по узлу. Новый пайп строится с прямыми выходами и приоритетом 45°. Направление выхода и контактов задаётся в свойствах узла и поворачивается вместе с рисунком разъёма. Перегибы видны сразу. Нажмите полупрозрачную точку в середине участка, чтобы добавить перегиб. При первом переносе видимая форма закрепляется. Обычное перетаскивание переносит соседние плечи, Shift меняет только ближайшие участки. Привязки 0/45/90° показаны линиями, режим 15° можно отключить. Выпрямленный перегиб в обычном режиме исчезает. Shift + клик по пайпу показывает его провода. «Разветвить» закрепляет существующий перегиб как узел. «Распределить по Э4» находит кратчайшие пути по созданным каналам. Вручную назначенные маршруты остаются закреплены. Для второго выхода выберите разъём и «Ещё выход». В свойствах выхода можно указать его провода. Правый клик по каналу создаёт Т-ответвление; свободный конец достраивается до нужного выхода. Общий выход не соединяет контакты электрически. Координаты не меняют физическую длину.</InfoHint></header>
     <div className="he-relations-actions"><button className="ui-control" type="button" onClick={()=>addNode()}>Узел / выход</button><button className="ui-control" type="button" disabled={!document.connectors.some(c=>selectedIds.includes(c.id))} onClick={()=>addNode(true)}>Ещё выход +</button><button className="ui-control" type="button" onClick={()=>onChange(routePhysicalWires(document,t))}>Распределить по Э4</button></div>
+    <PipeWireMembershipPanel document={document} selectedIds={selectedIds} onChange={onChange} onSelect={onSelect}/>
     </>}
     {!mode&&<><details><summary>Создать пайп по списку узлов</summary><div className="he-physical-fields he-pipe-create"><select aria-label="Начало участка" value={from} onChange={e => setFrom(e.target.value)}><option value="">От узла</option>{t.nodes.map(n => <option key={n.id} value={n.id}>{label(n.id)}</option>)}</select>
       <select aria-label="Конец участка" value={to} onChange={e => setTo(e.target.value)}><option value="">До узла</option>{t.nodes.map(n => <option key={n.id} value={n.id}>{label(n.id)}</option>)}</select>

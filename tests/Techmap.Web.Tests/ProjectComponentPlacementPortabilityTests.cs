@@ -86,6 +86,34 @@ public sealed class ProjectComponentPlacementPortabilityTests
     }
 
     [Fact]
+    public void Component_remap_preserves_segment_wire_exclusions_when_wire_ids_are_stable()
+    {
+        var sourceId = Guid.NewGuid();
+        var destinationId = Guid.NewGuid();
+        var sourceText = sourceId.ToString("D");
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[{"id":"SOURCEID","contacts":[{"id":"SOURCEID:contact:c1"}]}],
+             "wires":[{"id":"W1","from":{"connectorId":"SOURCEID","contactId":"SOURCEID:contact:c1"},"to":{}}],
+             "cables":[],"terminations":{},
+             "physicalTopology":{"snap":true,"nodes":[{"id":"N1","connectorId":"SOURCEID","position":{"x":0,"y":0}},
+               {"id":"N2","position":{"x":100,"y":0}}],
+              "segments":[{"id":"S","from":"N1","to":"N2","bends":[],"excludedWireIds":["W1"],"futureSegmentMetadata":{"keep":true}}],"routes":[]}}
+            """)!;
+        content["connectors"]![0]!["id"] = sourceText;
+        content["connectors"]![0]!["contacts"]![0]!["id"] = sourceText + ":contact:c1";
+        content["wires"]![0]!["from"]!["connectorId"] = sourceText;
+        content["wires"]![0]!["from"]!["contactId"] = sourceText + ":contact:c1";
+        content["physicalTopology"]!["nodes"]![0]!["connectorId"] = sourceText;
+
+        var remapped = ProjectComponentPlacementRemapper.RemapHarnessDesign(content.ToJsonString(),
+            new Dictionary<Guid, Guid> { [sourceId] = destinationId });
+        var copy = JsonNode.Parse(remapped.DesignJson)!;
+        Assert.Equal("W1", copy["physicalTopology"]!["segments"]![0]!["excludedWireIds"]![0]!.GetValue<string>());
+        Assert.True(JsonNode.DeepEquals(content["physicalTopology"]!["segments"]![0]!["futureSegmentMetadata"],
+            copy["physicalTopology"]!["segments"]![0]!["futureSegmentMetadata"]));
+    }
+
+    [Fact]
     public void Copy_ignores_commanded_placement_removed_from_live_design_and_its_snapshot()
     {
         using var fixture = Fixture.Create();

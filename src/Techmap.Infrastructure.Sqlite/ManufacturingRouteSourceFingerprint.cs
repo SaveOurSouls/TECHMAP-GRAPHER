@@ -47,7 +47,7 @@ internal static class ManufacturingRouteSourceFingerprint
             result["physicalTopology"] = new JsonObject
             {
                 ["nodes"] = Collection(topology, "nodes", item => Pick(item, "id", "position", "connectorId", "wireIds")),
-                ["segments"] = Collection(topology, "segments", item => Pick(item, "id", "from", "to", "path", "bends", "routing", "specificationItemId")),
+                ["segments"] = Collection(topology, "segments", SegmentSource),
                 ["routes"] = Collection(topology, "routes", item => Pick(item, "wireId", "steps"), "wireId"),
                 ["coverings"] = Collection(topology, "coverings", item => Pick(item, "id", "name", "kind", "color", "lengthMode", "lengthMm", "material", "spans", "bundle")),
             };
@@ -81,6 +81,17 @@ internal static class ManufacturingRouteSourceFingerprint
                 if (operation is JsonObject valueOperation && valueOperation["dependsOn"] is JsonArray dependencies)
                     valueOperation["dependsOn"] = new JsonArray(dependencies.Select(item => item?.GetValue<string>() ?? "").OrderBy(item => item, StringComparer.Ordinal).Select(item => (JsonNode?)JsonValue.Create(item)).ToArray());
         return document;
+    }
+
+    private static JsonNode SegmentSource(JsonElement item)
+    {
+        var result = Pick(item, "id", "from", "to", "path", "bends", "routing", "specificationItemId");
+        if (item.TryGetProperty("excludedWireIds", out var exclusions) && exclusions.ValueKind == JsonValueKind.Array && exclusions.GetArrayLength() > 0)
+            result["excludedWireIds"] = new JsonArray(exclusions.EnumerateArray()
+                .Select(value => value.GetString() ?? "")
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .Select(value => (JsonNode?)JsonValue.Create(value)).ToArray());
+        return result;
     }
 
     private static JsonObject Pick(JsonElement owner, params string[] keys)

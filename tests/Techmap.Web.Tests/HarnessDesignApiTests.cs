@@ -263,6 +263,36 @@ public sealed class HarnessDesignApiTests
         Assert.True(JsonElement.DeepEquals(original,saved.Content));
     }
 
+    [Fact]
+    public async Task Physical_segment_exclusions_round_trip_and_reject_route_reuse()
+    {
+        await using var factory = new TechmapWebApplicationFactory();
+        using var client = factory.CreateLocalClient();
+        var csrf = await StartSessionAsync(client);
+        var ids = await CreateHarnessAsync(client, csrf);
+        var content = JsonNode.Parse("""
+            {"schemaVersion":1,"connectors":[],"wires":[{"id":"W1"},{"id":"W2"}],
+             "physicalTopology":{"snap":true,"nodes":[{"id":"A","position":{"x":0,"y":0}},
+               {"id":"B","position":{"x":100,"y":0}}],
+              "segments":[{"id":"S","from":"A","to":"B","path":{"kind":"polyline","points":[]},
+                "excludedWireIds":["W2"],"futureSegmentMetadata":{"preserve":true}}],
+              "routes":[{"wireId":"W1","steps":[{"segmentId":"S","reverse":false}]}]}}
+            """)!;
+        var original = JsonSerializer.SerializeToElement(content);
+        using var accepted = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId), new PutHarnessDesignRequest(0, 1, original), csrf);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        Assert.True(JsonElement.DeepEquals(original, saved!.Content));
+
+        content["physicalTopology"]!["segments"]![0]!["excludedWireIds"] = new JsonArray("W1");
+        using var rejected = await SendAsync(client, HttpMethod.Put, Route(ids.ProjectId, ids.HarnessId),
+            new PutHarnessDesignRequest(1, 1, JsonSerializer.SerializeToElement(content)), csrf);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        saved = await client.GetFromJsonAsync<HarnessDesignResponse>(Route(ids.ProjectId, ids.HarnessId), TestContext.Current.CancellationToken);
+        Assert.Equal(1, saved!.Revision);
+        Assert.True(JsonElement.DeepEquals(original, saved.Content));
+    }
+
     [Theory]
     [InlineData("null")]
     [InlineData("[{\"drawingId\":\"a\",\"visible\":true,\"offset\":{\"x\":\"bad\",\"y\":0}}]")]

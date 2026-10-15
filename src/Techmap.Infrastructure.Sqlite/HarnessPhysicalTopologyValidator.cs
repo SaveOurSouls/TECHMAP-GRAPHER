@@ -74,6 +74,7 @@ internal static class HarnessPhysicalTopologyValidator
             nodes.Add(id, connector);
         }
         var segments = new Dictionary<string, (string From, string To)>(StringComparer.Ordinal);
+        var segmentExclusions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var segment in Array(t, "segments", 20000).EnumerateArray())
         {
             var id = Text(segment, "id"); var from = Text(segment, "from"); var to = Text(segment, "to");
@@ -85,6 +86,15 @@ internal static class HarnessPhysicalTopologyValidator
             if(segment.TryGetProperty("mode",out _) && Text(segment,"mode") is not ("flat" or "round"))throw Invalid();
             if(segment.TryGetProperty("showWires",out _))_=Boolean(segment,"showWires");
             if(segment.TryGetProperty("specificationItemId",out _))_=Text(segment,"specificationItemId");
+            if (segment.TryGetProperty("excludedWireIds", out var exclusions))
+            {
+                if (exclusions.ValueKind != JsonValueKind.Array || exclusions.GetArrayLength() > 20000) throw Invalid();
+                var excluded = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var item in exclusions.EnumerateArray())
+                    if (item.ValueKind != JsonValueKind.String || item.GetString() is not { Length: > 0 and <= 128 } wireId ||
+                        string.IsNullOrWhiteSpace(wireId) || !wires.ContainsKey(wireId) || !excluded.Add(wireId)) throw Invalid();
+                segmentExclusions.Add(id, excluded);
+            }
             segments.Add(id, (from, to));
         }
         var joiningPipes=HarnessJoiningPipeValidator.Validate(t,segments,ids);
@@ -141,6 +151,7 @@ internal static class HarnessPhysicalTopologyValidator
             {
                 var segmentId = Text(step, "segmentId");
                 if (!segments.TryGetValue(segmentId, out var segment) || !visited.Add(segmentId)) throw Invalid();
+                if (segmentExclusions.TryGetValue(segmentId, out var excluded) && excluded.Contains(wireId)) throw Invalid();
                 var reverse = Boolean(step, "reverse");
                 var from = reverse ? segment.To : segment.From; var to = reverse ? segment.From : segment.To;
                 if (previous is not null && from != previous) throw Invalid();

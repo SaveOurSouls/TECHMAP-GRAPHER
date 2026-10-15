@@ -1,0 +1,7 @@
+.he-pipe-membership { display:grid; gap:7px; min-width:0; padding:9px 0; border-top:1px solid #d7e1e7; }
+.he-pipe-membership label { display:flex; align-items:center; gap:7px; min-width:0; }
+.he-pipe-membership select { width:100%; min-width:0; max-width:100%; font:inherit; padding:5px; border:1px solid #b8cbd7; border-radius:4px; background:#fff; }
+.he-pipe-membership-add { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; }
+.he-pipe-membership-list { display:grid; gap:6px; max-height:200px; overflow:auto; padding:5px 0; }
+.he-pipe-membership-list span { overflow-wrap:anywhere; }
+.he-pipe-membership p[role=alert] { margin:0; color:#9b2835; font-size:12px; }

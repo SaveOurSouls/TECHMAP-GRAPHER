@@ -30,6 +30,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
 
   for (const s of t.segments) {
     if (!s) return fail(); unique(s.id);
+    if(s.excludedWireIds!==undefined&&(!Array.isArray(s.excludedWireIds)||s.excludedWireIds.length>20000||new Set(s.excludedWireIds).size!==s.excludedWireIds.length||s.excludedWireIds.some(id=>!text(id)||!document.wires.some(w=>w.id===id))))return fail();
     if(s.mode!==undefined&&s.mode!=="flat"&&s.mode!=="round"||s.width!==undefined&&(!Number.isFinite(s.width)||s.width<0||s.width>1e7)||s.color!==undefined&&!/^#[0-9a-f]{6}$/i.test(s.color)||s.opacity!==undefined&&(!Number.isFinite(s.opacity)||s.opacity<0||s.opacity>1)||s.showWires!==undefined&&typeof s.showWires!=="boolean"||s.volumeShading!==undefined&&typeof s.volumeShading!=="boolean"||s.specificationItemId!==undefined&&!text(s.specificationItemId))return fail();
     if (s.from === s.to || !t.nodes.some(n => n.id === s.from) || !t.nodes.some(n => n.id === s.to)) return fail();
   }
@@ -42,7 +43,7 @@ export function parsePhysicalTopology(value: unknown, document: HarnessDesignDoc
     const visited = new Set<string>();
     for (const step of r.steps) {
       const s = t.segments.find(s => s.id === step?.segmentId);
-      if (!s || typeof step.reverse !== "boolean" || visited.has(s.id)) return fail();
+      if (!s || typeof step.reverse !== "boolean" || visited.has(s.id) || s.excludedWireIds?.includes(r.wireId)) return fail();
       visited.add(s.id);
       const from = step.reverse ? s.to : s.from, to = step.reverse ? s.from : s.to;
       if (previous && previous !== from) return fail();

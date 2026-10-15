@@ -114,6 +114,25 @@ public sealed class ManufacturingRouteValidatorTests
         Assert.NotEqual(original, Hash(graph));
     }
 
+    [Fact]
+    public void Fingerprint_tracks_segment_wire_exclusions_as_an_unordered_set()
+    {
+        using var first = JsonDocument.Parse("""
+            {"connectors":[],"wires":[{"id":"W1"},{"id":"W2"}],"physicalTopology":{
+              "nodes":[],"segments":[{"id":"S","from":"A","to":"B","excludedWireIds":["W1","W2"]}],"routes":[]}}
+            """);
+        using var reordered = JsonDocument.Parse("""
+            {"connectors":[],"wires":[{"id":"W1"},{"id":"W2"}],"physicalTopology":{
+              "nodes":[],"segments":[{"id":"S","from":"A","to":"B","excludedWireIds":["W2","W1"]}],"routes":[]}}
+            """);
+        using var changed = JsonDocument.Parse("""
+            {"connectors":[],"wires":[{"id":"W1"},{"id":"W2"}],"physicalTopology":{
+              "nodes":[],"segments":[{"id":"S","from":"A","to":"B","excludedWireIds":["W1"]}],"routes":[]}}
+            """);
+        Assert.Equal(ManufacturingRouteSourceFingerprint.Compute(first.RootElement, 1), ManufacturingRouteSourceFingerprint.Compute(reordered.RootElement, 1));
+        Assert.NotEqual(ManufacturingRouteSourceFingerprint.Compute(first.RootElement, 1), ManufacturingRouteSourceFingerprint.Compute(changed.RootElement, 1));
+    }
+
     [Theory]
     [InlineData("missing-dependency")]
     [InlineData("duplicate-dependency")]
