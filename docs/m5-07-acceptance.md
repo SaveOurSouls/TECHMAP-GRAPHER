@@ -676,3 +676,27 @@ ZIP: `artifacts/m5-22-045/TECHMAP-GRAPHER-0.63.45-m5-22-review-win-x64.zip`.
 из исходного кириллического пути не проверен и ранее давал
 `UnauthorizedAccessException` при ACL. ZIP вне Git, owner acceptance открыта.
 
+# Пакет 15.10.2026 — M5-22-046 / карточки 100–103
+
+Кодовый HEAD: `8417e0a64f7bb86f417a4765526cc9be52789059`.
+Версия: `0.63.46-m5-22-review`. Code/handoff карточек 100–103
+подтверждены как предки этого HEAD в `docs/coordination/release-coverage.md`.
+Дизайн-only карточка 099 не меняет runtime и исключена из состава ZIP.
+
+ZIP: `artifacts/m5-22-046/TECHMAP-GRAPHER-0.63.46-m5-22-review-win-x64.zip`.
+Размер: **64 029 194 байта**. SHA-256:
+`99292AD3A906F9D0004C2B1FF4DDE0F4700B05D3469775651082402396E30D9F`.
+
+Штатный `scripts/build-package.ps1` — PASS: 196 клиентских файлов / 1880
+тестов, TypeScript, Vite production build, полный .NET-набор 1118/1118,
+отдельный performance-тест 1/1 и self-contained win-x64 publish.
+`verify-package.ps1` — PASS: 339 записей манифеста / 340 файлов.
+`test-portable-package.ps1` — PASS, 7/7 из `C:\Temp\TECHMAP-m5-22-046`;
+внутри проверен путь с кириллицей и пробелами.
+
+Ограничения: исходный жгут и packaged UI вручную не проверены; прямой запуск
+из исходного кириллического каталога не проверялся и ранее давал
+`UnauthorizedAccessException` при ACL. Чужая незакоммиченная перестановка
+блока дизайна 099 в `status.md` не вошла в ZIP и этот документальный коммит.
+ZIP вне Git, owner acceptance остаётся отдельным этапом.
+

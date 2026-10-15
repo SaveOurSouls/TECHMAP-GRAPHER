@@ -209,3 +209,13 @@ represent missing completed chat handoffs.
 | 102 — Вид проводов в строке ПФ | `/root` | code `30688f622129bd3114e44968aa86f03641442190`; handoff — документальный срез 102 | REQ-138; ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending |
 
 | 103 — Прямые колонки вида и рисунок ПФ | /root | code ca6cebaa72e0c723d8736c08fc77fad4bf92923a; handoff — документальный срез 103 | REQ-139; ancestor integration HEAD; 196/1880, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
+
+### m5-22-046 — 15.10.2026
+
+- **Integration branch:** `codex/integration-m5-22`
+- **Code HEAD:** `8417e0a64f7bb86f417a4765526cc9be52789059`
+- **Coverage:** 100–103 included (ancestor); 099 design-only excluded; pending/unknown `0`
+- **ZIP:** `artifacts/m5-22-046/TECHMAP-GRAPHER-0.63.46-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 029 194 / 99292AD3A906F9D0004C2B1FF4DDE0F4700B05D3469775651082402396E30D9F`
+- **Manifest / portable:** `PASS; 339/340; 7/7`
+- **Gate:** `PASS` для Git и package; ручная и owner acceptance открыты
