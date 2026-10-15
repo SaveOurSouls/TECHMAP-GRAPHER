@@ -1,10 +1,10 @@
 # 116. Учесть наконечники в Маршруте V3
 
-- **Статус:** registered
+- **Статус:** in-progress
 - **Владелец / чат:** `01a1414d-f512-79f3-8f80-2823d4a9af50`
 - **Источник запроса:** прямой запрос владельца от 15.10.2026.
 - **Требования:** REQ-151; наконечник относится к полуфабрикату провода на конце, гильза остаётся отдельной операцией.
-- **Ветка / рабочая копия:** `codex/route-v3-wire-terminals`, `tmp/route-v3-wire-terminals`; база — integration HEAD `34aa388` до регистрации.
+- **Ветка / рабочая копия:** `codex/route-v3-wire-terminals`, `tmp/route-v3-wire-terminals`; фактическая база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`, регистрация в рабочей ветке `e86e071`.
 - **Владелец файлов:** `src/Techmap.Client/src/manufacturing-v3/route-v3-model.ts`, `route-v3-operations.ts`, `route-v3-operation-products.ts` и профильные тесты `route-v3-model.test.ts`, `route-v3-operations.test.ts`, `route-v3-operation-products.test.ts`, `route-v3-termination.test.ts`. Дополнительные файлы согласовать с координатором до изменения.
 - **Общие документы:** требования/задача — общий проектный источник; регистрацию чата, status, registry, release coverage и интеграционный журнал ведёт координатор.
 - **Release coverage:** следующий кодовый срез после M5-22-052; новый ZIP не заказывался.

@@ -17,7 +17,7 @@
 
 ## 116 — наконечники в Маршруте V3, 15.10.2026
 
-Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, карточка [116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; статус registered. Планируемая ветка `codex/route-v3-wire-terminals`, отдельный worktree `tmp/route-v3-wire-terminals`, база `34aa388933bcd7895538dbe7c4d41dda2ccdbfa3` (integration HEAD до регистрации). Владелец: `src/Techmap.Client/src/manufacturing-v3/route-v3-model.ts`, `route-v3-operations.ts`, `route-v3-operation-products.ts` и профильные тесты `route-v3-model.test.ts`, `route-v3-operations.test.ts`, `route-v3-operation-products.test.ts`, `route-v3-termination.test.ts`; собственные task/acceptance/handoff. Координатор владеет общими coordination docs. Наконечник учитывается в ПФ провода только на назначенном конце; гильза — отдельная операция. ZIP не заказывался; coverage следующего среза после M5-22-052.
+Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, карточка [116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; статус in-progress. Ветка `codex/route-v3-wire-terminals`, отдельный worktree `tmp/route-v3-wire-terminals`, фактическая база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`; регистрация в рабочей ветке — `e86e071`. Владелец — чат: V3-проекция/модель/refresh/рисунок концов и тесты внутри `src/Techmap.Client/src/manufacturing-v3/`, отдельный handoff. Координатор ведёт общие coordination docs. Наконечник учитывается в ПФ провода только на назначенном конце; гильза — отдельная операция. ZIP не заказывался; coverage следующего среза после M5-22-052.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
