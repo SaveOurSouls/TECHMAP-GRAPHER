@@ -377,7 +377,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Плоский Г-контур; сплошная заливка без объёмного торца",
+      "note": "Компактный профиль C1; полупрозрачная оболочка и плоский металл",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -898,6 +898,47 @@
     "openCrimp": "uniform head scale .7, head right edge x90 and top y1.384; compact curled wings; window x69..84/y30..45 directly beneath head, above second wing pair",
     "pressed": "identical head placement for smooth/ribbed, uniform head scale .88; head underside y37 meets tube top y37; tube/head right edge x90; head top y1.0256; no side bridge",
     "insulated": "flat orthographic L silhouette; solid fill, no gradients/opacity/face/loop curls; coplanar metal outline",
-    "ports": "existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged"
+    "ports": "existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged",
+    "insulatedStatus": "historical solid fill and long silhouette superseded by insulatedFlagRevision; bare profiles remain current"
+  },
+  "insulatedFlagRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png",
+    "sourceProfile": {
+      "bounds": [
+        15,
+        25,
+        476,
+        436
+      ],
+      "mainBody": [
+        33,
+        170,
+        476,
+        436
+      ],
+      "shortInput": [
+        15,
+        25,
+        180,
+        180
+      ],
+      "sourceInputCenter": [
+        97.5,
+        25
+      ]
+    },
+    "sourceToLocalMatrix": [
+      0,
+      -0.12,
+      0.12,
+      0,
+      29,
+      61.7
+    ],
+    "scale": 0.12,
+    "drawing": "flat 2D internal backing, window and two longitudinal spring edges below real fill-opacity .61 polymer; no face plate, arcs, perspective or gradients",
+    "e4": "monochrome silhouette only",
+    "port": "one unchanged anchor32,50, normal[-1,0], pivot32,50; top-entry sheet is rotation of same symbol"
   }
 }

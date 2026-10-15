@@ -17,7 +17,7 @@ ITEMS=[
  ('socket-round','Socket · круглая розетка','terminal','socket','проектные поля L / d','Боковой вид с гнездом; сочленение не порт'),
  ('flat-male','Flat male · плоский штырь','terminal','male','проектные поля L / W / t','Плоская контактная лопатка'),
  ('flat-female','Flat female · плоская розетка','terminal','female','проектные поля L / W / t','Сложенный пружинный контакт с гнездом'),
- ('flag','Флажковый · цельная изоляция','terminal','flag','проектные поля L / W / t','Плоский Г-контур; сплошная заливка без объёмного торца'),
+ ('flag','Флажковый · цельная изоляция','terminal','flag','проектные поля L / W / t','Компактный профиль C1; полупрозрачная оболочка и плоский металл'),
  ('flag-bare-open','Неизолированный обжимной флажок','terminal','flag-bare-open','проектные поля L / W / t','Компактные крылья; головка над основанием, окно под ней'),
  ('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','terminal','flag-bare-pressed-smooth','проектные поля L / W / t','Два диаметра; трубка проходит под головкой до её края'),
  ('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','terminal','flag-bare-pressed-ribbed','проектные поля L / W / t','Один диаметр, рёбра; трубка под головкой до её края'),
@@ -70,12 +70,24 @@ def flag_body(family,mono,cuff):
  metal='#fff' if mono else 'url(#metal)'
  s=[]; details=[]
  if family=='flag':
-  # Flat one-piece L silhouette. No receiving-face plane, coils, gradient or opacity.
-  solid={'red':'#d66b6d','blue':'#78b7da','yellow':'#e4cc76'}
-  outer='M32 39 Q32 36 38 36 H97 Q105 36 105 28 V12 Q105 6 111 6 H156 Q162 6 162 12 V62 Q162 68 156 68 H38 Q32 68 32 62 Z'
-  s.append(path(outer,'#fff' if mono else solid[cuff]))
-  # Metal remains a thin, coplanar outline inside the insulated silhouette.
-  s.append(path('M40 44 H114 V14 H152 V60 H40 Z',extra='stroke="#657987" stroke-width=".55"'))
+  # C1 f8726991: preserve the photo profile in source coordinates, then rotate -90°.
+  # x'=32+.12*(source_y-25); y'=50-.12*(source_x-97.5). Isotropic scale .12.
+  color={'red':'#d86b70','blue':'#55a8d5','yellow':'#dbc257'}[cuff]
+  outer='M19 25 H176 Q180 25 180 29 V170 H470 Q476 170 476 176 V430 Q476 436 470 436 H39 Q33 436 33 430 V182 L20 172 Q15 168 15 162 V29 Q15 25 19 25 Z'
+  s.append('<g transform="matrix(0,-.12,.12,0,29,61.7)">')
+  if not mono:
+   # All internal parts stay in the photo plane; no receiving-face projection or coils.
+   # The broad backing and its window sit beneath the actual translucent polymer fill.
+   s.append(path('M62 198 H433 V411 H62 Z M139 244 H205 V369 H139 Z','#a8b4bc',extra='fill-rule="evenodd" fill-opacity=".34" stroke="#6b7e8b" stroke-opacity=".32" stroke-width="3"'))
+   s.append(path('M281 211 H431 V401 H281 V360 H303 V252 H281 Z','#8597a4',extra='fill-opacity=".35" stroke="#617687" stroke-opacity=".38" stroke-width="3"'))
+   # Two longitudinal spring edges; understated rounded planar strips, not end-view arcs.
+   s.append('<g fill="#697f8f" fill-opacity=".46" stroke="#5d7485" stroke-opacity=".4" stroke-width="3">'+rect(292,210,26,190,'#697f8f',8)+rect(394,210,26,190,'#697f8f',8)+'</g>')
+   s.append(path('M318 270 H394 V340 H318 Z','#b4c0c9',extra='fill-opacity=".32" stroke="#647a8c" stroke-opacity=".35" stroke-width="3"'))
+   s.append(path(outer,color,extra='fill-opacity=".61" stroke="#638da6" stroke-width="6.5"'))
+   s.append(path('M40 183 H462 V421 H46 M24 164 H173 M36 188 V419',extra='stroke="#5e9dc0" stroke-opacity=".28" stroke-width="2.7"'))
+  else:
+   s.append(path(outer,'#fff',extra='stroke-width="6.5"'))
+  s.append('</g>')
  elif family=='flag-bare-open':
   # C1 rotated to left wire entry. Head above right crimp base, large window beneath.
   # Lower crimp strip continues to the right support; two upright arms frame the window.
@@ -222,6 +234,8 @@ manifest['viewContract']='same silhouette paths; E4 monochrome with reduced deta
 manifest['flagRevision']={'date':'2026-10-15','references':{'C1':'codex-clipboard-c79a2619-0c4f-4f4f-b776-fd8d82ab0573.png','C2':'codex-clipboard-cbe9281b-f537-420a-9cee-934ff16a733d.png','C3':'codex-clipboard-82516bcf-e1ff-459f-9497-6e34da26ec65.png','C4':'codex-clipboard-e9959775-cb16-458e-843d-fb46a7f5f527.png','C5':'codex-clipboard-c8fe8adc-8155-4eb6-92c3-d4717a3e38a3.png'},'observation':'C1/C2 open-wing crimp and large bridge window; C3 fully insulated elbow; C4 superseded wrong straight-cuff profile; C5 two distinct bare pressed tubes: smooth two-diameter and ribbed one-diameter','portPolicy':'one wire-entry at 32,50; receptacle opening is geometry only'}
 manifest['flat2dRevision']={'date':'2026-10-15','references':{'C1':'codex-clipboard-1e6840a4-2b7d-4e8f-b846-85d3a98a8a60.png','C2':'codex-clipboard-48f88ebf-fc92-4343-a0a1-b61410ccc19a.png'},'openCrimp':'uniform head scale .7, head right edge x90 and top y1.384; compact curled wings; window x69..84/y30..45 directly beneath head, above second wing pair','pressed':'identical head placement for smooth/ribbed, uniform head scale .88; head underside y37 meets tube top y37; tube/head right edge x90; head top y1.0256; no side bridge','insulated':'flat orthographic L silhouette; solid fill, no gradients/opacity/face/loop curls; coplanar metal outline','ports':'existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged'}
 manifest['flagRevision']['status']='historical: profile geometry superseded by flat2dRevision'
+manifest['insulatedFlagRevision']={'date':'2026-10-15','reference':'codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png','sourceProfile':{'bounds':[15,25,476,436],'mainBody':[33,170,476,436],'shortInput':[15,25,180,180],'sourceInputCenter':[97.5,25]},'sourceToLocalMatrix':[0,-.12,.12,0,29,61.7],'scale':.12,'drawing':'flat 2D internal backing, window and two longitudinal spring edges below real fill-opacity .61 polymer; no face plate, arcs, perspective or gradients','e4':'monochrome silhouette only','port':'one unchanged anchor32,50, normal[-1,0], pivot32,50; top-entry sheet is rotation of same symbol'}
+manifest['flat2dRevision']['insulatedStatus']='historical solid fill and long silhouette superseded by insulatedFlagRevision; bare profiles remain current'
 (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 
 # Russian atlas: generous two-column cards, distinct views.
@@ -270,7 +284,8 @@ r=[rect(0,0,PDW,PDH,'#f3f6fa'),text(28,44,'099 · Профили по фотог
 for i,(fam,label) in enumerate([('ring','НКИ · круглая головка / плавная шейка'),('fork','НВИ · U-вилка / параллельные зубцы'),('pin','Bullet male · закруглённый нос'),('socket','Bullet female · приёмная втулка'),('male','Flat male · штампованная лопатка'),('female','Flat female · пружинные завальцовки'),('flag','Флажковый · цельный Г-корпус'),('ferrule-double','НШВИ-2 · расширенный раструб')]):
  x=28+(i%2)*608;y=119+(i//2)*290
  large_scale=2.4 if fam=='flag' else 2.7
- r += [rect(x,y,584,270,PAPER,10),text(x+18,y+28,label,'card-title'),text(x+18,y+49,'Чертёж · профиль по фото','view'),f'<g transform="translate({x+2},{y+20}) scale({large_scale})">{symbol(fam,"drawing")}</g>',text(x+18,y+231,'Э4 · тот же внешний контур','view'),f'<g transform="translate({x+164},{y+191}) scale(.9)">{symbol(fam,"e4")}</g>']
+ large_x,large_y=(200,55) if fam=='flag' else (2,20)
+ r += [rect(x,y,584,270,PAPER,10),text(x+18,y+28,label,'card-title'),text(x+18,y+49,'Чертёж · профиль по фото','view'),f'<g transform="translate({x+large_x},{y+large_y}) scale({large_scale})">{symbol(fam,"drawing",cuff="blue" if fam=="flag" else "red")}</g>',text(x+18,y+231,'Э4 · тот же внешний контур','view'),f'<g transform="translate({x+164},{y+191}) scale(.9)">{symbol(fam,"e4")}</g>']
 cy=1304
 r += [rect(28,cy,1192,250,PAPER,10),text(46,cy+31,'Манжеты · три цвета одного профиля','card-title')]
 for i,(col,label) in enumerate([('red','красная'),('blue','синяя'),('yellow','жёлтая')]):
@@ -281,8 +296,8 @@ r += [text(46,cy+222,'Цвет не подтверждает диапазон с
 
 # Direct comparison of the two revised female forms.
 RW,RH=1120,640
-v=[rect(0,0,RW,RH,'#f3f6fa'),text(28,44,'Flat female и плоский изолированный флажок','title'),text(28,73,'Прямая головка: исторический референс 7,3 / 6,6 / 2,3. Флажок: плоский 2D Г-профиль.'),text(28,96,'Слева — открытая металлическая головка. Справа — однотонный Г-контур с плоской линией металла внутри.','small')]
-for i,(fam,label) in enumerate([('female','Прямая · Flat female'),('flag','Изолированный флажок · плоский 2D')]):
+v=[rect(0,0,RW,RH,'#f3f6fa'),text(28,44,'Flat female и плоский изолированный флажок','title'),text(28,73,'Прямая головка: исторический референс 7,3 / 6,6 / 2,3. Флажок: плоский 2D Г-профиль.'),text(28,96,'Слева — открытая металлическая головка. Справа — компактный корпус C1, сквозь изоляцию читается плоский металл.','small')]
+for i,(fam,label) in enumerate([('female','Прямая · Flat female'),('flag','Изолированный флажок · компактный C1')]):
  x=24+i*548;y=120
  v += [rect(x,y,524,450,PAPER,12),text(x+20,y+32,label,'card-title'),text(x+20,y+58,'Чертёж · открытый металл' if fam=='female' else 'Чертёж · цельная Г-изоляция','view'),f'<g transform="translate({x-10},{y+76}) scale(3)">{symbol(fam,"drawing",cuff="blue")}</g>',text(x+20,y+310,'Э4 · общий профиль и один якорь','view'),f'<g transform="translate({x+70},{y+320}) scale(1.65)">{symbol(fam,"e4")}</g>']
 v += [text(28,601,'Прямая female сохранена. Изолированный флажок показан ортогонально без объёмного торца и дугообразных петель.','small'),text(28,622,'Синий круг — только вход провода. Приёмное гнездо и окна металлической части не являются портами.','small')]
@@ -291,17 +306,28 @@ v += [text(28,601,'Прямая female сохранена. Изолирован�
 # Four stable flag families, plus color alternatives of the same insulated item.
 FW2,FH2=1240,1445
 f=[rect(0,0,FW2,FH2,'#f3f6fa'),text(28,44,'099 · Четыре конструкции флажкового контакта','title'),text(28,72,'Один вход провода слева. Ось сочленения вертикальна; гнездо не является дополнительным портом.'),text(28,94,'Последняя правка C1/C2: головка над основанием; трубка под головкой; изоляция строго плоская 2D.','small')]
-flagitems=[('flag','Изолированный флажок · плоский 2D','Сплошная заливка; без градиента, прозрачности и торцевых петель'),('flag-bare-open','Неизолированный обжимной · C1','Компактные крылья; окно под головкой над правой частью основания'),('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','C2: двухдиаметральная трубка тянется под головкой до её края'),('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','C2: однодиаметральная трубка с рёбрами под той же головкой')]
+flagitems=[('flag','Изолированный флажок · компактный C1','Короткий широкий ввод; полупрозрачная оболочка, металл в одной плоскости'),('flag-bare-open','Неизолированный обжимной · C1','Компактные крылья; окно под головкой над правой частью основания'),('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','C2: двухдиаметральная трубка тянется под головкой до её края'),('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','C2: однодиаметральная трубка с рёбрами под той же головкой')]
 for i,(fam,label,note) in enumerate(flagitems):
  x=28+(i%2)*608;y=119+(i//2)*440
  f += [rect(x,y,584,420,PAPER,12),text(x+18,y+30,label,'card-title'),text(x+18,y+52,note,'small'),text(x+18,y+80,fam,'small'),f'<g transform="translate({x+20},{y+105}) scale(2.8)">{symbol(fam,"drawing",cuff="blue")}</g>',text(x+18,y+366,'Э4 · тот же профиль / один вход','view'),f'<g transform="translate({x+240},{y+315}) scale(1.25)">{symbol(fam,"e4")}</g>']
 fy=1025
-f += [rect(28,fy,1192,336,PAPER,12),text(46,fy+32,'Один плоский Г-профиль · синяя и жёлтая заливки','card-title')]
+f += [rect(28,fy,1192,336,PAPER,12),text(46,fy+32,'Компактный профиль C1 · синяя и жёлтая полупрозрачная оболочка','card-title')]
 for i,(col,label) in enumerate([('blue','Синий корпус'),('yellow','Жёлтый корпус')]):
  xx=46+i*596
  f += [text(xx,fy+58,label,'view'),f'<g transform="translate({xx+14},{fy+80}) scale(2.8)">{symbol("flag","drawing",cuff=col)}</g>']
 f += [text(46,fy+309,'Цвет не подтверждает сечение. Контуры — проектная визуализация, без выдуманных размеров и нормативных заявлений.','small'),text(28,FH2-27,'flag сохранён как существующий ID; три неизолированных конструкции имеют собственные стабильные ID.','small')]
 (OUT/'flag-variants.svg').write_text(shell('Четыре варианта флажковых наконечников',''.join(f),FW2,FH2),encoding='utf-8')
+
+# Latest insulated-only photo comparison; top-entry is +90° rotation of the working symbol.
+IW,IH=1240,1120
+z=[rect(0,0,IW,IH,'#f3f6fa'),text(28,44,'099 · Изолированный флажок · пропорции нового C1','title'),text(28,72,'Пропорции корпуса и короткого широкого ввода сохранены по фотографии.'),text(28,95,'Плоский металл под настоящей полупрозрачной оболочкой. Без изометрии, торцевой площадки и дуг.','small')]
+z += [rect(28,125,584,520,PAPER,12),text(46,158,'Как на фотографии · ввод сверху','card-title'),text(46,182,'Тот же рабочий символ, повёрнутый на +90°','small'),f'<g transform="translate(175,225) scale(6) rotate(90) translate(-32,-50)">{symbol("flag","drawing",cuff="blue",leads=False)}</g>',line(175,202,175,225,'class="wire"'),text(46,611,'Примерные пропорции широкого корпуса и короткого ввода сверены с фотографией.','small')]
+z += [rect(636,125,584,520,PAPER,12),text(654,158,'Э4 · рабочая ориентация','card-title'),text(654,182,'Ввод слева · один якорь (32,50) · монохромный силуэт','small'),f'<g transform="translate(750,490) scale(6) translate(-32,-50)">{symbol("flag","e4",leads=False)}</g>',line(727,490,750,490,'class="wire"'),text(654,611,'Поворот вида не меняет ID, электрические связи или число портов.','small')]
+for i,(col,label) in enumerate([('blue','Синяя оболочка · рабочий вид'),('yellow','Жёлтая оболочка · рабочий вид')]):
+ x=28+i*608
+ z += [rect(x,676,584,355,PAPER,12),text(x+18,709,label,'card-title'),f'<g transform="translate({x+165},956) scale(4) translate(-32,-50)">{symbol("flag","drawing",cuff=col,leads=False)}</g>',line(x+142,956,x+165,956,'class="wire"'),text(x+18,1006,'Металл в одной плоскости; заливка оболочки fill-opacity = 0,61.','small')]
+z += [text(28,1067,'C1: codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png. Цвет не задаёт сечение или материал.','small'),text(28,1094,'Профиль и масштаб — визуальная модель по фото; не размерный чертёж изделия и не нормативное УГО.','small')]
+(OUT/'insulated-flag-detail.svg').write_text(shell('Изолированный флажок по новому C1',''.join(z),IW,IH),encoding='utf-8')
 
 # structural validation, deterministic and no external packages required
 for p in OUT.glob('*.svg'):
