@@ -236,3 +236,8 @@ represent missing completed chat handoffs.
 - **Size / SHA-256:** `64 379 414 / 8753F520C2516EB85B8FC5391550856EDC160C860331E7EC28F05C7100322C0E`
 - **Manifest / portable:** `PASS; 528 files; 7/7`
 - **Gate:** Git и package PASS; ручная проверка исходного жгута, packaged UI и owner acceptance открыты.
+
+
+### Принятие Route v3 и закрытие чата — 15.10.2026
+
+Чат 01a111fa-93ab-79b3-9089-7ec8ca14c393: карточки 084, 086, 093, 096, 097, 098, 100, 101, 102, 103, 105 accepted владельцем через явное поручение координатору завершить/архивировать. Все 25 code/handoff refs — опубликованные ancestors integration; подробности в [протоколе закрытия](route-v3-closure-20261015.md). Заявленные ZIP и их code HEAD не менялись; pending manual/owner acceptance для этого чата закрыт, новая packaged UI-проверка не заявляется. Неподтверждённое завершение archive_worktree (queued) относится к закрытию чата, а не Git inclusion. Чужая 106 не входит в это закрытие.
