@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
+
+Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, active/in-progress. Отдельная ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`, база integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Владелец файлов: `src/Techmap.Client/src/termination-library/**` (кроме SVG), `src/Techmap.Client/src/component-library/**`, `src/Techmap.Client/src/App.tsx`, `src/Techmap.Client/src/editor/TerminationInspector.tsx`, карточка 109 и собственные разделы документации. Изменения карточки 108 в основной рабочей копии исключены. REQ-144 уточняет REQ-135/141; ADR-0021. Release coverage: следующий срез после M5-22-048, код/handoff пока ожидаются; по постоянному поручению владельца завершённую работу включить в ZIP.
+
 ## 107 — ручки и границы оконцовок, 15.10.2026
 
 Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в integration-ветке; handoff/coverage заполнены.
