@@ -3408,7 +3408,10 @@ export function CanvasViewport({
       destination,
       camera.zoom,
     );
-    setConnectorAlignmentGuides(result.guides);
+    // Pointer events can arrive faster than the document preview's animation
+    // frame. Unchanged guides must not trigger a second full canvas repaint.
+    if (JSON.stringify(connectorAlignmentGuides) !== JSON.stringify(result.guides))
+      setConnectorAlignmentGuides(result.guides);
     return result.position;
   };
 
