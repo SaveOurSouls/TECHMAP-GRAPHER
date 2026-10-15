@@ -2,6 +2,7 @@ import { parseHarnessDesignDocument, type HarnessDesignDocument } from "../edito
 import type { EditorSceneObject } from "../editor/editor-types";
 import type { WireBlankEnd } from "../WireBlankCatalog";
 import { dimensionRouteKey, type DrawingDimension } from "../editor/drawing-dimensions";
+import { reconcileTerminationReferences } from '../editor/termination-commands';
 
 export interface RouteDrawingCopy {
   readonly document: Omit<HarnessDesignDocument, "manufacturingRoute">;
@@ -87,6 +88,7 @@ export function createIndependentIsolatedDocument(
     diffPairs: source.diffPairs.filter(pair => pair.wireIds.every(id => wireSet.has(id))),
     screens: [],
     views: source.views,
+    ...(source.terminations ? {terminations:structuredClone(source.terminations)} : {}),
     ...(source.customWireColors ? { customWireColors: source.customWireColors } : {}),
     ...(documents ? {
       drawingDocuments: {
@@ -123,7 +125,7 @@ export function createIndependentIsolatedDocument(
   } };
   // parseHarnessDesignDocument normalizes defaults and validates that no
   // dangling source references survived the projection.
-  return parseHarnessDesignDocument(withDimensions);
+  return parseHarnessDesignDocument(reconcileTerminationReferences(withDimensions));
 }
 
 const maximumCopyBytes = 1024 * 1024;

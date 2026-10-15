@@ -1,4 +1,8 @@
 import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-covering-materials";
+import { terminationSceneObject } from './termination-scene';
+import { TerminationInspector, PhysicalTwistControls } from './TerminationInspector';
+import { TerminationLibraryPicker, createTerminationPlacement, terminationArtifactFromRecord, BUILTIN_TERMINATION_RECORDS } from '../termination-library';
+import type { TerminationArtifact } from './termination-model';
 import {useCoveringAssets,withCoveringTextureUrls} from "./covering-assets";
 import { orderPhysicalScene, physicalTopologyScene } from "./physical-scene";
 import { volumeShadingEligible } from "./volume-shading";
@@ -359,6 +363,7 @@ function contactPointForWire(
   const connector = document.connectors.find((item) => item.id === connectorId);
   const other = document.connectors.find((item) => item.id === otherConnectorId);
   if (!connector) return null;
+  if(connector.terminationComponent)return connectorContactPosition(connector,contactId,view);
   const useMaterialized = connector.libraryBinding?.mode === "template" &&
     (materializedConnectorIds === undefined || materializedConnectorIds.has(connector.id));
   const materialized = useMaterialized
@@ -403,6 +408,7 @@ export function designToScene(
   perimeters?: DrawingPerimeters,
 ): readonly EditorSceneObject[] {
   const connectors: EditorSceneObject[] = document.connectors.map((connector) => {
+    if(connector.terminationComponent)return terminationSceneObject(document,connector,view);
     const displayedContacts = view === "e4" ? connectorE4Contacts(connector) : connector.contacts;
     const geometry = view === "e4" ? connectorE4TableGeometry(connector) : null;
     const seriesBinding = connector.libraryBinding?.mode === "series" ? connector.libraryBinding : null;
@@ -853,6 +859,7 @@ export function HarnessDesignEditor({
   const terminalLookup = useTerminalArticleLookup(config, session);
   const wireLookup = useWireDatabaseLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(localCopy ? "drawing" : initialView);
+  const [terminationPicker,setTerminationPicker]=useState<{apply?:(artifact:TerminationArtifact)=>unknown;kind?:'terminal'|'sleeve';document?:HarnessDesignDocument}|null>(null);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [hiddenObjectIds, setHiddenObjectIds] = useState<readonly string[]>(localCopy?.hiddenObjectIds ?? []);
@@ -1514,11 +1521,11 @@ export function HarnessDesignEditor({
     drawingPerimeters,
   ),componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
   const layers = toUiLayers(history.present, view);
-  const selectedConnector = view === "e4" && selectedObjectId
-    ? history.present.connectors.find((connector) => connector.id === selectedObjectId) ?? null
+  const selectedConnector = selectedObjectId
+    ? history.present.connectors.find((connector) => connector.id === selectedObjectId && (view === "e4" || connector.terminationComponent)) ?? null
     : null;
   const selectedConnectorLayer = selectedConnector
-    ? layers.find((layer) => layer.id === selectedConnector.layerIds.e4)
+    ? layers.find((layer) => layer.id === selectedConnector.layerIds[view])
     : null;
   const selectedSeriesId = selectedConnector?.libraryBinding?.mode === "series"
     ? selectedConnector.libraryBinding.seriesId
@@ -2090,6 +2097,7 @@ export function HarnessDesignEditor({
             }}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
         documentActions={<>
+          <section className="he-utility-section"><h3>Оконцовки</h3><button type="button" onClick={()=>setTerminationPicker({})}>Наконечник / гильза из библиотеки</button><button type="button" onClick={()=>{const record=BUILTIN_TERMINATION_RECORDS.find(r=>r.assetId==='preparation-none');if(!record)return;const placement=createTerminationPlacement(record,{id:crypto.randomUUID(),designation:`Р${history.present.connectors.filter(c=>c.terminationComponent?.kind==='preparation').length+1}`,position:{x:Math.max(40,...(['e4','drawing'] as const).flatMap(v=>designToScene(history.present,v).map(o=>o.x+o.width)))+80,y:100}});if(!run({type:'add-termination-component',...placement}))return;setSelectedObjectId(placement.connector.id);setSelectedObjectIds([placement.connector.id]);setRevealRequest({token:Date.now(),objectIds:[placement.connector.id]});}}>Разделка</button></section>
           {view === "e4" && <>
             <ConnectionTableSettings />
             <section className="he-utility-section he-controls-section" aria-labelledby="he-e4-routing-heading">
@@ -2215,7 +2223,8 @@ export function HarnessDesignEditor({
             const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];
             return drawings.length ? <section className="he-companion-list" aria-label="Рисунки компонента"><header className="ui-section-heading"><strong>Рисунки артикула</strong><InfoHint>Показать или скрыть рисунок на Э4. Перетаскивайте рисунок мышью; прямая пунктирная линия связывает его с таблицей. Группа фигур перемещается как один рисунок.</InfoHint></header>{drawings.map(d=><label key={d.drawingId}><input type="checkbox" aria-label={`Показать ${d.label}`} checked={d.visible} disabled={selectedConnectorLayer?.locked===true} onChange={e=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,visible:e.target.checked})}/>{d.label}<DrawingScaleControl label={`Масштаб ${d.label}`} value={drawingScale(selectedConnector.drawingPlacements,d.drawingId)} disabled={selectedConnectorLayer?.locked===true} onChange={scale=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,scale})}/></label>)}</section> : null;
           })()}
-          <E4ConnectorInspector
+          <TerminationInspector key={selectedConnector.id} document={history.present} connector={selectedConnector} disabled={selectedConnectorLayer?.locked===true} onCommand={run} onChooseArtifact={(apply,kind)=>setTerminationPicker({apply,kind,document:history.present})}/>
+          {!selectedConnector.terminationComponent && <E4ConnectorInspector
             connector={selectedConnector}
             onRefreshTerminals={refreshTemplateTerminals}
             refreshingTerminals={refreshingTerminals}
@@ -2229,9 +2238,9 @@ export function HarnessDesignEditor({
             wireColors={editorWireColors}
             disabled={selectedConnectorLayer?.locked === true}
             onCommand={run}
-          />
+          />}
         </>) : view === "drawing" && selectedWireIds.length >= 2 ? (
-          <CableSelectionPanel
+          <><PhysicalTwistControls document={history.present} wireIds={selectedWireIds} disabled={selectedWiresLocked} onCommand={run}/><CableSelectionPanel
             selectedWireIds={selectedWireIds}
             cable={selectedCable}
             disabled={selectedWiresLocked}
@@ -2242,9 +2251,9 @@ export function HarnessDesignEditor({
             onUpdate={(patch) => selectedCable && run({ type: "update-cable", cableId: selectedCable.id, ...patch })}
             onMaterialClear={() => selectedCable && run({ type: "update-cable", cableId: selectedCable.id, materialBinding: null })}
             onRemove={() => selectedCable && run({ type: "remove-cable", cableId: selectedCable.id })}
-          />
+          /></>
         ) : undefined}
-        canvasEditor={selectedConnector ? (
+        canvasEditor={selectedConnector && !selectedConnector.terminationComponent ? (
           <E4ConnectorInspector
             connector={selectedConnector}
             onRefreshTerminals={refreshTemplateTerminals}
@@ -2581,6 +2590,7 @@ export function HarnessDesignEditor({
           if (await flushSave()) onClose();
         } : undefined}
       /></HarnessEditorErrorBoundary>
+      {terminationPicker&&<div className="he-termination-modal" role="dialog" aria-modal="true" aria-label="Библиотека оконцовок"><>{message&&<p role="alert">{message}</p>}<TerminationLibraryPicker onClose={()=>setTerminationPicker(null)} view={view} onSelect={record=>{try{if(terminationPicker.apply){if(terminationPicker.document!==historyRef.current?.present){setMessage('Документ изменился. Закройте библиотеку и повторите выбор для актуального контакта.');return;}const artifact=terminationArtifactFromRecord(record,crypto.randomUUID());if(!artifact){setMessage('Выберите наконечник или гильзу, а не Разделку.');return;}if(terminationPicker.kind&&artifact.kind!==terminationPicker.kind){setMessage(terminationPicker.kind==='sleeve'?'Выберите гильзу с двумя входами.':'Выберите наконечник с одним входом.');return;}if(terminationPicker.apply(artifact)===false)return;}else{const placement=createTerminationPlacement(record,{id:crypto.randomUUID(),designation:`T${history.present.connectors.filter(c=>c.terminationComponent).length+1}`,position:{x:Math.max(40,...(['e4','drawing'] as const).flatMap(v=>designToScene(history.present,v).map(o=>o.x+o.width)))+80,y:100}});if(!run({type:'add-termination-component',...placement}))return;setSelectedObjectId(placement.connector.id);setSelectedObjectIds([placement.connector.id]);setRevealRequest({token:Date.now(),objectIds:[placement.connector.id]});}setTerminationPicker(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось выбрать оконцовку.');}}}/></></div>}
       {(placementBusy || placementPending) && <div className={placementBusy ? "he-placement-busy" : "he-placement-pending"} role="status" aria-live="polite">
         {placementBusy
           ? "Закрепляем версию компонента в жгуте…"

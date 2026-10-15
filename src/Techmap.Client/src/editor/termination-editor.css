@@ -1,0 +1,12 @@
+.he-termination-modal{position:fixed;inset:5vh 5vw;z-index:1000;background:#fff;border:1px solid #94a3b8;border-radius:12px;box-shadow:0 20px 70px #0f172a55;overflow:auto;padding:20px}
+.he-termination-inspector{display:grid;gap:8px;padding:10px;min-width:0}
+.he-termination-inspector fieldset{border:1px solid #ccd7e3;border-radius:6px;padding:8px;min-width:0;display:grid;gap:6px}
+.he-termination-inspector label{display:grid;gap:3px;font-size:12px}
+.he-termination-inspector input,.he-termination-inspector select{min-width:0;max-width:100%;padding:5px;border:1px solid #aebdca;border-radius:4px}
+.he-termination-wire{display:grid;grid-template-columns:1fr 1fr;gap:5px;border-bottom:1px solid #e2e8f0;padding:5px 0}
+.he-termination-wire>label:first-child{grid-column:1/-1;display:flex;align-items:center;overflow-wrap:anywhere}
+.he-termination-inspector button{padding:6px;white-space:normal;text-align:left}
+.he-termination-inspector [role=status]{font-size:12px;color:#725326}
+@media(max-width:600px){.he-termination-modal{inset:8px;padding:10px}.he-termination-wire{grid-template-columns:1fr}}
+
+.he-wire-end-preparation{grid-column:1/-1;display:grid;gap:5px}

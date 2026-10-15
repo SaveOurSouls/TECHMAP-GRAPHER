@@ -3,6 +3,7 @@ import type { ConnectorContact, HarnessDesignDocument, WireEndpoint } from "../e
 import { terminalArticleLabel } from "../editor/terminal-article-label";
 import { buildRouteSourceItems } from "./route-source";
 import { formatWireName } from "./wire-display-formatters";
+import { effectiveEndPreparation } from '../editor/termination-model';
 
 export interface WireSemiFinishedProperties {
   readonly name: string;
@@ -103,8 +104,8 @@ export function wireSemiFinishedProperties(document: HarnessDesignDocument, wire
     name,
     mark: wireMarkWithoutSection(material, section), section,
     color: source.color || wire.color || "Цвет не назначен",
-    terminalFrom: compactWireEnd(from, ends?.from ?? automaticWireEnd(from), "from"),
-    terminalTo: compactWireEnd(to, ends?.to ?? automaticWireEnd(to), "to"),
+    terminalFrom: effectiveEndPreparation(document,{wireId,end:'from'})||document.terminations?.groups.some(g=>g.memberEnds.some(e=>e.wireId===wireId&&e.end==='from'))?source.terminalFrom:compactWireEnd(from, ends?.from ?? automaticWireEnd(from), "from"),
+    terminalTo: effectiveEndPreparation(document,{wireId,end:'to'})||document.terminations?.groups.some(g=>g.memberEnds.some(e=>e.wireId===wireId&&e.end==='to'))?source.terminalTo:compactWireEnd(to, ends?.to ?? automaticWireEnd(to), "to"),
   };
 }
 

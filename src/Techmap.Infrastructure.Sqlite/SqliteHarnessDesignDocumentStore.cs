@@ -44,10 +44,10 @@ public sealed class SqliteHarnessDesignDocumentStore(
                 "schemaVersion");
         }
 
-        if (writerContractVersion is not (null or 1 or 2))
-            throw Invalid("unsupported_design_writer_contract", "The supported design writer contracts are 1 and 2.", "writerContractVersion");
+        if (writerContractVersion is not (null or 1 or 2 or 3))
+            throw Invalid("unsupported_design_writer_contract", "The supported design writer contracts are 1, 2 and 3.", "writerContractVersion");
         var canonicalJson = ValidateContent(contentJson, schemaVersion);
-        if (writerContractVersion is 1 or 2)
+        if (writerContractVersion is 1 or 2 or 3)
         {
             var markedContent = JsonNode.Parse(canonicalJson)!.AsObject();
             using var unmarked = JsonDocument.Parse(canonicalJson);
@@ -359,6 +359,7 @@ public sealed class SqliteHarnessDesignDocumentStore(
             ValidateCableInstances(root);
             HarnessStripProfileValidator.Validate(root);
             ElectricalGraphValidator.Validate(root, allowDetachedDrawingEndpoints);
+            HarnessTerminationValidator.Validate(root, allowDetachedDrawingEndpoints);
     }
 
     private static void ValidateDrawingPlacements(JsonElement root)

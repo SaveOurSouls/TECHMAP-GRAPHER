@@ -16,6 +16,14 @@ const horizontalRequest = (overrides: Partial<E4RoutingRequest> = {}): E4Routing
 });
 
 describe("E4 obstacle router", () => {
+  it('allows an explicitly shared contact trunk but rejects overlap beyond it',()=>{
+    const start={position:{x:0,y:0},leadDirection:'right' as const},end={position:{x:200,y:80},leadDirection:'left' as const};
+    const occupied={points:[{x:0,y:0},{x:200,y:0}],sharedLeadSegments:[{start:{x:0,y:0},end:{x:48,y:0}}]};
+    const route=[{x:0,y:0},{x:48,y:0},{x:48,y:80},{x:200,y:80}];
+    expect(()=>validateE4Route(route,{start,end,occupiedRoutes:[occupied],options:{leadLength:24,wireClearance:8}})).not.toThrow();
+    expect(()=>validateE4Route([{x:0,y:0},{x:72,y:0},{x:72,y:80},{x:200,y:80}],{start,end,occupiedRoutes:[occupied],options:{leadLength:24,wireClearance:8}})).toThrow(/накладывается/);
+    expect(()=>validateE4Route(route,{start,end,occupiedRoutes:[{points:occupied.points}],options:{leadLength:24,wireClearance:8}})).toThrow(/накладывается/);
+  });
   it("uses a 30 degree lattice when angular routing is enabled", () => {
     const request: E4RoutingRequest = {
       start: { position: { x: 0, y: 0 }, leadDirection: null },

@@ -1,4 +1,5 @@
 import { artworkWireDiameter, artworkJacketAnchor, renderPartSvg } from "../wire-blank-artwork.mjs";
+import { terminationSceneBounds, terminationSceneContainsPoint } from "./termination-scene";
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
@@ -946,6 +947,7 @@ function containsPoint(
   tolerance: number,
   view?: HarnessEditorView,
 ): boolean {
+  if(object.metadata?.terminationSymbol)return terminationSceneContainsPoint(object,point,tolerance);
   if (object.kind === "object-index") return point.x >= object.x - tolerance && point.x <= object.x + object.width + tolerance && point.y >= object.y - tolerance && point.y <= object.y + object.height + tolerance;
   if (object.kind === "position-leader") {
     const circle = object.points?.[1];
@@ -1226,6 +1228,7 @@ export function e4ContactMarker(
  * returns null so legacy contactCount connectors keep their compact renderer.
  */
 export function getE4ConnectorLayout(object: EditorSceneObject): E4ConnectorLayout | null {
+  if(object.metadata?.terminationSymbol)return null;
   if (object.kind !== "connector" || object.metadata?.view !== "e4") return null;
   const connectionSide = object.metadata.orientation === "left"
     ? "left"
@@ -1953,6 +1956,7 @@ function ellipseSelectionPath(start:EditorPoint,end:EditorPoint):EditorPoint[] {
 /** Any touched visible object is a candidate for window selection. */
 export function objectIntersectsSelectionRectangle(object:EditorSceneObject,selection:EditorSelectionRectangle):boolean {
   const rectangle=normalizedSelectionRectangle(selection),points=object.points??[],kind=object.metadata?.graphicKind;
+  const terminationBounds=terminationSceneBounds(object);if(terminationBounds)return rectangleOverlaps(rectangle,terminationBounds);
   if(kind==="text"){
     const fontSize=Number(object.metadata?.graphicFontSize??16),width=Math.max(fontSize*1.8,object.label.length*fontSize*.65);
     return rectangleOverlaps(rectangle,{minX:object.x,minY:object.y-fontSize,maxX:object.x+width,maxY:object.y+fontSize*.2});
@@ -2196,6 +2200,17 @@ export function drawEditorSceneObject(
     context.beginPath();context.arc(x,y,5,0,Math.PI*2);context.fill();
     context.stroke();
     context.restore(); return;
+  }
+  if(object.kind==='connector'&&object.metadata?.terminationSymbol){
+    const metadata=object.metadata,points=getMaterializedConnectorContactPoints(object)??[];
+    if(metadata.terminationPointOnly!=='true'){
+      const entry=componentTemplateImageCache.get(metadata.terminationSymbol!);
+      if(entry.state==='loaded'){context.save();context.translate(object.x,object.y);context.rotate(Number(metadata.terminationRotation??0)*Math.PI/180);const scale=Number(metadata.terminationScale??1);context.scale(scale,scale);context.drawImage(entry.image,0,0,220,100);context.restore();}
+    }
+    for(const p of points)if(p){context.beginPath();context.arc(p.x,p.y,selected?5:3.5,0,Math.PI*2);context.fillStyle='#1684ba';context.fill();}
+    const anchor=points[0];context.fillStyle='#17384b';context.font='600 12px Arial';if(view!=='drawing')context.fillText(object.label,(anchor?.x??object.x+32),(anchor?.y??object.y+50)-16);
+    if(metadata.terminationBadge){context.font='11px Arial';context.fillText(metadata.terminationBadge,(anchor?.x??object.x+32),(anchor?.y??object.y+50)+20);}
+    context.restore();return;
   }
   if (object.kind === "connector" && componentTemplateViewInstance) {
     if (view === "e4") {
@@ -2615,6 +2630,10 @@ function expandSceneBounds(
 
 /** The index stays outside the projected library drawing, including rotations. */
 export function drawingConnectorIndexLabel(object:EditorSceneObject,bounds:EditorSceneBounds) {
+  if(object.metadata?.terminationPointOnly==='true'){
+    const text=object.label.trim(),x=(bounds.minX+bounds.maxX)/2+14,y=(bounds.minY+bounds.maxY)/2+12;
+    return {text,x,y,minX:x-4,minY:y-10,maxX:x+Math.max(28,text.length*8),maxY:y+10};
+  }
   const text=object.label.trim(),x=bounds.minX+5,y=bounds.minY-8;
   return {text,x,y,minX:x,minY:y-15,maxX:x+Math.max(28,text.length*8),maxY:y+3};
 }
@@ -2633,6 +2652,16 @@ export function getEditorSceneBounds(
   const visibleObjects = objectsInPaintOrder(objects, layers);
   const componentViews = new Map(componentTemplateViewInstances.map(instance => [instance.objectId, instance]));
   for (const object of visibleObjects) {
+    const terminationBounds=terminationSceneBounds(object);
+    if(terminationBounds){
+      bounds=expandSceneBounds(bounds,terminationBounds.minX,terminationBounds.minY,terminationBounds.maxX,terminationBounds.maxY);
+      const anchor=getMaterializedConnectorContactPoints(object)?.[0];
+      if(view==='drawing'&&object.label.trim()&&!objects.some(candidate=>candidate.kind==='object-index'&&candidate.metadata?.indexObjectId===object.id)){
+        const label=drawingConnectorIndexLabel(object,terminationBounds);bounds=expandSceneBounds(bounds,label.minX,label.minY,label.maxX,label.maxY);
+      }else if(view==='e4'&&anchor&&object.label.trim())bounds=expandSceneBounds(bounds,anchor.x,anchor.y-31,anchor.x+object.label.length*8,anchor.y-13);
+      if(anchor&&object.metadata?.terminationBadge)bounds=expandSceneBounds(bounds,anchor.x,anchor.y+8,anchor.x+object.metadata.terminationBadge.length*7,anchor.y+23);
+      continue;
+    }
     if (object.kind === "wire" || object.kind === "dimension" || object.kind === "physical-segment" || object.kind === "physical-covering") {
       const points = view === "e4" && object.kind === "wire" ? getE4WireRoute(object) : object.points ?? [];
       for (const point of points) {
@@ -2867,7 +2896,7 @@ export function redrawCanvas(
       else {
         const instance=componentViews.get(object.id);
         const projection=instance&&view==="drawing"?projectComponentTemplateView(instance,view,object,resolveComponentTemplateAssetUrl):null;
-        const bounds=projection?.bounds;
+        const bounds=terminationSceneBounds(object)??projection?.bounds;
         if(bounds)context.strokeRect(bounds.minX-4,bounds.minY-4,bounds.maxX-bounds.minX+8,bounds.maxY-bounds.minY+8);
         else context.strokeRect(object.x-4,object.y-4,object.width+8,object.height+8);
       }
@@ -2969,7 +2998,7 @@ export function redrawCanvas(
     for(const object of objectsInPaintOrder(objects,layers,view)){
       if(object.kind!=="connector"||!object.label.trim()||indexed.has(object.id))continue;
       const instance=componentViews.get(object.id),projection=instance?projectComponentTemplateView(instance,"drawing",{x:object.x,y:object.y},resolveComponentTemplateAssetUrl):null;
-      const label=drawingConnectorIndexLabel(object,projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
+      const label=drawingConnectorIndexLabel(object,terminationSceneBounds(object)??projection?.bounds??{minX:object.x,minY:object.y,maxX:object.x+object.width,maxY:object.y+object.height});
       context.fillText(label.text,label.x,label.y);
     }
     context.restore();

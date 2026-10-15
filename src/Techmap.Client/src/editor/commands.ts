@@ -63,6 +63,8 @@ import { resolveWireColorHex } from "./wire-reference-catalog";
 import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
+import { applyTerminationCommand, isTerminationCommand, reconcileTerminationReferences, type TerminationCommand } from './termination-commands';
+import { connectedTerminationWireIds, validateTerminationComponents, validateTerminationCircuits } from './termination-model';
 
 function isFreeDrawingEnd(document: HarnessDesignDocument, wire: WireInstance, end: "from" | "to"): boolean {
   if (!wire.drawingEndpoints) return false;
@@ -81,6 +83,7 @@ function assertEditableFreeDrawingEnd(document: HarnessDesignDocument, wire: Wir
 }
 
 export type EditorCommand =
+  | TerminationCommand
   | {readonly type:"edit-detached-wire-bend";readonly wireId:string;readonly index:number;readonly position:Point;readonly insert?:boolean}
   | {readonly type:"remove-detached-wire-bend";readonly wireId:string;readonly index:number}
   | {readonly type:"set-detached-wire-pair";readonly wireIds:readonly string[];readonly action:"twist"|"straighten";readonly groupId?:string;readonly step?:number;readonly amplitude?:number;readonly variant?:1|2}
@@ -127,7 +130,7 @@ export type EditorCommand =
   | { readonly type: "update-cable"; readonly cableId: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number; readonly sheathStrip?: CableInstance["sheathStrip"] | null }
   | { readonly type: "set-cable-members"; readonly cableId: string; readonly memberWireIds: readonly string[] }
   | { readonly type: "remove-cable"; readonly cableId: string }
-  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
+  | { readonly type: "update-wire"; readonly wireId: string; readonly circuit?: string; readonly color?: string; readonly colorSource?: WireColorSource|null; readonly secondaryColor?: string; readonly wireMark?: string; readonly wireSection?: string; readonly wireDiameterMm?:number|null; readonly materialBinding?: WireMaterialBinding | null; readonly lengthMm?: number | null; readonly endCorrectionFromMm?: number; readonly endCorrectionToMm?: number; readonly cutRoundingStepMm?: number }
   | { readonly type: "set-wire-strip-profile"; readonly wireId: string; readonly end: "from" | "to"; readonly profile: WireStripProfileBinding | null }
   | { readonly type: "set-wire-drawing-end-style"; readonly wireId: string; readonly end: "from" | "to"; readonly style: WireBlankEnd }
   | { readonly type: "set-wire-drawing-endpoint"; readonly wireId: string; readonly end: "from" | "to"; readonly position: Point }
@@ -239,12 +242,21 @@ export function applyEditorCommand(
   document: HarnessDesignDocument,
   command: EditorCommand,
 ): HarnessDesignDocument {
+  if(isTerminationCommand(command)) return applyTerminationCommand(document,command);
   if(command.type==="update-wire"&&command.lengthMm!==undefined&&(document.drawingDocuments?.dimensions?.some(d=>d.wireId===command.wireId&&!d.auxiliary)||pipeMeasuredWireLength(document,command.wireId).managed))throw new Error("Длина задана размерами на чертеже. Измените размер либо удалите его для ручного ввода.");
-  const changed = reconcileDrawingDimensions(document, refreshAutomaticPhysicalRoutes(document, prunePhysicalTopology(applyCommand(document, command))));
-  return reconcileDrawingDocuments(document, changed);
+  const source = snapshotSharedWireProperties(document,command);
+  const changed = reconcileDrawingDimensions(source, refreshAutomaticPhysicalRoutes(source, prunePhysicalTopology(applyCommand(source, command))));
+  const result = reconcileTerminationReferences(reconcileDrawingDocuments(source, changed));
+  validateTerminationComponents(result);
+  if(result.terminations||result.connectors.some(c=>c.terminationComponent)||result.wires.some(w=>w.wireMark!==undefined||w.wireSection!==undefined||w.secondaryColor!==undefined||w.wireDiameterMm!==undefined)){
+    validateTerminationCircuits(result);
+    return {...result,requiredWriterContractVersion:3};
+  }
+  return result;
 }
 
 function applyCommand(document: HarnessDesignDocument, command: EditorCommand): HarnessDesignDocument {
+  if(isTerminationCommand(command)) return applyTerminationCommand(document,command);
   switch (command.type) {
     case "edit-e4-bend": {
       const wire=findWire(document,command.wireId);
@@ -666,6 +678,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         validateUniqueContacts(contacts);
         return { ...connector, contacts };
       });
+      if (contactWireCount(document,command.connectorId,command.contactId)>1) return rememberCustomWireColors(updated,[command.color??'',command.secondaryColor??'']);
       const synchronized = command.color === undefined && command.secondaryColor === undefined
         ? updated
         : syncDirectWireColors(updated, command.connectorId, command.contactId);
@@ -842,8 +855,11 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       if (document.wires.some((item) => item.id === command.wire.id)) {
         throw new Error("Провод с таким ID уже существует.");
       }
-      const selectedMaterial = contactAtEndpoint(document, command.wire.from)?.materialBinding ??
-        contactAtEndpoint(document, command.wire.to)?.materialBinding;
+      if(command.wire.e4Route.length){
+        const start=wireEndpointE4Anchor(document,command.wire.from),end=wireEndpointE4Anchor(document,command.wire.to);
+        if(start&&end)validateE4Route([start.position,...command.wire.e4Route,end.position],createE4RoutingRequest(document,command.wire,command.wire.id));
+      }
+      const selectedMaterial = [command.wire.from,command.wire.to].filter(e=>contactWireCount(document,e.connectorId,e.contactId)===0).map(e=>contactAtEndpoint(document,e)?.materialBinding).find(Boolean);
       const newWire = command.wire.materialBinding || !selectedMaterial
         ? command.wire : { ...command.wire, materialBinding: selectedMaterial };
       let added = addWireToEndpointJunctions(
@@ -887,7 +903,11 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
             ...wire,
             circuit: command.circuit === undefined ? wire.circuit : command.circuit.trim(),
             color: command.color ?? wire.color,
-            colorSource: command.color === undefined ? wire.colorSource : null,
+            ...(command.secondaryColor===undefined?{}:{secondaryColor:command.secondaryColor}),
+            ...(command.wireMark===undefined?{}:{wireMark:command.wireMark}),
+            ...(command.wireSection===undefined?{}:{wireSection:command.wireSection}),
+            ...(command.wireDiameterMm===undefined?{}:{wireDiameterMm:command.wireDiameterMm===null?undefined:parseOuterDiameter(command.wireDiameterMm)}),
+            colorSource: command.colorSource === undefined ? (command.color === undefined ? wire.colorSource : null) : command.colorSource,
             materialBinding: command.materialBinding === undefined
               ? wire.materialBinding : command.materialBinding ?? undefined,
             lengthMm: command.lengthMm === undefined ? wire.lengthMm : command.lengthMm,
@@ -899,7 +919,7 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           return updated;
         }, "Провод не найден."),
       };
-      if (command.materialBinding === null) {
+      if (command.materialBinding === null && !changed.wires.some(w=>w.id===command.wireId&&[w.from,w.to].some(e=>contactWireCount(changed,e.connectorId,e.contactId)>1))) {
         const wire = changed.wires.find(item => item.id === command.wireId)!;
         return normalizeJunctionCircuits({ ...changed, connectors: changed.connectors.map(connector => ({
           ...connector, contacts: connector.contacts.map(contact => [wire.from, wire.to].some(endpoint =>
@@ -1312,11 +1332,33 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
   }
 }
 
+function contactWireCount(document:HarnessDesignDocument,connectorId:string,contactId:string):number {
+  return document.wires.filter(w=>[w.from,w.to].some(e=>sameConnectorEndpoint(e,connectorId,contactId))).length;
+}
+
+/** Capture legacy contact defaults before a second conductor makes them ambiguous. */
+function snapshotSharedWireProperties(document:HarnessDesignDocument,command:EditorCommand):HarnessDesignDocument {
+  const extra=command.type==='add-wire'?[command.wire.from,command.wire.to]:command.type==='reconnect-wire'?[command.endpoint]:[];
+  const key=(e:WireEndpoint)=>JSON.stringify([e.connectorId,e.contactId]);
+  const counts=new Map<string,number>();
+  for(const w of document.wires)for(const e of [w.from,w.to])if(!isJunctionEndpoint(e)&&!isScreenEndpoint(e))counts.set(key(e),(counts.get(key(e))??0)+1);
+  const shared=(e:WireEndpoint)=>!isJunctionEndpoint(e)&&!isScreenEndpoint(e)&&((counts.get(key(e))??0)>1||extra.some(x=>sameEndpoint(x,e)&&(counts.get(key(e))??0)>0));
+  let changed=false;
+  const wires=document.wires.map(w=>{
+    if(![w.from,w.to].some(shared))return w;
+    const c=contactAtEndpoint(document,w.from)??contactAtEndpoint(document,w.to);
+    changed=true;
+    return {...w,wireMark:w.wireMark??w.materialBinding?.displayName??c?.wire??'',wireSection:w.wireSection??c?.wireSection??'',secondaryColor:w.secondaryColor??c?.secondaryColor??'',wireDiameterMm:w.wireDiameterMm??c?.wireDiameterMm,colorSource:null};
+  });
+  return changed?{...document,wires}:document;
+}
+
 function syncDirectWireColors(
   document: HarnessDesignDocument,
   connectorId: string,
   contactId: string,
 ): HarnessDesignDocument {
+  if(contactWireCount(document,connectorId,contactId)>1)return document;
   const contact = document.connectors.find((connector) => connector.id === connectorId)
     ?.contacts.find((candidate) => candidate.id === contactId);
   if (!contact) return document;
@@ -1329,7 +1371,7 @@ function syncDirectWireColors(
         ![wire.from, wire.to].some((endpoint) => isConnectorEndpoint(endpoint, connectorId, contactId))) return wire;
     const opposite = sameConnectorEndpoint(wire.from, connectorId, contactId) ? wire.to : wire.from;
     const oppositeContact = contactAtEndpoint({ ...document, connectors }, opposite);
-    if (oppositeContact && contactColorIsAutomatic(oppositeContact)) {
+    if (oppositeContact && contactWireCount(document,opposite.connectorId,opposite.contactId)<=1 && contactColorIsAutomatic(oppositeContact)) {
       connectors = updateContactColor(connectors, opposite, contact.color, contact.secondaryColor ?? "", "auto");
     }
     changed = true;
@@ -1345,6 +1387,7 @@ function syncContactWireMaterial(
   contactId: string,
   materialOverride?: WireMaterialBinding,
 ): HarnessDesignDocument {
+  if(contactWireCount(document,connectorId,contactId)>1)return document;
   const source = contactAtEndpoint(document, { connectorId, contactId });
   if (!source) return document;
   if (!document.wires.some(wire => [wire.from, wire.to].some(endpoint =>
@@ -1354,7 +1397,7 @@ function syncContactWireMaterial(
   const wires = document.wires.map(wire => {
     if (![wire.from, wire.to].some(endpoint => sameConnectorEndpoint(endpoint, connectorId, contactId))) return wire;
     const opposite = sameConnectorEndpoint(wire.from, connectorId, contactId) ? wire.to : wire.from;
-    if (!isJunctionEndpoint(opposite) && !isScreenEndpoint(opposite)) {
+    if (!isJunctionEndpoint(opposite) && !isScreenEndpoint(opposite) && contactWireCount(document,opposite.connectorId,opposite.contactId)<=1) {
       connectors = connectors.map(connector => connector.id !== opposite.connectorId ? connector : {
         ...connector,
         contacts: connector.contacts.map(contact => contact.id !== opposite.contactId ? contact : {
@@ -2189,14 +2232,19 @@ function createE4RoutingRequest(
   const wireStart = wireEndpointE4Anchor(document, wire.from);
   const wireEnd = wireEndpointE4Anchor(document, wire.to);
   if (!wireStart || !wireEnd) throw new Error("Точки подключения маршрута Э4 не найдены.");
-  const start: E4RouterAnchor = explicitStart ?? {
+  const fanoutLead=(e:WireEndpoint,anchor:E4RouterAnchor):E4RouterAnchor=>{
+    if(isJunctionEndpoint(e)||isScreenEndpoint(e)||anchor.leadDirection===null)return anchor;
+    const siblings=document.wires.filter(w=>[w.from,w.to].some(x=>sameEndpoint(x,e))).sort((a,b)=>a.id.localeCompare(b.id));
+    return siblings.length>1?{...anchor,leadLength:(anchor.leadLength??defaultE4WireLead)+Math.max(0,siblings.findIndex(w=>w.id===wireId))*24}:anchor;
+  };
+  const start: E4RouterAnchor = fanoutLead(wire.from,explicitStart ?? {
     ...wireStart,
     obstacleId: isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ? undefined : wire.from.connectorId,
-  };
-  const end: E4RouterAnchor = explicitEnd ?? {
+  });
+  const end: E4RouterAnchor = fanoutLead(wire.to,explicitEnd ?? {
     ...wireEnd,
     obstacleId: isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to) ? undefined : wire.to.connectorId,
-  };
+  });
   const fullWirePoints = (candidate: WireInstance): readonly Point[] | null => {
     const candidateStart = wireEndpointE4Anchor(document, candidate.from);
     const candidateEnd = wireEndpointE4Anchor(document, candidate.to);
@@ -2222,6 +2270,7 @@ function createE4RoutingRequest(
     end,
     obstacles: [
       ...document.connectors.map((connector) => {
+        if(connector.terminationComponent)return {id:connector.id,x:connector.positions.e4.x+32,y:connector.positions.e4.y+15,width:156,height:70};
         const geometry = connectorE4TableGeometry(connector);
         return {
           id: connector.id,
@@ -2246,7 +2295,16 @@ function createE4RoutingRequest(
       const allowedTouchPoints = document.junctions
         .filter((junction) => junction.wireIds.includes(wireId) && junction.wireIds.includes(candidate.id))
         .map((junction) => junction.position);
-      return points ? [{ id: candidate.id, points, allowedTouchPoints }] : [];
+      const sharedLeadSegments=[wire.from,wire.to].flatMap(e=>{
+        if(isJunctionEndpoint(e)||isScreenEndpoint(e)||![candidate.from,candidate.to].some(x=>sameEndpoint(x,e)))return [];
+        const a=wireEndpointE4Anchor(document,e);if(!a?.leadDirection)return [];
+        const count=document.wires.filter(w=>[w.from,w.to].some(x=>sameEndpoint(x,e))).length;
+        const length=(a.leadLength??defaultE4WireLead)+(count-1)*24;
+        const dx=a.leadDirection==='left'?-length:a.leadDirection==='right'?length:0;
+        const dy=a.leadDirection==='up'?-length:a.leadDirection==='down'?length:0;
+        return [{start:a.position,end:{x:a.position.x+dx,y:a.position.y+dy}}];
+      });
+      return points ? [{ id: candidate.id, points, allowedTouchPoints,sharedLeadSegments }] : [];
       }),
       ...(partialRoute && partialRoute.length >= 2
         ? [{
@@ -2512,6 +2570,7 @@ function normalizeJunctionCircuits(document: HarnessDesignDocument): HarnessDesi
 }
 
 function collectConductiveComponent(initial: readonly string[], document: HarnessDesignDocument): Set<string> {
+  if(document.terminations||document.connectors.some(c=>c.terminationComponent))return connectedTerminationWireIds(document,initial);
   const result = collectJunctionComponent(initial, document.junctions);
   let size = -1;
   while (size !== result.size) {

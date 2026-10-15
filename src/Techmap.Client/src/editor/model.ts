@@ -10,6 +10,8 @@ import { parsePhysicalTopology } from "./physical-topology-validation";
 import type { PhysicalTopology } from "./physical-topology-model";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
 import { terminalArticleLabel } from "./terminal-article-label";
+import { drawingLocalPoint } from './drawing-scale';
+import { parseTerminationComponent, parseTerminationDocument, validateTerminationComponents, validateTerminationCircuits, type TerminationComponent, type TerminationDocument } from './termination-model';
 import { clearDecorationSpans } from "./e4-decoration-spans";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 
@@ -266,6 +268,7 @@ export interface ConnectorDrawingPlacement {
 }
 
 export interface ConnectorInstance {
+  readonly terminationComponent?: TerminationComponent;
   readonly drawingPlacements?: readonly ConnectorDrawingPlacement[];
   /** v5 uses the editable E4 table; graphical points belong to the drawing. */
   readonly e4TableMode?: boolean;
@@ -342,6 +345,11 @@ export interface E4RouteAnchor {
 }
 
 export interface WireInstance {
+  /** Per-conductor values; shared contact rows must never overwrite these. */
+  readonly wireMark?: string;
+  readonly wireSection?: string;
+  readonly secondaryColor?: string;
+  readonly wireDiameterMm?: number;
   readonly id: string;
   readonly from: WireEndpoint;
   readonly to: WireEndpoint;
@@ -569,7 +577,8 @@ export interface HarnessDesignDocument {
   readonly physicalTopology?: PhysicalTopology;
   readonly schemaVersion: 1;
   /** Minimum writer contract required to safely preserve this document. */
-  readonly requiredWriterContractVersion?: 1 | 2;
+  readonly requiredWriterContractVersion?: 1 | 2 | 3;
+  readonly terminations?: TerminationDocument;
   readonly manufacturingRoute?: ManufacturingRoute;
   /** User-created wire colors retained by this harness even when temporarily unused. */
   readonly customWireColors?: readonly string[];
@@ -734,7 +743,7 @@ export function createEmptyHarnessDesign(): HarnessDesignDocument {
 
 export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocument {
   const record = requireRecord(value, "Сервер вернул повреждённый документ жгута.");
-  if (record.requiredWriterContractVersion !== undefined && record.requiredWriterContractVersion !== 1 && record.requiredWriterContractVersion !== 2) {
+  if (record.requiredWriterContractVersion !== undefined && ![1,2,3].includes(record.requiredWriterContractVersion as number)) {
     throw new Error("Для этого документа требуется более новая версия приложения.");
   }
   if (record.schemaVersion !== 1 || !Array.isArray(record.connectors) || !Array.isArray(record.wires)) {
@@ -744,7 +753,7 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   const views = requireRecord(record.views, "Представления документа жгута заданы неверно.");
   let document: HarnessDesignDocument = {
     schemaVersion: 1,
-    ...(record.requiredWriterContractVersion === 1 || record.requiredWriterContractVersion === 2 ? { requiredWriterContractVersion: record.requiredWriterContractVersion } : {}),
+    ...([1,2,3].includes(record.requiredWriterContractVersion as number) ? { requiredWriterContractVersion: record.requiredWriterContractVersion as 1|2|3 } : {}),
     ...(record.manufacturingRoute !== undefined ? { manufacturingRoute: parseManufacturingRoute(record.manufacturingRoute) } : {}),
     customWireColors: parseCustomWireColors(record.customWireColors),
     connectors: record.connectors.map(parseConnector),
@@ -793,6 +802,10 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
     ...document,
     wires: document.wires.map((wire) => ({
       ...wire,
+      ...([wire.from,wire.to].some(e=>document.wires.filter(w=>[w.from,w.to].some(x=>x.connectorId===e.connectorId&&x.contactId===e.contactId&&!x.junctionId&&!x.screenId)).length>1)?(() => {
+        const c=[wire.from,wire.to].map(e=>document.connectors.find(c=>c.id===e.connectorId)?.contacts.find(c=>c.id===e.contactId)).find(c=>c?.wire.trim()||c?.wireSection?.trim());
+        return {wireMark:wire.wireMark??wire.materialBinding?.displayName??c?.wire??'',wireSection:wire.wireSection??c?.wireSection??'',secondaryColor:wire.secondaryColor??c?.secondaryColor??'',wireDiameterMm:wire.wireDiameterMm??c?.wireDiameterMm};
+      })():{}),
       colorSource: normalizeWireColorSource(document, wire),
     })),
   };
@@ -821,6 +834,12 @@ export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocumen
   validateParsedGroups(document, wireIds);
   validateJunctions(document);
   validateJunctionCircuitComponents(document.wires, document.junctions);
+  if (record.terminations !== undefined) document = { ...document, terminations: parseTerminationDocument(record.terminations, document) };
+  validateTerminationComponents(document);
+  if (document.terminations || document.connectors.some(c=>c.terminationComponent) || document.wires.some(w=>w.wireMark!==undefined||w.wireSection!==undefined||w.secondaryColor!==undefined||w.wireDiameterMm!==undefined)) {
+    document = {...document,requiredWriterContractVersion:3};
+    validateTerminationCircuits(document);
+  }
   return document;
 }
 
@@ -887,6 +906,10 @@ function wireEndpointE4AnchorInternal(
   }
   const connector = document.connectors.find((item) => item.id === endpoint.connectorId);
   if (!connector) return null;
+  if (connector.terminationComponent) {
+    const position = connectorContactPosition(connector, endpoint.contactId, 'e4');
+    return position ? {position,leadDirection:connector.contacts.findIndex(c=>c.id===endpoint.contactId)===1?'right':'left'} : null;
+  }
   const materialized = materializedContactWorldRepresentation(connector, endpoint.contactId, "e4");
   const position = materialized?.position ?? connectorContactPosition(connector, endpoint.contactId, "e4");
   return position ? {
@@ -1135,6 +1158,12 @@ export function connectorContactPosition(
 ): Point | null {
   const index = connector.contacts.findIndex((contact) => contact.id === contactId);
   if (index < 0) return null;
+  if (connector.terminationComponent) {
+    const origin = connector.positions[view];
+    const local = {x:index===1?188:32,y:50};
+    const point = view==='drawing'?drawingLocalPoint(local,connector.drawingPlacements):local;
+    return {x:origin.x+point.x,y:origin.y+point.y};
+  }
   const materialized = materializedContactWorldRepresentation(connector, contactId, view);
   if (materialized) return materialized.position;
   const origin = connector.positions[view];
@@ -1216,6 +1245,7 @@ function parseConnector(value: unknown): ConnectorInstance {
     }
   }
   let connector: ConnectorInstance = {
+    ...(record.terminationComponent === undefined ? {} : {terminationComponent:parseTerminationComponent(record.terminationComponent)}),
     ...(record.drawingPlacements === undefined ? {} : {drawingPlacements: parseDrawingPlacements(record.drawingPlacements)}),
     ...(record.e4TableMode === true ? { e4TableMode: true } : {}),
     ...(record.terminalCatalog === undefined ? {} : { terminalCatalog: parseConnectorTerminalCatalog(record.terminalCatalog) }),
@@ -1662,6 +1692,10 @@ function parseWire(value: unknown): WireInstance {
   })();
   return {
     id: requireText(record.id, "ID провода"),
+    ...(record.wireMark===undefined?{}:{wireMark:requireString(record.wireMark,'Марка провода')}),
+    ...(record.wireSection===undefined?{}:{wireSection:requireString(record.wireSection,'Сечение провода')}),
+    ...(record.secondaryColor===undefined?{}:{secondaryColor:requireString(record.secondaryColor,'Второй цвет провода')}),
+    ...(record.wireDiameterMm===undefined?{}:{wireDiameterMm:parseOuterDiameter(record.wireDiameterMm)}),
     from: parseEndpoint(record.from),
     to: parseEndpoint(record.to),
     circuit: requireString(record.circuit, "Цепь провода"),
@@ -1869,6 +1903,7 @@ function parseContactColorMode(value: unknown): "auto" | "manual" {
 }
 
 function normalizeWireColorSource(document: HarnessDesignDocument, wire: WireInstance): WireColorSource | null | undefined {
+  if([wire.from,wire.to].some(e=>!e.junctionId&&!e.screenId&&document.wires.filter(w=>[w.from,w.to].some(x=>x.connectorId===e.connectorId&&x.contactId===e.contactId&&!x.junctionId&&!x.screenId)).length>1))return null;
   if (isJunctionEndpoint(wire.from) || isScreenEndpoint(wire.from) ||
       isJunctionEndpoint(wire.to) || isScreenEndpoint(wire.to)) return undefined;
   if (wire.colorSource === null) return null;

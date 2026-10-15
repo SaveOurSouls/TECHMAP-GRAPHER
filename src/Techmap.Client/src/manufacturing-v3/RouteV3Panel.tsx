@@ -18,6 +18,8 @@ import { RouteV3Graph } from "./RouteV3Graph";
 import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
 import "../manufacturing-v2/route-v2.css";
 import "./route-v3.css";
+import { syncRouteV3TerminationOperations } from './route-v3-model';
+import { RouteV3SourceArtwork } from './route-v3-termination-artwork';
 
 type Props = { config: RuntimeConfig; session: LocalSession; projectId: string; harnessId: string; onClose?: () => void; onSectionChange?: (section: HarnessSectionId) => void | Promise<void> };
 function fragmentRow(fragment: RouteV3Fragment): RouteRow {
@@ -81,7 +83,7 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   };
   const applySourceRefresh = () => {
     if (!window.confirm(`Обновить Маршрут v3 по сохранённому Чертежу/Э4? Изменятся исходное сырьё и количества; ${sourceRefresh.divergences.length} расхождений останутся для проверки оператором.`)) return;
-    try { persist(applyRouteV3SourceRefresh(current.current, sourceRefresh)); setRefreshOpen(true); }
+    try { persist(syncRouteV3TerminationOperations(applyRouteV3SourceRefresh(current.current, sourceRefresh),source)); setRefreshOpen(true); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось обновить маршрут."); }
   };
   const newFragment = (document: HarnessDesignDocument, ids: readonly string[], scene: readonly EditorSceneObject[], isolate: boolean): RouteV3Fragment => {
@@ -115,9 +117,9 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   const openGraphical = () => { setOpenedOnce(true); setGraphical(true); };
   const generate = () => { if (current.current.graphEdited && !window.confirm("Пересоздать маршрут из слепков? Ручные карточки, связи, размеры и операции будут заменены.")) return; try { persist(generateRouteV3(current.current, source, sourceScene.map(object => object.id))); setGraphical(false); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сгенерировать маршрут."); } };
   const showFragment = (fragment: RouteV3Fragment) => <RouteAssemblyDrawingPreview row={{ ...fragmentRow(fragment), presentation: { objects: [], backgroundOpacity: 0, drawingCopy: fragmentDrawingCopy(fragment) } }} document={source} config={config} session={session} projectId={projectId} />;
-  const artwork = (ref: RouteSourceRef) => { const item = sources.find(candidate => refKey(candidate.ref) === refKey(ref)); return ref.kind === "wire" && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(route, ref.id)} /> : <RouteV2SourceArtwork document={source} ref={ref} item={item} textureUrls={textures.urls} />; };
+  const artwork = (ref: RouteSourceRef) => { const item = sources.find(candidate => refKey(candidate.ref) === refKey(ref)); return ref.kind === "wire" && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(route, ref.id)} /> : <RouteV3SourceArtwork document={source} ref={ref} item={item} textureUrls={textures.urls} />; };
   const finalRow: RouteRow = { id: "final", kind: "assembly", title: "Готовый жгут", sourceObjects: sources.map(item => item.ref), dependsOn: [], comment: "", operations: [], prepared: false, presentation: { backgroundOpacity: 0, objects: [], drawingCopy: createRouteDrawingCopy(source) } };
-  const board = useMemo(() => refreshRouteV3(editableRouteV3(route.nodes.length || route.graphEdited ? route : { ...route, nodes: generateRouteV3({ ...route, fragments: [] }).nodes })), [route]);
+  const board = useMemo(() => refreshRouteV3(editableRouteV3(route.nodes.length || route.graphEdited ? route : generateRouteV3({ ...route, fragments: [] },source))), [route,source]);
   const nodeArtwork = (node: RouteV3Node, zoomEnabled = false): ReactNode => {
     if (node.drawing) return <ArtworkTile zoomEnabled={zoomEnabled}><RouteAssemblyDrawingPreview row={{ ...finalRow, title: node.title, sourceObjects: node.refs, presentation: { objects: [], ...node.drawing } }} document={source} config={config} session={session} projectId={projectId} /></ArtworkTile>;
     const keys = new Set(node.refs.map(refKey));

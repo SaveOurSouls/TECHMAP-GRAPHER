@@ -42,7 +42,7 @@ public sealed class ManufacturingRouteStoreTests
         });
         graph["manufacturingRoute"] = route;
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(graph.ToJsonString()) > 1024 * 1024);
-        var saved = fixture.Put(source.Revision, graph, 2);
+        var saved = fixture.Put(source.Revision, graph, 3);
         Assert.Equal(2, JsonNode.Parse(fixture.Get().ContentJson)!["manufacturingRoute"]!["rows"]!.AsArray().Count - 1);
         graph["padding"] = new string('x', SqliteHarnessDesignDocumentStore.MaximumContentBytes);
         Assert.Equal("design_content_too_large", Assert.Throws<HarnessDesignDocumentException>(() => fixture.Put(saved.Revision, graph, 2)).Code);
@@ -137,6 +137,15 @@ public sealed class ManufacturingRouteStoreTests
         graph["connectors"]![0]!["contacts"]![0]!["id"] = $"{from:D}:contact:a";
         graph["wires"]![0]!["from"]!["connectorId"] = from.ToString("D");
         graph["wires"]![0]!["from"]!["contactId"] = $"{from:D}:contact:a";
+        graph["connectors"]![0]!["terminationComponent"] = new JsonObject { ["kind"] = "terminal", ["symbolId"] = "t", ["artifactId"] = "terminal-artifact" };
+        graph["terminations"] = new JsonObject
+        {
+            ["version"] = 1,
+            ["artifacts"] = new JsonArray(new JsonObject { ["id"] = "terminal-artifact", ["kind"] = "terminal", ["article"] = "T", ["symbolId"] = "t" }),
+            ["groups"] = new JsonArray(new JsonObject { ["id"] = "group", ["target"] = new JsonObject { ["connectorId"] = from.ToString("D"), ["contactId"] = $"{from:D}:contact:a" }, ["artifactId"] = "terminal-artifact", ["memberEnds"] = new JsonArray() }),
+            ["endPreparations"] = new JsonArray(), ["operations"] = new JsonArray(new JsonObject { ["id"] = "ports", ["kind"] = "strip", ["target"] = new JsonObject { ["kind"] = "portSet", ["connectorId"] = from.ToString("D"), ["contactIds"] = new JsonArray($"{from:D}:contact:a") }, ["executionCount"] = 1 }),
+            ["twists"] = new JsonArray(),
+        };
         using var source = JsonDocument.Parse(graph.ToJsonString());
         graph["manufacturingRoute"] = Route(ManufacturingRouteSourceFingerprint.Compute(source.RootElement, 3));
         var row = graph["manufacturingRoute"]!["rows"]![0]!;
@@ -147,10 +156,41 @@ public sealed class ManufacturingRouteStoreTests
         var route = actual.RootElement.GetProperty("manufacturingRoute");
         Assert.Equal(to.ToString("D"), route.GetProperty("rows")[0].GetProperty("sourceObjects")[1].GetProperty("id").GetString());
         Assert.Equal(to.ToString("D"), route.GetProperty("rows")[0].GetProperty("presentation").GetProperty("objects")[0].GetProperty("ref").GetProperty("id").GetString());
+        var groupTarget = actual.RootElement.GetProperty("terminations").GetProperty("groups")[0].GetProperty("target");
+        Assert.Equal(to.ToString("D"), groupTarget.GetProperty("connectorId").GetString());
+        Assert.Equal($"{to:D}:contact:a", groupTarget.GetProperty("contactId").GetString());
+        var portTarget = actual.RootElement.GetProperty("terminations").GetProperty("operations")[0].GetProperty("target");
+        Assert.Equal(to.ToString("D"), portTarget.GetProperty("connectorId").GetString());
+        Assert.Equal($"{to:D}:contact:a", portTarget.GetProperty("contactIds")[0].GetString());
         Assert.Equal(ManufacturingRouteSourceFingerprint.Compute(actual.RootElement, 3), route.GetProperty("source").GetProperty("sha256").GetString());
         graph["manufacturingRoute"]!["source"]!["sha256"] = new string('a', 64);
         var stale = ProjectComponentPlacementRemapper.RemapHarnessDesign(graph.ToJsonString(), new Dictionary<Guid, Guid> { [from] = to }, 3);
         Assert.Equal(new string('a', 64), JsonNode.Parse(stale.DesignJson)!["manufacturingRoute"]!["source"]!["sha256"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Route_can_reference_used_termination_artifacts_but_not_unused_drafts()
+    {
+        using var fixture = new Fixture();
+        var graph = Construction();
+        graph["terminations"] = new JsonObject
+        {
+            ["version"] = 1,
+            ["artifacts"] = new JsonArray(
+                new JsonObject { ["id"] = "used", ["kind"] = "terminal", ["article"] = "T1", ["symbolId"] = "t" },
+                new JsonObject { ["id"] = "draft", ["kind"] = "terminal", ["article"] = "T2", ["symbolId"] = "t" }),
+            ["groups"] = new JsonArray(new JsonObject { ["id"] = "g", ["target"] = new JsonObject { ["connectorId"] = "B", ["contactId"] = "b" }, ["artifactId"] = "used", ["memberEnds"] = new JsonArray(new JsonObject { ["wireId"] = "w", ["end"] = "to" }) }),
+            ["endPreparations"] = new JsonArray(), ["operations"] = new JsonArray(), ["twists"] = new JsonArray(),
+        };
+        var source = fixture.Put(0, graph, 3);
+        graph["manufacturingRoute"] = Route(source.SourceFingerprint!);
+        graph["manufacturingRoute"]!["rows"]![0]!["sourceObjects"]!.AsArray().Add(new JsonObject { ["kind"] = "termination-artifact", ["id"] = "used" });
+        var saved = fixture.Put(source.Revision, graph, 3);
+        Assert.Contains("termination-artifact", saved.ContentJson);
+
+        graph["manufacturingRoute"]!["rows"]![0]!["sourceObjects"]![1]!["id"] = "draft";
+        var error = Assert.Throws<HarnessDesignDocumentException>(() => fixture.Put(saved.Revision, graph, 3));
+        Assert.Equal("invalid_manufacturing_route", error.Code);
     }
 
     private static JsonObject Construction() => JsonNode.Parse("""

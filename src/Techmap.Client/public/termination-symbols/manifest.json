@@ -1,0 +1,1173 @@
+{
+  "schema": "termination-099/v1",
+  "designStatus": "project-symbols",
+  "units": "viewBox units, illustrative scale",
+  "viewBox": [
+    0,
+    0,
+    220,
+    100
+  ],
+  "colorTokens": {
+    "paper": "#ffffff",
+    "outline": "#334155",
+    "metal": "#dbe5ee",
+    "tin": "#dae5ee",
+    "insulation": "#d95f59",
+    "wire": "#69798a",
+    "anchor": "#1684ba",
+    "copper": "#c98755",
+    "seal": "#59a69b"
+  },
+  "terminationVariants": [
+    "без разделки",
+    "медь",
+    "лужёная медь",
+    "pin",
+    "socket",
+    "pin+seal",
+    "socket+seal",
+    "lug"
+  ],
+  "assets": [
+    {
+      "id": "nki-ring",
+      "name": "НКИ · кольцевой",
+      "kind": "terminal",
+      "geometryFamily": "ring",
+      "views": {
+        "e4": "nki-ring-e4.svg",
+        "drawing": "nki-ring-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Изолированный обжим и кольцевой лепесток",
+      "dimensionFields": "L / L1 / D / B / d1 / P / S",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nvi-fork",
+      "name": "НВИ · вилочный",
+      "kind": "terminal",
+      "geometryFamily": "fork",
+      "views": {
+        "e4": "nvi-fork-e4.svg",
+        "drawing": "nvi-fork-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Открытая вилка без дополнительного порта",
+      "dimensionFields": "L / L1 / D / B / d1 / P / S",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "nshvi-single",
+      "name": "НШВИ · стандартный раструб",
+      "kind": "terminal",
+      "geometryFamily": "ferrule",
+      "views": {
+        "e4": "nshvi-single-e4.svg",
+        "drawing": "nshvi-single-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Трубчатая втулка с изолированным раструбом",
+      "dimensionFields": "L / L1 / C / W / A",
+      "catalogAlias": null,
+      "standardClaim": null,
+      "colorOptions": [
+        {
+          "id": "white",
+          "name": "Белый",
+          "hex": "#f2f0e8",
+          "views": {
+            "drawing": "nshvi-single-white-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "gray",
+          "name": "Серый",
+          "hex": "#8d959c",
+          "views": {
+            "drawing": "nshvi-single-gray-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "red",
+          "name": "Красный",
+          "hex": "#ce5356",
+          "views": {
+            "drawing": "nshvi-single-red-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "blue",
+          "name": "Синий",
+          "hex": "#287fb5",
+          "views": {
+            "drawing": "nshvi-single-blue-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "black",
+          "name": "Чёрный",
+          "hex": "#323941",
+          "views": {
+            "drawing": "nshvi-single-black-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "yellow",
+          "name": "Жёлтый",
+          "hex": "#e9c742",
+          "views": {
+            "drawing": "nshvi-single-yellow-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        }
+      ],
+      "colorPolicy": "visual execution only; no section, dimension or capacity mapping asserted"
+    },
+    {
+      "id": "nshvi-double",
+      "name": "НШВИ · широкий раструб",
+      "kind": "terminal",
+      "geometryFamily": "ferrule-double",
+      "views": {
+        "e4": "nshvi-double-e4.svg",
+        "drawing": "nshvi-double-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Прямоугольный раструб с плечами к трубке; один ввод",
+      "dimensionFields": "L / L1 / C / W / A",
+      "catalogAlias": null,
+      "standardClaim": null,
+      "colorOptions": [
+        {
+          "id": "white",
+          "name": "Белый",
+          "hex": "#f2f0e8",
+          "views": {
+            "drawing": "nshvi-double-white-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "gray",
+          "name": "Серый",
+          "hex": "#8d959c",
+          "views": {
+            "drawing": "nshvi-double-gray-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "red",
+          "name": "Красный",
+          "hex": "#ce5356",
+          "views": {
+            "drawing": "nshvi-double-red-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "blue",
+          "name": "Синий",
+          "hex": "#287fb5",
+          "views": {
+            "drawing": "nshvi-double-blue-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "black",
+          "name": "Чёрный",
+          "hex": "#323941",
+          "views": {
+            "drawing": "nshvi-double-black-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "yellow",
+          "name": "Жёлтый",
+          "hex": "#e9c742",
+          "views": {
+            "drawing": "nshvi-double-yellow-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        }
+      ],
+      "colorPolicy": "visual execution only; no section, dimension or capacity mapping asserted"
+    },
+    {
+      "id": "nvsh-alias-pin-blade",
+      "name": "НВШ (alias) · pin blade",
+      "kind": "terminal",
+      "geometryFamily": "blade",
+      "views": {
+        "e4": "nvsh-alias-pin-blade-e4.svg",
+        "drawing": "nvsh-alias-pin-blade-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Предложенная геометрия; расшифровка не утверждается",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": "НВШ",
+      "standardClaim": null
+    },
+    {
+      "id": "din-sc-ring",
+      "name": "DIN / SC · силовой кольцевой",
+      "kind": "terminal",
+      "geometryFamily": "power-ring",
+      "views": {
+        "e4": "din-sc-ring-e4.svg",
+        "drawing": "din-sc-ring-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Медь лужёная; на C3 маркировка SC. DIN не подтверждён",
+      "dimensionFields": "поля каталога C3: d2 / d / D / B / E / L",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "pin-round",
+      "name": "Pin · круглый штырь",
+      "kind": "terminal",
+      "geometryFamily": "pin",
+      "views": {
+        "e4": "pin-round-e4.svg",
+        "drawing": "pin-round-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Боковой вид цилиндрического контакта",
+      "dimensionFields": "проектные поля L / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "socket-round",
+      "name": "Socket · круглая розетка",
+      "kind": "terminal",
+      "geometryFamily": "socket",
+      "views": {
+        "e4": "socket-round-e4.svg",
+        "drawing": "socket-round-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Боковой вид с гнездом; сочленение не порт",
+      "dimensionFields": "проектные поля L / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flat-male",
+      "name": "Flat male · плоский штырь",
+      "kind": "terminal",
+      "geometryFamily": "male",
+      "views": {
+        "e4": "flat-male-e4.svg",
+        "drawing": "flat-male-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Плоская контактная лопатка",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flat-female",
+      "name": "Flat female · плоская розетка",
+      "kind": "terminal",
+      "geometryFamily": "female",
+      "views": {
+        "e4": "flat-female-e4.svg",
+        "drawing": "flat-female-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Сложенный пружинный контакт с гнездом",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag",
+      "name": "Флажковый · цельная изоляция",
+      "kind": "terminal",
+      "geometryFamily": "flag",
+      "views": {
+        "e4": "flag-e4.svg",
+        "drawing": "flag-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Компактный профиль C1; полупрозрачная оболочка и плоский металл",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-open",
+      "name": "Неизолированный обжимной флажок",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-open",
+      "views": {
+        "e4": "flag-bare-open-e4.svg",
+        "drawing": "flag-bare-open-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Компактные крылья; головка над основанием, окно под ней",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-pressed-smooth",
+      "name": "Неизолированный опрессовочный · гладкий",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-pressed-smooth",
+      "views": {
+        "e4": "flag-bare-pressed-smooth-e4.svg",
+        "drawing": "flag-bare-pressed-smooth-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Два диаметра; трубка проходит под головкой до её края",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-pressed-ribbed",
+      "name": "Неизолированный опрессовочный · рифлёный",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-pressed-ribbed",
+      "views": {
+        "e4": "flag-bare-pressed-ribbed-e4.svg",
+        "drawing": "flag-bare-pressed-ribbed-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Один диаметр, рёбра; трубка под головкой до её края",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-insulated",
+      "name": "Гильза · изолированная",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-insulated",
+      "views": {
+        "e4": "sleeve-insulated-e4.svg",
+        "drawing": "sleeve-insulated-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Два крайних входа; изоляция показана цветом",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-bare",
+      "name": "Гильза · неизолированная",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-bare",
+      "views": {
+        "e4": "sleeve-bare-e4.svg",
+        "drawing": "sleeve-bare-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Два крайних входа; один общий объём гильзы",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "sleeve-ultrasonic",
+      "name": "Гильза · УЗ сварка",
+      "kind": "sleeve",
+      "geometryFamily": "sleeve-ultrasonic",
+      "views": {
+        "e4": "sleeve-ultrasonic-e4.svg",
+        "drawing": "sleeve-ultrasonic-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry-a",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        },
+        {
+          "id": "anchor-wire-entry-b",
+          "role": "wire-entry",
+          "x": 188,
+          "y": 50,
+          "normal": [
+            1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 110,
+        "y": 50
+      },
+      "electricalPointCount": 2,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "УЗ шов — операция, не отдельный порт",
+      "dimensionFields": "проектные поля L / D / d",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "preparation-none",
+      "name": "Разделка: без разделки",
+      "kind": "preparation",
+      "geometryFamily": "none",
+      "views": {
+        "e4": "preparation-none-e4.svg",
+        "drawing": "preparation-none-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-copper",
+      "name": "Разделка: медь",
+      "kind": "preparation",
+      "geometryFamily": "copper",
+      "views": {
+        "e4": "preparation-copper-e4.svg",
+        "drawing": "preparation-copper-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-tinned-copper",
+      "name": "Разделка: лужёная медь",
+      "kind": "preparation",
+      "geometryFamily": "tinned-copper",
+      "views": {
+        "e4": "preparation-tinned-copper-e4.svg",
+        "drawing": "preparation-tinned-copper-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-pin",
+      "name": "Разделка: pin",
+      "kind": "preparation",
+      "geometryFamily": "pin",
+      "views": {
+        "e4": "preparation-pin-e4.svg",
+        "drawing": "preparation-pin-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-socket",
+      "name": "Разделка: socket",
+      "kind": "preparation",
+      "geometryFamily": "socket",
+      "views": {
+        "e4": "preparation-socket-e4.svg",
+        "drawing": "preparation-socket-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-pin-seal",
+      "name": "Разделка: pin+seal",
+      "kind": "preparation",
+      "geometryFamily": "pin-seal",
+      "views": {
+        "e4": "preparation-pin-seal-e4.svg",
+        "drawing": "preparation-pin-seal-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-socket-seal",
+      "name": "Разделка: socket+seal",
+      "kind": "preparation",
+      "geometryFamily": "socket-seal",
+      "views": {
+        "e4": "preparation-socket-seal-e4.svg",
+        "drawing": "preparation-socket-seal-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    },
+    {
+      "id": "preparation-lug",
+      "name": "Разделка: lug",
+      "kind": "preparation",
+      "geometryFamily": "lug",
+      "views": {
+        "e4": "preparation-lug-e4.svg",
+        "drawing": "preparation-lug-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант"
+    }
+  ],
+  "references": {
+    "C1": {
+      "image": "codex-clipboard-bbee8c8c-ddbe-40a1-b1c6-01db61a7f201.png",
+      "observed": "НКИ/НВИ: L/L1/D/B/d1/P/S, кольцо и открытая вилка"
+    },
+    "C2": {
+      "image": "codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png",
+      "observed": "трубчатые варианты; расширенный раструб — вариант проекта; поля L/L1/C/W/A"
+    },
+    "C3": {
+      "image": "codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png",
+      "observed": "трубчатые медные лужёные SC; d2/d/D/B/E/L; DIN не указан"
+    },
+    "C4": {
+      "image": "codex-clipboard-b83f3bf3-8029-4807-a459-21fa6222fbc1.png",
+      "observed": "кольцевые/вилки, butt, bullet, male/female, pin, flag"
+    },
+    "C5": {
+      "image": "codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png",
+      "observed": "визуальное разнообразие ring/fork/round/flat/flag/sleeve"
+    }
+  },
+  "profileRevision": "2026-10-15-photo-profiles",
+  "cuffRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-c8f5ebe8-345a-4b3f-b800-2bc7dead84c4.png",
+    "families": [
+      "ring",
+      "fork",
+      "blade",
+      "pin",
+      "socket",
+      "male",
+      "female"
+    ],
+    "profile": "cylindrical smaller front barrel with larger wire-entry collar; same shape in both views",
+    "nshvi": "geometry unchanged; remove badge and double designation from visible names; legacy ids retained"
+  },
+  "receptacleRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-af5ec56d-26e0-4073-9720-5d65b12e714e.png",
+    "headRatio": [
+      7.3,
+      6.6
+    ],
+    "neckWidthRatio": 2.3,
+    "note": "Straight female proportions unchanged. Bare flags reuse a projected 90-degree metal head; insulated flag has a separate complete polymer shell."
+  },
+  "profileReferences": {
+    "C1": "codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png",
+    "C2": "codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png",
+    "C3": "codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png"
+  },
+  "viewContract": "same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds",
+  "flagRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-c79a2619-0c4f-4f4f-b776-fd8d82ab0573.png",
+      "C2": "codex-clipboard-cbe9281b-f537-420a-9cee-934ff16a733d.png",
+      "C3": "codex-clipboard-82516bcf-e1ff-459f-9497-6e34da26ec65.png",
+      "C4": "codex-clipboard-e9959775-cb16-458e-843d-fb46a7f5f527.png",
+      "C5": "codex-clipboard-c8fe8adc-8155-4eb6-92c3-d4717a3e38a3.png"
+    },
+    "observation": "C1/C2 open-wing crimp and large bridge window; C3 fully insulated elbow; C4 superseded wrong straight-cuff profile; C5 two distinct bare pressed tubes: smooth two-diameter and ribbed one-diameter",
+    "portPolicy": "one wire-entry at 32,50; receptacle opening is geometry only",
+    "status": "historical: profile geometry superseded by flat2dRevision"
+  },
+  "flat2dRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-1e6840a4-2b7d-4e8f-b846-85d3a98a8a60.png",
+      "C2": "codex-clipboard-48f88ebf-fc92-4343-a0a1-b61410ccc19a.png"
+    },
+    "openCrimp": "uniform head scale .7, head right edge x90 and top y1.384; compact curled wings; window x69..84/y30..45 directly beneath head, above second wing pair",
+    "pressed": "identical head placement for smooth/ribbed, uniform head scale .88; head underside y37 meets tube top y37; tube/head right edge x90; head top y1.0256; no side bridge",
+    "insulated": "flat orthographic L silhouette; solid fill, no gradients/opacity/face/loop curls; coplanar metal outline",
+    "ports": "existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged",
+    "insulatedStatus": "historical solid fill and long silhouette superseded by insulatedFlagRevision; bare profiles remain current"
+  },
+  "insulatedFlagRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png",
+    "sourceProfile": {
+      "bounds": [
+        15,
+        25,
+        476,
+        436
+      ],
+      "mainBody": [
+        33,
+        170,
+        476,
+        436
+      ],
+      "shortInput": [
+        15,
+        25,
+        180,
+        180
+      ],
+      "sourceInputCenter": [
+        97.5,
+        25
+      ]
+    },
+    "sourceToLocalMatrix": [
+      0,
+      -0.12,
+      0.12,
+      0,
+      29,
+      61.7
+    ],
+    "scale": 0.12,
+    "drawing": "flat 2D internal backing, window and two longitudinal spring edges below real fill-opacity .61 polymer; no face plate, arcs, perspective or gradients",
+    "e4": "monochrome silhouette only",
+    "port": "one unchanged anchor32,50, normal[-1,0], pivot32,50; top-entry sheet is rotation of same symbol"
+  },
+  "nshviRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-cb956ef9-76ba-43e5-ae61-9b0c6478315e.png",
+      "C2": "codex-clipboard-0fb25d29-e892-4e35-ab3d-6e895e023661.png",
+      "C3": "codex-clipboard-b06aea3f-a3d7-465f-bb14-f760206198e2.png"
+    },
+    "standard": "existing silhouette preserved",
+    "wide": "broad rectangular base with shoulders to tube; polymer width45/tube diameter18=2.5; polymer length54/tube length66≈.818, illustrative drawing units",
+    "colors": [
+      "white",
+      "gray",
+      "red",
+      "blue",
+      "black",
+      "yellow"
+    ],
+    "policy": "no section, physical dimension, length class or capacity assigned by color; same one wire entry32,50 and pivot32,50",
+    "variants": "12 real color drawing SVGs; colorOptions refer to existing monochrome E4 for their geometry"
+  },
+  "runtime": {
+    "source": "design/termination-099",
+    "e4": "same accepted geometry, monochrome ink; drawing files unchanged",
+    "sourceFileSha256": {
+      "din-sc-ring-drawing.svg": "c3d462832a19cbe8fe7570c2c07922370d6a6158cc26f4bf3f9c1bddce407082",
+      "din-sc-ring-e4.svg": "4474d784852324c3c0daafdc7e05e70629d0aab267178e7a7ea0bf3786480e69",
+      "flag-bare-open-drawing.svg": "ee698e8090d6c0c0d2d0b419f461c4dbcffd3b1403dfe640457f3ceb7ef942f0",
+      "flag-bare-open-e4.svg": "c7167c2273982ba39cd5206ffc5acb01121413babf5c0a783852510ba51f4739",
+      "flag-bare-pressed-ribbed-drawing.svg": "249aea934598ac13756a88ef152aedef3224af5ddbb00c6b49472cf1840afc56",
+      "flag-bare-pressed-ribbed-e4.svg": "f7c43a6c6d7d8db3206056be94353826a890a4779e7d00a3f1d354286490dc59",
+      "flag-bare-pressed-smooth-drawing.svg": "0813fb8c4cf48611bd704171fd930e797f525068b0063d4b52ecb3a3d9ee1b22",
+      "flag-bare-pressed-smooth-e4.svg": "e9e299dc7f0a9f9d7f7771a48a7fa89ba3e49ceb29a7db225c069e435c29d3a3",
+      "flag-drawing.svg": "95a12afed945ecd40dd26b9a878c05f2e16d648f3f531e34f517620f8c599338",
+      "flag-e4.svg": "006c4db2bc317902f6291e580dd07932ffe6a1b584ec9b6284d3b02262999b98",
+      "flat-female-drawing.svg": "ece6f8f65c4d4b43c7a04f88a569ba3f497cc44dff026d80f76c5679a12e19ad",
+      "flat-female-e4.svg": "48429a089a570525e84f0e6f22a69b2fef65db7a7cda7a93fc8403881f508b84",
+      "flat-male-drawing.svg": "779fa5241c89d3c797832921644440aadd4109129ebaa647153d7d05a374adb9",
+      "flat-male-e4.svg": "7fbee98dca5776196383dcdb0f0ada3525873f0ea4fb62363ac921396214e5de",
+      "nki-ring-drawing.svg": "bfbf979078d12f79c50ae1398a127378173c3512227a3e3c1b801ddc8e521826",
+      "nki-ring-e4.svg": "0d425ac32cd4662f4eb3023ccb618ae5e74b976f1886f9cf9ee9a507aad88563",
+      "nshvi-double-black-drawing.svg": "c192acca51f8deacabbff0620dce4077c638eb284ae93af32e98995813cab8ff",
+      "nshvi-double-blue-drawing.svg": "7a9af2d5f844865551df23e8e2ba944d83f4aae3aa68d7d4aa785e157257ed03",
+      "nshvi-double-drawing.svg": "b8a67492e9b86ffbb139050a4dc983a0eb882c2b9b134f1707444424eaf60111",
+      "nshvi-double-e4.svg": "b4f0e3473b10c5c02dce5c3c6f14ca6cc086ff28e6d9b01314983f2cf541bfe3",
+      "nshvi-double-gray-drawing.svg": "15570241d93e783ace03e2968b6dc5d07ed346d3e762660e625e1f0aca811b98",
+      "nshvi-double-red-drawing.svg": "47054a6bf3c5c9076f2fe40a2642482d90d52c2b6bd5f456336c0212f4ee1a31",
+      "nshvi-double-white-drawing.svg": "c26f7ece276f3a5a2027fb2fff9a442486b6c26b83d7128c2975aca0e6da170e",
+      "nshvi-double-yellow-drawing.svg": "44f211de9f667b78fa32e50b13f8dd27773294c886d4fef47f0c067de3e10492",
+      "nshvi-single-black-drawing.svg": "460590de7f4aa700c0b2ca064c282544850bc970368db832c0f1ef09c757a952",
+      "nshvi-single-blue-drawing.svg": "1e8030d1b6ea9521980ce11696fd0b71a0d29404db36fed7510598f62ef4685c",
+      "nshvi-single-drawing.svg": "8602b0a6dd045c5a52fb61b2d7bd6fa8e1a9318f8913b38f65a1d79947876f7c",
+      "nshvi-single-e4.svg": "48752abcfe0c81fc62297b39152775cafac387d4efd6e9f5a232ec668d2284d9",
+      "nshvi-single-gray-drawing.svg": "e8ef8f7bc243cf7e9047ea7d18ec4af55003dad73e840331de9673858edb10e9",
+      "nshvi-single-red-drawing.svg": "c3ed2ad1e03fff2efa33aa8788f529745589882d46387a5537b6206418e38cd9",
+      "nshvi-single-white-drawing.svg": "02227177a92332a5d974472d52c5affd8bfff95a1fdb7da8968880bb5b95b617",
+      "nshvi-single-yellow-drawing.svg": "dd7c43bd298e0d64d9ff50268cd8d2c255166a6e59fcd3f3ab98098d9360f6b8",
+      "nvi-fork-drawing.svg": "ce1c2270bd2fb241eb406c971959011487ff1f5b26c2c5d95bc1cd87804560f6",
+      "nvi-fork-e4.svg": "cf3435227f6fe184faa7a0cb61bacfe390d20b037244120613650a7aec03be82",
+      "nvsh-alias-pin-blade-drawing.svg": "bdfea7d600d2e6fe2b7ffac01c43e0fb68feaa4d6b557c50ab085b8ec50875c1",
+      "nvsh-alias-pin-blade-e4.svg": "0ac625c9acaf36734d1fdaf8033f6144a15cd0dd4c3ac41c32c60eb57d6453ef",
+      "pin-round-drawing.svg": "2222feed20421596df5ff3669a5170e39d3af46b65e45dda01b9c2f0a736d211",
+      "pin-round-e4.svg": "2a2ee3fa0121f3ebcfaadfa01d72fceec4179fa2639b1605dc597bf11c743799",
+      "preparation-copper-drawing.svg": "d7b7002996ab95368306ac3ba95dec204305d119cfe874aed21721d1097a17b0",
+      "preparation-copper-e4.svg": "1d68c00914e93236f77deaa18259fde29953ff785b4cfa67d68b172e6da2f1b2",
+      "preparation-lug-drawing.svg": "fdb2e627ea8deb30bb680ffeca25d56df21fec08dcb8d659df51b497290b1944",
+      "preparation-lug-e4.svg": "42ec7c00e5af7aed89151f38ffef5bf64cacef86a31000164b20adf676c59c85",
+      "preparation-none-drawing.svg": "92c847c0183252c23d65894c1d78e14a5a9a5a07df5988bfec628df2b5187cf4",
+      "preparation-none-e4.svg": "538b993a92e6a961681d60b5e826f9ed0c59558fe85aeea49062efde4afbaf69",
+      "preparation-pin-drawing.svg": "f63f0766b6604fcaf1fe9f1597270e7450071e556c9c730fe22aec86a4333138",
+      "preparation-pin-e4.svg": "0855da9b6714eefb5dfff7227493a5e393035aaaf6fdb68795bf3df15617758f",
+      "preparation-pin-seal-drawing.svg": "84f05fa4d6ffb5a00a4520f6386a2a3aa97f380266836ce4a5e10844332d4cfd",
+      "preparation-pin-seal-e4.svg": "f592f1918cf295148551a3801f329ae2c22df5a7e6a139b4435c1293f3dab152",
+      "preparation-socket-drawing.svg": "30a2d83f0fc8f36c2c5cfef19223695a089eda8540ec5fd4e8902873f33c6359",
+      "preparation-socket-e4.svg": "ba1fd82d5cc89b1cd2ba441278c28b9b80bcd7868c11f4a99f6320ec26d710fb",
+      "preparation-socket-seal-drawing.svg": "b054578b5720c9531044597c9db1d8f17afd8a99ed3624b7270db38a6bfd9617",
+      "preparation-socket-seal-e4.svg": "4f267dd38d4b2a98e7a2e7ee69b76149413983c7c5116cd4872b342433be2c88",
+      "preparation-tinned-copper-drawing.svg": "4e44cb00ad0bdae26cbcd8f2d6183c4970439a12966a9a0de8ae3c7f9ad410b0",
+      "preparation-tinned-copper-e4.svg": "aaedc3e868e04a3ec9399966b3062979e86ea5022ca8bf3e0eeac07282457760",
+      "sleeve-bare-drawing.svg": "17a1991274730b329884d853f87d02cced72923958dce75e12abdb783522ee6a",
+      "sleeve-bare-e4.svg": "4eef377af864a37440b3ae4ec275923a060a5775500834453a90c14e3f9872d7",
+      "sleeve-insulated-drawing.svg": "3631286d947a1f74aa5bd452005e5e1b9da71f7d187370f615cbd46ba0efc853",
+      "sleeve-insulated-e4.svg": "14e70612f95bbdc45f1d61930fa152f543352e31dec0108696a266e901cb3f7e",
+      "sleeve-ultrasonic-drawing.svg": "0cb47a3f3a534113511aaa5a28b3661a0c97110b9e28358c180a7b2e22b32697",
+      "sleeve-ultrasonic-e4.svg": "fd74c4bb3e30a7a6cb4027ed6e5b89b9e504bedc0964c5be361d397347267da5",
+      "socket-round-drawing.svg": "ff6acc4d1b97894b9373ae47fd84e0c4f88d5ce6909d019fe3b89a8ce7cccf83",
+      "socket-round-e4.svg": "356196a4fb37360f833aed825cc4d337b07c3474c5c6372d5ddd265cb1c2a208"
+    }
+  }
+}

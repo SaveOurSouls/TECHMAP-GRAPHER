@@ -58,7 +58,7 @@ function exact(value: Record<string, unknown>, keys: readonly string[]): void {
 function parseRef(value: unknown): RouteSourceRef {
   const v = object(value);
   exact(v, ["kind", "id"]);
-  if (!["wire", "cable", "covering", "connector"].includes(String(v.kind))) return fail();
+  if (!["wire", "cable", "covering", "connector", "termination-artifact"].includes(String(v.kind))) return fail();
   return { kind: v.kind as RouteSourceRef["kind"], id: text(v.id, 128) };
 }
 function parseAssemblyInput(value: unknown): RouteAssemblyInput {

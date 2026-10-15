@@ -3,9 +3,13 @@ import { buildRouteSourceItems, type RouteSourceRef, type RouteSourceItem } from
 import type { RouteV3Node, RouteV3Product } from "./route-v3-model";
 import type { ReferenceCatalogRecord, ReferenceCatalogSnapshot } from "../reference-catalog-api";
 import type { UmlOperation } from "../uml/uml-model";
+import type { TerminationOperation } from '../editor/termination-model';
 
 /** Route v3 norms are seconds; legacy UML fields remain for old saved cards. */
 export interface RouteV3Operation extends UmlOperation {
+  /** Canonical manufacturing feature; one recipe can cover both sleeve ports. */
+  readonly terminationOperationId?: string;
+  readonly terminationOperationSnapshot?: TerminationOperation;
   readonly catalogBinding?: {
     readonly sourceId: string; readonly snapshotId: string; readonly snapshotSha256: string;
     readonly recordId: string; readonly sourceKey: string; readonly displayName: string;
@@ -51,7 +55,7 @@ export function routeV3CatalogGroups(records: readonly ReferenceCatalogRecord[])
     .map(([name, entries]) => ({ name, records: entries.sort((left, right) => routeV3CatalogNumber(left).localeCompare(routeV3CatalogNumber(right), "ru", { numeric: true })) }));
 }
 
-export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snapshot: ReferenceCatalogSnapshot, id: string): RouteV3Operation {
+export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snapshot: ReferenceCatalogSnapshot, id: string, previous?:RouteV3Operation): RouteV3Operation {
   if (record.entityType !== "operation") throw new Error("Выберите запись БД.ОП.");
   const category = routeV3CatalogName(record);
   const subcategory = routeV3CatalogNumber(record);
@@ -60,12 +64,16 @@ export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snap
   const norms = Object.fromEntries(normKeys.map(key => [key, numberOrNull(record.payload[key])])) as Pick<RouteV3Operation, typeof normKeys[number]>;
   return {
     id, title: category, kind, lengthMm: 0, speedMmPerMinute: 1, employees: 1, quantity: 1, minutesEach: 0,
+    ...(previous?.terminationOperationId?{terminationOperationId:previous.terminationOperationId,terminationOperationSnapshot:previous.terminationOperationSnapshot}:{}),
     catalogBinding: { sourceId: snapshot.sourceId, snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256, recordId: record.recordId, sourceKey: record.sourceKey, displayName: `${category} · № ${subcategory}` },
     category, subcategory, catalogOperationType: operationType, parallelCapacity: 1, ...norms,
   };
 }
 
 export function validRouteV3Operation(op: RouteV3Operation): boolean {
+  if(op?.terminationOperationId!==undefined&&(typeof op.terminationOperationId!=='string'||!op.terminationOperationId.trim()))return false;
+  const snapshot=op?.terminationOperationSnapshot;
+  if(snapshot&&(!op.terminationOperationId||snapshot.id!==op.terminationOperationId||!['strip','tin','crimp','ultrasonic-weld','twist'].includes(snapshot.kind)||snapshot.executionCount!==null&&(!Number.isSafeInteger(snapshot.executionCount)||snapshot.executionCount<1)||snapshot.processCapacity!=null&&(!Number.isSafeInteger(snapshot.processCapacity)||snapshot.processCapacity<1)||snapshot.norm&&Object.values(snapshot.norm).some(v=>v!==null&&(typeof v!=='number'||!Number.isFinite(v)||v<0))))return false;
   if (!op || typeof op.id !== "string" || !op.id.trim() || typeof op.title !== "string" || !["running", "static"].includes(op.kind) || [op.lengthMm, op.speedMmPerMinute, op.employees, op.quantity, op.minutesEach].some(n => typeof n !== "number" || !Number.isFinite(n) || n < 0)) return false;
   if (normKeys.some(key => op[key] !== undefined && op[key] !== null && (typeof op[key] !== "number" || !Number.isFinite(op[key]) || op[key]! < 0))) return false;
   if ([op.category, op.subcategory, op.catalogOperationType].some(value => value !== undefined && (typeof value !== "string" || value.length > 512))) return false;
@@ -113,6 +121,16 @@ export function routeV3OperationTimes(operation: RouteV3Operation, batchQuantity
 }
 export const routeV3OperationMinutes = (operation: RouteV3Operation): number | null => routeV3OperationTimes(operation).operationMinutes;
 
+export function routeV3TerminationOperationRefs(source:HarnessDesignDocument,id:string):readonly RouteSourceRef[]{
+  const o=source.terminations?.operations.find(o=>o.id===id);if(!o)return [];
+  const t=o.target;
+  const groups=t.kind==='group'?source.terminations!.groups.filter(g=>g.id===t.groupId):t.kind==='portSet'?source.terminations!.groups.filter(g=>g.target.connectorId===t.connectorId&&t.contactIds.includes(g.target.contactId)):[];
+  const wireIds:string[]=t.kind==='wireEnd'?[t.wireId]:t.kind==='twist'?[...(source.terminations!.twists.find(g=>g.id===t.twistId)?.memberWireIds??[])]:groups.flatMap(g=>g.memberEnds.map(e=>e.wireId));
+  if(t.kind==='portSet')for(const w of source.wires)if([w.from,w.to].some(e=>e.connectorId===t.connectorId&&t.contactIds.includes(e.contactId)))wireIds.push(w.id);
+  const artifactIds=groups.map(g=>g.artifactId);if(t.kind==='portSet'){const id=source.connectors.find(c=>c.id===t.connectorId)?.terminationComponent?.artifactId;if(id)artifactIds.push(id);}
+  return [...[...new Set(wireIds)].map(id=>({kind:'wire' as const,id})),...[...new Set(artifactIds)].map(id=>({kind:'termination-artifact' as const,id}))];
+}
+
 const productId = (nodeId: string, ref?: RouteSourceRef): string => ref ? `product:${nodeId}:${ref.kind}:${ref.id}` : `product:${nodeId}`;
 export function routeV3IsCutCard(node: RouteV3Node): boolean {
   return node.kind === "semiFinished" && !node.fragmentIds.length
@@ -141,6 +159,25 @@ export function assignRouteV3OperationProducts(node: RouteV3Node, operationId: s
 
 export interface RouteV3OperationProjectTimes extends RouteV3OperationTimes { readonly projectMinutes: number | null; readonly cycles: number | null; readonly setupMinutes: number | null; readonly assignedRefs: readonly RouteSourceRef[]; }
 export function routeV3OperationProjectTimes(operation: RouteV3Operation, node: RouteV3Node, source: HarnessDesignDocument, harnessQuantity: number): RouteV3OperationProjectTimes {
+  if(operation.terminationOperationId){
+    const o=operation.terminationOperationSnapshot??source.terminations?.operations.find(o=>o.id===operation.terminationOperationId);
+    const unknown={machineMinutes:null,humanMinutes:null,operationMinutes:null,batchMinutes:null,projectMinutes:null,cycles:null,setupMinutes:null,assignedRefs:[]};
+    if(!o||o.executionCount===null||!Number.isSafeInteger(harnessQuantity)||harnessQuantity<1)return unknown;
+    // executionCount is the recipe's actual executions per harness, already
+    // accounting for its process capacity. Do not divide these counts twice.
+    const cycles=o.executionCount*harnessQuantity,n=o.norm??{machineSeconds:null,humanSeconds:null,setupSeconds:null};
+    if(operation.catalogBinding){
+      const times=routeV3OperationTimes({...operation,quantity:1},1);
+      const setupMinutes=operation.setupTimeSeconds==null?null:operation.setupTimeSeconds/60;
+      const projectMinutes=times.operationMinutes===null||setupMinutes===null?null:times.operationMinutes*cycles+setupMinutes;
+      return {...times,projectMinutes,batchMinutes:projectMinutes,cycles,setupMinutes,assignedRefs:[]};
+    }
+    // ADR-0018 static operation time: human work; machine time is informative.
+    const operationMinutes=n.humanSeconds===null?null:n.humanSeconds/60;
+    const setupMinutes=n.setupSeconds===null?null:n.setupSeconds/60;
+    const projectMinutes=operationMinutes===null||setupMinutes===null?null:operationMinutes*cycles+setupMinutes;
+    return {machineMinutes:n.machineSeconds===null?null:n.machineSeconds/60,humanMinutes:n.humanSeconds===null?null:n.humanSeconds/60,operationMinutes,batchMinutes:projectMinutes,projectMinutes,cycles,setupMinutes,assignedRefs:[]};
+  }
   const sources = buildRouteSourceItems(source);
   const products = routeV3Products(node), assigned = routeV3AssignedProductIds(node, operation);
   const refs = products.filter(product => assigned.includes(product.id)).flatMap(product => product.ref ? [product.ref] : []);
@@ -203,7 +240,7 @@ export function routeV3SourceQuantity(ref: RouteSourceRef, source: HarnessDesign
   const exists = ref.kind === "wire" ? source.wires.some(w => w.id === ref.id)
     : ref.kind === "cable" ? source.cables.some(c => c.id === ref.id)
     : ref.kind === "covering" ? source.physicalTopology?.coverings?.some(c => c.id === ref.id) ?? false
-    : source.connectors.some(c => c.id === ref.id);
+    : ref.kind==='termination-artifact'?source.terminations?.artifacts.some(a=>a.id===ref.id)??false:source.connectors.some(c => c.id === ref.id);
   const perSemiFinished = exists ? 1 : 0;
   return { perSemiFinished, perBatch: perSemiFinished * (Number.isFinite(harnessQuantity) && harnessQuantity > 0 ? harnessQuantity : 1) };
 }

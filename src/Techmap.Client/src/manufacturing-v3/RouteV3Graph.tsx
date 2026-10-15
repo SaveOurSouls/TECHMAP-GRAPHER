@@ -1,5 +1,5 @@
 import { routeV3CompositionGroups, setRouteV3GroupArtwork } from "./route-v3-composition-groups";
-import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
+import { RouteV3SourceArtwork } from "./route-v3-termination-artwork";
 import { RouteV3OperationTable as Operations } from "./RouteV3OperationTable";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent } from "react";
 import type { HarnessDesignDocument } from "../editor/model";
@@ -74,7 +74,7 @@ function Composition({ node, source, sources, graph, harnessQuantity, updateWire
         const label = `ПФ-${String(index + 1).padStart(2, "0")}`;
         const ids = refs.map(value => value.id);
         return <Fragment key={refKey(ref)}><tr>
-          <td data-label="Рисунок"><div className="route-v3-composition-thumbnail" aria-label={`Рисунок ${label}`}>{appearance && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(graph, ref.id)} /> : <RouteV2SourceArtwork document={source} ref={ref} item={item} />}</div></td>
+          <td data-label="Рисунок"><div className="route-v3-composition-thumbnail" aria-label={`Рисунок ${label}`}>{appearance && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(graph, ref.id)} /> : <RouteV3SourceArtwork document={source} ref={ref} item={item} />}</div></td>
           <td data-label="Объект"><strong>{label}</strong><span>{appearance?.name ?? item?.title ?? ref.id}{refs.length > 1 ? ` · ${refs.length} одинаковых` : ""}</span></td>
           <td data-label="Материал">{item ? (ref.kind === "wire" ? <span className="route-v3-material-label"><i className="route-v3-color-swatch" style={{ background: wireColor?.background }} aria-hidden="true" />{routeSourceWireMaterial(item)}</span> : routeSourceDesignation(item)) : "Объект отсутствует в чертеже"}</td>
           <td data-label="Длина">{item?.lengthMm == null ? "—" : `${item.lengthMm} мм`}</td>
@@ -203,9 +203,9 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
   };
   const chooseOperation = (record: ReferenceCatalogRecord) => {
     if (!chooser || !catalogSnapshot) return;
-    const operation = routeV3OperationFromCatalog(record, catalogSnapshot, chooser);
-    const firstLength = selected?.refs.map(ref => sources.find(item => refKey(item.ref) === refKey(ref))?.lengthMm).find((length): length is number => length != null) ?? 0;
     const previous = selected?.operations?.find(value => value.id === chooser);
+    const operation = routeV3OperationFromCatalog(record, catalogSnapshot, chooser,previous);
+    const firstLength = selected?.refs.map(ref => sources.find(item => refKey(item.ref) === refKey(ref))?.lengthMm).find((length): length is number => length != null) ?? 0;
     updateOperation(chooser, { ...operation, lengthMm: firstLength, outputProductIds: previous?.outputProductIds, parallelCapacity: previous?.parallelCapacity ?? 1 });
     setChooser(null); setCategory(null);
   };

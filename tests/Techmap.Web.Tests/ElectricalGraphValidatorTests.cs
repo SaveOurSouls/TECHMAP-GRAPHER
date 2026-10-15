@@ -51,6 +51,26 @@ public sealed class ElectricalGraphValidatorTests
         Assert.Equal(fixture.PlacementId, Assert.Single(fixture.Snapshots.ListPlacements(fixture.ProjectId, fixture.HarnessId)).PlacementId);
     }
 
+    [Fact]
+    public void Termination_data_requires_writer_contract_three()
+    {
+        using var fixture = new Fixture();
+        var initial = fixture.Designs.Get(fixture.ProjectId, fixture.HarnessId);
+        var graph = Graph(fixture.PlacementId, fixture.Template);
+        graph["terminations"] = new JsonObject
+        {
+            ["version"] = 1, ["artifacts"] = new JsonArray(), ["groups"] = new JsonArray(),
+            ["endPreparations"] = new JsonArray(), ["operations"] = new JsonArray(), ["twists"] = new JsonArray(),
+        };
+        var oldWriter = Assert.Throws<HarnessDesignDocumentException>(() => fixture.Designs.Put(
+            fixture.ProjectId, fixture.HarnessId, initial.Revision, 1, graph.ToJsonString(), 2));
+        Assert.Equal("design_writer_upgrade_required", oldWriter.Code);
+        Assert.Equal(initial, fixture.Designs.Get(fixture.ProjectId, fixture.HarnessId));
+
+        var saved = fixture.Designs.Put(fixture.ProjectId, fixture.HarnessId, initial.Revision, 1, graph.ToJsonString(), 3);
+        Assert.Equal(3, JsonNode.Parse(saved.ContentJson)!["requiredWriterContractVersion"]!.GetValue<int>());
+    }
+
     [Theory]
     [InlineData("contacts")]
     [InlineData("from")]
@@ -72,10 +92,10 @@ public sealed class ElectricalGraphValidatorTests
             case "from": graph["wires"]![0]!.AsObject().Remove("from"); break;
             case "to": graph["wires"]![0]!.AsObject().Remove("to"); break;
             case "marker-zero": graph["requiredWriterContractVersion"] = 0; break;
-            case "marker-future": graph["requiredWriterContractVersion"] = 3; break;
+            case "marker-future": graph["requiredWriterContractVersion"] = 4; break;
             case "marker-null": graph["requiredWriterContractVersion"] = null; break;
             case "writer-zero": writer = 0; break;
-            case "writer-future": writer = 3; break;
+            case "writer-future": writer = 4; break;
         }
         var error = Assert.Throws<HarnessDesignDocumentException>(() => fixture.Designs.Put(
             fixture.ProjectId, fixture.HarnessId, before.Revision, 1, graph.ToJsonString(), writer));

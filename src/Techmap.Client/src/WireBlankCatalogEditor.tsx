@@ -4,9 +4,9 @@ import { wireBlankDraft, wireBlankEndLabels, wireBlankEnds, wireBlankRequest, ty
 import { renderWireSvg } from "./wire-blank-artwork.mjs";
 import "./wire-blank-catalog.css";
 
-export function WireBlankPreview({ row }: { row: WireBlank }) {
-  if (row.photoDataUrl) return <img className="wire-blank-preview" src={row.photoDataUrl} alt={`Фото полуфабриката ${row.title}`} />;
-  const title = `${row.title}: ${wireBlankEndLabels[row.start]} — ${wireBlankEndLabels[row.end]}`;
+export function WireBlankPreview({ row, alt }: { row: WireBlank; alt?: string }) {
+  if (row.photoDataUrl) return <img className="wire-blank-preview" src={row.photoDataUrl} alt={alt ?? `Фото полуфабриката ${row.title}`} />;
+  const title = alt ?? `${row.title}: ${wireBlankEndLabels[row.start]} — ${wireBlankEndLabels[row.end]}`;
   const artwork = renderWireSvg({ left: row.start, right: row.end, color: row.color });
   return <img className="wire-blank-preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(artwork)}`} alt={title} />;
 }

@@ -8,12 +8,20 @@ internal static class ElectricalGraphValidator
 {
     internal static int RequiredWriterContract(JsonElement root)
     {
-        if (!root.TryGetProperty("requiredWriterContractVersion", out var version)) return root.TryGetProperty("manufacturingRoute", out _) ? 2 : 0;
-        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number is not (1 or 2))
+        var terminationContract = HasTerminationData(root) ? 3 : 0;
+        if (!root.TryGetProperty("requiredWriterContractVersion", out var version))
+            return Math.Max(root.TryGetProperty("manufacturingRoute", out _) ? 2 : 0, terminationContract);
+        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number is not (1 or 2 or 3))
             throw new HarnessDesignDocumentException("unsupported_design_writer_contract",
                 "The document requires an unsupported design writer contract.", "content.requiredWriterContractVersion");
-        return root.TryGetProperty("manufacturingRoute", out _) ? Math.Max(2, number) : number;
+        var required = root.TryGetProperty("manufacturingRoute", out _) ? Math.Max(2, number) : number;
+        return Math.Max(required, terminationContract);
     }
+
+    private static bool HasTerminationData(JsonElement root) =>
+        root.TryGetProperty("terminations", out _) ||
+        root.TryGetProperty("connectors", out var connectors) && connectors.ValueKind == JsonValueKind.Array &&
+        connectors.EnumerateArray().Any(connector => connector.ValueKind == JsonValueKind.Object && connector.TryGetProperty("terminationComponent", out _));
 
     internal static void Validate(JsonElement root, bool allowDetachedDrawingEndpoints = false)
     {

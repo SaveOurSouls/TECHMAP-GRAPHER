@@ -1,9 +1,11 @@
+import { usedTerminationArtifactIds } from '../editor/termination-model';
 import { calculateWireCutLength, type ConnectorContact, type HarnessDesignDocument, type WireEndStripProfiles, type WireEndpoint } from "../editor/model";
 import { coveringMeasuredLength } from "../editor/physical-coverings";
 import { formatWireMaterial, formatStoredWireSection, type WireColorIndicator, formatWireColorIndicator } from "./wire-display-formatters";
+import { effectiveEndPreparation } from '../editor/termination-model';
 
 export interface RouteSourceRef {
-  readonly kind: "wire" | "cable" | "covering" | "connector";
+  readonly kind: "wire" | "cable" | "covering" | "connector" | "termination-artifact";
   readonly id: string;
 }
 
@@ -34,6 +36,14 @@ export function buildRouteSourceItems(document: HarnessDesignDocument): RouteSou
   const endTitle = (endpoint: WireEndpoint): string => endpoint.junctionId ? "Узел" : endpoint.screenId ? "Экран"
     : `${connectors.get(endpoint.connectorId)?.designation || "Соединитель"}:${contactAt(endpoint)?.number ?? "?"}`;
   const cableByWire = new Map(document.cables.flatMap(cable => cable.memberWireIds.map(id => [id, cable.id] as const)));
+  const endDescription = (wireId:string,end:'from'|'to',fallback:string):string => {
+    const p=effectiveEndPreparation(document,{wireId,end});
+    const g=document.terminations?.groups.find(g=>g.memberEnds.some(e=>e.wireId===wireId&&e.end===end));
+    const a=document.terminations?.artifacts.find(a=>a.id===(g?.artifactId??p?.artifactId));
+    const seal=document.terminations?.artifacts.find(a=>a.id===p?.sealArtifactId);
+    const labels={cut:'Без разделки',copper:'Медь',tin:'Лужёная медь',pin:'Терминал pin',socket:'Терминал socket','pin-sealed':'Терминал pin с уплотнителем','socket-sealed':'Терминал socket с уплотнителем',lug:'Наконечник'};
+    return g?`${a?.kind==='sleeve'?'В соединительную гильзу':'В общий обжим'} ${a?.article.trim()||endTitle(g.target)}`:p?[a?.article||labels[p.mode],seal?.article].filter(Boolean).join(' / '):fallback;
+  };
   const items: RouteSourceItem[] = document.wires.map(wire => {
     const from = contactAt(wire.from), to = contactAt(wire.to);
     const colorContact = wire.colorSource ? contacts.get(wire.colorSource.connectorId)?.get(wire.colorSource.contactId)
@@ -43,14 +53,14 @@ export function buildRouteSourceItems(document: HarnessDesignDocument): RouteSou
       ref: { kind: "wire", id: wire.id },
       title: `${endTitle(wire.from)} → ${endTitle(wire.to)}${wire.circuit.trim() ? ` · ${wire.circuit.trim()}` : ""}`,
       lengthMm: calculateWireCutLength(wire).cutLengthMm,
-      color: colorContact?.color.trim() || wire.color.trim() || null,
-      secondaryColor: colorContact?.secondaryColor?.trim() || null,
-      material: wire.materialBinding?.displayName || from?.wire.trim() || to?.wire.trim() || "",
+      color: wire.colorSource===null?wire.color.trim()||null:colorContact?.color.trim() || wire.color.trim() || null,
+      secondaryColor: wire.secondaryColor ?? colorContact?.secondaryColor?.trim() ?? null,
+      material: wire.wireMark ?? (wire.materialBinding?.displayName || from?.wire.trim() || to?.wire.trim() || ""),
       materialArticle: wire.materialBinding?.sourceKey || "",
-      section: from?.wireSection?.trim() || to?.wireSection?.trim() || "",
+      section: wire.wireSection ?? (from?.wireSection?.trim() || to?.wireSection?.trim() || ""),
       ...(wire.materialBinding?.sectionUnit || wire.materialBinding?.sourceId === "technology-wires"
         ? { sectionUnit: wire.materialBinding.sectionUnit ?? "awg" as const } : {}),
-      terminalFrom: from?.terminalArticle ?? "", terminalTo: to?.terminalArticle ?? "",
+      terminalFrom: endDescription(wire.id,'from',from?.terminalArticle ?? ""), terminalTo: endDescription(wire.id,'to',to?.terminalArticle ?? ""),
       ...(wire.stripProfiles ? { stripProfiles: wire.stripProfiles } : {}),
       ...(cableId ? { cableId } : {}),
     };
@@ -65,7 +75,11 @@ export function buildRouteSourceItems(document: HarnessDesignDocument): RouteSou
     lengthMm: coveringMeasuredLength(document, covering), color: covering.color || null,
     material: covering.material?.displayName ?? "", materialArticle: covering.material?.sourceKey ?? "", section: "", terminalFrom: "", terminalTo: "",
   });
-  for (const connector of document.connectors) items.push({
+  for (const artifact of (document.terminations?.artifacts ?? []).filter(a=>usedTerminationArtifactIds(document).has(a.id))) items.push({
+    ref:{kind:'termination-artifact',id:artifact.id},title:artifact.catalogBinding?.displayName||artifact.article||'Оконцовка',
+    lengthMm:null,color:artifact.color??null,material:artifact.catalogBinding?.displayName||artifact.article,materialArticle:artifact.article,section:'',terminalFrom:'',terminalTo:'',
+  });
+  for (const connector of document.connectors.filter(c=>!c.terminationComponent)) items.push({
     ref: { kind: "connector", id: connector.id }, title: connector.designation,
     lengthMm: null, color: null, material: connector.partNumber, materialArticle: connector.partNumber,
     section: "", terminalFrom: "", terminalTo: "",

@@ -4,6 +4,7 @@ import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/rou
 import { createRouteDrawingCopy, parseRouteDrawingCopy, type RouteDrawingCopy } from "../manufacturing/route-drawing-copy";
 import type { RouteV3Operation } from "./route-v3-operations";
 import { validRouteV3Operation } from "./route-v3-operations";
+import { routeV3TerminationOperationRefs } from './route-v3-operations';
 import { captureRouteV3SourceState, validRouteV3SourceState, validRouteV3SourceDivergence, type RouteV3SourceState, type RouteV3SourceDivergence } from "./route-v3-source-refresh";
 import type { RouteV2Drawing } from "../manufacturing-v2/route-v2-model";
 
@@ -134,7 +135,8 @@ export const routeV3NodeQuantity = (node: Pick<RouteV3Node, "quantity">): number
 export const routeV3NodeOperations = (node: Pick<RouteV3Node, "operations">): readonly RouteV3Operation[] => node.operations ?? [];
 
 export function createInitialRouteV3(source: HarnessDesignDocument, harnessQuantity = 1): RouteV3Document {
-  return { version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2, sourceState: captureRouteV3SourceState(source, harnessQuantity) };
+  const initial:RouteV3Document={ version: 1, preparedRefs: buildRouteSourceItems(source).filter(item => item.ref.kind === 'termination-artifact' || item.ref.kind === "covering" || item.ref.kind === "cable" || item.ref.kind === "wire" && !item.cableId).map(item => item.ref), fragments: [], nodes: [], edges: [], generated: false, backgroundOpacity: .2, sourceState: captureRouteV3SourceState(source, harnessQuantity) };
+  return source.terminations?.operations.length?generateRouteV3(initial,source):initial;
 }
 export function routeV3WireArtworkOverride(document: RouteV3Document, wireId: string): RouteV3WireArtworkOverride | undefined { return document.wireArtwork?.find(value => value.wireId === wireId); }
 export function setRouteV3WireArtworkOverride(document: RouteV3Document, override: RouteV3WireArtworkOverride): RouteV3Document {
@@ -167,7 +169,7 @@ export function captureRouteV3Selection(source: HarnessDesignDocument, scene: re
   }
   // Index labels are part of the same visual object and must follow its visibility.
   for (const object of scene) if (object.metadata?.indexObjectId && ids.has(object.metadata.indexObjectId)) ids.add(object.id);
-  const refs = buildRouteSourceItems(source).filter(item => ids.has(item.ref.id) || item.ref.kind === "cable" && source.cables.find(cable => cable.id === item.ref.id)?.memberWireIds.some(wireId => ids.has(wireId))).map(item => item.ref);
+  const refs = buildRouteSourceItems(source).filter(item => ids.has(item.ref.id) || item.ref.kind==='termination-artifact'&&source.connectors.some(c=>ids.has(c.id)&&c.terminationComponent?.artifactId===item.ref.id) || item.ref.kind === "cable" && source.cables.find(cable => cable.id === item.ref.id)?.memberWireIds.some(wireId => ids.has(wireId))).map(item => item.ref);
   return { objectIds: [...ids], refs, drawingCopy: createRouteDrawingCopy(source, scene.filter(object => !ids.has(object.id)).map(object => object.id)) };
 }
 
@@ -185,12 +187,26 @@ export function generateRouteV3(document: RouteV3Document, source?: HarnessDesig
     rows.set(depth, column + 1); depths.set(node.id, depth);
     for (const from of parents) edges.push({ id: `edge:${from}:${node.id}`, from, to: node.id });
   };
-  for (const kind of ["wire", "cable", "covering"] as const) {
+  for (const kind of ["wire", "cable", "covering",'termination-artifact'] as const) {
     const refs = document.preparedRefs.filter(ref => ref.kind === kind);
     if (!refs.length) continue;
     const id = `prepared:${kind}`;
-    addNode({ id, kind: "semiFinished", title: kind === "wire" ? "Нарезанные провода" : kind === "covering" ? "Нарезанные оболочки" : "Нарезанные кабели", refs, fragmentIds: [] }, []);
+    addNode({ id, kind: "semiFinished", title: kind === 'termination-artifact'?'Оконцовки и уплотнители':kind === "wire" ? "Нарезанные провода" : kind === "covering" ? "Нарезанные оболочки" : "Нарезанные кабели", refs, fragmentIds: [] }, []);
     for (const ref of refs) owner.set(refKey(ref), id);
+  }
+  if(source){
+    const done=new Set<string>();
+    const labels={strip:'Зачистка',tin:'Лужение',crimp:'Общий обжим','ultrasonic-weld':'УЗ сварка на гильзе',twist:'Свивка'};
+    const addOperation=(id:string)=>{
+      if(done.has(id))return;const o=source.terminations?.operations.find(o=>o.id===id);if(!o)return;
+      for(const dep of o.dependsOn??[])addOperation(dep);done.add(id);
+      const refs=routeV3TerminationOperationRefs(source,id),parents=[...new Set([...refs.map(r=>owner.get(refKey(r))).filter((id):id is string=>!!id),...(o.dependsOn??[]).map(id=>'termination-operation:'+id)])];
+      const operation:RouteV3Operation={id:'termination:'+o.id,terminationOperationId:o.id,terminationOperationSnapshot:structuredClone(o),title:o.recipe?.displayName||labels[o.kind],kind:'static',lengthMm:0,speedMmPerMinute:1,employees:1,quantity:1,minutesEach:0};
+      const nodeId='termination-operation:'+id;
+      addNode({id:nodeId,kind:'assembly',title:operation.title,refs,fragmentIds:[],operations:[operation]},parents);
+      for(const ref of refs)owner.set(refKey(ref),nodeId);
+    };
+    for(const o of source.terminations?.operations??[])addOperation(o.id);
   }
   for (const fragment of document.fragments) {
     const parents = new Set(fragment.refs.map(ref => owner.get(refKey(ref))).filter((id): id is string => !!id));
@@ -217,6 +233,31 @@ export function generateRouteV3(document: RouteV3Document, source?: HarnessDesig
   return { ...document, nodes, edges, generated: true, ...(document.graphEdited !== undefined ? { graphEdited: false } : {}) };
 }
 
+/** Called only after explicit source adoption; retain authored layout and cards. */
+export function syncRouteV3TerminationOperations(document:RouteV3Document,source:HarnessDesignDocument):RouteV3Document {
+  const generated=generateRouteV3(createInitialRouteV3(source),source);
+  const canonical=generated.nodes.filter(n=>n.id.startsWith('termination-operation:'));
+  const requiredParents=new Set(generated.edges.filter(e=>canonical.some(n=>n.id===e.to)).map(e=>e.from));
+  const sourceIds=new Set(source.terminations?.operations.map(o=>o.id)??[]);
+  const nodes:RouteV3Node[]=document.nodes.map(n=>({...n,operations:n.operations?.filter(o=>!o.terminationOperationId||sourceIds.has(o.terminationOperationId))}));
+  for(const candidate of generated.nodes.filter(n=>canonical.includes(n)||requiredParents.has(n.id))){
+    const index=nodes.findIndex(n=>n.id===candidate.id);
+    if(index<0)nodes.push({...candidate,rawRefs:candidate.refs,operatorConfirmed:false});
+    else if(candidate.id.startsWith('termination-operation:')){
+      const current=nodes[index]!;
+      const canonicalOperations=(candidate.operations??[]).map(o=>{
+        const previous=current.operations?.find(p=>p.terminationOperationId===o.terminationOperationId||p.id===o.id);
+        return previous?.catalogBinding?{...previous,id:o.id,terminationOperationId:o.terminationOperationId,terminationOperationSnapshot:o.terminationOperationSnapshot}:o;
+      });
+      const canonicalIds=new Set(canonicalOperations.map(o=>o.id));
+      nodes[index]={...current,refs:candidate.refs,rawRefs:candidate.refs,operatorConfirmed:false,operations:[...(current.operations??[]).filter(o=>!o.terminationOperationId&&!canonicalIds.has(o.id)),...canonicalOperations]};
+    }
+  }
+  const edges=[...document.edges];
+  for(const edge of generated.edges.filter(e=>canonical.some(n=>n.id===e.to)))if(nodes.some(n=>n.id===edge.from)&&!edges.some(e=>e.from===edge.from&&e.to===edge.to))edges.push({...edge,refs:nodes.find(n=>n.id===edge.to)!.refs.filter(r=>nodes.find(n=>n.id===edge.from)!.refs.some(v=>refKey(v)===refKey(r)))});
+  return {...document,nodes,edges};
+}
+
 /** Reject the whole draft instead of silently dropping damaged snapshots. */
 export function parseRouteV3(value: unknown): RouteV3Document | null {
   try {
@@ -225,7 +266,7 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
     if (v.graphEdited !== undefined && typeof v.graphEdited !== "boolean") return null;
     const opacity = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
     const text = (n: unknown): n is string => typeof n === "string" && n.trim().length > 0 && n.length <= 512;
-    const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
+    const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector", "termination-artifact"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
     if (!opacity(v.backgroundOpacity) || !refs(v.preparedRefs)) return null;
     if (v.wireArtwork !== undefined && (!Array.isArray(v.wireArtwork) || v.wireArtwork.some(value => !value || !text(value.wireId) || (value.color !== undefined && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.start !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.start)) || (value.end !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.end))) || new Set(v.wireArtwork.map(value => value.wireId)).size !== v.wireArtwork.length)) return null;
     const ids = new Set<string>();

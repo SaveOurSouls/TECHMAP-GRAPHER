@@ -22,6 +22,8 @@ export interface E4RoutingObstacle {
 }
 
 export interface E4OccupiedRoute {
+  /** Explicitly shared electrical contact fan-out, never inferred from pixels. */
+  readonly sharedLeadSegments?: readonly {readonly start:Point;readonly end:Point}[];
   readonly id?: string;
   /** Full route, including both endpoint positions. */
   readonly points: readonly Point[];
@@ -90,11 +92,13 @@ interface Segment {
 }
 
 interface OccupiedSegment extends Segment {
+  readonly sharedLeadSegments: readonly {readonly start:Point;readonly end:Point}[];
   readonly allowCrossings: boolean;
   readonly allowedTouchPoints: readonly Point[];
 }
 
 interface OccupiedBend {
+  readonly sharedLeadSegments: readonly {readonly start:Point;readonly end:Point}[];
   readonly point: Point;
   readonly allowedTouchPoints: readonly Point[];
 }
@@ -269,11 +273,12 @@ function normalizeRequest(request: E4RoutingRequest): {
     occupiedSegments.push(...segments.map((segment) => ({
       ...segment,
       allowCrossings: route.allowCrossings !== false,
+      sharedLeadSegments: route.sharedLeadSegments??[],
       allowedTouchPoints,
     })));
     for (let index = 1; route.allowCrossings !== false && index < segments.length; index += 1) {
       if (!segmentsParallel(segments[index - 1]!,segments[index]!)) {
-        occupiedBends.push({ point: route.points[index]!, allowedTouchPoints });
+        occupiedBends.push({ point: route.points[index]!, allowedTouchPoints,sharedLeadSegments:route.sharedLeadSegments??[] });
       }
     }
     occupiedPoints.push(...route.points);
@@ -672,6 +677,7 @@ function validateSegmentAgainstOccupied(
 ): void {
   for (const occupied of occupiedSegments) {
     const intersection = segmentIntersection(segment, occupied);
+    if(intersection.kind==='overlap'&&sharedLeadOverlap(segment,occupied))continue;
     if(intersection.kind === "point" && touchIsAllowed(intersection.point,segment,occupied))continue;
     if(intersection.kind === "overlap")throw new Error("Маршрут коллинеарно накладывается на другой провод.");
     if(intersection.kind === "point" && !occupied.allowCrossings)throw new Error("Маршрут пересекает уже построенную часть самого себя.");
@@ -688,6 +694,7 @@ function validateSegmentAgainstOccupiedBends(
   clearance: number,
 ): void {
   for (const bend of occupiedBends) {
+    if(bend.sharedLeadSegments.some(s=>segmentPointDistance(bend.point,s)<EPSILON)&&segmentPointDistance(bend.point,segment)<EPSILON)continue;
     if (bend.allowedTouchPoints.some((allowed) => samePoint(bend.point, allowed)) &&
         isSegmentEndpoint(bend.point, segment)) continue;
     if (pointToSegmentDistance(bend.point, segment) + EPSILON < clearance) {
@@ -702,13 +709,20 @@ function bendHasOccupiedClearance(
   clearance: number,
 ): boolean {
   return occupiedSegments.every((occupied) =>
+    occupied.sharedLeadSegments.some(s=>segmentPointDistance(point,s)<EPSILON)||
     occupied.allowedTouchPoints.some((allowed) => samePoint(point, allowed)) ||
     pointToSegmentDistance(point, occupied) + EPSILON >= clearance);
 }
 
 function touchIsAllowed(point: Point, segment: Segment, occupied: OccupiedSegment): boolean {
+  if(occupied.sharedLeadSegments.some(s=>segmentPointDistance(point,s)<EPSILON))return true;
   return isSegmentEndpoint(point, segment) &&
     occupied.allowedTouchPoints.some((allowed) => samePoint(point, allowed));
+}
+
+function sharedLeadOverlap(a:Segment,b:OccupiedSegment):boolean {
+  const points=[a.start,a.end,b.start,b.end].filter(p=>segmentPointDistance(p,a)<EPSILON&&segmentPointDistance(p,b)<EPSILON);
+  return points.length>=2&&b.sharedLeadSegments.some(s=>points.every(p=>segmentPointDistance(p,s)<EPSILON));
 }
 
 function isSegmentEndpoint(point: Point, segment: Segment): boolean {

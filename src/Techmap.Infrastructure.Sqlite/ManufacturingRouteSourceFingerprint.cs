@@ -28,7 +28,7 @@ internal static class ManufacturingRouteSourceFingerprint
         var result = new JsonObject();
         result["connectors"] = Collection(design, "connectors", item =>
         {
-            var connector = Pick(item, "id", "designation", "libraryCode", "partNumber", "terminalCatalog");
+            var connector = Pick(item, "id", "designation", "libraryCode", "partNumber", "terminalCatalog", "terminationComponent");
             connector["contacts"] = Collection(item, "contacts", contact => Pick(contact, "id", "logicalContactId", "number", "nameOverride", "contactType", "circuit", "terminalArticle", "wire", "wireSection", "wireDiameterMm", "color", "secondaryColor", "customValues"));
             if (item.TryGetProperty("libraryBinding", out var binding)) connector["libraryBinding"] = Pick(binding, "mode", "templateId", "templateVersion", "versionSha256", "articleVariantId", "article", "seriesId", "partNumber");
             return connector;
@@ -38,6 +38,8 @@ internal static class ManufacturingRouteSourceFingerprint
         result["junctions"] = Collection(design, "junctions", item => Pick(item, "id", "wireIds"));
         result["screens"] = Collection(design, "screens", item => Pick(item, "id", "wireIds", "terminalSide", "label"));
         result["diffPairs"] = Collection(design, "diffPairs", item => Pick(item, "id", "wireIds"));
+        if (design.TryGetProperty("terminations", out var terminations))
+            result["terminations"] = CanonicalTerminations(terminations);
         if (design.TryGetProperty("physicalTopology", out var topology) && topology.ValueKind == JsonValueKind.Object)
         {
             // Authored topology/anchors can change which measured dimension interval a
@@ -54,6 +56,31 @@ internal static class ManufacturingRouteSourceFingerprint
             ? Collection(drawings, "dimensions", item => Pick(item, "id", "wireId", "segmentId", "from", "to", "pointCount", "routeKey", "lengthMm", "auxiliary"))
             : new JsonArray();
         return result;
+    }
+
+    private static JsonNode? CanonicalTerminations(JsonElement value)
+    {
+        var result = JsonNode.Parse(value.GetRawText());
+        if (result is not JsonObject document) return result;
+        foreach (var name in new[] { "artifacts", "groups", "endPreparations", "operations", "twists" })
+            if (document[name] is JsonArray collection)
+                document[name] = new JsonArray(collection.OrderBy(item => item?["id"]?.GetValue<string>() ?? "", StringComparer.Ordinal).Select(item => item?.DeepClone()).ToArray());
+        if (document["groups"] is JsonArray groups)
+            foreach (var group in groups)
+                if (group is JsonObject valueGroup && valueGroup["memberEnds"] is JsonArray members)
+                    valueGroup["memberEnds"] = new JsonArray(members.OrderBy(item => item?["wireId"]?.GetValue<string>() ?? "", StringComparer.Ordinal)
+                        .ThenBy(item => item?["end"]?.GetValue<string>() ?? "", StringComparer.Ordinal).Select(item => item?.DeepClone()).ToArray());
+        if (document["twists"] is JsonArray twists)
+            foreach (var twist in twists)
+                if (twist is JsonObject valueTwist)
+                    foreach (var name in new[] { "memberWireIds", "segmentIds" })
+                        if (valueTwist[name] is JsonArray values)
+                            valueTwist[name] = new JsonArray(values.Select(item => item?.GetValue<string>() ?? "").OrderBy(item => item, StringComparer.Ordinal).Select(item => (JsonNode?)JsonValue.Create(item)).ToArray());
+        if (document["operations"] is JsonArray operations)
+            foreach (var operation in operations)
+                if (operation is JsonObject valueOperation && valueOperation["dependsOn"] is JsonArray dependencies)
+                    valueOperation["dependsOn"] = new JsonArray(dependencies.Select(item => item?.GetValue<string>() ?? "").OrderBy(item => item, StringComparer.Ordinal).Select(item => (JsonNode?)JsonValue.Create(item)).ToArray());
+        return document;
     }
 
     private static JsonObject Pick(JsonElement owner, params string[] keys)

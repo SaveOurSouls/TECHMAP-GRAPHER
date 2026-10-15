@@ -3,6 +3,7 @@ import { buildDrawingBom, type DrawingDocuments } from "./drawing-documents";
 import { buildDrawingObjectIndices } from "./drawing-object-indices";
 import { defaultLayerIds, type HarnessDesignDocument, type Point } from "./model";
 import { projectComponentTemplateView, type ComponentTemplateViewInstance, type ResolveComponentTemplateAssetUrl } from "./component-template-view-renderer";
+import { terminationSceneBounds } from "./termination-scene";
 
 const indexId = (objectId: string) => `object-index:${objectId}`;
 
@@ -25,6 +26,8 @@ function pathMidpoint(points: readonly EditorPoint[]): EditorPoint | null {
 }
 
 function defaultIndexPosition(object: EditorSceneObject): EditorPoint | null {
+  const terminationBounds=terminationSceneBounds(object);
+  if(terminationBounds)return {x:terminationBounds.maxX+6,y:terminationBounds.minY+12};
   if (object.kind === "connector") return { x: object.x + object.width + 6, y: object.y + 12 };
   const path = object.paths?.reduce<readonly EditorPoint[] | undefined>((longest, points) =>
     !longest || points.length > longest.length ? points : longest, undefined) ?? object.points ?? [];
@@ -98,11 +101,11 @@ function constrainedIndexPosition(object: EditorSceneObject, requested: EditorPo
  * Persist their visual bounds on the index so its leader follows the picture,
  * not that obsolete rectangle, during both drawing and dragging. */
 function connectorIndexOwner(object: EditorSceneObject, metadata?: Readonly<Record<string, string>>): EditorSceneObject {
-  if (object.kind !== "connector" || !metadata) return object;
-  const x = Number(metadata.indexOwnerMinX), y = Number(metadata.indexOwnerMinY);
-  const maxX = Number(metadata.indexOwnerMaxX), maxY = Number(metadata.indexOwnerMaxY);
-  if (![x, y, maxX, maxY].every(Number.isFinite) || maxX <= x || maxY <= y) return object;
-  return { ...object, x, y, width: maxX - x, height: maxY - y };
+  if (object.kind !== "connector") return object;
+  const x = Number(metadata?.indexOwnerMinX), y = Number(metadata?.indexOwnerMinY);
+  const maxX = Number(metadata?.indexOwnerMaxX), maxY = Number(metadata?.indexOwnerMaxY);
+  const bounds=[x,y,maxX,maxY].every(Number.isFinite)&&maxX>x&&maxY>y?{minX:x,minY:y,maxX,maxY}:terminationSceneBounds(object);
+  return bounds?{...object,x:bounds.minX,y:bounds.minY,width:bounds.maxX-bounds.minX,height:bounds.maxY-bounds.minY}:object;
 }
 
 function bomIndexes(document: HarnessDesignDocument): Map<string, string> {
@@ -148,7 +151,7 @@ export function drawingObjectIndexScene(
     if (!label) return [];
     const offset = persisted[object.id] ?? { x: 0, y: 0 };
     const requested = { x: position.x + offset.x, y: position.y + offset.y };
-    const constrained = constrainedIndexPosition(object, requested);
+    const constrained = constrainedIndexPosition(connectorIndexOwner(object), requested);
     const x = constrained.position.x, y = constrained.position.y, leader = constrained.leader;
     const width = Math.max(16, label.length * 8 * scale + 8 * scale), height = 20 * scale;
     return [{
@@ -180,24 +183,24 @@ export function alignDrawingConnectorIndexes(
     const ownerId = object.metadata?.indexObjectId;
     const owner = ownerId ? connectors.get(ownerId) : undefined;
     const instance = ownerId ? views.get(ownerId) : undefined;
-    if (!owner || !instance) return object;
-    const projection = projectComponentTemplateView(instance, "drawing", { x: owner.x, y: owner.y }, resolveAssetUrl);
-    if (!projection) return object;
-    const base = { x: projection.bounds.maxX + 6, y: projection.bounds.minY + 12 };
+    if (!owner) return object;
+    const bounds=terminationSceneBounds(owner)??(instance?projectComponentTemplateView(instance,"drawing",{x:owner.x,y:owner.y},resolveAssetUrl)?.bounds:null);
+    if (!bounds) return object;
+    const base = { x: bounds.maxX + 6, y: bounds.minY + 12 };
     const offset = document.drawingDocuments?.indexOffsets?.[owner.id] ?? { x: 0, y: 0 };
     const requested = { x: base.x + offset.x, y: base.y + offset.y };
     const ownerForIndex = {
       ...owner,
-      x: projection.bounds.minX,
-      y: projection.bounds.minY,
-      width: projection.bounds.maxX - projection.bounds.minX,
-      height: projection.bounds.maxY - projection.bounds.minY,
+      x: bounds.minX,
+      y: bounds.minY,
+      width: bounds.maxX - bounds.minX,
+      height: bounds.maxY - bounds.minY,
     };
     const constrained = constrainedIndexPosition(ownerForIndex, requested);
     return { ...object, x: constrained.position.x, y: constrained.position.y, metadata: {
       ...object.metadata, indexBaseX: String(base.x), indexBaseY: String(base.y),
-      indexOwnerMinX: String(projection.bounds.minX), indexOwnerMinY: String(projection.bounds.minY),
-      indexOwnerMaxX: String(projection.bounds.maxX), indexOwnerMaxY: String(projection.bounds.maxY),
+      indexOwnerMinX: String(bounds.minX), indexOwnerMinY: String(bounds.minY),
+      indexOwnerMaxX: String(bounds.maxX), indexOwnerMaxY: String(bounds.maxY),
       ...(constrained.leader ? { indexAnchorX: String(constrained.leader.anchor.x), indexAnchorY: String(constrained.leader.anchor.y) } : {}),
     }, ...(constrained.leader ? { points: [constrained.leader.anchor, constrained.position] } : {}) };
   });

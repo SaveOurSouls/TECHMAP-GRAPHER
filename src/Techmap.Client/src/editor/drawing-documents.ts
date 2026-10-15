@@ -1,3 +1,4 @@
+import { usedTerminationArtifactIds } from './termination-model';
 import { drawingTableColumnWidths } from "./drawing-table-column-widths";
 import {validateCoveringLibrary,type CoveringLibrary} from "./covering-library";
 import { drawingObjectPerimeter, type DrawingPerimeters } from "./drawing-object-perimeter";
@@ -148,11 +149,12 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
     return [];
   };
   for(const c of document.connectors) {
+    if(c.terminationComponent)continue;
     const b=c.libraryBinding;
     const key=b?.mode==="template" ? keyOf("connector",b.templateId,b.templateVersion,b.versionSha256,b.article.sourceId,b.article.entityType,b.article.articleKey) : b?.mode==="series" ? keyOf("series",b.seriesId,c.partNumber) : keyOf("free",c.id);
     const description=(b?.mode==="template"?b.snapshot.name:b?.mode==="series"?c.libraryCode || b.seriesId:undefined) ?? "Соединитель";
     add(key,c.id,c.partNumber || "—",`${c.contacts.length} конт. — ${description}`,1,"шт.",b?.mode==="template"?`Библиотека v${b.templateVersion}`:b?.mode==="series"?"Встроенная серия":"Без библиотечной привязки",c.designation);
-    for(const contact of c.contacts) if(contact.terminalArticle) {
+    for(const contact of c.contacts) if(contact.terminalArticle&&!document.terminations?.groups.some(g=>g.target.connectorId===c.id&&g.target.contactId===contact.id)) {
       const identity=b?.mode==="template" ? keyOf("terminal",b.templateId,b.templateVersion,b.versionSha256,contact.terminalArticle,c.terminalCatalog?.versionSha256 ?? "") : keyOf("terminal-unpinned",c.id,contact.id);
       const article = contact.terminalDetails?.article || terminalArticleLabel(contact.terminalArticle);
       const name = contact.terminalDetails
@@ -160,6 +162,13 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
         : [decodeArticleParts(contact.terminalArticle)[0], decodeArticleParts(contact.terminalArticle)[3]].filter(Boolean).join(" · ") || "Терминал";
       add(identity,c.id,article,name,1,"шт.",b?.mode==="template"?"Контакт закреплённой серии":"Терминал без закреплённого источника",`${c.designation}:${contact.number}`);
     }
+  }
+  for(const artifact of (document.terminations?.artifacts??[]).filter(a=>usedTerminationArtifactIds(document).has(a.id))) {
+    const b=artifact.catalogBinding;
+    const key=b?materialKey('termination-artifact',b):keyOf('termination-artifact-unpinned',artifact.id);
+    const owners=document.connectors.filter(c=>c.terminationComponent?.artifactId===artifact.id);
+    add(key,artifact.id,artifact.article||'—',b?.displayName||'Оконцовка',1,'шт.',b?'Закреплённый экземпляр оконцовки':'Совместимость не подтверждена',owners.map(c=>c.designation).join(', ')||artifact.article);
+    for(const c of owners)rows.get(key)!.objectIds.add(c.id);
   }
   const cableMembers=new Set(document.cables.flatMap(c=>c.memberWireIds));
   for(const blank of [...document.wires.filter(w=>!cableMembers.has(w.id)),...document.cables]) {
@@ -172,9 +181,11 @@ export function buildDrawingBom(document: HarnessDesignDocument, quantity = 1): 
       const contact = connector?.contacts.find(item => item.id === endpoint.contactId);
       return contact ? [contact] : [];
     }));
-    const marks = [...new Set(contacts.map(contact => contact.wire.trim()).filter(Boolean))];
-    const sections = [...new Set(contacts.map(contact => contact.wireSection?.trim() ?? "").filter(Boolean))];
-    const colors = [...new Set(contacts.map(contact => [contact.color, contact.secondaryColor].filter(Boolean).join("/")).filter(Boolean))];
+    const wire='circuit' in blank?blank:undefined;
+    const individual=wire&&(wire.wireMark!==undefined||wire.wireSection!==undefined||wire.secondaryColor!==undefined||wire.wireDiameterMm!==undefined);
+    const marks = [...new Set((individual?[wire.wireMark??'']:contacts.map(contact => contact.wire.trim())).filter(Boolean))];
+    const sections = [...new Set((individual?[wire.wireSection??'']:contacts.map(contact => contact.wireSection?.trim() ?? '')).filter(Boolean))];
+    const colors = [...new Set((individual?[[wire.color,wire.secondaryColor].filter(Boolean).join('/')]:contacts.map(contact => [contact.color, contact.secondaryColor].filter(Boolean).join('/'))).filter(Boolean))];
     const attributes = [marks.join("/"), sections.join("/"), colors.join("/")].filter(Boolean).join(", ");
     const key=b ? keyOf(...JSON.parse(materialKey("material",b)) as unknown[],attributes) : keyOf("material-unpinned",blank.id);
     const article = b?.sourceKey ?? "";
@@ -252,8 +263,8 @@ export function connectionWireColor(document: HarnessDesignDocument, wire: Harne
     const connector = document.connectors.find(item => item.id === end.connectorId);
     return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
   });
-  const primary = contacts.find(contact => contact.color.trim())?.color.trim() ?? wire.color;
-  const secondary = contacts.find(contact => contact.secondaryColor?.trim())?.secondaryColor?.trim();
+  const primary = wire.colorSource===null?wire.color:contacts.find(contact => contact.color.trim())?.color.trim() ?? wire.color;
+  const secondary = wire.secondaryColor ?? contacts.find(contact => contact.secondaryColor?.trim())?.secondaryColor?.trim();
   const name = (value: string) => builtInWireColors.find(color => color.hex.toLocaleLowerCase() === value.toLocaleLowerCase())?.name ?? value;
   return { label: [name(primary), secondary ? name(secondary) : ""].filter(Boolean).join(" / ") || "—", hex: resolveWireColorHex(primary, builtInWireColors, wire.color || "#D9E2E7") };
 }
@@ -280,7 +291,7 @@ export function connectionWireMark(document: HarnessDesignDocument, wire: Harnes
     const connector = document.connectors.find(item => item.id === end.connectorId);
     return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
   });
-  return contacts.find(contact => contact.wire.trim())?.wire.trim() ?? wire.materialBinding?.sourceKey ?? "";
+  return wire.wireMark ?? contacts.find(contact => contact.wire.trim())?.wire.trim() ?? wire.materialBinding?.sourceKey ?? "";
 }
 
 export function connectionWireSection(document: HarnessDesignDocument, wire: HarnessDesignDocument["wires"][number]): string {
@@ -289,7 +300,7 @@ export function connectionWireSection(document: HarnessDesignDocument, wire: Har
     const connector = document.connectors.find(item => item.id === end.connectorId);
     return connector?.contacts.filter(contact => contact.id === end.contactId) ?? [];
   });
-  return contacts.find(contact => contact.wireSection?.trim())?.wireSection?.trim() ?? "";
+  return wire.wireSection ?? contacts.find(contact => contact.wireSection?.trim())?.wireSection?.trim() ?? "";
 }
 export function drawingObjectOrigin(document:HarnessDesignDocument,id:string):Point|null {
   const extra=document.drawingDocuments?.specificationItems?.find(i=>i.id===id);if(extra)return extra.position ?? null;

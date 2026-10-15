@@ -39,6 +39,10 @@ public sealed class DesignWriterContractApiTests
         capable.EnsureSuccessStatusCode();
         var next = (await capable.Content.ReadFromJsonAsync<HarnessDesignResponse>(TestContext.Current.CancellationToken))!;
         Assert.Equal(1, next.Content.GetProperty("requiredWriterContractVersion").GetInt32());
+        using var terminationWriter = await Send(HttpMethod.Put, route, new PutHarnessDesignRequest(next.Revision, 1, content, 3));
+        terminationWriter.EnsureSuccessStatusCode();
+        var terminationSaved = (await terminationWriter.Content.ReadFromJsonAsync<HarnessDesignResponse>(TestContext.Current.CancellationToken))!;
+        Assert.Equal(3, terminationSaved.Content.GetProperty("requiredWriterContractVersion").GetInt32());
 
         async Task<HttpResponseMessage> Send(HttpMethod method, string path, object body)
         {

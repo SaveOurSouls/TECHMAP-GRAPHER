@@ -1662,7 +1662,9 @@ describe("shared harness editor model", () => {
     expect(() => applyEditorCommand(document, {
       type: "add-wire",
       wire: createWire("w4", { connectorId: "x1", contactId: "x1:contact:2" }, createJunctionEndpoint("j1"), 100, ""),
-    })).toThrow(/накладывается/);
+    // Shared contacts now fan out without geometric overlap. This attempted
+    // branch still shorts NET-B to NET-A and must fail electrically.
+    })).toThrow(/разные цепи/);
     expect(document.junctions[0]?.wireIds).toEqual(["w1", "w3"]);
     expect(() => applyEditorCommand(document, {
       type: "connect-wire-to-wire", wireId: "w2", end: "to", targetWireId: "w1", junctionId: "j2", position: { x: 750, y: 64 },

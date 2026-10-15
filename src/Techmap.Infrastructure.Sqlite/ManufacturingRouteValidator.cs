@@ -116,6 +116,28 @@ internal static class ManufacturingRouteValidator
                 foreach (var item in objects.EnumerateArray()) available.Add((kind, item.GetProperty("id").GetString()!));
         if (root.TryGetProperty("physicalTopology", out var topology) && topology.ValueKind == JsonValueKind.Object && topology.TryGetProperty("coverings", out var coverings))
             foreach (var item in coverings.EnumerateArray()) available.Add(("covering", item.GetProperty("id").GetString()!));
+        if (root.TryGetProperty("terminations", out var terminations) && terminations.ValueKind == JsonValueKind.Object && terminations.TryGetProperty("artifacts", out var artifacts) && artifacts.ValueKind == JsonValueKind.Array)
+        {
+            var usedArtifactIds = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("connectors", out var connectors) && connectors.ValueKind == JsonValueKind.Array)
+                foreach (var connector in connectors.EnumerateArray())
+                    if (connector.TryGetProperty("terminationComponent", out var component) && component.TryGetProperty("artifactId", out var artifactId) && artifactId.ValueKind == JsonValueKind.String)
+                        usedArtifactIds.Add(artifactId.GetString()!);
+            if (terminations.TryGetProperty("groups", out var groups) && groups.ValueKind == JsonValueKind.Array)
+                foreach (var group in groups.EnumerateArray())
+                    if (group.TryGetProperty("artifactId", out var artifactId) && artifactId.ValueKind == JsonValueKind.String)
+                        usedArtifactIds.Add(artifactId.GetString()!);
+            if (terminations.TryGetProperty("endPreparations", out var preparations) && preparations.ValueKind == JsonValueKind.Array)
+                foreach (var preparation in preparations.EnumerateArray())
+                    foreach (var property in new[] { "artifactId", "sealArtifactId" })
+                        if (preparation.TryGetProperty(property, out var artifactId) && artifactId.ValueKind == JsonValueKind.String)
+                            usedArtifactIds.Add(artifactId.GetString()!);
+            foreach (var item in artifacts.EnumerateArray())
+            {
+                var id = item.GetProperty("id").GetString()!;
+                if (usedArtifactIds.Contains(id)) available.Add(("termination-artifact", id));
+            }
+        }
         foreach (var row in route.GetProperty("rows").EnumerateArray())
             foreach (var item in row.GetProperty("sourceObjects").EnumerateArray())
                 if (!available.Contains((item.GetProperty("kind").GetString()!, item.GetProperty("id").GetString()!)))
@@ -124,7 +146,7 @@ internal static class ManufacturingRouteValidator
         {
             var introduced = route.GetProperty("rows").EnumerateArray().SelectMany(row => row.GetProperty("sourceObjects").EnumerateArray())
                 .Select(item => (item.GetProperty("kind").GetString()!, item.GetProperty("id").GetString()!)).ToHashSet();
-            if (available.Any(item => item.Item1 is "wire" or "covering" && !introduced.Contains(item)))
+            if (available.Any(item => (item.Item1 is "wire" or "covering" or "termination-artifact") && !introduced.Contains(item)))
                 throw Invalid("Completed route must introduce every construction wire and covering.", "content.manufacturingRoute.rows");
         }
     }
@@ -139,7 +161,7 @@ internal static class ManufacturingRouteValidator
             var itemPath = $"{path}[{index++}]";
             RequireExact(item, "kind", "id");
             var kind = Text(item, "kind", itemPath + ".kind", 32);
-            if (kind is not ("wire" or "cable" or "covering" or "connector")) throw Invalid("Invalid route source object kind.", itemPath + ".kind");
+            if (kind is not ("wire" or "cable" or "covering" or "connector" or "termination-artifact")) throw Invalid("Invalid route source object kind.", itemPath + ".kind");
             var id = Text(item, "id", itemPath + ".id", 128);
             if (!result.Add((kind, id))) throw Invalid("A route row cannot consume the same source object twice.", itemPath);
             count++;
@@ -181,7 +203,7 @@ internal static class ManufacturingRouteValidator
                 RequireExact(input, "id", "kind", "ref");
                 var reference = input.GetProperty("ref"); RequireExact(reference, "kind", "id");
                 var sourceKind = Text(reference, "kind", inputPath + ".ref.kind", 32);
-                if (sourceKind is not ("wire" or "cable" or "covering" or "connector"))
+                if (sourceKind is not ("wire" or "cable" or "covering" or "connector" or "termination-artifact"))
                     throw Invalid("Invalid assembly source kind.", inputPath + ".ref.kind");
                 if (!inputSources.Add((sourceKind, Text(reference, "id", inputPath + ".ref.id", 128))))
                     throw Invalid("Assembly source input is duplicated.", inputPath + ".ref");
@@ -303,7 +325,7 @@ internal static class ManufacturingRouteValidator
         {
             RequireExact(item, "ref", "points", "hidden"); var refValue = item.GetProperty("ref"); RequireExact(refValue, "kind", "id");
             var reference = (Text(refValue, "kind", path + ".objects.ref.kind", 32), Text(refValue, "id", path + ".objects.ref.id", 128));
-            if (reference.Item1 is not ("wire" or "cable" or "covering" or "connector") || !seen.Add(reference)) throw Invalid("Invalid or duplicate presentation reference.", path + ".objects.ref");
+            if (reference.Item1 is not ("wire" or "cable" or "covering" or "connector" or "termination-artifact") || !seen.Add(reference)) throw Invalid("Invalid or duplicate presentation reference.", path + ".objects.ref");
             if (item.GetProperty("hidden").ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw Invalid("Presentation hidden must be boolean.", path + ".objects.hidden");
             var points = Array(item, "points", path + ".objects.points", 2000);
             foreach (var point in points.EnumerateArray()) { RequireExact(point, "x", "y"); var x = Number(point, "x", path); var y = Number(point, "y", path); if (!double.IsFinite(x) || !double.IsFinite(y) || Math.Abs(x) > 1e7 || Math.Abs(y) > 1e7) throw Invalid("Route presentation point is out of range.", path + ".objects.points"); }

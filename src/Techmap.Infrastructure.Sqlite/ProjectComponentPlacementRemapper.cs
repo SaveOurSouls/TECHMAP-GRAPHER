@@ -92,6 +92,8 @@ internal static class ProjectComponentPlacementRemapper
             RemapEndpoint(wire["to"], placementIds, contactIds);
         }
 
+        RemapTerminationContactRefs(root["terminations"], placementIds, contactIds);
+
         // Re-read the connector nodes after wire updates to guarantee that the
         // placement row is byte-for-byte the same object stored in the design.
         foreach (var item in connectors)
@@ -105,6 +107,61 @@ internal static class ProjectComponentPlacementRemapper
         }
 
         return new ProjectComponentPlacementRemap(ManufacturingRouteRemapper.Remap(designJson, root.ToJsonString(), placementIds, harnessQuantity), instances);
+    }
+
+    private static void RemapTerminationContactRefs(
+        JsonNode? terminations,
+        IReadOnlyDictionary<Guid, Guid> placementIds,
+        IReadOnlyDictionary<(Guid PlacementId, string ContactId), string> contactIds)
+    {
+        if (terminations is not JsonObject document) return;
+        if (document["groups"] is JsonArray groups)
+            foreach (var item in groups)
+                if (item is JsonObject group) RemapContactRef(group["target"], placementIds, contactIds);
+        if (document["operations"] is JsonArray operations)
+            foreach (var item in operations)
+                if (item is JsonObject operation && operation["target"] is JsonObject target &&
+                    string.Equals(target["kind"]?.GetValue<string>(), "portSet", StringComparison.Ordinal))
+                    RemapPortSet(target, placementIds, contactIds);
+    }
+
+    private static void RemapContactRef(
+        JsonNode? node,
+        IReadOnlyDictionary<Guid, Guid> placementIds,
+        IReadOnlyDictionary<(Guid PlacementId, string ContactId), string> contactIds)
+    {
+        if (node is not JsonObject contact || contact["connectorId"]?.GetValueKind() != JsonValueKind.String) return;
+        var sourceIdText = contact["connectorId"]!.GetValue<string>();
+        if (!Guid.TryParseExact(sourceIdText, "D", out var sourceId) || !placementIds.TryGetValue(sourceId, out var destinationId)) return;
+        if (contact["contactId"]?.GetValueKind() != JsonValueKind.String)
+            throw new InvalidDataException("A termination contact reference is missing its contact ID.");
+        var sourceContactId = contact["contactId"]!.GetValue<string>();
+        if (!contactIds.TryGetValue((sourceId, sourceContactId), out var destinationContactId))
+            throw new InvalidDataException("A termination reference points to an unknown template component contact.");
+        contact["connectorId"] = destinationId.ToString("D", CultureInfo.InvariantCulture);
+        contact["contactId"] = destinationContactId;
+    }
+
+    private static void RemapPortSet(
+        JsonObject target,
+        IReadOnlyDictionary<Guid, Guid> placementIds,
+        IReadOnlyDictionary<(Guid PlacementId, string ContactId), string> contactIds)
+    {
+        if (target["connectorId"]?.GetValueKind() != JsonValueKind.String) return;
+        var sourceIdText = target["connectorId"]!.GetValue<string>();
+        if (!Guid.TryParseExact(sourceIdText, "D", out var sourceId) || !placementIds.TryGetValue(sourceId, out var destinationId)) return;
+        if (target["contactIds"] is not JsonArray contacts)
+            throw new InvalidDataException("A termination port-set reference is missing its contact IDs.");
+        for (var index = 0; index < contacts.Count; index++)
+        {
+            if (contacts[index]?.GetValueKind() != JsonValueKind.String)
+                throw new InvalidDataException("A termination port-set contact ID is invalid.");
+            var sourceContactId = contacts[index]!.GetValue<string>();
+            if (!contactIds.TryGetValue((sourceId, sourceContactId), out var destinationContactId))
+                throw new InvalidDataException("A termination port-set references an unknown template component contact.");
+            contacts[index] = destinationContactId;
+        }
+        target["connectorId"] = destinationId.ToString("D", CultureInfo.InvariantCulture);
     }
 
     private static void RemapEndpoint(
