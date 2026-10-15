@@ -4,11 +4,11 @@
 
 REQ-143, [карточка108](../../tasks/108-pipe-wire-membership.md). Код `2ce6e70a854856f092b14c6e0fa26cbe1226835b` опубликован в `origin/codex/integration-m5-22`, подтверждён в integration HEAD через ancestry. [Handoff](agent-handoff.md), [протокол](../pipe-membership-108-acceptance.md). Полный Vitest 208/2187, TypeScript/Vite/.NET Release, 75 целевых серверных тестов, browser/review/diff-check PASS. Ready-for-review.
 
-Coverage — следующий срез после M5-22-048 вместе с непоставленной107; прежний ZIP не обновлён. Перед упаковкой сборщик подтверждает код и handoff в своём HEAD. Приёмка владельцем открыта.
+Coverage: code `2ce6e70a854856f092b14c6e0fa26cbe1226835b` и handoff `2945ba5da1b88a886f293dcb322418b7575256e9` проверены сборщиком как предки integration HEAD `2945ba5da1b88a886f293dcb322418b7575256e9`; оба опубликованы в origin, `git show --check` PASS. Включить в M5-22-049 вместе с 107; приёмка владельцем открыта. Полный серверный набор в карточке 108 не завершён: целевые 75 тестов PASS, итог общего HarnessDesignApiTests отсутствует; package gate запускает свой полный серверный набор отдельно.
 
 ## 107 — физическая точка и компактные границы, 15.10.2026
 
-REQ-142/141/135, карточка107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в `origin/codex/integration-m5-22` и подтверждён в integration HEAD (ancestry). [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Coverage — следующий срез после M5-22-048, прежний ZIP не обновлён; сборщик подтверждает SHA и handoff в собираемом HEAD. Приёмка владельцем открыта.
+REQ-142/141/135, карточка 107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` и handoff `313c22539df4c4d1f8aca896849a21d1e5e14caa` опубликованы в `origin/codex/integration-m5-22` и проверены сборщиком как предки integration HEAD `2945ba5da1b88a886f293dcb322418b7575256e9`; `git show --check` PASS. [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Включить в M5-22-049; прежний ZIP не содержит 107. Приёмка владельцем открыта.
 
 ## 106 — рисунки, размещение и подключения оконцовок, 15.10.2026
 
