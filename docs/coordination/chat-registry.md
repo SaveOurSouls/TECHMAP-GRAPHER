@@ -6,7 +6,11 @@
 
 ## 113 — оконцовка P1 в масштабе провода, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; ready-for-review. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`; предки merge `70a41ab`. Совместный клиент 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; включено в проверенный ZIP M5-22-052. Handoff: [протокол 113](../handoff-113-p1-termination-graphic-scale.md).
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`, интегрированы merge `70a41ab`; включены в проверенный ZIP M5-22-052. С 15.10.2026 чат выполняет follow-up, in-progress: C1 `e0128795` — у pin/socket обрезается рисунок уплотнителя; заявленная причина — `renderPreparationSvg` задаёт viewBox 250 при artwork до x≈289.6, также указаны короткие metadata image/localBounds. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база follow-up `11445e852b7ace5549f60ac6983a92f5f513a96a`. Изменения ограничены artwork/metadata и preparation-drawing с тестами; код 112/114, production dimensions и electrical connectivity исключены. Новый code/handoff ещё не передан; follow-up блокирует следующий ZIP. Совместный browser/scene прогон 113/114, исходный жгут и packaged UI предыдущего среза не проверены.
+
+## 115 — правила редактирования трасс Э4, 15.10.2026
+
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, карточка [115](../../tasks/115-e4-routing-interaction.md), REQ-150; статус registered. Ветка `codex/e4-routing-interaction`, отдельный worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6` (текущий опубликованный integration HEAD на момент регистрации). Владелец: `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts` и профильные тесты; собственные task/acceptance/handoff. Общие coordination docs принадлежат координатору. Изменения карточки 110 и другие файлы исключены. C1–C4; код не начинать до регистрации ветки/worktree. Следующий ZIP после M5-22-052; ZIP не заказывался.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 

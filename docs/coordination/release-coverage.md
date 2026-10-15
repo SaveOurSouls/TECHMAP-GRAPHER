@@ -6,11 +6,15 @@ REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md)
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, base `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `70a41ab`, `git show --check` PASS. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up in-progress, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база `11445e852b7ace5549f60ac6983a92f5f513a96a`: сообщено о клиппинге уплотнителя pin/socket (C1 `e0128795`); code/handoff follow-up pending. Следующий ZIP заблокирован до проверки и интеграции нового handoff. Указанная в M5-22-052 coverage относится только к предыдущему срезу. Совместный browser/scene прогон 113/114, исходный жгут и packaged UI не проверены.
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
 REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `d66f287`, `git show --check` PASS. Конфликт только в карточке 114 разрешён с сохранением подробного протокола worker branch и coordinator SHA. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон с 113, исходный жгут и packaged UI не проверены.
+
+## 115 — правила редактирования трасс Э4, 15.10.2026
+
+REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`. Зарегистрирована новая ветка `codex/e4-routing-interaction` и worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`; code/handoff пока отсутствуют. C1–C4 охватывают полный прямой участок диффпары, сохранение ортогональности после перемещения и ошибочный отказ drag. Статус registered; блокирует следующий ZIP до handoff и интеграции. ZIP M5-22-052 остаётся последним проверенным срезом и этой работой не содержит.
 
 ### m5-22-052 — 15.10.2026
 
