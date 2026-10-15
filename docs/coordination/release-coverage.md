@@ -1,5 +1,9 @@
 # Release coverage
 
+## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
+
+15.10.2026, чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md). In-progress в прежнем `tmp/op-bend-coordinate-integrity`; база `96829c0`. Следующий срез после M5-22-052, новый code/handoff pending. Первый код 112 уже включён в 052; это не подтверждает новый follow-up. Новая упаковка блокируется до завершения/интеграции относящихся к ней handoff; ZIP здесь не заказан. Изменены только собственные записи в отдельной ветке, общая рабочая копия принадлежит координатору.
+
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
 REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a7` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `0811aff`, `git show --check` PASS. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут, ручные C1 и packaged UI не проверены.
