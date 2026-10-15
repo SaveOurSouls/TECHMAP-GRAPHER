@@ -10,7 +10,7 @@ ITEMS=[
  ('nki-ring','НКИ · кольцевой','terminal','ring','L / L1 / D / B / d1 / P / S','Изолированный обжим и кольцевой лепесток'),
  ('nvi-fork','НВИ · вилочный','terminal','fork','L / L1 / D / B / d1 / P / S','Открытая вилка без дополнительного порта'),
  ('nshvi-single','НШВИ · стандартный раструб','terminal','ferrule','L / L1 / C / W / A','Трубчатая втулка с изолированным раструбом'),
- ('nshvi-double','НШВИ · расширенный раструб','terminal','ferrule-double','L / L1 / C / W / A','Трубчатая втулка с расширенным раструбом'),
+ ('nshvi-double','НШВИ · широкий раструб','terminal','ferrule-double','L / L1 / C / W / A','Прямоугольный раструб с плечами к трубке; один ввод'),
  ('nvsh-alias-pin-blade','НВШ (alias) · pin blade','terminal','blade','проектные поля L / W / t','Предложенная геометрия; расшифровка не утверждается'),
  ('din-sc-ring','DIN / SC · силовой кольцевой','terminal','power-ring','поля каталога C3: d2 / d / D / B / E / L','Медь лужёная; на C3 маркировка SC. DIN не подтверждён'),
  ('pin-round','Pin · круглый штырь','terminal','pin','проектные поля L / d','Боковой вид цилиндрического контакта'),
@@ -117,6 +117,15 @@ def flag_body(family,mono,cuff):
   s.append('<g transform="translate(73.7376,37) rotate(-90) scale(.88)">'+receptacle_head(mono)+'</g>')
  return ''.join(s)+(''.join(details) if not mono else '')
 
+NSHVI_COLORS={
+ 'white':{'name':'Белый','hex':'#f2f0e8'},
+ 'gray':{'name':'Серый','hex':'#8d959c'},
+ 'red':{'name':'Красный','hex':'#ce5356'},
+ 'blue':{'name':'Синий','hex':'#287fb5'},
+ 'black':{'name':'Чёрный','hex':'#323941'},
+ 'yellow':{'name':'Жёлтый','hex':'#e9c742'},
+}
+
 def body(family,view,cuff='red',leads=True):
  # Both views use exactly the same profile paths. E4 omits highlights/ribs only.
  mono=view=='e4'; metal='#fff' if mono else 'url(#metal)'; ins='#fff' if mono else f'url(#{cuff})'
@@ -138,11 +147,26 @@ def body(family,view,cuff='red',leads=True):
    if family=='sleeve-ultrasonic':
     for xx in range(99,123,4):details.append(path(f'M{xx} 41 l3 18',extra='stroke="#776782" stroke-width=".6"'))
  elif family in ('ferrule','ferrule-double'):
-  double=family.endswith('double');yy=34 if double else 38
-  shape(f'M32 {yy} Q32 {yy-2} 36 {yy-2} H66 Q70 {yy-2} 74 {yy+2} L86 44 V56 L74 {98-yy} Q70 {102-yy} 66 {102-yy} H36 Q32 {102-yy} 32 {100-yy} Z',ins)
-  shape('M86 43 H174 Q177 43 177 45 V55 Q177 57 174 57 H86 Z')
-  detail('M90 45 H174 M90 55 H174 M36 39 H64 M36 61 H64')
-  detail(f'M38 {yy} C35 42 35 58 38 {100-yy}')
+  # Local ferrule colors do not alter shared cuff tokens/defs or any other family.
+  # The standard base SVG keeps its existing fill as well as its exact geometry.
+  # Explicit color executions use a local selector; no global gradient ids are added.
+  if mono:ferrule_fill='#fff'
+  elif cuff.startswith('nshvi-'):ferrule_fill=NSHVI_COLORS[cuff[6:]]['hex']
+  elif family=='ferrule-double':ferrule_fill=NSHVI_COLORS[cuff]['hex']
+  else:ferrule_fill=ins
+  if family=='ferrule-double':
+   # C1/C2: broad rectangular base, shoulders, slender tube. Illustrative proportions only.
+   # Polymer width45 / tube diameter18 =2.5; polymer length54 / tube length66 ≈.818.
+   shape('M32 31 Q32 27.5 35.5 27.5 H63 Q66 27.5 68 29.5 L84 40 Q85.5 41 86 41 V59 Q85.5 59 84 60 L68 70.5 Q66 72.5 63 72.5 H35.5 Q32 72.5 32 69 Z',ferrule_fill)
+   shape('M86 41 H150 Q152 41 152 43 V57 Q152 59 150 59 H86 Z')
+   detail('M91 44 H148 M91 56 H148 M37 32 H62 Q64 32 66 34 L79 42 M37 68 H62 Q64 68 66 66 L79 58')
+  else:
+   # Existing standard geometry and detail coordinates are intentionally unchanged.
+   yy=38
+   shape(f'M32 {yy} Q32 {yy-2} 36 {yy-2} H66 Q70 {yy-2} 74 {yy+2} L86 44 V56 L74 {98-yy} Q70 {102-yy} 66 {102-yy} H36 Q32 {102-yy} 32 {100-yy} Z',ferrule_fill)
+   shape('M86 43 H174 Q177 43 177 45 V55 Q177 57 174 57 H86 Z')
+   detail('M90 45 H174 M90 55 H174 M36 39 H64 M36 61 H64')
+   detail(f'M38 {yy} C35 42 35 58 38 {100-yy}')
  elif family=='power-ring':
   shape('M32 35 Q32 33 37 33 H82 Q92 33 105 42 C118 43 129 38 139 32 A23 23 0 1 1 139 68 C129 62 118 57 105 58 Q92 67 82 67 H37 Q32 67 32 65 Z')
   s.append(circle(153,50,12.5,PAPER))
@@ -219,8 +243,17 @@ def record(id,name,kind,family,note):
  return {'id':id,'name':name,'kind':kind,'geometryFamily':family,'views':{v:f'{id}-{v}.svg' for v in ('e4','drawing')},'anchors':anchors,'pivot':{'x':110 if kind=='sleeve' else 32,'y':50},'electricalPointCount':2 if kind=='sleeve' else 1,'countAnnotationPolicy':'multiple wires share one existing anchor; ×2/×3/×4 is annotation only','note':note}
 
 for id,name,kind,family,dims,note in ITEMS:
- for view in ('e4','drawing'):(OUT/f'{id}-{view}.svg').write_text(shell(name+' — '+('Э4' if view=='e4' else 'Чертёж'),symbol(family,view)),encoding='utf-8')
+ for view in ('e4','drawing'):(OUT/f'{id}-{view}.svg').write_text(shell(name+' — '+('Э4' if view=='e4' else 'Чертёж'),symbol(family,view,cuff='blue' if family=='ferrule-double' else 'red')),encoding='utf-8')
  r=record(id,name,kind,family,note);r['dimensionFields']=dims;r['catalogAlias']='НВШ' if family=='blade' else None;r['standardClaim']=None;manifest['assets'].append(r)
+# Color is a presentation option on the two existing assets, never another electrical object.
+for a in manifest['assets']:
+ if a['id'] not in ('nshvi-single','nshvi-double'):continue
+ a['colorOptions']=[]
+ for key,color in NSHVI_COLORS.items():
+  file=f"{a['id']}-{key}-drawing.svg"
+  (OUT/file).write_text(shell(a['name']+' — '+color['name']+' — Чертёж',symbol(a['geometryFamily'],'drawing',cuff='nshvi-'+key)),encoding='utf-8')
+  a['colorOptions'].append({'id':key,'name':color['name'],'hex':color['hex'],'views':{'drawing':file,'e4':a['views']['e4']},'colorSectionMapping':None})
+ a['colorPolicy']='visual execution only; no section, dimension or capacity mapping asserted'
 for key,label in VARIANTS:
  id='preparation-'+key
  for view in ('e4','drawing'):(OUT/f'{id}-{view}.svg').write_text(shell('Разделка — '+label+' — '+view,prep_symbol(key,view)),encoding='utf-8')
@@ -236,6 +269,7 @@ manifest['flat2dRevision']={'date':'2026-10-15','references':{'C1':'codex-clipbo
 manifest['flagRevision']['status']='historical: profile geometry superseded by flat2dRevision'
 manifest['insulatedFlagRevision']={'date':'2026-10-15','reference':'codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png','sourceProfile':{'bounds':[15,25,476,436],'mainBody':[33,170,476,436],'shortInput':[15,25,180,180],'sourceInputCenter':[97.5,25]},'sourceToLocalMatrix':[0,-.12,.12,0,29,61.7],'scale':.12,'drawing':'flat 2D internal backing, window and two longitudinal spring edges below real fill-opacity .61 polymer; no face plate, arcs, perspective or gradients','e4':'monochrome silhouette only','port':'one unchanged anchor32,50, normal[-1,0], pivot32,50; top-entry sheet is rotation of same symbol'}
 manifest['flat2dRevision']['insulatedStatus']='historical solid fill and long silhouette superseded by insulatedFlagRevision; bare profiles remain current'
+manifest['nshviRevision']={'date':'2026-10-15','references':{'C1':'codex-clipboard-cb956ef9-76ba-43e5-ae61-9b0c6478315e.png','C2':'codex-clipboard-0fb25d29-e892-4e35-ab3d-6e895e023661.png','C3':'codex-clipboard-b06aea3f-a3d7-465f-bb14-f760206198e2.png'},'standard':'existing silhouette preserved','wide':'broad rectangular base with shoulders to tube; polymer width45/tube diameter18=2.5; polymer length54/tube length66≈.818, illustrative drawing units','colors':['white','gray','red','blue','black','yellow'],'policy':'no section, physical dimension, length class or capacity assigned by color; same one wire entry32,50 and pivot32,50','variants':'12 real color drawing SVGs; colorOptions refer to existing monochrome E4 for their geometry'}
 (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 
 # Russian atlas: generous two-column cards, distinct views.
@@ -274,14 +308,14 @@ for x,fam,name in [(70,'ring','C1 · НКИ / НВИ'),(650,'ferrule-double','C2
  if fam=='ring':
   q += [text(x,345,'L — общая длина · L1 — зона металлического обжима','small'),text(x,367,'D — отверстие кольца / раскрытие вилки · B — ширина лепестка','small'),text(x,389,'d1 — входной диаметр · P — длина хвостовой зоны · S — толщина','small')]
  else:
-  q += [text(x,345,'L — металлическая втулка · L1 — общая длина','small'),text(x,367,'C — диаметр втулки · W — габарит раструба','small'),text(x,389,'A — поперечный габарит; профиль раструба сохранён','small')]
+  q += [text(x,345,'L — металлическая втулка · L1 — общая длина','small'),text(x,367,'C — диаметр втулки · W — габарит раструба','small'),text(x,389,'A — поперечный габарит стандартного / широкого раструба','small')]
 q += [text(28,431,'Схема только сохраняет названия полей приложений; значения и допуски не выдуманы.','small')]
 (OUT/'dimensions.svg').write_text(shell('Размерные поля 099',''.join(q),DW,DH),encoding='utf-8')
 
 # Enlarged sheet for silhouette / fold inspection and neutral color comparison.
 PDW,PDH=1240,1630
 r=[rect(0,0,PDW,PDH,'#f3f6fa'),text(28,44,'099 · Профили по фотографиям · 15.10.2026','title'),text(28,72,'C1–C3: плавная шейка, раструб манжеты, штампованные переходы и контактные пружины.'),text(28,94,'Э4 сохраняет тот же силуэт. Красный / синий / жёлтый здесь — варианты показа, без привязки к сечению.','small')]
-for i,(fam,label) in enumerate([('ring','НКИ · круглая головка / плавная шейка'),('fork','НВИ · U-вилка / параллельные зубцы'),('pin','Bullet male · закруглённый нос'),('socket','Bullet female · приёмная втулка'),('male','Flat male · штампованная лопатка'),('female','Flat female · пружинные завальцовки'),('flag','Флажковый · цельный Г-корпус'),('ferrule-double','НШВИ · расширенный раструб')]):
+for i,(fam,label) in enumerate([('ring','НКИ · круглая головка / плавная шейка'),('fork','НВИ · U-вилка / параллельные зубцы'),('pin','Bullet male · закруглённый нос'),('socket','Bullet female · приёмная втулка'),('male','Flat male · штампованная лопатка'),('female','Flat female · пружинные завальцовки'),('flag','Флажковый · цельный Г-корпус'),('ferrule-double','НШВИ · широкий раструб')]):
  x=28+(i%2)*608;y=119+(i//2)*290
  large_scale=2.4 if fam=='flag' else 2.7
  large_x,large_y=(200,55) if fam=='flag' else (2,20)
@@ -329,14 +363,29 @@ for i,(col,label) in enumerate([('blue','Синяя оболочка · рабо
 z += [text(28,1067,'C1: codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png. Цвет не задаёт сечение или материал.','small'),text(28,1094,'Профиль и масштаб — визуальная модель по фото; не размерный чертёж изделия и не нормативное УГО.','small')]
 (OUT/'insulated-flag-detail.svg').write_text(shell('Изолированный флажок по новому C1',''.join(z),IW,IH),encoding='utf-8')
 
-# Shared cylindrical cuff, with the unchanged ferrule profile for comparison.
+# Shared cylindrical cuffs unchanged; latest broad ferrule profile shown separately for comparison.
 CW,CH=1120,1170
-u=[rect(0,0,CW,CH,'#f3f6fa'),text(28,44,'Манжеты · цилиндр и расширенный входной поясок','title'),text(28,73,'Профиль по новому C1: одинаковая манжета у семи прямых изолированных наконечников.'),text(28,95,'НШВИ сохраняет форму; обозначение кратности убрано из рисунка и названия.','small')]
-for i,(fam,label) in enumerate([('ring','НКИ · кольцевой'),('fork','НВИ · вилочный'),('blade','НВШ · плоский штырь'),('pin','Pin · круглый штырь'),('socket','Socket · круглая розетка'),('male','Flat male · плоский штырь'),('female','Flat female · плоская розетка'),('ferrule-double','НШВИ · расширенный раструб')]):
+u=[rect(0,0,CW,CH,'#f3f6fa'),text(28,44,'Манжеты · цилиндр и расширенный входной поясок','title'),text(28,73,'Общая цилиндрическая манжета из предыдущего среза; НШВИ показан отдельно для сравнения.'),text(28,95,'Стандартный НШВИ сохранён; широкий раструб обновлён по C1/C2. Цвет не задаёт сечение.','small')]
+for i,(fam,label) in enumerate([('ring','НКИ · кольцевой'),('fork','НВИ · вилочный'),('blade','НВШ · плоский штырь'),('pin','Pin · круглый штырь'),('socket','Socket · круглая розетка'),('male','Flat male · плоский штырь'),('female','Flat female · плоская розетка'),('ferrule-double','НШВИ · широкий раструб')]):
  x=24+(i%2)*548;y=120+(i//2)*250
  u += [rect(x,y,524,236,PAPER,10),text(x+18,y+29,label,'card-title'),f'<g transform="translate({x+5},{y+18}) scale(2.4)">{symbol(fam,"drawing")}</g>',text(x+18,y+214,'Э4 · один вход','view'),f'<g transform="translate({x+225},{y+178}) scale(.65)">{symbol(fam,"e4")}</g>']
-u += [text(28,1144,'Контуры металлических частей и точки подключения сохранены. Цвет манжеты не определяет сечение.','small')]
+u += [text(28,1144,'Металл семи прямых типов и все точки подключения сохранены. Широкий НШВИ уточнён по фото.','small')]
 (OUT/'cuff-detail.svg').write_text(shell('Цилиндрические манжеты наконечников',''.join(u),CW,CH),encoding='utf-8')
+
+# NShVI form and color presentation options, without manufacturing size claims.
+NW,NH=1240,1340
+n=[rect(0,0,NW,NH,'#f3f6fa'),text(28,44,'099 · НШВИ · стандартный и широкий раструбы','title'),text(28,72,'Фронтальные 2D профили по C1–C3; цвет — исполнение, без привязки к сечению.'),text(28,94,'Один вход провода у каждой формы. Э4 и Чертёж используют один и тот же контур.','small')]
+for i,(fam,label,col) in enumerate([('ferrule','Стандартный раструб','gray'),('ferrule-double','Широкий раструб · C1 / C2','blue')]):
+ x=28+i*608;y=119
+ n += [rect(x,y,584,480,PAPER,12),text(x+18,y+30,label,'card-title'),text(x+18,y+54,'Чертёж · фронтальный вид, трубка вверх','view'),f'<g transform="translate({x+200},{y+420}) scale(2.5) rotate(-90) translate(-32,-50)">{symbol(fam,"drawing",cuff="nshvi-"+col,leads=False)}</g>',text(x+300,y+220,'Э4 · рабочий вид','view'),f'<g transform="translate({x+280},{y+240})">{symbol(fam,"e4")}</g>',text(x+18,y+456,'Геометрия стандартного раструба сохранена.' if fam=='ferrule' else 'Ширина прямоугольного основания примерно 2,5 диаметра трубки.','small')]
+for row,(fam,label) in enumerate([('ferrule','Палитра · стандартный раструб'),('ferrule-double','Палитра · широкий раструб')]):
+ yy=625+row*325
+ n += [rect(28,yy,1192,300,PAPER,12),text(46,yy+31,label,'card-title')]
+ for i,(key,color) in enumerate(NSHVI_COLORS.items()):
+  xx=46+i*193
+  n += [rect(xx,yy+55,178,205,'#f8fafc',8),text(xx+10,yy+80,color['name'],'view'),f'<g transform="translate({xx+90},{yy+235}) scale(.95) rotate(-90) translate(-32,-50)">{symbol(fam,"drawing",cuff="nshvi-"+key,leads=False)}</g>']
+n += [text(28,1292,'Шесть цветов для каждой формы. Цветовые варианты сохраняют один вход провода.','small'),text(28,1318,'Пропорции по фото условные. Цвет не определяет сечение, размер, допустимое число проводов или соответствие стандарту.','small')]
+(OUT/'nshvi-variants.svg').write_text(shell('НШВИ стандартный и широкий раструбы, цвета',''.join(n),NW,NH),encoding='utf-8')
 
 # structural validation, deterministic and no external packages required
 for p in OUT.glob('*.svg'):
@@ -346,4 +395,9 @@ for a in manifest['assets']:
   root=ET.parse(OUT/file).getroot(); found=[n for n in root.iter() if n.get('data-role')=='wire-entry'];assert len(found)==a['electricalPointCount'],(a['id'],view)
   for expected in a['anchors']:
    node=next(n for n in found if n.get('id')==expected['id']);assert float(node.get('cx'))==expected['x'] and float(node.get('cy'))==expected['y']
+for a in manifest['assets']:
+ for option in a.get('colorOptions',[]):
+  for file in option['views'].values():
+   root=ET.parse(OUT/file).getroot(); anchors=[x for x in root.iter() if x.get('data-role')=='wire-entry']
+   assert len(anchors)==1 and anchors[0].get('cx')=='32' and anchors[0].get('cy')=='50',file
 print(f'OK: {len(manifest["assets"])} assets, 8 preparation variants, {len(list(OUT.glob("*.svg")))} valid SVGs; anchor coordinates verified')

@@ -124,11 +124,74 @@
       "note": "Трубчатая втулка с изолированным раструбом",
       "dimensionFields": "L / L1 / C / W / A",
       "catalogAlias": null,
-      "standardClaim": null
+      "standardClaim": null,
+      "colorOptions": [
+        {
+          "id": "white",
+          "name": "Белый",
+          "hex": "#f2f0e8",
+          "views": {
+            "drawing": "nshvi-single-white-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "gray",
+          "name": "Серый",
+          "hex": "#8d959c",
+          "views": {
+            "drawing": "nshvi-single-gray-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "red",
+          "name": "Красный",
+          "hex": "#ce5356",
+          "views": {
+            "drawing": "nshvi-single-red-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "blue",
+          "name": "Синий",
+          "hex": "#287fb5",
+          "views": {
+            "drawing": "nshvi-single-blue-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "black",
+          "name": "Чёрный",
+          "hex": "#323941",
+          "views": {
+            "drawing": "nshvi-single-black-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "yellow",
+          "name": "Жёлтый",
+          "hex": "#e9c742",
+          "views": {
+            "drawing": "nshvi-single-yellow-drawing.svg",
+            "e4": "nshvi-single-e4.svg"
+          },
+          "colorSectionMapping": null
+        }
+      ],
+      "colorPolicy": "visual execution only; no section, dimension or capacity mapping asserted"
     },
     {
       "id": "nshvi-double",
-      "name": "НШВИ · расширенный раструб",
+      "name": "НШВИ · широкий раструб",
       "kind": "terminal",
       "geometryFamily": "ferrule-double",
       "views": {
@@ -153,10 +216,73 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Трубчатая втулка с расширенным раструбом",
+      "note": "Прямоугольный раструб с плечами к трубке; один ввод",
       "dimensionFields": "L / L1 / C / W / A",
       "catalogAlias": null,
-      "standardClaim": null
+      "standardClaim": null,
+      "colorOptions": [
+        {
+          "id": "white",
+          "name": "Белый",
+          "hex": "#f2f0e8",
+          "views": {
+            "drawing": "nshvi-double-white-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "gray",
+          "name": "Серый",
+          "hex": "#8d959c",
+          "views": {
+            "drawing": "nshvi-double-gray-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "red",
+          "name": "Красный",
+          "hex": "#ce5356",
+          "views": {
+            "drawing": "nshvi-double-red-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "blue",
+          "name": "Синий",
+          "hex": "#287fb5",
+          "views": {
+            "drawing": "nshvi-double-blue-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "black",
+          "name": "Чёрный",
+          "hex": "#323941",
+          "views": {
+            "drawing": "nshvi-double-black-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        },
+        {
+          "id": "yellow",
+          "name": "Жёлтый",
+          "hex": "#e9c742",
+          "views": {
+            "drawing": "nshvi-double-yellow-drawing.svg",
+            "e4": "nshvi-double-e4.svg"
+          },
+          "colorSectionMapping": null
+        }
+      ],
+      "colorPolicy": "visual execution only; no section, dimension or capacity mapping asserted"
     },
     {
       "id": "nvsh-alias-pin-blade",
@@ -955,5 +1081,25 @@
     "drawing": "flat 2D internal backing, window and two longitudinal spring edges below real fill-opacity .61 polymer; no face plate, arcs, perspective or gradients",
     "e4": "monochrome silhouette only",
     "port": "one unchanged anchor32,50, normal[-1,0], pivot32,50; top-entry sheet is rotation of same symbol"
+  },
+  "nshviRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-cb956ef9-76ba-43e5-ae61-9b0c6478315e.png",
+      "C2": "codex-clipboard-0fb25d29-e892-4e35-ab3d-6e895e023661.png",
+      "C3": "codex-clipboard-b06aea3f-a3d7-465f-bb14-f760206198e2.png"
+    },
+    "standard": "existing silhouette preserved",
+    "wide": "broad rectangular base with shoulders to tube; polymer width45/tube diameter18=2.5; polymer length54/tube length66≈.818, illustrative drawing units",
+    "colors": [
+      "white",
+      "gray",
+      "red",
+      "blue",
+      "black",
+      "yellow"
+    ],
+    "policy": "no section, physical dimension, length class or capacity assigned by color; same one wire entry32,50 and pivot32,50",
+    "variants": "12 real color drawing SVGs; colorOptions refer to existing monochrome E4 for their geometry"
   }
 }
