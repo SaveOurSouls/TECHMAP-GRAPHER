@@ -1,5 +1,9 @@
 # Release coverage
 
+## 112 — координаты изгибов после создания ОП, 15.10.2026
+
+REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, `codex/integration-m5-22`, основная копия. In-progress; обязательный handoff и code SHA pending. Исправление предназначено для следующего среза после M5-22-051; до завершения handoff новый ZIP блокируется. ZIP здесь не заказан.
+
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 
 REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
