@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 112 — возврат прежней оболочки П, 15.10.2026
+
+Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`, база `564b81fa5e506ccb9f87e75faa95fe1dff798ab3`; in-progress. Прямое уточнение владельца отменяет расширенный охват карточки 111 / REQ-146. Новое правило REQ-147, карточка [112](../../tasks/112-restore-pipe-sleeve-behavior.md): провода своего П втягиваются в оболочку, другие П общего выхода не включаются. Root владеет точечным откатом `covering-layout.ts`, `physical-wire-geometry.ts`, удалением `connector-sleeve-support.ts`, заменой регрессий 111 и документами 111/112; общие документы меняются только в этой отдельной копии. Coverage: следующий кодовый срез после M5-22-051; ZIP не запрошен. История 109/110/111 и уже выданный ZIP сохраняются.
+
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`; статус ready-for-review. REQ-146, карточка [111](../../tasks/111-thermal-sleeve-wire-coverage.md). Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и включены в integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` (ancestry PASS). C1 — неполный охват проводов у общего выхода; C2 — контекст жгута. Рабочий чат владел кодом геометрии и тестами, координатор — регистрацией. Совместный клиент 211/2223, TypeScript/Vite PASS; ZIP M5-22-051 проверен, приёмка владельцем открыта.
