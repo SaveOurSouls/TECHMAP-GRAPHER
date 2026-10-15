@@ -19,6 +19,13 @@ export interface JoiningPipeMemberControl {
  readonly lead?:"enter"|"exit";
 }
 const mix=(a:Point,b:Point,t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+/** A transition support belongs outside the shared straight lead. When that
+ * lead grows past the former station, slide the station with its front plane
+ * instead of making the member double back through a stale derived corner. */
+function outsideSharedLead(point:Point,lead:Point,outward:Point):Point {
+  const distance=(point.x-lead.x)*outward.x+(point.y-lead.y)*outward.y;
+  return distance>=0?point:{x:point.x-distance*outward.x,y:point.y-distance*outward.y};
+}
 function at(samples:readonly JoiningPipeSample[],fraction:number):Point {
   if(fraction<=samples[0]!.fraction)return samples[0]!.point;
   const i=samples.findIndex(s=>s.fraction>=fraction);if(i<0)return samples.at(-1)!.point;
@@ -130,12 +137,14 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const low=member.from/2,high=(1+member.to)/2;
       // Fractions and segment order already follow the member's own source
       // direction. Only the OP lane is reversed, not its source shoulders.
-      const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(source,low),outerB=member.exitOuter??at(source,high);
+      const a=oriented[0]!.point,b=oriented.at(-1)!.point;
       const enterLead=member.reverse?pipe.exitLength:pipe.enterLength;
       const exitLead=member.reverse?pipe.enterLength:pipe.exitLength;
       const enterVector=joiningPipeExitVector(pipe,member.reverse?"to":"from"),exitVector=joiningPipeExitVector(pipe,member.reverse?"from":"to");
       const enterLeadPoint={x:a.x+enterVector.x*(enterLead??20),y:a.y+enterVector.y*(enterLead??20)};
       const exitLeadPoint={x:b.x+exitVector.x*(exitLead??20),y:b.y+exitVector.y*(exitLead??20)};
+      const outerA=outsideSharedLead(member.enterOuter??at(source,low),enterLeadPoint,enterVector);
+      const outerB=outsideSharedLead(member.exitOuter??at(source,high),exitLeadPoint,exitVector);
       const enterBend=member.enterBend??null,exitBend=member.exitBend??null;
       const enter=sample(enterBend===null?[outerA,enterLeadPoint,a]:[outerA,enterBend,enterLeadPoint,a]);
       const exit=sample(exitBend===null?[b,exitLeadPoint,outerB]:[b,exitLeadPoint,exitBend,outerB]);

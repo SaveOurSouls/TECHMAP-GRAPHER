@@ -1,5 +1,9 @@
 # Release coverage
 
+## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
+
+15.10.2026, чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md). Ready-for-review в прежнем `tmp/op-bend-coordinate-integrity`; база `96829c0`, регистрация `1170ee6`. Код `dc817dea78d89410e04a89b86ef1489209dbaaea` и docs-only handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и включены в integration merge. Worker PASS: 216/2285, финальный профильный 2/29, TypeScript/Vite/diff-check. Первый код 112 вошёл в M5-22-052; новый follow-up в этот ZIP не входит. Исходный документ, ручная C1–C4 и packaged UI не проверены; новый ZIP не заказан и ожидает завершения других активных карточек.
+
 ## 111 follow-up — откат оболочек П по уточнению владельца, 15.10.2026
 
 Уточнённое REQ-146 заменяет первоначальную трактовку; [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md).
