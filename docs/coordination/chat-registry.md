@@ -1,14 +1,14 @@
 # Реестр чатов проекта
 
-## 112 — возврат прежней оболочки П, 15.10.2026
+## 111 follow-up — возврат прежней оболочки П, 15.10.2026
 
-Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`, база `564b81fa5e506ccb9f87e75faa95fe1dff798ab3`; ready-for-review. REQ-147 / [112](../../tasks/112-restore-pipe-sleeve-behavior.md): точечный откат отменённого требования 111, оболочка только своего П. Код `e6f03190831bf6607438837d382d3b43e6718ec2` опубликован. Root — runtime/регрессии/docs 111/112; Vitest 211/2219, TS/Vite, browser и diff-check PASS. Handoff заполнен. Coverage: следующий срез после M5-22-051, интеграцию подтверждает сборщик; ZIP не заказан. Исходный документ/portable и приёмка владельцем открыты.
+Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`, база `564b81fa5e506ccb9f87e75faa95fe1dff798ab3`; ready-for-review. REQ-146 / [111](../../tasks/111-thermal-sleeve-wire-coverage.md): точечный откат отменённого требования 111, оболочка только своего П. Код `e6f03190831bf6607438837d382d3b43e6718ec2` опубликован. Root — runtime/регрессии/docs 111; Vitest 211/2219, TS/Vite, browser и diff-check PASS. Handoff заполнен. Coverage: следующий срез после M5-22-051, интеграцию подтверждает сборщик; ZIP не заказан. Исходный документ/portable и приёмка владельцем открыты.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
-Текущий статус: **cancelled** по уточнению владельца; REQ-146 отменено.
+Первоначальная трактовка отменена; текущий статус follow-up — ready-for-review.
 Далее сохранена историческая запись интеграции 111 в M5-22-051; действующий
-результат возврата — карточка 112 / REQ-147.
+результат возврата — карточка 111 / REQ-146.
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`; статус ready-for-review. REQ-146, карточка [111](../../tasks/111-thermal-sleeve-wire-coverage.md). Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и включены в integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` (ancestry PASS). C1 — неполный охват проводов у общего выхода; C2 — контекст жгута. Рабочий чат владел кодом геометрии и тестами, координатор — регистрацией. Совместный клиент 211/2223, TypeScript/Vite PASS; ZIP M5-22-051 проверен, приёмка владельцем открыта.
 

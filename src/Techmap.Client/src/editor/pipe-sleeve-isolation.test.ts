@@ -48,7 +48,7 @@ function assertSurface(document: HarnessDesignDocument) {
   return surfaces;
 }
 
-describe("REQ-147: a P sleeve belongs only to its own pipe", () => {
+describe("REQ-146: a P sleeve belongs only to its own pipe", () => {
   it("keeps its contour independent of other pipes at the same connector exit", () => {
     const source = fixture(), t = source.physicalTopology!;
     const withoutOthers = { ...source, physicalTopology: { ...t, routes: t.routes.slice(0, 4) } };
