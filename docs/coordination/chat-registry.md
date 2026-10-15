@@ -236,3 +236,7 @@ Follow-up 091 (13.10.2026, C1–C4): `/root`, тот же worktree и ветка
 ## Карточка 103 — 15.10.2026: прямое редактирование вида ПФ
 
 `/root`, текущий чат, основной worktree codex/integration-m5-22. Владелец RouteV3Graph.tsx, route-v3-graph.css, модуль группировки и тесты; документы 103/REQ-139. Ready-for-review; код ca6cebaa72e0c723d8736c08fc77fad4bf92923a опубликован. Следующий ZIP pending. Изменения 099 исключены.
+
+## Карточка 105 — 15.10.2026: ширина настроек Route v3
+
+Чат 01a111fa-93ab-79b3-9089-7ec8ca14c393, /root, codex/integration-m5-22, основной worktree. Владелец RouteV3Graph.tsx, route-v3-graph.css, route-v3-operation-table.css и только разделов документов 105/REQ-140. Ready-for-review; code fc8f0f9596f0f5280988cdca6cae5a830b6e2461 опубликован; следующий ZIP pending. Реализация 104 и её файлы исключены.

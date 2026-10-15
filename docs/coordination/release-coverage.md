@@ -219,3 +219,5 @@ represent missing completed chat handoffs.
 - **Size / SHA-256:** `64 029 194 / 99292AD3A906F9D0004C2B1FF4DDE0F4700B05D3469775651082402396E30D9F`
 - **Manifest / portable:** `PASS; 339/340; 7/7`
 - **Gate:** `PASS` для Git и package; ручная и owner acceptance открыты
+
+| 105 — Ширина настроек Route v3 | /root | code fc8f0f9596f0f5280988cdca6cae5a830b6e2461; handoff — документальный срез 105 | REQ-140; ancestor integration; изолированный HEAD+105: 196/1880, TS/Vite PASS; production CSS/browser 1024–2557 px PASS | included (ancestor); следующий ZIP pending, приёмка открыта |

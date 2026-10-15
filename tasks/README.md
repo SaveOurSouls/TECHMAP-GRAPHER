@@ -121,3 +121,4 @@
 | 101 | [Таблица операций и выбор продукции](101-route-v3-operation-table.md) | ready-for-review | REQ-137: одна операция в строке сетки, выбор ПФ по кнопке, серые занятые и фильтр. |
 | 102 | [Вид проводов в строке ПФ](102-route-v3-inline-wire-view.md) | ready-for-review | REQ-138: кнопка вида в основной строке ПФ, сохранение индивидуальных настроек. |
 | 103 | [Прямые колонки вида и рисунок ПФ](103-route-v3-direct-appearance-columns.md) | ready-for-review | REQ-139: начало/конец/цвет в таблице, рисунок слева. |
+| 105 | [Ширина настроек карточки Route v3](105-route-v3-full-width-card-settings.md) | ready-for-review | REQ-140: окно по ширине экрана, согласованный CSS, таблицы без горизонтального overflow desktop. |
