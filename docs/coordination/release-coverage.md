@@ -1,5 +1,9 @@
 # Release coverage
 
+## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
+
+REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-component-drag-performance`, отдельный worktree; in-progress, handoff и кодовые SHA пока отсутствуют. Запланировано в следующем пакете после M5-22-049; до интеграции ZIP заблокирован этой карточкой только если она заявлена завершённой/относящейся к пакету.
+
 ## 108 — управление составом П, 15.10.2026
 
 REQ-143, [карточка108](../../tasks/108-pipe-wire-membership.md). Код `2ce6e70a854856f092b14c6e0fa26cbe1226835b` опубликован в `origin/codex/integration-m5-22`, подтверждён в integration HEAD через ancestry. [Handoff](agent-handoff.md), [протокол](../pipe-membership-108-acceptance.md). Полный Vitest 208/2187, TypeScript/Vite/.NET Release, 75 целевых серверных тестов, browser/review/diff-check PASS. Ready-for-review.
