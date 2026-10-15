@@ -2,7 +2,9 @@
 
 ## 15.10.2026 — handoff 106 после M5-22-047
 
-Сборщик сверил реестр, карточку 106, handoff и release coverage с integration HEAD `21be7baf1bdca6581d44c50d80b9cafaca1f69e7`, совпадающим с origin. Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` являются предками HEAD; `git show --check` PASS. После M5-22-047 иных runtime-коммитов нет; `1ffb942` и `00d0557` — документация. Рабочая копия чиста, pending/unknown handoff для нового среза нет. Владелец принял карточку 096, остальные статусы отражены в реестре и coverage. Следующий шаг — повышение версии и сборка M5-22-048.
+Сборщик сверил реестр, карточку 106, handoff и release coverage с integration HEAD `21be7baf1bdca6581d44c50d80b9cafaca1f69e7`, совпадающим с origin. Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` являются предками HEAD; `git show --check` PASS. После M5-22-047 иных runtime-коммитов нет; `1ffb942` и `00d0557` — документация. Рабочая копия чиста, pending/unknown handoff для нового среза нет. Владелец принял карточку 096, остальные статусы отражены в реестре и coverage. Версия повышена до `0.63.48-m5-22-review` в `5dd2ee1`.
+
+Штатная сборка из code HEAD `5dd2ee133b2c483f481e4a5f621622c7e59430e8` прошла: Vitest 204/2055, .NET 1131/1131, performance 1/1, манифест 525 файлов, portable 7/7. ZIP `artifacts/m5-22-048/TECHMAP-GRAPHER-0.63.48-m5-22-review-win-x64.zip`: 64 363 314 байт, SHA-256 `7DD2DED85C3C09B9645AA6581528D47C5A4CDB40D7CE6A0BF5B74428F631AAB2`. Исходный пользовательский жгут и ручная packaged UI-приёмка открыты.
 
 ## 15.10.2026 — handoff 104/105 для следующего ZIP после M5-22-046
 

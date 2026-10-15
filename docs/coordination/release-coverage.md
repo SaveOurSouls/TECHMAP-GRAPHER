@@ -4,7 +4,16 @@
 
 REQ-141/135, [карточка 106](../../tasks/106-termination-placement-and-connections.md). Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` опубликован в `origin/codex/integration-m5-22`; находится в integration HEAD, ancestry проверен. [Handoff](agent-handoff.md), [протокол](../termination-106-acceptance.md). Полный Vitest 204/2055, TypeScript/Vite/.NET Release, production HTTP и browser PASS. Ready-for-review.
 
-Coverage: code `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` проверены сборщиком как предки integration HEAD `21be7baf1bdca6581d44c50d80b9cafaca1f69e7`; оба опубликованы в origin, `git show --check` PASS. Включить в M5-22-048; прежний ZIP не содержит 106. Приёмка владельцем остаётся открытой.
+Coverage: code `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` проверены сборщиком как предки code HEAD `5dd2ee133b2c483f481e4a5f621622c7e59430e8`; оба опубликованы в origin, `git show --check` PASS. Включено в M5-22-048; прежний ZIP не содержит 106. Приёмка владельцем остаётся открытой.
+
+### m5-22-048 — 15.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `5dd2ee133b2c483f481e4a5f621622c7e59430e8`
+- **Coverage:** 106/REQ-141 включена; code и handoff SHA — предки HEAD; pending/unknown `0`. Принятие 096 владельцем и остальных карточек Route V3 отражено отдельным документальным коммитом `00d05572b64996a1ad4c73d34b2e5e0179a08aa4`.
+- **ZIP:** `artifacts/m5-22-048/TECHMAP-GRAPHER-0.63.48-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 363 314 / 7DD2DED85C3C09B9645AA6581528D47C5A4CDB40D7CE6A0BF5B74428F631AAB2`
+- **Manifest / portable:** `PASS; 525 files; 7/7`
+- **Gate:** Git и package PASS; исходный пользовательский жгут, ручная packaged UI-проверка и owner acceptance карточки 106 открыты.
 
 ## 104 — многопроводные оконцовки, 15.10.2026
 

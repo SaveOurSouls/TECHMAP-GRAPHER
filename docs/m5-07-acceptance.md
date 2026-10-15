@@ -1,3 +1,11 @@
+# Пакет M5-22-048 — карточка 106, 15.10.2026
+
+Исходный code HEAD: `5dd2ee133b2c483f481e4a5f621622c7e59430e8` (`codex/integration-m5-22`). Код 106 `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` подтверждены как предки HEAD и опубликованы в origin. Coverage зафиксирован `9c1fd96`; версия `0.63.48-m5-22-review` поднята коммитом `5dd2ee1` до сборки. Неизвестных или ожидающих handoff для этого среза нет.
+
+Windows x64 ZIP: `artifacts/m5-22-048/TECHMAP-GRAPHER-0.63.48-m5-22-review-win-x64.zip`. Размер: **64 363 314 байт**. SHA-256: `7DD2DED85C3C09B9645AA6581528D47C5A4CDB40D7CE6A0BF5B74428F631AAB2`.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-048` завершился успешно: Vitest **204 файла / 2055 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1131/1131 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **525 файлов манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-048`, включая каталог с кириллицей и пробелами. Проверка 106 также подтвердила HTTP-доставку 62 SVG и UI на синтетическом жгуте. Исходный пользовательский жгут и ручная приёмка packaged UI владельцем остаются открытыми; физическая допустимость многопроводного обжима определяется данными артикула. ZIP остаётся вне Git.
+
 # Пакет M5-22-047 — карточки 104 и 105, 15.10.2026
 
 Исходный кодовый HEAD: `32427989ec801540b11f068a5bc0a9ed333099c3` (`codex/integration-m5-22`). После него опубликован только документальный коммит `dd9dd04542c556646f86da8f1962430ac1698efc` в `status.md`; `src/`, `package/` и `scripts/` в нём не изменены. Код 104 `40e94921b45c4246a4187c350026ae19b33644cb` и код 105 `fc8f0f9596f0f5280988cdca6cae5a830b6e2461`, а также их handoff `6b96388f89f9a121ee2b70dc21cdb5e0662c4772` и `6a4a1ed73bb005d579e8b57d2bb784d7bcb59de6` проверены как предки исходного HEAD. Версия `0.63.47-m5-22-review` поднята коммитом `3242798` после проверки coverage.
