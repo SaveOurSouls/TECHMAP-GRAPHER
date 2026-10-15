@@ -15,10 +15,10 @@ import { routeV3IsCutCard, routeV3ProcessedQuantity } from "./route-v3-card-quan
 import { routeV3CatalogGroups, routeV3CatalogNumber } from "./route-v3-operations";
 import "./route-v3-graph.css";
 
-function Modal({ label, close, children }: { label: string; close: () => void; children: ReactNode }) {
+function Modal({ label, close, children, cardSettings = false }: { label: string; close: () => void; children: ReactNode; cardSettings?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const el = ref.current; el?.showModal(); return () => el?.close(); }, []);
-  return <dialog ref={ref} className="route-v3-dialog route-v3-card-dialog" aria-label={label} onCancel={e => { e.preventDefault(); e.stopPropagation(); close(); }}>{children}</dialog>;
+  return <dialog ref={ref} className={`route-v3-dialog route-v3-card-dialog${cardSettings ? " route-v3-card-settings-dialog" : ""}`} aria-label={label} onCancel={e => { e.preventDefault(); e.stopPropagation(); close(); }}>{children}</dialog>;
 }
 function WireColorSwatch({ item }: { item: RouteSourceItem }) {
   return <i className="route-v3-color-swatch" style={{ background: routeSourceWireColor(item).background }} aria-hidden="true" />;
@@ -232,7 +232,7 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
         <button className="route-v3-card-resize" aria-label={`Изменить размер ${node.title}`} onPointerDown={e => begin(e, node, "resize")} onKeyDown={e => { const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 20 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -20 : 0; if (!delta) return; e.preventDefault(); const s = routeV3NodeSize(node); change(d => ({ ...d, nodes: routeV3ResizeLayout(d.nodes, node.id, s.width + (e.key.includes("Left") || e.key.includes("Right") ? delta : 0), s.height + (e.key.includes("Up") || e.key.includes("Down") ? delta : 0)).nodes })); }} />
       </article>)}
     </div></div>
-    {selected && <Modal label={`Настройки карточки ${selected.title}`} close={() => select(null)}>
+    {selected && <Modal cardSettings label={`Настройки карточки ${selected.title}`} close={() => select(null)}>
       <header className="route-v3-preview-heading"><h3>{selected.title}</h3><button onClick={() => select(null)}>Закрыть</button></header>
       {error && <p role="alert">{error}</p>}
       <div className="route-v3-settings-top"><label>Название карточки<input value={selected.title} maxLength={512} onChange={e => update({ title: e.target.value || "Карточка" })} /></label><label>Количество на партию, шт.<input type="number" min="1" value={selected.quantity ?? harnessQuantity} onChange={e => update({ quantity: Math.max(1, Number(e.target.value) || 1) })} /></label><button className="secondary-action" onClick={() => editDrawing(selected)}>Открыть редактор рисунка</button></div>

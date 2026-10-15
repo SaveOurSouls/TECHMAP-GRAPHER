@@ -68,3 +68,7 @@
 .route-v3-direct-composition>tbody>tr>td>select{width:100%;min-width:0;padding:6px 2px;border:1px solid #cbdde5;border-radius:4px;background:#fff;color:#31556a;font:inherit}
 .route-v3-direct-composition>tbody>tr>td>input[type=color]{display:block;width:36px;max-width:100%;height:28px;padding:2px;border:1px solid #cbdde5;border-radius:4px;background:#fff;cursor:pointer}
 @media(max-width:900px){.route-v3-direct-composition>colgroup{display:none}.route-v3-composition-thumbnail{max-width:240px}.route-v3-direct-composition>tbody>tr>td>select{max-width:240px}}
+/* REQ-140: the panel stylesheet may load later; keep card settings viewport-wide. */
+dialog.route-v3-dialog.route-v3-card-settings-dialog{width:calc(100vw - 28px);max-width:none;max-height:calc(100dvh - 28px);margin:auto;overflow-x:hidden;overflow-y:auto}
+@media(min-width:1000px){.route-v3-card-settings-dialog .route-v3-operations table.route-v3-operation-grid{min-width:0}}
+@media(max-width:600px){dialog.route-v3-dialog.route-v3-card-settings-dialog{width:calc(100vw - 12px);max-height:calc(100dvh - 12px)}}
