@@ -8,10 +8,6 @@
 
 Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; ready-for-review. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`; предки merge `70a41ab`. Совместный клиент 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; включено в проверенный ZIP M5-22-052. Handoff: [протокол 113](../handoff-113-p1-termination-graphic-scale.md).
 
-## 114 — размеры P1 и точки соединения, 15.10.2026
-
-Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; ready-for-review. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, registration base `8d98038`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`; предки merge `d66f287`. Общий клиент 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон 113/114, исходный жгут и packaged UI не проверены. Включено в проверенный ZIP M5-22-052; приёмка владельца открыта.
-
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`; статус ready-for-review. REQ-146, карточка [111](../../tasks/111-thermal-sleeve-wire-coverage.md). Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и включены в integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` (ancestry PASS). C1 — неполный охват проводов у общего выхода; C2 — контекст жгута. Рабочий чат владел кодом геометрии и тестами, координатор — регистрацией. Совместный клиент 211/2223, TypeScript/Vite PASS; ZIP M5-22-051 проверен, приёмка владельцем открыта.
@@ -216,6 +212,7 @@ Follow-up 15.10.2026: тот же чат `01a13a64-e264-7a03-8198-49dae2c51bee`,
 | 07.10.2026 | Исправить приоритет выбора точки (карточка 082) | `01a1119f-326d-7863-be97-7d30800b20db` | accepted владельцем; handoff и integration equivalent подтверждены; чат idle, worktree чист | `37a8d0a`, `e345f5f`, `7aaaf46` |
 | 07.10.2026 | Исправить трассировку проводов у X4 (карточка 081) | `01a1119a-83a3-7ad2-8b8f-bffd2668c411` | accepted владельцем; handoff и integration equivalent подтверждены; чат idle, worktree чист | `fdc5c7c`, `ca55a20`, `e918e18`, `5eeb02f` |
 | 07.10.2026 | Исправить свойства размеров (карточка 085) | `01a116cf-8c36-79b3-89ca-57fa146c0046` | accepted владельцем; handoff и ancestry подтверждены в M5-22-040; чат idle, отдельного worktree нет | `723ff99`, `7241134`, `4035766` |
+| 15.10.2026 | Исправить размеры P1 и точки соединения (карточка 114) | `01a14112-b339-74f3-893c-bef0ef5912a0` | accepted владельцем; code и handoff включены в M5-22-052; физическая папка worktree удалена, Git сохранил устаревшую prunable-запись из-за ошибки Windows | `fb248e1`, `d1b896b`, `4edfcc8`, `11445e8` |
 | 04.10.2026 | Диагностировать плавающую проблему | `01a107ce-abd7-7fd0-8484-5191c816a4a6` | Codex archived list; историческая запись | — |
 | 04.10.2026 | Обновить спецификацию и индексы | `01a106ca-bf40-7ed3-9ea0-da369dd166c0` | Codex archived list; историческая запись | — |
 | 04.10.2026 | Устранить нехватку Playwright/Vite | `01a106fa-113e-7961-b2ff-fb6357ff3ecb` | Codex archived list; историческая запись | — |
