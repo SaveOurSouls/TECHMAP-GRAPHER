@@ -58,3 +58,12 @@
 .route-v3-color-swatch{display:inline-block;width:10px;height:10px;margin-right:4px;border:1px solid #69808b;border-radius:50%;vertical-align:-1px}
 .route-v3-material-label{display:inline-flex;align-items:center;min-width:0}
 .route-v3-wire-ends{display:grid;gap:3px}
+/* REQ-138: wire appearance belongs to the same row as its semi-finished item. */
+.route-v3-composition-table>table>thead>tr>th:nth-child(1){width:13%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(2){width:16%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(3){width:7%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(4){width:18%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(5),.route-v3-composition-table>table>thead>tr>th:nth-child(6){width:9%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(7),.route-v3-composition-table>table>thead>tr>th:nth-child(8){width:10%}
+.route-v3-composition-table>table>thead>tr>th:nth-child(9){width:8%}
+.route-v3-wire-view-button{width:100%;padding:5px 7px;border:1px solid #cadce5;border-radius:4px;background:#f8fcfd;color:#31617b;font:inherit;white-space:nowrap;cursor:pointer}
