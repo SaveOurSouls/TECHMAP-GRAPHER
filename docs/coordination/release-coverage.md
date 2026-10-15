@@ -182,4 +182,3 @@ represent missing completed chat handoffs.
 - **Size / SHA-256:** `64 012 360 / 5F3A431A4AB0090426A0CA2FB51F04ED068EA1EC9C774F0931B74C38597796C2`
 - **PACKAGE-MANIFEST / portable:** `PASS; 339 записей / 340 файлов; 7/7 из C:\Temp`
 - **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта
-
