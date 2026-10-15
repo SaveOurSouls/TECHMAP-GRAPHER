@@ -37,6 +37,7 @@ import { joiningPipeEndpoint, joiningPipeExit, migrateJoiningPipes } from "./phy
 import { projectE4DrawingCompanions } from "./component-template-view-renderer";
 import { freeTwistedPairPaths } from "./drawing-twisted-pair";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { previewE4ConnectorMove } from './e4-move-preview';
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { applyEditorCommand, createWire, e4RoutingIssues, type EditorCommand } from "./commands";
@@ -1291,6 +1292,10 @@ export function HarnessDesignEditor({
     }
     if (!movePreview) return { document: history.present, error: null };
     try {
+      if (view === 'e4' && history.present.connectors.some(c => c.id === movePreview.objectId)) {
+        return { document: previewE4ConnectorMove(history.present, movePreview.objectId,
+          movePreview.point, movePreview.mode), error: null };
+      }
       if(movePreview.objectId.startsWith("object-index:")){
         const indexScene=alignDrawingConnectorIndexes(history.present,designToScene(history.present,"drawing"),componentTemplateViewInstances,resolveComponentTemplateAssetUrl);
         const index=moveDrawingIndex(history.present,movePreview.objectId,movePreview.point,indexScene);

@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 110 — ускорение перемещения компонентов в Э4, 15.10.2026
+
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-component-drag-performance`, worktree `tmp/e4-component-drag-performance`; статус in-progress. REQ-145, карточка [110](../../tasks/110-e4-component-drag-performance.md). Владелец кода — рабочий чат: `CanvasViewport.tsx`, тесты жестов и узкие связанные участки перетаскивания Э4; координатор владеет регистрацией и отдельной карточкой. База `aa2b3bc3d9e83248fca96d70899a6002993ce835`. Coverage: следующий пакет после M5-22-049; включить только после опубликованного handoff и интеграционной проверки. Рабочая копия изолирована от сборщика ZIP.
+
 ## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
 
 Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, ready-for-review. Исходная ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`, база integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Владелец файлов: `src/Techmap.Client/src/termination-library/**` (кроме SVG), `src/Techmap.Client/src/component-library/LibraryWorkspace.tsx`, `src/Techmap.Client/src/App.tsx`, `src/Techmap.Client/src/editor/TerminationInspector.tsx`, карточка 109 и собственные разделы документации. Изменения 108 исключены из рабочей ветки и сохранены при merge. REQ-144, ADR-0021; регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3`, handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393` опубликованы и включены в integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc` (ancestry PASS). Интегрированный Vitest 209/2205, TypeScript/Vite PASS; исходный browser 1440/390 PASS. Включено в ZIP M5-22-050; приёмка владельцем открыта.

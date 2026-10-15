@@ -1,5 +1,9 @@
 # Release coverage
 
+## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
+
+REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-component-drag-performance`, отдельный worktree; in-progress, handoff и кодовые SHA пока отсутствуют. Запланировано в следующем пакете после M5-22-049; до интеграции ZIP заблокирован этой карточкой только если она заявлена завершённой/относящейся к пакету.
+
 ## 109 — библиотека оконцовок и генерация серий, 15.10.2026
 
 REQ-144, карточка [109](../../tasks/109-termination-library-series.md). Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, исходная ветка `codex/termination-library-series`, база `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3` и handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393` опубликованы и проверены сборщиком как предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc` и code HEAD `094668949831f9167e482db674a794a6af9c355c`; `git show --check` PASS. Конфликты шести общих Markdown-файлов разрешены с сохранением 108/109; интегрированный клиент: Vitest 209/2205, TypeScript/Vite PASS. [Handoff](agent-handoff.md), [протокол](../termination-109-acceptance.md). Ready-for-review, включено в M5-22-050; исходный жгут/native portable UI и приёмка владельцем открыты.

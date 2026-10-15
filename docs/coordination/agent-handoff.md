@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 110 — скорость перемещения компонентов Э4, 15.10.2026
+
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, отдельный worktree `tmp/e4-component-drag-performance`, ветка `codex/e4-component-drag-performance`, ready-for-review. REQ-145. Код `8ff8736d1a8989b8d8482d806455abf2130c207e` опубликован в разрешённый origin. Из полного command path убран предпросмотр Э4; точная команда при отпускании сохраняется. Vitest 209/2197, TypeScript/Vite, browser drag/Shift/Escape/save/Undo/Redo, benchmark и diff-check PASS. На синтетической сцене масштаба C1 геометрия оконцовки со сценой ~2064 → 0,57 мс; окончательный синхронный пересчёт ~2 с остаётся. Исходный пользовательский проект и portable не проверены. [Точный handoff](handoff-110-e4-performance.md), [протокол](../e4-component-drag-110-acceptance.md). Следующий пакет после M5-22-049; интеграцию/coverage подтверждает сборщик, ZIP здесь не собирался. Приёмка владельцем открыта.
+
 ## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
 
 - Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, /root, ready-for-review. Ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`; база `313c22539df4c4d1f8aca896849a21d1e5e14caa`.
