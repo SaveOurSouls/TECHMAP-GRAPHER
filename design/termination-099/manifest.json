@@ -762,5 +762,12 @@
       "image": "codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png",
       "observed": "визуальное разнообразие ring/fork/round/flat/flag/sleeve"
     }
-  }
+  },
+  "profileRevision": "2026-10-15-photo-profiles",
+  "profileReferences": {
+    "C1": "codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png",
+    "C2": "codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png",
+    "C3": "codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png"
+  },
+  "viewContract": "same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds"
 }
