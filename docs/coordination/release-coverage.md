@@ -4,7 +4,7 @@
 
 REQ-135, карточка 104. Код `40e94921b45c4246a4187c350026ae19b33644cb` опубликован непосредственно в `codex/integration-m5-22`, интеграция подтверждена нахождением в HEAD при оформлении handoff (проверка ancestry выполнена). Включает runtime библиотеки/Э4/Чертежа/Route V3, клиентские и серверные проверки; [протокол](../termination-104-acceptance.md), [handoff](agent-handoff.md). Статус ready-for-review; дизайн 099 принят, код ожидает приёмки.
 
-Coverage: исходный код текущей integration-ветки; новый ZIP не заказан. Ни один ранее выпущенный архив не объявляется содержащим этот код. При следующей поставке сборщик обязан подтвердить SHA в собираемом HEAD.
+Coverage: код `40e94921b45c4246a4187c350026ae19b33644cb` и handoff `6b96388f89f9a121ee2b70dc21cdb5e0662c4772` проверены сборщиком как предки integration HEAD `6b96388f89f9a121ee2b70dc21cdb5e0662c4772`; `git show --check` PASS. Включить в следующий ZIP; ручная приёмка кода владельцем открыта.
 
 ## 099 — широкий НШВИ и цветовые варианты, 15.10.2026
 
@@ -226,4 +226,4 @@ represent missing completed chat handoffs.
 - **Manifest / portable:** `PASS; 339/340; 7/7`
 - **Gate:** `PASS` для Git и package; ручная и owner acceptance открыты
 
-| 105 — Ширина настроек Route v3 | /root | code fc8f0f9596f0f5280988cdca6cae5a830b6e2461; handoff — документальный срез 105 | REQ-140; ancestor integration; изолированный HEAD+105: 196/1880, TS/Vite PASS; production CSS/browser 1024–2557 px PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
+| 105 — Ширина настроек Route v3 | /root | code `fc8f0f9596f0f5280988cdca6cae5a830b6e2461`; handoff `6a4a1ed73bb005d579e8b57d2bb784d7bcb59de6` | REQ-140; оба SHA — предки integration HEAD `6b96388f89f9a121ee2b70dc21cdb5e0662c4772`; `git show --check` PASS; изолированный HEAD+105: 196/1880, TS/Vite PASS; production CSS/browser 1024–2557 px PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
