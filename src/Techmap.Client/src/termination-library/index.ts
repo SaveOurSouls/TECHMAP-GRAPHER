@@ -3,5 +3,7 @@ export * from './storage';
 export * from './symbol';
 export * from './placement';
 export * from './TerminationSymbol';
-export * from './TerminationRecordEditor';
+export * from './series';
+export * from './TerminationRecordTable';
+export * from './TerminationProperties';
 export * from './TerminationLibraryPicker';
