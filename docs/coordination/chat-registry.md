@@ -10,7 +10,7 @@
 
 ## 115 — правила редактирования трасс Э4, 15.10.2026
 
-Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, карточка [115](../../tasks/115-e4-routing-interaction.md), REQ-150; статус registered. Ветка `codex/e4-routing-interaction`, отдельный worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6` (текущий опубликованный integration HEAD на момент регистрации). Владелец: `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts` и профильные тесты; собственные task/acceptance/handoff. Общие coordination docs принадлежат координатору. Изменения карточки 110 и другие файлы исключены. C1–C4; код не начинать до регистрации ветки/worktree. Следующий ZIP после M5-22-052; ZIP не заказывался.
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, карточка [115](../../tasks/115-e4-routing-interaction.md), REQ-150; статус in-progress. Ветка `codex/e4-routing-interaction`, отдельный worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6` (integration HEAD до регистрации). Регистрация опубликована в `56e733fdc26042b1d4aa3f09712881b87af456fb`; чат уведомлён и направлен работать в отдельной копии. Владелец: `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts` и профильные тесты; собственные task/acceptance/handoff. Общие coordination docs принадлежат координатору. Изменения карточки 110 и другие файлы исключены. C1–C4. Следующий ZIP после M5-22-052; ZIP не заказывался.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
