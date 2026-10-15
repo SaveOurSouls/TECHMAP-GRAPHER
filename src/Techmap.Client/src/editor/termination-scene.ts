@@ -4,6 +4,7 @@ import type { EditorSceneBounds } from './editor-camera';
 import { drawingLocalPoint, drawingRotation, drawingScale, drawingLocalDirectionVector } from './drawing-scale';
 import { getTerminationSymbol } from '../termination-library';
 import { getTerminationArtworkBounds,type TerminationLocalBounds } from '../termination-library/artwork-bounds';
+import { preparationArtworkBounds, preparationArtworkContains } from './preparation-drawing';
 
 function terminationLocalBounds(object:EditorSceneObject):TerminationLocalBounds{
  try{
@@ -22,7 +23,8 @@ function terminationWorldPoint(object:EditorSceneObject,p:{x:number;y:number}){
 export function terminationSceneBounds(object:EditorSceneObject):EditorSceneBounds|null{
  if(object.kind!=='connector'||!object.metadata?.terminationSymbol)return null;
  if(object.metadata.terminationPointOnly==='true'){
-  const p=terminationWorldPoint(object,{x:32,y:50});return {minX:p.x-4,minY:p.y-4,maxX:p.x+4,maxY:p.y+4};
+  const p=terminationWorldPoint(object,{x:32,y:50}),bounds=(object.terminationArtwork??[]).map(preparationArtworkBounds);
+  return {minX:Math.min(p.x-4,...bounds.map(b=>b.minX)),minY:Math.min(p.y-4,...bounds.map(b=>b.minY)),maxX:Math.max(p.x+4,...bounds.map(b=>b.maxX)),maxY:Math.max(p.y+4,...bounds.map(b=>b.maxY))};
  }
  const [minX,minY,maxX,maxY]=terminationLocalBounds(object);
  const corners=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}].map(p=>terminationWorldPoint(object,p));
@@ -31,7 +33,7 @@ export function terminationSceneBounds(object:EditorSceneObject):EditorSceneBoun
 export function terminationSceneContainsPoint(object:EditorSceneObject,point:{x:number;y:number},tolerance:number):boolean{
  if(object.kind!=='connector'||!object.metadata?.terminationSymbol)return false;
  if(object.metadata?.terminationPointOnly==='true'){
-  const p=terminationWorldPoint(object,{x:32,y:50});return Math.hypot(point.x-p.x,point.y-p.y)<=4+tolerance;
+  const p=terminationWorldPoint(object,{x:32,y:50});return Math.hypot(point.x-p.x,point.y-p.y)<=4+tolerance||(object.terminationArtwork??[]).some(art=>preparationArtworkContains(art,point,tolerance));
  }
  const scale=Number(object.metadata?.terminationScale??1),angle=-Number(object.metadata?.terminationRotation??0)*Math.PI/180;
  const dx=point.x-object.x,dy=point.y-object.y,x=(dx*Math.cos(angle)-dy*Math.sin(angle))/scale,y=(dx*Math.sin(angle)+dy*Math.cos(angle))/scale,pad=tolerance/scale;
