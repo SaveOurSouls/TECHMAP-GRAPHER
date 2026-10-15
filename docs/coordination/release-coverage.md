@@ -4,7 +4,7 @@
 
 REQ-141/135, [карточка 106](../../tasks/106-termination-placement-and-connections.md). Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` опубликован в `origin/codex/integration-m5-22`; находится в integration HEAD, ancestry проверен. [Handoff](agent-handoff.md), [протокол](../termination-106-acceptance.md). Полный Vitest 204/2055, TypeScript/Vite/.NET Release, production HTTP и browser PASS. Ready-for-review.
 
-Coverage: включить в следующий собираемый срез после M5-22-047; прежний ZIP не содержит 106. ZIP в этой карточке не заказан. Перед следующей упаковкой сборщик подтверждает этот SHA и handoff в своём HEAD; приёмка владельцем остаётся открытой.
+Coverage: code `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` проверены сборщиком как предки integration HEAD `21be7baf1bdca6581d44c50d80b9cafaca1f69e7`; оба опубликованы в origin, `git show --check` PASS. Включить в M5-22-048; прежний ZIP не содержит 106. Приёмка владельцем остаётся открытой.
 
 ## 104 — многопроводные оконцовки, 15.10.2026
 

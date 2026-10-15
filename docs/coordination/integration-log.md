@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 15.10.2026 — handoff 106 после M5-22-047
+
+Сборщик сверил реестр, карточку 106, handoff и release coverage с integration HEAD `21be7baf1bdca6581d44c50d80b9cafaca1f69e7`, совпадающим с origin. Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` являются предками HEAD; `git show --check` PASS. После M5-22-047 иных runtime-коммитов нет; `1ffb942` и `00d0557` — документация. Рабочая копия чиста, pending/unknown handoff для нового среза нет. Владелец принял карточку 096, остальные статусы отражены в реестре и coverage. Следующий шаг — повышение версии и сборка M5-22-048.
+
 ## 15.10.2026 — handoff 104/105 для следующего ZIP после M5-22-046
 
 Сборщик сверил реестр, карточки и handoff с integration HEAD `6b96388f89f9a121ee2b70dc21cdb5e0662c4772` (`origin/codex/integration-m5-22` совпадает). После последнего ZIP появились два кодовых среза: 105 `fc8f0f9596f0f5280988cdca6cae5a830b6e2461` с handoff `6a4a1ed73bb005d579e8b57d2bb784d7bcb59de6` и 104 `40e94921b45c4246a4187c350026ae19b33644cb` с handoff `6b96388f89f9a121ee2b70dc21cdb5e0662c4772`. Все четыре SHA — предки HEAD, `git show --check` PASS. 104 содержит runtime код; дизайн 099 интегрирован в 104. Оба handoff ready-for-review; неизвестных или ожидающих handoff для этого среза нет. Чужая незакоммиченная перестановка текста `status.md` в сборку и коммиты сборщика не включается. Следующий шаг: повысить `appVersion`, собрать и проверить новый ZIP.
