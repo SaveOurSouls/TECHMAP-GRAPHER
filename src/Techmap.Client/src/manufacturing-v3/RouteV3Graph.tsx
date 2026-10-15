@@ -1,3 +1,5 @@
+import { routeV3CompositionGroups, setRouteV3GroupArtwork } from "./route-v3-composition-groups";
+import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
 import { RouteV3OperationTable as Operations } from "./RouteV3OperationTable";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent } from "react";
 import type { HarnessDesignDocument } from "../editor/model";
@@ -5,10 +7,9 @@ import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createReferenceCatalogApi, type ReferenceCatalogRecord, type ReferenceCatalogSnapshot, type ReferenceCatalogSourceSummary } from "../reference-catalog-api";
 import { buildRouteSourceItems, routeSourceDesignation, routeSourceWireColor, routeSourceWireMaterial, type RouteSourceItem } from "../manufacturing/route-source";
-import { wireSemiFinishedProperties } from "../manufacturing/cut-list-properties";
 import { wireBlankEnds, wireBlankEndLabels } from "../WireBlankCatalog";
-import { routeV3WireArtwork } from "./route-v3-wire-artwork";
-import { refKey, resetRouteV3WireArtwork, routeV3AssignedProductIds, routeV3BatchQuantity, routeV3ConnectionPort, routeV3GroupedSourceQuantity, routeV3NodeSize, routeV3OperationFromCatalog, routeV3OperationProjectTimes, routeV3Products, routeV3ResizeLayout, routeV3SourceGroupKey, routeV3WireArtworkOverride, setRouteV3WireArtworkOverride, assignRouteV3OperationProducts, type RouteV3Document, type RouteV3Node, type RouteV3Operation } from "./route-v3-model";
+import { routeV3WireArtwork, RouteV3WireArtworkPreview } from "./route-v3-wire-artwork";
+import { refKey, resetRouteV3WireArtwork, routeV3AssignedProductIds, routeV3BatchQuantity, routeV3ConnectionPort, routeV3GroupedSourceQuantity, routeV3NodeSize, routeV3OperationFromCatalog, routeV3OperationProjectTimes, routeV3Products, routeV3ResizeLayout, routeV3WireArtworkOverride, assignRouteV3OperationProducts, type RouteV3Document, type RouteV3Node, type RouteV3Operation } from "./route-v3-model";
 import { connectRouteV3, deleteRouteV3Edge, deleteRouteV3Node, insertRouteV3Node, refreshRouteV3, routeV3EdgeInputRefs, setRouteV3EdgeInputRefs } from "./route-v3-graph";
 import { routeV3IsCutCard, routeV3ProcessedQuantity } from "./route-v3-card-quantity";
 import { routeV3CatalogGroups, routeV3CatalogNumber } from "./route-v3-operations";
@@ -50,42 +51,45 @@ function OperationChooser({ category, setCategory, snapshot, loading, error, cho
 
 function Composition({ node, source, sources, graph, harnessQuantity, updateWireArtwork, resetWireArtwork, operations }: {
   node: RouteV3Node; source: HarnessDesignDocument; sources: readonly RouteSourceItem[]; graph: RouteV3Document; harnessQuantity: number;
-  updateWireArtwork: (id: string, patch: { color?: string; start?: typeof wireBlankEnds[number]; end?: typeof wireBlankEnds[number] }) => void;
+  updateWireArtwork: (ids: readonly string[], patch: { color?: string; start?: typeof wireBlankEnds[number]; end?: typeof wireBlankEnds[number] }) => void;
   resetWireArtwork: () => void; operations: ReactNode;
 }) {
-  const [wireView, setWireView] = useState<{ label: string; ids: readonly string[] } | null>(null);
   const count = routeV3BatchQuantity(node, harnessQuantity);
   const processed = routeV3ProcessedQuantity(node, harnessQuantity);
   const cut = routeV3IsCutCard(node);
-  const groups = new Map<string, typeof node.refs>();
-  for (const ref of node.refs) { const key = routeV3SourceGroupKey(ref, source); groups.set(key, [...(groups.get(key) ?? []), ref]); }
-  const rows = [...groups.values()].map(refs => ({ ref: refs[0]!, refs, item: sources.find(value => refKey(value.ref) === refKey(refs[0]!)) }));
+  const rows = routeV3CompositionGroups(node.refs, source, graph).map(refs => ({ ref: refs[0]!, refs, item: sources.find(value => refKey(value.ref) === refKey(refs[0]!)) }));
   const wireRefs = node.refs.filter(ref => ref.kind === "wire");
   const operationTimes = (node.operations ?? []).map(operation => routeV3OperationProjectTimes(operation, node, source, harnessQuantity));
   const total = operationTimes.some(value => value.operationMinutes === null) ? null : operationTimes.reduce<number>((sum, value) => sum + value.operationMinutes!, 0);
   const projectTimes = operationTimes.map(value => value.projectMinutes);
   const projectTotal = projectTimes.some(value => value === null) ? null : projectTimes.reduce<number>((sum, value) => sum + value!, 0);
   const rowTime = rows.length === 1 ? total : null;
-  const wireControls = (id: string) => {
-    const appearance = routeV3WireArtwork(source, id, routeV3WireArtworkOverride(graph, id));
-    if (!appearance) return null;
-    const item = sources.find(value => value.ref.kind === "wire" && value.ref.id === id);
-    return <div className="route-v3-composition-wire" key={id}><strong>{appearance.name}</strong><span>{item && <WireColorSwatch item={item} />}{appearance.mark} · {appearance.section} · {appearance.colorLabel} · {appearance.automatic ? "по Э4" : "ручной"}</span><label>Начало<select value={appearance.start} onChange={e => updateWireArtwork(id, { start: e.target.value as typeof appearance.start })}>{wireBlankEnds.map(value => <option key={value} value={value}>{wireBlankEndLabels[value]}</option>)}</select></label><label>Конец<select value={appearance.end} onChange={e => updateWireArtwork(id, { end: e.target.value as typeof appearance.end })}>{wireBlankEnds.map(value => <option key={value} value={value}>{wireBlankEndLabels[value]}</option>)}</select></label><label>Цвет<input type="color" aria-label={`Цвет ${id}`} value={appearance.color} onChange={e => updateWireArtwork(id, { color: e.target.value })} /></label></div>;
-  };
   return <section className="route-v3-composition route-v2-settings-section" aria-label="Состав карточки">
-    <div className="route-v3-section-heading"><div><h4>Состав карточки · {node.refs.length}</h4><p>{cut ? `Резка: ${node.refs.length} заготовки на жгут × ${count} жгут(а) = ${processed} заготовок на партию.` : `Партия: ${count} жгут(а). Количества и время пересчитываются для партии.`}</p></div>{wireRefs.length > 0 && <button className="secondary-action" type="button" onClick={resetWireArtwork} title="Сбросит ручной вид проводов и возьмёт его из Э4">Обновить вид проводов по Э4</button>}</div>
-    <div className="route-v3-composition-table"><table aria-label="Полуфабрикаты карточки"><thead><tr><th>Объект</th><th>Материал</th><th>Длина</th><th>Концы и разделка</th><th>Кол-во на ПФ</th><th>Кол-во на партию</th><th>Время на операцию</th><th>Время на партию</th><th>Вид проводов</th></tr></thead><tbody>
+    <div className="route-v3-section-heading"><div><h4>Состав карточки · {node.refs.length}</h4><p>{cut ? `Резка: ${node.refs.length} заготовки на жгут × ${count} жгут(а) = ${processed} заготовок на партию.` : `Партия: ${count} жгут(а). Количества и время пересчитываются для партии.`}</p>{wireRefs.length > 0 && <p>Начало, конец и цвет меняются для всех проводов строки. Рисунок обновляется сразу.</p>}</div>{wireRefs.length > 0 && <button className="secondary-action" type="button" onClick={resetWireArtwork} title="Сбросит ручной вид проводов и возьмёт его из Э4">Обновить вид проводов по Э4</button>}</div>
+    <div className="route-v3-composition-table"><table className="route-v3-direct-composition" aria-label="Полуфабрикаты карточки"><colgroup>{[14,9,10,5,12,6,6,7,7,9,9,6].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup><thead><tr>{["Рисунок", "Объект", "Материал", "Длина", "Концы и разделка", "Кол-во на ПФ", "Кол-во на партию", "Время на операцию", "Время на партию", "Начало", "Конец", "Цвет"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>
       {rows.map(({ ref, refs, item }, index) => {
-        const quantity = routeV3GroupedSourceQuantity(ref, node.refs, source, count);
-        const wireProperties = ref.kind === "wire" ? wireSemiFinishedProperties(source, ref.id) : null;
+        const quantity = routeV3GroupedSourceQuantity(ref, refs, source, count);
+        const appearance = ref.kind === "wire" ? routeV3WireArtwork(source, ref.id, routeV3WireArtworkOverride(graph, ref.id)) : null;
         const wireColor = item && ref.kind === "wire" ? routeSourceWireColor(item) : null;
-        return <Fragment key={refKey(ref)}><tr><td data-label="Объект"><strong>ПФ-{String(index + 1).padStart(2, "0")}</strong><span>{ref.kind === "wire" ? wireProperties?.name ?? "Провод" : item?.title ?? ref.id}{refs.length > 1 ? ` · ${refs.length} одинаковых` : ""}</span></td><td data-label="Материал">{item ? (ref.kind === "wire" ? <span className="route-v3-material-label"><i className="route-v3-color-swatch" style={{ background: wireColor?.background }} aria-hidden="true" />{routeSourceWireMaterial(item)}</span> : routeSourceDesignation(item)) : "Объект отсутствует в чертеже"}</td><td data-label="Длина">{item?.lengthMm == null ? "—" : `${item.lengthMm} мм`}</td><td data-label="Концы и разделка">{ref.kind === "wire" ? <span className="route-v3-wire-ends"><span>Н: {wireProperties?.terminalFrom || "Без разделки"}</span><span>К: {wireProperties?.terminalTo || "Без разделки"}</span></span> : "—"}</td><td data-label="Кол-во на ПФ">{ref.kind === "wire" || ref.kind === "covering" ? "—" : `${quantity.perSemiFinished} шт.`}</td><td data-label="Кол-во на партию">{quantity.perBatch} шт.</td><td data-label="Время на операцию">{rowTime === null || !node.operations?.length ? "—" : `${time(rowTime)} мин`}</td><td data-label="Время на партию">{rowTime === null || projectTotal === null || !node.operations?.length ? "—" : `${time(projectTotal)} мин`}</td><td data-label="Вид проводов">{ref.kind === "wire" ? <button type="button" className="route-v3-wire-view-button" aria-label={`Вид проводов ПФ-${String(index + 1).padStart(2, "0")}`} onClick={() => setWireView({ label: `ПФ-${String(index + 1).padStart(2, "0")}`, ids: refs.map(value => value.id) })}>Вид · {refs.length}</button> : "—"}</td></tr>{ref.kind !== "wire" && refs.length > 1 && <tr className="route-v3-composition-detail-row"><td colSpan={9}><details className="route-v3-composition-detail"><summary>Исходные оболочки · {refs.length}</summary><p>{refs.map(value => value.id).join(", ")}</p></details></td></tr>}</Fragment>;
+        const label = `ПФ-${String(index + 1).padStart(2, "0")}`;
+        const ids = refs.map(value => value.id);
+        return <Fragment key={refKey(ref)}><tr>
+          <td data-label="Рисунок"><div className="route-v3-composition-thumbnail" aria-label={`Рисунок ${label}`}>{appearance && item ? <RouteV3WireArtworkPreview document={source} item={item} override={routeV3WireArtworkOverride(graph, ref.id)} /> : <RouteV2SourceArtwork document={source} ref={ref} item={item} />}</div></td>
+          <td data-label="Объект"><strong>{label}</strong><span>{appearance?.name ?? item?.title ?? ref.id}{refs.length > 1 ? ` · ${refs.length} одинаковых` : ""}</span></td>
+          <td data-label="Материал">{item ? (ref.kind === "wire" ? <span className="route-v3-material-label"><i className="route-v3-color-swatch" style={{ background: wireColor?.background }} aria-hidden="true" />{routeSourceWireMaterial(item)}</span> : routeSourceDesignation(item)) : "Объект отсутствует в чертеже"}</td>
+          <td data-label="Длина">{item?.lengthMm == null ? "—" : `${item.lengthMm} мм`}</td>
+          <td data-label="Концы и разделка">{appearance ? <span className="route-v3-wire-ends"><span>Н: {appearance.terminalFrom || "Без разделки"}</span><span>К: {appearance.terminalTo || "Без разделки"}</span></span> : "—"}</td>
+          <td data-label="Кол-во на ПФ">{ref.kind === "wire" || ref.kind === "covering" ? "—" : `${quantity.perSemiFinished} шт.`}</td><td data-label="Кол-во на партию">{quantity.perBatch} шт.</td>
+          <td data-label="Время на операцию">{rowTime === null || !node.operations?.length ? "—" : `${time(rowTime)} мин`}</td><td data-label="Время на партию">{rowTime === null || projectTotal === null || !node.operations?.length ? "—" : `${time(projectTotal)} мин`}</td>
+          <td data-label="Начало">{appearance ? <select aria-label={`Начало ${label}`} title={wireBlankEndLabels[appearance.start]} value={appearance.start} onChange={event => updateWireArtwork(ids, { start: event.target.value as typeof appearance.start })}>{wireBlankEnds.map(value => <option key={value} value={value}>{wireBlankEndLabels[value]}</option>)}</select> : "—"}</td>
+          <td data-label="Конец">{appearance ? <select aria-label={`Конец ${label}`} title={wireBlankEndLabels[appearance.end]} value={appearance.end} onChange={event => updateWireArtwork(ids, { end: event.target.value as typeof appearance.end })}>{wireBlankEnds.map(value => <option key={value} value={value}>{wireBlankEndLabels[value]}</option>)}</select> : "—"}</td>
+          <td data-label="Цвет">{appearance ? <input type="color" aria-label={`Цвет ${label}`} title={appearance.automatic ? "Вид по Э4" : "Ручной вид"} value={appearance.color} onChange={event => updateWireArtwork(ids, { color: event.target.value })} /> : "—"}</td>
+        </tr>{ref.kind !== "wire" && refs.length > 1 && <tr className="route-v3-composition-detail-row"><td colSpan={12}><details className="route-v3-composition-detail"><summary>Исходные оболочки · {refs.length}</summary><p>{refs.map(value => value.id).join(", ")}</p></details></td></tr>}</Fragment>;
       })}
-      {!rows.length && <tr><td colSpan={9} className="route-v3-composition-empty">Состав пуст. Выберите сырьё и полуфабрикаты ниже.</td></tr>}
-      {!!node.operations?.length && rows.length > 1 && <tr className="route-v3-composition-total"><td colSpan={6}>{cut ? `Итого резка ${processed} заготовок.` : "Операции карточки применяются к составу целиком; время отдельных материалов не распределено."}</td><td data-label="Время на операцию">{total === null ? "Не задано" : `${time(total)} мин`}</td><td data-label="Время на партию">{projectTotal === null ? "Не задано" : `${time(projectTotal)} мин`}</td><td /></tr>}
-      {cut && <tr className="route-v3-composition-operations"><td colSpan={9}>{operations}</td></tr>}
+      {!rows.length && <tr><td colSpan={12} className="route-v3-composition-empty">Состав пуст. Выберите сырьё и полуфабрикаты ниже.</td></tr>}
+      {!!node.operations?.length && rows.length > 1 && <tr className="route-v3-composition-total"><td colSpan={7}>{cut ? `Итого резка ${processed} заготовок.` : "Операции карточки применяются к составу целиком; время отдельных материалов не распределено."}</td><td data-label="Время на операцию">{total === null ? "Не задано" : `${time(total)} мин`}</td><td data-label="Время на партию">{projectTotal === null ? "Не задано" : `${time(projectTotal)} мин`}</td><td colSpan={3} /></tr>}
+      {cut && <tr className="route-v3-composition-operations"><td colSpan={12}>{operations}</td></tr>}
     </tbody></table></div>
-    {wireView && <Modal label={`Вид проводов ${wireView.label}`} close={() => setWireView(null)}><header className="route-v3-preview-heading"><h3>Вид проводов · {wireView.label}</h3><button type="button" onClick={() => setWireView(null)}>Готово</button></header><div className="route-v3-composition-wire-list">{wireView.ids.filter(id => node.refs.some(ref => ref.kind === "wire" && ref.id === id)).map(wireControls)}</div></Modal>}
   </section>;
 }
 
@@ -159,7 +163,7 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
   }, [catalogApi, catalogSourceId, chooser]);
   const change = (fn: (d: RouteV3Document) => RouteV3Document) => { try { const next = fn(current.current); save(next); current.current = next; setError(""); return true; } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сохранить карточку."); return false; } };
   const update = (patch: Partial<RouteV3Node>) => change(d => refreshRouteV3({ ...d, nodes: d.nodes.map(n => ({ ...n, ...(n.id === selectedId ? patch : {}), operatorConfirmed: patch.operatorConfirmed === undefined ? false : n.id === selectedId ? patch.operatorConfirmed : n.operatorConfirmed })) }));
-  const updateWireArtwork = (wireId: string, patch: { readonly color?: string; readonly start?: typeof wireBlankEnds[number]; readonly end?: typeof wireBlankEnds[number] }) => change(d => setRouteV3WireArtworkOverride(d, { ...(routeV3WireArtworkOverride(d, wireId) ?? { wireId }), ...patch, wireId }));
+  const updateWireArtwork = (wireIds: readonly string[], patch: { readonly color?: string; readonly start?: typeof wireBlankEnds[number]; readonly end?: typeof wireBlankEnds[number] }) => change(d => setRouteV3GroupArtwork(d, wireIds, patch));
   const begin = (e: PointerEvent<HTMLButtonElement>, node: RouteV3Node, mode: "move" | "resize") => {
     if (e.button !== 0) return; e.preventDefault();
     const size = routeV3NodeSize(node);
