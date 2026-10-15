@@ -246,3 +246,6 @@ Follow-up 091 (13.10.2026, C1–C4): `/root`, тот же worktree и ветка
 ## Карточка 105 — 15.10.2026: ширина настроек Route v3
 
 Чат 01a111fa-93ab-79b3-9089-7ec8ca14c393, /root, codex/integration-m5-22, основной worktree. Владелец RouteV3Graph.tsx, route-v3-graph.css, route-v3-operation-table.css и только разделов документов 105/REQ-140. Ready-for-review; code fc8f0f9596f0f5280988cdca6cae5a830b6e2461 опубликован; следующий ZIP pending. Реализация 104 и её файлы исключены.
+
+
+Follow-up 105 (15.10.2026, повторный C1): /root, тот же чат/worktree. Только диагностика и собственные документы 105: найден запущенный Downloads 0.63.46; проверен готовый ZIP 0.63.47 с исправлением (528 файлов, размер/SHA совпали). Ready-for-review, повторной сборки нет; приёмка владельцем открыта.
