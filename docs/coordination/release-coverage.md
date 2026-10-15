@@ -2,11 +2,20 @@
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 
-REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включить в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
+REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
 
 ## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
 
-REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, отдельный worktree. Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и проверены как предки integration merge `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и HEAD `cfeace60dfe6f6c2241203def9767ed0723ff6cd`; `git show --check` PASS. Клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включить в M5-22-051. Полный синхронный пересчёт при pointer-up на синтетическом сценарии остаётся около 2 с; исходный проект и packaged UI не проверены.
+REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, отдельный worktree. Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и проверены как предки integration merge `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Полный синхронный пересчёт при pointer-up на синтетическом сценарии остаётся около 2 с; исходный проект и packaged UI не проверены.
+
+### m5-22-051 — 15.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `30795935aee1d79c21bcfeb56daf212f5b0c4002`
+- **Coverage:** 110/REQ-145 и 111/REQ-146 включены; registration/code/handoff SHA — предки HEAD; pending/unknown завершённых handoff `0`.
+- **ZIP:** `artifacts/m5-22-051/TECHMAP-GRAPHER-0.63.51-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 401 358 / D666320822013AB3D13EBBFABF7F5C3F7671CB818508FF17E69709CB293BD12D`
+- **Manifest / portable:** `PASS; 534 files; 7/7`
+- **Gate:** Git/package PASS, Vitest 211/2223, .NET 1140/1140, performance 1/1. Pointer-up Э4 около 2 с на синтетическом сценарии; исходный жгут, ручная packaged UI-проверка и owner acceptance 110/111 открыты.
 
 ## 109 — библиотека оконцовок и генерация серий, 15.10.2026
 

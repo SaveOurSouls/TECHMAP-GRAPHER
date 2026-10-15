@@ -1,3 +1,11 @@
+# Пакет M5-22-051 — карточки 110 и 111, 15.10.2026
+
+Исходный code HEAD: `30795935aee1d79c21bcfeb56daf212f5b0c4002` (`codex/integration-m5-22`). Регистрация, код и handoff карточки 110: `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, `8ff8736d1a8989b8d8482d806455abf2130c207e`, `2f9008fa06351dde7bcdb3678db9564d298ba4b4`; карточки 111: `b0d51fc3b330897b59693cd0635b520b41e913ec`, `b4726217d708b2c76f1aa28209ba061706a65967`, `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0`. Все шесть SHA проверены как предки сборочного HEAD. Версия `0.63.51-m5-22-review` поднята коммитом `30795935aee1d79c21bcfeb56daf212f5b0c4002` до сборки.
+
+Windows x64 ZIP: `artifacts/m5-22-051/TECHMAP-GRAPHER-0.63.51-m5-22-review-win-x64.zip`. Размер: **64 401 358 байт**. SHA-256: `D666320822013AB3D13EBBFABF7F5C3F7671CB818508FF17E69709CB293BD12D`.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-051` завершился успешно: Vitest **211 файлов / 2223 теста PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **534 файла манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-051`, включая путь с кириллицей и пробелами. Ограничения: полный синхронный пересчёт при pointer-up в Э4 на синтетическом сценарии остаётся около 2 с; исходный пользовательский жгут и ручная packaged UI-приёмка не проверены; приёмка владельцем карточек 110/111 открыта. ZIP остаётся вне Git.
+
 # Пакет M5-22-050 — карточка 109, 15.10.2026
 
 Исходный code HEAD: `094668949831f9167e482db674a794a6af9c355c` (`codex/integration-m5-22`). Карточка 109 передана из `codex/termination-library-series`: регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3`, handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393`; все три SHA — предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc` и сборочного HEAD. Общие документы 108/109 объединены, coverage зафиксирован `b0cd25927337407aef6c4b3a129f6a26de36908e`. Версия `0.63.50-m5-22-review` поднята коммитом `0946689` до сборки. Неизвестных или ожидающих завершённых handoff для этого среза нет.
@@ -731,4 +739,3 @@ ZIP: `artifacts/m5-22-046/TECHMAP-GRAPHER-0.63.46-m5-22-review-win-x64.zip`.
 `UnauthorizedAccessException` при ACL. Чужая незакоммиченная перестановка
 блока дизайна 099 в `status.md` не вошла в ZIP и этот документальный коммит.
 ZIP вне Git, owner acceptance остаётся отдельным этапом.
-
