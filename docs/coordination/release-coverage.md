@@ -1,8 +1,17 @@
 # Release coverage
 
+### m5-22-053 — 16.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `2a9dd345cdd858847afcacd94e83fe29357337a3`.
+- **Coverage:** follow-up 111/REQ-146, 112/REQ-147 и 113/REQ-148 включены ancestry; 115/REQ-150 и 116/REQ-151 включены проверенными cherry-pick эквивалентами `258a04d`/`bae2185` и `8267e3b`/`6df71de`. Исходные SHA и доказательства эквивалентности записаны ниже. Pending/unknown завершённых handoff: `0`.
+- **ZIP:** `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`.
+- **Size / SHA-256:** `64 412 661 / BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
+- **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
+- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112, совместный browser/scene 113/114 и owner acceptance 111–116 остаются открытыми.
+
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
-15.10.2026, чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md). Ready-for-review в прежнем `tmp/op-bend-coordinate-integrity`; база `96829c0`, регистрация `1170ee6`. Код `dc817dea78d89410e04a89b86ef1489209dbaaea` и docs-only handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и проверены как предки integration merge `98e91c08f3b477ab4df1abcf3b028351871b3eb5`; `git show --check` PASS. Worker: 216/2285, профильный 2/29; после интеграции общий Vitest 216/2283, TypeScript/Vite PASS. Первый код 112 вошёл в M5-22-052; новый follow-up в этот ZIP не входит. Исходный документ, ручная C1–C4 и packaged UI не проверены; новый ZIP не заказан и ожидает завершения карточек 115/116.
+15.10.2026, чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md). Ready-for-review в прежнем `tmp/op-bend-coordinate-integrity`; база `96829c0`, регистрация `1170ee6`. Код `dc817dea78d89410e04a89b86ef1489209dbaaea` и docs-only handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и проверены как предки integration merge `98e91c08f3b477ab4df1abcf3b028351871b3eb5`; `git show --check` PASS. Worker: 216/2285, профильный 2/29; после интеграции общий Vitest 216/2283, TypeScript/Vite PASS. Первый код 112 вошёл в M5-22-052; follow-up включён в M5-22-053. Исходный документ, ручная C1–C4 и packaged UI не проверены.
 
 ## 111 follow-up — откат оболочек П по уточнению владельца, 15.10.2026
 
@@ -16,7 +25,7 @@ ready-for-review. Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первы�
 `connector-sleeve-support.ts` удалён, `connectorSleeveSupports` в runtime нет.
 После объединения с follow-up 113 общий Vitest 215/2277 и TypeScript/Vite PASS.
 M5-22-051 и M5-22-052 остаются историческими ZIP с отменённым поведением 111;
-новый ZIP не заказан и заблокирован активной карточкой 115. Исходный жгут и
+уточнённое поведение включено в M5-22-053. Исходный жгут и
 packaged UI не проверены; приёмка владельца открыта.
 
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
@@ -25,7 +34,7 @@ REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md)
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): код `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` опубликованы и проверены как предки integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; `git show --check` PASS. Совместный клиент после отката 111: Vitest 215/2277, TypeScript/Vite PASS. Ready-for-review, интегрировано после M5-22-052, поэтому выданный ZIP исправления не содержит. Следующий ZIP заблокирован активной карточкой 115. Исходный жгут и packaged UI не проверены.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): код `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` опубликованы и проверены как предки integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; `git show --check` PASS. Совместный клиент после отката 111: Vitest 215/2277, TypeScript/Vite PASS. Ready-for-review; исправление после M5-22-052 включено в M5-22-053. Исходный жгут и packaged UI не проверены.
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
@@ -33,11 +42,11 @@ REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md)
 
 ## 115 — правила редактирования трасс Э4, 15.10.2026
 
-REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`. Код `a712396092ea7f3eabf610c78499836f0523a527` и handoff `3b276e745880c6963cbe4383f01f1b5dbf464aa4` опубликованы. Интеграционные cherry-pick `258a04d` (код) и `bae2185` (handoff/docs) являются проверенным эквивалентом; исходные SHA не ancestry из-за cherry-pick. `git show --check` PASS. Integration Vitest 217/2297, TypeScript/Vite PASS. Ready-for-review; исходный жгут/portable не проверены. Код 115 больше не блокирует следующий ZIP. M5-22-052 остаётся последним ZIP и изменения 115 не содержит.
+REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`. Код `a712396092ea7f3eabf610c78499836f0523a527` и handoff `3b276e745880c6963cbe4383f01f1b5dbf464aa4` опубликованы. Интеграционные cherry-pick `258a04d` (код) и `bae2185` (handoff/docs) являются проверенным эквивалентом; исходные SHA не ancestry из-за cherry-pick. `git show --check` PASS. Integration Vitest 217/2297, TypeScript/Vite PASS. Ready-for-review; исходный жгут не проверен, portable 7/7 в M5-22-053. Код 115 включён в M5-22-053; M5-22-052 остаётся историческим пакетом без него.
 
 ## 116 — наконечники в Маршруте V3, 15.10.2026
 
-REQ-151, [карточка 116](../../tasks/116-route-v3-wire-terminals.md), чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, ready-for-review. Code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` опубликованы; интегрированы точными cherry-pick `8267e3b`/`6df71de`. Полный integration Vitest 218/2319, TypeScript/Vite PASS. Не входит в M5-22-052; ZIP поручен владельцем 16.10.2026. Worker browser 1440×1000/390×844 и 14 форм оконцовок PASS. Исходный документ, серверные тесты и portable/package UI не проверены.
+REQ-151, [карточка 116](../../tasks/116-route-v3-wire-terminals.md), чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, ready-for-review. Code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` опубликованы; интегрированы точными cherry-pick `8267e3b`/`6df71de`. Полный integration Vitest 218/2319, TypeScript/Vite PASS. Не входит в M5-22-052; включён в M5-22-053. Worker browser 1440×1000/390×844 и 14 форм оконцовок PASS. Исходный документ и ручной package UI не проверены; серверные тесты и portable прошли в M5-22-053.
 
 ### m5-22-052 — 15.10.2026
 

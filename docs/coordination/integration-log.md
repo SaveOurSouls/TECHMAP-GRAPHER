@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — проверенный ZIP M5-22-053
+
+После проверки release coverage 111–113 и эквивалентов cherry-pick 115/116 версия повышена до `0.63.53-m5-22-review` коммитом `2a9dd345cdd858847afcacd94e83fe29357337a3` и опубликована до сборки. Рабочая копия была чистой; новых неподтверждённых завершённых handoff нет. Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-053`: Vitest 218/2319, TypeScript/Vite, .NET Release 1140/1140, performance 1/1, self-contained win-x64 publish PASS. Манифест 534 файла, portable 7/7, включая путь с кириллицей и пробелами. ZIP `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`: 64 412 661 байт, SHA-256 `BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`. Исходный жгут, ручная packaged UI-проверка и отмеченные в coverage визуальные проверки остаются открытыми.
+
 ## 16.10.2026 — handoff 116 / REQ-151 и ZIP
 
 Из `codex/route-v3-wire-terminals` (база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`) интегрированы code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` точными cherry-pick `8267e3b` и `6df71de`; карточка разрешена проверенной версией worker. Full integration Vitest **218/2319**, TypeScript/Vite build PASS. Worker: Chrome/Playwright desktop/mobile, 14 форм наконечников, отдельный этап гильзы, общий наконечник, уплотнители и legacy adoption PASS. Исходный жгут, серверные тесты и portable/package UI не проверены. M5-22-052 имеет ту же версию `0.63.52-m5-22-review`; перед ZIP требуется сравнить и при необходимости поднять `appVersion`. ZIP поручен сборщику владельцем 16.10.2026; проверить manifest, portable 7/7, точный размер/SHA-256 и затем коммитить acceptance-документацию.
