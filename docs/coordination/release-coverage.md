@@ -183,4 +183,3 @@ represent missing completed chat handoffs.
 - **PACKAGE-MANIFEST / portable:** `PASS; 339 записей / 340 файлов; 7/7 из C:\Temp`
 - **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта
 
-| 101 — Таблица операций Route v3 | `/root` | pending | REQ-137; общий worktree integration | in-progress; следующий ZIP pending |
