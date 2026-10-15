@@ -19,6 +19,10 @@ describe('termination picker/editor UI',()=>{
  });
  it('renders runtime SVG without exposing raw user markup',()=>{
   const html=renderToStaticMarkup(<TerminationSymbol record={{...BUILTIN_TERMINATION_RECORDS[0]!,name:'<script>bad</script>'}} view="e4"/>);
-  expect(html).toContain('termination-symbols/nki-ring-e4.svg');expect(html).not.toContain('<script>');
+  expect(html).toContain('symbol-assets/nki-ring-e4.svg');expect(html).not.toContain('<script>');
+ });
+ it('keeps view controls, selection footer and local integration errors inside the picker',()=>{
+  const html=renderToStaticMarkup(<TerminationLibraryPicker error="Выберите гильзу с двумя входами." onSelect={()=>{}}/>);
+  expect(html).toContain('aria-label="Вид рисунка"');expect(html).toContain('termination-library-footer');expect(html).toContain('role="alert"');expect(html).toContain('Выберите гильзу с двумя входами.');
  });
 });

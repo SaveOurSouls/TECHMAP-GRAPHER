@@ -129,6 +129,9 @@ export function layersWithIsolatedLayer(layers: readonly EditorLayer[], layerId:
 export type EditorSaveState = "saved" | "saving" | "changed" | "error";
 
 export interface HarnessEditorWorkspaceProps {
+  readonly pendingPlacement?: EditorSceneObject | null;
+  readonly onPlace?: (point: EditorPoint) => void;
+  readonly onPlacementCancel?: () => void;
   readonly harnessId: string;
   readonly harnessDesignation: string;
   readonly view?: HarnessEditorView;
@@ -324,6 +327,7 @@ export function HarnessEditorWorkspace({
   catalogHasMore,
   selectedObjectId: controlledSelectedObjectId,
   selectedObjectIds: controlledSelectedObjectIds,
+  pendingPlacement, onPlace, onPlacementCancel,
   highlightedObjectIds = [], foregroundWireIds = [], relationPanel, revealRequest, documentActions, drawingWindows,onDimensionCreate,onPositionRailCreate,onGraphicCreate,drawingSnaps,drawingAngleStep,selectedGraphic,canPasteGraphic,onGraphicCopy,onGraphicPaste,onGraphicDelete,onUndo,angleStep,onAngleStepChange,onDrawingSnapsChange,onPipeIntervalSelect,onCoveringDrag,
   cables = [],
   saveState = "saved",
@@ -393,6 +397,10 @@ export function HarnessEditorWorkspace({
 }: HarnessEditorWorkspaceProps) {
   const [localView, setLocalView] = useState<HarnessEditorView>("e4");
   const [tool, setTool] = useState<EditorTool>("select");
+  const changeTool = (next: EditorTool) => {
+    if (pendingPlacement) onPlacementCancel?.();
+    setTool(next);
+  };
   const [localObjects, setLocalObjects] = useState(defaultObjects);
   const [localLayers, setLocalLayers] = useState(defaultLayers);
   const [localSelectedObjectId, setLocalSelectedObjectId] = useState<string | null>("W1");
@@ -409,7 +417,7 @@ export function HarnessEditorWorkspace({
   const view = controlledView ?? localView;
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (document.querySelector('dialog[open], [popover]:popover-open')) return;
+      if (pendingPlacement || document.querySelector('dialog[open], [role="dialog"][aria-modal="true"], [popover]:popover-open')) return;
       if (event.target instanceof Element && event.target !== document.body && !event.target.closest('.harness-editor')) return;
       if (event.defaultPrevented || (event.target instanceof Element && event.target.closest(
         'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="dialog"],[popover]:popover-open',
@@ -419,7 +427,7 @@ export function HarnessEditorWorkspace({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [view]);
+  }, [view, pendingPlacement]);
   const objects = controlledObjects ?? localObjects;
   const layers = controlledLayers ?? localLayers;
   const selectedObjectId = controlledSelectedObjectId === undefined
@@ -759,13 +767,16 @@ export function HarnessEditorWorkspace({
           onAngleStepChange={onAngleStepChange}
           snaps={drawingSnaps}
           onSnapsChange={onDrawingSnapsChange}
-          onToolChange={setTool}
+          onToolChange={changeTool}
           onZoomIn={() => changeZoom(1.2)}
           onZoomOut={() => changeZoom(1 / 1.2)}
           onZoomChange={setZoom}
           onFitView={fitView}
         />
         <CanvasViewport
+          pendingPlacement={pendingPlacement}
+          onPlace={point => { onPlace?.(point); setTool("select"); }}
+          onPlacementCancel={onPlacementCancel}
           view={view}
           tool={tool}
           camera={camera}

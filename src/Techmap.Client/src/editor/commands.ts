@@ -465,6 +465,16 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           ? carryPhysicalExits(document,shifted,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
           : shifted;
       }
+      const previousConnector = document.connectors.find(c => c.id === command.connectorId)!;
+      // Termination contacts have point-sized routing anchors. Carrying their
+      // attached automatic routes as manual polylines can leave diagonal or
+      // colliding traces after a small drag, so rebuild the affected routes
+      // around the moved component. Existing valid manual routes are preserved
+      // by rebuildConnectorE4Wires.
+      if (command.physicalDragMode && previousConnector.terminationComponent) {
+        if(document.views.e4.layers.some(l=>l.locked&&(l.id===previousConnector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===previousConnector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
+        return rebuildConnectorE4Wires(moved, command.connectorId, previousConnector);
+      }
       if(command.physicalDragMode){
         const connector=document.connectors.find(c=>c.id===command.connectorId)!;
         if(document.views.e4.layers.some(l=>l.locked&&(l.id===connector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===connector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");

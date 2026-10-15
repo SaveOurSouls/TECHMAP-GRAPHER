@@ -1,5 +1,7 @@
 import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-covering-materials";
 import { terminationSceneObject } from './termination-scene';
+import { placementOrigin, placementLayerError } from './termination-placement-interaction';
+import type { TerminationLibraryRecord } from '../termination-library/catalog';
 import { TerminationInspector, PhysicalTwistControls } from './TerminationInspector';
 import { TerminationLibraryPicker, createTerminationPlacement, terminationArtifactFromRecord, BUILTIN_TERMINATION_RECORDS } from '../termination-library';
 import type { TerminationArtifact } from './termination-model';
@@ -105,7 +107,6 @@ import {
   calculateWireCutLength,
   createJunctionEndpoint,
   createScreenEndpoint,
-  createOrthogonalE4Route,
   createEmptyHarnessDesign,
   findWireEndpoint,
   isJunctionEndpoint,
@@ -860,6 +861,8 @@ export function HarnessDesignEditor({
   const wireLookup = useWireDatabaseLookup(config, session);
   const [view, setView] = useState<HarnessEditorView>(localCopy ? "drawing" : initialView);
   const [terminationPicker,setTerminationPicker]=useState<{apply?:(artifact:TerminationArtifact)=>unknown;kind?:'terminal'|'sleeve';document?:HarnessDesignDocument}|null>(null);
+  const [terminationDraft, setTerminationDraft] = useState<ReturnType<typeof createTerminationPlacement> | null>(null);
+  const [terminationPickerError, setTerminationPickerError] = useState<string | null>(null);
   const [resource, setResource] = useState<HarnessDesignResource | null>(null);
   const [history, setHistory] = useState<EditorHistory | null>(null);
   const [hiddenObjectIds, setHiddenObjectIds] = useState<readonly string[]>(localCopy?.hiddenObjectIds ?? []);
@@ -1011,6 +1014,8 @@ export function HarnessDesignEditor({
     pendingPlacementRef.current = null;
     setPlacementBusy(false);
     setPlacementPending(false);
+    setTerminationDraft(null);
+    setTerminationPicker(null);
     setResource(null);
     setHistory(null);
     setSelectedObjectId(null);
@@ -1446,6 +1451,10 @@ export function HarnessDesignEditor({
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (terminationPicker || terminationDraft) {
+        if (event.key === "Escape") { event.preventDefault(); setTerminationPicker(null); setTerminationDraft(null); }
+        return;
+      }
       if(joiningPipeDraft){if(event.key==='Escape'){event.preventDefault();setJoiningPipeDraft(null);}return;}
       if (placementBusyRef.current || pendingPlacementRef.current) return;
       if (event.key === "Escape" && editingObjectId) {
@@ -1483,7 +1492,7 @@ export function HarnessDesignEditor({
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [editingObjectId, run, selectedObjectIds,joiningPipeDraft]);
+  }, [editingObjectId, run, selectedObjectIds,joiningPipeDraft,terminationDraft,terminationPicker]);
 
   useEffect(() => {
     if (!localCopy?.captureSelection || !localCopy.revealedObjectIds || !history) return;
@@ -1495,6 +1504,17 @@ export function HarnessDesignEditor({
   if (!history || !resource) {
     return <div className={`he-loading ${saveState === "error" ? "error" : ""}`} role="status">{message}</div>;
   }
+
+  const terminationPreview = terminationDraft ? terminationSceneObject(history.present, terminationDraft.connector, view) : null;
+  const beginTerminationPlacement = (record: TerminationLibraryRecord) => {
+    const prefix = record.kind === 'preparation' ? 'Р' : 'T';
+    const names = new Set(history.present.connectors.map(c => c.designation));
+    let number = 1;
+    while (names.has(`${prefix}${number}`)) number++;
+    setTerminationDraft(createTerminationPlacement(record, {id: crypto.randomUUID(), designation: `${prefix}${number}`, position: {x: 0, y: 0}}));
+    setJoiningPipeDraft(null); setEditingObjectId(null);
+    setSelectedObjectId(null); setSelectedObjectIds([]); setMessage('');
+  };
 
   const diagnosticObjectIds = new Set(diagnostics.map((diagnostic) => diagnostic.target.objectId));
   const materializedConnectorIds = new Set(componentTemplateViewInstances.map((instance) => instance.objectId));
@@ -1894,9 +1914,9 @@ export function HarnessDesignEditor({
       terminalCorrections.from?.plusMm ?? 0, terminalCorrections.to?.plusMm ?? 0, 1,
       colorSource ? { connectorId: colorSource.connectorId, contactId: colorSource.contactId } : undefined,
     );
-    const start = wireEndpointE4Anchor(history.present, from);
-    const end = wireEndpointE4Anchor(history.present, to);
-    return start && end ? { ...wire, e4Route: createOrthogonalE4Route(start, end) } : wire;
+    // add-wire owns obstacle-aware routing. A provisional Manhattan path can
+    // cross the source body and would be rejected as an explicit manual route.
+    return wire;
   };
 
   const selectedWireIds = selectedObjectIds.filter((id) => history.present.wires.some((wire) => wire.id === id));
@@ -2097,7 +2117,11 @@ export function HarnessDesignEditor({
             }}
             onBundleEdit={bundleId=>{const topology=history.present.physicalTopology;if(topology)setJoiningPipeDraft(beginJoiningPipe(history.present,bundleId,selectedObjectIds));}}/>:undefined}
         documentActions={<>
-          <section className="he-utility-section"><h3>Оконцовки</h3><button type="button" onClick={()=>setTerminationPicker({})}>Наконечник / гильза из библиотеки</button><button type="button" onClick={()=>{const record=BUILTIN_TERMINATION_RECORDS.find(r=>r.assetId==='preparation-none');if(!record)return;const placement=createTerminationPlacement(record,{id:crypto.randomUUID(),designation:`Р${history.present.connectors.filter(c=>c.terminationComponent?.kind==='preparation').length+1}`,position:{x:Math.max(40,...(['e4','drawing'] as const).flatMap(v=>designToScene(history.present,v).map(o=>o.x+o.width)))+80,y:100}});if(!run({type:'add-termination-component',...placement}))return;setSelectedObjectId(placement.connector.id);setSelectedObjectIds([placement.connector.id]);setRevealRequest({token:Date.now(),objectIds:[placement.connector.id]});}}>Разделка</button></section>
+          <section className="he-utility-section"><h3>Оконцовки</h3>
+            <button type="button" onClick={() => { setTerminationDraft(null); setTerminationPickerError(null); setTerminationPicker({}); }}>Наконечник / гильза из библиотеки</button>
+            <button type="button" onClick={() => { const record = BUILTIN_TERMINATION_RECORDS.find(r => r.assetId === 'preparation-none'); if (record) beginTerminationPlacement(record); }}>Разделка</button>
+            {terminationDraft && <div role="status">Укажите точку подключения на поле. Щелчок — поставить, Esc — отменить.<button type="button" onClick={() => setTerminationDraft(null)}>Отменить размещение</button></div>}
+          </section>
           {view === "e4" && <>
             <ConnectionTableSettings />
             <section className="he-utility-section he-controls-section" aria-labelledby="he-e4-routing-heading">
@@ -2223,7 +2247,7 @@ export function HarnessDesignEditor({
             const drawings=instance ? projectE4DrawingCompanions(instance,{x:0,y:0},300,resolveComponentTemplateAssetUrl) : [];
             return drawings.length ? <section className="he-companion-list" aria-label="Рисунки компонента"><header className="ui-section-heading"><strong>Рисунки артикула</strong><InfoHint>Показать или скрыть рисунок на Э4. Перетаскивайте рисунок мышью; прямая пунктирная линия связывает его с таблицей. Группа фигур перемещается как один рисунок.</InfoHint></header>{drawings.map(d=><label key={d.drawingId}><input type="checkbox" aria-label={`Показать ${d.label}`} checked={d.visible} disabled={selectedConnectorLayer?.locked===true} onChange={e=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,visible:e.target.checked})}/>{d.label}<DrawingScaleControl label={`Масштаб ${d.label}`} value={drawingScale(selectedConnector.drawingPlacements,d.drawingId)} disabled={selectedConnectorLayer?.locked===true} onChange={scale=>run({type:"set-drawing-placement",connectorId:selectedConnector.id,drawingId:d.drawingId,scale})}/></label>)}</section> : null;
           })()}
-          <TerminationInspector key={selectedConnector.id} document={history.present} connector={selectedConnector} disabled={selectedConnectorLayer?.locked===true} onCommand={run} onChooseArtifact={(apply,kind)=>setTerminationPicker({apply,kind,document:history.present})}/>
+          <TerminationInspector key={selectedConnector.id} document={history.present} connector={selectedConnector} disabled={selectedConnectorLayer?.locked===true} onCommand={run} onChooseArtifact={(apply,kind)=>{setTerminationDraft(null);setTerminationPickerError(null);setTerminationPicker({apply,kind,document:history.present});}}/>
           {!selectedConnector.terminationComponent && <E4ConnectorInspector
             connector={selectedConnector}
             onRefreshTerminals={refreshTemplateTerminals}
@@ -2283,8 +2307,20 @@ export function HarnessDesignEditor({
           label: history.present.wires.find((wire) => wire.id === issue.wireId)?.circuit || issue.wireId,
           message: issue.message,
         }))]}
+        pendingPlacement={terminationPreview}
+        onPlacementCancel={() => setTerminationDraft(null)}
+        onPlace={point => {
+          if (!terminationDraft || !terminationPreview) return;
+          const layerError = placementLayerError(terminationPreview, history.present.views[view].layers);
+          if (layerError) { setMessage(layerError); return; }
+          const origin = placementOrigin(terminationPreview, point);
+          const connector = {...terminationDraft.connector, positions: {e4: origin, drawing: origin}};
+          if (!run({type: 'add-termination-component', ...terminationDraft, connector})) return;
+          setTerminationDraft(null); setSelectedObjectId(connector.id); setSelectedObjectIds([connector.id]);
+        }}
         previewMessage={previewResult.error}
         onViewChange={(nextView) => {
+          setTerminationDraft(null);
           setJoiningPipeDraft(null);
           setEditingObjectId(null);
           setView(nextView);
@@ -2390,10 +2426,10 @@ export function HarnessDesignEditor({
           const toEndpoint = resolveEndpoint(to);
           if (!fromEndpoint || !toEndpoint) return;
           const id = crypto.randomUUID();
-          run({
+          if (!run({
             type: "add-wire",
             wire: createRoutedWire(id, fromEndpoint, toEndpoint),
-          });
+          })) return;
           setSelectedObjectId(id);
           setSelectedObjectIds([id]);
         }}
@@ -2442,11 +2478,7 @@ export function HarnessDesignEditor({
           const terminalCorrections = wireEndTerminalCorrections(history.present, { from: fromEndpoint, to: toEndpoint }, terminalLookup.records);
           const base = createWire(wireId, fromEndpoint, toEndpoint, null, targetWire.circuit, "#334155",
             terminalCorrections.from?.plusMm ?? 0, terminalCorrections.to?.plusMm ?? 0);
-          const start = wireEndpointE4Anchor(history.present, fromEndpoint);
-          const branchWire = start ? {
-            ...base,
-            e4Route: createOrthogonalE4Route(start, { position: point, leadDirection: null }),
-          } : base;
+          const branchWire = base;
           const succeeded = existingJunction
             ? run({ type: "add-wire", wire: branchWire, targetWireId })
             : run({
@@ -2590,7 +2622,21 @@ export function HarnessDesignEditor({
           if (await flushSave()) onClose();
         } : undefined}
       /></HarnessEditorErrorBoundary>
-      {terminationPicker&&<div className="he-termination-modal" role="dialog" aria-modal="true" aria-label="Библиотека оконцовок"><>{message&&<p role="alert">{message}</p>}<TerminationLibraryPicker onClose={()=>setTerminationPicker(null)} view={view} onSelect={record=>{try{if(terminationPicker.apply){if(terminationPicker.document!==historyRef.current?.present){setMessage('Документ изменился. Закройте библиотеку и повторите выбор для актуального контакта.');return;}const artifact=terminationArtifactFromRecord(record,crypto.randomUUID());if(!artifact){setMessage('Выберите наконечник или гильзу, а не Разделку.');return;}if(terminationPicker.kind&&artifact.kind!==terminationPicker.kind){setMessage(terminationPicker.kind==='sleeve'?'Выберите гильзу с двумя входами.':'Выберите наконечник с одним входом.');return;}if(terminationPicker.apply(artifact)===false)return;}else{const placement=createTerminationPlacement(record,{id:crypto.randomUUID(),designation:`T${history.present.connectors.filter(c=>c.terminationComponent).length+1}`,position:{x:Math.max(40,...(['e4','drawing'] as const).flatMap(v=>designToScene(history.present,v).map(o=>o.x+o.width)))+80,y:100}});if(!run({type:'add-termination-component',...placement}))return;setSelectedObjectId(placement.connector.id);setSelectedObjectIds([placement.connector.id]);setRevealRequest({token:Date.now(),objectIds:[placement.connector.id]});}setTerminationPicker(null);}catch(error){setMessage(error instanceof Error?error.message:'Не удалось выбрать оконцовку.');}}}/></></div>}
+      {terminationPicker && <div className="he-termination-backdrop">
+        <div className="he-termination-modal" role="dialog" aria-modal="true" aria-label="Библиотека оконцовок">
+          <TerminationLibraryPicker error={terminationPickerError} onClose={() => setTerminationPicker(null)} view={view} onSelect={record => {
+            try {
+              if (terminationPicker.apply) {
+                if (terminationPicker.document !== historyRef.current?.present) throw new Error('Документ изменился. Закройте библиотеку и повторите выбор для актуального контакта.');
+                const artifact = terminationArtifactFromRecord(record, crypto.randomUUID());
+                if (terminationPicker.kind && artifact.kind !== terminationPicker.kind) throw new Error(terminationPicker.kind === 'sleeve' ? 'Выберите гильзу с двумя входами.' : 'Выберите наконечник с одним входом.');
+                if (terminationPicker.apply(artifact) === false) { setTerminationPickerError('Не удалось назначить оконцовку. Проверьте состав подключения.'); return; }
+              } else beginTerminationPlacement(record);
+              setTerminationPicker(null);
+            } catch (error) { setTerminationPickerError(error instanceof Error ? error.message : 'Не удалось выбрать оконцовку.'); }
+          }}/>
+        </div>
+      </div>}
       {(placementBusy || placementPending) && <div className={placementBusy ? "he-placement-busy" : "he-placement-pending"} role="status" aria-live="polite">
         {placementBusy
           ? "Закрепляем версию компонента в жгуте…"

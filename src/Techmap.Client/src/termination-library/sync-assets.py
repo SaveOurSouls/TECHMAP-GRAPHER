@@ -1,7 +1,7 @@
 from pathlib import Path
 import json,re,hashlib
 root=Path(__file__).resolve().parents[4]
-source=root/'design/termination-099'; out=root/'src/Techmap.Client/public/termination-symbols';out.mkdir(parents=True,exist_ok=True)
+source=root/'design/termination-099'; out=root/'src/Techmap.Client/src/termination-library/symbol-assets';out.mkdir(parents=True,exist_ok=True)
 m=json.loads((source/'manifest.json').read_text(encoding='utf-8'))
 files=set()
 for a in m['assets']:

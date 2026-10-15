@@ -1,5 +1,6 @@
 import { artworkWireDiameter, artworkJacketAnchor, renderPartSvg } from "../wire-blank-artwork.mjs";
 import { terminationSceneBounds, terminationSceneContainsPoint } from "./termination-scene";
+import { placementSceneObject } from "./termination-placement-interaction";
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
 import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
@@ -71,6 +72,10 @@ import { snapDrawingPoint, type DrawingOutline, type DrawingSnaps } from "../com
 import { materialObjectGroup } from "./MaterialObjectsPanel";
 
 export interface CanvasViewportProps {
+  /** Preview only: absent from the document until onPlace confirms the first contact's world position. */
+  readonly pendingPlacement?: EditorSceneObject | null;
+  readonly onPlace?: (insertionPoint: EditorPoint) => void;
+  readonly onPlacementCancel?: () => void;
   readonly onFreeWireEndpointMove?: (wireId:string,end:"from"|"to",point:EditorPoint)=>void;
   readonly onFreeWireEndpointPreview?: (wireId:string,end:"from"|"to",point:EditorPoint|null)=>void;
   readonly onFreeWireEndpointsXChange?: (wireIds:readonly string[],end:"from"|"to",x:number)=>void;
@@ -3079,6 +3084,7 @@ function e4ConnectorSnapTarget(object: EditorSceneObject): E4ConnectorSnapTarget
 }
 
 export function CanvasViewport({
+  pendingPlacement, onPlace, onPlacementCancel,
   onFreeWireEndpointMove, onFreeWireEndpointsXChange, onFreeWireEndpointPreview, onDetachedPairAction, onFreeWireEndStyleRequest,
   view,
   tool,
@@ -3131,6 +3137,18 @@ export function CanvasViewport({
     return ()=>window.removeEventListener("keydown",cancel);
   },[onFreeWireEndpointPreview]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [placementPoint, setPlacementPoint] = useState<EditorPoint | null>(null);
+  useEffect(() => { setPlacementPoint(null); }, [pendingPlacement?.id, view]);
+  useEffect(() => {
+    if (!pendingPlacement) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault(); event.stopPropagation();
+      setPlacementPoint(null); onPlacementCancel?.();
+    };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, [pendingPlacement, onPlacementCancel]);
   const componentTemplateImageCacheRef = useRef<ComponentTemplateImageCache | null>(null);
   if (!componentTemplateImageCacheRef.current) {
     componentTemplateImageCacheRef.current = new ComponentTemplateImageCache();
@@ -3164,6 +3182,9 @@ export function CanvasViewport({
   useEffect(()=>{setGraphicStart(null);setGraphicPathDraft(null);setGraphicPreview(null);setSelectionRectangle(null);setSelectionCandidateIds([]);selectionDragRef.current=null;},[tool,view]);
   const [wireStart, setWireStart] = useState<E4ConnectableEndpoint | null>(null);
   const [wireReconnect, setWireReconnect] = useState<{ readonly wireId: string; readonly end: "from" | "to" } | null>(null);
+  useEffect(() => {
+    if (pendingPlacement) { setWireStart(null); setWireReconnect(null); }
+  }, [pendingPlacement?.id]);
   const [wireLabelPreview, setWireLabelPreview] = useState<{ readonly wireId: string; readonly position: number } | null>(null);
   const [screenPositionPreview, setScreenPositionPreview] = useState<{ readonly screenId: string; readonly position: number } | null>(null);
   const [connectorAlignmentGuides, setConnectorAlignmentGuides] = useState<E4ConnectorSnapGuides>({});
@@ -3267,6 +3288,19 @@ export function CanvasViewport({
         backgroundObjects,
         backgroundOpacity,
       );
+      if (pendingPlacement && placementPoint) {
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.save();
+          context.translate(camera.offsetX, camera.offsetY); context.scale(camera.zoom, camera.zoom);
+          context.globalAlpha = .6;
+          drawEditorSceneObject(context, placementSceneObject(pendingPlacement, placementPoint), false, view, undefined, resolveComponentTemplateAssetUrl, componentTemplateImageCacheRef.current!);
+          context.globalAlpha = 1; context.beginPath();
+          context.arc(placementPoint.x, placementPoint.y, 5 / camera.zoom, 0, Math.PI * 2);
+          context.strokeStyle = '#1179ac'; context.lineWidth = 1 / camera.zoom; context.stroke();
+          context.restore();
+        }
+      }
       onViewportSizeChange?.({
         width: Math.max(1, Math.round(canvas.clientWidth)),
         height: Math.max(1, Math.round(canvas.clientHeight)),
@@ -3282,7 +3316,7 @@ export function CanvasViewport({
       observer.disconnect();
       componentTemplateImageCacheRef.current?.setInvalidate(null);
     };
-  }, [dimmedObjectIds, effectiveHighlights, foregroundWireIds, backgroundObjects, backgroundOpacity, cables, camera, displayInstances, connectorAlignmentGuides, paintObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
+  }, [pendingPlacement, placementPoint, dimmedObjectIds, effectiveHighlights, foregroundWireIds, backgroundObjects, backgroundOpacity, cables, camera, displayInstances, connectorAlignmentGuides, paintObjects, inlineObject?.id, layers, onViewportSizeChange, overlays, resolveComponentTemplateAssetUrl, selectedObjectIds, selectedObjectId, view, physicalNodePreview]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -3331,7 +3365,7 @@ export function CanvasViewport({
       selectionDragRef.current=null;
     };
     cancelConnection();
-    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") cancelConnection(); };
+    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") { setWireStart(null); setWireReconnect(null); cancelConnection(); } };
     window.addEventListener("keydown", keydown);
     return () => { window.removeEventListener("keydown", keydown); cancelConnection(); };
   }, [tool, view]);
@@ -3397,6 +3431,31 @@ export function CanvasViewport({
   };
 
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pendingPlacement && event.button === 0) {
+      event.preventDefault(); event.stopPropagation();
+      onPlace?.(screenToWorld(camera, localPoint(event.clientX, event.clientY)));
+      setPlacementPoint(null); return;
+    }
+    // A preparation is only a point on the drawing. Its contact must remain a
+    // usable drag handle in Select, rather than switching to wire authoring.
+    if (!pendingPlacement && !onObjectPick && event.button === 0 && tool === 'select') {
+      const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      const termination = [...objects].reverse().find(object => object.metadata?.terminationSymbol &&
+        layers.some(layer => layer.id === object.layerId && layer.visible) && terminationSceneContainsPoint(object, point, 7 / camera.zoom));
+      const top = objects.find(object => object.id === hitTestEditorScene(objects, layers, point, camera.zoom, view));
+      // Contact/node/wire decorations may cover a point-sized preparation, but
+      // a symbol's transparent viewBox must not steal a foreground component.
+      const pointOverlay = top && ['physical-node', 'physical-segment', 'physical-covering', 'wire'].includes(top.kind);
+      if (termination && (top?.id === termination.id || pointOverlay)) {
+        onObjectSelect(termination.id, event.ctrlKey || event.metaKey || event.shiftKey);
+        if (onObjectMove && !layers.find(layer => layer.id === termination.layerId)?.locked) {
+          event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = { kind: 'object', pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
+            objectId: termination.id, objectX: termination.x, objectY: termination.y, mode: event.shiftKey ? 'adjacent' : 'carry', snapState: {} };
+        }
+        return;
+      }
+    }
     if(event.button===0&&view==="drawing"&&tool==="select"&&(onFreeWireEndpointMove||onFreeWireEndpointsXChange)&&!onObjectPick){
       const p=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const axis = freeEndAxes.find(axis => Math.abs(axis.x - p.x) <= 8 / camera.zoom &&
@@ -3807,6 +3866,10 @@ export function CanvasViewport({
   const [hoverGrip,setHoverGrip]=useState<CoveringHandle|null>(null);
   const gripAt=(point:EditorPoint):CoveringHandle|null=>[...objects].reverse().filter(o=>o.kind==="physical-covering"&&layers.some(l=>l.id===o.layerId&&l.visible&&!l.locked)).flatMap(o=>coveringGrips(o)).find(g=>(g.pointMarker?Math.hypot(point.x-g.point.x,point.y-g.point.y):pointToSegmentDistance(point,g.edgeFrom??{x:g.point.x-g.normal.x*g.halfWidth,y:g.point.y-g.normal.y*g.halfWidth},g.edgeTo??{x:g.point.x+g.normal.x*g.halfWidth,y:g.point.y+g.normal.y*g.halfWidth}))<=8/camera.zoom)??null;
   const pointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (pendingPlacement) {
+      setPlacementPoint(screenToWorld(camera, localPoint(event.clientX, event.clientY)));
+      setHoverTarget(null); event.currentTarget.style.cursor = 'crosshair'; return;
+    }
     if(selectionDragRef.current?.pointerId===event.pointerId){
       const drag=selectionDragRef.current,end=screenToWorld(camera,localPoint(event.clientX,event.clientY));
       const selection={start:drag.start,end};setSelectionRectangle(selection);
@@ -4030,6 +4093,7 @@ export function CanvasViewport({
   };
 
   const doubleClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (pendingPlacement) { event.preventDefault(); return; }
     if(onObjectPick)return;
     const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
     if(tool==="select"){
@@ -4199,12 +4263,13 @@ export function CanvasViewport({
       <canvas
         ref={canvasRef}
         className="he-canvas"
+        style={pendingPlacement ? { cursor: 'crosshair' } : undefined}
         tabIndex={0}
         aria-label={`${view === "e4" ? "Поле схемы Э4" : "Поле чертежа"}. Масштаб ${Math.round(camera.zoom * 100)} процентов`}
         onPointerDown={pointerDown}
         onKeyDown={event=>{if(onObjectPick&&event.key==='Escape'){event.stopPropagation();onObjectPickCancel?.();}}}
         onPointerMove={pointerMove}
-        onPointerLeave={()=>setHoverTarget(null)}
+        onPointerLeave={()=>{setHoverTarget(null);setPlacementPoint(null);}}
         onPointerUp={endPointer}
         onPointerCancel={cancelPointer}
         onLostPointerCapture={cancelPointer}
@@ -4212,6 +4277,7 @@ export function CanvasViewport({
         onDrop={drop}
         onDoubleClick={doubleClick}
         onContextMenu={event=>{
+          if(pendingPlacement){event.preventDefault();return;}
           if(onObjectPick){event.preventDefault();return;}
           if(tool.startsWith("graphic-")&&graphicPathDraft){event.preventDefault();finishGraphicPath();return;}
           if(view!=="drawing"||(!onPhysicalContextAction&&!objectProperties&&!onObjectsIsolate&&!onObjectsSave&&!onDetachedPairAction&&!onFreeWireEndStyleRequest))return;
@@ -4254,7 +4320,7 @@ export function CanvasViewport({
       })}
       <div className="he-canvas-status" aria-live="polite">
         <span>{Math.round(camera.zoom * 100)}%</span>
-        <span>{tool === "position-rail" ? railDraft ? `Нанизано позиций: ${railDraft.leaderIds.length}. Второй щелчок закрепит линию` : "Первый щелчок задаёт начало линии позиций"
+        <span>{pendingPlacement ? 'Укажите место контакта щелчком; Escape — отмена' : tool === "position-rail" ? railDraft ? `Нанизано позиций: ${railDraft.leaderIds.length}. Второй щелчок закрепит линию` : "Первый щелчок задаёт начало линии позиций"
           : tool === "wire"
           ? physicalStart ? "Выберите узел или общий выход для завершения канала" : wireReconnect ? "Выберите новый контакт для конца провода"
             : wireStart ? "Выберите второй контакт"
@@ -4287,7 +4353,7 @@ export function CanvasViewport({
       </CanvasObjectPopover>}
       {overlay && <div className="he-e4-wire-popover">{overlay}</div>}
       {diagnosticOverlay && <div className="he-e4-diagnostic-popover">{diagnosticOverlay}</div>}
-      {inlineEditor && inlineObject && inlineLayout && (
+      {!pendingPlacement && inlineEditor && inlineObject && inlineLayout && (
         <div
           className={`he-e4-inline-editor ${inlineObject.metadata?.diagnostic === "error" ? "has-error" : ""}`}
           style={{

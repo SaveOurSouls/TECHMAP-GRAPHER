@@ -8,7 +8,7 @@
 
 ## Экспорты для редактора
 
-- `TerminationLibraryPicker({onSelect, onClose?, selectedId?, view?, storage?})`
+- `TerminationLibraryPicker({onSelect, onClose?, selectedId?, view?, storage?, error?})`
   выбирает запись, создаёт и редактирует пользовательский артикул. `onSelect`
   получает валидированную `TerminationLibraryRecord`, включая выбранный цвет.
   `view` — `e4` или `drawing`, по умолчанию `drawing`.
@@ -57,11 +57,15 @@
 записи переносится вместе с документом.
 
 `sync-assets.py` воспроизводимо переносит 62 используемых SVG из
-`design/termination-099` в `public/termination-symbols`: Чертёж сохраняет принятые
+`design/termination-099` в `termination-library/symbol-assets`: Чертёж сохраняет принятые
 цвета, Э4 использует монохромную краску при той же геометрии. Манифест сохраняет
 provenance исходников и их SHA-256. Порт наконечника/Разделки — `(32,50)`, у гильзы
 второй — `(188,50)`; отверстия и сочленения дополнительных портов не создают.
-URL учитывает Vite `BASE_URL`, поэтому подходит и для portable-сборки.
+SVG импортируются через Vite `?url&no-inline` и получают хешированные имена внутри
+`dist/assets`. Production-сервер раздаёт именно `/assets`; прежние запросы к
+`/termination-symbols/*.svg` не обслуживались этим middleware и возвращали 404.
+URL учитывают Vite base и серверный path base. Не переносите SVG обратно в public
+с прямыми URL без проверки реальной раздачи production-сервера.
 
 ## Проверки
 
@@ -73,3 +77,11 @@ URL учитывает Vite `BASE_URL`, поэтому подходит и дл�
 SSR-модуль до выполнения тестов (`Temp/ssr ENOENT`); thread pool с сохранённой
 изоляцией файлов и отдельный запуск SSR-файла проходят. Интеграция в сцену и браузерная
 проверка редактора выполняются владельцем UI.
+
+Для регрессии доставки после production build и запуска настоящего .NET host:
+`node src/termination-library/verify-production-assets.mjs dist http://127.0.0.1:PORT/`.
+Повторите с настроенным path base, например `/techmap/`. Проверка требует все 62
+хешированных файла, MIME `image/svg+xml` и совпадение полученных байтов с dist;
+одного HTTP 200 недостаточно. Компактное окно использует внешние классы
+`he-termination-backdrop` / `he-termination-modal`; интеграционную ошибку передают
+через `error`, чтобы она оставалась внутри текущего окна.

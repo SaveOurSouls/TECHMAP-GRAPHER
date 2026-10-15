@@ -32,6 +32,7 @@ vi.mock("react",async importOriginal=>({
 }));
 
 const connector:EditorSceneObject={id:"X",kind:"connector",layerId:"connectors",label:"X",x:100,y:80,width:118,height:100,color:"#222",metadata:{view:"e4",orientation:"right",rows:"[]"}};
+const termination:EditorSceneObject={...connector,id:'termination-stable',label:'T1',width:220,metadata:{terminationSymbol:'terminal.svg',terminationPointOnly:'true',contactCount:'1',materializedContactPoints:JSON.stringify([{x:32,y:50,direction:'left',status:'available'}])}};
 let keydown:(event:{key:string})=>void;
 beforeEach(()=>{
   hooks.effects=[];
@@ -70,6 +71,78 @@ it('does not offer isolation for service geometry alone', () => {
   expect(isolate).not.toHaveBeenCalled();
 });
 afterEach(()=>vi.unstubAllGlobals());
+
+it.each(['e4','drawing'] as const)('confirms pending placement only by a canvas click in %s, using the world contact position',view=>{
+ const place=vi.fn(),cancel=vi.fn(),move=vi.fn(),select=vi.fn(),cameraChange=vi.fn();
+ const props={view,tool:'select' as const,camera:{zoom:2,offsetX:40,offsetY:60},objects:[termination],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:null,pendingPlacement:termination,onPlace:place,onPlacementCancel:cancel,onObjectSelect:select,onObjectMove:move,onCatalogDrop:vi.fn(),onCameraChange:cameraChange};
+ const tree=CanvasViewport(props),canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!,handlers=canvas.props as any;
+ const currentTarget={style:{cursor:''},setPointerCapture:vi.fn()},event={button:0,pointerId:1,clientX:440,clientY:260,currentTarget,preventDefault:vi.fn(),stopPropagation:vi.fn()};
+ handlers.onPointerMove(event);expect(place).not.toHaveBeenCalled();expect(currentTarget.style.cursor).toBe('crosshair');
+ handlers.onPointerDown({...event,button:2});expect(place).not.toHaveBeenCalled();
+ handlers.onPointerDown(event);expect(place).toHaveBeenCalledExactlyOnceWith({x:200,y:100});
+ expect(move).not.toHaveBeenCalled();expect(select).not.toHaveBeenCalled();expect(cancel).not.toHaveBeenCalled();expect(cameraChange).not.toHaveBeenCalled();
+});
+
+it('cancels pending placement on Escape without adding or moving an object',()=>{
+ const listeners:((event:any)=>void)[]=[],place=vi.fn(),cancel=vi.fn(),move=vi.fn();
+ vi.stubGlobal('window',{addEventListener:(type:string,listener:(event:any)=>void)=>{if(type==='keydown')listeners.push(listener);},removeEventListener:vi.fn()});
+ CanvasViewport({view:'drawing',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[],layers:[],selectedObjectId:null,pendingPlacement:termination,onPlace:place,onPlacementCancel:cancel,onObjectSelect:vi.fn(),onObjectMove:move,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()});
+ hooks.effects.forEach(effect=>effect());
+ listeners.forEach(listener=>listener({key:'Escape',preventDefault:vi.fn(),stopPropagation:vi.fn()}));
+ expect(cancel).toHaveBeenCalledOnce();expect(place).not.toHaveBeenCalled();expect(move).not.toHaveBeenCalled();
+});
+
+it.each(['e4','drawing'] as const)('drags a termination by its exact contact in Select in %s rather than starting a wire or moving its physical node',view=>{
+ const move=vi.fn(),preview=vi.fn(),wireTool=vi.fn(),select=vi.fn();
+ const node:EditorSceneObject={...connector,id:'node',kind:'physical-node',x:127,y:125,width:10,height:10};
+ const tree=CanvasViewport({view,tool:'select',camera:{zoom:2,offsetX:0,offsetY:0},objects:[termination,node],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:null,onObjectSelect:select,onObjectMove:move,onObjectMovePreview:preview,onWireToolRequest:wireTool,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()});
+ const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!,handlers=canvas.props as any;
+ const target={setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ const event={button:0,pointerId:1,clientX:264,clientY:260,currentTarget:target,preventDefault:vi.fn()};
+ handlers.onPointerDown(event);handlers.onPointerMove({...event,clientX:324,clientY:300});handlers.onPointerUp({...event,clientX:324,clientY:300});
+ expect(select).toHaveBeenCalledWith('termination-stable',undefined);
+ expect(preview).toHaveBeenCalledWith('termination-stable',{x:130,y:100},'carry');
+ expect(move).toHaveBeenCalledExactlyOnceWith('termination-stable',{x:130,y:100},'carry');
+ expect(wireTool).not.toHaveBeenCalled();
+});
+
+it.each(['e4','drawing'] as const)('still connects termination contacts with the explicit Wire tool in %s',view=>{
+ const connect=vi.fn(),move=vi.fn(),other={...termination,id:'other',x:500};
+ const props={view,tool:'wire' as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[termination,other],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:null,onObjectSelect:vi.fn(),onObjectMove:move,onWireConnect:connect,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()};
+ const handlers=()=>{hooks.index=0;return ((CanvasViewport(props).props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!.props as any);};
+ const event={button:0,pointerId:1,clientX:132,clientY:130,currentTarget:{setPointerCapture:vi.fn()},preventDefault:vi.fn()};
+ handlers().onPointerDown(event);handlers().onPointerDown({...event,clientX:532});
+ expect(connect).toHaveBeenCalledExactlyOnceWith({connectorId:'termination-stable',contactIndex:0},{connectorId:'other',contactIndex:0});
+ expect(move).not.toHaveBeenCalled();
+});
+
+it.each(['connect','reconnect'] as const)('clears an unfinished %s on entering placement, even when placement is cancelled without Escape',mode=>{
+ const connect=vi.fn(),reconnect=vi.fn(),other={...termination,id:'other',x:500};
+ const wire:EditorSceneObject={...connector,id:'wire',kind:'wire',points:[{x:50,y:50},{x:400,y:50}]};
+ const props={view:'e4' as const,tool:'wire' as const,camera:{zoom:1,offsetX:0,offsetY:0},objects:[termination,other,wire],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:mode==='reconnect'?'wire':null,pendingPlacement:null as EditorSceneObject|null,onObjectSelect:vi.fn(),onWireConnect:connect,onWireReconnect:reconnect,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()};
+ const render=()=>{hooks.index=0;return ((CanvasViewport(props).props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!.props as any);};
+ const event={button:0,pointerId:1,clientX:mode==='reconnect'?50:132,clientY:mode==='reconnect'?50:130,currentTarget:{setPointerCapture:vi.fn()},preventDefault:vi.fn()};
+ render().onPointerDown(event);
+ props.pendingPlacement=termination;const previousEffectCount=hooks.effects.length;render();hooks.effects.slice(previousEffectCount).forEach(effect=>effect());
+ props.pendingPlacement=null;
+ render().onPointerDown({...event,clientX:532,clientY:130});
+ expect(connect).not.toHaveBeenCalled();expect(reconnect).not.toHaveBeenCalled();
+ render().onPointerDown({...event,clientX:132,clientY:130});
+ expect(connect).toHaveBeenCalledExactlyOnceWith({connectorId:'other',contactIndex:0},{connectorId:'termination-stable',contactIndex:0});
+ expect(reconnect).not.toHaveBeenCalled();
+});
+
+it.each(['connector','graphic-rectangle'] as const)('keeps a foreground %s selectable over the transparent bounds of a termination',kind=>{
+ const select=vi.fn(),move=vi.fn(),symbol={...termination,metadata:{...termination.metadata,terminationPointOnly:'false'}};
+ const front:EditorSceneObject={...connector,id:'foreground',kind,x:180,y:100,width:60,height:40,points:[{x:180,y:100},{x:240,y:140}],metadata:kind==='connector'?{rows:'[]',contactCount:'0'}:{graphicKind:'rectangle'}};
+ const tree=CanvasViewport({view:'e4',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[symbol,front],layers:[{id:'connectors',label:'Соединители',visible:true,locked:false}],selectedObjectId:null,onObjectSelect:select,onObjectMove:move,onCatalogDrop:vi.fn(),onCameraChange:vi.fn()});
+ const handlers=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!.props as any;
+ const target={setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()},event={button:0,pointerId:1,clientX:181,clientY:110,currentTarget:target,preventDefault:vi.fn()};
+ handlers.onPointerDown(event);handlers.onPointerUp({...event,clientX:201,clientY:130});
+ expect(select).toHaveBeenCalledWith('foreground',false);
+ expect(move).toHaveBeenCalledWith('foreground',expect.any(Object),'carry');
+ expect(move.mock.calls.every(call=>call[0]!=='termination-stable')).toBe(true);
+});
 
 it("selects every graphic touched by the selection perimeter, including ellipse and text",()=>{
  const line:EditorSceneObject={id:"line",kind:"graphic-line",layerId:"connectors",label:"line",x:0,y:0,width:100,height:0,color:"#222",points:[{x:0,y:0},{x:100,y:0}],metadata:{graphicKind:"line",graphicWidth:"2"}};

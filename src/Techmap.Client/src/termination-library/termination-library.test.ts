@@ -75,10 +75,10 @@ describe('runtime accepted symbols and adapters',()=>{
  it('ships every base/color SVG and resolves monochrome E4 versus colored drawing',()=>{
   for(const asset of TERMINATION_ASSETS){
    for(const view of ['e4','drawing'] as const){const d=getTerminationSymbolById(asset.id,view)!;expect(d.pointCount).toBe(asset.kind==='sleeve'?2:1);expect(d.anchors[0]).toMatchObject({x:32,y:50});if(d.pointCount===2)expect(d.anchors[1]).toMatchObject({x:188,y:50});
-    const file=resolve('public/termination-symbols',asset.views[view]);expect(existsSync(file)).toBe(true);const xml:string=readFileSync(file,'utf8');expect((xml.match(/data-role="wire-entry"/g)??[]).length).toBe(d.pointCount);
+    const file=resolve('src/termination-library/symbol-assets',asset.views[view]);expect(existsSync(file)).toBe(true);const xml:string=readFileSync(file,'utf8');expect((xml.match(/data-role="wire-entry"/g)??[]).length).toBe(d.pointCount);
     if(view==='e4'){const colors=xml.match(/#[0-9a-f]{6}/gi)??[];expect(colors.every(c=>['#334155','#ffffff'].includes(c.toLowerCase()))).toBe(true);}
    }
-   for(const c of asset.colorOptions??[]){expect(existsSync(resolve('public/termination-symbols',c.views.drawing))).toBe(true);expect(getTerminationSymbol({assetId:asset.id,colorId:c.id},'drawing')?.href).toContain(c.views.drawing);expect(getTerminationSymbol({symbolId:asset.id,color:c.hex},'e4')?.href).toContain(asset.views.e4);}
+   for(const c of asset.colorOptions??[]){expect(existsSync(resolve('src/termination-library/symbol-assets',c.views.drawing))).toBe(true);expect(getTerminationSymbol({assetId:asset.id,colorId:c.id},'drawing')?.href).toContain(c.views.drawing);expect(getTerminationSymbol({symbolId:asset.id,color:c.hex},'e4')?.href).toContain(asset.views.e4);}
   }
   expect(getTerminationSymbolById('unknown','e4')).toBeNull();
  });

@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 106 — исправление оконцовок по С1–С4, 15.10.2026
+
+Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Root — HarnessDesignEditor.tsx/docs/интеграция; artwork_sol — termination-library и доставка SVG; architecture_sol — CanvasViewport/placement/drag; review_luna — маршрутизация и подключения. Карточка 106 фиксирует границы. REQ-141/135. Полный Vitest 204/2055, TypeScript/Vite, production HTTP и browser PASS. Coverage: следующий срез после M5-22-047, не входит в уже выданный ZIP; приёмка владельцем открыта.
+
 ## 104 — внедрение многопроводных оконцовок, 15.10.2026
 
 Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Владелец принял дизайн 099 и поручил реализацию первого задания. Root — интеграция UI Э4/Чертежа, документация и общие проверки; architecture_sol — модель/команды/сохранение, BOM и Route V3; artwork_sol — библиотека/SVG/UI, геометрия и тесты; review_luna — серверные validators/stores/remapping и тесты. Точные дополнительные файлы согласуются до правок; общие model/commands принадлежат architecture_sol, общие editor/canvas — root. Coverage: код REQ-135; ZIP не заказан. Чужая незакоммиченная правка status 103 исключается.

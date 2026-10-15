@@ -1,4 +1,4 @@
-import manifest from '../../public/termination-symbols/manifest.json';
+import manifest from './symbol-assets/manifest.json';
 
 export type TerminationView = 'e4' | 'drawing';
 export type TerminationKind = 'terminal' | 'sleeve' | 'preparation';

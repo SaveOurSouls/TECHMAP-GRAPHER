@@ -122,3 +122,4 @@
 | 102 | [Вид проводов в строке ПФ](102-route-v3-inline-wire-view.md) | accepted | REQ-138: кнопка вида в основной строке ПФ, сохранение индивидуальных настроек. |
 | 103 | [Прямые колонки вида и рисунок ПФ](103-route-v3-direct-appearance-columns.md) | accepted | REQ-139: начало/конец/цвет в таблице, рисунок слева. |
 | 105 | [Ширина настроек карточки Route v3](105-route-v3-full-width-card-settings.md) | accepted | REQ-140: окно по ширине экрана, согласованный CSS, таблицы без горизонтального overflow desktop. |
+| 106 | [Рисунки, размещение и подключения оконцовок](106-termination-placement-and-connections.md) | ready-for-review | REQ-141: production SVG, библиотека, вставка мышью, перенос и 2/3/4+ проводов; 2055 тестов PASS. |
