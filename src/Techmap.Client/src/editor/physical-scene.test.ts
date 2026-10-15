@@ -5,6 +5,8 @@ import { physicalSegmentPoints, physicalSegmentControls } from "./physical-geome
 import { physicalNodeFacingDirection } from "./physical-ports";
 import { hitTestWireRoutePoint, objectsInPaintOrder } from "./CanvasViewport";
 import { defaultLayerIds, parseHarnessDesignDocument } from "./model";
+import { drawingRouteHitPoints } from "./drawing-route-path";
+import { projectOntoPolyline } from "./physical-coverings";
 
 it("carries author controls, rendered route and wire identity independently without metadata serialization",()=>{
  const doc=physicalFixture(),before=JSON.stringify(doc),scene=physicalTopologyScene(doc);
@@ -12,10 +14,11 @@ it("carries author controls, rendered route and wire identity independently with
   const pipe=scene.find(o=>o.id===segment.id)!;
   expect(pipe.points).toEqual(physicalSegmentPoints(doc,segment));
   expect(pipeSceneControls(pipe)).toEqual(physicalSegmentControls(doc,segment));
-  expect(pipeSceneHandles(pipe)).toEqual(segment.path.points.length?segment.path.points:pipe.points!.slice(1,-1));
+  expect(pipe.pipe!.handleOrigins).toEqual(segment.path.points.length?segment.path.points:pipe.points!.slice(1,-1));
+  const painted=drawingRouteHitPoints(pipe.points!,pipe.routeRadius);
+  for(const point of pipeSceneHandles(pipe))expect(projectOntoPolyline(painted,point).distance).toBeLessThan(1e-6);
   expect(pipe.metadata?.opacity).toBe("0.72");
-  for(const [i,p] of segment.path.points.entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
-  if(!segment.path.points.length)for(const [i,p] of pipe.points!.slice(1,-1).entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
+  for(const [i,p] of pipeSceneHandles(pipe).entries())expect(hitTestWireRoutePoint(pipe,p,100)).toBe(i);
  }
  expect(pipeSceneWireIds(scene.find(o=>o.id==="S0"))).toEqual(["W1","W2"]);
  expect(JSON.stringify(doc)).toBe(before);

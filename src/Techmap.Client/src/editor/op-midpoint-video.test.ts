@@ -157,8 +157,8 @@ describe("OP midpoint gesture shown in video 14:43", () => {
     const committedScene = memberScene(history.present);
     const newHandle = committedScene.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
     expect(newHandle).toBeGreaterThanOrEqual(0);
-    expect(Math.hypot(committedScene.pipe!.handles[newHandle]!.x - target.x,
-      committedScene.pipe!.handles[newHandle]!.y - target.y)).toBeLessThan(1);
+    expect(committedScene.pipe!.handleOrigins![newHandle]).toEqual(target);
+    expect(distanceToRoute(committedScene.pipe!.handles[newHandle]!,drawingRouteHitPoints(committedScene.points!,24))).toBeLessThan(1e-6);
     expect(parseHarnessDesignDocument(JSON.parse(JSON.stringify(history.present))).physicalTopology)
       .toEqual(history.present.physicalTopology);
     expect(undoEditorCommand(history).present).toEqual(source);
@@ -181,8 +181,8 @@ describe("OP midpoint gesture shown in video 14:43", () => {
     const shown = memberScene(moved);
     const inserted = shown.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
     expect(inserted).toBeGreaterThanOrEqual(0);
-    expect(Math.hypot(shown.pipe!.handles[inserted]!.x - snapped.point.x,
-      shown.pipe!.handles[inserted]!.y - snapped.point.y)).toBeLessThan(1);
+    expect(shown.pipe!.handleOrigins![inserted]).toEqual(snapped.point);
+    expect(distanceToRoute(shown.pipe!.handles[inserted]!,drawingRouteHitPoints(shown.points!,24))).toBeLessThan(1e-6);
     expect(distanceToRoute(snapped.point, drawingRouteHitPoints(shown.points!, 24)))
       .toBeLessThan(24);
   });
@@ -234,8 +234,10 @@ describe("OP midpoint gesture shown in video 14:43", () => {
       const shown = memberScene(document);
       const movedIndex = shown.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
       expect(movedIndex).toBeGreaterThanOrEqual(0);
-      expect(Math.hypot(shown.pipe!.handles[movedIndex]!.x - snap.point.x,
-        shown.pipe!.handles[movedIndex]!.y - snap.point.y)).toBeLessThan(1);
+      const sharp=source.pipe!.handleOrigins![handleIndex]!;
+      expect(shown.pipe!.handleOrigins![movedIndex]!.x).toBeCloseTo(sharp.x+snap.point.x-origin.x);
+      expect(shown.pipe!.handleOrigins![movedIndex]!.y).toBeCloseTo(sharp.y+snap.point.y-origin.y);
+      expect(distanceToRoute(shown.pipe!.handles[movedIndex]!,drawingRouteHitPoints(shown.points!,24))).toBeLessThan(1e-6);
       if (ctrl) {
         expect(snap.guide).toBeDefined();
         expect(distanceToRoute(snap.point, drawingRouteHitPoints(memberScene(document).points!, 24)))
@@ -263,7 +265,7 @@ describe("OP midpoint gesture shown in video 14:43", () => {
     const source = memberScene(created);
     const index = source.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
     const origin = source.pipe!.handles[index]!;
-    const controls = [source.points![0]!, ...source.pipe!.handles, source.points!.at(-1)!];
+    const controls = [source.points![0]!, ...source.pipe!.handleOrigins!, source.points!.at(-1)!];
     const anchors = pipeBendSnapAnchors(source.pipe!, controls, index, false, "adjacent", origin);
     const snapped = snapBendPoint({ x: origin.x + 48, y: origin.y + 41 }, anchors,
       true, 7, origin, Math.PI / 6);
@@ -272,15 +274,16 @@ describe("OP midpoint gesture shown in video 14:43", () => {
       snapped.point, "adjacent", false)!);
     const shown = memberScene(moved);
     const movedIndex = shown.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
-    const nextControls = [shown.points![0]!, ...shown.pipe!.handles, shown.points!.at(-1)!];
+    const nextControls = [shown.points![0]!, ...shown.pipe!.handleOrigins!, shown.points!.at(-1)!];
     const nextPoint = nextControls[movedIndex + 1]!;
     const guideAnchors = snapped.guide!.filter(point => Math.hypot(point.x - snapped.point.x,
       point.y - snapped.point.y) > 1e-6);
     expect(guideAnchors.length).toBeGreaterThan(0);
     for (const guideAnchor of guideAnchors) {
       const sourceNeighbours = [index, index + 2];
-      const sourceIndex = sourceNeighbours.find(i => Math.hypot(controls[i]!.x - guideAnchor.x,
-        controls[i]!.y - guideAnchor.y) < 1)!;
+      const shift={x:origin.x-controls[index+1]!.x,y:origin.y-controls[index+1]!.y};
+      const sourceIndex = sourceNeighbours.find(i => Math.hypot(controls[i]!.x+shift.x - guideAnchor.x,
+        controls[i]!.y+shift.y - guideAnchor.y) < 1)!;
       expect(sourceIndex).toBeDefined();
       const offset = sourceIndex - (index + 1);
       const actual = nextControls[movedIndex + 1 + offset]!;
@@ -467,7 +470,7 @@ describe("OP midpoint gesture shown in video 14:43", () => {
         if (before < 1e-5 || after < 1e-5) continue;
         const cosine = ((b.x-a.x)*(c.x-b.x)+(b.y-a.y)*(c.y-b.y))/(before*after);
         if(cosine<=-.75) {
-          const known=[stops[0]!,...scene.pipe!.handles,stops.at(-1)!];
+          const known=[stops[0]!,...scene.pipe!.handleOrigins!,stops.at(-1)!];
           expect(Math.min(...known.map(point=>Math.hypot(point.x-b.x,point.y-b.y)))).toBeLessThan(1);
         }
       }
@@ -543,7 +546,7 @@ describe("OP midpoint gesture shown in video 14:43", () => {
       joiningPipes:topology.joiningPipes!.map(pipe=>({...pipe,members:pipe.members.map((member,index)=>
         index===1?{...member,authoredBendRegions:[{segmentId:"p1",bendIndex:0,
           region:"before-enter" as const,displayPoint:{x:75,y:178}}]}:member)}))}};
-    const scene=memberScene(source),controls=[scene.points![0]!,...scene.pipe!.handles,scene.points!.at(-1)!];
+    const scene=memberScene(source),controls=[scene.points![0]!,...scene.pipe!.handleOrigins!,scene.points!.at(-1)!];
     const authored=scene.pipe!.authoredHandleIndices!.findIndex(value=>value===1);
     const index=[authored,authored+1].find(value=>scene.pipe!.midpointRegions?.[value]===
       scene.pipe!.authoredHandleRegions?.[authored]&&
@@ -568,7 +571,7 @@ describe("OP midpoint gesture shown in video 14:43", () => {
     const carried=next.pipe!.authoredHandleIndices!.findIndex(value=>value===
       (index===authored?2:1));
     expect(carried).toBeGreaterThanOrEqual(0);
-    const shoulder=next.pipe!.handles[carried]!;
+    const shoulder=next.pipe!.handleOrigins![carried]!;
     const guide=snap.guide![1]!;
     const cross=(shoulder.x-fixed.x)*(guide.y-virtual.y)-
       (shoulder.y-fixed.y)*(guide.x-virtual.x);
@@ -592,8 +595,11 @@ describe("OP midpoint gesture shown in video 14:43", () => {
     const controls = [scene.points![0]!, ...scene.pipe!.handles, scene.points!.at(-1)!];
     const anchors = pipeBendSnapAnchors(scene.pipe!,controls,index,false,"adjacent",origin);
     expect(anchors).toHaveLength(2);
-    expect(anchors).toContainEqual(controls[index]);
-    expect(anchors).toContainEqual(controls[index+2]);
+    const sharp=scene.pipe!.handleOrigins![index]!;
+    for(const neighbour of [index-1,index+1]){
+      const point=neighbour<0?scene.points![0]!:scene.pipe!.handleOrigins![neighbour]??scene.points!.at(-1)!;
+      expect(anchors).toContainEqual({x:point.x+origin.x-sharp.x,y:point.y+origin.y-sharp.y});
+    }
     for (const anchor of anchors) {
       const pointer = { x: anchor.x + 29, y: anchor.y - 13 };
       const snapped = snapBendPoint(pointer,anchors,true,7,origin,Math.PI/6,undefined,"nearest-compatible");
@@ -614,7 +620,8 @@ describe("OP midpoint gesture shown in video 14:43", () => {
         ] } : member) })) } };
     const before = memberScene(source);
     const authored = before.pipe!.authoredHandleIndices!.findIndex(value => value === 1);
-    expect(before.pipe!.handles[authored]).toEqual(displayPoint);
+    expect(before.pipe!.handleOrigins![authored]).toEqual(displayPoint);
+    expect(distanceToRoute(before.pipe!.handles[authored]!,drawingRouteHitPoints(before.points!,24))).toBeLessThan(1e-6);
     const split = { ...source, physicalTopology: splitPhysicalSegment(source,"p1",1,"joint-display","tail-display") };
     for(const document of [split,parseHarnessDesignDocument(JSON.parse(JSON.stringify(split)))]) {
       const head=physicalTopologyScene(document).find(item=>item.id==="p1")!;

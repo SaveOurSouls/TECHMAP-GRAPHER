@@ -124,6 +124,7 @@ export function bendSnapAnchors(points:readonly Point[],index:number,insert:bool
  * neighbouring visible shoulders. */
 export function pipeBendSnapAnchors(pipe:{
   authoredPoints?:readonly Point[];handles:readonly Point[];
+  handleOrigins?:readonly Point[];
   joiningMember?:boolean;
   authoredHandleIndices?:readonly number[];
   joiningTransitionHandles?:readonly {index:number;side:"enter"|"exit"}[];
@@ -132,6 +133,14 @@ export function pipeBendSnapAnchors(pipe:{
   authoredHandleRegions?:readonly (BendRegion|undefined)[];
   midpointRegions?:readonly (BendRegion|undefined)[];
 },displayPoints:readonly Point[],index:number,insert:boolean,mode:PhysicalDragMode,displayOrigin:Point):Point[] {
+  // Angular constraints belong to the control polygon, while the pointer is
+  // on its rounded grip. Translate constraints into the pointer's frame.
+  if(pipe.handleOrigins){
+    const controls=[displayPoints[0]!,...pipe.handleOrigins,displayPoints.at(-1)!];
+    const controlOrigin=insert?displayOrigin:pipe.handleOrigins[index]??displayOrigin;
+    return pipeBendSnapAnchors({...pipe,handleOrigins:undefined},controls,index,insert,mode,controlOrigin)
+      .map(anchor=>({x:anchor.x+displayOrigin.x-controlOrigin.x,y:anchor.y+displayOrigin.y-controlOrigin.y}));
+  }
   const transition=!insert?pipe.joiningTransitionHandles?.find(handle=>handle.index===index):undefined;
   if(transition&&mode==="carry"){
     const at=index+1,step=transition.side==="enter"?-1:1;

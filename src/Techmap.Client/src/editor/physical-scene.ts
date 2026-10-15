@@ -5,7 +5,7 @@ import { physicalNodePoint, physicalNodeFacingDirection } from "./physical-ports
 import { drawingPipeWidth } from "./drawing-thickness";
 import { defaultLayerIds } from "./model";
 import { physicalEditablePoints } from "./physical-editing";
-import { drawingBendRadius, drawingRouteSamples, projectOntoDrawingRoute } from "./drawing-route-path";
+import { drawingBendRadius, drawingRouteSamples, drawingRouteHitPoints, projectOntoDrawingRoute } from "./drawing-route-path";
 import { hasPipeBundleProjection, pipeBundleDisplaySamples, projectPipeBundleControls, pipeBundleNodePoint,pipeBundleDepth } from "./pipe-bundle-projection";
 import { joiningPipePoints, joiningPipeEndpointId, joiningPipeExitId, joiningPipeExitPoint } from "./physical-joining-pipes";
 import { joiningPipeDisplaySamples,joiningPipeMemberControls,joiningPipeWidth,joiningPipeControlsMemberStation,joiningPipeAuthoredHandle,joiningPipeMidpointRegion } from "./physical-joining-pipe-projection";
@@ -64,17 +64,14 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const editable = projectPipeBundleControls(document, segment.id, authored);
     const display = pipeBundleDisplaySamples(document, segment.id);
     const route=physicalSegmentPoints(document,segment);
-    // Route painting rounds sharp authored corners. Keep ordinary physical
-    // segment grips on that same visible route; OP member stations and bundled
-    // projections already own their display coordinates and must not be
-    // re-projected here.
+    // Projection supplies sharp control corners; painting also rounds the
+    // member shoulders. Resolve every grip on that final painted route.
     const painted = display?.map(sample=>sample.point)??route;
     const radius = display&&!joiningPipeDisplaySamples(document,segment.id)?0:drawingBendRadius(document);
+    const paintedPoints=drawingRouteHitPoints(painted,radius);
     const alignToPaintedRoute = (point: EditorPoint) => {
-      if (joiningPipeMemberControls(document,segment.id) || hasPipeBundleProjection(document,segment.id)) return point;
-      const samples = drawingRouteSamples(painted, radius).map(sample => sample.point);
-      return samples.reduce((best, candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <
-        Math.hypot(best.x - point.x, best.y - point.y) ? candidate : best, point);
+      const projected=projectOntoPolyline(paintedPoints,point);
+      return projected.distance<1e-7?point:projected.point;
     };
     const controlled=(point:EditorPoint)=>joiningPipeControlsMemberStation(document,segment.id,projectOntoPolyline(route,point).fraction);
     const generatedControls=joiningPipeMemberControls(document,segment.id);
@@ -84,7 +81,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
     const authoredHandles:SceneControl[]=editable.slice(1,-1).map((point,index)=>{
       const fixed=joiningPipeAuthoredHandle(document,segment.id,index),fraction=fixed?.fraction??projectOntoPolyline(route,authored[index+1]!).fraction;
       const authoredRegion=member?.authoredBendRegions?.find(entry=>entry.segmentId===segment.id&&entry.bendIndex===index)?.region;
-      return {fraction,point:alignToPaintedRoute(fixed?.point??point),authoredIndex:index+1,authoredRegion,
+      return {fraction,point:fixed?.point??point,authoredIndex:index+1,authoredRegion,
         // OP axis stations are derived controls.  A fresh member P, however,
         // still owns its automatically generated outer corners and must expose
         // them to the first move/delete gesture.
@@ -112,12 +109,16 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
         }
         handles.push(handle);return handles;
       },[]);
-    const handles=mergedHandles.map(handle=>handle.point);
+    const handleOrigins=mergedHandles.map(handle=>handle.point);
+    const handles=handleOrigins.map(alignToPaintedRoute);
     const authoredHandleIndices=mergedHandles.map(handle=>handle.authoredIndex??-1);
     const authoredHandleRegions=mergedHandles.map(handle=>handle.authoredRegion);
     const joiningTransitionHandleData=mergedHandles.flatMap((handle,index)=>handle.transition?[{index,memberIndex:handle.transition.memberIndex,side:handle.transition.side}]:[]);
     const joiningBoundaryHandleData=mergedHandles.flatMap((handle,index)=>handle.boundary?[{index,memberIndex:handle.memberIndex!,boundary:handle.boundary}]:[]);
-    const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>handle.controlled?[index]:[]);
+    const controlledHandleIndices=mergedHandles.flatMap((handle,index)=>{
+      const automaticOuter=handle.boundary==="outerEnter"&&member?.enterOuter===undefined||handle.boundary==="outerExit"&&member?.exitOuter===undefined;
+      return handle.controlled||automaticOuter?[index]:[];
+    });
     const routeControls:SceneControl[]=[{fraction:0,point:editable[0]!,controlled:false},...mergedHandles,{fraction:1,point:editable.at(-1)!,controlled:false}];
     const rounded=drawingRouteSamples(painted,radius);
     const pointAtDistance=(distance:number):EditorPoint=>{
@@ -174,6 +175,7 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
       authoredPoints: authored,
       controls: controls,
       handles,
+      handleOrigins,
       authoredHandleIndices,
       authoredHandleRegions,
       midpoints,
@@ -191,11 +193,12 @@ export function physicalTopologyScene(document: HarnessDesignDocument): EditorSc
   });
   const joining: EditorSceneObject[] = (topology.joiningPipes??[]).map((pipe,i)=>{
     const authored=joiningPipePoints(pipe), display=authored;
-    const controls=authored,handles=pipe.path.points;
+    const controls=authored,painted=drawingRouteHitPoints(authored,drawingBendRadius(document));
+    const handles=pipe.path.points.map(point=>projectOntoPolyline(painted,point).point);
     const midpoints=authored.slice(1).map((p,j)=>({x:(p.x+authored[j]!.x)/2,y:(p.y+authored[j]!.y)/2}));
     const wireIds=[...new Set(pipe.members.flatMap(m=>m.segmentIds).flatMap(id=>topology.routes.filter(route=>route.steps.some(step=>step.segmentId===id)).map(route=>route.wireId)))];
     return {id:pipe.id,kind:"physical-segment" as const,label:`ОП${i+1}`,layerId:"wires",x:0,y:0,width:joiningPipeWidth(document,pipe),height:0,color:pipe.color??"#aebfc9",points:display,paths:[display],routeRadius:drawingBendRadius(document),
-      pipe:{role:"joining-pipe" as const,authoredPoints:authored,fromNodeId:joiningPipeEndpointId(pipe.id,"from"),toNodeId:joiningPipeEndpointId(pipe.id,"to"),controls,handles,midpoints,wireIds,memberSegmentIds:pipe.members.flatMap(m=>m.segmentIds)},
+      pipe:{role:"joining-pipe" as const,authoredPoints:authored,fromNodeId:joiningPipeEndpointId(pipe.id,"from"),toNodeId:joiningPipeEndpointId(pipe.id,"to"),controls,handles,handleOrigins:pipe.path.points,midpoints,wireIds,memberSegmentIds:pipe.members.flatMap(m=>m.segmentIds)},
       metadata:{joiningPipe:"true",opacity:String(document.drawingDocuments?.pipeOpacity??.72),volumeShading:String(pipe.volumeShading??document.drawingDocuments?.volumeShading!==false)}};
   });
   const nodes: EditorSceneObject[] = topology.nodes.map((node, i) => {

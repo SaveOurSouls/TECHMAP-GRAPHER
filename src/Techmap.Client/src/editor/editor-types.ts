@@ -31,6 +31,8 @@ export interface PhysicalPipeSceneData {
   readonly midpointRegions?: readonly ("before-enter"|"enter"|"axis"|"exit"|"after-exit"|undefined)[];
   readonly controls: readonly EditorPoint[];
   readonly handles: readonly EditorPoint[];
+  /** Sharp display controls corresponding to the rounded, painted grips. */
+  readonly handleOrigins?: readonly EditorPoint[];
   readonly wireIds: readonly string[];
   readonly role?: "pipe" | "joining-pipe";
   readonly joiningMember?: boolean;
