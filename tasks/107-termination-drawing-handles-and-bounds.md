@@ -1,6 +1,7 @@
 # 107. Ручки и границы оконцовок на Чертеже
 
 - Статус: ready-for-review; приёмка владельцем открыта.
+- Код: `72aa5ddcf6871dec5f6e06d1eabb5a3195720848`, опубликован в origin/codex/integration-m5-22; handoff/coverage заполнены.
 - Источник: прямое поручение 15.10.2026, С1 — точка соединения не перемещается; С2 — большой контур/далёкая выноска T1. REQ-142 уточняет REQ-141/135.
 - Чат 01a13a64-e264-7a03-8198-49dae2c51bee, основной worktree codex/integration-m5-22.
 - Root: CanvasViewport/жесты, документы и интеграция. artwork_sol: termination-scene.ts, компактные границы и тесты. architecture_sol: physical-topology.ts/physical-ports.ts и тесты новых выходов. review_luna: независимый read-only review. Общие файлы меняет root.

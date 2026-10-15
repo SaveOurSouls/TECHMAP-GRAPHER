@@ -2,6 +2,8 @@
 
 ## 107 — ручки и границы оконцовок, 15.10.2026
 
+Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в integration-ветке; handoff/coverage заполнены.
+
 Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Root — CanvasViewport/жесты/docs; artwork_sol — termination-scene, границы и тесты; architecture_sol — physical-topology/physical-ports и тесты; review_luna — read-only review. REQ-142/141/135, карточка 107. PASS: Vitest 206/2169, TypeScript/Vite, browser, diff-check; замечание review устранено. Coverage: следующий срез после M5-22-048; ZIP не заказан, приёмка владельцем открыта.
 
 ## 106 — исправление оконцовок по С1–С4, 15.10.2026

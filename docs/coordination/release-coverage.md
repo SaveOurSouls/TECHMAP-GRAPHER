@@ -1,5 +1,9 @@
 # Release coverage
 
+## 107 — физическая точка и компактные границы, 15.10.2026
+
+REQ-142/141/135, карточка107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в `origin/codex/integration-m5-22` и подтверждён в integration HEAD (ancestry). [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Coverage — следующий срез после M5-22-048, прежний ZIP не обновлён; сборщик подтверждает SHA и handoff в собираемом HEAD. Приёмка владельцем открыта.
+
 ## 106 — рисунки, размещение и подключения оконцовок, 15.10.2026
 
 REQ-141/135, [карточка 106](../../tasks/106-termination-placement-and-connections.md). Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` опубликован в `origin/codex/integration-m5-22`; находится в integration HEAD, ancestry проверен. [Handoff](agent-handoff.md), [протокол](../termination-106-acceptance.md). Полный Vitest 204/2055, TypeScript/Vite/.NET Release, production HTTP и browser PASS. Ready-for-review.
