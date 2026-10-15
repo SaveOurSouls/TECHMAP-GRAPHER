@@ -1,3 +1,4 @@
+import { buildRouteV3SourceItems } from './route-v3-wire-terminals';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
@@ -6,7 +7,7 @@ import type { EditorSceneObject } from "../editor/editor-types";
 import { designToScene, HarnessDesignEditor } from "../editor/HarnessDesignEditor";
 import { createHarnessDesignApi } from "../editor/design-api";
 import { useCoveringAssets } from "../editor/covering-assets";
-import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { type RouteSourceRef } from "../manufacturing/route-source";
 import { createIndependentIsolatedDocument, createRouteDrawingCopy } from "../manufacturing/route-drawing-copy";
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview } from "../manufacturing/RouteAssemblyDrawing";
 import type { RouteRow } from "../manufacturing/route-model";
@@ -71,7 +72,7 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   const [preview, setPreview] = useState<RouteV3Node | null>(null);
   const [refreshOpen, setRefreshOpen] = useState(false);
   const sourceRefresh = useMemo(() => previewRouteV3SourceRefresh(route, source, harnessQuantity), [route, source, harnessQuantity]);
-  const sources = useMemo(() => buildRouteSourceItems(source), [source]);
+  const sources = useMemo(() => buildRouteV3SourceItems(source), [source]);
   const sourceScene = useMemo(() => designToScene(source, "drawing"), [source]);
   const revealed = useMemo(() => revealedRouteV3Ids(route), [route.fragments]);
   const hidden = useMemo(() => sourceScene.filter(object => !revealed.includes(object.id)).map(object => object.id), [sourceScene, revealed]);

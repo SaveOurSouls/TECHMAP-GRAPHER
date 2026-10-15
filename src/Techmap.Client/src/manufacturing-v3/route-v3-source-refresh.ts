@@ -1,6 +1,8 @@
+import { buildRouteV3SourceItems } from './route-v3-wire-terminals';
 import { usedTerminationArtifactIds } from '../editor/termination-model';
+import { routeV3EmbeddedArtifactOwners, routeV3WireEndArtifacts } from './route-v3-wire-terminals';
 import type { HarnessDesignDocument, WireEndpoint } from "../editor/model";
-import { buildRouteSourceItems, type RouteSourceRef } from "../manufacturing/route-source";
+import { type RouteSourceRef } from "../manufacturing/route-source";
 import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
 import type { RouteV3Document } from "./route-v3-model";
 import {routeV3TerminationOperationRefs} from './route-v3-operations';
@@ -38,11 +40,12 @@ const materialIdentity = (binding: { readonly sourceId: string; readonly snapsho
 
 /** Capture manufacturing identity, not drawing/E4 line geometry or viewport state. */
 export function captureRouteV3SourceState(source: HarnessDesignDocument, harnessQuantity = 1): RouteV3SourceState {
-  const items = buildRouteSourceItems(source);
+  const items = buildRouteV3SourceItems(source);
   const byKey = new Map(items.map(item => [refKey(item.ref), item]));
   const nodes = new Map(source.physicalTopology?.segments.map(segment => [segment.id, segment]) ?? []);
   const physicalRoutes = new Map(source.physicalTopology?.routes.map(route => [route.wireId, route]) ?? []);
   const objects: RouteV3SourceObject[] = [];
+  const embeddedArtifacts = routeV3EmbeddedArtifactOwners(source);
   for (const wire of source.wires) {
     const item = byKey.get(`wire:${wire.id}`)!;
     const physicalPath = physicalRoutes.get(wire.id)?.steps.flatMap((step, index) => {
@@ -56,7 +59,8 @@ export function captureRouteV3SourceState(source: HarnessDesignDocument, harness
     const groups=source.terminations?.groups.filter(g=>g.memberEnds.some(e=>e.wireId===wire.id)).map(g=>({id:g.id,target:g.target,artifactId:g.artifactId,memberEnds:[...g.memberEnds].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))})).sort((a,b)=>a.id.localeCompare(b.id))??[];
     const twists=source.terminations?.twists.filter(t=>t.memberWireIds.includes(wire.id)).sort((a,b)=>a.id.localeCompare(b.id))??[];
     const operations=source.terminations?.operations.filter(o=>{const t=o.target;return t.kind==='wireEnd'?t.wireId===wire.id:t.kind==='group'?groups.some(g=>g.id===t.groupId):t.kind==='twist'?twists.some(g=>g.id===t.twistId):[wire.from,wire.to].some(e=>e.connectorId===t.connectorId&&t.contactIds.includes(e.contactId));}).sort((a,b)=>a.id.localeCompare(b.id))??[];
-    objects.push({ ref: item.ref, attachment: stable({ electrical: pair(endpoint(wire.from), endpoint(wire.to)), physicalPath, ...(groups.length?{groups}:{}), ...(twists.length?{twists}:{} ) }), specification: stable({ lengthMm: item.lengthMm, material: materialIdentity(wire.materialBinding), materialName: item.material, article: item.materialArticle, section: item.section, color: item.color, terminalFrom: item.terminalFrom, terminalTo: item.terminalTo, stripProfiles: wire.stripProfiles ?? null, ...(preparations.length?{preparations}:{}),...(operations.length?{operations}:{}) }) });
+    const endArtifacts = [...routeV3WireEndArtifacts(source,wire.id,'from'), ...routeV3WireEndArtifacts(source,wire.id,'to')];
+    objects.push({ ref: item.ref, attachment: stable({ electrical: pair(endpoint(wire.from), endpoint(wire.to)), physicalPath, ...(groups.length?{groups}:{}), ...(twists.length?{twists}:{} ) }), specification: stable({ lengthMm: item.lengthMm, material: materialIdentity(wire.materialBinding), materialName: item.material, article: item.materialArticle, section: item.section, color: item.color, terminalFrom: item.terminalFrom, terminalTo: item.terminalTo, stripProfiles: wire.stripProfiles ?? null, ...(preparations.length?{preparations}:{}),...(operations.length?{operations}:{}), ...(endArtifacts.length?{endArtifacts}:{}) }) });
   }
   for (const cable of source.cables) {
     const item = byKey.get(`cable:${cable.id}`)!;
@@ -75,7 +79,7 @@ export function captureRouteV3SourceState(source: HarnessDesignDocument, harness
     const groups=source.terminations?.groups.filter(g=>g.artifactId===artifact.id).map(g=>({...g,memberEnds:[...g.memberEnds].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))})).sort((a,b)=>a.id.localeCompare(b.id))??[];
     const owners=source.connectors.filter(c=>c.terminationComponent?.artifactId===artifact.id);
     const operations=source.terminations?.operations.filter(o=>{const t=o.target;return t.kind==='group'?groups.some(g=>g.id===t.groupId):t.kind==='portSet'?owners.some(c=>c.id===t.connectorId):t.kind==='wireEnd'?groups.some(g=>g.memberEnds.some(e=>e.wireId===t.wireId&&e.end===t.end)):false;}).sort((a,b)=>a.id.localeCompare(b.id))??[];
-    objects.push({ref:{kind:'termination-artifact',id:artifact.id},attachment:stable({groups,components:owners.map(c=>({id:c.id,component:c.terminationComponent})).sort((a,b)=>a.id.localeCompare(b.id))}),specification:stable({artifact,operations})});
+    if (!embeddedArtifacts.has(artifact.id)) objects.push({ref:{kind:'termination-artifact',id:artifact.id},attachment:stable({groups,components:owners.map(c=>({id:c.id,component:c.terminationComponent})).sort((a,b)=>a.id.localeCompare(b.id))}),specification:stable({artifact,operations})});
   }
   for (const connector of source.connectors.filter(c=>!c.terminationComponent)) {
     const item = byKey.get(`connector:${connector.id}`)!;
@@ -114,6 +118,9 @@ export function previewRouteV3SourceRefresh(route: RouteV3Document, source: Harn
     const ref=routeV3TerminationOperationRefs(source,operation.id)[0];
     if(ref&&!divergences.some(d=>refKey(d.ref)===refKey(ref)&&d.kind==='specification'))add(ref,'specification','Операция отсутствует в маршруте',operation.recipe?.displayName??operation.kind);
   }
+  for (const ref of route.preparedRefs.filter(ref=>ref.kind==='termination-artifact'&&source.terminations?.artifacts.some(a=>a.id===ref.id&&a.kind==='sleeve'))) {
+    if (!divergences.some(d=>refKey(d.ref)===refKey(ref))) add(ref,'specification','Гильза выделена как подготовленный полуфабрикат','Гильза устанавливается отдельным этапом маршрута');
+  }
   return { changed: divergences.length > 0 || route.sourceState.presentation !== nextSourceState.presentation || route.sourceState.harnessQuantity !== nextSourceState.harnessQuantity, divergences, nextSourceState };
 }
 
@@ -125,7 +132,7 @@ export function applyRouteV3SourceRefresh(route: RouteV3Document, preview: Route
   const preparedRefs = preview.nextSourceState.objects.filter(o => o.ref.kind === 'termination-artifact' || o.ref.kind === "cable" || o.ref.kind === "covering" || o.ref.kind === "wire" && !cableMembers.has(o.ref.id)).map(o => o.ref);
   const priorResolved = new Set(route.sourceDivergences?.filter(issue => issue.resolved).map(issue => issue.key) ?? []);
   const editable = editableRouteV3(route);
-  const next = { ...editable, preparedRefs, sourceState: preview.nextSourceState, sourceDivergences: preview.divergences.map(issue => priorResolved.has(issue.key) ? { ...issue, resolved: true } : issue), nodes: editable.nodes.map(node => node.id.startsWith("prepared:") ? { ...node, operatorConfirmed: false, rawRefs: preparedRefs.filter(ref => `prepared:${ref.kind}` === node.id) } : node) };
+  const next = { ...editable, preparedRefs, sourceState: preview.nextSourceState, sourceDivergences: preview.divergences.map(issue => priorResolved.has(issue.key) ? { ...issue, resolved: true } : issue), nodes: editable.nodes.map(node => node.id.startsWith("prepared:") ? { ...node, operatorConfirmed: false, rawRefs: node.id === 'prepared:termination-artifact' ? node.rawRefs : preparedRefs.filter(ref => `prepared:${ref.kind}` === node.id) } : node) };
   return refreshRouteV3(next);
 }
 export function resolveRouteV3SourceDivergence(route: RouteV3Document, key: string): RouteV3Document {
