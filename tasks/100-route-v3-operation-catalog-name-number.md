@@ -22,5 +22,5 @@
 - Профильный и полный Vitest, TypeScript, Vite build, staged diff-check; доступный UI QA.
 - Полный Vitest: 195 файлов / 1878 тестов, PASS. TypeScript и Vite build: PASS. Первый запуск в sandbox дал ENOENT во временном каталоге; разрешённый повторный прогон прошёл.
 - Browser plugin и локальный Playwright отсутствуют; выбор в живом интерфейсе и packaged UI не проверены вручную.
-- Кодовый SHA: —
-- Handoff: —
+- Кодовый SHA: `4f4e1c4`, опубликован в `origin/codex/integration-m5-22`.
+- Handoff: в `docs/coordination/agent-handoff.md`; сборщику проверить ancestry этого SHA в следующем ZIP HEAD.

@@ -4,7 +4,7 @@
 
 | Роль | Чат / Thread ID | Ветка / worktree | Владелец файлов | Release coverage |
 | --- | --- | --- | --- | --- |
-| Координатор и исполнитель | `/root`, текущий чат | `codex/integration-m5-22`, основной | `manufacturing-v3/RouteV3Graph.tsx`, `route-v3-operations.ts`, новый helper/тесты; документы 100/REQ-136/handoff | следующий ZIP после handoff; ZIP не заказан |
+| Координатор и исполнитель | `/root`, текущий чат | `codex/integration-m5-22`, основной | `manufacturing-v3/RouteV3Graph.tsx`, `route-v3-operations.ts`, профильные тесты; документы 100/REQ-136/handoff | ready-for-review; код `4f4e1c4` опубликован, следующий ZIP после интеграционного gate |
 
 ## Карточка 099 — 14.10.2026: проектирование оконцовок
 

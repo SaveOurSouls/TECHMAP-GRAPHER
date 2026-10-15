@@ -1,5 +1,13 @@
 # Шаблон handoff от чата задачи
 
+## 100 — БД.ОП по названию и номеру, 15.10.2026
+
+- Чат `/root`, ветка `codex/integration-m5-22`, основной worktree; статус ready-for-review.
+- Код `4f4e1c4` опубликован в `git@github.com:SaveOurSouls/TECHMAP-GRAPHER.git`. REQ-136 / tasks/100: первый уровень по `name` («Название»), второй показывает `sourceKey` («Номер») только выбранного названия; тип визуально третичен. Точная запись `recordId` и нормы сохранены.
+- Проверки: Vitest 195 файлов / 1878 тестов PASS, TypeScript PASS, Vite production build PASS, staged diff-check PASS. Первый sandbox-прогон Vitest дал ENOENT во временном каталоге; повтор вне этого ограничения прошёл.
+- Ограничение: Browser plugin и локальный Playwright недоступны; живой UI и packaged Windows UI вручную не проверены. ZIP не запрошен.
+- Сборщику: подтвердить `4f4e1c4` как ancestor собираемого HEAD и отметить release coverage.
+
 ## 099 — Сквозное проектирование многопроводных оконцовок, 14.10.2026
 
 - Статус: ready-for-review. Чат `01a13a64-e264-7a03-8198-49dae2c51bee`; координатор `/root`, архитектура/рисунки Sol, проверка Luna. Terra недоступна и не запускалась.
