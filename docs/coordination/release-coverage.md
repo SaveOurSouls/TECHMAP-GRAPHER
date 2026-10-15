@@ -1,5 +1,11 @@
 # Release coverage
 
+## 108 — управление составом П, 15.10.2026
+
+REQ-143, [карточка108](../../tasks/108-pipe-wire-membership.md). Код `2ce6e70a854856f092b14c6e0fa26cbe1226835b` опубликован в `origin/codex/integration-m5-22`, подтверждён в integration HEAD через ancestry. [Handoff](agent-handoff.md), [протокол](../pipe-membership-108-acceptance.md). Полный Vitest 208/2187, TypeScript/Vite/.NET Release, 75 целевых серверных тестов, browser/review/diff-check PASS. Ready-for-review.
+
+Coverage — следующий срез после M5-22-048 вместе с непоставленной107; прежний ZIP не обновлён. Перед упаковкой сборщик подтверждает код и handoff в своём HEAD. Приёмка владельцем открыта.
+
 ## 107 — физическая точка и компактные границы, 15.10.2026
 
 REQ-142/141/135, карточка107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в `origin/codex/integration-m5-22` и подтверждён в integration HEAD (ancestry). [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Coverage — следующий срез после M5-22-048, прежний ZIP не обновлён; сборщик подтверждает SHA и handoff в собираемом HEAD. Приёмка владельцем открыта.

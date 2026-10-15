@@ -2,6 +2,8 @@
 
 ## 108 — состав проводов П, 15.10.2026
 
+Код `2ce6e70a854856f092b14c6e0fa26cbe1226835b` опубликован в integration-ветке; handoff/coverage заполнены.
+
 Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Root — UI/интеграция/docs; architecture_sol — маршрутизация/helper/клиентские тесты; review_luna — серверная валидация/копирование/серверные тесты. REQ-143, карточка108. PASS: Vitest 208/2187, TypeScript/Vite/.NET Release, 75 целевых серверных тестов, browser/review/diff-check. Coverage: следующий срез после M5-22-048; ZIP не заказан, приёмка владельцем открыта.
 
 ## 107 — ручки и границы оконцовок, 15.10.2026
