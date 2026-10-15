@@ -1,6 +1,6 @@
 import type {Point} from "./model";
 
-export interface ParallelSegment {readonly index:number;readonly start:Point;readonly end:Point;readonly orientation:"horizontal"|"vertical"}
+export interface ParallelSegment {readonly index:number;readonly endIndex?:number;readonly start:Point;readonly end:Point;readonly orientation:"horizontal"|"vertical"}
 export interface ParallelSpan {
   readonly orientation:"horizontal"|"vertical";
   /** Oblique spans use an orthonormal frame (along, cross). Axis spans keep world coordinates. */
@@ -58,20 +58,41 @@ export function commonParallelSpan(paths:readonly {id:string;points:readonly Poi
  * real conductors. Vertical and oblique spans remain valid for other E4
  * features, such as screens, but never become the differential pair body. */
 export function commonHorizontalPairSpan(paths:readonly {id:string;points:readonly Point[]}[]):ParallelSpan|null {
-  if(paths.length!==2)return null;
-  const horizontal=paths.map(path=>path.points.slice(1).flatMap((end,index)=>{
-    const start=path.points[index]!;
-    if(Math.abs(end.y-start.y)>1e-7||Math.abs(end.x-start.x)<1e-7)return [];
-    return [{index,start,end,minimum:Math.min(start.x,end.x),maximum:Math.max(start.x,end.x)}];
-  }));
-  let best:ParallelSpan|null=null;
-  for(const first of horizontal[0]??[])for(const second of horizontal[1]??[]){
-    const start=Math.max(first.minimum,second.minimum),end=Math.min(first.maximum,second.maximum);
-    if(end-start<1e-7||best&&best.end-best.start>=end-start-1e-7)continue;
-    best={orientation:"horizontal",start,end,crossMinimum:Math.min(first.start.y,second.start.y),
+  return commonHorizontalPairSpans(paths).sort((a,b)=>(b.end-b.start)-(a.end-a.start))[0]??null;
+}
+
+/** Maximal straight runs; handles do not interrupt a twist. Original indices
+ * remain available to callers that edit the underlying conductor geometry. */
+export function commonHorizontalPairSpans(paths:readonly {id:string;points:readonly Point[]}[]):ParallelSpan[] {
+  if(paths.length!==2)return [];
+  const horizontal=paths.map(path=>{
+    const runs:ParallelSegment[]=[];
+    for(let index=0;index<path.points.length-1;index++){
+      const start=path.points[index]!,end=path.points[index+1]!;
+      if(Math.hypot(end.x-start.x,end.y-start.y)<1e-7)continue;
+      if(Math.abs(end.y-start.y)>1e-7)continue;
+      const last=runs.at(-1);
+      if(last&&Math.abs(last.end.x-start.x)<1e-7&&Math.abs(last.end.y-start.y)<1e-7&&
+          path.points.slice(last.endIndex,index+1).every(p=>Math.hypot(p.x-start.x,p.y-start.y)<1e-7)&&
+          (last.end.x-last.start.x)*(end.x-start.x)>0){
+        runs[runs.length-1]={...last,end,endIndex:index+1};
+      }else runs.push({index,endIndex:index+1,start,end,orientation:'horizontal'});
+    }
+    return runs;
+  });
+  const candidates:ParallelSpan[]=[];
+  for(const first of horizontal[0]!)for(const second of horizontal[1]!){
+    const start=Math.max(Math.min(first.start.x,first.end.x),Math.min(second.start.x,second.end.x));
+    const end=Math.min(Math.max(first.start.x,first.end.x),Math.max(second.start.x,second.end.x));
+    if(end-start<1e-7)continue;
+    candidates.push({orientation:'horizontal',start,end,crossMinimum:Math.min(first.start.y,second.start.y),
       crossMaximum:Math.max(first.start.y,second.start.y),firstWireDirection:first.end.x>=first.start.x?1:-1,
-      segmentByWireId:{[paths[0]!.id]:{index:first.index,start:first.start,end:first.end,orientation:"horizontal"},
-        [paths[1]!.id]:{index:second.index,start:second.start,end:second.end,orientation:"horizontal"}}};
+      segmentByWireId:{[paths[0]!.id]:first,[paths[1]!.id]:second}});
   }
-  return best;
+  // A folded conductor may have multiple return legs over the same interval.
+  // Prefer its adjacent companion instead of drawing across a different run.
+  return candidates.filter(span=>!paths.every(path=>candidates.some(other=>other!==span&&
+    other.crossMaximum-other.crossMinimum<span.crossMaximum-span.crossMinimum-1e-7&&
+    other.segmentByWireId[path.id]===span.segmentByWireId[path.id])))
+    .sort((a,b)=>a.segmentByWireId[paths[0]!.id]!.index-b.segmentByWireId[paths[0]!.id]!.index||a.start-b.start);
 }

@@ -3,7 +3,7 @@ import { drawingEndArtworkPlacement } from './preparation-drawing';
 import { terminationSceneBounds, terminationSceneContainsPoint } from "./termination-scene";
 import { placementSceneObject } from "./termination-placement-interaction";
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
-import { commonParallelSpan, commonHorizontalPairSpan, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
+import { commonParallelSpan, commonHorizontalPairSpans, parallelSpanWorld, parallelSpanLocal, type ParallelSpan } from "./e4-parallel-spans";
 import { intersectSegments, segmentsParallel } from "./segment-geometry";
 import type { PhysicalDragMode } from "./physical-editing";
 import { snapPhysicalPoint, snapBendPoint, bendSnapAnchors, pipeBendSnapAnchors, joiningPipeEndpointSnapAnchors, physicalObjectSnapAnchors, physicalObjectRouteAnchors, type BendSnapState } from "./physical-editing";
@@ -359,23 +359,6 @@ function samePoint(left: EditorPoint, right: EditorPoint): boolean {
   return Math.abs(left.x - right.x) < 0.000001 && Math.abs(left.y - right.y) < 0.000001;
 }
 
-function orthogonalE4Bend(point: EditorPoint, original: EditorPoint, route: readonly EditorPoint[]): EditorPoint {
-  const index = route.findIndex(candidate => samePoint(candidate, original));
-  if (index <= 0 || index >= route.length - 1) return point;
-  const previous = route[index - 1]!;
-  const next = route[index + 1]!;
-  // A corner is defined by its two neighbours. Choosing one shared axis for
-  // each adjacent segment keeps both shoulders orthogonal even when a legacy
-  // route already contains a diagonal segment or a carried junction.
-  const candidates = [
-    { x: previous.x, y: next.y },
-    { x: next.x, y: previous.y },
-  ];
-  return candidates.sort((left, right) =>
-    Math.hypot(left.x - point.x, left.y - point.y) -
-    Math.hypot(right.x - point.x, right.y - point.y))[0]!;
-}
-
 /** The scene owns routing. Painting and hit testing use exactly the same supplied points. */
 export function getE4WireRoute(object: EditorSceneObject): readonly EditorPoint[] {
   return object.points ?? [];
@@ -681,8 +664,15 @@ export function getE4DifferentialPairLayout(
   group: E4DifferentialPairOverlay,
   objects: readonly EditorSceneObject[],
 ): E4DifferentialPairLayout | null {
-  const common = commonHorizontalPairSpan(group.wireIds.map(id => ({id,points:objects.find(o=>o.id===id&&o.kind==="wire")?.points??[]})));
-  if (!common) return null;
+  return getE4DifferentialPairLayouts(group,objects).sort((a,b)=>(b.span.end-b.span.start)-(a.span.end-a.span.start))[0]??null;
+}
+
+export function getE4DifferentialPairLayouts(group:E4DifferentialPairOverlay,objects:readonly EditorSceneObject[]):E4DifferentialPairLayout[] {
+  return commonHorizontalPairSpans(group.wireIds.map(id=>({id,points:objects.find(o=>o.id===id&&o.kind==="wire")?.points??[]})))
+    .flatMap(common=>pairLayoutsOnSpan(group,objects,common));
+}
+
+function pairLayoutsOnSpan(group:E4DifferentialPairOverlay,objects:readonly EditorSceneObject[],common:E4ParallelSpan):E4DifferentialPairLayout[] {
   const tables=objects.filter(object=>object.kind==="connector").map(table=>{
     if(!common.direction)return table;
     const corners=[{x:table.x,y:table.y},{x:table.x+table.width,y:table.y},{x:table.x,y:table.y+table.height},{x:table.x+table.width,y:table.y+table.height}].map(p=>parallelSpanLocal(common,p));
@@ -700,10 +690,8 @@ export function getE4DifferentialPairLayout(
     crossMinimum: compactCrossCenter - crossGap / 2,
     crossMaximum: compactCrossCenter + crossGap / 2,
   };
-  const span = clearDecorationSpans([compactCommon], tables, 10,
-    item => Math.max(group.amplitude * 2, item.crossMaximum - item.crossMinimum))
-    .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
-  if (!span) return null;
+  return clearDecorationSpans([compactCommon], tables, 10,
+    item => Math.max(group.amplitude * 2, item.crossMaximum - item.crossMinimum)).map(span=>{
   const available = span.end - span.start;
   // Keep the visible pitch at the smallest readable E4 increment. The stored
   // physical pitch may be larger, but it must not make a long common span look
@@ -737,6 +725,7 @@ export function getE4DifferentialPairLayout(
       };
     }),
   };
+  });
 }
 
 export function getE4ScreenLayout(
@@ -804,14 +793,14 @@ export function hitTestE4DifferentialPair(
   const visibleObjects = layers ? objectsInPaintOrder(objects, layers) : objects;
   for (const group of [...groups].reverse()) {
     if (layers && !isE4OverlayVisible(group.wireIds, objects, layers)) continue;
-    const layout = getE4DifferentialPairLayout(group, visibleObjects);
-    if (!layout) continue;
+    for(const layout of getE4DifferentialPairLayouts(group, visibleObjects)){
     const local=parallelSpanLocal(layout.span,point);
     const along = local.x;
     const cross = local.y;
     if (cross < layout.crossMinimum - tolerance || cross > layout.crossMaximum + tolerance) continue;
     if (layout.motifs.some((motif) => along >= motif.from - tolerance && along <= motif.to + tolerance)) {
       return layout;
+    }
     }
   }
   return null;
@@ -2460,8 +2449,7 @@ export function drawE4DifferentialPairs(
   objects: readonly EditorSceneObject[],
 ) {
   for (const group of groups) {
-    const layout = getE4DifferentialPairLayout(group, objects);
-    if (!layout) continue;
+    for(const layout of getE4DifferentialPairLayouts(group, objects)){
     const span = layout.span;
     const first = objects.find((object) => object.id === group.wireIds[0]);
     const second = objects.find((object) => object.id === group.wireIds[1]);
@@ -2552,6 +2540,7 @@ export function drawE4DifferentialPairs(
         drawLane(layout.crossMaximum, afterSwap ? first.color : second.color);
       }
       context.restore();
+    }
     }
   }
 }
@@ -2806,10 +2795,10 @@ export function getEditorSceneBounds(
     );
   }
   for (const group of visibleOverlays.diffPairs) {
-    const layout = getE4DifferentialPairLayout(group, visibleObjects);
-    if (!layout) continue;
+    for(const layout of getE4DifferentialPairLayouts(group, visibleObjects)){
     for(const along of [layout.span.start,layout.span.end])for(const cross of [layout.crossMinimum,layout.crossMaximum]){
       const p=parallelSpanWorld(layout.span,along,cross);bounds=expandSceneBounds(bounds,p.x,p.y,p.x,p.y);
+    }
     }
   }
   for (const screen of visibleOverlays.screens) {
@@ -4042,7 +4031,7 @@ export function CanvasViewport({
         x: drag.point.x + (event.clientX - drag.clientX) / camera.zoom,
         y: drag.point.y + (event.clientY - drag.clientY) / camera.zoom,
         }, drag.anchors ?? [], view === "e4" ? e4RoutingMode === "angular" || event.ctrlKey : event.ctrlKey, 7 / camera.zoom, undefined, Math.PI / 6, drag.snapState,drag.opMember?"nearest-compatible":"all").point : drag.point;
-        onWireRoutePointMove?.(drag.wireId, drag.routeIndex, view === "e4" && e4RoutingMode === "orthogonal" ? orthogonalE4Bend(rawPoint, drag.point, objects.find(item => item.id === drag.wireId)?.points ?? []) : rawPoint, drag.mode, drag.insert);
+        onWireRoutePointMove?.(drag.wireId, drag.routeIndex, rawPoint, drag.mode, drag.insert);
       }
       setPhysicalGuide(undefined);
     } else if (dragRef.current?.kind === "e4-wire-segment") {

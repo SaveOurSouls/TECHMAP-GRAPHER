@@ -60,7 +60,7 @@ import type { ConnectorLibraryBinding } from "./model";
 import { polylineLength, routeE4Wire, routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor } from "./e4-router";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
-import { editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
+import { orthogonalE4Deformation, editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 import { applyTerminationCommand, isTerminationCommand, reconcileTerminationReferences, type TerminationCommand } from './termination-commands';
@@ -271,8 +271,10 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
       const raw=editedE4Points(original,command.index,authoredPosition,editMode,command.insert,false);
       const baseline=[...original];
       if(command.insert){const a=baseline[command.index]!,b=baseline[command.index+1]!;baseline.splice(command.index+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}
-      const positions=movedE4Junctions(document,wire.id,baseline,raw);
-      const points=editedE4Points(original,command.index,authoredPosition,editMode,command.insert);
+      const geometry=document.views.e4.e4RoutingMode!=="angular"
+        ?orthogonalE4Deformation(baseline,raw,request.start,request.end,editMode,command.index+1,!!command.insert):null;
+      const positions=movedE4Junctions(document,wire.id,baseline,geometry?.vertices??raw,geometry?.segments,geometry?.points);
+      const points=geometry?.points??editedE4Points(original,command.index,authoredPosition,editMode,command.insert);
       const route=preserveE4Leads(points,request.start,request.end).slice(1,-1);
       let changed=followE4Junctions(document,{...document,wires:document.wires.map(w=>w.id===wire.id?{...w,e4Route:route,e4RouteMode:"manual" as const}:w)},positions,new Set([wire.id]),editMode);
       const branches=new Set(changed.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds).filter(id=>id!==wire.id));
@@ -488,9 +490,11 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           const original=[a.position,...wire.e4Route,b.position];
           const raw=moveE4Ends(original,start.position,end.position,command.physicalDragMode);
           const baseline=moveE4Ends(original,a.position,b.position,command.physicalDragMode);
-          proposals.set(wire.id,movedE4Junctions(document,wire.id,baseline,raw));
+          const geometry=document.views.e4.e4RoutingMode!=="angular"
+            ?orthogonalE4Deformation(baseline,raw,start,end,command.physicalDragMode):null;
+          proposals.set(wire.id,movedE4Junctions(document,wire.id,baseline,geometry?.vertices??raw,geometry?.segments,geometry?.points));
           owners.add(wire.id);
-          const points=preserveE4Leads(raw,start,end);
+          const points=geometry?.points??preserveE4Leads(raw,start,end);
           changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),e4RouteMode:"manual"}:w)};
         }
         const positions=resolveE4JunctionMoves(document,proposals);
@@ -500,7 +504,10 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         })));
         changed=followE4Junctions(document,changed,positions,new Set([...owners].filter(id=>!branches.has(id))),command.physicalDragMode);
         if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
-        changed=repairE4JunctionBranches(changed,branches);
+        const affected=new Set([...owners,...branches]);
+        changed=spreadMovedE4Shoulders(document,changed,affected);
+        try { changed=repairE4JunctionBranches(changed,affected); }
+        catch { changed=rerouteE4WireBatch(changed,[...affected],true); }
         for(const id of screenAttachmentWireIds(changed,changed.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId)).map(w=>w.id)))changed=rerouteWireE4ThroughJunctions(changed,id);
         for(const junction of changed.junctions)validateJunctionAgainstWires(changed,junction);
         validateWireGroups(changed);
@@ -1952,7 +1959,7 @@ function routeStraightScreenBranch(document: HarnessDesignDocument, wire: WireIn
   throw new Error("Для подключения экрана нужен прямой участок до целевого провода без изгибов.");
 }
 
-function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly string[]): HarnessDesignDocument {
+function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly string[],firstValid=false): HarnessDesignDocument {
   const baseOrder = [...new Set(wireIds)];
   if (baseOrder.length === 0) return document;
   const byRouteComplexity = [...baseOrder].sort((left, right) => {
@@ -1992,6 +1999,7 @@ function rerouteE4WireBatch(document: HarnessDesignDocument, wireIds: readonly s
       validateE4WireIds(changed, order);
       for (const junction of changed.junctions) validateJunctionAgainstWires(changed, junction);
       validateWireGroups(changed);
+      if(firstValid)return changed;
       const score = e4RoutingScore(changed);
       if (score < bestScore) {
         best = changed;
@@ -2098,6 +2106,36 @@ function wireRouteTouchesConnector(
         Math.max(Math.min(first.x, second.x), rect.left) <= Math.min(Math.max(first.x, second.x), rect.right)) return true;
   }
   return false;
+}
+
+/** A straight bundle acquires parallel jogs when a table changes height.
+ * Stagger those new jogs as one small transaction before considering grid
+ * search. Only formerly straight conductors participate; authored bends and
+ * junction positions are never discarded to make the candidate fit. */
+function spreadMovedE4Shoulders(before:HarnessDesignDocument,document:HarnessDesignDocument,ids:ReadonlySet<string>):HarnessDesignDocument {
+  if(document.views.e4.e4RoutingMode==='angular')return document;
+  try {validateE4WireIds(document,[...ids]);return document;}catch{/* Try local candidates. */}
+  const candidates=document.wires.filter(w=>{
+    if(!ids.has(w.id)||w.e4Route.length!==2||w.e4Route[0]!.x!==w.e4Route[1]!.x)return false;
+    const old=before.wires.find(item=>item.id===w.id);if(!old)return false;
+    const start=wireEndpointE4Anchor(before,old.from),end=wireEndpointE4Anchor(before,old.to);
+    return start&&end&&[...old.e4Route,end.position].every(p=>p.y===start.position.y);
+  }).sort((a,b)=>a.e4Route[0]!.y-b.e4Route[0]!.y||a.id.localeCompare(b.id));
+  if(candidates.length<2)return document;
+  const ranks=new Map(candidates.map((w,i)=>[w.id,i]));
+  for(const direction of [1,-1])for(const origin of [candidates.length-1,0,(candidates.length-1)/2]){
+    const changed={...document,wires:document.wires.map(w=>{
+      const rank=ranks.get(w.id);if(rank===undefined)return w;
+      const dx=(rank-origin)*24*direction;
+      return {...w,e4Route:w.e4Route.map(p=>({x:p.x+dx,y:p.y}))};
+    })};
+    try {
+      validateE4WireIds(changed,[...ids]);
+      for(const j of changed.junctions.filter(j=>j.wireIds.some(id=>ids.has(id))))validateJunctionAgainstWires(changed,j);
+      return changed;
+    }catch{/* Keep the next candidate bounded and deterministic. */}
+  }
+  return document;
 }
 
 /** Keep the author's unaffected corners when the deformed branch is valid.
@@ -2377,7 +2415,8 @@ function compactAutomaticDifferentialPairs(
       const end = wireEndpointE4Anchor(result, wire.to)?.position;
       if (!start || !end) return wire;
       const full = [start, ...wire.e4Route, end];
-      const p0 = full[segment.index]!, p1 = full[segment.index + 1]!;
+      const segmentEnd=segment.endIndex??segment.index+1;
+      const p0 = full[segment.index]!, p1 = full[segmentEnd]!;
       const along = (point: Point) => span.orientation === "horizontal" ? point.x : point.y;
       const cross = (point: Point) => span.orientation === "horizontal" ? point.y : point.x;
       const axis0 = along(p0), axis1 = along(p1), direction = axis1 >= axis0 ? 1 : -1;
@@ -2387,7 +2426,7 @@ function compactAutomaticDifferentialPairs(
       const world = (axis: number, crossValue: number): Point => span.orientation === "horizontal"
         ? { x: axis, y: crossValue } : { x: crossValue, y: axis };
       const replacement = axisValues.map((axis, index) => world(axis, index === 1 || index === 2 ? target : cross(p0)));
-      const next = [...full.slice(0, segment.index), ...replacement, ...full.slice(segment.index + 2)];
+      const next = [...full.slice(0, segment.index), ...replacement, ...full.slice(segmentEnd + 1)];
       const compacted = next.filter((point, index) => index === 0 || Math.hypot(point.x - next[index - 1]!.x, point.y - next[index - 1]!.y) > 1e-7);
       try {
         const compactStart = wireEndpointE4Anchor(result, wire.from)!;

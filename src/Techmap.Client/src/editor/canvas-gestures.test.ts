@@ -256,6 +256,19 @@ it("selects a dimension before an overlapping pipe gesture",()=>{
  expect(target.setPointerCapture).toHaveBeenCalled();
 });
 
+it.each([false,true])('C4 passes the requested E4 corner position to preview and commit (Shift=%s)',shiftKey=>{
+ const move=vi.fn(),preview=vi.fn();
+ const points=[{x:20,y:50},{x:200,y:50},{x:200,y:150},{x:400,y:150}];
+ const wire:EditorSceneObject={id:'W',kind:'wire',layerId:'wires',label:'W',x:0,y:0,width:0,height:0,color:'#222',points};
+ const tree=CanvasViewport({view:'e4',e4RoutingMode:'orthogonal',tool:'select',camera:{zoom:1,offsetX:0,offsetY:0},objects:[wire],layers:[{id:'wires',label:'Провода',visible:true,locked:false}],selectedObjectId:'W',onObjectSelect:vi.fn(),onCatalogDrop:vi.fn(),onCameraChange:vi.fn(),onWireRoutePointMove:move,onWireRoutePointPreview:preview});
+ const canvas=(tree.props as {children:ReactElement[]}).children.find(c=>c?.type==='canvas')!,h=canvas.props as any;
+ const target={style:{cursor:''},setPointerCapture:vi.fn(),hasPointerCapture:()=>true,releasePointerCapture:vi.fn()};
+ const e={pointerId:1,button:0,clientX:200,clientY:50,shiftKey,currentTarget:target,preventDefault:vi.fn()};
+ h.onPointerDown(e);h.onPointerMove({...e,clientX:260,clientY:90});h.onPointerUp({...e,clientX:260,clientY:90});
+ expect(preview).toHaveBeenCalledWith('W',0,{x:260,y:90},shiftKey?'adjacent':'carry',false);
+ expect(move).toHaveBeenCalledExactlyOnceWith('W',0,{x:260,y:90},shiftKey?'adjacent':'carry',false);
+});
+
 it.each([false,true])('inserts a detached midpoint with independent anchors and Escape=%s rollback',cancel=>{
  const move=vi.fn(),preview=vi.fn();
  const points=[{x:20,y:50},{x:200,y:50}];
