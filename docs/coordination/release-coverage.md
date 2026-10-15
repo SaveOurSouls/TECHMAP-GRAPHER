@@ -7,7 +7,7 @@
 ready-for-review. Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первый handoff
 `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации
 `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и включены
-в integration merge; ancestry PASS. Runtime-файлы `covering-layout.ts` и
+в integration merge `4b09472aa5bddc1f55a52364268f7a76b977a2af`; ancestry PASS. Runtime-файлы `covering-layout.ts` и
 `physical-wire-geometry.ts` совпадают с `aa2b3bc` до изменения 111;
 `connector-sleeve-support.ts` удалён, `connectorSleeveSupports` в runtime нет.
 После объединения с follow-up 113 общий Vitest 215/2277 и TypeScript/Vite PASS.

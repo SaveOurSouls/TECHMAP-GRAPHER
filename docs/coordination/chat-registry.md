@@ -9,7 +9,7 @@
 
 ## 113 — оконцовка P1 в масштабе провода, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`, интегрированы merge `70a41ab`; включены в проверенный ZIP M5-22-052. С 15.10.2026 чат выполняет follow-up, in-progress: C1 `e0128795` — у pin/socket обрезается рисунок уплотнителя; заявленная причина — `renderPreparationSvg` задаёт viewBox 250 при artwork до x≈289.6, также указаны короткие metadata image/localBounds. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база follow-up `11445e852b7ace5549f60ac6983a92f5f513a96a`. Изменения ограничены artwork/metadata и preparation-drawing с тестами; код 112/114, production dimensions и electrical connectivity исключены. Новый code/handoff ещё не передан; follow-up блокирует следующий ZIP. Совместный browser/scene прогон 113/114, исходный жгут и packaged UI предыдущего среза не проверены.
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; ready-for-review. Первичный code/handoff `3933379`/`7e7ca03` включены в M5-22-052. Follow-up C1 `e0128795` по полному уплотнителю pin/socket: code `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` интегрированы merge `d5bea34`; общий Vitest после отката оболочек 215/2277, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; следующий ZIP не заказан и ожидает карточку 115.
 
 ## 115 — правила редактирования трасс Э4, 15.10.2026
 

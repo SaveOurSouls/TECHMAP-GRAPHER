@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 15.10.2026 — возврат оболочки П, follow-up 111 после M5-22-052
+
+Уточнение REQ-146: code `e6f03190831bf6607438837d382d3b43e6718ec2`, handoff `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и интегрированы merge `4b09472aa5bddc1f55a52364268f7a76b977a2af`; все три SHA — предки HEAD, `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 112/REQ-147, 113, 114 и активной 115. Runtime `covering-layout.ts` и `physical-wire-geometry.ts` имеет те же Git blob SHA, что в `aa2b3bc` до изменения 111; `connector-sleeve-support.ts` и runtime `connectorSleeveSupports` отсутствуют. После объединения с follow-up 113 общий Vitest **215/2277**, TypeScript/Vite production build PASS. Исходный жгут и packaged UI не проверены. ZIP M5-22-052 содержит отменённое поведение; новый ZIP не заказан и блокируется активной карточкой 115.
+
 ## 15.10.2026 — follow-up 113 после M5-22-052
 
 Исправление полного контура уплотнителя pin/socket: опубликованные code `18dee2b93a220064f99b87c587d4777c307ae3c7` и handoff `db7c57975a1bd4b5d055add094798725a9569370` включены в integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; ancestry и `git show --check` PASS. Конфликт только в статусе карточки 113 разрешён с сохранением ready-for-review и сведений рабочего чата. Общий Vitest **215/2281**, TypeScript и Vite production build PASS. Первоначальный запуск не нашёл `vitest` из-за пустых локальных ссылок `node_modules`; зависимости восстановлены без изменения lockfile, затем проверки прошли. ZIP M5-22-052 был собран ранее и этого follow-up не содержит. Новый ZIP не заказан; карточка 115 активна, handoff отката оболочек П уточняется. Исходный жгут и packaged UI не проверены.
