@@ -1,0 +1,31 @@
+/* REQ-137: a shared grid, one row per operation, including inside composition. */
+.route-v3-operation-grid-wrap{width:100%;overflow-x:auto;border:1px solid #dce7ec;border-radius:6px;background:#fff}
+.route-v3-operations table.route-v3-operation-grid{display:table;width:100%;min-width:1000px;table-layout:fixed;border-collapse:collapse;font-size:11px}
+.route-v3-operations .route-v3-operation-grid thead{display:table-header-group}
+.route-v3-operations .route-v3-operation-grid tbody{display:table-row-group}
+.route-v3-operations .route-v3-operation-grid tr{display:table-row;border:0}
+.route-v3-operations .route-v3-operation-grid th,.route-v3-operations .route-v3-operation-grid td{display:table-cell;width:auto;padding:7px 5px;border:1px solid #e2ebef;vertical-align:middle;text-align:left;background:#fff;color:#3d5a6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.route-v3-operations .route-v3-operation-grid th{background:#f5f9fb;color:#718794;font-size:9px;font-weight:650;white-space:normal;letter-spacing:0;text-transform:none}
+.route-v3-operations .route-v3-operation-grid th:nth-child(n){width:auto;overflow-wrap:normal}
+.route-v3-operations .route-v3-operation-grid td::before{content:none}
+.route-v3-operations .route-v3-operation-grid tbody tr:hover td{background:#f4f9fb}
+.route-v3-operations .route-v3-operation-grid input{width:100%;height:28px;min-height:0;padding:3px 2px;border:1px solid #cadce5;border-radius:3px;background:#fff;color:#31556a;font:inherit}
+.route-v3-operations .route-v3-operation-grid input[type=number]{appearance:textfield;-moz-appearance:textfield}
+.route-v3-operation-grid input::-webkit-inner-spin-button{appearance:none}
+.route-v3-operations .route-v3-operation-grid button{display:block;width:100%;min-height:28px;padding:4px 3px;border:1px solid #cadce5;border-radius:3px;background:#f8fcfd;color:#31617b;font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.route-v3-operations .route-v3-operation-grid .route-v3-grid-title{border:0;background:transparent;text-align:left;font-weight:650}
+.route-v3-operations .route-v3-operation-grid .route-v3-grid-remove{border:0;background:transparent;color:#a75757;font-size:18px;padding:0}
+.route-v3-operation-grid button:focus-visible,.route-v3-operation-grid input:focus-visible{outline:2px solid #5496b3;outline-offset:-2px}
+.route-v3-product-picker{box-sizing:border-box;width:min(920px,calc(100vw - 28px));max-width:none;max-height:85vh;padding:22px;border:1px solid #cadce5;border-radius:9px;background:#fff;color:#31556a;overflow-y:auto}
+.route-v3-product-picker::backdrop{background:#243e5366}
+.route-v3-product-picker header{display:flex;align-items:start;justify-content:space-between;gap:16px}
+.route-v3-product-picker h3{margin:0;font-size:17px}.route-v3-product-picker p{font-size:12px}
+.route-v3-product-picker button,.route-v3-product-filter input[type=search]{padding:8px 10px;border:1px solid #cadce5;border-radius:5px;background:#fff;color:#31556a}
+.route-v3-product-filter{display:flex;gap:14px;align-items:center;margin:18px 0 8px}.route-v3-product-filter input[type=search]{flex:1;min-width:0}.route-v3-product-filter label{display:flex;gap:7px;align-items:center;white-space:nowrap;font-size:12px}
+.route-v3-product-hint{color:#687d88}
+.route-v3-product-list{display:grid;border:1px solid #dce7ec;border-radius:5px;overflow:hidden}
+.route-v3-product-list>label{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid #e2ebef;font-size:12px;cursor:pointer}
+.route-v3-product-list>label:last-child{border-bottom:0}.route-v3-product-list>label.used{background:#edf0f2;color:#687681}
+.route-v3-product-list small{display:block;margin-top:4px;font-size:11px}.route-v3-product-list>p{padding:12px}
+.route-v3-product-picker input[type=checkbox]{width:16px;height:16px;min-width:16px;flex:none;margin:0}.route-v3-product-list span{overflow-wrap:anywhere}
+@media(max-width:600px){.route-v3-product-picker{padding:14px}.route-v3-product-filter{flex-direction:column;align-items:stretch}}

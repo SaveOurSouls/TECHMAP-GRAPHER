@@ -1,3 +1,4 @@
+import { RouteV3OperationTable as Operations } from "./RouteV3OperationTable";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent } from "react";
 import type { HarnessDesignDocument } from "../editor/model";
 import type { LocalSession } from "../local-session";
@@ -83,33 +84,6 @@ function Composition({ node, source, sources, graph, harnessQuantity, updateWire
       {!!node.operations?.length && rows.length > 1 && <tr className="route-v3-composition-total"><td colSpan={6}>{cut ? `Итого резка ${processed} заготовок.` : "Операции карточки применяются к составу целиком; время отдельных материалов не распределено."}</td><td data-label="Время на операцию">{total === null ? "Не задано" : `${time(total)} мин`}</td><td data-label="Время на партию">{projectTotal === null ? "Не задано" : `${time(projectTotal)} мин`}</td></tr>}
       {cut && <tr className="route-v3-composition-operations"><td colSpan={8}>{operations}</td></tr>}
     </tbody></table></div>
-  </section>;
-}
-
-function Operations({ node, source, harnessQuantity, batchQuantity, add, choose, update, assign, remove }: {
-  node: RouteV3Node; source: HarnessDesignDocument; harnessQuantity: number; batchQuantity: number; add: () => void; choose: (id: string) => void;
-  assign: (id: string, productIds: readonly string[]) => void;
-  update: (id: string, patch: Partial<RouteV3Operation>) => void; remove: (id: string) => void;
-}) {
-  const operations = node.operations ?? [];
-  const products = routeV3Products(node);
-  const sourceItems = useMemo(() => buildRouteSourceItems(source), [source]);
-  const productLabel = (ref: RouteV3Node["refs"][number] | undefined): string => {
-    if (!ref) return node.title;
-    const item = sourceItems.find(value => refKey(value.ref) === refKey(ref));
-    return item ? [item.title, item.ref.kind === "wire" ? routeSourceWireMaterial(item) : routeSourceDesignation(item), item.lengthMm === null ? "" : `${item.lengthMm} мм`].filter(Boolean).join(" · ") : ref.id;
-  };
-  const wireCut = routeV3IsCutCard(node) && node.refs.every(ref => ref.kind === "wire");
-  return <section className="route-v3-operations" aria-label="Операции карточки">
-    <div className="route-v3-section-heading"><div><h4>Операции · {operations.length}</h4><p>Нормы закрепляются из БД.ОП и рассчитываются на {batchQuantity} {routeV3IsCutCard(node) ? "заготовок" : "шт."}.</p></div><button type="button" className="secondary-action" onClick={add}>+ Добавить операцию</button></div>
-    {!operations.length && <p className="route-v3-operation-empty">Операции не назначены.</p>}
-    {operations.map((operation, index) => { const times = routeV3OperationProjectTimes(operation, node, source, harnessQuantity); const assigned = routeV3AssignedProductIds(node, operation); return <article className="route-v3-operation-row" key={operation.id}>
-      <div className="route-v3-operation-main"><span className="route-v3-operation-index">{index + 1}</span><button type="button" className="route-v3-operation-title" aria-label={`Выбрать название операции ${index + 1}`} onClick={() => choose(operation.id)}><strong>{operation.title}</strong><small>{operation.catalogBinding ? `БД.ОП № ${operation.catalogBinding.sourceKey}` : "Выбрать из БД.ОП"}</small><small className="route-v3-operation-kind">{operation.catalogOperationType || (operation.kind === "running" ? "Погонная" : "Статичная")}</small></button><button type="button" className="route-v3-operation-remove" aria-label={`Удалить операцию ${operation.title}`} onClick={() => remove(operation.id)}>×</button></div>
-      <div className="route-v3-operation-parameters">{operation.kind === "running" && <label>Длина L, мм<input aria-label={`Длина операции ${index + 1}`} type="number" min="0" value={operation.lengthMm} onChange={event => update(operation.id, { lengthMm: Math.max(0, Number(event.target.value) || 0) })} /></label>}{wireCut && <label>Параллельно, шт.<input aria-label={`Параллельная ёмкость операции ${index + 1}`} type="number" min="1" step="1" value={operation.parallelCapacity ?? 1} onChange={event => update(operation.id, { parallelCapacity: Math.max(1, Math.floor(Number(event.target.value) || 1)) })} /></label>}<span><small>Время машины</small><strong>{duration(times.machineMinutes)}</strong></span><span><small>Время человека</small><strong>{duration(times.humanMinutes)}</strong></span><span><small>Время доп.</small><strong>{operation.additionalTimeSeconds == null ? "Не задано" : `${time(operation.additionalTimeSeconds)} с`}</strong></span><span><small>На операцию</small><strong>{duration(times.operationMinutes)}</strong></span><span><small>На партию</small><strong>{duration(times.batchMinutes)}</strong></span></div>
-      {routeV3IsCutCard(node) && products.length > 1 && <fieldset className="route-v3-operation-products"><legend>Продукция операции</legend>{products.map(product => { const label = productLabel(product.ref); const productItem = product.ref ? sourceItems.find(value => refKey(value.ref) === refKey(product.ref!)) : undefined; return <label key={product.id}><input type="checkbox" aria-label={`Продукция ${label} для операции ${index + 1}`} checked={assigned.includes(product.id)} onChange={event => assign(operation.id, event.target.checked ? [...assigned, product.id] : assigned.filter(id => id !== product.id))} /><span title={label}>{productItem?.ref.kind === "wire" && <WireColorSwatch item={productItem} />}{label}</span></label>; })}</fieldset>}
-      <p className="route-v3-operation-summary">На проект: <strong>{duration(times.projectMinutes)}</strong> · Циклы: {times.cycles ?? "—"} · Подготовка: {times.setupMinutes === null ? "Не задано" : duration(times.setupMinutes)} · Продукция: {assigned.length ? assigned.length : products.length === 1 ? "авто" : "не назначена"}</p>
-      {operation.kind === "running" && <p className="route-v3-operation-formula">Погонная: скорость проката × L + время инструмента × количество операций + время доп.</p>}
-    </article>; })}
   </section>;
 }
 
