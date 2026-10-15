@@ -8,6 +8,10 @@ REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md)
 
 REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, base `034bf42154a6ed9a15841a010f1242b865e3a120`. In-progress; обязательный handoff/code SHA pending. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
 
+## 114 — размеры P1 и точки соединения, 15.10.2026
+
+REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. In-progress; registration base и обязательный handoff/code SHA будут зафиксированы после подготовки изолированной ветки. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
+
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 
 REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
@@ -313,3 +317,7 @@ represent missing completed chat handoffs.
 ### Принятие Route v3 и закрытие чата — 15.10.2026
 
 Чат 01a111fa-93ab-79b3-9089-7ec8ca14c393: карточки 084, 086, 093, 096, 097, 098, 100, 101, 102, 103, 105 accepted владельцем через явное поручение координатору завершить/архивировать. Все 25 code/handoff refs — опубликованные ancestors integration; подробности в [протоколе закрытия](route-v3-closure-20261015.md). Заявленные ZIP и их code HEAD не менялись; pending manual/owner acceptance для этого чата закрыт, новая packaged UI-проверка не заявляется. Неподтверждённое завершение archive_worktree (queued) относится к закрытию чата, а не Git inclusion. Чужая 106 не входит в это закрытие.
+
+## 114 — якоря размеров у меди и оконцовок, 15.10.2026
+
+REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, основная `codex/integration-m5-22`. In-progress; code SHA и handoff pending. Следующий релиз после M5-22-051; до handoff ZIP блокируется. ZIP не заказан.

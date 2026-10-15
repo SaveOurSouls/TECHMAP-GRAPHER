@@ -6,7 +6,11 @@
 
 ## 113 — оконцовка P1 в масштабе провода, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; in-progress. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Владелец: отображение P1 на Чертеже, `CanvasViewport.tsx`, профильные artwork/termination scene geometry и тесты. Общие Markdown-файлы ведёт координатор; код 112 не пересекается. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — оконцовка должна соотноситься с видимым масштабом провода; изоляция обжимает жилу, оголённая медь не шире видимого проводника. Результат владельцем ещё не принят.
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; in-progress. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Владелец: отображение P1 на Чертеже, `CanvasViewport.tsx`, `termination-scene.ts`, профильные artwork/geometry файлы и тесты. `drawing-dimensions.ts` и его тесты зарезервированы карточке 114. Общие Markdown-файлы ведёт координатор; код 112 не пересекается. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — оконцовка должна соотноситься с видимым масштабом провода; изоляция обжимает жилу, оголённая медь не шире видимого проводника. Результат владельцем ещё не принят.
+
+## 114 — размеры P1 и точки соединения, 15.10.2026
+
+Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; in-progress. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, база будет зафиксирована registration commit. Владелец: `src/Techmap.Client/src/editor/drawing-dimensions.ts` и `drawing-dimensions.test.ts`; не менять `CanvasViewport.tsx` и termination artwork карточки 113. Общие Markdown-файлы ведёт координатор. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — размер P1 привязан к краю меди, а при установленном терминале/наконечнике к его началу. C2 — размер подтянут к точке соединения. Результат владельцем ещё не принят.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
@@ -292,3 +296,7 @@ Follow-up 105 (15.10.2026, повторный C1): /root, тот же чат/wor
 ## Закрытие чата «Создать Маршрут v3» — 15.10.2026
 
 Чат 01a111fa-93ab-79b3-9089-7ec8ca14c393: owner acceptance подтверждён человеческим поручением координатору завершить/архивировать. Карточки 084, 086, 093, 096, 097, 098, 100, 101, 102, 103, 105 accepted; 25 code/handoff refs опубликованы и являются ancestors origin/integration. Этот раздел заменяет прежние ready-for-review/pending для указанного чата. Отдельная worktree чиста, но archive_worktree вернул queued и удаление ещё не подтверждено; окончательное архивирование чата ожидает координатора. Основная worktree содержит чужую активную 106. Доказательства: [протокол закрытия](route-v3-closure-20261015.md).
+
+## 114 — якоря размеров у меди и оконцовок, 15.10.2026
+
+Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, [карточка 114](../../tasks/114-dimension-termination-anchors.md), REQ-149; in-progress. Ветка `codex/integration-m5-22`, основная рабочая копия, база `034bf42`. Владелец: `drawing-dimensions.ts`, новые `drawing-dimension-anchors.ts` и профильный тест, собственная документация/координационные записи. Файлы 112/113 исключены; интеграция рисунка P1 сверяется с 113. Следующий релиз после M5-22-051; code SHA/handoff pending; ZIP не заказан.

@@ -5,7 +5,7 @@
 - **Источник запроса:** поручение владельца 15.10.2026; C1 — оконцовка P1 должна соотноситься с масштабом провода.
 - **Требования:** REQ-148; связанные REQ-135/141; ADR проверить по фактическому решению.
 - **Ветка / рабочая копия:** `codex/p1-termination-graphic-scale`, `tmp/p1-termination-graphic-scale`; база фиксируется registration commit.
-- **Владелец файлов:** `src/Techmap.Client/src/editor/CanvasViewport.tsx`, `termination-scene.ts`, узкие связанные artwork/geometry файлы и профильные тесты. Общие Markdown-файлы ведёт координатор.
+- **Владелец файлов:** `src/Techmap.Client/src/editor/CanvasViewport.tsx`, `termination-scene.ts`, узкие связанные artwork/geometry файлы и профильные тесты. `drawing-dimensions.ts` и его тесты исключены и закреплены за карточкой 114. Общие Markdown-файлы ведёт координатор.
 - **Release coverage:** следующий срез после M5-22-051; ZIP не заказан.
 
 ## Результат и границы

@@ -131,3 +131,5 @@
 | 111 | [Исправить охват проводов термотрубки](111-thermal-sleeve-wire-coverage.md) | ready-for-review | REQ-146: код `b472621`, handoff `2e8492c` включены в проверенный ZIP M5-22-051; клиент 211/2223, .NET 1140/1140, portable 7/7. |
 | 112 | [Координаты изгибов после создания ОП](112-op-bend-coordinate-integrity.md) | in-progress | REQ-147: отдельная ветка/worktree; handoff и code SHA ожидаются. |
 | 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | in-progress | REQ-148: отдельная ветка/worktree; handoff и code SHA ожидаются. |
+| 114 | [Исправить размеры P1 и точки соединения](114-p1-drawing-dimension-anchors.md) | in-progress | REQ-149: отдельная ветка/worktree; handoff и code SHA ожидаются. |
+| 114 | [Якоря размеров у меди и оконцовок](114-dimension-termination-anchors.md) | in-progress | REQ-149: C1 край меди / начало терминала, C2 точка соединения. |
