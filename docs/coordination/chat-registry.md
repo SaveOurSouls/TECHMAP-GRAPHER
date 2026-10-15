@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 116 — наконечники в полуфабрикатах проводов Route V3, 15.10.2026
+
+Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, [карточка 116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; in-progress. Изолированная ветка `codex/route-v3-wire-terminals`, worktree `tmp/route-v3-wire-terminals`, база `146a3d8`. Владелец — `/root`: только V3-проекция/модель/refresh/рисунок концов и тесты в `src/Techmap.Client/src/manufacturing-v3/`, карточка и отдельный handoff 116. Регистрация записана в собственной ветке до runtime-изменений; integration-копия и файлы соседних задач не меняются. Coverage: следующий релиз после M5-22-052, интеграцию подтверждает сборщик; ZIP не заказан. C1 — наконечник UNL20 отдельным ПФ вместо конца провода.
+
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
 Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, карточка [112](../../tasks/112-op-bend-coordinate-integrity.md), REQ-147; ready-for-review. Ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63`, handoff `47e1c647220409c0f37633ab29e92930eccc58a`; предки integration merge `0811aff`. Общий клиент 215/2279, TypeScript/Vite PASS. Синтетический C1 прошёл; исходный жгут и packaged UI не проверены. Чат не принят владельцем; включено в проверенный ZIP M5-22-052.
