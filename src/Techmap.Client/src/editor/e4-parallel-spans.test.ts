@@ -1,5 +1,5 @@
 import {expect,it,vi} from "vitest";
-import {commonParallelSpan,commonHorizontalPairSpan,parallelSpanLocal,parallelSpanWorld} from "./e4-parallel-spans";
+import {commonParallelSpan,commonHorizontalPairSpan,commonHorizontalPairSpans,parallelSpanLocal,parallelSpanWorld} from "./e4-parallel-spans";
 import {drawE4DifferentialPairs,getE4DifferentialPairLayout,hitTestE4DifferentialPair} from "./CanvasViewport";
 import type {EditorSceneObject} from "./editor-types";
 import {createConnector,createWire,applyEditorCommand} from "./commands";
@@ -26,9 +26,31 @@ it("C7 chooses the longest horizontal overlap even when vertical and oblique spa
  ];
  const span=commonHorizontalPairSpan(routes)!;
  expect(span.orientation).toBe("horizontal");
- expect(span.start).toBe(150);
+ expect(span.start).toBe(0);
  expect(span.end).toBe(500);
  expect(span.crossMaximum-span.crossMinimum).toBe(24);
+});
+
+it('C1 joins collinear handles into the full common horizontal run in either direction',()=>{
+ const routes=[{id:'a',points:[{x:0,y:0},{x:160,y:0},{x:350,y:0},{x:540,y:0}]},
+ {id:'b',points:[{x:540,y:24},{x:370,y:24},{x:180,y:24},{x:0,y:24}]}];
+ const spans=commonHorizontalPairSpans(routes);
+ expect(spans).toHaveLength(1);
+ expect(spans[0]).toMatchObject({start:0,end:540});
+});
+
+it('C2 decorates both horizontal runs around a height change, without matching unrelated lanes',()=>{
+ const routes=[{id:'a',points:[{x:0,y:0},{x:200,y:0},{x:200,y:120},{x:500,y:120}]},
+ {id:'b',points:[{x:0,y:24},{x:224,y:24},{x:224,y:144},{x:500,y:144}]}];
+ expect(commonHorizontalPairSpans(routes).map(s=>[s.start,s.end,s.crossMinimum,s.crossMaximum]))
+   .toEqual([[0,200,0,24],[224,500,120,144]]);
+});
+
+it('retains consecutive horizontal runs when the authored lane gap changes',()=>{
+ const routes=[{id:'a',points:[{x:0,y:0},{x:500,y:0}]},
+ {id:'b',points:[{x:0,y:24},{x:200,y:24},{x:200,y:48},{x:500,y:48}]}];
+ expect(commonHorizontalPairSpans(routes).map(s=>[s.start,s.end,s.crossMaximum]))
+   .toEqual([[0,200,24],[200,500,48]]);
 });
 
 it("does not paint or select oblique differential motifs",()=>{

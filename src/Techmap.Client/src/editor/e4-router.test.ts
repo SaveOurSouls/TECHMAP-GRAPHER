@@ -16,6 +16,18 @@ const horizontalRequest = (overrides: Partial<E4RoutingRequest> = {}): E4Routing
 });
 
 describe("E4 obstacle router", () => {
+  it('allows a T endpoint near its carrier corner but rejects an unrelated approach or overlap',()=>{
+    const junction={x:100,y:100};
+    const points=[{x:0,y:100},junction,{x:100,y:80},{x:220,y:80}];
+    const branch=[{x:100,y:200},junction];
+    const request:E4RoutingRequest={start:{position:branch[0]!,leadDirection:null},end:{position:junction,leadDirection:null},
+      occupiedRoutes:[{points,allowedTouchPoints:[junction]}]};
+    expect(()=>validateE4Route(branch,request)).not.toThrow();
+    expect(()=>validateE4Route(branch,{...request,occupiedRoutes:[{points}]})).toThrow(/зазор/);
+    const overlap=[{x:100,y:40},junction];
+    expect(()=>validateE4Route(overlap,{...request,start:{position:overlap[0]!,leadDirection:null}})).toThrow(/накладывается/);
+  });
+
   it('allows an explicitly shared contact trunk but rejects overlap beyond it',()=>{
     const start={position:{x:0,y:0},leadDirection:'right' as const},end={position:{x:200,y:80},leadDirection:'left' as const};
     const occupied={points:[{x:0,y:0},{x:200,y:0}],sharedLeadSegments:[{start:{x:0,y:0},end:{x:48,y:0}}]};

@@ -22,6 +22,20 @@ function fixture(): HarnessDesignDocument {
 }
 
 describe('E4 transient component movement', () => {
+  it.each(['carry','adjacent'] as const)('staggered straight bundle commits without grid search in %s',mode=>{
+    const d=fixture();
+    const base={...d,wires:[0,1,2,3].map(i=>({...d.wires[0]!,id:`w${i}`,
+      from:{connectorId:'a',contactId:d.connectors[0]!.contacts[i]!.id},
+      to:{connectorId:'b',contactId:d.connectors[1]!.contacts[i]!.id},
+      e4Route:[{x:487,y:64+i*24},{x:976,y:64+i*24}]}))};
+    const route=vi.spyOn(router,'routeE4Wire'),waypoints=vi.spyOn(router,'routeE4WireThroughWaypoints');
+    const moved=applyEditorCommand(base,{type:'move-connector',connectorId:'a',view:'e4',position:{x:15,y:12},physicalDragMode:mode});
+    expect(commands.e4RoutingIssues(moved)).toEqual([]);
+    expect(e4ConnectivityFingerprint(moved)).toBe(e4ConnectivityFingerprint(base));
+    expect(new Set(moved.wires.map(w=>w.e4Route[0]!.x)).size).toBe(4);
+    expect(route).not.toHaveBeenCalled();expect(waypoints).not.toHaveBeenCalled();
+  });
+
   it.each(['carry', 'adjacent'] as const)('preserves %s shoulders and commits once with undo/redo', mode => {
     const d = fixture(), snapshot = JSON.stringify(d), point = { x: 20, y: 30 };
     const history = createEditorHistory(d);

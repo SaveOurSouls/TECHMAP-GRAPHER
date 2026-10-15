@@ -697,6 +697,11 @@ function validateSegmentAgainstOccupiedBends(
     if(bend.sharedLeadSegments.some(s=>segmentPointDistance(bend.point,s)<EPSILON)&&segmentPointDistance(bend.point,segment)<EPSILON)continue;
     if (bend.allowedTouchPoints.some((allowed) => samePoint(bend.point, allowed)) &&
         isSegmentEndpoint(bend.point, segment)) continue;
+    // An explicit T endpoint can be closer than the bridge footprint to its
+    // own carrier's next corner. Permit only an approach whose closest point
+    // to that corner is the shared endpoint; passing the corner stays invalid.
+    if(bend.allowedTouchPoints.some(point=>isSegmentEndpoint(point,segment)&&
+      Math.abs(pointToSegmentDistance(bend.point,segment)-Math.hypot(bend.point.x-point.x,bend.point.y-point.y))<EPSILON))continue;
     if (pointToSegmentDistance(bend.point, segment) + EPSILON < clearance) {
       throw new Error("Между проводом и углом другого провода не выдержан зазор.");
     }

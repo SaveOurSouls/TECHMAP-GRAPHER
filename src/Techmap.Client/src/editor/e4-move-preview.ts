@@ -1,5 +1,5 @@
 import { wireEndpointE4Anchor, type HarnessDesignDocument, type Point } from './model';
-import { followE4Junctions, movedE4Junctions, moveE4Ends, preserveE4Leads, resolveE4JunctionMoves } from './e4-editing';
+import { orthogonalE4Deformation, followE4Junctions, movedE4Junctions, moveE4Ends, preserveE4Leads, resolveE4JunctionMoves } from './e4-editing';
 import type { PhysicalDragMode } from './physical-editing';
 
 /** Presentation only: no commands, route search, validation or physical reconciliation.
@@ -25,10 +25,11 @@ export function previewE4ConnectorMove(
     if (!a || !b || !start || !end) return wire;
     const original = [a.position, ...wire.e4Route, b.position];
     const raw = moveE4Ends(original, start.position, end.position, mode);
-    proposals.set(wire.id, movedE4Junctions(document, wire.id,
-      moveE4Ends(original, a.position, b.position, mode), raw));
+    const baseline=moveE4Ends(original,a.position,b.position,mode);
+    const geometry=document.views.e4.e4RoutingMode!=="angular"?orthogonalE4Deformation(baseline,raw,start,end,mode):null;
+    proposals.set(wire.id, movedE4Junctions(document, wire.id,baseline,geometry?.vertices??raw,geometry?.segments,geometry?.points));
     owners.add(wire.id);
-    return { ...wire, e4Route: preserveE4Leads(raw, start, end).slice(1, -1) };
+    return { ...wire, e4Route: (geometry?.points??preserveE4Leads(raw, start, end)).slice(1, -1) };
   });
   const positions = resolveE4JunctionMoves(document, proposals);
   // A branch can have both the moved connector and a moved carrier as endpoints.

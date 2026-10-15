@@ -1,7 +1,18 @@
 import {expect,it} from "vitest";
-import {moveE4Ends,movedE4Junctions,resolveE4JunctionMoves} from "./e4-editing";
+import {moveE4Ends,movedE4Junctions,resolveE4JunctionMoves,orthogonalE4Deformation,editedE4Points} from "./e4-editing";
 import {createEmptyHarnessDesign} from "./model";
 import {createWire} from "./commands";
+
+it.each(['carry','adjacent'] as const)('C3 keeps leads and all shoulders orthogonal when a bend crosses the lower corner (%s)',mode=>{
+ const before=[{x:0,y:0},{x:24,y:0},{x:280,y:0},{x:280,y:200},{x:576,y:200},{x:600,y:200}];
+ const raw=editedE4Points(before,1,{x:320,y:240},mode,false,false);
+ const result=orthogonalE4Deformation(before,raw,{position:before[0]!,leadDirection:'right'},
+   {position:before.at(-1)!,leadDirection:'left'},mode,2);
+ expect(result.points[0]).toEqual(before[0]);expect(result.points.at(-1)).toEqual(before.at(-1));
+ expect(result.points.some(p=>p.x===320&&p.y===240)).toBe(true);
+ for(let i=1;i<result.points.length;i++)expect(result.points[i]!.x===result.points[i-1]!.x||result.points[i]!.y===result.points[i-1]!.y).toBe(true);
+ expect(result.points[1]!.y).toBe(0);expect(result.points.at(-2)!.y).toBe(200);
+});
 it("moves a shared shoulder once when both ends move together",()=>{
  const points=[{x:0,y:0},{x:50,y:50},{x:100,y:0}];
  expect(moveE4Ends(points,{x:20,y:30},{x:120,y:30},"carry")).toEqual([{x:20,y:30},{x:70,y:80},{x:120,y:30}]);
