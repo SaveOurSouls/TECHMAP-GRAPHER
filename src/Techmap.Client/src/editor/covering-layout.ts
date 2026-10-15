@@ -11,6 +11,7 @@ import { moveBundleCovering, bundleSpanEdgeVisible } from "./covering-motion";
 import {hasJoiningPipeProjection,joiningPipeDisplaySamples,joiningPipeWidth} from "./physical-joining-pipe-projection";
 import { conformalCoveringContour, squareConformalContourEnds } from "./covering-contour";
 import { coveringRidges, type CoveringRidge } from "./covering-relief";
+import { connectorSleeveSupports } from "./connector-sleeve-support";
 
 export interface CoveringHandle { readonly objectId:string; readonly spanIndex:number; readonly part:"from"|"to"|"transition-from"|"transition-to"; readonly point:Point; readonly normal:Point; readonly halfWidth:number; readonly rightHalfWidth?:number; readonly edgeFrom?:Point; readonly edgeTo?:Point; readonly pointMarker?:boolean; readonly bound:boolean }
 export interface CoveringSurface { readonly polygon:readonly Point[]; readonly path:readonly Point[]; readonly spanIndex?:number; readonly openStart?:boolean; readonly openEnd?:boolean; readonly conformal?:boolean; readonly ridges?:readonly CoveringRidge[] }
@@ -264,8 +265,10 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
     const outset={from:start,to:end,width:Math.max(edgeAllowance+growth,lower+edgeAllowance)};
     outsets.push(outset);ownJoiningOutsets.push({segmentId:s.segmentId,outset});
    }
-   const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets):[];
-   const conformal=joining?conformalCoveringContour(centerline,widths,widths,supports):null;
+   const supports=joining?joiningSupportCells(route.envelope,segmentFrom,segmentTo,outsets)
+    :coveringKind(covering)==="heat-shrink"?connectorSleeveSupports(document,s.segmentId,from,to,centerline,coveringClearance/2):[];
+   const fittedConnector=supports.length>0&&!joining;
+   const conformal=joining||fittedConnector?conformalCoveringContour(centerline,widths,widths,supports):null;
    const bounded=!!joining&&from>=-1e-9&&to<=1+1e-9;
    const axis={x:joining?joining.end.x-joining.start.x:0,y:joining?joining.end.y-joining.start.y:0};
    const axisContour=bounded?squareConformalContourEnds(conformal!,centerline,axis):null;
@@ -276,14 +279,14 @@ export function coveringScene(document:HarnessDesignDocument):EditorSceneObject[
    const axisSafe=!!axisContour?.length&&memberSamples.every(point=>contourContains(axisContour,point));
    const contour=axisSafe?axisContour!:bounded?squareConformalContourEnds(conformal!,centerline):conformal??polygon;
    surfaces.push({polygon:contour,path:centerline,spanIndex,
-     ...(joining?{conformal:true,ridges:coveringRidges(route.envelope,segmentFrom,segmentTo,coveringClearance+growth,centerline[0]!)}:{}),
+     ...(joining?{conformal:true,ridges:coveringRidges(route.envelope,segmentFrom,segmentTo,coveringClearance+growth,centerline[0]!)}:fittedConnector?{conformal:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'from')?{openStart:true}:{}),
      ...(!bundleSpanEdgeVisible(document,covering,spanIndex,'to')?{openEnd:true}:{})});paths.push(centerline);
    for(const part of ["from","to"] as const){if(!bundleSpanEdgeVisible(document,covering,spanIndex,part))continue;const i=part==="from"?0:centerline.length-1,p=centerline[i]!,q=centerline[part==="from"?1:i-1]!,dx=axisSafe?axis.x:part==="from"?q.x-p.x:p.x-q.x,dy=axisSafe?axis.y:part==="from"?q.y-p.y:p.y-q.y,len=Math.hypot(dx,dy)||1;
     const at=visible[i]!.distance,near=route.envelope.findIndex(sample=>sample.at>=at),a=route.envelope[Math.max(0,near<0?route.envelope.length-1:near-1)],b=route.envelope[near<0?route.envelope.length-1:near];
     const t=a&&b?Math.max(0,Math.min(1,(at-a.at)/(b.at-a.at||1))):0;
     const leftSpread=a&&b?a.leftSpread+(b.leftSpread-a.leftSpread)*t:0,rightSpread=a&&b?a.rightSpread+(b.rightSpread-a.rightSpread)*t:0;
-    const edge=joining?contourEndEdge(contour,p,{x:dx/len,y:dy/len}):null;
+    const edge=joining||fittedConnector?contourEndEdge(contour,p,{x:dx/len,y:dy/len}):null;
     const gripPoint=edge?{x:(edge.from.x+edge.to.x)/2,y:(edge.from.y+edge.to.y)/2}:p;
     handles.push({objectId:covering.id,spanIndex,part,point:gripPoint,normal:{x:-dy/len,y:dx/len},halfWidth:Math.max(widths[i]!,leftSpread+coveringClearance),...(edge?{edgeFrom:edge.from,edgeTo:edge.to}:joining?{rightHalfWidth:Math.max(widths[i]!,rightSpread+coveringClearance),pointMarker:true}:{}),bound:original[part==="from"?"fromAnchor":"toAnchor"]!==undefined});}
   }

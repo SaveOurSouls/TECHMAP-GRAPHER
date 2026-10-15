@@ -1,5 +1,9 @@
 # Release coverage
 
+## 111 — охват термотрубкой всех проводов, 15.10.2026
+
+REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, отдельный worktree; in-progress, кодовые SHA и handoff ещё не заявлены. Назначено в следующий пакет после M5-22-049; включение требует опубликованных SHA и подтверждения ancestry/equivalent в собираемом HEAD.
+
 ## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
 
 REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-component-drag-performance`, отдельный worktree; in-progress, handoff и кодовые SHA пока отсутствуют. Запланировано в следующем пакете после M5-22-049; до интеграции ZIP заблокирован этой карточкой только если она заявлена завершённой/относящейся к пакету.

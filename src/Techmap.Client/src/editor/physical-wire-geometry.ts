@@ -44,7 +44,7 @@ function joinDisplayPaths(paths:readonly (readonly Point[]|null)[]):Point[][] {
   return result;
 }
 export interface VisibleWireStroke { readonly points:readonly Point[]; readonly width:number; readonly radius?:number; readonly lineJoin?:CanvasLineJoin }
-export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[]; readonly twisted:boolean }
+export interface PhysicalWireDisplay { readonly paths:Point[][]; readonly selectionPaths:Point[][]; readonly visibleStrokes:readonly VisibleWireStroke[]; readonly twisted:boolean; readonly endpointStrokes:readonly (VisibleWireStroke & { readonly nodeId:string })[] }
 export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):PhysicalWireDisplay|undefined {
  const t=document.physicalTopology,route=t?.routes.find(r=>r.wireId===wireId);if(!t||!route?.steps.length)return undefined;
  const paths:(Point[]|null)[]=[];
@@ -112,7 +112,11 @@ export function physicalWireDisplay(document:HarnessDesignDocument,wireId:string
  const joined=joinDisplayPaths(routePaths);
  if(startPath.length>1)visibleStrokes.push({points:startPath,width:wireWidth});
  if(endPath.length>1)visibleStrokes.push({points:endPath,width:wireWidth});
- return {paths:joined,selectionPaths:joinDisplayPaths([startPath,...allPaths,endPath]),visibleStrokes,twisted};
+ return {paths:joined,selectionPaths:joinDisplayPaths([startPath,...allPaths,endPath]),visibleStrokes,twisted,
+  // Include the neighbouring pipe tangent so sampling rounds the node exactly
+  // like the complete painted wire, including a lane offset at the junction.
+  endpointStrokes:[{nodeId:fromNode.id,points:[...startPath,...(paths[0]?.slice(0,2)??[])],width:wireWidth},
+   {nodeId:toNode.id,points:[...(paths.at(-1)?.slice(-2)??[]),...endPath],width:wireWidth}]};
 }
 export function physicalWireDisplayPaths(document:HarnessDesignDocument,wireId:string,start:Point,end:Point):Point[][]|undefined {
  return physicalWireDisplay(document,wireId,start,end)?.paths;
