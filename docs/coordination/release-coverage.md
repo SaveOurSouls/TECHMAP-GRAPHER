@@ -2,7 +2,11 @@
 
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
-REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, `codex/integration-m5-22`, основная копия. In-progress; обязательный handoff и code SHA pending. Исправление предназначено для следующего среза после M5-22-051; до завершения handoff новый ZIP блокируется. ZIP здесь не заказан.
+REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. In-progress; обязательный handoff и code SHA pending. Следующий срез после M5-22-051; до завершения handoff новый ZIP блокируется. ZIP здесь не заказан.
+
+## 113 — масштаб оконцовки P1, 15.10.2026
+
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`. In-progress; регистрационный commit/base и обязательный handoff/code SHA фиксируются после создания изолированной ветки. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 

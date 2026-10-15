@@ -129,3 +129,5 @@
 | 109 | [Постоянная библиотека оконцовок и генерация серий](109-termination-library-series.md) | ready-for-review | REQ-144: код `b437f79` интегрирован merge `053d295` и включён в ZIP M5-22-050; 209/2205, TS/Vite и production browser PASS. |
 | 110 | [Ускорить перемещение компонентов в Э4](110-e4-component-drag-performance.md) | ready-for-review | REQ-145: код `8ff8736`, handoff `2f9008f` включены в проверенный ZIP M5-22-051; клиент 211/2223, .NET 1140/1140, portable 7/7. |
 | 111 | [Исправить охват проводов термотрубки](111-thermal-sleeve-wire-coverage.md) | ready-for-review | REQ-146: код `b472621`, handoff `2e8492c` включены в проверенный ZIP M5-22-051; клиент 211/2223, .NET 1140/1140, portable 7/7. |
+| 112 | [Координаты изгибов после создания ОП](112-op-bend-coordinate-integrity.md) | in-progress | REQ-147: отдельная ветка/worktree; handoff и code SHA ожидаются. |
+| 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | in-progress | REQ-148: отдельная ветка/worktree; handoff и code SHA ожидаются. |

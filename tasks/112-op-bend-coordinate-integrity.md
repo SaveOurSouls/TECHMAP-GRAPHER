@@ -4,8 +4,8 @@
 - **Владелец / чат:** текущий рабочий чат, `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`
 - **Источник запроса:** поручение владельца 15.10.2026; C1 (`codex-clipboard-7477a0ad`) — две точки «1», верхняя левая неподвижна и удалена от нарисованного П.
 - **Требования:** REQ-147, REQ-010; ADR-0004, ADR-0011.
-- **Ветка / рабочая копия:** `codex/integration-m5-22`, основная копия.
-- **Владелец файлов:** `physical-scene.ts`, `physical-joining-pipe-projection.ts`, `physical-route-point-command.ts`, связанные регрессионные тесты и при необходимости CanvasViewport/physical-editing; собственные записи в документах координации, requirements, status и индексе задач.
+- **Ветка / рабочая копия:** `codex/op-bend-coordinate-integrity`, `tmp/op-bend-coordinate-integrity`; база регистрации `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`.
+- **Владелец файлов:** `physical-scene.ts`, `physical-joining-pipe-projection.ts`, `physical-route-point-command.ts`, `physical-editing.ts`, профильные физические тесты и `op-bend-coordinate-integrity.test.ts`. `CanvasViewport.tsx` закреплён за карточкой 113 и сюда не входит. Общие документы ведёт координатор.
 - **Release coverage:** следующий срез после M5-22-051; ZIP в этой карточке не заказан.
 
 ## Результат и границы
