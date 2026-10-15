@@ -182,3 +182,5 @@ represent missing completed chat handoffs.
 - **Size / SHA-256:** `64 012 360 / 5F3A431A4AB0090426A0CA2FB51F04ED068EA1EC9C774F0931B74C38597796C2`
 - **PACKAGE-MANIFEST / portable:** `PASS; 339 записей / 340 файлов; 7/7 из C:\Temp`
 - **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта
+
+| 101 — Таблица операций Route v3 | `/root` | code `a808a25db9a1a8dd5bb56a33dc87700c718e28ad`; handoff — документальный срез 101 | REQ-137; code является ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
