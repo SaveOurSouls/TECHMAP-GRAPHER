@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 15.10.2026 — follow-up 112 после M5-22-052
+
+Регистрация `1170ee6`, код `dc817dea78d89410e04a89b86ef1489209dbaaea` и handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и включены в merge `98e91c08f3b477ab4df1abcf3b028351871b3eb5`; ancestry и `git show --check` PASS. Конфликт только в release coverage разрешён с сохранением истории M5-22-052 и текущих follow-up 111/113. Общий интегрированный Vitest **216/2283**, TypeScript/Vite production build PASS. Изменённый production-код ограничен `physical-joining-pipe-projection.ts`; исходный жгут, ручная C1–C4 и packaged UI не проверены. M5-22-052 нового кода не содержит; ZIP не заказан и ожидает завершения активных карточек 115/116.
+
 ## 15.10.2026 — возврат оболочки П, follow-up 111 после M5-22-052
 
 Уточнение REQ-146: code `e6f03190831bf6607438837d382d3b43e6718ec2`, handoff `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и интегрированы merge `4b09472aa5bddc1f55a52364268f7a76b977a2af`; все три SHA — предки HEAD, `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 112/REQ-147, 113, 114 и активной 115. Runtime `covering-layout.ts` и `physical-wire-geometry.ts` имеет те же Git blob SHA, что в `aa2b3bc` до изменения 111; `connector-sleeve-support.ts` и runtime `connectorSleeveSupports` отсутствуют. После объединения с follow-up 113 общий Vitest **215/2277**, TypeScript/Vite production build PASS. Исходный жгут и packaged UI не проверены. ZIP M5-22-052 содержит отменённое поведение; новый ZIP не заказан и блокируется активной карточкой 115.
