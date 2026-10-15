@@ -4,7 +4,7 @@
 
 Windows x64 ZIP: `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`. Размер: **64 412 661 байт**. SHA-256: `BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
 
-Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-053` завершился успешно: Vitest **218 файлов / 2319 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **534 файла манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-053`, включая каталог с кириллицей и пробелами. Исходный пользовательский жгут, ручные C1–C4 карточки 112, совместная browser/scene-проверка 113/114 и ручная проверка UI готового пакета не выполнялись; приёмка владельцем 111–116 открыта. Vite предупреждает о внешних Node-модулях `heic-to` и крупном JS chunk. ZIP остаётся вне Git.
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-053` завершился успешно: Vitest **218 файлов / 2319 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **534 файла манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-053`, включая каталог с кириллицей и пробелами. Владелец принял чат 111 16.10.2026. Исходный пользовательский жгут, ручные C1–C4 карточки 112, совместная browser/scene-проверка 113/114 и ручная проверка UI готового пакета не выполнялись; приёмка 112–116 открыта. Vite предупреждает о внешних Node-модулях `heic-to` и крупном JS chunk. ZIP остаётся вне Git.
 
 # Пакет M5-22-052 — карточки 112–114, 15.10.2026
 

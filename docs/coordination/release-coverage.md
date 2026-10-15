@@ -7,7 +7,7 @@
 - **ZIP:** `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`.
 - **Size / SHA-256:** `64 412 661 / BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
 - **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
-- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112, совместный browser/scene 113/114 и owner acceptance 111–116 остаются открытыми.
+- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Чат 111 accepted владельцем 16.10.2026; acceptance 112–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
 
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
@@ -17,7 +17,7 @@
 
 Уточнённое REQ-146 заменяет первоначальную трактовку; [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md).
 Исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree,
-ready-for-review. Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первый handoff
+accepted владельцем 16.10.2026 (чат архивирован). Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первый handoff
 `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации
 `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и включены
 в integration merge `4b09472aa5bddc1f55a52364268f7a76b977a2af`; ancestry PASS. Runtime-файлы `covering-layout.ts` и
@@ -25,8 +25,8 @@ ready-for-review. Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первы�
 `connector-sleeve-support.ts` удалён, `connectorSleeveSupports` в runtime нет.
 После объединения с follow-up 113 общий Vitest 215/2277 и TypeScript/Vite PASS.
 M5-22-051 и M5-22-052 остаются историческими ZIP с отменённым поведением 111;
-уточнённое поведение включено в M5-22-053. Исходный жгут и
-packaged UI не проверены; приёмка владельца открыта.
+уточнённое поведение включено в M5-22-053. Владелец принял чат 16.10.2026;
+исходный жгут и packaged UI не проверены.
 
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
