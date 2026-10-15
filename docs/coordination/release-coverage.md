@@ -188,3 +188,5 @@ represent missing completed chat handoffs.
 - **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта
 
 | 101 — Таблица операций Route v3 | `/root` | code `a808a25db9a1a8dd5bb56a33dc87700c718e28ad`; handoff — документальный срез 101 | REQ-137; code является ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
+
+| 102 — Вид проводов в строке ПФ | `/root` | code `30688f622129bd3114e44968aa86f03641442190`; handoff — документальный срез 102 | REQ-138; ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending |
