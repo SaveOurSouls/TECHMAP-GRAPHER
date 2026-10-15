@@ -39,6 +39,12 @@ Follow-up C1–C4: ready-for-review, база `96829c0`, регистрация 
 
 Чат `01a1410f-1e06-7602-b18f-97df76b92296`, REQ-148, ready-for-review. Code `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы и интегрированы merge `70a41ab` в integration HEAD `0811aff`. PASS: worker Vitest 212/2246, 23 новых регрессии; совместный интеграционный Vitest 215/2279, TypeScript/Vite. Подробный [handoff 113](handoff-113-p1-termination-graphic-scale.md) и [acceptance-протокол](../p1-termination-113-acceptance.md). Совместный scene/browser сценарий 113/114, исходный жгут и packaged UI не проверены; ZIP не заказан, приёмка владельца открыта.
 
+## 115 — правила редактирования трасс Э4, 16.10.2026
+
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-routing-interaction`, worktree `tmp/e4-routing-interaction`; [карточка 115](../../tasks/115-e4-routing-interaction.md), REQ-150, ready-for-review. Код рабочего чата `a712396092ea7f3eabf610c78499836f0523a527` и handoff-коммит `3b276e745880c6963cbe4383f01f1b5dbf464aa4` опубликованы в origin. Из-за общей карточки add/add код и handoff cherry-pick-нуты в integration как `258a04d` и `bae2185`; исходные SHA не являются ancestry интеграционной ветки, подтверждённый эквивалент — точные изменения этих cherry-pick-коммитов. `git show --check` PASS для обоих интеграционных SHA. Интеграционный HEAD после handoff: `bae2185`.
+
+C1–C4 исправлены: полная свивка общих прямых участков, ортогональное перетаскивание с сохранением T-узлов и контактов, удаление UI clamp и разрешение общего T-подхода. Worker PASS: 216/2293, TypeScript/Vite, Chrome drag/Shift/Escape/autosave/Undo/Redo и benchmark. После интеграции полный Vitest PASS: **217 файлов / 2297 тестов**, `npm run build` (TypeScript/Vite) PASS. Подробный [handoff](handoff-115-e4-routing.md), [acceptance](../e4-routing-interaction-115-acceptance.md). Ограничения: исходный жгут и portable не проверены; commit оконцовки около 1,1 с в benchmark. ZIP не заказан. Handoff и ancestry эквивалента подтверждены.
+
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
 **Отменено владельцем:** действующий handoff возврата — follow-up 111 выше;

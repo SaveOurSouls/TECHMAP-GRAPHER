@@ -33,7 +33,7 @@ REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md)
 
 ## 115 — правила редактирования трасс Э4, 15.10.2026
 
-REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`. Ветка `codex/e4-routing-interaction` и worktree `tmp/e4-routing-interaction` созданы от базы `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`; code/handoff пока отсутствуют. C1–C4 охватывают полный прямой участок диффпары, сохранение ортогональности после перемещения и ошибочный отказ drag. Статус in-progress; блокирует следующий ZIP до handoff и интеграции. ZIP M5-22-052 остаётся последним проверенным срезом и этой работой не содержит.
+REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`. Код `a712396092ea7f3eabf610c78499836f0523a527` и handoff `3b276e745880c6963cbe4383f01f1b5dbf464aa4` опубликованы. Интеграционные cherry-pick `258a04d` (код) и `bae2185` (handoff/docs) являются проверенным эквивалентом; исходные SHA не ancestry из-за cherry-pick. `git show --check` PASS. Integration Vitest 217/2297, TypeScript/Vite PASS. Ready-for-review; исходный жгут/portable не проверены. Код 115 больше не блокирует следующий ZIP. M5-22-052 остаётся последним ZIP и изменения 115 не содержит.
 
 ## 116 — наконечники в Маршруте V3, 15.10.2026
 

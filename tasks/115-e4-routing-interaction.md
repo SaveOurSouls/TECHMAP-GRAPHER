@@ -30,10 +30,10 @@
 
 ## Журнал результата
 
-- Коммит кода: `a712396092ea7f3eabf610c78499836f0523a527`, опубликован; документация — этот handoff-коммит.; работа назначена в зарегистрированный worktree.
-- Handoff сборщику: [точный протокол](../docs/coordination/handoff-115-e4-routing.md), SHA документального коммита передаётся после push.
-- Интеграционный commit/эквивалент: —
+- Коммиты рабочего чата: code `a712396092ea7f3eabf610c78499836f0523a527`, handoff/docs `3b276e745880c6963cbe4383f01f1b5dbf464aa4`.
+- Handoff сборщику: [точный протокол](../docs/coordination/handoff-115-e4-routing.md), опубликован.
+- Интеграционный commit/эквивалент: `258a04d` (code), `bae2185` (handoff/docs), точные cherry-pick опубликованных SHA.
 - ZIP / release coverage: ожидает следующего кодового среза после M5-22-052.
-- Проверки 15–16.10.2026: Vitest 216/2293, TypeScript/Vite, browser drag/Shift/Escape/save/Undo/Redo, benchmark, diff/staged-check PASS. [Приёмочный протокол](../docs/e4-routing-interaction-115-acceptance.md).
-- Ограничения: исходный пользовательский файл и portable не проверены; commit оконцовки в синтетическом benchmark около 1,1 с; ZIP не заказан. Интеграция и приёмка владельцем открыты.
+- Проверки 15–16.10.2026: worker Vitest 216/2293, TypeScript/Vite, browser drag/Shift/Escape/save/Undo/Redo, benchmark, diff/staged-check PASS; integration Vitest 217/2297, TypeScript/Vite и `git show --check` PASS. [Приёмочный протокол](../docs/e4-routing-interaction-115-acceptance.md).
+- Ограничения: исходный пользовательский файл и portable не проверены; commit оконцовки в синтетическом benchmark около 1,1 с; ZIP не заказан. Интеграция подтверждена, приёмка владельцем открыта.
 - Решение владельца о приёмке: —

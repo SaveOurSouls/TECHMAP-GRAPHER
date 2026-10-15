@@ -132,5 +132,5 @@
 | 112 | [Координаты изгибов после создания ОП](112-op-bend-coordinate-integrity.md) | ready-for-review | REQ-147: code `4d56e40`, handoff `47e1c64` включены в merge `0811aff`; общий клиент 215/2279, TS/Vite PASS. |
 | 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | ready-for-review | REQ-148: первичный срез в M5-22-052; follow-up seal `18dee2b`/`db7c579` интегрирован, новый ZIP не заказан. |
 | 114 | [Исправить размеры P1 и точки соединения](114-p1-drawing-dimension-anchors.md) | ready-for-review | REQ-149: code `fb248e1`, handoff `d1b896b` включены в merge `d66f287`; общий клиент 215/2279, TS/Vite PASS. |
-| 115 | [Пересмотреть правила редактирования трасс Э4](115-e4-routing-interaction.md) | in-progress | REQ-150: C1–C4 про полноту прямых диффпар, ортогональную геометрию после drag и ложный отказ перемещения; отдельный worktree создан от `96829c0`. |
+| 115 | [Пересмотреть правила редактирования трасс Э4](115-e4-routing-interaction.md) | ready-for-review | REQ-150: интегрировано `258a04d`/`bae2185`; Vitest 217/2297, TypeScript/Vite PASS. |
 | 116 | [Учесть наконечники в Маршруте V3](116-route-v3-wire-terminals.md) | in-progress | REQ-151: наконечник входит в полуфабрикат провода на его конце; гильза остаётся отдельной операцией; отдельная ветка/worktree созданы от `146a3d8`. |

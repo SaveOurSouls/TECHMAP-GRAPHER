@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — handoff 115 / REQ-150
+
+Рабочая ветка `codex/e4-routing-interaction` основана на `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`. Опубликованы code `a712396092ea7f3eabf610c78499836f0523a527` и handoff/docs `3b276e745880c6963cbe4383f01f1b5dbf464aa4`. Из-за add/add карточки 115 выполнены точные cherry-pick: integration code `258a04d`, документы/handoff `bae2185`; карточка взята из проверенной версии рабочего чата. `git show --check` PASS; интеграционный HEAD `bae2185`. Полный Vitest 217/2297 и `npm run build` (TypeScript/Vite) PASS. Первый sandbox-запуск Vitest дал системные Temp ENOENT, повтор вне sandbox прошёл. Worker browser drag/Shift/Escape/autosave/Undo/Redo и benchmark PASS. Ограничения: исходный жгут/portable не проверены; commit оконцовки около 1,1 с; ZIP не заказывался, карточка 116 ещё in-progress.
+
 ## 15.10.2026 — follow-up 112 после M5-22-052
 
 Регистрация `1170ee6`, код `dc817dea78d89410e04a89b86ef1489209dbaaea` и handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и включены в merge `98e91c08f3b477ab4df1abcf3b028351871b3eb5`; ancestry и `git show --check` PASS. Конфликт только в release coverage разрешён с сохранением истории M5-22-052 и текущих follow-up 111/113. Общий интегрированный Vitest **216/2283**, TypeScript/Vite production build PASS. Изменённый production-код ограничен `physical-joining-pipe-projection.ts`; исходный жгут, ручная C1–C4 и packaged UI не проверены. M5-22-052 нового кода не содержит; ZIP не заказан и ожидает завершения активных карточек 115/116.
