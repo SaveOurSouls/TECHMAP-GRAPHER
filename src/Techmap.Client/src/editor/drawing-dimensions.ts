@@ -5,6 +5,7 @@ import { findWireEndpoint, calculateWireCutLength, type HarnessDesignDocument, t
 import { physicalWirePoints } from "./physical-wire-geometry";
 import { physicalSegmentControls } from "./physical-geometry";
 import type { EditorSceneObject } from "./editor-types";
+import { pipeTerminationDimensionEnd, wireDimensionEnd } from "./drawing-dimension-anchors";
 
 export type DimensionMode="horizontal"|"vertical"|"aligned"|"path";
 export interface DrawingDimension {
@@ -120,8 +121,14 @@ export function dimensionTargetPoints(document:HarnessDesignDocument,d:DrawingDi
  const controls=segment?physicalSegmentControls(document,segment):wire?dimensionWirePoints(document,wire):[];
  const points=controls.slice(d.from,d.to+1).map(p=>({...p}));if(points.length<2)return [];
  const ends=segment?[document.physicalTopology?.nodes.find(n=>n.id===segment.from)?.connectorId,document.physicalTopology?.nodes.find(n=>n.id===segment.to)?.connectorId]:wire?.drawingEndpoints?[]:[wire?.from.connectorId,wire?.to.connectorId];
- if(d.from===0&&ends[0])points[0]=drawingConnectorCorner(document,ends[0],points[0]!,perimeters)??points[0]!;
- if(d.to===controls.length-1&&ends[1])points[points.length-1]=drawingConnectorCorner(document,ends[1],points.at(-1)!,perimeters)??points.at(-1)!;
+ const anchor=(index:number,end:"from"|"to",connectorId:string|undefined)=>{
+  const connector=document.connectors.find(c=>c.id===connectorId);
+  if(wire&&(wire.drawingEndpoints||connector?.terminationComponent))return wireDimensionEnd(document,wire,end)??points[index]!;
+  if(segment&&connector?.terminationComponent)return pipeTerminationDimensionEnd(document,segment.id,end,points[index]!,points[index===0?1:points.length-2]!);
+  return connectorId?drawingConnectorCorner(document,connectorId,points[index]!,perimeters)??points[index]!:points[index]!;
+ };
+ if(d.from===0)points[0]=anchor(0,"from",ends[0]);
+ if(d.to===controls.length-1)points[points.length-1]=anchor(points.length-1,"to",ends[1]);
  return points;
 }
 export const resolvedDimensionMode=(document:HarnessDesignDocument,d:DrawingDimension):DimensionMode=>d.modeOverride===false?document.drawingDocuments?.dimensionMode??d.mode:d.mode;
@@ -135,7 +142,7 @@ export function drawingDimensionScene(document:HarnessDesignDocument,_wires:read
  const explicit=document.drawingDocuments?.dimensions??[];
  const legacy=document.wires.filter(w=>document.drawingDocuments===undefined&&w.lengthMm!==null&&!explicit.some(d=>d.wireId===w.id)).flatMap(w=>{
   const points=dimensionWirePoints(document,w);if(points.length<2)return [];
-  const geometry=dimensionGeometry(points[0]!,points.at(-1)!,"aligned",40);
+  const geometry=dimensionGeometry(wireDimensionEnd(document,w,"from")??points[0]!,wireDimensionEnd(document,w,"to")??points.at(-1)!,"aligned",40);
   return [{id:`dimension:${w.id}`,kind:"dimension" as const,layerId:"dimensions",label:`${w.lengthMm} мм`,x:(geometry[1]!.x+geometry[2]!.x)/2,y:(geometry[1]!.y+geometry[2]!.y)/2,width:0,height:0,color:"#55798e",points:geometry,metadata:{boundDimension:"true",legacyDimension:"true",dimensionMode:"aligned"}}];
  });
   const scene:EditorSceneObject[]=[...legacy,...explicit.flatMap(d=>{
