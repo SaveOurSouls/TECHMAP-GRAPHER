@@ -19,7 +19,7 @@ Follow-up C1–C4 от владельца: ready-for-review, прежний ча
 
 ## 116 — наконечники в Маршруте V3, 15.10.2026
 
-Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, карточка [116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; статус in-progress. Ветка `codex/route-v3-wire-terminals`, отдельный worktree `tmp/route-v3-wire-terminals`, фактическая база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`; регистрация в рабочей ветке — `e86e071`. Владелец — чат: V3-проекция/модель/refresh/рисунок концов и тесты внутри `src/Techmap.Client/src/manufacturing-v3/`, отдельный handoff. Координатор ведёт общие coordination docs. Наконечник учитывается в ПФ провода только на назначенном конце; гильза — отдельная операция. ZIP не заказывался; coverage следующего среза после M5-22-052.
+Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, карточка [116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; ready-for-review. Ветка `codex/route-v3-wire-terminals`, worktree `tmp/route-v3-wire-terminals`, база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`; регистрация `e86e071`, код `8ce6047`, handoff `821a975`. Integration эквиваленты — cherry-pick `8267e3b`/`6df71de`; полный клиент 218/2319, TypeScript/Vite PASS. Координатор ведёт общие coordination docs. Исходный жгут, server tests и portable/package UI не проверены. ZIP поручен сборщику 16.10.2026.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 

@@ -7,7 +7,7 @@
 - **База:** `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`.
 - **Регистрация:** `e86e071fed7efad7f06231733621361ad8d44dfb`; центральный реестр координатора также содержит 116.
 - **Код:** `8ce60474966d56da5e68a0d41d0b9f31bc03134c`, опубликован в разрешённый `origin/codex/route-v3-wire-terminals`.
-- **Handoff:** следующий документальный commit этой ветки.
+- **Handoff:** `821a975b4a924c10ceb9771a83270ea5b01eaba9`, опубликован в `origin/codex/route-v3-wire-terminals`.
 - **Coverage:** следующий релиз после M5-22-052; включение в integration HEAD и ZIP подтверждает сборщик. ZIP здесь не собирался.
 
 ## Результат

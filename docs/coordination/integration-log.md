@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — handoff 116 / REQ-151 и ZIP
+
+Из `codex/route-v3-wire-terminals` (база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`) интегрированы code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` точными cherry-pick `8267e3b` и `6df71de`; карточка разрешена проверенной версией worker. Full integration Vitest **218/2319**, TypeScript/Vite build PASS. Worker: Chrome/Playwright desktop/mobile, 14 форм наконечников, отдельный этап гильзы, общий наконечник, уплотнители и legacy adoption PASS. Исходный жгут, серверные тесты и portable/package UI не проверены. M5-22-052 имеет ту же версию `0.63.52-m5-22-review`; перед ZIP требуется сравнить и при необходимости поднять `appVersion`. ZIP поручен сборщику владельцем 16.10.2026; проверить manifest, portable 7/7, точный размер/SHA-256 и затем коммитить acceptance-документацию.
+
 ## 16.10.2026 — handoff 115 / REQ-150
 
 Рабочая ветка `codex/e4-routing-interaction` основана на `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`. Опубликованы code `a712396092ea7f3eabf610c78499836f0523a527` и handoff/docs `3b276e745880c6963cbe4383f01f1b5dbf464aa4`. Из-за add/add карточки 115 выполнены точные cherry-pick: integration code `258a04d`, документы/handoff `bae2185`; карточка взята из проверенной версии рабочего чата. `git show --check` PASS; интеграционный HEAD `bae2185`. Полный Vitest 217/2297 и `npm run build` (TypeScript/Vite) PASS. Первый sandbox-запуск Vitest дал системные Temp ENOENT, повтор вне sandbox прошёл. Worker browser drag/Shift/Escape/autosave/Undo/Redo и benchmark PASS. Ограничения: исходный жгут/portable не проверены; commit оконцовки около 1,1 с; ZIP не заказывался, карточка 116 ещё in-progress.
