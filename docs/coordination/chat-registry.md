@@ -2,7 +2,7 @@
 
 ## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
 
-Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, active/in-progress. Отдельная ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`, база integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Владелец файлов: `src/Techmap.Client/src/termination-library/**` (кроме SVG), `src/Techmap.Client/src/component-library/**`, `src/Techmap.Client/src/App.tsx`, `src/Techmap.Client/src/editor/TerminationInspector.tsx`, карточка 109 и собственные разделы документации. Изменения карточки 108 в основной рабочей копии исключены. REQ-144 уточняет REQ-135/141; ADR-0021. Release coverage: следующий срез после M5-22-048, код/handoff пока ожидаются; по постоянному поручению владельца завершённую работу включить в ZIP.
+Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, ready-for-review. Отдельная ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`, база integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Владелец файлов: `src/Techmap.Client/src/termination-library/**` (кроме SVG), `src/Techmap.Client/src/component-library/LibraryWorkspace.tsx`, `src/Techmap.Client/src/App.tsx`, `src/Techmap.Client/src/editor/TerminationInspector.tsx`, карточка 109 и собственные разделы документации. Изменения 108 исключены. REQ-144, ADR-0021; код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3` опубликован. PASS: 207/2187, TypeScript/Vite, production browser 1440/390, diff-check; handoff заполнен. Следующий срез после M5-22-048 должен включить результат; интеграция/ancestry сборщиком pending, ZIP этой веткой не собирался. Приёмка владельцем открыта.
 
 ## 107 — ручки и границы оконцовок, 15.10.2026
 

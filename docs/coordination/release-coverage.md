@@ -2,7 +2,7 @@
 
 ## 109 — библиотека оконцовок и генерация серий, 15.10.2026
 
-REQ-144, карточка [109](../../tasks/109-termination-library-series.md). Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, ветка `codex/termination-library-series`, базовый integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Реализация и handoff ожидаются; интеграция и ancestry не подтверждены. Следующий пакет после M5-22-048 должен включить этот результат по постоянному поручению владельца. До code/handoff проверки coverage остаётся pending, ZIP не собирать.
+REQ-144, карточка [109](../../tasks/109-termination-library-series.md). Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, ветка `codex/termination-library-series`, базовый integration SHA `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3` опубликован; handoff — текущий документальный коммит ветки и [раздел 109](agent-handoff.md). PASS: 207/2187, TypeScript/Vite, production browser 1440/390, diff-check. Ready-for-review. **Coverage pending integration:** в основной integration-ветке не подтверждён; сборщик должен включить регистрацию `ed1fe21`, code SHA и handoff, сверить общие документы с карточкой 108 и записать ancestry/equivalent. Следующий пакет после M5-22-048 должен включить результат по постоянному поручению владельца; до подтверждения интеграции ZIP заблокирован. Исходный жгут/native portable UI не проверены, приёмка владельцем открыта.
 
 ## 107 — физическая точка и компактные границы, 15.10.2026
 

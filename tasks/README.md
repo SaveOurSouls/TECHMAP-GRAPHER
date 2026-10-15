@@ -124,4 +124,4 @@
 | 105 | [Ширина настроек карточки Route v3](105-route-v3-full-width-card-settings.md) | accepted | REQ-140: окно по ширине экрана, согласованный CSS, таблицы без горизонтального overflow desktop. |
 | 106 | [Рисунки, размещение и подключения оконцовок](106-termination-placement-and-connections.md) | ready-for-review | REQ-141: production SVG, библиотека, вставка мышью, перенос и 2/3/4+ проводов; 2055 тестов PASS. |
 | 107 | [Ручки и границы оконцовок на Чертеже](107-termination-drawing-handles-and-bounds.md) | ready-for-review | REQ-142: самостоятельный перенос физической точки, новые выходы на манжете, компактные границы/выноска; 2169 тестов PASS. |
-| 109 | [Постоянная библиотека оконцовок и генерация серий](109-termination-library-series.md) | in-progress | REQ-144: библиотека начального экрана, таблицы серий и просмотр свойств в Э4/Чертеже. |
+| 109 | [Постоянная библиотека оконцовок и генерация серий](109-termination-library-series.md) | ready-for-review | REQ-144: код `b437f79`, 207/2187, TS/Vite и production browser PASS; опубликован в отдельной ветке, интеграция/следующий ZIP pending. |

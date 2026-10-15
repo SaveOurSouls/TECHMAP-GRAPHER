@@ -1,5 +1,14 @@
 # Шаблон handoff от чата задачи
 
+## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
+
+- Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, /root, ready-for-review. Ветка `codex/termination-library-series`, worktree `tmp/termination-library-series`; база `313c22539df4c4d1f8aca896849a21d1e5e14caa`.
+- Регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`; код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3`, оба опубликованы в `origin/codex/termination-library-series`. Документальное закрытие — коммит этого раздела, его точный SHA передаётся сборщику после push.
+- REQ-144: постоянная домашняя библиотека, независимые серии и генерация/дополнение строк, все каталожные параметры в таблице, protected templates, старый localStorage, атомарная запись и stale-save guard, табличные закреплённые свойства без создания артикулов в Э4/Чертеже. Владение: termination-library без SVG, LibraryWorkspace.tsx, App.tsx, TerminationInspector.tsx и документы 109. Чужие изменения 108 отсутствуют.
+- PASS: полный Vitest **207 файлов / 2187 тестов**, TypeScript, Vite build, production Chrome/Playwright **1440×1050 / 390×844**, визуальный просмотр, staged diff-check и `git show --check`. Подробные сценарии и команды: [протокол 109](../termination-109-acceptance.md).
+- Ограничения: каталог локален браузеру/origin; реальные каталожные нормы не выдуманы. Browser использует mock API и отдельную production QA-страницу свойств/выбора; исходный пользовательский жгут/native portable UI не проверены. Сервер не менялся, .NET не запускался. Приёмка владельцем открыта.
+- **Сборщику:** включить registration/code/handoff в integration и подтвердить ancestry/equivalent в coverage перед следующим ZIP после M5-22-048. Общие документы регистрации не должны затереть параллельные разделы 108; ветка не содержит 108. Готовая worktree сохранена для ревью, автоматического удаления/архивирования не было. ZIP этой задачей не собран.
+
 ## 107 — физическая точка и границы оконцовки, 15.10.2026
 
 Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` опубликован в разрешённый origin и включён непосредственно в integration HEAD; ancestry проверен. Root — жесты/интеграция/docs, Sol — компактная геометрия и физические выходы, Luna — независимый review. Замечание о самостоятельном узле устранено.
