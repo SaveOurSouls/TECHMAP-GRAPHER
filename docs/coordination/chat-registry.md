@@ -220,3 +220,7 @@ Follow-up 091 (13.10.2026, C1–C4): `/root`, тот же worktree и ветка
 ## Карточка 102 — 15.10.2026: вид проводов в строке ПФ
 
 `/root`, текущий чат, `codex/integration-m5-22`, основной worktree. Владелец RouteV3Graph.tsx, route-v3-graph.css и документов 102/REQ-138; ready-for-review; код `30688f622129bd3114e44968aa86f03641442190` опубликован. Coverage: следующий ZIP pending. Чужие изменения 099 исключены.
+
+## Карточка 103 — 15.10.2026: прямое редактирование вида ПФ
+
+`/root`, текущий чат, основной worktree codex/integration-m5-22. Владелец RouteV3Graph.tsx, route-v3-graph.css, модуль группировки и тесты; документы 103/REQ-139. Ready-for-review; код ca6cebaa72e0c723d8736c08fc77fad4bf92923a опубликован. Следующий ZIP pending. Изменения 099 исключены.

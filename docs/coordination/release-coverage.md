@@ -190,3 +190,5 @@ represent missing completed chat handoffs.
 | 101 — Таблица операций Route v3 | `/root` | code `a808a25db9a1a8dd5bb56a33dc87700c718e28ad`; handoff — документальный срез 101 | REQ-137; code является ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
 
 | 102 — Вид проводов в строке ПФ | `/root` | code `30688f622129bd3114e44968aa86f03641442190`; handoff — документальный срез 102 | REQ-138; ancestor integration HEAD; 195/1878, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending |
+
+| 103 — Прямые колонки вида и рисунок ПФ | /root | code ca6cebaa72e0c723d8736c08fc77fad4bf92923a; handoff — документальный срез 103 | REQ-139; ancestor integration HEAD; 196/1880, TypeScript/Vite, Playwright PASS | included (ancestor); следующий ZIP pending, приёмка открыта |
