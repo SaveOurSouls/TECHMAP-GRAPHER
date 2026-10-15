@@ -117,12 +117,7 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
     const axis=sample(joiningPipePoints(pipe),drawingBendRadius(document)),packed=joiningPipePacking(document,pipe);
     for(const [i,member] of pipe.members.entries()){
       const source=sample(joiningMemberPoints(document,member.segmentIds));
-      // A reversed member enters the OP from the opposite connector. Keep the
-      // authored source for projection deltas, but use an OP-oriented copy for
-      // the two transition shoulders.
-      const orientedSource=member.reverse
-        ? [...source].reverse().map(sample=>({fraction:1-sample.fraction,point:sample.point}))
-        : source;
+      // Orient the OP lane to the member's source traversal.
       const rawAxis=sample(joiningPipePoints(pipe));
       const lane=offsetSamples(axis,packed.members[i]!.offset);
       const oriented=member.reverse?[...lane].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):lane;
@@ -133,7 +128,9 @@ function placements(document:HarnessDesignDocument):ReadonlyMap<string,Placement
       const axisControls=member.reverse?[...axisControlsBase].reverse().map(s=>({fraction:1-s.fraction,point:s.point})):axisControlsBase;
       const lengths=member.segmentIds.map(id=>pathLength(physicalSegmentPoints(document,t!.segments.find(s=>s.id===id)!))),total=lengths.reduce((a,b)=>a+b,0);
       const low=member.from/2,high=(1+member.to)/2;
-      const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(orientedSource,low),outerB=member.exitOuter??at(orientedSource,high);
+      // Fractions and segment order already follow the member's own source
+      // direction. Only the OP lane is reversed, not its source shoulders.
+      const a=oriented[0]!.point,b=oriented.at(-1)!.point,outerA=member.enterOuter??at(source,low),outerB=member.exitOuter??at(source,high);
       const enterLead=member.reverse?pipe.exitLength:pipe.enterLength;
       const exitLead=member.reverse?pipe.enterLength:pipe.exitLength;
       const enterVector=joiningPipeExitVector(pipe,member.reverse?"to":"from"),exitVector=joiningPipeExitVector(pipe,member.reverse?"from":"to");
@@ -169,9 +166,6 @@ function transitionControlCandidates(p:Placement):readonly JoiningPipeMemberCont
  const enterBendFraction=p.low+(m.from-p.low)*(p.enter[1]?.fraction??.5);
  const exitBendFraction=m.to+(p.high-m.to)*(p.exit.at(-2)?.fraction??.5);
  const candidates:JoiningPipeMemberControl[]=[
-   // The outer station is the first real transition corner on the member
-   // route. Keep it visible and numbered; OP axis stations remain controlled
-   // by the common pipe itself.
    {fraction:p.low,point:p.enter[0]!.point,controlled:false,connection:true,boundary:"outerEnter",memberIndex:p.memberIndex},
    ...(p.enterBend===null?[]:[{fraction:enterBendFraction,point:p.enterBend,controlled:false,transition:{memberIndex:p.memberIndex,side:"enter" as const}}]),
    {fraction:p.low+(m.from-p.low)*p.enter.at(-2)!.fraction,point:p.enterLeadPoint,controlled:true,lead:"enter",memberIndex:p.memberIndex},

@@ -6,6 +6,8 @@ import { automaticPipeRoute, constrainedPolyline, physicalNodePoint, physicalNod
 import { createJoiningPipe } from "./physical-joining-pipes";
 import { physicalTopologyScene } from "./physical-scene";
 import { resolvePhysicalRoutePointCommand } from "./physical-route-point-command";
+import { drawingRouteHitPoints } from "./drawing-route-path";
+import { projectOntoPolyline } from "./physical-coverings";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { createEditorHistory, executeEditorCommand, undoEditorCommand } from "./history";
 
@@ -224,12 +226,13 @@ it("places an ordinary bend grip on the rounded painted route and preserves its 
    segments:source.physicalTopology!.segments.map(item=>item.id===segment.id?{...item,path:{kind:"polyline" as const,points:[{x:220,y:80}]}}:item)}};
  const scene=physicalTopologyScene(document).find(item=>item.id===segment.id)!;
  const grip=scene.pipe!.handles[0]!;
- const painted=scene.points!;
- const nearest=Math.min(...painted.map(point=>Math.hypot(point.x-grip.x,point.y-grip.y)));
+ const painted=drawingRouteHitPoints(scene.points!,scene.routeRadius);
+ const nearest=projectOntoPolyline(painted,grip).distance;
  expect(nearest).toBeLessThan(1e-6);
  const command=resolvePhysicalRoutePointCommand(document,segment.id,0,{x:grip.x+15,y:grip.y-8},"carry");
  expect(command).toMatchObject({type:"edit-physical-bend",segmentId:segment.id,index:0});
- expect((command as any).position).toEqual({x:235,y:72});
+ expect((command as any).position.x).toBeCloseTo(235,10);
+ expect((command as any).position.y).toBeCloseTo(72,10);
 });
 it("distributes wires to shortest channels, preserves pinned routes and supports separate exits for double crimp",async()=>{
  const {routePhysicalWires}=await import("./physical-topology");const base=physicalFixture();const d={...base,wires:base.wires.map(w=>w.id==="W2"?{...w,from:base.wires[0]!.from,e4Route:createOrthogonalE4Route(wireEndpointE4Anchor(base,base.wires[0]!.from)!,wireEndpointE4Anchor(base,w.to)!)}:w)};

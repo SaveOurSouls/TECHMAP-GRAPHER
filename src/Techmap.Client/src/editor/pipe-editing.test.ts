@@ -26,10 +26,11 @@ describe('pipe editing regressions M4-70',()=>{
   const d=physicalFixture(),s=d.physicalTopology!.segments[0]!;
   expect(physicalSegmentPoints(d,s)).toEqual(physicalSegmentControls(d,s));
   const scene=designToScene(d,'drawing');const pipe=scene.find(o=>o.id==='S0')!;
-  expect(hitTestWireRoutePoint(pipe,s.path.points[0]!,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.bendIndex===0));
+  expect(hitTestWireRoutePoint(pipe,pipe.pipe!.handles[0]!,100)).toBe(physicalSegmentHandles(d,s).findIndex(h=>h.bendIndex===0));
   const automatic = {...s,path: { kind: "routed" as const, points: [] }};
   const autoScene = designToScene({...d,physicalTopology:{...d.physicalTopology!,segments:[automatic,...d.physicalTopology!.segments.slice(1)]}},'drawing').find(o=>o.id===s.id)!;
-  for(const [i,corner] of autoScene.points!.slice(1,-1).entries())expect(hitTestWireRoutePoint(autoScene,corner,100)).toBe(i);
+  expect(autoScene.pipe!.handleOrigins).toEqual(autoScene.points!.slice(1,-1));
+  for(const [i,corner] of autoScene.pipe!.handles.entries())expect(hitTestWireRoutePoint(autoScene,corner,100)).toBe(i);
   const next=applyEditorCommand(d,{type:'set-physical-topology',topology:{...d.physicalTopology!,segments:d.physicalTopology!.segments.map(x=>x.id===s.id?{...x,path: { kind: "routed" as const, points: [{x:250,y:90}] }}:x)}});
   expect(next.wires).toEqual(d.wires);expect(next.physicalTopology!.routes).toEqual(d.physicalTopology!.routes);
   expect(physicalWirePoints(next,'W1',{x:0,y:0},{x:1,y:1})).not.toEqual(physicalWirePoints(d,'W1',{x:0,y:0},{x:1,y:1}));

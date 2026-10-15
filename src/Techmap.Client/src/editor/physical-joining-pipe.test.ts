@@ -154,7 +154,10 @@ it("keeps explicit member transition points separate from shared exits",()=>{
   const transition=pipe.joiningTransitionHandles!.find(handle=>handle.side==="enter")!;
   const transitionPoint=pipe.handles[transition.index]!;
   const transitionAnchors=pipeBendSnapAnchors(pipe,display,transition.index,false,"adjacent",transitionPoint);
-  expect(transitionAnchors).toEqual(bendSnapAnchors(display,transition.index,false,"adjacent",transitionPoint));
+  const raw=[member.points![0]!,...pipe.handleOrigins!,member.points!.at(-1)!];
+  const sharp=pipe.handleOrigins![transition.index]!;
+  expect(transitionAnchors).toEqual(bendSnapAnchors(raw,transition.index,false,"adjacent",sharp)
+    .map(anchor=>({x:anchor.x+transitionPoint.x-sharp.x,y:anchor.y+transitionPoint.y-sharp.y})));
   expect(transitionAnchors).toHaveLength(2);
   const snapped=snapBendPoint({x:transitionPoint.x+27,y:transitionPoint.y+41},transitionAnchors,true,7,undefined,Math.PI/6).point;
   expect(snapped).not.toEqual({x:transitionPoint.x+27,y:transitionPoint.y+41});
@@ -335,7 +338,7 @@ it("keeps boundary stations out of bend hit targets while preserving their geome
  const member=physicalTopologyScene(base).find(object=>object.id==="p1")!;
  const outer=member.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!;
  const outerPoint=member.pipe!.handles[outer.index]!;
- expect(hitTestWireRoutePoint(member,outerPoint,1)).toBe(outer.index);
+ expect(hitTestWireRoutePoint(member,outerPoint,100)).toBeNull();
  const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:outer.boundary,origin:outerPoint,position:{x:outerPoint.x+20,y:outerPoint.y+30}});
  expect(moved.physicalTopology!.joiningPipes![0]!.members[1]!.enterOuter).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
  expect(joiningPipeMemberControls(moved,"p1")!.find(control=>control.boundary==="outerEnter")!.point).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
@@ -348,7 +351,9 @@ it("restores an edited exterior transition station when its numbered handle is r
  const d=fixture(),op=createJoiningPipe(d,[["p0"],["p1"]],"op"),base={...d,physicalTopology:{...d.physicalTopology!,joiningPipes:[op]}};
  const before=physicalTopologyScene(base).find(object=>object.id==="p1")!,outer=before.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!;
  const origin=before.pipe!.handles[outer.index]!,changed=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:"outerEnter",origin,position:{x:origin.x+30,y:origin.y-20}});
- const resolved=resolvePhysicalRoutePointCommand(base,"p1",outer.index,{x:origin.x+30,y:origin.y-20},"adjacent");
+ const custom=physicalTopologyScene(changed).find(object=>object.id==="p1")!,customIndex=custom.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="outerEnter")!.index;
+ const customOrigin=custom.pipe!.handles[customIndex]!;
+ const resolved=resolvePhysicalRoutePointCommand(changed,"p1",customIndex,{x:customOrigin.x+30,y:customOrigin.y-20},"adjacent");
  expect(resolved).toMatchObject({type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:"outerEnter"});
  expect(changed.physicalTopology!.joiningPipes![0]!.members[outer.memberIndex]!.enterOuter).toEqual({x:origin.x+30,y:origin.y-20});
  const restored=applyEditorCommand(changed,{type:"clear-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:"outerEnter"});
@@ -439,7 +444,9 @@ it("keeps reversed OP members attached to the nearest connector at both ends",()
  const op=createJoiningPipe(source,[["p1"],["p0"]],"op"),document={...source,physicalTopology:{...source.physicalTopology,joiningPipes:[op]}};
  expect(op.members[1]!.reverse).toBe(true);
  const controls=joiningPipeMemberControls(document,"p0")!;
- expect(controls.find(control=>control.boundary==="outerEnter")!.point.x).toBeGreaterThan(controls.find(control=>control.boundary==="outerExit")!.point.x);
+ // p0 itself still runs from x=0 to x=600; the reverse flag changes its OP
+ // lane orientation, not the direction of its source shoulders.
+ expect(controls.find(control=>control.boundary==="outerEnter")!.point.x).toBeLessThan(controls.find(control=>control.boundary==="outerExit")!.point.x);
 });
 
 it("split fragments share a continuous lane and keep their node on the display route",()=>{

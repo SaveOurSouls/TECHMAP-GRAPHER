@@ -2573,7 +2573,7 @@ export function HarnessDesignEditor({
           if(view==="e4"){run({type:"edit-e4-bend",wireId,index:routeIndex,position:point,mode,insert});return;}
           const topology = history.present.physicalTopology;
           const op=topology?.joiningPipes?.find(p=>p.id===wireId);
-          if(op){run({type:"edit-joining-pipe-bend",pipeId:wireId,index:routeIndex,position:point,mode,insert});return;}
+          if(op){const command=resolvePhysicalRoutePointCommand(history.present,wireId,routeIndex,point,mode,insert);if(command)run(command);return;}
           const segment = topology?.segments.find(s => s.id === wireId);
           if (topology && segment) {const command=resolvePhysicalRoutePointCommand(history.present,wireId,routeIndex,point,mode,insert);if(command)run(command);return;}
           const wire = history.present.wires.find((item) => item.id === wireId);
