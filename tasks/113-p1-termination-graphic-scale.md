@@ -32,6 +32,8 @@ P1 на Чертеже должен быть виден в масштабе по
 `39333794958043e20a95ce7b2a116b8076f324f7` опубликован в
 `origin/codex/p1-termination-graphic-scale`. Подготовлен
 [точный handoff](../docs/coordination/handoff-113-p1-termination-graphic-scale.md)
-сборщику; интеграция и включение в ZIP пока не подтверждены. Общие requirements,
-status, реестр и coverage обновляет координатор после передачи. Исходный жгут,
-packaged UI и приёмка владельцем открыты; ZIP не заказан.
+сборщику; code `3933379` и handoff `7e7ca03` интегрированы merge `70a41ab` и
+подтверждены в integration HEAD `0811aff`. Совместный клиентский прогон 112–114:
+215/2279, TypeScript/Vite PASS. Общие requirements, status, реестр и coverage
+обновлены координатором. Исходный жгут, совместный scene/browser и packaged UI не
+проверены; приёмка владельцем открыта; ZIP не заказан.
