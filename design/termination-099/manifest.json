@@ -352,7 +352,7 @@
     },
     {
       "id": "flag",
-      "name": "Флажковый · угловая розетка",
+      "name": "Флажковый · цельная изоляция",
       "kind": "terminal",
       "geometryFamily": "flag",
       "views": {
@@ -377,7 +377,103 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Контактная часть развёрнута к оси обжима",
+      "note": "Цельный Г-корпус; металл скрыт, виден приёмный торец",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-open",
+      "name": "Неизолированный обжимной флажок",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-open",
+      "views": {
+        "e4": "flag-bare-open-e4.svg",
+        "drawing": "flag-bare-open-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Две пары открытых крыльев; крупное окно перемычки",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-pressed-smooth",
+      "name": "Неизолированный опрессовочный · гладкий",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-pressed-smooth",
+      "views": {
+        "e4": "flag-bare-pressed-smooth-e4.svg",
+        "drawing": "flag-bare-pressed-smooth-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Закрытая трубка прессовки с двумя диаметрами",
+      "dimensionFields": "проектные поля L / W / t",
+      "catalogAlias": null,
+      "standardClaim": null
+    },
+    {
+      "id": "flag-bare-pressed-ribbed",
+      "name": "Неизолированный опрессовочный · рифлёный",
+      "kind": "terminal",
+      "geometryFamily": "flag-bare-pressed-ribbed",
+      "views": {
+        "e4": "flag-bare-pressed-ribbed-e4.svg",
+        "drawing": "flag-bare-pressed-ribbed-drawing.svg"
+      },
+      "anchors": [
+        {
+          "id": "anchor-wire-entry",
+          "role": "wire-entry",
+          "x": 32,
+          "y": 50,
+          "normal": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "pivot": {
+        "x": 32,
+        "y": 50
+      },
+      "electricalPointCount": 1,
+      "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
+      "note": "Закрытая трубка прессовки одного диаметра; рёбра",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -772,12 +868,24 @@
       6.6
     ],
     "neckWidthRatio": 2.3,
-    "note": "Reference proportions only; flag is a projected 90-degree adaptation, not a dimensioned manufacturing drawing."
+    "note": "Straight female proportions unchanged. Bare flags reuse a projected 90-degree metal head; insulated flag has a separate complete polymer shell."
   },
   "profileReferences": {
     "C1": "codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png",
     "C2": "codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png",
     "C3": "codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png"
   },
-  "viewContract": "same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds"
+  "viewContract": "same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds",
+  "flagRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-c79a2619-0c4f-4f4f-b776-fd8d82ab0573.png",
+      "C2": "codex-clipboard-cbe9281b-f537-420a-9cee-934ff16a733d.png",
+      "C3": "codex-clipboard-82516bcf-e1ff-459f-9497-6e34da26ec65.png",
+      "C4": "codex-clipboard-e9959775-cb16-458e-843d-fb46a7f5f527.png",
+      "C5": "codex-clipboard-c8fe8adc-8155-4eb6-92c3-d4717a3e38a3.png"
+    },
+    "observation": "C1/C2 open-wing crimp and large bridge window; C3 fully insulated elbow; C4 superseded wrong straight-cuff profile; C5 two distinct bare pressed tubes: smooth two-diameter and ribbed one-diameter",
+    "portPolicy": "one wire-entry at 32,50; receptacle opening is geometry only"
+  }
 }
