@@ -1,12 +1,27 @@
 # Release coverage
 
+## 111 follow-up — откат оболочек П по уточнению владельца, 15.10.2026
+
+Уточнённое REQ-146 заменяет первоначальную трактовку; [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md).
+Исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree,
+ready-for-review. Код `e6f03190831bf6607438837d382d3b43e6718ec2`, первый handoff
+`a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации
+`04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и включены
+в integration merge; ancestry PASS. Runtime-файлы `covering-layout.ts` и
+`physical-wire-geometry.ts` совпадают с `aa2b3bc` до изменения 111;
+`connector-sleeve-support.ts` удалён, `connectorSleeveSupports` в runtime нет.
+После объединения с follow-up 113 общий Vitest 215/2277 и TypeScript/Vite PASS.
+M5-22-051 и M5-22-052 остаются историческими ZIP с отменённым поведением 111;
+новый ZIP не заказан и заблокирован активной карточкой 115. Исходный жгут и
+packaged UI не проверены; приёмка владельца открыта.
+
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
 REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a7` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `0811aff`, `git show --check` PASS. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут, ручные C1 и packaged UI не проверены.
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): код `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` опубликованы и проверены как предки integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; `git show --check` PASS. Совместный клиент Vitest 215/2281, TypeScript/Vite PASS. Ready-for-review, интегрировано после M5-22-052, поэтому выданный ZIP исправления не содержит. Следующий ZIP заблокирован активной карточкой 115 и ожидающим уточнения handoff отката оболочек П. Исходный жгут и packaged UI не проверены.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`. Первичный handoff: код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; включены в M5-22-052. Follow-up по клиппингу уплотнителя pin/socket (C1 `e0128795`): код `18dee2b93a220064f99b87c587d4777c307ae3c7`, handoff `db7c57975a1bd4b5d055add094798725a9569370` опубликованы и проверены как предки integration merge `d5bea34a2dd013fc18b639fe119b71d66398c20f`; `git show --check` PASS. Совместный клиент после отката 111: Vitest 215/2277, TypeScript/Vite PASS. Ready-for-review, интегрировано после M5-22-052, поэтому выданный ZIP исправления не содержит. Следующий ZIP заблокирован активной карточкой 115. Исходный жгут и packaged UI не проверены.
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
@@ -26,6 +41,9 @@ REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), ча
 - **Gate:** Git/package PASS, Vitest 215/2279, .NET 1140/1140, performance 1/1. Совместный browser/scene сценарий 113/114, исходный жгут, ручная packaged UI-проверка и owner acceptance 112–114 открыты.
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
+
+**Отменено владельцем:** первоначальная трактовка REQ-146 заменена follow-up 111.
+Ниже — история прежней интеграции и поставки, а не действующее требование.
 
 REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
 

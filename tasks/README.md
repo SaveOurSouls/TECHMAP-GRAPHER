@@ -128,8 +128,8 @@
 | 108 | [Состав проводов существующего П](108-pipe-wire-membership.md) | ready-for-review | REQ-143: добавление, устойчивое исключение и перенос проводов между П; 2187 клиентских и 75 целевых серверных тестов PASS. |
 | 109 | [Постоянная библиотека оконцовок и генерация серий](109-termination-library-series.md) | ready-for-review | REQ-144: код `b437f79` интегрирован merge `053d295` и включён в ZIP M5-22-050; 209/2205, TS/Vite и production browser PASS. |
 | 110 | [Ускорить перемещение компонентов в Э4](110-e4-component-drag-performance.md) | ready-for-review | REQ-145: код `8ff8736`, handoff `2f9008f` включены в проверенный ZIP M5-22-051; клиент 211/2223, .NET 1140/1140, portable 7/7. |
-| 111 | [Исправить охват проводов термотрубки](111-thermal-sleeve-wire-coverage.md) | ready-for-review | REQ-146: код `b472621`, handoff `2e8492c` включены в проверенный ZIP M5-22-051; клиент 211/2223, .NET 1140/1140, portable 7/7. |
+|
 | 112 | [Координаты изгибов после создания ОП](112-op-bend-coordinate-integrity.md) | ready-for-review | REQ-147: code `4d56e40`, handoff `47e1c64` включены в merge `0811aff`; общий клиент 215/2279, TS/Vite PASS. |
-| 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | in-progress (follow-up) | REQ-148: первичные code/handoff включены в M5-22-052; C1 `e0128795` — обрезан рисунок уплотнителя pin/socket; follow-up на базе `11445e8`, следующий ZIP заблокирован до нового handoff. |
+| 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | ready-for-review | REQ-148: первичный срез в M5-22-052; follow-up seal `18dee2b`/`db7c579` интегрирован, новый ZIP не заказан. |
 | 114 | [Исправить размеры P1 и точки соединения](114-p1-drawing-dimension-anchors.md) | ready-for-review | REQ-149: code `fb248e1`, handoff `d1b896b` включены в merge `d66f287`; общий клиент 215/2279, TS/Vite PASS. |
 | 115 | [Пересмотреть правила редактирования трасс Э4](115-e4-routing-interaction.md) | in-progress | REQ-150: C1–C4 про полноту прямых диффпар, ортогональную геометрию после drag и ложный отказ перемещения; отдельный worktree создан от `96829c0`. |

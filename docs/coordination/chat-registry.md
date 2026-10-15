@@ -1,5 +1,8 @@
 # Реестр чатов проекта
 
+## 111 follow-up — возврат прежней оболочки П, 15.10.2026
+
+Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`; ready-for-review. Уточнение REQ-146 в [карточке 111](../../tasks/111-thermal-sleeve-wire-coverage.md): код `e6f03190831bf6607438837d382d3b43e6718ec2`, handoff `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и интегрированы; ancestry PASS. Общий Vitest 215/2277, TypeScript/Vite PASS. Прежняя реализация охвата всех П отменена владельцем; M5-22-052 её всё ещё содержит, новый ZIP не заказан. Исходный жгут и packaged UI не проверены; приёмка владельца открыта.
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
 Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, карточка [112](../../tasks/112-op-bend-coordinate-integrity.md), REQ-147; ready-for-review. Ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63`, handoff `47e1c647220409c0f37633ab29e92930eccc58a`; предки integration merge `0811aff`. Общий клиент 215/2279, TypeScript/Vite PASS. Синтетический C1 прошёл; исходный жгут и packaged UI не проверены. Чат не принят владельцем; включено в проверенный ZIP M5-22-052.
@@ -13,6 +16,10 @@
 Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, карточка [115](../../tasks/115-e4-routing-interaction.md), REQ-150; статус in-progress. Ветка `codex/e4-routing-interaction`, отдельный worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6` (integration HEAD до регистрации). Регистрация опубликована в `56e733fdc26042b1d4aa3f09712881b87af456fb`; чат уведомлён и направлен работать в отдельной копии. Владелец: `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts` и профильные тесты; собственные task/acceptance/handoff. Общие coordination docs принадлежат координатору. Изменения карточки 110 и другие файлы исключены. C1–C4. Следующий ZIP после M5-22-052; ZIP не заказывался.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
+
+Первоначальная трактовка отменена; текущий статус follow-up — ready-for-review.
+Далее сохранена историческая запись интеграции 111 в M5-22-051; действующий
+результат возврата — карточка 111 / REQ-146.
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`; статус ready-for-review. REQ-146, карточка [111](../../tasks/111-thermal-sleeve-wire-coverage.md). Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и включены в integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd` (ancestry PASS). C1 — неполный охват проводов у общего выхода; C2 — контекст жгута. Рабочий чат владел кодом геометрии и тестами, координатор — регистрацией. Совместный клиент 211/2223, TypeScript/Vite PASS; ZIP M5-22-051 проверен, приёмка владельцем открыта.
 

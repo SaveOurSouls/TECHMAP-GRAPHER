@@ -1,5 +1,34 @@
 # Шаблон handoff от чата задачи
 
+## 111 follow-up — прежнее обтягивание оболочки П, 15.10.2026
+
+Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка
+`codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`.
+Код `e6f03190831bf6607438837d382d3b43e6718ec2` опубликован в разрешённый origin;
+ready-for-review. [Карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md),
+[протокол](../thermal-sleeve-111-rollback-acceptance.md), REQ-146.
+
+Владелец прямо отменил неверную постановку 111 / REQ-146. Runtime-diff `b472621`
+обращён; `covering-layout.ts` и `physical-wire-geometry.ts` совпадают с `b472621^`.
+Удалены `connector-sleeve-support.ts` и endpointStrokes; тесты расширенного
+охвата заменены четырьмя регрессиями оболочки только своего П.
+Провода этого П втягиваются в оболочку; другие П общей точки не захватываются.
+ОП, 109/110, электрические связи, маршруты и производственные длины сохранены.
+
+Root владеет перечисленными runtime-файлами, `pipe-sleeve-isolation.test.ts`
+и собственными записями docs/tasks. PASS: профильный Vitest 4/68, полный
+211/2219, TypeScript/Vite, browser исходное/перенос XS1/торец/тело
+(поверхность и Rubber002 сохраняются, ошибок страницы нет), diff/staged-check.
+
+Сборщику: интегрировать code SHA и следующий документальный коммит, подтвердить
+ancestry, обновить integration-log/coverage. Назначение — следующий срез после
+M5-22-051, который исторически содержит отменённую реализацию 111.
+ZIP не заказан и не собирался. Исходный документ/portable не проверены;
+приёмка владельцем открыта. Старые записи 111 сохраняются как история отменённой
+постановки и не должны трактоваться как действующее правило.
+
+Повторный запрос: на `d0bd36e` откат отсутствует, поэтому M5-22-052 сохраняет дефект. Runtime проверен против `aa2b3bc` до чата — совпадает. Прежний handoff `a0535adf3f12b39c233158c675e4d91f403328a1` опубликован; этот документальный коммит исправляет нумерацию на follow-up 111/REQ-146. После восстановления зависимостей повторно PASS 3/41 профильных тестов. Сборщику включить все три SHA и проверить фактическое отсутствие `connectorSleeveSupports`, затем подтвердить ancestry.
+
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
 Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`; REQ-147, ready-for-review. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a` опубликованы и интегрированы merge `0811aff`. Ручки П/ОП совпадают с нарисованным контуром; pointer delta и Ctrl-привязки используют сохранённые в scene исходные координаты; preview/commit ОП общий; служебные внешние станции не создают неудаляемых numbered grips; обратный П сохраняет направление своих плеч. Production формат/связи/длины не меняются. CanvasViewport/113 и dimensions/114 не затронуты. PASS: общий клиент 215/2279, TypeScript/Vite; полный worker Vitest 212/2233 + Canvas gestures 1/4. Исходный C1, browser visual и packaged UI не проверены. ZIP не заказан. [Точный handoff 112](handoff-112-op-bends.md).
@@ -9,6 +38,9 @@
 Чат `01a1410f-1e06-7602-b18f-97df76b92296`, REQ-148, ready-for-review. Code `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы и интегрированы merge `70a41ab` в integration HEAD `0811aff`. PASS: worker Vitest 212/2246, 23 новых регрессии; совместный интеграционный Vitest 215/2279, TypeScript/Vite. Подробный [handoff 113](handoff-113-p1-termination-graphic-scale.md) и [acceptance-протокол](../p1-termination-113-acceptance.md). Совместный scene/browser сценарий 113/114, исходный жгут и packaged UI не проверены; ZIP не заказан, приёмка владельца открыта.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
+
+**Отменено владельцем:** действующий handoff возврата — follow-up 111 выше;
+далее сохранена история передачи прежнего решения.
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка
 `codex/thermal-tube-wire-coverage`, worktree `tmp/thermal-tube-wire-coverage`.
