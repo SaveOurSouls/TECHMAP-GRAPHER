@@ -2,6 +2,8 @@
 
 ## 106 — исправление оконцовок по С1–С4, 15.10.2026
 
+Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` опубликован в integration-ветке; handoff/coverage заполнены.
+
 Чат `01a13a64-e264-7a03-8198-49dae2c51bee`, основной worktree `codex/integration-m5-22`, ready-for-review. Root — HarnessDesignEditor.tsx/docs/интеграция; artwork_sol — termination-library и доставка SVG; architecture_sol — CanvasViewport/placement/drag; review_luna — маршрутизация и подключения. Карточка 106 фиксирует границы. REQ-141/135. Полный Vitest 204/2055, TypeScript/Vite, production HTTP и browser PASS. Coverage: следующий срез после M5-22-047, не входит в уже выданный ZIP; приёмка владельцем открыта.
 
 ## 104 — внедрение многопроводных оконцовок, 15.10.2026

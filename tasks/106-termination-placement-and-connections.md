@@ -1,6 +1,7 @@
 # 106. Оконцовки: рисунки, размещение и подключения
 
 - Статус: ready-for-review; приёмка владельцем открыта.
+- Код: `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72`, опубликован в origin/codex/integration-m5-22; handoff/coverage заполнены.
 - Источник: прямое поручение владельца 15.10.2026, С1–С4; REQ-141, уточнение REQ-135.
 - Чат: 01a13a64-e264-7a03-8198-49dae2c51bee; codex/integration-m5-22, основной worktree.
 - Владельцы: root — HarnessDesignEditor.tsx, docs и интеграция; artwork_sol — termination-library/*, доставка SVG и тесты; architecture_sol — CanvasViewport.tsx, placement/drag и тесты; review_luna — e4-router/маршрутизация, команды подключения и тесты. Общие файлы согласуются до изменения.

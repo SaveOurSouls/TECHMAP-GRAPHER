@@ -1,5 +1,11 @@
 # Release coverage
 
+## 106 — рисунки, размещение и подключения оконцовок, 15.10.2026
+
+REQ-141/135, [карточка 106](../../tasks/106-termination-placement-and-connections.md). Код `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` опубликован в `origin/codex/integration-m5-22`; находится в integration HEAD, ancestry проверен. [Handoff](agent-handoff.md), [протокол](../termination-106-acceptance.md). Полный Vitest 204/2055, TypeScript/Vite/.NET Release, production HTTP и browser PASS. Ready-for-review.
+
+Coverage: включить в следующий собираемый срез после M5-22-047; прежний ZIP не содержит 106. ZIP в этой карточке не заказан. Перед следующей упаковкой сборщик подтверждает этот SHA и handoff в своём HEAD; приёмка владельцем остаётся открытой.
+
 ## 104 — многопроводные оконцовки, 15.10.2026
 
 REQ-135, карточка 104. Код `40e94921b45c4246a4187c350026ae19b33644cb` опубликован непосредственно в `codex/integration-m5-22`, интеграция подтверждена нахождением в HEAD при оформлении handoff (проверка ancestry выполнена). Включает runtime библиотеки/Э4/Чертежа/Route V3, клиентские и серверные проверки; [протокол](../termination-104-acceptance.md), [handoff](agent-handoff.md). Статус ready-for-review; дизайн 099 принят, код ожидает приёмки.
