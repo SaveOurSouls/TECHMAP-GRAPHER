@@ -2,11 +2,11 @@
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 
-REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`, отдельный worktree; in-progress, кодовые SHA и handoff ещё не заявлены. Назначено в следующий пакет после M5-22-049; включение требует опубликованных SHA и подтверждения ancestry/equivalent в собираемом HEAD.
+REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md). Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, исходная ветка `codex/thermal-tube-wire-coverage`, отдельный worktree. Регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967` и handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0` опубликованы и проверены как предки integration merge `cfeace60dfe6f6c2241203def9767ed0723ff6cd`; `git show --check` PASS. Конфликты общих Markdown-файлов разрешены с сохранением 109/110, клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включить в M5-22-051. Исходный жгут и packaged UI не проверены, приёмка владельцем открыта.
 
 ## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
 
-REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, ветка `codex/e4-component-drag-performance`, отдельный worktree; in-progress, handoff и кодовые SHA пока отсутствуют. Запланировано в следующем пакете после M5-22-049; до интеграции ZIP заблокирован этой карточкой только если она заявлена завершённой/относящейся к пакету.
+REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, отдельный worktree. Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и проверены как предки integration merge `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и HEAD `cfeace60dfe6f6c2241203def9767ed0723ff6cd`; `git show --check` PASS. Клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включить в M5-22-051. Полный синхронный пересчёт при pointer-up на синтетическом сценарии остаётся около 2 с; исходный проект и packaged UI не проверены.
 
 ## 109 — библиотека оконцовок и генерация серий, 15.10.2026
 

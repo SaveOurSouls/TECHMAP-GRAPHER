@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 15.10.2026 — handoff 110/111 для M5-22-051
+
+Из отдельных веток с базой `aa2b3bc3d9e83248fca96d70899a6002993ce835` включены 110 (`origin/codex/e4-component-drag-performance`: регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e`, handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4`) и 111 (`origin/codex/thermal-tube-wire-coverage`: регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0`). Все шесть SHA — предки integration HEAD `cfeace60dfe6f6c2241203def9767ed0723ff6cd`; merge-коммиты `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и `cfeace60dfe6f6c2241203def9767ed0723ff6cd`, `git show --check` PASS. Код объединён без конфликтов; общие документы сохранены для 107–111 и покрытий 049/050. Совместный клиент Vitest 211/2223, TypeScript/Vite PASS. Рабочая копия после merge чиста. Следующий шаг — поднять appVersion и собрать M5-22-051; исходный проект и portable UI в рабочих handoff не проверены.
+
 ## 15.10.2026 — интеграция карточки 109 после M5-22-049
 
 Сборщик проверил опубликованную ветку `origin/codex/termination-library-series` с базой `313c22539df4c4d1f8aca896849a21d1e5e14caa`: регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3`, handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393`. Все три SHA — предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc`, `git show --check` PASS. Конфликты только в шести общих Markdown-файлах разрешены с сохранением записей 108 и 109; код интегрирован без конфликтов. После merge клиентские Vitest 209/2205, TypeScript и Vite build PASS. Первый sandbox-прогон Vitest не смог читать временные файлы (`ENOENT`); идентичный прогон с доступом к temp прошёл. Рабочее дерево после merge чисто. Исходный жгут и native portable UI в handoff 109 не проверялись.
