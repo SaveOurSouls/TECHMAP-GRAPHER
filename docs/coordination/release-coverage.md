@@ -2,15 +2,24 @@
 
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
-REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a7` опубликованы, проверены как предки integration HEAD `0811aff83e79f2d0e515bfe42731181e36d45c18`; merge `0811aff`, `git show --check` PASS. Ready-for-review, интегрировано после M5-22-051; полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут, ручные C1 и packaged UI не проверены; ZIP для нового среза не заказан.
+REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md), чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a7` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `0811aff`, `git show --check` PASS. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут, ручные C1 и packaged UI не проверены.
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, base `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы, проверены как предки integration HEAD `0811aff83e79f2d0e515bfe42731181e36d45c18`; merge `70a41ab`, `git show --check` PASS. Ready-for-review, интегрировано после M5-22-051; полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; ZIP для нового среза не заказан.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, base `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `70a41ab`, `git show --check` PASS. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены.
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
-REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1` опубликованы, проверены как предки integration HEAD `0811aff83e79f2d0e515bfe42731181e36d45c18`; merge `d66f287`, `git show --check` PASS. Конфликт только в карточке 114 разрешён с сохранением подробного протокола worker branch и coordinator SHA. Ready-for-review, интегрировано после M5-22-051; полный совместный Vitest 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон с 113, исходный жгут и packaged UI не проверены; ZIP для нового среза не заказан.
+REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1` опубликованы, проверены как предки сборочного HEAD `4edfcc8b05639906cade04abafec73006551a89b`; merge `d66f287`, `git show --check` PASS. Конфликт только в карточке 114 разрешён с сохранением подробного протокола worker branch и coordinator SHA. Ready-for-review; включено в M5-22-052. Полный совместный Vitest 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон с 113, исходный жгут и packaged UI не проверены.
+
+### m5-22-052 — 15.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `4edfcc8b05639906cade04abafec73006551a89b`
+- **Coverage:** 112/REQ-147, 113/REQ-148 и 114/REQ-149 включены; code/handoff SHA — предки HEAD; pending/unknown завершённых handoff `0`.
+- **ZIP:** `artifacts/m5-22-052/TECHMAP-GRAPHER-0.63.52-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 406 097 / 8406AD17DD3C23FD72587C170E2AA3CB3B601F7DFA1C245A1E7A6949C7E4F1B0`
+- **Manifest / portable:** `PASS; 534 files; 7/7`
+- **Gate:** Git/package PASS, Vitest 215/2279, .NET 1140/1140, performance 1/1. Совместный browser/scene сценарий 113/114, исходный жгут, ручная packaged UI-проверка и owner acceptance 112–114 открыты.
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 

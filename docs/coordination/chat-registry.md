@@ -2,15 +2,15 @@
 
 ## 112 — координаты изгибов после создания ОП, 15.10.2026
 
-Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, карточка [112](../../tasks/112-op-bend-coordinate-integrity.md), REQ-147; ready-for-review. Ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63`, handoff `47e1c647220409c0f37633ab29e92930eccc58a`; предки integration merge `0811aff`. Общий клиент 215/2279, TypeScript/Vite PASS. Синтетический C1 прошёл; исходный жгут и packaged UI не проверены. Чат не принят владельцем; ZIP не заказан.
+Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, карточка [112](../../tasks/112-op-bend-coordinate-integrity.md), REQ-147; ready-for-review. Ветка `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`, база `bbeeb3c15e6d59c1b3e45fce04d1efa279be348c`. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63`, handoff `47e1c647220409c0f37633ab29e92930eccc58a`; предки integration merge `0811aff`. Общий клиент 215/2279, TypeScript/Vite PASS. Синтетический C1 прошёл; исходный жгут и packaged UI не проверены. Чат не принят владельцем; включено в проверенный ZIP M5-22-052.
 
 ## 113 — оконцовка P1 в масштабе провода, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; ready-for-review. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`; предки merge `70a41ab`. Совместный клиент 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; ZIP не заказан. Handoff: [протокол 113](../handoff-113-p1-termination-graphic-scale.md).
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; ready-for-review. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Код `39333794958043e20a95ce7b2a116b8076f324f7`, handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`; предки merge `70a41ab`. Совместный клиент 215/2279, TypeScript/Vite PASS. Исходный жгут и packaged UI не проверены; включено в проверенный ZIP M5-22-052. Handoff: [протокол 113](../handoff-113-p1-termination-graphic-scale.md).
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
-Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; ready-for-review. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, registration base `8d98038`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`; предки merge `d66f287`. Общий клиент 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон 113/114, исходный жгут и packaged UI не проверены. ZIP не заказан; приёмка владельца открыта.
+Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; ready-for-review. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, registration base `8d98038`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`; предки merge `d66f287`. Общий клиент 215/2279, TypeScript/Vite PASS. Совместный scene/browser прогон 113/114, исходный жгут и packaged UI не проверены. Включено в проверенный ZIP M5-22-052; приёмка владельца открыта.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 

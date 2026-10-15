@@ -1,3 +1,11 @@
+# Пакет M5-22-052 — карточки 112–114, 15.10.2026
+
+Исходный code HEAD: `4edfcc8b05639906cade04abafec73006551a89b` (`codex/integration-m5-22`). Для карточки 112 код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` и handoff `47e1c647220409c0f37633ab29e92930eccc58a7`; для 113 код `39333794958043e20a95ce7b2a116b8076f324f7` и handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`; для 114 код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`. Все шесть SHA — предки сборочного HEAD; release coverage закрыт для этих завершённых handoff. Версия `0.63.52-m5-22-review` поднята и опубликована коммитом `4edfcc8b05639906cade04abafec73006551a89b` до сборки.
+
+Windows x64 ZIP: `artifacts/m5-22-052/TECHMAP-GRAPHER-0.63.52-m5-22-review-win-x64.zip`. Размер: **64 406 097 байт**. SHA-256: `8406AD17DD3C23FD72587C170E2AA3CB3B601F7DFA1C245A1E7A6949C7E4F1B0`.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-052` завершился успешно: Vitest **215 файлов / 2279 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **534 файла манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-052`, включая каталог с кириллицей и пробелами. Ограничения: совместная визуальная проверка сцены/браузера для 113/114, исходный пользовательский жгут и ручная проверка UI внутри готового пакета не выполнялись; приёмка владельцем 112–114 открыта. Vite предупреждает о внешних Node-модулях `heic-to` и крупном JS chunk. ZIP остаётся вне Git.
+
 # Пакет M5-22-051 — карточки 110 и 111, 15.10.2026
 
 Исходный code HEAD: `30795935aee1d79c21bcfeb56daf212f5b0c4002` (`codex/integration-m5-22`). Регистрация, код и handoff карточки 110: `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, `8ff8736d1a8989b8d8482d806455abf2130c207e`, `2f9008fa06351dde7bcdb3678db9564d298ba4b4`; карточки 111: `b0d51fc3b330897b59693cd0635b520b41e913ec`, `b4726217d708b2c76f1aa28209ba061706a65967`, `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0`. Все шесть SHA проверены как предки сборочного HEAD. Версия `0.63.51-m5-22-review` поднята коммитом `30795935aee1d79c21bcfeb56daf212f5b0c4002` до сборки.

@@ -1,5 +1,11 @@
 # Журнал интеграции
 
+## 15.10.2026 — проверенный ZIP M5-22-052
+
+После подтверждённой интеграции 112–114 версия повышена до `0.63.52-m5-22-review` коммитом `4edfcc8b05639906cade04abafec73006551a89b`, опубликованным до сборки. Все шесть code/handoff SHA карточек 112–114 являются предками этого HEAD; рабочая копия была чистой, неизвестных или ожидающих завершённых handoff не было.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-052` прошёл: Vitest 215/2279, TypeScript/Vite, .NET Release 1140/1140, отдельный performance 1/1, self-contained win-x64 publish. `verify-package.ps1`: 534 файла; `test-portable-package.ps1`: 7/7 из `C:\Temp\TECHMAP-m5-22-052`. ZIP `artifacts/m5-22-052/TECHMAP-GRAPHER-0.63.52-m5-22-review-win-x64.zip`: 64 406 097 байт, SHA-256 `8406AD17DD3C23FD72587C170E2AA3CB3B601F7DFA1C245A1E7A6949C7E4F1B0`. Совместная визуальная проверка 113/114, исходный жгут и ручная packaged UI-приёмка остаются открытыми.
+
 ## 15.10.2026 — handoff 112–114 после M5-22-051
 
 В `codex/integration-m5-22` интегрированы опубликованные ветки карточек 113 (`39333794958043e20a95ce7b2a116b8076f324f7` / handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`, merge `70a41ab`), 114 (`fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` / handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`, merge `d66f287`) и 112 (`4d56e4058b1a8e9ba0034f812b7ac3699604bf63` / handoff `47e1c647220409c0f37633ab29e92930eccc58a7`, merge `0811aff`). Все code/handoff SHA — предки опубликованного integration HEAD `0811aff83e79f2d0e515bfe42731181e36d45c18`; `git show --check` PASS. Конфликт 114 был только в карточке: сохранены сведения рабочего чата и координатора. Ранний неотслеживаемый черновик теста 112 с SHA-256 `F314D115C03C78BE62E9F20F9D13406C48B02A38690F7ABBD2C155A5DC1931CF` перенесён в игнорируемый `tmp/`; опубликованный тест находится в merge.
