@@ -7,3 +7,4 @@ export function bodyPart(color?: string): string;
 export function endPart(kind: string, color?: string): string;
 export function renderWireSvg(options: { left: string; right: string; color?: string; title?: string }): string;
 export function renderPartSvg(part: string, color?: string): string;
+export function renderPreparationSvg(mode: string, color?: string): string;

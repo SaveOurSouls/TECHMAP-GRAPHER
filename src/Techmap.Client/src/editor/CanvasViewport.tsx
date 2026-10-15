@@ -1,4 +1,5 @@
-import { artworkWireDiameter, artworkJacketAnchor, renderPartSvg } from "../wire-blank-artwork.mjs";
+import { renderPartSvg } from "../wire-blank-artwork.mjs";
+import { drawingEndArtworkPlacement } from './preparation-drawing';
 import { terminationSceneBounds, terminationSceneContainsPoint } from "./termination-scene";
 import { placementSceneObject } from "./termination-placement-interaction";
 import { drawVolumeStroke, drawVolumeSurface } from "./drawing-volume";
@@ -1518,7 +1519,7 @@ export function objectsInPaintOrder(
   const regularArtwork = artwork.filter((object) => object.kind !== "object-index" && object.kind !== "position-leader" && object.kind !== "leader-anchor");
   // Drawing connector pictures are underlays; preserve user order within each pass.
   return view === "drawing"
-    ? [...regularArtwork.filter(object => object.kind === "connector"), ...regularArtwork.filter(object => object.kind !== "connector"), ...connectionPoints, ...topAnnotations, ...missingTopAnnotations]
+    ? [...regularArtwork.filter(object => object.kind === "connector" && !object.terminationArtwork?.length), ...regularArtwork.filter(object => object.kind !== "connector"), ...regularArtwork.filter(object => object.kind === 'connector' && object.terminationArtwork?.length), ...connectionPoints, ...topAnnotations, ...missingTopAnnotations]
     : [...artwork, ...connectionPoints];
 }
 
@@ -2037,16 +2038,7 @@ export interface WireDrawingEndArtworkPlacement {
 /** The artwork's jacket edge is x=222 in its viewBox.  Keeping that edge at
  * the authored endpoint places all of the terminal outside the wire route. */
 export function wireDrawingEndArtworkPlacement(origin: EditorPoint, adjacent: EditorPoint, drawingWidth: number): WireDrawingEndArtworkPlacement | null {
-  const dx = adjacent.x - origin.x, dy = adjacent.y - origin.y;
-  const length = Math.hypot(dx, dy);
-  if (!length) return null;
-  const scale = Math.min(Math.max(drawingWidth, 3) / artworkWireDiameter, length / 280);
-  return {
-    x: origin.x - dx / length * artworkJacketAnchor * scale,
-    y: origin.y - dy / length * artworkJacketAnchor * scale,
-    rotation: Math.atan2(dy, dx),
-    scale,
-  };
+  return drawingEndArtworkPlacement(origin, adjacent, drawingWidth);
 }
 
 function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: EditorSceneObject, selected: boolean, cache: ComponentTemplateImageCache): void {
@@ -2054,7 +2046,7 @@ function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: Edi
   const styles = object.drawingEndStyles;
   if (!styles || points.length < 2) return;
   context.save();
-  const radius = Math.max(2.5, Number(object.metadata?.drawingWidth ?? 2) * (selected ? 0.9 : 0.75));
+  const radius = Number(object.metadata?.drawingWidth ?? 2) * .35;
   (['from', 'to'] as const).forEach((end) => {
     if (object.metadata?.[`free${end === "from" ? "From" : "To"}`] === "false") return;
     const origin = end === 'from' ? points[0]! : points[points.length - 1]!;
@@ -2076,7 +2068,7 @@ function drawWireDrawingEndStyles(context: CanvasRenderingContext2D, object: Edi
     const tip = { x: origin.x - dx / length * depth, y: origin.y - dy / length * depth };
     context.strokeStyle = selected ? '#1179ac' : '#344b59';
     context.fillStyle = styles[end] === 'tin' ? '#b8c7cc' : styles[end] === 'copper' ? '#ca7e4a' : styles[end] === 'sealed' || styles[end] === 'sealed-pin' ? '#7a929e' : object.color;
-    context.lineWidth = 1.2;
+    context.lineWidth = Number(object.metadata?.drawingWidth ?? 2) * .05;
     context.beginPath();
     context.moveTo(origin.x + nx * radius, origin.y + ny * radius);
     context.lineTo(tip.x + nx * radius * 1.2, tip.y + ny * radius * 1.2);
@@ -2208,6 +2200,19 @@ export function drawEditorSceneObject(
   }
   if(object.kind==='connector'&&object.metadata?.terminationSymbol){
     const metadata=object.metadata,points=getMaterializedConnectorContactPoints(object)??[];
+    for (const art of object.terminationArtwork ?? []) {
+      const entry = componentTemplateImageCache.get(art.href);
+      context.save(); context.translate(art.x, art.y); context.rotate(art.rotation); context.scale(art.scale, art.scale);
+      if (entry.state === 'loaded') context.drawImage(entry.image, ...art.image);
+      else {
+        const [x,y,right,bottom] = art.localBounds;
+        context.fillStyle = art.mode === 'copper' ? '#ca7e4a' : art.mode === 'tin' ? '#b8c7cc' : '#929699';
+        // A calibrated loading/error silhouette also stays within the jacket.
+        const height = Math.min(bottom-y,art.conductorDiameter/art.scale);
+        context.fillRect(x,(y+bottom-height)/2,right-x,height);
+      }
+      context.restore();
+    }
     if(metadata.terminationPointOnly!=='true'){
       const entry=componentTemplateImageCache.get(metadata.terminationSymbol!);
       if(entry.state==='loaded'){context.save();context.translate(object.x,object.y);context.rotate(Number(metadata.terminationRotation??0)*Math.PI/180);const scale=Number(metadata.terminationScale??1);context.scale(scale,scale);context.drawImage(entry.image,0,0,220,100);context.restore();}

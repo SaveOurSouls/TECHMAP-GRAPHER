@@ -1,5 +1,6 @@
 import {coveringMaterialChanged,createGlobalCoveringPreparer} from "./global-covering-materials";
 import { terminationSceneObject } from './termination-scene';
+import { withPreparationDrawingArtwork } from './preparation-drawing';
 import { placementOrigin, placementLayerError } from './termination-placement-interaction';
 import type { TerminationLibraryRecord } from '../termination-library/catalog';
 import { TerminationInspector, PhysicalTwistControls } from './TerminationInspector';
@@ -569,7 +570,7 @@ export function designToScene(
   const physical = view === "drawing" ? physicalTopologyScene(document) : [];
   const coverings: EditorSceneObject[] = view === "drawing" ? coveringScene(document) : [];
   const drawingPhysical= view === "drawing" ? orderPhysicalScene(document,[...physical,...wires,...coverings]) : [];
-  const objects=[...connectors, ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...drawingDocumentScene(document,quantity,perimeters,view)];
+  const objects=[...(view === 'drawing' ? withPreparationDrawingArtwork(document,connectors,wires) : connectors), ...(view === "drawing" ? drawingPhysical : wires), ...dimensions, ...drawingDocumentScene(document,quantity,perimeters,view)];
   return view === "drawing" ? [...objects,...drawingObjectIndexScene(document,objects)] : objects;
 }
 

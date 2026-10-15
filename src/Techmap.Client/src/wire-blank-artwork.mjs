@@ -91,3 +91,14 @@ export function renderPartSvg(part, color = "#26609e") {
   const content = part === "body" ? bodyPart(color) : endPart(part, color);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="${artworkViewBox}" role="img">${defs()}${content}</svg>\n`;
 }
+
+// Drawing preparation uses the same calibrated jacket and crimp as wire blanks.
+// Its compact viewport excludes the long, transparent catalogue page.
+export function renderPreparationSvg(mode, color = "#26609e") {
+  const content = mode === 'pin' ? terminal(true, color, false)
+    : mode === 'socket' ? terminal(false, color, false)
+    : mode === 'pin-sealed' ? terminal(true, color, true)
+    : mode === 'socket-sealed' ? terminal(false, color, true)
+    : endPart(mode, color);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="250" height="80" viewBox="0 80 250 80">${defs()}${content}</svg>`;
+}
