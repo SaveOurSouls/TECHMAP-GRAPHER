@@ -4,11 +4,20 @@
 
 REQ-143, [карточка108](../../tasks/108-pipe-wire-membership.md). Код `2ce6e70a854856f092b14c6e0fa26cbe1226835b` опубликован в `origin/codex/integration-m5-22`, подтверждён в integration HEAD через ancestry. [Handoff](agent-handoff.md), [протокол](../pipe-membership-108-acceptance.md). Полный Vitest 208/2187, TypeScript/Vite/.NET Release, 75 целевых серверных тестов, browser/review/diff-check PASS. Ready-for-review.
 
-Coverage: code `2ce6e70a854856f092b14c6e0fa26cbe1226835b` и handoff `2945ba5da1b88a886f293dcb322418b7575256e9` проверены сборщиком как предки integration HEAD `2945ba5da1b88a886f293dcb322418b7575256e9`; оба опубликованы в origin, `git show --check` PASS. Включить в M5-22-049 вместе с 107; приёмка владельцем открыта. Полный серверный набор в карточке 108 не завершён: целевые 75 тестов PASS, итог общего HarnessDesignApiTests отсутствует; package gate запускает свой полный серверный набор отдельно.
+Coverage: code `2ce6e70a854856f092b14c6e0fa26cbe1226835b` и handoff `2945ba5da1b88a886f293dcb322418b7575256e9` проверены сборщиком как предки code HEAD `aa2b3bc3d9e83248fca96d70899a6002993ce835`; оба опубликованы в origin, `git show --check` PASS. Включено в M5-22-049 вместе с 107; приёмка владельцем открыта. Общий HarnessDesignApiTests карточки 108 был прерван без результата; целевые 75 тестов PASS, полный серверный набор 1140/1140 прошёл в независимой штатной сборке пакета.
 
 ## 107 — физическая точка и компактные границы, 15.10.2026
 
-REQ-142/141/135, карточка 107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` и handoff `313c22539df4c4d1f8aca896849a21d1e5e14caa` опубликованы в `origin/codex/integration-m5-22` и проверены сборщиком как предки integration HEAD `2945ba5da1b88a886f293dcb322418b7575256e9`; `git show --check` PASS. [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Включить в M5-22-049; прежний ZIP не содержит 107. Приёмка владельцем открыта.
+REQ-142/141/135, карточка 107. Код `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` и handoff `313c22539df4c4d1f8aca896849a21d1e5e14caa` опубликованы в `origin/codex/integration-m5-22` и проверены сборщиком как предки code HEAD `aa2b3bc3d9e83248fca96d70899a6002993ce835`; `git show --check` PASS. [Handoff](agent-handoff.md), [протокол](../termination-107-acceptance.md). Vitest 206/2169, TypeScript/Vite, browser, diff-check PASS. Ready-for-review. Включено в M5-22-049; прежний ZIP не содержит 107. Приёмка владельцем открыта.
+
+### m5-22-049 — 15.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `aa2b3bc3d9e83248fca96d70899a6002993ce835`
+- **Coverage:** 107/REQ-142 и 108/REQ-143 включены; code/handoff SHA — предки HEAD; pending/unknown завершённых handoff `0`. Карточка 109 выполняется отдельно и относится к следующему срезу после handoff.
+- **ZIP:** `artifacts/m5-22-049/TECHMAP-GRAPHER-0.63.49-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 381 510 / A736749770CCB94E5E37BBC04A0A264D7674B72D17DE633947F7876AC5C29BFB`
+- **Manifest / portable:** `PASS; 525 files; 7/7`
+- **Gate:** Git/package PASS, Vitest 208/2187, .NET 1140/1140, performance 1/1. Ручная packaged UI-проверка, исходный пользовательский жгут и owner acceptance 107/108 открыты.
 
 ## 106 — рисунки, размещение и подключения оконцовок, 15.10.2026
 

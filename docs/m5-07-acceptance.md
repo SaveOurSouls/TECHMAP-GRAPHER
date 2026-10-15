@@ -1,3 +1,11 @@
+# Пакет M5-22-049 — карточки 107 и 108, 15.10.2026
+
+Исходный code HEAD: `aa2b3bc3d9e83248fca96d70899a6002993ce835` (`codex/integration-m5-22`). Код 107 `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` / handoff `313c22539df4c4d1f8aca896849a21d1e5e14caa` и код 108 `2ce6e70a854856f092b14c6e0fa26cbe1226835b` / handoff `2945ba5da1b88a886f293dcb322418b7575256e9` подтверждены как предки HEAD и опубликованы в origin. Coverage зафиксирован `e579128`, версия `0.63.49-m5-22-review` поднята коммитом `aa2b3bc` до сборки. Карточка 109 остаётся отдельной незавершённой работой и в этот срез не включалась.
+
+Windows x64 ZIP: `artifacts/m5-22-049/TECHMAP-GRAPHER-0.63.49-m5-22-review-win-x64.zip`. Размер: **64 381 510 байт**. SHA-256: `A736749770CCB94E5E37BBC04A0A264D7674B72D17DE633947F7876AC5C29BFB`.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-049` завершился успешно: Vitest **208 файлов / 2187 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **525 файлов манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-049`, включая каталог с кириллицей и пробелами. В карточке 108 ранее был прерван общий HarnessDesignApiTests без результата; её 75 целевых серверных тестов прошли, а полный серверный набор 1140/1140 подтверждён независимо штатной сборкой ZIP. Исходный пользовательский жгут, ручная packaged UI-приёмка и owner acceptance 107/108 остаются открытыми. ZIP остаётся вне Git.
+
 # Пакет M5-22-048 — карточка 106, 15.10.2026
 
 Исходный code HEAD: `5dd2ee133b2c483f481e4a5f621622c7e59430e8` (`codex/integration-m5-22`). Код 106 `5d1bf07b95734816cbfa3c005f7cdafdf7a1ca72` и handoff `21be7baf1bdca6581d44c50d80b9cafaca1f69e7` подтверждены как предки HEAD и опубликованы в origin. Coverage зафиксирован `9c1fd96`; версия `0.63.48-m5-22-review` поднята коммитом `5dd2ee1` до сборки. Неизвестных или ожидающих handoff для этого среза нет.
