@@ -30,9 +30,9 @@ import { UmlPanel } from "./uml/UmlPanel";
 import { InfoHint } from "./InfoHint";
 import type { HarnessSectionId } from "./editor/HarnessSectionNavigation";
 
-const ComponentLibrary = lazy(async () => {
-  const module = await import("./component-library/ComponentLibrary");
-  return { default: module.ComponentLibrary };
+const LibraryWorkspace = lazy(async () => {
+  const module = await import("./component-library/LibraryWorkspace");
+  return { default: module.LibraryWorkspace };
 });
 const MaterialLibrary = lazy(async () => {
   const module = await import("./MaterialLibrary");
@@ -1034,7 +1034,7 @@ export function App({ config, session }: AppProps) {
             <ReferenceImportPanel config={config} session={session} />
           ) : activeSection === "library" ? (
             <Suspense fallback={<p className="panel-message" role="status">Открываем библиотеку…</p>}>
-              <ComponentLibrary config={config} session={session} onNavigationGuard={registerLibraryNavigationGuard} />
+              <LibraryWorkspace config={config} session={session} onNavigationGuard={registerLibraryNavigationGuard} />
             </Suspense>
           ) : (
             <Suspense fallback={<p className="panel-message" role="status">Открываем материалы…</p>}>
