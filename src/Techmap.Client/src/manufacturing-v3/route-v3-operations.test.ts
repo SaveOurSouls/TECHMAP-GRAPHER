@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { physicalFixture } from "../editor/physical-topology-fixture";
 import type { ReferenceCatalogRecord, ReferenceCatalogSnapshot } from "../reference-catalog-api";
-import { routeV3GroupedSourceQuantity, routeV3OperationFromCatalog, routeV3OperationTimes, routeV3SourceGroupKey } from "./route-v3-operations";
+import { routeV3CatalogGroups, routeV3GroupedSourceQuantity, routeV3OperationFromCatalog, routeV3OperationTimes, routeV3SourceGroupKey } from "./route-v3-operations";
 
 const snapshot = { sourceId: "technology-operations", snapshotId: "snapshot", sha256: "a".repeat(64) } as ReferenceCatalogSnapshot;
 const record = (type: string, payload: Record<string, unknown>): ReferenceCatalogRecord => ({ recordId: "record", entityType: "operation", sourceKey: "007", sourceLocation: null, payload: { name: "Резка", operationType: type, ...payload } });
@@ -12,7 +12,20 @@ describe("Route v3 БД.ОП time and quantity contract", () => {
     const operation = routeV3OperationFromCatalog(record("Погонный", norm), snapshot, "op");
     expect(operation.title).toBe("Резка");
     expect(operation.catalogOperationType).toBe("Погонный");
-    expect(operation.category).toBe("Погонный");
+    expect(operation.category).toBe("Резка");
+    expect(operation.subcategory).toBe("007");
+    expect(operation.catalogBinding?.displayName).toBe("Резка · № 007");
+  });
+  it("groups the first level by Название and the second by Номер, not by type", () => {
+    const entries = [
+      { ...record("Погонный", norm), recordId: "a", sourceKey: "10", payload: { name: "Резка", operationType: "Погонный" } },
+      { ...record("Статичный", norm), recordId: "b", sourceKey: "2", payload: { name: "Резка", operationType: "Статичный" } },
+      { ...record("Погонный", norm), recordId: "c", sourceKey: "3", payload: { name: "Обжим", operationType: "Погонный" } },
+    ];
+    const groups = routeV3CatalogGroups(entries);
+    expect(groups.map(group => group.name)).toEqual(["Обжим", "Резка"]);
+    expect(groups.find(group => group.name === "Резка")?.records.map(entry => entry.sourceKey)).toEqual(["2", "10"]);
+    expect(groups.find(group => group.name === "Резка")?.records.map(entry => entry.recordId)).toEqual(["b", "a"]);
   });
   it("pins the catalog snapshot and calculates a running operation in seconds per metre", () => {
     const operation = { ...routeV3OperationFromCatalog(record("Погонный", norm), snapshot, "op"), lengthMm: 2500 };

@@ -1,5 +1,11 @@
 # Реестр чатов проекта
 
+## Карточка 100 — 15.10.2026: БД.ОП по названию и номеру
+
+| Роль | Чат / Thread ID | Ветка / worktree | Владелец файлов | Release coverage |
+| --- | --- | --- | --- | --- |
+| Координатор и исполнитель | `/root`, текущий чат | `codex/integration-m5-22`, основной | `manufacturing-v3/RouteV3Graph.tsx`, `route-v3-operations.ts`, новый helper/тесты; документы 100/REQ-136/handoff | следующий ZIP после handoff; ZIP не заказан |
+
 ## Карточка 099 — 14.10.2026: проектирование оконцовок
 
 | Роль | Чат / Thread ID | Ветка / worktree | Владелец файлов | Coverage |

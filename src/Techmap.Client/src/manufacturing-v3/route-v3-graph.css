@@ -53,6 +53,8 @@
 .route-v3-operation-choice small{margin-top:0;color:#78909b;font-size:10px;line-height:1.2}
 .route-v3-chooser-filter{display:flex;align-items:center;gap:8px;margin:12px 0;color:#68808f;font-size:11px}
 .route-v3-chooser-filter select{padding:6px 8px;border:1px solid #cbdde5;border-radius:5px;background:#fff;color:#294459}
+.route-v3-operation-title .route-v3-operation-kind{display:block;padding:0;border:0;border-radius:0;background:none;color:#91a0a8;font-size:9px;font-weight:400}
+.route-v3-operation-choice small{color:#91a0a8}
 .route-v3-color-swatch{display:inline-block;width:10px;height:10px;margin-right:4px;border:1px solid #69808b;border-radius:50%;vertical-align:-1px}
 .route-v3-material-label{display:inline-flex;align-items:center;min-width:0}
 .route-v3-wire-ends{display:grid;gap:3px}

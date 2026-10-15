@@ -37,16 +37,30 @@ const numberOrNull = (value: unknown): number | null => {
 };
 const label = (payload: Readonly<Record<string, unknown>>, key: string): string => typeof payload[key] === "string" ? String(payload[key]).trim() : "";
 
+/** The catalog hierarchy follows the source columns, not the calculation type. */
+export const routeV3CatalogName = (record: ReferenceCatalogRecord): string => label(record.payload, "name") || "Без названия";
+export const routeV3CatalogNumber = (record: ReferenceCatalogRecord): string => record.sourceKey.trim() || "Номер не указан";
+export function routeV3CatalogGroups(records: readonly ReferenceCatalogRecord[]): readonly { name: string; records: readonly ReferenceCatalogRecord[] }[] {
+  const groups = new Map<string, ReferenceCatalogRecord[]>();
+  for (const record of records) {
+    if (record.entityType !== "operation") continue;
+    const name = routeV3CatalogName(record);
+    groups.set(name, [...(groups.get(name) ?? []), record]);
+  }
+  return [...groups].sort(([left], [right]) => left.localeCompare(right, "ru"))
+    .map(([name, entries]) => ({ name, records: entries.sort((left, right) => routeV3CatalogNumber(left).localeCompare(routeV3CatalogNumber(right), "ru", { numeric: true })) }));
+}
+
 export function routeV3OperationFromCatalog(record: ReferenceCatalogRecord, snapshot: ReferenceCatalogSnapshot, id: string): RouteV3Operation {
   if (record.entityType !== "operation") throw new Error("Выберите запись БД.ОП.");
-  const category = label(record.payload, "operationType") || "Без типа";
-  const subcategory = label(record.payload, "name") || label(record.payload, "instruction") || label(record.payload, "machine") || `Операция № ${record.sourceKey}`;
+  const category = routeV3CatalogName(record);
+  const subcategory = routeV3CatalogNumber(record);
   const operationType = label(record.payload, "operationType");
   const kind = operationType.toLocaleLowerCase("ru").includes("погон") ? "running" : "static";
   const norms = Object.fromEntries(normKeys.map(key => [key, numberOrNull(record.payload[key])])) as Pick<RouteV3Operation, typeof normKeys[number]>;
   return {
-    id, title: subcategory, kind, lengthMm: 0, speedMmPerMinute: 1, employees: 1, quantity: 1, minutesEach: 0,
-    catalogBinding: { sourceId: snapshot.sourceId, snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256, recordId: record.recordId, sourceKey: record.sourceKey, displayName: subcategory },
+    id, title: category, kind, lengthMm: 0, speedMmPerMinute: 1, employees: 1, quantity: 1, minutesEach: 0,
+    catalogBinding: { sourceId: snapshot.sourceId, snapshotId: snapshot.snapshotId, snapshotSha256: snapshot.sha256, recordId: record.recordId, sourceKey: record.sourceKey, displayName: `${category} · № ${subcategory}` },
     category, subcategory, catalogOperationType: operationType, parallelCapacity: 1, ...norms,
   };
 }
