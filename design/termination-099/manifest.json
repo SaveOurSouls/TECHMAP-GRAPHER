@@ -96,7 +96,7 @@
     },
     {
       "id": "nshvi-single",
-      "name": "НШВИ · одинарный",
+      "name": "НШВИ · стандартный раструб",
       "kind": "terminal",
       "geometryFamily": "ferrule",
       "views": {
@@ -128,7 +128,7 @@
     },
     {
       "id": "nshvi-double",
-      "name": "НШВИ-2 · двойной",
+      "name": "НШВИ · расширенный раструб",
       "kind": "terminal",
       "geometryFamily": "ferrule-double",
       "views": {
@@ -153,7 +153,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Один общий вход; ×2 — аннотация",
+      "note": "Трубчатая втулка с расширенным раструбом",
       "dimensionFields": "L / L1 / C / W / A",
       "catalogAlias": null,
       "standardClaim": null
@@ -844,7 +844,7 @@
     },
     "C2": {
       "image": "codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png",
-      "observed": "трубчатые варианты; НШВИ-2 — расширение проекта; поля L/L1/C/W/A"
+      "observed": "трубчатые варианты; расширенный раструб — вариант проекта; поля L/L1/C/W/A"
     },
     "C3": {
       "image": "codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png",
@@ -860,6 +860,21 @@
     }
   },
   "profileRevision": "2026-10-15-photo-profiles",
+  "cuffRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-c8f5ebe8-345a-4b3f-b800-2bc7dead84c4.png",
+    "families": [
+      "ring",
+      "fork",
+      "blade",
+      "pin",
+      "socket",
+      "male",
+      "female"
+    ],
+    "profile": "cylindrical smaller front barrel with larger wire-entry collar; same shape in both views",
+    "nshvi": "geometry unchanged; remove badge and double designation from visible names; legacy ids retained"
+  },
   "receptacleRevision": {
     "date": "2026-10-15",
     "reference": "codex-clipboard-af5ec56d-26e0-4073-9720-5d65b12e714e.png",

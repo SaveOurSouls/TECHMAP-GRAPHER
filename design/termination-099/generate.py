@@ -9,8 +9,8 @@ W,H=220,100
 ITEMS=[
  ('nki-ring','НКИ · кольцевой','terminal','ring','L / L1 / D / B / d1 / P / S','Изолированный обжим и кольцевой лепесток'),
  ('nvi-fork','НВИ · вилочный','terminal','fork','L / L1 / D / B / d1 / P / S','Открытая вилка без дополнительного порта'),
- ('nshvi-single','НШВИ · одинарный','terminal','ferrule','L / L1 / C / W / A','Трубчатая втулка с изолированным раструбом'),
- ('nshvi-double','НШВИ-2 · двойной','terminal','ferrule-double','L / L1 / C / W / A','Один общий вход; ×2 — аннотация'),
+ ('nshvi-single','НШВИ · стандартный раструб','terminal','ferrule','L / L1 / C / W / A','Трубчатая втулка с изолированным раструбом'),
+ ('nshvi-double','НШВИ · расширенный раструб','terminal','ferrule-double','L / L1 / C / W / A','Трубчатая втулка с расширенным раструбом'),
  ('nvsh-alias-pin-blade','НВШ (alias) · pin blade','terminal','blade','проектные поля L / W / t','Предложенная геометрия; расшифровка не утверждается'),
  ('din-sc-ring','DIN / SC · силовой кольцевой','terminal','power-ring','поля каталога C3: d2 / d / D / B / E / L','Медь лужёная; на C3 маркировка SC. DIN не подтверждён'),
  ('pin-round','Pin · круглый штырь','terminal','pin','проектные поля L / d','Боковой вид цилиндрического контакта'),
@@ -143,20 +143,19 @@ def body(family,view,cuff='red',leads=True):
   shape('M86 43 H174 Q177 43 177 45 V55 Q177 57 174 57 H86 Z')
   detail('M90 45 H174 M90 55 H174 M36 39 H64 M36 61 H64')
   detail(f'M38 {yy} C35 42 35 58 38 {100-yy}')
-  if double:s.append(text(184,29,'×2','badge'))
  elif family=='power-ring':
   shape('M32 35 Q32 33 37 33 H82 Q92 33 105 42 C118 43 129 38 139 32 A23 23 0 1 1 139 68 C129 62 118 57 105 58 Q92 67 82 67 H37 Q32 67 32 65 Z')
   s.append(circle(153,50,12.5,PAPER))
   detail('M37 37 H80 Q91 37 103 44 M37 63 H80 Q91 63 103 56 M38 36 V64 M88 36 V64')
   detail('M116 46 Q126 42 132 38 M116 54 Q126 58 132 62')
  else:
-  # Moulded bell-mouth entry and a taper onto the exposed crimp barrel.
-  shape('M32 37 Q32 35 36 35 L47 37 Q51 38 57 38 H74 Q80 38 85 42 L88 45 V55 L85 58 Q80 62 74 62 H57 Q51 62 47 63 L36 65 Q32 65 32 63 Z',ins)
+  # C1 c8f5ebe8: straight smaller barrel with an enlarged cylindrical entry collar.
+  shape('M32 36 Q32 33 35 33 H52 Q56 33 56 37 V39 H85 Q88 39 88 42 V58 Q88 61 85 61 H56 V63 Q56 67 52 67 H35 Q32 67 32 64 Z',ins)
   # Metal neck / open stamped transition, clearly narrower than the cuff.
   if family not in ('female','flag'):
    shape('M86 43 L91 40 L97 43 H109 V57 H97 L91 60 L86 57 Z')
    detail('M89 44 L94 47 H108 M89 56 L94 53 H108 M97 43 V57')
-  detail('M35 39 L48 41 Q54 42 75 42 M35 61 L48 59 Q54 58 75 58 M37 37 Q34 49 37 63')
+  detail('M38 37 H50 M38 63 H50 M60 42 H84 M60 58 H84 M36 35 C33 42 33 58 36 65 M53 37 Q50 50 53 63')
   if family=='ring':
    # Full circular head with a smooth concave neck; not a pointed leaf.
    shape('M105 43 C120 43 127 39 137 33 A22 22 0 1 1 137 67 C127 61 120 57 105 57 Z')
@@ -226,8 +225,9 @@ for key,label in VARIANTS:
  id='preparation-'+key
  for view in ('e4','drawing'):(OUT/f'{id}-{view}.svg').write_text(shell('Разделка — '+label+' — '+view,prep_symbol(key,view)),encoding='utf-8')
  r=record(id,'Разделка: '+label,'preparation',key,'Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант');manifest['assets'].append(r)
-manifest['references']={'C1':{'image':'codex-clipboard-bbee8c8c-ddbe-40a1-b1c6-01db61a7f201.png','observed':'НКИ/НВИ: L/L1/D/B/d1/P/S, кольцо и открытая вилка'},'C2':{'image':'codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png','observed':'трубчатые варианты; НШВИ-2 — расширение проекта; поля L/L1/C/W/A'},'C3':{'image':'codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png','observed':'трубчатые медные лужёные SC; d2/d/D/B/E/L; DIN не указан'},'C4':{'image':'codex-clipboard-b83f3bf3-8029-4807-a459-21fa6222fbc1.png','observed':'кольцевые/вилки, butt, bullet, male/female, pin, flag'},'C5':{'image':'codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png','observed':'визуальное разнообразие ring/fork/round/flat/flag/sleeve'}}
+manifest['references']={'C1':{'image':'codex-clipboard-bbee8c8c-ddbe-40a1-b1c6-01db61a7f201.png','observed':'НКИ/НВИ: L/L1/D/B/d1/P/S, кольцо и открытая вилка'},'C2':{'image':'codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png','observed':'трубчатые варианты; расширенный раструб — вариант проекта; поля L/L1/C/W/A'},'C3':{'image':'codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png','observed':'трубчатые медные лужёные SC; d2/d/D/B/E/L; DIN не указан'},'C4':{'image':'codex-clipboard-b83f3bf3-8029-4807-a459-21fa6222fbc1.png','observed':'кольцевые/вилки, butt, bullet, male/female, pin, flag'},'C5':{'image':'codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png','observed':'визуальное разнообразие ring/fork/round/flat/flag/sleeve'}}
 manifest['profileRevision']='2026-10-15-photo-profiles'
+manifest['cuffRevision']={'date':'2026-10-15','reference':'codex-clipboard-c8f5ebe8-345a-4b3f-b800-2bc7dead84c4.png','families':['ring','fork','blade','pin','socket','male','female'],'profile':'cylindrical smaller front barrel with larger wire-entry collar; same shape in both views','nshvi':'geometry unchanged; remove badge and double designation from visible names; legacy ids retained'}
 manifest['receptacleRevision']={'date':'2026-10-15','reference':'codex-clipboard-af5ec56d-26e0-4073-9720-5d65b12e714e.png','headRatio':[7.3,6.6],'neckWidthRatio':2.3,'note':'Straight female proportions unchanged. Bare flags reuse a projected 90-degree metal head; insulated flag has a separate complete polymer shell.'}
 manifest['profileReferences']={'C1':'codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png','C2':'codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png','C3':'codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png'}
 manifest['viewContract']='same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds'
@@ -274,14 +274,14 @@ for x,fam,name in [(70,'ring','C1 · НКИ / НВИ'),(650,'ferrule-double','C2
  if fam=='ring':
   q += [text(x,345,'L — общая длина · L1 — зона металлического обжима','small'),text(x,367,'D — отверстие кольца / раскрытие вилки · B — ширина лепестка','small'),text(x,389,'d1 — входной диаметр · P — длина хвостовой зоны · S — толщина','small')]
  else:
-  q += [text(x,345,'L — металлическая втулка · L1 — общая длина','small'),text(x,367,'C — диаметр втулки · W — габарит раструба','small'),text(x,389,'A — поперечный габарит; НШВИ-2 — расширение проекта','small')]
+  q += [text(x,345,'L — металлическая втулка · L1 — общая длина','small'),text(x,367,'C — диаметр втулки · W — габарит раструба','small'),text(x,389,'A — поперечный габарит; профиль раструба сохранён','small')]
 q += [text(28,431,'Схема только сохраняет названия полей приложений; значения и допуски не выдуманы.','small')]
 (OUT/'dimensions.svg').write_text(shell('Размерные поля 099',''.join(q),DW,DH),encoding='utf-8')
 
 # Enlarged sheet for silhouette / fold inspection and neutral color comparison.
 PDW,PDH=1240,1630
 r=[rect(0,0,PDW,PDH,'#f3f6fa'),text(28,44,'099 · Профили по фотографиям · 15.10.2026','title'),text(28,72,'C1–C3: плавная шейка, раструб манжеты, штампованные переходы и контактные пружины.'),text(28,94,'Э4 сохраняет тот же силуэт. Красный / синий / жёлтый здесь — варианты показа, без привязки к сечению.','small')]
-for i,(fam,label) in enumerate([('ring','НКИ · круглая головка / плавная шейка'),('fork','НВИ · U-вилка / параллельные зубцы'),('pin','Bullet male · закруглённый нос'),('socket','Bullet female · приёмная втулка'),('male','Flat male · штампованная лопатка'),('female','Flat female · пружинные завальцовки'),('flag','Флажковый · цельный Г-корпус'),('ferrule-double','НШВИ-2 · расширенный раструб')]):
+for i,(fam,label) in enumerate([('ring','НКИ · круглая головка / плавная шейка'),('fork','НВИ · U-вилка / параллельные зубцы'),('pin','Bullet male · закруглённый нос'),('socket','Bullet female · приёмная втулка'),('male','Flat male · штампованная лопатка'),('female','Flat female · пружинные завальцовки'),('flag','Флажковый · цельный Г-корпус'),('ferrule-double','НШВИ · расширенный раструб')]):
  x=28+(i%2)*608;y=119+(i//2)*290
  large_scale=2.4 if fam=='flag' else 2.7
  large_x,large_y=(200,55) if fam=='flag' else (2,20)
@@ -328,6 +328,15 @@ for i,(col,label) in enumerate([('blue','Синяя оболочка · рабо
  z += [rect(x,676,584,355,PAPER,12),text(x+18,709,label,'card-title'),f'<g transform="translate({x+165},956) scale(4) translate(-32,-50)">{symbol("flag","drawing",cuff=col,leads=False)}</g>',line(x+142,956,x+165,956,'class="wire"'),text(x+18,1006,'Металл в одной плоскости; заливка оболочки fill-opacity = 0,61.','small')]
 z += [text(28,1067,'C1: codex-clipboard-f8726991-e275-41a2-98f0-d305978b0667.png. Цвет не задаёт сечение или материал.','small'),text(28,1094,'Профиль и масштаб — визуальная модель по фото; не размерный чертёж изделия и не нормативное УГО.','small')]
 (OUT/'insulated-flag-detail.svg').write_text(shell('Изолированный флажок по новому C1',''.join(z),IW,IH),encoding='utf-8')
+
+# Shared cylindrical cuff, with the unchanged ferrule profile for comparison.
+CW,CH=1120,1170
+u=[rect(0,0,CW,CH,'#f3f6fa'),text(28,44,'Манжеты · цилиндр и расширенный входной поясок','title'),text(28,73,'Профиль по новому C1: одинаковая манжета у семи прямых изолированных наконечников.'),text(28,95,'НШВИ сохраняет форму; обозначение кратности убрано из рисунка и названия.','small')]
+for i,(fam,label) in enumerate([('ring','НКИ · кольцевой'),('fork','НВИ · вилочный'),('blade','НВШ · плоский штырь'),('pin','Pin · круглый штырь'),('socket','Socket · круглая розетка'),('male','Flat male · плоский штырь'),('female','Flat female · плоская розетка'),('ferrule-double','НШВИ · расширенный раструб')]):
+ x=24+(i%2)*548;y=120+(i//2)*250
+ u += [rect(x,y,524,236,PAPER,10),text(x+18,y+29,label,'card-title'),f'<g transform="translate({x+5},{y+18}) scale(2.4)">{symbol(fam,"drawing")}</g>',text(x+18,y+214,'Э4 · один вход','view'),f'<g transform="translate({x+225},{y+178}) scale(.65)">{symbol(fam,"e4")}</g>']
+u += [text(28,1144,'Контуры металлических частей и точки подключения сохранены. Цвет манжеты не определяет сечение.','small')]
+(OUT/'cuff-detail.svg').write_text(shell('Цилиндрические манжеты наконечников',''.join(u),CW,CH),encoding='utf-8')
 
 # structural validation, deterministic and no external packages required
 for p in OUT.glob('*.svg'):
