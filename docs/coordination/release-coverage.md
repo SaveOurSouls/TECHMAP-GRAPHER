@@ -6,7 +6,7 @@ REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md)
 
 ## 113 — масштаб оконцовки P1, 15.10.2026
 
-REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`. In-progress; регистрационный commit/base и обязательный handoff/code SHA фиксируются после создания изолированной ветки. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
+REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md), чат `01a1410f-1e06-7602-b18f-97df76b92296`, ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, base `034bf42154a6ed9a15841a010f1242b865e3a120`. In-progress; обязательный handoff/code SHA pending. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 

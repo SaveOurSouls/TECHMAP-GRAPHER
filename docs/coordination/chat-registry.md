@@ -6,7 +6,7 @@
 
 ## 113 — оконцовка P1 в масштабе провода, 15.10.2026
 
-Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; in-progress. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база будет зафиксирована registration commit. Владелец: отображение P1 на Чертеже, `CanvasViewport.tsx`, профильные artwork/termination scene geometry и тесты. Общие Markdown-файлы ведёт координатор; код 112 не пересекается. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — оконцовка должна соотноситься с видимым масштабом провода; изоляция обжимает жилу, оголённая медь не шире видимого проводника. Результат владельцем ещё не принят.
+Чат `01a1410f-1e06-7602-b18f-97df76b92296`, карточка [113](../../tasks/113-p1-termination-graphic-scale.md), REQ-148; in-progress. Ветка `codex/p1-termination-graphic-scale`, worktree `tmp/p1-termination-graphic-scale`, база registration commit `034bf42154a6ed9a15841a010f1242b865e3a120`. Владелец: отображение P1 на Чертеже, `CanvasViewport.tsx`, профильные artwork/termination scene geometry и тесты. Общие Markdown-файлы ведёт координатор; код 112 не пересекается. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — оконцовка должна соотноситься с видимым масштабом провода; изоляция обжимает жилу, оголённая медь не шире видимого проводника. Результат владельцем ещё не принят.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
