@@ -7,7 +7,7 @@
 - **ZIP:** `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`.
 - **Size / SHA-256:** `64 412 661 / BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
 - **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
-- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Чаты 111 и 113 accepted владельцем 16.10.2026; acceptance 112, 114–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
+- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Карточки 110, 111 и 113 приняты владельцем 16.10.2026; acceptance 112, 114–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
 
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
@@ -66,7 +66,7 @@ REQ-146, [карточка 111](../../tasks/111-thermal-sleeve-wire-coverage.md)
 
 ## 110 — отзывчивость перемещения компонентов Э4, 15.10.2026
 
-REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, отдельный worktree. Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и проверены как предки integration merge `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; `git show --check` PASS. Клиентский Vitest 211/2223 и TypeScript/Vite PASS. Ready-for-review; включено в M5-22-051. Полный синхронный пересчёт при pointer-up на синтетическом сценарии остаётся около 2 с; исходный проект и packaged UI не проверены.
+REQ-145, [карточка 110](../../tasks/110-e4-component-drag-performance.md). Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, отдельный worktree. Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и проверены как предки сборочного HEAD M5-22-053 `2a9dd345cdd858847afcacd94e83fe29357337a3`; `git show --check` PASS. Клиентский Vitest 211/2223 и TypeScript/Vite PASS; ZIP M5-22-051 и M5-22-053 выпущены. Карточка принята владельцем 16.10.2026. Полный синхронный пересчёт при pointer-up остаётся около 2 с; исходный проект и packaged UI не проверены.
 
 ### m5-22-051 — 15.10.2026
 

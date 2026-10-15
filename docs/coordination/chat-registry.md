@@ -31,7 +31,7 @@ Follow-up C1–C4 от владельца: ready-for-review, прежний ча
 
 ## 110 — ускорение перемещения компонентов в Э4, 15.10.2026
 
-Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, исходная ветка `codex/e4-component-drag-performance`, worktree `tmp/e4-component-drag-performance`; статус ready-for-review. REQ-145, карточка [110](../../tasks/110-e4-component-drag-performance.md). Регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e`, handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` опубликованы и включены в integration merge `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` (ancestry PASS). Владелец кода — рабочий чат; координатор владеет регистрацией. Совместный клиент 211/2223, TypeScript/Vite PASS; ZIP M5-22-051 проверен, приёмка владельцем открыта.
+Thread `01a140c3-46d1-7f81-ac60-ad27761a2ca2` содержит карточки 110 и 115. Карточка 110 принята владельцем 16.10.2026: code `8ff8736d1a8989b8d8482d806455abf2130c207e` и handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4` — предки M5-22-053 (`2a9dd345`), интеграция PASS. ZIP M5-22-051 и M5-22-053 подтверждены. Чат пока не архивирован: карточка 115 в том же Thread ID не принята владельцем, её отдельный worktree `tmp/e4-routing-interaction` сохранён.
 
 ## 109 — постоянная библиотека оконцовок и генерация серий, 15.10.2026
 
