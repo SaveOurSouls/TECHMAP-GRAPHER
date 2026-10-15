@@ -19,6 +19,27 @@ function fixture(mode: EndPreparationMode = 'copper', scale = 1) {
 }
 
 describe('P1 drawing end treatment', () => {
+  it.each(['pin-sealed','socket-sealed'] as const)('keeps the complete %s rubber inside the SVG, canvas frame and selectable bounds', mode => {
+    // The last rubber lip is x=679 with a 2-unit stroke, inside the
+    // canonical translate(4 82.83) scale(.42) terminal group.
+    const sealRight=4+(679+1)*.42;
+    const svg=renderPreparationSvg(mode), viewBox=svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number);
+    expect(viewBox[0]!+viewBox[2]!).toBeGreaterThanOrEqual(sealRight);
+    const document=fixture(mode,8), before=JSON.stringify(document);
+    const scene=designToScene(document,'drawing'), p=scene.find(o=>o.id==='p')!, art=p.terminationArtwork![0]!;
+    expect(art.image[0]+art.image[2]).toBeGreaterThanOrEqual(sealRight);
+    expect(art.localBounds[2]).toBeGreaterThanOrEqual(sealRight);
+    expect(art.image[2]).toBe(viewBox[2]); // No stretching to compensate for clipping.
+    const lip=artworkWorldPoint(art,{x:4+679*.42,y:0});
+    expect(terminationSceneContainsPoint(p,lip,0)).toBe(true);
+    const bounds=terminationSceneBounds(p)!;
+    expect(lip.x).toBeGreaterThanOrEqual(bounds.minX); expect(lip.x).toBeLessThanOrEqual(bounds.maxX);
+    expect(lip.y).toBeGreaterThanOrEqual(bounds.minY); expect(lip.y).toBeLessThanOrEqual(bounds.maxY);
+    const wire=scene.find(o=>o.id==='w')!,anchor=artworkWorldPoint(art,{x:222,y:0});
+    expect(art.scale*artworkWireDiameter).toBeCloseTo(Number(wire.metadata!.drawingWidth));
+    expect(anchor.x).toBeCloseTo(wire.points!.at(-1)!.x);expect(anchor.y).toBeCloseTo(wire.points!.at(-1)!.y);
+    expect(JSON.stringify(document)).toBe(before);
+  });
   it.each([.2, .25, 1, 5, 8])('uses the same jacket diameter at drawing scale %s', scale => {
     const document = fixture('copper', scale), before = JSON.stringify(document);
     const scene = designToScene(document, 'drawing'), p = scene.find(o => o.id === 'p')!, wire = scene.find(o => o.id === 'w')!;

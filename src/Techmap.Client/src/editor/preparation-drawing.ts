@@ -1,4 +1,4 @@
-import { artworkWireDiameter, artworkJacketAnchor, renderPreparationSvg } from '../wire-blank-artwork.mjs';
+import { artworkWireDiameter, artworkJacketAnchor, renderPreparationSvg, preparationArtworkWidth } from '../wire-blank-artwork.mjs';
 import { getTerminationSymbol } from '../termination-library/symbol';
 import { getTerminationArtworkBounds } from '../termination-library/artwork-bounds';
 import type { EditorPoint, EditorSceneObject } from './editor-types';
@@ -88,7 +88,8 @@ export function withPreparationDrawingArtwork(document: HarnessDesignDocument, c
         artwork.push({ ...p, scale, rotation, mode: preparation.mode, wireId: wire.id, href: symbol.href, image: [0, 0, 220, 100], localBounds: bounds, conductorDiameter: width * .75 });
       } else {
         const bare = preparation.mode === 'copper' || preparation.mode === 'tin';
-        artwork.push({ ...placement, mode: preparation.mode, wireId: wire.id, href: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(renderPreparationSvg(preparation.mode, scene.color)), image: [0, -40, 250, 80], localBounds: bare ? [157, -12, 223, 12] : [16, -32, 233, 32], conductorDiameter: width * 17.1 / artworkWireDiameter });
+        const sealed = preparation.mode === 'pin-sealed' || preparation.mode === 'socket-sealed';
+        artwork.push({ ...placement, mode: preparation.mode, wireId: wire.id, href: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(renderPreparationSvg(preparation.mode, scene.color)), image: [0, -40, preparationArtworkWidth(preparation.mode), 80], localBounds: bare ? [157, -12, 223, 12] : [16, -32, sealed ? 291 : 233, 32], conductorDiameter: width * 17.1 / artworkWireDiameter });
       }
     }
     return artwork.length ? { ...object, terminationArtwork: artwork } : object;
