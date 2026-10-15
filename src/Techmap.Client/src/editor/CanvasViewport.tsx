@@ -3440,12 +3440,31 @@ export function CanvasViewport({
     // usable drag handle in Select, rather than switching to wire authoring.
     if (!pendingPlacement && !onObjectPick && event.button === 0 && tool === 'select') {
       const point = screenToWorld(camera, localPoint(event.clientX, event.clientY));
+      // An authored physical exit is independently movable, even over a
+      // terminal picture. Its own layer controls editing, not the symbol layer.
+      const exit = view === 'drawing' ? [...objects].reverse().find(object =>
+        object.kind === 'physical-node' && object.port?.connectorId &&
+        layers.some(layer => layer.id === object.layerId && layer.visible) &&
+        containsPoint(object, point, 7 / camera.zoom, view)) : undefined;
+      const foreground = objects.find(object => object.id === hitTestEditorScene(objects, layers, point, camera.zoom, view));
+      const annotation = foreground && ['dimension', 'object-index', 'position-leader', 'leader-anchor'].includes(foreground.kind);
+      if (exit && !annotation) {
+        onObjectSelect(exit.id, event.ctrlKey || event.metaKey || event.shiftKey);
+        if (onObjectMove && !layers.find(layer => layer.id === exit.layerId)?.locked) {
+          event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = { kind: 'object', pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
+            objectId: exit.id, objectX: exit.x, objectY: exit.y, mode: event.shiftKey ? 'adjacent' : 'carry', snapState: {},
+            anchors: exit.metadata?.bundleMember !== 'true' ? physicalObjectSnapAnchors(objects.filter(o => layers.some(l => l.id === o.layerId && l.visible)), exit) : undefined,
+            routeAnchors: physicalObjectRouteAnchors(objects, exit, event.shiftKey ? 'adjacent' : 'carry') };
+        }
+        return;
+      }
       const termination = [...objects].reverse().find(object => object.metadata?.terminationSymbol &&
         layers.some(layer => layer.id === object.layerId && layer.visible) && terminationSceneContainsPoint(object, point, 7 / camera.zoom));
       const top = objects.find(object => object.id === hitTestEditorScene(objects, layers, point, camera.zoom, view));
       // Contact/node/wire decorations may cover a point-sized preparation, but
       // a symbol's transparent viewBox must not steal a foreground component.
-      const pointOverlay = top && ['physical-node', 'physical-segment', 'physical-covering', 'wire'].includes(top.kind);
+      const pointOverlay = top && (['physical-segment', 'physical-covering', 'wire'].includes(top.kind) || view === 'e4' && top.kind === 'physical-node');
       if (termination && (top?.id === termination.id || pointOverlay)) {
         onObjectSelect(termination.id, event.ctrlKey || event.metaKey || event.shiftKey);
         if (onObjectMove && !layers.find(layer => layer.id === termination.layerId)?.locked) {

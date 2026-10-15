@@ -47,7 +47,9 @@ export function physicalNodeDirection(document: HarnessDesignDocument, node: Phy
     const point = connectorContactPosition(connector, contact.id, "drawing");
     if (!point) return [];
     const materialized = selectMaterializedContactRepresentation(connector, contact.id, "drawing");
-    if (materialized) return [point];
+    // Termination contacts, like materialized contacts, are already transformed
+    // by connectorContactPosition. Only ordinary table offsets need rotation.
+    if (materialized || connector.terminationComponent) return [point];
     // Ordinary table lookup returns unrotated local offsets; align its center with the rotated exit.
     const local = drawingLocalPoint({ x: point.x - connector.positions.drawing.x, y: point.y - connector.positions.drawing.y }, connector.drawingPlacements);
     return [{ x: connector.positions.drawing.x + local.x, y: connector.positions.drawing.y + local.y }];

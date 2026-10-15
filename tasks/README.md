@@ -123,3 +123,4 @@
 | 103 | [Прямые колонки вида и рисунок ПФ](103-route-v3-direct-appearance-columns.md) | accepted | REQ-139: начало/конец/цвет в таблице, рисунок слева. |
 | 105 | [Ширина настроек карточки Route v3](105-route-v3-full-width-card-settings.md) | accepted | REQ-140: окно по ширине экрана, согласованный CSS, таблицы без горизонтального overflow desktop. |
 | 106 | [Рисунки, размещение и подключения оконцовок](106-termination-placement-and-connections.md) | ready-for-review | REQ-141: production SVG, библиотека, вставка мышью, перенос и 2/3/4+ проводов; 2055 тестов PASS. |
+| 107 | [Ручки и границы оконцовок на Чертеже](107-termination-drawing-handles-and-bounds.md) | ready-for-review | REQ-142: самостоятельный перенос физической точки, новые выходы на манжете, компактные границы/выноска; 2169 тестов PASS. |

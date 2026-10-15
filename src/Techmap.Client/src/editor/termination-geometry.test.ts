@@ -49,13 +49,13 @@ describe('termination transformed geometry',()=>{
  it('hits the rotated head and fits/box-selects its real extent while preserving the electrical anchor',()=>{
   const {connector,object}=rotatedScene();
   const b=terminationSceneBounds(object)!;
-  expect(b.minX).toBeCloseTo(0);expect(b.minY).toBeCloseTo(200);expect(b.maxX).toBeCloseTo(100);expect(b.maxY).toBeCloseTo(420);
+  expect(b.minX).toBeCloseTo(27.5625);expect(b.minY).toBeCloseTo(206.1875);expect(b.maxX).toBeCloseTo(72.4375);expect(b.maxY).toBeCloseTo(373.375);
   expect(connectorContactPosition(connector,connector.contacts[0]!.id,'drawing')).toEqual({x:50,y:232});
   expect(hitTestEditorScene([object],layers,{x:50,y:360},1,'drawing')).toBe('t');
   expect(hitTestEditorScene([object],layers,{x:260,y:250},1,'drawing')).toBeNull();
   expect(objectIntersectsSelectionRectangle(object,{start:{x:45,y:350},end:{x:55,y:370}})).toBe(true);
   const fit=getEditorSceneBounds([object],layers,'drawing')!;
-  expect(fit.minX).toBeCloseTo(0);expect(fit.maxY).toBeCloseTo(420);expect(fit.minY).toBeLessThan(200);
+  expect(fit.minX).toBeCloseTo(27.5625);expect(fit.maxY).toBeCloseTo(373.375);expect(fit.minY).toBeLessThan(200);
  });
  it.each([[-135,.5],[45,2],[180,1.25]])('inverse hit transform agrees with the image at %s degrees / scale %s',(angle,scale)=>{
   const {object}=rotatedScene(angle,scale),a=angle*Math.PI/180;
@@ -72,7 +72,8 @@ describe('termination transformed geometry',()=>{
   const covering:EditorSceneObject={...pipe,id:'cover',kind:'physical-covering',color:'#445566',metadata:{surfaces:JSON.stringify([{polygon:[{x:0,y:210},{x:200,y:210},{x:200,y:240},{x:0,y:240}]}])}};
   redrawCanvas(canvas,'drawing',{offsetX:0,offsetY:0,zoom:1},[object,pipe,covering],layers,new Set());
   const labels=ops.map((o,i)=>({...o,index:i})).filter(o=>o.method==='fillText'&&o.args[0]==='T1');
-  expect(labels).toHaveLength(1);expect(labels[0]!.args[1]).toBeCloseTo(5);expect(labels[0]!.args[2]).toBeCloseTo(192);
+  const label=drawingConnectorIndexLabel(object,terminationSceneBounds(object)!);
+  expect(labels).toHaveLength(1);expect(labels[0]!.args[1]).toBeCloseTo(label.x);expect(labels[0]!.args[2]).toBeCloseTo(label.y);
   const lastSurface=ops.reduce((n,o,i)=>o.color==='#aabbcc'||o.color==='#445566'?i:n,-1);
   expect(lastSurface).toBeGreaterThan(-1);expect(labels[0]!.index).toBeGreaterThan(lastSurface);
   expect(ops.some(o=>o.method==='arc'&&o.args[0]===50&&o.args[1]===232)).toBe(true);

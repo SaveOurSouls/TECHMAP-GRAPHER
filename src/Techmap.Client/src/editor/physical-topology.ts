@@ -13,14 +13,20 @@ import {pruneJoiningPipes} from "./physical-joining-pipes";
 export { emptyPhysicalTopology } from "./physical-topology-model";
 export type { PhysicalDirection, PhysicalNode, PhysicalSegment, PhysicalStep, PhysicalRoute, PhysicalTopology, PhysicalJoiningPipe, JoiningPipeMember } from "./physical-topology-model";
 
-/** One persistent exit per connector; existing exits and routes are never replaced. */
+/** One persistent exit per connector; existing exits and routes are never replaced.
+ * New single-point terminations start at their conductor input. Sleeves retain
+ * their common physical exit until physical nodes can identify each port. */
 export function ensureConnectorExits(document: HarnessDesignDocument): PhysicalTopology {
   const topology = document.physicalTopology ?? emptyPhysicalTopology();
   const missing = document.connectors.filter(c => !topology.nodes.some(n => n.connectorId === c.id));
   if (!missing.length) return topology;
-  return { ...topology, nodes: [...topology.nodes, ...missing.map(c => ({
-    id: crypto.randomUUID(), connectorId: c.id, position: { x: 170, y: 60 },
-  }))] };
+  return { ...topology, nodes: [...topology.nodes, ...missing.map(c => {
+    const singlePoint = c.terminationComponent?.kind === 'terminal' || c.terminationComponent?.kind === 'preparation';
+    return { id: crypto.randomUUID(), connectorId: c.id,
+      position: singlePoint ? { x: 32, y: 50 } : { x: 170, y: 60 },
+      ...(singlePoint ? { direction: 'left' as const } : {}),
+    };
+  })] };
 }
 
 /** Editing uses only authored vertices, never automatic presentation vertices. */
