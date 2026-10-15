@@ -1,3 +1,11 @@
+# Пакет M5-22-050 — карточка 109, 15.10.2026
+
+Исходный code HEAD: `094668949831f9167e482db674a794a6af9c355c` (`codex/integration-m5-22`). Карточка 109 передана из `codex/termination-library-series`: регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3`, handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393`; все три SHA — предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc` и сборочного HEAD. Общие документы 108/109 объединены, coverage зафиксирован `b0cd25927337407aef6c4b3a129f6a26de36908e`. Версия `0.63.50-m5-22-review` поднята коммитом `0946689` до сборки. Неизвестных или ожидающих завершённых handoff для этого среза нет.
+
+Windows x64 ZIP: `artifacts/m5-22-050/TECHMAP-GRAPHER-0.63.50-m5-22-review-win-x64.zip`. Размер: **64 398 376 байт**. SHA-256: `98135088AC445F16C0B3E6D226921B4D4DE690C8C1E6592AE41D530EFE8878DD`.
+
+Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-050` завершился успешно: Vitest **209 файлов / 2205 тестов PASS**, TypeScript и Vite production build PASS, .NET Release **1140/1140 PASS**, отдельный performance-тест **1/1 PASS**, self-contained win-x64 publish. `verify-package.ps1` подтвердил **534 файла манифеста**; `test-portable-package.ps1` подтвердил **7/7 режимов** из `C:\Temp\TECHMAP-m5-22-050`, включая каталог с кириллицей и пробелами. Новая библиотека серий и read-only свойства прошли исходную production browser-проверку 1440/390 px; Windows packaged UI вручную не принимался. Каталог остаётся локальным браузеру/origin, реальные нормы производителя не выдуманы; исходный пользовательский жгут и owner acceptance 109 открыты. ZIP остаётся вне Git.
+
 # Пакет M5-22-049 — карточки 107 и 108, 15.10.2026
 
 Исходный code HEAD: `aa2b3bc3d9e83248fca96d70899a6002993ce835` (`codex/integration-m5-22`). Код 107 `72aa5ddcf6871dec5f6e06d1eabb5a3195720848` / handoff `313c22539df4c4d1f8aca896849a21d1e5e14caa` и код 108 `2ce6e70a854856f092b14c6e0fa26cbe1226835b` / handoff `2945ba5da1b88a886f293dcb322418b7575256e9` подтверждены как предки HEAD и опубликованы в origin. Coverage зафиксирован `e579128`, версия `0.63.49-m5-22-review` поднята коммитом `aa2b3bc` до сборки. Карточка 109 остаётся отдельной незавершённой работой и в этот срез не включалась.

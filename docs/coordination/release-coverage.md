@@ -2,7 +2,16 @@
 
 ## 109 — библиотека оконцовок и генерация серий, 15.10.2026
 
-REQ-144, карточка [109](../../tasks/109-termination-library-series.md). Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, исходная ветка `codex/termination-library-series`, база `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3` и handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393` опубликованы и проверены сборщиком как предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc`; `git show --check` PASS. Конфликты шести общих Markdown-файлов разрешены с сохранением 108/109; интегрированный клиент: Vitest 209/2205, TypeScript/Vite PASS. [Handoff](agent-handoff.md), [протокол](../termination-109-acceptance.md). Ready-for-review, включить в следующий ZIP после M5-22-049; исходный жгут/native portable UI и приёмка владельцем открыты.
+REQ-144, карточка [109](../../tasks/109-termination-library-series.md). Чат `01a140ad-0999-77b0-88e7-918d730dfce2`, исходная ветка `codex/termination-library-series`, база `313c22539df4c4d1f8aca896849a21d1e5e14caa`. Регистрация `ed1fe21721f1fe1ed402ec1541d1c5916f2f8612`, код `b437f796cc73c7bed554849b1d1d7d03a46bc8e3` и handoff `56b1e0d91176e4d2c862a24a98afd83f2f06e393` опубликованы и проверены сборщиком как предки integration merge `053d2955bc684183f0d358d7a612dc2f556e45bc` и code HEAD `094668949831f9167e482db674a794a6af9c355c`; `git show --check` PASS. Конфликты шести общих Markdown-файлов разрешены с сохранением 108/109; интегрированный клиент: Vitest 209/2205, TypeScript/Vite PASS. [Handoff](agent-handoff.md), [протокол](../termination-109-acceptance.md). Ready-for-review, включено в M5-22-050; исходный жгут/native portable UI и приёмка владельцем открыты.
+
+### m5-22-050 — 15.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `094668949831f9167e482db674a794a6af9c355c`
+- **Coverage:** 109/REQ-144 включена; registration/code/handoff SHA — предки HEAD; pending/unknown завершённых handoff `0`. Код 107/108 и их coverage сохранены при merge.
+- **ZIP:** `artifacts/m5-22-050/TECHMAP-GRAPHER-0.63.50-m5-22-review-win-x64.zip`
+- **Size / SHA-256:** `64 398 376 / 98135088AC445F16C0B3E6D226921B4D4DE690C8C1E6592AE41D530EFE8878DD`
+- **Manifest / portable:** `PASS; 534 files; 7/7`
+- **Gate:** Git/package PASS, Vitest 209/2205, .NET 1140/1140, performance 1/1. Каталог локален браузеру; исходный жгут, ручная packaged UI-проверка и owner acceptance 109 открыты.
 
 ## 108 — управление составом П, 15.10.2026
 
