@@ -1,5 +1,9 @@
 # Release coverage
 
+## 099 — розетки по C1 `af5ec56d`, 15.10.2026
+
+`faf94638902896fd0f25eac6de8d854301639cf6` опубликован и интегрирован непосредственно в `codex/integration-m5-22`. Две формы и лист сравнения, 49 SVG / 22 неизменных контракта; структурные, геометрические и визуальные проверки PASS. Только дизайн; runtime и ZIP не изменены. Перед следующей сборкой подтвердить ancestry данного SHA и handoff; это продолжение design-only результата 099.
+
 ## 099 follow-up — 15.10.2026, уточнённые векторные профили
 
 `e1259fc333d642e3e861cf8d29c6a1300b228d61` опубликован в integration-ветке;
@@ -178,3 +182,5 @@ represent missing completed chat handoffs.
 - **Size / SHA-256:** `64 012 360 / 5F3A431A4AB0090426A0CA2FB51F04ED068EA1EC9C774F0931B74C38597796C2`
 - **PACKAGE-MANIFEST / portable:** `PASS; 339 записей / 340 файлов; 7/7 из C:\Temp`
 - **Gate:** `PASS` для Git/package coverage; ручная и owner acceptance открыта
+
+| 101 — Таблица операций Route v3 | `/root` | pending | REQ-137; общий worktree integration | in-progress; следующий ZIP pending |
