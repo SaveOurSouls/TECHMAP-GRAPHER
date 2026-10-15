@@ -1,9 +1,11 @@
+import { buildRouteV3SourceItems } from './route-v3-wire-terminals';
 import type { HarnessDesignDocument } from "../editor/model";
-import { buildRouteSourceItems, type RouteSourceRef, type RouteSourceItem } from "../manufacturing/route-source";
+import { type RouteSourceRef, type RouteSourceItem } from "../manufacturing/route-source";
 import type { RouteV3Node, RouteV3Product } from "./route-v3-model";
 import type { ReferenceCatalogRecord, ReferenceCatalogSnapshot } from "../reference-catalog-api";
 import type { UmlOperation } from "../uml/uml-model";
 import type { TerminationOperation } from '../editor/termination-model';
+import { routeV3EmbeddedArtifactOwners, routeV3WireEndArtifacts } from './route-v3-wire-terminals';
 
 /** Route v3 norms are seconds; legacy UML fields remain for old saved cards. */
 export interface RouteV3Operation extends UmlOperation {
@@ -128,7 +130,8 @@ export function routeV3TerminationOperationRefs(source:HarnessDesignDocument,id:
   const wireIds:string[]=t.kind==='wireEnd'?[t.wireId]:t.kind==='twist'?[...(source.terminations!.twists.find(g=>g.id===t.twistId)?.memberWireIds??[])]:groups.flatMap(g=>g.memberEnds.map(e=>e.wireId));
   if(t.kind==='portSet')for(const w of source.wires)if([w.from,w.to].some(e=>e.connectorId===t.connectorId&&t.contactIds.includes(e.contactId)))wireIds.push(w.id);
   const artifactIds=groups.map(g=>g.artifactId);if(t.kind==='portSet'){const id=source.connectors.find(c=>c.id===t.connectorId)?.terminationComponent?.artifactId;if(id)artifactIds.push(id);}
-  return [...[...new Set(wireIds)].map(id=>({kind:'wire' as const,id})),...[...new Set(artifactIds)].map(id=>({kind:'termination-artifact' as const,id}))];
+  const embedded = routeV3EmbeddedArtifactOwners(source);
+  return [...[...new Set(wireIds)].map(id=>({kind:'wire' as const,id})),...[...new Set(artifactIds)].filter(id=>!embedded.has(id)).map(id=>({kind:'termination-artifact' as const,id}))];
 }
 
 const productId = (nodeId: string, ref?: RouteSourceRef): string => ref ? `product:${nodeId}:${ref.kind}:${ref.id}` : `product:${nodeId}`;
@@ -178,7 +181,7 @@ export function routeV3OperationProjectTimes(operation: RouteV3Operation, node: 
     const projectMinutes=operationMinutes===null||setupMinutes===null?null:operationMinutes*cycles+setupMinutes;
     return {machineMinutes:n.machineSeconds===null?null:n.machineSeconds/60,humanMinutes:n.humanSeconds===null?null:n.humanSeconds/60,operationMinutes,batchMinutes:projectMinutes,projectMinutes,cycles,setupMinutes,assignedRefs:[]};
   }
-  const sources = buildRouteSourceItems(source);
+  const sources = buildRouteV3SourceItems(source);
   const products = routeV3Products(node), assigned = routeV3AssignedProductIds(node, operation);
   const refs = products.filter(product => assigned.includes(product.id)).flatMap(product => product.ref ? [product.ref] : []);
   const unknown = (): RouteV3OperationProjectTimes => ({ machineMinutes: null, humanMinutes: null, operationMinutes: null, batchMinutes: null, projectMinutes: null, cycles: null, setupMinutes: null, assignedRefs: refs });
@@ -247,11 +250,12 @@ export function routeV3SourceQuantity(ref: RouteSourceRef, source: HarnessDesign
 
 /** Stable production grouping for repeated wire/covering blanks in one harness. */
 export function routeV3SourceGroupKey(ref: RouteSourceRef, source: HarnessDesignDocument): string {
-  const item = buildRouteSourceItems(source).find(candidate => candidate.ref.kind === ref.kind && candidate.ref.id === ref.id);
+  const item = buildRouteV3SourceItems(source).find(candidate => candidate.ref.kind === ref.kind && candidate.ref.id === ref.id);
   if (!item || (ref.kind !== "wire" && ref.kind !== "covering")) return `${ref.kind}:${ref.id}`;
   if (ref.kind === "wire") {
     const wire = source.wires.find(value => value.id === ref.id)!;
-    return JSON.stringify(["wire", wire.materialBinding?.snapshotSha256 ?? "", wire.materialBinding?.recordId ?? "", item.materialArticle, item.material, item.section, item.color, item.lengthMm, item.terminalFrom, item.terminalTo, item.stripProfiles ?? null]);
+    const ends = (['from','to'] as const).map(end=>routeV3WireEndArtifacts(source,wire.id,end).map(a=>[a.kind,a.article,a.symbolId,a.color??'',a.catalogBinding?.snapshotSha256??'',a.catalogBinding?.recordId??'']));
+    return JSON.stringify(["wire", wire.materialBinding?.snapshotSha256 ?? "", wire.materialBinding?.recordId ?? "", item.materialArticle, item.material, item.section, item.color, item.lengthMm, item.terminalFrom, item.terminalTo, item.stripProfiles ?? null, ends]);
   }
   const covering = source.physicalTopology?.coverings?.find(value => value.id === ref.id);
   return JSON.stringify(["covering", covering?.material?.snapshotSha256 ?? "", covering?.material?.recordId ?? "", item.materialArticle, item.material, item.lengthMm, covering?.kind ?? null]);

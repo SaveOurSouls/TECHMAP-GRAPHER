@@ -1,3 +1,4 @@
+import { buildRouteV3SourceItems } from './route-v3-wire-terminals';
 import { routeV3CompositionGroups, setRouteV3GroupArtwork } from "./route-v3-composition-groups";
 import { RouteV3SourceArtwork } from "./route-v3-termination-artwork";
 import { RouteV3OperationTable as Operations } from "./RouteV3OperationTable";
@@ -6,7 +7,7 @@ import type { HarnessDesignDocument } from "../editor/model";
 import type { LocalSession } from "../local-session";
 import type { RuntimeConfig } from "../runtime-config";
 import { createReferenceCatalogApi, type ReferenceCatalogRecord, type ReferenceCatalogSnapshot, type ReferenceCatalogSourceSummary } from "../reference-catalog-api";
-import { buildRouteSourceItems, routeSourceDesignation, routeSourceWireColor, routeSourceWireMaterial, type RouteSourceItem } from "../manufacturing/route-source";
+import { routeSourceDesignation, routeSourceWireColor, routeSourceWireMaterial, type RouteSourceItem } from "../manufacturing/route-source";
 import { wireBlankEnds, wireBlankEndLabels } from "../WireBlankCatalog";
 import { routeV3WireArtwork, RouteV3WireArtworkPreview } from "./route-v3-wire-artwork";
 import { refKey, resetRouteV3WireArtwork, routeV3AssignedProductIds, routeV3BatchQuantity, routeV3ConnectionPort, routeV3GroupedSourceQuantity, routeV3NodeSize, routeV3OperationFromCatalog, routeV3OperationProjectTimes, routeV3Products, routeV3ResizeLayout, routeV3WireArtworkOverride, assignRouteV3OperationProducts, type RouteV3Document, type RouteV3Node, type RouteV3Operation } from "./route-v3-model";
@@ -134,7 +135,7 @@ export function RouteV3Graph({ graph, source, config, session, harnessQuantity =
   const [resizeSnap, setResizeSnap] = useState<{ id: string; width: boolean; height: boolean } | null>(null);
   const catalogApi = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
   const selected = graph.nodes.find(n => n.id === selectedId);
-  const sources = useMemo(() => buildRouteSourceItems(source), [source]);
+  const sources = useMemo(() => buildRouteV3SourceItems(source), [source]);
   const projectMinutes = (node: RouteV3Node): number | null => {
     const values = (node.operations ?? []).map(operation => routeV3OperationProjectTimes(operation, node, source, harnessQuantity).projectMinutes);
     return values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + value!, 0);
