@@ -17,10 +17,10 @@ ITEMS=[
  ('socket-round','Socket · круглая розетка','terminal','socket','проектные поля L / d','Боковой вид с гнездом; сочленение не порт'),
  ('flat-male','Flat male · плоский штырь','terminal','male','проектные поля L / W / t','Плоская контактная лопатка'),
  ('flat-female','Flat female · плоская розетка','terminal','female','проектные поля L / W / t','Сложенный пружинный контакт с гнездом'),
- ('flag','Флажковый · цельная изоляция','terminal','flag','проектные поля L / W / t','Цельный Г-корпус; металл скрыт, виден приёмный торец'),
- ('flag-bare-open','Неизолированный обжимной флажок','terminal','flag-bare-open','проектные поля L / W / t','Две пары открытых крыльев; крупное окно перемычки'),
- ('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','terminal','flag-bare-pressed-smooth','проектные поля L / W / t','Закрытая трубка прессовки с двумя диаметрами'),
- ('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','terminal','flag-bare-pressed-ribbed','проектные поля L / W / t','Закрытая трубка прессовки одного диаметра; рёбра'),
+ ('flag','Флажковый · цельная изоляция','terminal','flag','проектные поля L / W / t','Плоский Г-контур; сплошная заливка без объёмного торца'),
+ ('flag-bare-open','Неизолированный обжимной флажок','terminal','flag-bare-open','проектные поля L / W / t','Компактные крылья; головка над основанием, окно под ней'),
+ ('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','terminal','flag-bare-pressed-smooth','проектные поля L / W / t','Два диаметра; трубка проходит под головкой до её края'),
+ ('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','terminal','flag-bare-pressed-ribbed','проектные поля L / W / t','Один диаметр, рёбра; трубка под головкой до её края'),
  ('sleeve-insulated','Гильза · изолированная','sleeve','sleeve-insulated','проектные поля L / D / d','Два крайних входа; изоляция показана цветом'),
  ('sleeve-bare','Гильза · неизолированная','sleeve','sleeve-bare','проектные поля L / D / d','Два крайних входа; один общий объём гильзы'),
  ('sleeve-ultrasonic','Гильза · УЗ сварка','sleeve','sleeve-ultrasonic','проектные поля L / D / d','УЗ шов — операция, не отдельный порт'),
@@ -66,50 +66,44 @@ def receptacle_head(mono):
  return ''.join(s)
 
 def flag_body(family,mono,cuff):
- # Wire-entry axis is horizontal; mating axis is vertical. Holes/mouths are not ports.
- metal='#fff' if mono else 'url(#metal)'; shellfill='#fff' if mono else f'url(#{cuff})'
- s=[]; detail=[]
+ # Orthographic profile: wire enters from left; head is above the right-hand base.
+ metal='#fff' if mono else 'url(#metal)'
+ s=[]; details=[]
  if family=='flag':
-  # One-piece insulated elbow covers barrel, bridge, and entire receiving head.
+  # Flat one-piece L silhouette. No receiving-face plane, coils, gradient or opacity.
+  solid={'red':'#d66b6d','blue':'#78b7da','yellow':'#e4cc76'}
   outer='M32 39 Q32 36 38 36 H97 Q105 36 105 28 V12 Q105 6 111 6 H156 Q162 6 162 12 V62 Q162 68 156 68 H38 Q32 68 32 62 Z'
-  s.append(path(outer,shellfill,extra='fill-opacity="1"' if mono else 'fill-opacity=".87"'))
-  if not mono:
-   # Internal metal is subdued behind translucent polymer, never an exposed open head.
-   s.append('<g opacity=".16" transform="translate(133.5,59) rotate(-90)">'+receptacle_head(False)+'</g>')
-   detail += [path('M36 40 H96 Q109 40 109 28 V13 M38 64 H155 V22 M158 17 V60 M36 60 H89',extra='class="detail"'),path('M39 37 C36 45 36 59 39 67',extra='class="detail"')]
-  # Visible receiving face only: rolled lips at the open end of the insulated leg.
-  s.append(path('M111 10 Q111 8 114 8 H153 Q156 8 156 11 V19 H111 Z','#fff' if mono else '#6c7e8a'))
-  s.append(path('M113 18 C108 6 130 5 128 17 L124 17 C126 10 114 10 117 17 Z',metal))
-  s.append(path('M139 17 C137 5 159 6 154 18 L150 17 C153 10 141 10 143 17 Z',metal))
-  s.append(path('M116 18 Q134 21 152 18',extra='stroke="#fff"' if not mono else ''))
+  s.append(path(outer,'#fff' if mono else solid[cuff]))
+  # Metal remains a thin, coplanar outline inside the insulated silhouette.
+  s.append(path('M40 44 H114 V14 H152 V60 H40 Z',extra='stroke="#657987" stroke-width=".55"'))
  elif family=='flag-bare-open':
-  # Open stamped strip: insulation wings (left), conductor wings (right), bridge window.
-  s.append(path('M32 44 H85 L87 20 Q87 17 90 17 H123 V22 H94 V43 H121 V61 H86 L80 56 H32 Z',metal))
-  # Both upper/lower wings are drawn as open flanges; no closed tubular entry.
-  s.append(path('M32 44 L30 31 Q30 28 34 29 L49 33 L53 44 Z',metal))
-  s.append(path('M32 56 L30 69 Q30 72 34 71 L49 67 L53 56 Z',metal))
-  s.append(path('M61 44 L59 34 Q59 31 63 32 L76 35 L81 44 Z',metal))
-  s.append(path('M61 56 L59 66 Q59 69 63 68 L76 65 L81 56 Z',metal))
-  # Large rectangular cutout is actually empty between two structural arms.
-  s.append('<g transform="translate(140,60) rotate(-90)">'+receptacle_head(mono)+'</g>')
+  # C1 rotated to left wire entry. Head above right crimp base, large window beneath.
+  # Lower crimp strip continues to the right support; two upright arms frame the window.
+  s.append(path('M32 45 H64 V29 H69 V45 H84 V29 H90 V55 H32 Z',metal))
+  # Compact curled wings, two pairs along the crimp base; not triangular ears.
+  s.append(path('M34 45 C32 41 32 35 37 34 C42 34 47 36 48 40 L49 45 Z',metal))
+  s.append(path('M34 55 C32 59 32 65 37 66 C42 66 47 64 48 60 L49 55 Z',metal))
+  s.append(path('M60 45 C58 41 58 38 62 37 C66 37 71 39 72 42 L73 45 Z',metal))
+  s.append(path('M60 55 C58 59 58 62 62 63 C66 63 71 61 72 58 L73 55 Z',metal))
+  # Uniform scale keeps head proportions. Window (69..84, 30..45) is under the head.
+  s.append('<g transform="translate(77.064,30) rotate(-90) scale(.7)">'+receptacle_head(mono)+'</g>')
   if not mono:
-   detail += [path('M34 42 L33 32 M35 58 L33 68 M64 42 L62 35 M64 58 L62 65 M36 48 H76 M36 52 H76 M90 22 V42 M91 58 H118',extra='class="detail"')]
+   details += [path('M36 43 Q35 40 37 37 Q41 36 45 39 M36 57 Q35 60 37 63 Q41 64 45 61 M62 43 Q61 41 63 39 Q66 39 69 41 M62 57 Q61 59 63 61 Q66 61 69 59 M36 48 H80 M36 52 H80 M66 32 V36 M87 32 V52',extra='class="detail"')]
  elif family.startswith('flag-bare-pressed'):
-  # Closed crimp tube joins a flat 90-degree bridge and the receiving head.
-  s.append(path('M86 43 H94 L100 47 H116 V61 H100 Q94 60 86 57 Z',metal))
-  s.append('<g transform="translate(116,60) rotate(-90)">'+receptacle_head(mono)+'</g>')
+  # C2 mounting silhouette: tube continues UNDER the head to precisely the same x90 edge.
+  # Tube top is y37 and head underside is y37: there is no side neck or bridge.
   if family.endswith('smooth'):
-   s.append(path('M32 37 Q32 34 37 34 H59 Q63 34 63 39 H91 Q96 39 96 43 V57 Q96 61 91 61 H63 Q63 66 59 66 H37 Q32 66 32 63 Z',metal))
-   # Two diameters with a visible shoulder, closed near-rim ellipse.
-   s.append(path('M35 36 C30 39 30 61 35 64',extra='class="detail"'))
-   if not mono:detail += [path('M38 38 H58 M38 62 H58 M63 39 Q59 50 63 61 M68 42 H90 M68 58 H90',extra='class="detail"')]
+   s.append(path('M32 37 Q32 33 37 33 H54 Q58 33 58 37 H86 Q90 37 90 41 V59 Q90 63 86 63 H58 Q58 67 54 67 H37 Q32 67 32 63 Z',metal))
+   s.append(path('M35 35 C31 39 31 61 35 65',extra='class="detail"'))
+   if not mono:details += [path('M38 37 H53 M38 63 H53 M58 38 Q54 50 58 62 M63 41 H86 M63 59 H86',extra='class="detail"')]
   else:
-   s.append(path('M32 40 Q32 37 37 37 H91 Q96 37 96 41 V59 Q96 63 91 63 H37 Q32 63 32 60 Z',metal))
+   s.append(path('M32 41 Q32 37 37 37 H86 Q90 37 90 41 V59 Q90 63 86 63 H37 Q32 63 32 59 Z',metal))
    s.append(path('M35 39 C31 42 31 58 35 61',extra='class="detail"'))
-   # Crimp serrations are distinct from open wing flanges and remain in E4.
-   for xx in range(43,87,7):s.append(path(f'M{xx} 38 Q{xx-3} 50 {xx} 62',extra='stroke="#81909b" stroke-width=".65"'))
-   if not mono:detail += [path('M38 41 H90 M38 59 H90',extra='class="detail"')]
- return ''.join(s)+(''.join(detail) if not mono else '')
+   for xx in range(43,87,8):s.append(path(f'M{xx} 38 Q{xx-3} 50 {xx} 62',extra='stroke="#81909b" stroke-width=".65"'))
+   if not mono:details += [path('M38 41 H86 M38 59 H86',extra='class="detail"')]
+  # Same placement and proportions for both pressed families; only tube profile changes.
+  s.append('<g transform="translate(73.7376,37) rotate(-90) scale(.88)">'+receptacle_head(mono)+'</g>')
+ return ''.join(s)+(''.join(details) if not mono else '')
 
 def body(family,view,cuff='red',leads=True):
  # Both views use exactly the same profile paths. E4 omits highlights/ribs only.
@@ -226,6 +220,8 @@ manifest['receptacleRevision']={'date':'2026-10-15','reference':'codex-clipboard
 manifest['profileReferences']={'C1':'codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png','C2':'codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png','C3':'codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png'}
 manifest['viewContract']='same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds'
 manifest['flagRevision']={'date':'2026-10-15','references':{'C1':'codex-clipboard-c79a2619-0c4f-4f4f-b776-fd8d82ab0573.png','C2':'codex-clipboard-cbe9281b-f537-420a-9cee-934ff16a733d.png','C3':'codex-clipboard-82516bcf-e1ff-459f-9497-6e34da26ec65.png','C4':'codex-clipboard-e9959775-cb16-458e-843d-fb46a7f5f527.png','C5':'codex-clipboard-c8fe8adc-8155-4eb6-92c3-d4717a3e38a3.png'},'observation':'C1/C2 open-wing crimp and large bridge window; C3 fully insulated elbow; C4 superseded wrong straight-cuff profile; C5 two distinct bare pressed tubes: smooth two-diameter and ribbed one-diameter','portPolicy':'one wire-entry at 32,50; receptacle opening is geometry only'}
+manifest['flat2dRevision']={'date':'2026-10-15','references':{'C1':'codex-clipboard-1e6840a4-2b7d-4e8f-b846-85d3a98a8a60.png','C2':'codex-clipboard-48f88ebf-fc92-4343-a0a1-b61410ccc19a.png'},'openCrimp':'uniform head scale .7, head right edge x90 and top y1.384; compact curled wings; window x69..84/y30..45 directly beneath head, above second wing pair','pressed':'identical head placement for smooth/ribbed, uniform head scale .88; head underside y37 meets tube top y37; tube/head right edge x90; head top y1.0256; no side bridge','insulated':'flat orthographic L silhouette; solid fill, no gradients/opacity/face/loop curls; coplanar metal outline','ports':'existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged'}
+manifest['flagRevision']['status']='historical: profile geometry superseded by flat2dRevision'
 (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 
 # Russian atlas: generous two-column cards, distinct views.
@@ -285,22 +281,22 @@ r += [text(46,cy+222,'Цвет не подтверждает диапазон с
 
 # Direct comparison of the two revised female forms.
 RW,RH=1120,640
-v=[rect(0,0,RW,RH,'#f3f6fa'),text(28,44,'Flat female и изолированный флажок','title'),text(28,73,'Прямая головка: исторический референс 7,3 / 6,6 / 2,3. Флажок: новый C3, цельная изоляция.'),text(28,96,'Слева — открытая металлическая головка. Справа — металл скрыт в цельном Г-корпусе; виден только торец.','small')]
-for i,(fam,label) in enumerate([('female','Прямая · Flat female'),('flag','Изолированный флажок · новый C3')]):
+v=[rect(0,0,RW,RH,'#f3f6fa'),text(28,44,'Flat female и плоский изолированный флажок','title'),text(28,73,'Прямая головка: исторический референс 7,3 / 6,6 / 2,3. Флажок: плоский 2D Г-профиль.'),text(28,96,'Слева — открытая металлическая головка. Справа — однотонный Г-контур с плоской линией металла внутри.','small')]
+for i,(fam,label) in enumerate([('female','Прямая · Flat female'),('flag','Изолированный флажок · плоский 2D')]):
  x=24+i*548;y=120
  v += [rect(x,y,524,450,PAPER,12),text(x+20,y+32,label,'card-title'),text(x+20,y+58,'Чертёж · открытый металл' if fam=='female' else 'Чертёж · цельная Г-изоляция','view'),f'<g transform="translate({x-10},{y+76}) scale(3)">{symbol(fam,"drawing",cuff="blue")}</g>',text(x+20,y+310,'Э4 · общий профиль и один якорь','view'),f'<g transform="translate({x+70},{y+320}) scale(1.65)">{symbol(fam,"e4")}</g>']
-v += [text(28,601,'Прямая female сохранена. Флажок заменён по новому C3: отдельная цельная оболочка, а не прямая манжета.','small'),text(28,622,'Синий круг — только вход провода. Приёмное гнездо и окна металлической части не являются портами.','small')]
+v += [text(28,601,'Прямая female сохранена. Изолированный флажок показан ортогонально без объёмного торца и дугообразных петель.','small'),text(28,622,'Синий круг — только вход провода. Приёмное гнездо и окна металлической части не являются портами.','small')]
 (OUT/'receptacle-detail.svg').write_text(shell('Прямая и угловая плоские розетки',''.join(v),RW,RH),encoding='utf-8')
 
 # Four stable flag families, plus color alternatives of the same insulated item.
 FW2,FH2=1240,1445
-f=[rect(0,0,FW2,FH2,'#f3f6fa'),text(28,44,'099 · Четыре конструкции флажкового контакта','title'),text(28,72,'Один вход провода слева. Ось сочленения вертикальна; гнездо не является дополнительным портом.'),text(28,94,'Новые C1–C5 от 15.10.2026: открытые крылья, цельная изоляция, два вида закрытой трубки прессовки.','small')]
-flagitems=[('flag','Цельная Г-изоляция · C3','Металл скрыт в полупрозрачном корпусе; виден торец'),('flag-bare-open','Неизолированный обжимной · C1 / C2','Две пары крыльев: проводник и изоляция; окно перемычки'),('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','C5 слева: закрытая двухдиаметральная трубка прессовки'),('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','C5 справа: закрытая однодиаметральная трубка с рёбрами')]
+f=[rect(0,0,FW2,FH2,'#f3f6fa'),text(28,44,'099 · Четыре конструкции флажкового контакта','title'),text(28,72,'Один вход провода слева. Ось сочленения вертикальна; гнездо не является дополнительным портом.'),text(28,94,'Последняя правка C1/C2: головка над основанием; трубка под головкой; изоляция строго плоская 2D.','small')]
+flagitems=[('flag','Изолированный флажок · плоский 2D','Сплошная заливка; без градиента, прозрачности и торцевых петель'),('flag-bare-open','Неизолированный обжимной · C1','Компактные крылья; окно под головкой над правой частью основания'),('flag-bare-pressed-smooth','Неизолированный опрессовочный · гладкий','C2: двухдиаметральная трубка тянется под головкой до её края'),('flag-bare-pressed-ribbed','Неизолированный опрессовочный · рифлёный','C2: однодиаметральная трубка с рёбрами под той же головкой')]
 for i,(fam,label,note) in enumerate(flagitems):
  x=28+(i%2)*608;y=119+(i//2)*440
  f += [rect(x,y,584,420,PAPER,12),text(x+18,y+30,label,'card-title'),text(x+18,y+52,note,'small'),text(x+18,y+80,fam,'small'),f'<g transform="translate({x+20},{y+105}) scale(2.8)">{symbol(fam,"drawing",cuff="blue")}</g>',text(x+18,y+366,'Э4 · тот же профиль / один вход','view'),f'<g transform="translate({x+240},{y+315}) scale(1.25)">{symbol(fam,"e4")}</g>']
 fy=1025
-f += [rect(28,fy,1192,336,PAPER,12),text(46,fy+32,'Цветовые варианты одного изолированного флажка','card-title')]
+f += [rect(28,fy,1192,336,PAPER,12),text(46,fy+32,'Один плоский Г-профиль · синяя и жёлтая заливки','card-title')]
 for i,(col,label) in enumerate([('blue','Синий корпус'),('yellow','Жёлтый корпус')]):
  xx=46+i*596
  f += [text(xx,fy+58,label,'view'),f'<g transform="translate({xx+14},{fy+80}) scale(2.8)">{symbol("flag","drawing",cuff=col)}</g>']

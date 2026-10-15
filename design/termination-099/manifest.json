@@ -377,7 +377,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Цельный Г-корпус; металл скрыт, виден приёмный торец",
+      "note": "Плоский Г-контур; сплошная заливка без объёмного торца",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -409,7 +409,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Две пары открытых крыльев; крупное окно перемычки",
+      "note": "Компактные крылья; головка над основанием, окно под ней",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -441,7 +441,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Закрытая трубка прессовки с двумя диаметрами",
+      "note": "Два диаметра; трубка проходит под головкой до её края",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -473,7 +473,7 @@
       },
       "electricalPointCount": 1,
       "countAnnotationPolicy": "multiple wires share one existing anchor; ×2/×3/×4 is annotation only",
-      "note": "Закрытая трубка прессовки одного диаметра; рёбра",
+      "note": "Один диаметр, рёбра; трубка под головкой до её края",
       "dimensionFields": "проектные поля L / W / t",
       "catalogAlias": null,
       "standardClaim": null
@@ -886,6 +886,18 @@
       "C5": "codex-clipboard-c8fe8adc-8155-4eb6-92c3-d4717a3e38a3.png"
     },
     "observation": "C1/C2 open-wing crimp and large bridge window; C3 fully insulated elbow; C4 superseded wrong straight-cuff profile; C5 two distinct bare pressed tubes: smooth two-diameter and ribbed one-diameter",
-    "portPolicy": "one wire-entry at 32,50; receptacle opening is geometry only"
+    "portPolicy": "one wire-entry at 32,50; receptacle opening is geometry only",
+    "status": "historical: profile geometry superseded by flat2dRevision"
+  },
+  "flat2dRevision": {
+    "date": "2026-10-15",
+    "references": {
+      "C1": "codex-clipboard-1e6840a4-2b7d-4e8f-b846-85d3a98a8a60.png",
+      "C2": "codex-clipboard-48f88ebf-fc92-4343-a0a1-b61410ccc19a.png"
+    },
+    "openCrimp": "uniform head scale .7, head right edge x90 and top y1.384; compact curled wings; window x69..84/y30..45 directly beneath head, above second wing pair",
+    "pressed": "identical head placement for smooth/ribbed, uniform head scale .88; head underside y37 meets tube top y37; tube/head right edge x90; head top y1.0256; no side bridge",
+    "insulated": "flat orthographic L silhouette; solid fill, no gradients/opacity/face/loop curls; coplanar metal outline",
+    "ports": "existing id, one anchor (32,50), pivot (32,50), viewBox 220x100 unchanged"
   }
 }
