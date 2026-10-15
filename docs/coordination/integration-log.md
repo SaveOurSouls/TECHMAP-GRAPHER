@@ -1,5 +1,11 @@
 # Журнал интеграции
 
+## 15.10.2026 — handoff 112–114 после M5-22-051
+
+В `codex/integration-m5-22` интегрированы опубликованные ветки карточек 113 (`39333794958043e20a95ce7b2a116b8076f324f7` / handoff `7e7ca0377f8dfddcf2abfad2f83c6f3c15f176a6`, merge `70a41ab`), 114 (`fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` / handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`, merge `d66f287`) и 112 (`4d56e4058b1a8e9ba0034f812b7ac3699604bf63` / handoff `47e1c647220409c0f37633ab29e92930eccc58a7`, merge `0811aff`). Все code/handoff SHA — предки опубликованного integration HEAD `0811aff83e79f2d0e515bfe42731181e36d45c18`; `git show --check` PASS. Конфликт 114 был только в карточке: сохранены сведения рабочего чата и координатора. Ранний неотслеживаемый черновик теста 112 с SHA-256 `F314D115C03C78BE62E9F20F9D13406C48B02A38690F7ABBD2C155A5DC1931CF` перенесён в игнорируемый `tmp/`; опубликованный тест находится в merge.
+
+Совместный прогон после всех трёх merge: Vitest **215 файлов / 2279 тестов PASS**, TypeScript и Vite production build PASS. Первый запуск в песочнице получил `ENOENT` для временного каталога Vitest; повтор с доступом к системному temp прошёл. Проверка исходного пользовательского жгута, совместный browser/scene сценарий 113/114 и ручная packaged UI-приёмка остаются открытыми. Последний выданный ZIP M5-22-051 не содержит 112–114; новый ZIP не заказан.
+
 ## 15.10.2026 — handoff 110/111 для M5-22-051
 
 Из отдельных веток с базой `aa2b3bc3d9e83248fca96d70899a6002993ce835` включены 110 (`origin/codex/e4-component-drag-performance`: регистрация `1f60da08af4f3d04f9f1479bf0b671c64f066e92`, код `8ff8736d1a8989b8d8482d806455abf2130c207e`, handoff `2f9008fa06351dde7bcdb3678db9564d298ba4b4`) и 111 (`origin/codex/thermal-tube-wire-coverage`: регистрация `b0d51fc3b330897b59693cd0635b520b41e913ec`, код `b4726217d708b2c76f1aa28209ba061706a65967`, handoff `2e8492c871f5dac10ac0fd5302e22ae7ebdf3dd0`). Все шесть SHA — предки сборочного HEAD `30795935aee1d79c21bcfeb56daf212f5b0c4002`; merge-коммиты `ae28456c9c2b75e4f7f59ab0d8d89953cd534fb5` и `cfeace60dfe6f6c2241203def9767ed0723ff6cd`, `git show --check` PASS. Код объединён без конфликтов; общие документы сохранены для 107–111 и покрытий 049/050. Версия поднята до `0.63.51-m5-22-review` в сборочном HEAD.
