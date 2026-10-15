@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 112 — координаты изгибов после создания ОП, 15.10.2026
+
+Чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, `codex/op-bend-coordinate-integrity`, worktree `tmp/op-bend-coordinate-integrity`; REQ-147, ready-for-review. Код `4d56e4058b1a8e9ba0034f812b7ac3699604bf63` опубликован в origin. Ручки П/ОП совпадают с нарисованным контуром; pointer delta и Ctrl-привязки используют сохранённые в scene исходные координаты; preview/commit ОП общий; служебные внешние станции не создают неудаляемых numbered grips; обратный П сохраняет направление своих плеч. Production формат/связи/длины не меняются. CanvasViewport/113 и dimensions/114 не затронуты; `editor-types.ts` расширен только scene DTO, `HarnessDesignEditor.tsx` — одна строка resolver commit. PASS: полный Vitest 212/2233 + новые Canvas gestures 1/4 (всего 213/2237), TypeScript/Vite, diff/staged/show-check. Нумерация остаётся локальной для каждого П/ОП. Исходный C1, browser visual и packaged UI не проверены (Browser Use не смог подключиться к localhost). ZIP не заказан; integration/coverage pending. [Точный handoff 112](handoff-112-op-bends.md), включая ранний untracked-черновик в основной копии для уборки координатором.
+
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка
