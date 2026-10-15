@@ -1,12 +1,12 @@
 # 115. Пересмотреть правила редактирования трасс Э4
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** `01a140c3-46d1-7f81-ac60-ad27761a2ca2`
 - **Источник запроса:** прямой запрос владельца от 15.10.2026, C1–C4.
 - **Требования:** REQ-150; сохранять электрическую топологию и производственные длины.
 - **Ветка / рабочая копия:** `codex/e4-routing-interaction`, `tmp/e4-routing-interaction`; база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`.
-- **Владелец файлов:** `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts` и профильные тесты. Рабочий чат ведёт собственные acceptance и handoff; общие Markdown-файлы — координатор.
-- **Исключения:** файлы и изменения карточки 110, чужие параллельные задачи и общие release/coordination docs.
+- **Владелец файлов:** `src/Techmap.Client/src/editor/e4-editing.ts`, `e4-parallel-spans.ts`, `commands.ts`, `CanvasViewport.tsx`, `e4-move-preview.ts`, `e4-router.ts` и профильные тесты. Рабочий чат ведёт собственные acceptance и handoff; общие Markdown-файлы — координатор.
+- **Исключения:** чужие параллельные задачи и общие release/coordination docs. Документация 110 и её оптимизация transient preview сохранены; preview использует общий новый расчёт геометрии без поиска маршрута.
 - **Release coverage:** следующий кодовый срез после M5-22-052; ZIP не заказывался.
 
 ## Результат и границы
@@ -30,10 +30,10 @@
 
 ## Журнал результата
 
-- Коммит кода/документации: —; работа назначена в зарегистрированный worktree.
-- Handoff сборщику: —
+- Коммит кода: `a712396092ea7f3eabf610c78499836f0523a527`, опубликован; документация — этот handoff-коммит.; работа назначена в зарегистрированный worktree.
+- Handoff сборщику: [точный протокол](../docs/coordination/handoff-115-e4-routing.md), SHA документального коммита передаётся после push.
 - Интеграционный commit/эквивалент: —
 - ZIP / release coverage: ожидает следующего кодового среза после M5-22-052.
-- Проверки и даты: —
-- Ограничения и открытые вопросы: —
+- Проверки 15–16.10.2026: Vitest 216/2293, TypeScript/Vite, browser drag/Shift/Escape/save/Undo/Redo, benchmark, diff/staged-check PASS. [Приёмочный протокол](../docs/e4-routing-interaction-115-acceptance.md).
+- Ограничения: исходный пользовательский файл и portable не проверены; commit оконцовки в синтетическом benchmark около 1,1 с; ZIP не заказан. Интеграция и приёмка владельцем открыты.
 - Решение владельца о приёмке: —
