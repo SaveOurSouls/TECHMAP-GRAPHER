@@ -764,6 +764,16 @@
     }
   },
   "profileRevision": "2026-10-15-photo-profiles",
+  "receptacleRevision": {
+    "date": "2026-10-15",
+    "reference": "codex-clipboard-af5ec56d-26e0-4073-9720-5d65b12e714e.png",
+    "headRatio": [
+      7.3,
+      6.6
+    ],
+    "neckWidthRatio": 2.3,
+    "note": "Reference proportions only; flag is a projected 90-degree adaptation, not a dimensioned manufacturing drawing."
+  },
   "profileReferences": {
     "C1": "codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png",
     "C2": "codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png",

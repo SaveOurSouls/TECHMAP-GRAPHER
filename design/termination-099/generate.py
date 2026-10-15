@@ -47,6 +47,21 @@ DEFS='''<defs>
 <linearGradient id="yellow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b88c29"/><stop offset=".27" stop-color="#ffe6a1"/><stop offset=".55" stop-color="#e9bd4d"/><stop offset="1" stop-color="#b48c32"/></linearGradient>
 </defs>'''
 
+def receptacle_head(mono):
+ # C1: 7.3 axial x 6.6 wide, at 5.6 drawing units/mm. Shared by both angles.
+ metal='#fff' if mono else 'url(#metal)'
+ recess='#fff' if mono else '#74808b'
+ s=[path('M0 -15.48 Q0 -18.48 3 -18.48 H37.88 Q40.88 -18.48 40.88 -15.48 V15.48 Q40.88 18.48 37.88 18.48 H3 Q0 18.48 0 15.48 Z',metal)]
+ # Backing plate windows and retaining dimple, without an arrow-shaped tongue.
+ for x in (6,29):s.append(rect(x,-8.2,5.2,16.4,recess,0.5))
+ s.append(path('M17 -4 H22 Q27 -4 27 0 Q27 4 22 4 H17 Z',recess))
+ # Longitudinal rolled lips with rounded ends and a central receiving channel.
+ s.append(path('M3 -18.48 H37.88 Q40.88 -18.48 40.88 -15.48 V-9.6 Q40.88 -7.4 37.88 -7.4 H3 Q0 -7.4 0 -10.4 V-15.48 Q0 -18.48 3 -18.48 Z',metal))
+ s.append(path('M3 7.4 H37.88 Q40.88 7.4 40.88 10.4 V15.48 Q40.88 18.48 37.88 18.48 H3 Q0 18.48 0 15.48 V10.4 Q0 7.4 3 7.4 Z',metal))
+ if not mono:
+  s += [path('M4 -15.7 H36.88 M4 10.1 H36.88 M18 -2.6 H22 Q25 -2.6 25 0 Q25 2.6 22 2.6',extra='class="detail"'),path('M39 -15.4 Q36.2 -12.9 39 -10 M39 10.3 Q36.2 12.9 39 15.4',extra='class="detail"')]
+ return ''.join(s)
+
 def body(family,view,cuff='red',leads=True):
  # Both views use exactly the same profile paths. E4 omits highlights/ribs only.
  mono=view=='e4'; metal='#fff' if mono else 'url(#metal)'; ins='#fff' if mono else f'url(#{cuff})'
@@ -81,8 +96,9 @@ def body(family,view,cuff='red',leads=True):
   # Moulded bell-mouth entry and a taper onto the exposed crimp barrel.
   shape('M32 37 Q32 35 36 35 L47 37 Q51 38 57 38 H74 Q80 38 85 42 L88 45 V55 L85 58 Q80 62 74 62 H57 Q51 62 47 63 L36 65 Q32 65 32 63 Z',ins)
   # Metal neck / open stamped transition, clearly narrower than the cuff.
-  shape('M86 43 L91 40 L97 43 H109 V57 H97 L91 60 L86 57 Z')
-  detail('M89 44 L94 47 H108 M89 56 L94 53 H108 M97 43 V57')
+  if family not in ('female','flag'):
+   shape('M86 43 L91 40 L97 43 H109 V57 H97 L91 60 L86 57 Z')
+   detail('M89 44 L94 47 H108 M89 56 L94 53 H108 M97 43 V57')
   detail('M35 39 L48 41 Q54 42 75 42 M35 61 L48 59 Q54 58 75 58 M37 37 Q34 49 37 63')
   if family=='ring':
    # Full circular head with a smooth concave neck; not a pointed leaf.
@@ -112,21 +128,15 @@ def body(family,view,cuff='red',leads=True):
    # Narrow raised stamped detent beside the fastening hole.
    detail('M134 45 Q139 41 144 45 M134 55 Q139 59 144 55')
   elif family=='female':
-   shape('M106 43 L117 33 H171 Q179 33 181 40 V60 Q179 67 171 67 H117 L106 57 Z')
-   s.append(path('M128 42 H177 V58 H128 Z','#fff' if mono else '#8996a3'))
-   # Rolled upper/lower spring folds and a sprung tongue inside the mouth.
-   s.append(path('M120 34 H173 Q178 34 178 40 H128 Q122 40 120 44 Z',metal))
-   s.append(path('M120 66 H173 Q178 66 178 60 H128 Q122 60 120 56 Z',metal))
-   s.append(path('M130 47 H168 L173 50 L168 53 H130 Z',metal))
-   detail('M124 36 H172 M124 64 H172 M133 49 H165 M113 44 V56')
+   # Narrow 2.3 mm neck flares smoothly to the 6.6 mm rolled head.
+   shape('M86 43.56 H90 C98 43.56 101 34.5 107.6 31.52 V68.48 C101 65.5 98 56.44 90 56.44 H86 Z')
+   detail('M90 46 Q99 45 105 38 M90 54 Q99 55 105 62')
+   s.append('<g transform="translate(107.6,50)">'+receptacle_head(mono)+'</g>')
   elif family=='flag':
-   # True 90° folded female contact above the crimp axis.
-   shape('M106 43 H117 Q121 43 121 39 V20 Q121 14 127 14 H157 Q164 14 164 21 V53 Q164 59 158 59 H106 Z')
-   s.append(path('M132 17 H153 V42 H132 Z','#fff' if mono else '#8996a3'))
-   s.append(path('M123 19 Q123 15 129 15 V43 H122 Z',metal))
-   s.append(path('M157 15 Q163 15 163 21 V47 H156 V19 Z',metal))
-   s.append(path('M138 18 V36 L142 41 L146 36 V18 Z',metal))
-   detail('M126 20 V38 M160 21 V45 M123 49 Q126 54 134 54 H158')
+   # Bent neck; identical head and spring construction rotated exactly 90 degrees.
+   shape('M86 43.56 H100 Q106 43.56 111 41 L117.56 38 H130.44 V48.88 Q130.44 58 120 58 H100 Q94 56.44 86 56.44 Z')
+   detail('M91 47 H101 Q103 47 104.5 46 M91 53 H101 Q111 55 120 54')
+   s.append('<g transform="translate(124,48.88) rotate(-90)">'+receptacle_head(mono)+'</g>')
  s='<g class="geom">'+''.join(s)+((''.join(details)) if not mono else '')+'</g>'
  return s
 
@@ -166,6 +176,7 @@ for key,label in VARIANTS:
  r=record(id,'Разделка: '+label,'preparation',key,'Чертёж — один общий точечный вид для всех вариантов; Э4 — выбранный вариант');manifest['assets'].append(r)
 manifest['references']={'C1':{'image':'codex-clipboard-bbee8c8c-ddbe-40a1-b1c6-01db61a7f201.png','observed':'НКИ/НВИ: L/L1/D/B/d1/P/S, кольцо и открытая вилка'},'C2':{'image':'codex-clipboard-0a619538-77d8-4e08-97e3-ceb9a7c7cbfc.png','observed':'трубчатые варианты; НШВИ-2 — расширение проекта; поля L/L1/C/W/A'},'C3':{'image':'codex-clipboard-306a0705-ae92-40d4-a24c-71cd5ab21328.png','observed':'трубчатые медные лужёные SC; d2/d/D/B/E/L; DIN не указан'},'C4':{'image':'codex-clipboard-b83f3bf3-8029-4807-a459-21fa6222fbc1.png','observed':'кольцевые/вилки, butt, bullet, male/female, pin, flag'},'C5':{'image':'codex-clipboard-f5014f2a-7c14-43b0-8b8e-0efc9e102b57.png','observed':'визуальное разнообразие ring/fork/round/flat/flag/sleeve'}}
 manifest['profileRevision']='2026-10-15-photo-profiles'
+manifest['receptacleRevision']={'date':'2026-10-15','reference':'codex-clipboard-af5ec56d-26e0-4073-9720-5d65b12e714e.png','headRatio':[7.3,6.6],'neckWidthRatio':2.3,'note':'Reference proportions only; flag is a projected 90-degree adaptation, not a dimensioned manufacturing drawing.'}
 manifest['profileReferences']={'C1':'codex-clipboard-99230161-c64b-4f61-a8d4-82cdf7de665d.png','C2':'codex-clipboard-264c60fd-81a9-4f6d-8a74-6fef23089339.png','C3':'codex-clipboard-95e2c17e-9767-4ea0-a922-72615987b6fb.png'}
 manifest['viewContract']='same silhouette paths; E4 monochrome with reduced detail; drawing moderate gradients and stamped folds'
 (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -223,6 +234,15 @@ for i,(col,label) in enumerate([('red','красная'),('blue','синяя'),(
  r += [text(xx,cy+60,label,'view'),f'<g transform="translate({xx-7},{cy+66}) scale(1.8)">{symbol("ring","drawing",cuff=col)}</g>']
 r += [text(46,cy+222,'Цвет не подтверждает диапазон сечения, материал или соответствие стандарту. Якори не изменены.','small'),text(28,1600,'Самостоятельные векторные профили по визуальным ориентирам владельца. Проектные символы; не нормативные УГО.','small')]
 (OUT/'profile-detail.svg').write_text(shell('Оконцовки · увеличенные профили 15.10.2026',''.join(r),PDW,PDH),encoding='utf-8')
+
+# Direct comparison of the two revised female forms.
+RW,RH=1120,640
+v=[rect(0,0,RW,RH,'#f3f6fa'),text(28,44,'Flat female · прямая и флажковая розетки','title'),text(28,73,'Пропорции головки по C1: длина 7,3 / ширина 6,6; узкая шейка 2,3.'),text(28,96,'Две завальцованные кромки, окна основания и фиксатор. У каждой формы один вход провода.','small')]
+for i,(fam,label) in enumerate([('female','Прямая · Flat female'),('flag','Угловая · флажковая, 90°')]):
+ x=24+i*548;y=120
+ v += [rect(x,y,524,450,PAPER,12),text(x+20,y+32,label,'card-title'),text(x+20,y+58,'Чертёж · металлическая головка','view'),f'<g transform="translate({x-10},{y+76}) scale(3)">{symbol(fam,"drawing",cuff="blue")}</g>',text(x+20,y+310,'Э4 · общий профиль и один якорь','view'),f'<g transform="translate({x+70},{y+320}) scale(1.65)">{symbol(fam,"e4")}</g>']
+v += [text(28,601,'Пропорции взяты с референса. Угловой переход — проектная адаптация; это не размерный чертёж изделия.','small'),text(28,622,'Синий круг — только вход провода. Приёмное гнездо и окна металлической части не являются портами.','small')]
+(OUT/'receptacle-detail.svg').write_text(shell('Прямая и угловая плоские розетки',''.join(v),RW,RH),encoding='utf-8')
 
 # structural validation, deterministic and no external packages required
 for p in OUT.glob('*.svg'):
