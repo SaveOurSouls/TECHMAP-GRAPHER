@@ -10,7 +10,7 @@ REQ-148, [карточка 113](../../tasks/113-p1-termination-graphic-scale.md)
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
-REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. In-progress; registration base и обязательный handoff/code SHA будут зафиксированы после подготовки изолированной ветки. Следующий срез после M5-22-051; до handoff ZIP заблокирован. ZIP здесь не заказан.
+REQ-149, [карточка 114](../../tasks/114-p1-drawing-dimension-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`. Code `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1` опубликованы; ancestry PASS в worker branch, но не в integration HEAD `624317111d5205d2c7be0f822b1dcb14623822a0`. Ready-for-review; ожидает интеграции сборщиком. 212 файлов / 2242 теста, TypeScript/Vite/diff-check PASS на source branch. Совместный scene/browser прогон с 113, portable и packaged UI не проверены. Следующий срез после M5-22-051; до интеграции ZIP блокирован. ZIP здесь не заказан.
 
 ## 111 — охват термотрубкой всех проводов, 15.10.2026
 

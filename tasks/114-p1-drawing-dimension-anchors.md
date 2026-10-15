@@ -1,10 +1,10 @@
 # 114. Исправить размеры P1 и точки соединения
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** `01a14112-b339-74f3-893c-bef0ef5912a0`
 - **Источник запроса:** поручение владельца 15.10.2026; C1 — размер P1 до края меди или начала терминала/наконечника; C2 — размер у точки соединения.
 - **Требования:** REQ-149; связанные REQ-010/121/148; ADR-0021.
-- **Ветка / рабочая копия:** `codex/p1-drawing-dimension-anchors`, `tmp/p1-drawing-dimension-anchors`; база фиксируется registration commit.
+- **Ветка / рабочая копия:** `codex/p1-drawing-dimension-anchors`, `tmp/p1-drawing-dimension-anchors`; registration base `8d98038`.
 - **Владелец файлов:** `src/Techmap.Client/src/editor/drawing-dimensions.ts`, новый `drawing-dimension-anchors.ts` и его тесты, `drawing-dimensions.test.ts`. `CanvasViewport.tsx` и `termination-scene.ts` закреплены за 113. Общие Markdown-файлы ведёт координатор.
 - **Release coverage:** следующий срез после M5-22-051; ZIP не заказан.
 
@@ -19,6 +19,9 @@
 - Профильные и полный клиентский Vitest, TypeScript, Vite, `git diff --check`.
 - Коммит, push в разрешённый origin и точный handoff сборщику.
 
-## Журнал
+## Проверенный результат 15.10.2026
 
-Чат уже выявил привязку к углу габаритной рамки; реализацию выполнять только в зарегистрированном worktree.
+- Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c`, handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1`; опубликованы в `origin/codex/p1-drawing-dimension-anchors`. Handoff является предком HEAD worker branch; интеграционная ancestry ожидает сборщика.
+- Размерные якоря для P1, оконцовок и точек соединения реализованы в новом resolver; generic connector corner anchors сохранены. Для открытого P1 учитывается хвост провода по endpoint route step/node ID.
+- PASS: 19 новых регрессий; полный Vitest 212 файлов / 2242 теста; TypeScript, Vite build и diff-check.
+- Ограничения: совместный scene/browser прогон с 113, исходный жгут и packaged UI не проверены. ZIP не заказан; приёмка владельца открыта.

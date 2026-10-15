@@ -10,7 +10,7 @@
 
 ## 114 — размеры P1 и точки соединения, 15.10.2026
 
-Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; in-progress. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, база будет зафиксирована registration commit. Владелец: `src/Techmap.Client/src/editor/drawing-dimensions.ts` и `drawing-dimensions.test.ts`; не менять `CanvasViewport.tsx` и termination artwork карточки 113. Общие Markdown-файлы ведёт координатор. Следующий релиз после M5-22-051, coverage pending; ZIP не заказан. C1 — размер P1 привязан к краю меди, а при установленном терминале/наконечнике к его началу. C2 — размер подтянут к точке соединения. Результат владельцем ещё не принят.
+Чат `01a14112-b339-74f3-893c-bef0ef5912a0`, карточка [114](../../tasks/114-p1-drawing-dimension-anchors.md), REQ-149; ready-for-review. Ветка `codex/p1-drawing-dimension-anchors`, worktree `tmp/p1-drawing-dimension-anchors`, registration base `8d98038`. Код `fb248e1d1504f64eb9fd4435aa9f3898ddaf365c` и handoff `d1b896bfcc97e7ac596d04ee1ba2df3c3fb39eb1` опубликованы. Worker branch ancestry PASS; отсутствуют в integration HEAD `624317111d5205d2c7be0f822b1dcb14623822a0`, сборщик должен подтвердить интеграцию. Vitest 212 файлов / 2242 теста, TypeScript/Vite/diff-check PASS. Область: drawing-dimensions и resolver/tests; `CanvasViewport.tsx` и termination artwork принадлежат 113. Следующий срез после M5-22-051, coverage pending; ZIP не заказан. Совместный scene/browser прогон с 113 и packaged UI остаются сборщику; приёмка владельцем открыта.
 
 ## 111 — охват проводов термотрубкой, 15.10.2026
 

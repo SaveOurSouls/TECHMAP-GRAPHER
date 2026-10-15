@@ -1012,3 +1012,7 @@ coverage commit `4be527d45f81ae1daf4aa4b72d0a1a7573bff542`. Новые refs cove
 typecheck/Vite, self-contained publish, manifest 339/340 и portable 7/7 PASS.
 ZIP SHA-256: `0ED7DDD6995C32E7582D8A432829FA9F35E094927E0499A305AFA9757A67D9C7`.
 Owner acceptance, исходный жгут и 390px visual QA открыты.
+## 114 — handoff ожидает интеграции, 15.10.2026
+
+Карточка 114/REQ-149: code `fb248e1` и handoff `d1b896b` опубликованы в `codex/p1-drawing-dimension-anchors`; worker branch ancestry PASS. Проверки исходной ветки: Vitest 212 файлов / 2242 теста, TypeScript/Vite/diff-check PASS. Эти коммиты отсутствуют в текущем integration HEAD `6243171` и не входят в проверенный ZIP M5-22-051. Сборщику требуется интегрировать карточку вместе с 113, подтвердить ancestry и провести совместную проверку scene/browser. Portable/package UI и приёмка владельцем не выполнены; новый ZIP не заказан.
+
