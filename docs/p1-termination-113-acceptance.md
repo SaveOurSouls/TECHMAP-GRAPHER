@@ -3,6 +3,8 @@
 15.10.2026, REQ-148; [карточка 113](../tasks/113-p1-termination-graphic-scale.md).
 Рабочая ветка `codex/p1-termination-graphic-scale`, отдельный worktree
 `tmp/p1-termination-graphic-scale`; регистрация `034bf42154a6ed9a15841a010f1242b865e3a120`.
+Проверенный код: `39333794958043e20a95ce7b2a116b8076f324f7`, опубликован
+в разрешённый origin. Статус ready-for-review, интеграция в пакет отдельно.
 
 ## C1 и результат
 
