@@ -369,3 +369,7 @@ represent missing completed chat handoffs.
 ## 114 — якоря размеров у меди и оконцовок, 15.10.2026
 
 REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md), чат `01a14112-b339-74f3-893c-bef0ef5912a0`, основная `codex/integration-m5-22`. In-progress; code SHA и handoff pending. Следующий релиз после M5-22-051; до handoff ZIP блокируется. ZIP не заказан.
+
+## 117 — следующий срез после M5-22-053
+
+REQ-152, in-progress; код/handoff pending до проверок. Последний ZIP не содержит изменение.

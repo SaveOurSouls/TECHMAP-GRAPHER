@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 117 — заготовки проводов по схемам, 16.10.2026
+
+Чат `01a144a5-6da7-7483-b2ef-7b048627a9bf`, `/root`, [карточка 117](../../tasks/117-wire-preparation-schemes.md), REQ-152; in-progress. Ветка `codex/integration-m5-22`, основной worktree. Владелец: WireBlank/WirePreparation, ReferenceImportPanel, серверные seed/validation/Program, V3 model/panel и модуль схем, профильные тесты, собственные разделы docs/tasks. Пересекающиеся работы завершены и интегрированы. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
+
 ## 111 follow-up — возврат прежней оболочки П, 15.10.2026
 
 Чат `01a140c6-1d85-7cf1-a979-7a8826cc7d7c`, ветка `codex/thermal-tube-wire-coverage`; accepted владельцем 16.10.2026 и архивирован. Уточнение REQ-146 в [карточке 111](../../tasks/111-thermal-sleeve-wire-coverage.md): код `e6f03190831bf6607438837d382d3b43e6718ec2`, handoff `a0535adf3f12b39c233158c675e4d91f403328a1` и исправление нумерации `04f3414c6b2ab642cda34216ebeea41d00c9dbfb` опубликованы и интегрированы; ancestry PASS в M5-22-053 (code HEAD `2a9dd345cdd858847afcacd94e83fe29357337a3`). Отдельный worktree удалён; ignored baseline/rollback/build evidence сохранены в `tmp/archive-111-thermal-tube-worktree-2026-10-16`. Исходный жгут и packaged UI не проверены.
