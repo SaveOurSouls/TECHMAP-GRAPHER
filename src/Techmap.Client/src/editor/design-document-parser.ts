@@ -1,13 +1,42 @@
-import { type HarnessDesignDocument, type WireInstance, type E4Junction, type EditorViewState, type DiffPairGroup, type WireScreenGroup } from "./design-types";
-import { requireRecord, requireText, requireInteger, parsePoint, requirePositive, requireNumber, requireBoundedText } from "./design-parse-primitives";
+import {
+  type HarnessDesignDocument,
+  type WireInstance,
+  type E4Junction,
+  type EditorViewState,
+  type DiffPairGroup,
+  type WireScreenGroup,
+} from "./design-types";
+import {
+  requireRecord,
+  requireText,
+  requireInteger,
+  parsePoint,
+  requirePositive,
+  requireNumber,
+  requireBoundedText,
+} from "./design-parse-primitives";
 import { parseManufacturingRoute } from "../manufacturing/route-model";
 import { parseConnector } from "./design-connector-parser";
 import { parseWire, parseCables, validateCables, normalizeWireColorSource } from "./design-wire-parser";
 import { parsePhysicalTopology } from "./physical-topology-validation";
 import { validateDrawingDocuments } from "./drawing-documents";
-import { isJunctionEndpoint, isScreenEndpoint, wireScreenConnectionPoint, wireEndpointE4Anchor, createOrthogonalE4Route, validateE4Polyline, wireGroupHasCommonE4ParallelSpan, wireGroupHasScreenCrossSection, wireE4PathContainsPoint } from "./design-e4-geometry";
+import {
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  wireScreenConnectionPoint,
+  wireEndpointE4Anchor,
+  createOrthogonalE4Route,
+  validateE4Polyline,
+  wireGroupHasCommonE4ParallelSpan,
+  wireGroupHasScreenCrossSection,
+  wireE4PathContainsPoint,
+} from "./design-e4-geometry";
 import { defaultE4WireLead, defaultLayerIds } from "./design-defaults";
-import { parseTerminationDocument, validateTerminationComponents, validateTerminationCircuits } from "./termination-model";
+import {
+  parseTerminationDocument,
+  validateTerminationComponents,
+  validateTerminationCircuits,
+} from "./termination-model";
 
 export function parseHarnessDesignDocument(value: unknown): HarnessDesignDocument {
   const record = requireRecord(value, "Сервер вернул повреждённый документ жгута.");

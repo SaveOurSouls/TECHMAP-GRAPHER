@@ -1,7 +1,48 @@
-import { updateConnector, rememberCustomWireColors, validateCableMembership, removeRequired, validateWire, contactWireCount, contactAtEndpoint, addWireToEndpointJunctions, validateWireGroups, normalizeJunctionCircuits, syncContactWireMaterial, syncDirectWireColors, cleanupWireReferences, replaceRequired, sameConnectorEndpoint, assertEditableFreeDrawingEnd, isFreeDrawingEnd, assertNoLockedDrawingWires, requireEndpoint, findWire, updateJunctionMembership, requireWireIds, requirePositiveParameter } from "./editor-command-invariants";
+import {
+  updateConnector,
+  rememberCustomWireColors,
+  validateCableMembership,
+  removeRequired,
+  validateWire,
+  contactWireCount,
+  contactAtEndpoint,
+  addWireToEndpointJunctions,
+  validateWireGroups,
+  normalizeJunctionCircuits,
+  syncContactWireMaterial,
+  syncDirectWireColors,
+  cleanupWireReferences,
+  replaceRequired,
+  sameConnectorEndpoint,
+  assertEditableFreeDrawingEnd,
+  isFreeDrawingEnd,
+  assertNoLockedDrawingWires,
+  requireEndpoint,
+  findWire,
+  updateJunctionMembership,
+  requireWireIds,
+  requirePositiveParameter,
+} from "./editor-command-invariants";
 import { validDrawingScale } from "./drawing-scale";
-import { validateConnectorLibraryMetadata, isJunctionEndpoint, isScreenEndpoint, normalizeCableInstance, wireEndpointE4Anchor, type HarnessDesignDocument, parseOuterDiameter, calculateWireCutLength, normalizeWireStripProfileBinding, type DiffPairGroup } from "./model";
-import { updateConnectorE4Geometry, addTargetWireToJunction, rerouteWireE4, rerouteE4WireBatch, screenAttachmentWireIds } from "./command-e4-routing";
+import {
+  validateConnectorLibraryMetadata,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  normalizeCableInstance,
+  wireEndpointE4Anchor,
+  type HarnessDesignDocument,
+  parseOuterDiameter,
+  calculateWireCutLength,
+  normalizeWireStripProfileBinding,
+  type DiffPairGroup,
+} from "./model";
+import {
+  updateConnectorE4Geometry,
+  addTargetWireToJunction,
+  rerouteWireE4,
+  rerouteE4WireBatch,
+  screenAttachmentWireIds,
+} from "./command-e4-routing";
 import { validateE4Route } from "./e4-router";
 import { createE4RoutingRequest } from "./command-e4-analysis";
 import { wireBlankEnds } from "../WireBlankCatalog";

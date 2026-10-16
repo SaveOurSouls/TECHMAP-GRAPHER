@@ -1,4 +1,10 @@
-import { type HarnessDesignDocument, wireEndpointE4Anchor, type Point, validateE4Polyline, defaultE4WireLead } from "./model";
+import {
+  type HarnessDesignDocument,
+  wireEndpointE4Anchor,
+  type Point,
+  validateE4Polyline,
+  defaultE4WireLead,
+} from "./model";
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
 import { screenJunctionEnds, validateE4WireIds, simplifyE4IntermediateRoute } from "./command-e4-analysis";
 

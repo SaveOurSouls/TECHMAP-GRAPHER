@@ -1,9 +1,90 @@
-
-export { type EditorView, type Point, type ConnectorContactStatus, type ConnectorLibraryContactKind, type ConnectorLibraryBinding, type ComponentTemplateArticleKeySnapshot, type ComponentTemplateAssetSnapshot, type ComponentTemplateContactRepresentationSnapshot, type ComponentTemplateContactSnapshot, type ComponentTemplateMaterializedSnapshot, type ConnectorLibraryContact, type ConnectorSchematicOrientation, type ConnectorBaseColumnKey, type ConnectorBaseColumn, type ConnectorCustomField, type ConnectorSchematicPresentation, type ConnectorE4TableColumn, type ConnectorE4TableGeometry, type ConnectorContact, type ConnectorDrawingPlacement, type ConnectorInstance, type ConnectorTerminalCatalog, type WireEndpoint, type E4Junction, type DiffPairGroup, type WireScreenGroup, type WireScreenTerminalSide, type WireScreenEndpointSide, type WireCrossingStyle, type E4RouteLeadDirection, type E4RouteAnchor, type WireInstance, type WireColorSource, type WireMaterialBinding, type CableInstance, type WireEndStripProfiles, type WireStripProfileBinding, type WireStripProfileLayer, type WireStripStep, type WireCutLengthCalculation, type EditorLayer, type EditorViewState, type HarnessDesignDocument, type WireScreenConnectionGeometry } from "./design-types";
-export { connectorBaseColumnKeys, templateNameColumnId, connectorContactName, connectorE4TableMetrics, connectorE4FooterWidth, connectorE4TableColumnWidth, templateTerminalChoices, createDefaultConnectorBaseColumns, connectorE4Contacts, connectorE4TableGeometry, connectorContactPosition } from "./connector-presentation";
-export { calculateCableSheathStrip, calculateWireStripSteps, defaultWireCutRoundingStepMm, calculateWireCutLength, parseOuterDiameter } from "./wire-measurements";
+export {
+  type EditorView,
+  type Point,
+  type ConnectorContactStatus,
+  type ConnectorLibraryContactKind,
+  type ConnectorLibraryBinding,
+  type ComponentTemplateArticleKeySnapshot,
+  type ComponentTemplateAssetSnapshot,
+  type ComponentTemplateContactRepresentationSnapshot,
+  type ComponentTemplateContactSnapshot,
+  type ComponentTemplateMaterializedSnapshot,
+  type ConnectorLibraryContact,
+  type ConnectorSchematicOrientation,
+  type ConnectorBaseColumnKey,
+  type ConnectorBaseColumn,
+  type ConnectorCustomField,
+  type ConnectorSchematicPresentation,
+  type ConnectorE4TableColumn,
+  type ConnectorE4TableGeometry,
+  type ConnectorContact,
+  type ConnectorDrawingPlacement,
+  type ConnectorInstance,
+  type ConnectorTerminalCatalog,
+  type WireEndpoint,
+  type E4Junction,
+  type DiffPairGroup,
+  type WireScreenGroup,
+  type WireScreenTerminalSide,
+  type WireScreenEndpointSide,
+  type WireCrossingStyle,
+  type E4RouteLeadDirection,
+  type E4RouteAnchor,
+  type WireInstance,
+  type WireColorSource,
+  type WireMaterialBinding,
+  type CableInstance,
+  type WireEndStripProfiles,
+  type WireStripProfileBinding,
+  type WireStripProfileLayer,
+  type WireStripStep,
+  type WireCutLengthCalculation,
+  type EditorLayer,
+  type EditorViewState,
+  type HarnessDesignDocument,
+  type WireScreenConnectionGeometry,
+} from "./design-types";
+export {
+  connectorBaseColumnKeys,
+  templateNameColumnId,
+  connectorContactName,
+  connectorE4TableMetrics,
+  connectorE4FooterWidth,
+  connectorE4TableColumnWidth,
+  templateTerminalChoices,
+  createDefaultConnectorBaseColumns,
+  connectorE4Contacts,
+  connectorE4TableGeometry,
+  connectorContactPosition,
+} from "./connector-presentation";
+export {
+  calculateCableSheathStrip,
+  calculateWireStripSteps,
+  defaultWireCutRoundingStepMm,
+  calculateWireCutLength,
+  parseOuterDiameter,
+} from "./wire-measurements";
 export { defaultE4WireLead, e4ScreenAlongSize, defaultLayerIds, createEmptyHarnessDesign } from "./design-defaults";
 export { parseHarnessDesignDocument } from "./design-document-parser";
-export { isJunctionEndpoint, createJunctionEndpoint, isScreenEndpoint, createScreenEndpoint, wireEndpointE4Anchor, wireScreenConnectionGeometry, wireScreenConnectionPoint, validateE4Polyline, validateOrthogonalE4Route, createOrthogonalE4Route, findWireEndpoint, wireE4PathContainsPoint, wireGroupHasScreenCrossSection, wireGroupHasCommonE4ParallelSpan } from "./design-e4-geometry";
-export { parseDrawingPlacements, validateConnectorLibraryMetadata, parseConnectorSchematic } from "./design-connector-parser";
+export {
+  isJunctionEndpoint,
+  createJunctionEndpoint,
+  isScreenEndpoint,
+  createScreenEndpoint,
+  wireEndpointE4Anchor,
+  wireScreenConnectionGeometry,
+  wireScreenConnectionPoint,
+  validateE4Polyline,
+  validateOrthogonalE4Route,
+  createOrthogonalE4Route,
+  findWireEndpoint,
+  wireE4PathContainsPoint,
+  wireGroupHasScreenCrossSection,
+  wireGroupHasCommonE4ParallelSpan,
+} from "./design-e4-geometry";
+export {
+  parseDrawingPlacements,
+  validateConnectorLibraryMetadata,
+  parseConnectorSchematic,
+} from "./design-connector-parser";
 export { normalizeCableInstance, normalizeWireStripProfileBinding } from "./design-wire-parser";

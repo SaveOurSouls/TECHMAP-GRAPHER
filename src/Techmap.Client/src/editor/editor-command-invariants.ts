@@ -1,4 +1,28 @@
-import { type HarnessDesignDocument, type WireInstance, type WireEndpoint, isJunctionEndpoint, isScreenEndpoint, type WireMaterialBinding, type ConnectorContact, type ConnectorInstance, type EditorLayer, type ConnectorCustomField, type ConnectorContactStatus, templateTerminalChoices, type E4Junction, wireE4PathContainsPoint, type Point, wireGroupHasCommonE4ParallelSpan, wireGroupHasScreenCrossSection, type CableInstance, type DiffPairGroup, type WireScreenGroup, type EditorView, calculateWireCutLength, wireEndpointE4Anchor } from "./model";
+import {
+  type HarnessDesignDocument,
+  type WireInstance,
+  type WireEndpoint,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  type WireMaterialBinding,
+  type ConnectorContact,
+  type ConnectorInstance,
+  type EditorLayer,
+  type ConnectorCustomField,
+  type ConnectorContactStatus,
+  templateTerminalChoices,
+  type E4Junction,
+  wireE4PathContainsPoint,
+  type Point,
+  wireGroupHasCommonE4ParallelSpan,
+  wireGroupHasScreenCrossSection,
+  type CableInstance,
+  type DiffPairGroup,
+  type WireScreenGroup,
+  type EditorView,
+  calculateWireCutLength,
+  wireEndpointE4Anchor,
+} from "./model";
 import { type EditorCommand } from "./editor-command-types";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import { connectedTerminationWireIds } from "./termination-model";

@@ -1,6 +1,24 @@
-import { type Point, type WireInstance, isScreenEndpoint, isJunctionEndpoint, type HarnessDesignDocument, wireEndpointE4Anchor, type ConnectorInstance, connectorE4TableGeometry, type WireEndpoint, defaultE4WireLead, validateE4Polyline } from "./model";
+import {
+  type Point,
+  type WireInstance,
+  isScreenEndpoint,
+  isJunctionEndpoint,
+  type HarnessDesignDocument,
+  wireEndpointE4Anchor,
+  type ConnectorInstance,
+  connectorE4TableGeometry,
+  type WireEndpoint,
+  defaultE4WireLead,
+  validateE4Polyline,
+} from "./model";
 import { polylineLength, validateE4Route, type E4RouterAnchor } from "./e4-router";
-import { pointOnOrthogonalSegment, pointsMatch, findWire, collectJunctionComponent, sameEndpoint } from "./editor-command-invariants";
+import {
+  pointOnOrthogonalSegment,
+  pointsMatch,
+  findWire,
+  collectJunctionComponent,
+  sameEndpoint,
+} from "./editor-command-invariants";
 import { segmentEntersRect } from "./segment-geometry";
 
 export function simplifyE4IntermediateRoute(

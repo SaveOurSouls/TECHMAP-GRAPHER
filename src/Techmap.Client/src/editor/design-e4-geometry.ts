@@ -1,4 +1,13 @@
-import { type WireEndpoint, type WireScreenEndpointSide, type HarnessDesignDocument, type E4RouteAnchor, type WireScreenConnectionGeometry, type Point, type EditorView, type WireInstance } from "./design-types";
+import {
+  type WireEndpoint,
+  type WireScreenEndpointSide,
+  type HarnessDesignDocument,
+  type E4RouteAnchor,
+  type WireScreenConnectionGeometry,
+  type Point,
+  type EditorView,
+  type WireInstance,
+} from "./design-types";
 import { connectorContactPosition, connectorE4TableGeometry } from "./connector-presentation";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
 import { screenCrossSections, clearScreenSections, uprightScreenBody } from "./e4-screen-spans";

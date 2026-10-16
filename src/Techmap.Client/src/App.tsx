@@ -8,7 +8,7 @@ import {
 } from "./autosave-controller";
 import type { LocalSession } from "./local-session";
 import { ReferenceImportPanel } from "./ReferenceImportPanel";
-import { HarnessDesignEditor } from "./editor/HarnessDesignEditor";
+import { LazyHarnessDesignEditor as HarnessDesignEditor } from "./editor/lazy-harness-editor";
 import {
   createProjectApi,
   ProjectApiError,
@@ -22,7 +22,7 @@ import { TransitionGate } from "./transition-gate";
 import { createHarnessCutListApi } from "./harness-cut-list-api";
 import { HarnessCutListPanel } from "./HarnessCutListPanel";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
-import { RouteV3Panel } from "./manufacturing-v3/RouteV3Panel";
+import { LazyRouteV3Panel as RouteV3Panel } from "./manufacturing-v3/lazy-route-v3";
 import { InfoHint } from "./InfoHint";
 import { resolveHarnessSection, type HarnessSectionId } from "./editor/HarnessSectionNavigation";
 

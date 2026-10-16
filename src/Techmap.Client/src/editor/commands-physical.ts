@@ -2,7 +2,12 @@ import { materializePhysicalPath, deletePhysicalBend, editPhysicalBend, carryPhy
 import { segmentDimensionKey } from "./drawing-dimensions";
 import { validateDrawingDocuments } from "./drawing-documents";
 import { parsePhysicalTopology } from "./physical-topology-validation";
-import { editJoiningPipeBend, moveJoiningPipe, remapJoiningPipeMemberBends, removeJoiningPipe } from "./physical-joining-pipe-editing";
+import {
+  editJoiningPipeBend,
+  moveJoiningPipe,
+  remapJoiningPipeMemberBends,
+  removeJoiningPipe,
+} from "./physical-joining-pipe-editing";
 import { joiningPipePoints, joiningPipeExitVector } from "./physical-joining-pipes";
 import { defaultLayerIds, type HarnessDesignDocument } from "./model";
 import { physicalNodeLocalPoint } from "./physical-ports";

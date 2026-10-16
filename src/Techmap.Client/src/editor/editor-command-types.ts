@@ -1,5 +1,25 @@
 import { type TerminationCommand } from "./termination-commands";
-import { type Point, type ConnectorInstance, type EditorView, type ConnectorContact, type ConnectorLibraryBinding, type WireMaterialBinding, type ConnectorContactStatus, type ConnectorBaseColumnKey, type ConnectorCustomField, type WireInstance, type CableInstance, type WireColorSource, type WireStripProfileBinding, type WireEndpoint, type WireCrossingStyle, type E4Junction, type DiffPairGroup, type WireScreenGroup, type EditorLayer } from "./model";
+import {
+  type Point,
+  type ConnectorInstance,
+  type EditorView,
+  type ConnectorContact,
+  type ConnectorLibraryBinding,
+  type WireMaterialBinding,
+  type ConnectorContactStatus,
+  type ConnectorBaseColumnKey,
+  type ConnectorCustomField,
+  type WireInstance,
+  type CableInstance,
+  type WireColorSource,
+  type WireStripProfileBinding,
+  type WireEndpoint,
+  type WireCrossingStyle,
+  type E4Junction,
+  type DiffPairGroup,
+  type WireScreenGroup,
+  type EditorLayer,
+} from "./model";
 import { type PhysicalDragMode } from "./physical-editing";
 import { type DimensionMode } from "./drawing-dimensions";
 import { type DrawingDocuments } from "./drawing-documents";

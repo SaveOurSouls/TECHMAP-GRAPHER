@@ -7,17 +7,32 @@ import { projectComponentTemplateView, projectE4DrawingCompanions } from "./comp
 import { ComponentGraphErrorAlert, HarnessEditorErrorBoundary } from "./HarnessEditorBoundary";
 import { HarnessEditorWorkspace } from "./HarnessEditorWorkspace";
 import { withCoveringTextureUrls } from "./covering-assets";
-import { joiningPipeDraftHighlights, toggleJoiningPipeMember, beginJoiningPipe, JoiningPipeEditor, joiningPipeDraftTopology } from "./JoiningPipeEditor";
+import {
+  joiningPipeDraftHighlights,
+  toggleJoiningPipeMember,
+  beginJoiningPipe,
+  JoiningPipeEditor,
+  joiningPipeDraftTopology,
+} from "./JoiningPipeEditor";
 import { DrawingObjectProperties } from "./DrawingObjectProperties";
 import { CONTACT_SIDE_VIEW_PLACEMENT_ID, drawingScale } from "./drawing-scale";
-import { BUILTIN_TERMINATION_RECORDS, TerminationLibraryPicker, terminationArtifactFromRecord } from "../termination-library";
+import {
+  BUILTIN_TERMINATION_RECORDS,
+  TerminationLibraryPicker,
+  terminationArtifactFromRecord,
+} from "../termination-library";
 import { ConnectionTableSettings } from "./ConnectionTableSettings";
 import { DrawingRangeControl } from "./DrawingRangeControl";
 import { drawingReferenceDiameter } from "./drawing-thickness";
 import { drawingBendRadius } from "./drawing-route-path";
 import { toggleDrawingDimensions, dimensionRouteKey } from "./drawing-dimensions";
 import { DocumentIcon } from "./DocumentIcon";
-import { addDrawingPositions, setDrawingPositionsVisibility, createPositionRail, moveDrawingAnnotation } from "./drawing-documents";
+import {
+  addDrawingPositions,
+  setDrawingPositionsVisibility,
+  createPositionRail,
+  moveDrawingAnnotation,
+} from "./drawing-documents";
 import { routeCutReadiness } from "../manufacturing/route-cut-readiness";
 import { DrawingTableWindows } from "./DrawingTableWindows";
 import { selectedEditorDeletionCommands, fromUiLayers } from "./harness-selection-adapters";

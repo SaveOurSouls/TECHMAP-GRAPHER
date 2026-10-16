@@ -1,6 +1,12 @@
 import { type TemplateContentV3 as TemplateContentV2 } from "./template-model-v3";
 import { type Draft } from "./library-editor-types";
-import { newTemplateContentV3 as newTemplateContentV2, addContactTypeGroupV3, addArticleVariantsV3, setArticleVariantContactGroupV3, upsertArticleVariantV3 } from "./template-commands-v3";
+import {
+  newTemplateContentV3 as newTemplateContentV2,
+  addContactTypeGroupV3,
+  addArticleVariantsV3,
+  setArticleVariantContactGroupV3,
+  upsertArticleVariantV3,
+} from "./template-commands-v3";
 import { createE4ConnectorSeriesTableFromV3, type E4ConnectorSeriesTable } from "./e4-connector-series-table";
 import { readLibraryDraftRecovery } from "./library-draft-recovery";
 import { type TemplateContentV4 } from "./template-model-v4";

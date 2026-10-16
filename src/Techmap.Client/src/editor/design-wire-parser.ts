@@ -1,8 +1,42 @@
-import { type WireInstance, type CableInstance, type WireMaterialBinding, type WireEndStripProfiles, type WireStripProfileBinding, type WireColorSource, type HarnessDesignDocument, type WireEndpoint } from "./design-types";
-import { requireRecord, requireNumber, parsePoint, requireText, requireString, parseNormalizedPosition, requireBoundedText, parseNonEmptyGuid, parseSha256, requireInteger } from "./design-parse-primitives";
-import { validateWirePhysicalLength, validateWireCorrection, defaultWireCutRoundingStepMm, validateWireRoundingStep, calculateWireCutLength, parseOuterDiameter, calculateCableSheathStrip, normalizeWireStripProfileLayers } from "./wire-measurements";
+import {
+  type WireInstance,
+  type CableInstance,
+  type WireMaterialBinding,
+  type WireEndStripProfiles,
+  type WireStripProfileBinding,
+  type WireColorSource,
+  type HarnessDesignDocument,
+  type WireEndpoint,
+} from "./design-types";
+import {
+  requireRecord,
+  requireNumber,
+  parsePoint,
+  requireText,
+  requireString,
+  parseNormalizedPosition,
+  requireBoundedText,
+  parseNonEmptyGuid,
+  parseSha256,
+  requireInteger,
+} from "./design-parse-primitives";
+import {
+  validateWirePhysicalLength,
+  validateWireCorrection,
+  defaultWireCutRoundingStepMm,
+  validateWireRoundingStep,
+  calculateWireCutLength,
+  parseOuterDiameter,
+  calculateCableSheathStrip,
+  normalizeWireStripProfileLayers,
+} from "./wire-measurements";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
-import { isJunctionEndpoint, isScreenEndpoint, createJunctionEndpoint, createScreenEndpoint } from "./design-e4-geometry";
+import {
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  createJunctionEndpoint,
+  createScreenEndpoint,
+} from "./design-e4-geometry";
 
 export function parseWire(value: unknown): WireInstance {
   const record = requireRecord(value, "Провод задан неверно.");

@@ -1,4 +1,10 @@
-import { type CableInstance, type WireStripProfileLayer, type WireStripStep, type WireInstance, type WireCutLengthCalculation } from "./design-types";
+import {
+  type CableInstance,
+  type WireStripProfileLayer,
+  type WireStripStep,
+  type WireInstance,
+  type WireCutLengthCalculation,
+} from "./design-types";
 import { requireNumber } from "./design-parse-primitives";
 
 /** End corrections belong to the blank; stripping never adds a second material. */

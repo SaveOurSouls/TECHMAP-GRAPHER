@@ -1,4 +1,3 @@
-
 export { type EditorCommand } from "./editor-command-types";
 export { createConnector, createWire } from "./editor-command-factories";
 export { applyEditorCommand } from "./editor-command-dispatcher";

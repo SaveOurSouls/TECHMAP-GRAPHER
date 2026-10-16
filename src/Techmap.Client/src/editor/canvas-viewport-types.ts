@@ -1,7 +1,17 @@
-import { type EditorSceneObject, type EditorPoint, type HarnessEditorView, type EditorTool, type EditorCamera, type EditorLayer } from "./editor-types";
+import {
+  type EditorSceneObject,
+  type EditorPoint,
+  type HarnessEditorView,
+  type EditorTool,
+  type EditorCamera,
+  type EditorLayer,
+} from "./editor-types";
 import { type CableInstance } from "./model";
 import { type E4SceneOverlays, type E4ConnectableEndpoint, type E4SegmentOrientation } from "./canvas-e4-scene";
-import { type ComponentTemplateViewInstance, type ResolveComponentTemplateAssetUrl } from "./component-template-view-renderer";
+import {
+  type ComponentTemplateViewInstance,
+  type ResolveComponentTemplateAssetUrl,
+} from "./component-template-view-renderer";
 import { type ReactNode } from "react";
 import { type CoveringDragPart } from "./covering-layout";
 import { type DimensionMode } from "./drawing-dimensions";

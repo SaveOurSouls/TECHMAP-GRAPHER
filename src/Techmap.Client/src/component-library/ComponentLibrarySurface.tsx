@@ -1,10 +1,36 @@
-
 import { InfoHint } from "../InfoHint";
 import { TemplateSeriesPanelV3 } from "./TemplateSeriesPanelV3";
 import { E4ArticlePreview } from "./E4ArticlePreview";
 import { materializeGenerator } from "./drawing-generator";
 import { TemplateCanvasV2, type TemplatePointAngleModeV2 } from "./TemplateCanvasV2";
-import { projectTemplateContentV3CoreToV2, addContactTypeGroupV3, renameContactTypeGroupV3, deleteContactTypeGroupV3, upsertArticleVariantV3, removeArticleVariantV3, renameLayerV3 as renameLayerV2, reorderLayerV3 as reorderLayerV2, setLayerVisibleV3 as setLayerVisibleV2, setLayerLockedV3 as setLayerLockedV2, deleteLayerV3 as deleteLayerV2, createRepeatPrototypeV3 as createRepeatPrototypeV2, constantExpressionV3 as constantExpressionV2, attachRepeatDomainV3 as attachRepeatDomainV2, setRepeatCountV3 as setRepeatCountV2, setRepeatStepV3 as setRepeatStepV2, deleteRepeatPrototypeV3 as deleteRepeatPrototypeV2, parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2, setTemplateParameterDefaultV3 as setTemplateParameterDefaultV2, editLogicalContactV3 as editLogicalContactV2, editContactPointV3 as editContactPointV2, deleteContactPointV3 as deleteContactPointV2, editBundlePortV3 as editBundlePortV2, deleteBundlePortV3 as deleteBundlePortV2, editNodeV3 as editNodeV2, setNodeLockedV3 as setNodeLockedV2 } from "./template-commands-v3";
+import {
+  projectTemplateContentV3CoreToV2,
+  addContactTypeGroupV3,
+  renameContactTypeGroupV3,
+  deleteContactTypeGroupV3,
+  upsertArticleVariantV3,
+  removeArticleVariantV3,
+  renameLayerV3 as renameLayerV2,
+  reorderLayerV3 as reorderLayerV2,
+  setLayerVisibleV3 as setLayerVisibleV2,
+  setLayerLockedV3 as setLayerLockedV2,
+  deleteLayerV3 as deleteLayerV2,
+  createRepeatPrototypeV3 as createRepeatPrototypeV2,
+  constantExpressionV3 as constantExpressionV2,
+  attachRepeatDomainV3 as attachRepeatDomainV2,
+  setRepeatCountV3 as setRepeatCountV2,
+  setRepeatStepV3 as setRepeatStepV2,
+  deleteRepeatPrototypeV3 as deleteRepeatPrototypeV2,
+  parameterizeNodeDimensionV3 as parameterizeNodeDimensionV2,
+  setTemplateParameterDefaultV3 as setTemplateParameterDefaultV2,
+  editLogicalContactV3 as editLogicalContactV2,
+  editContactPointV3 as editContactPointV2,
+  deleteContactPointV3 as deleteContactPointV2,
+  editBundlePortV3 as editBundlePortV2,
+  deleteBundlePortV3 as deleteBundlePortV2,
+  editNodeV3 as editNodeV2,
+  setNodeLockedV3 as setNodeLockedV2,
+} from "./template-commands-v3";
 import { errorText, addSeriesArticles, TEMPLATE_UNDO_LIMIT } from "./library-draft-adapters";
 import { findArticleDrawing, articleDrawingView, type DrawingTarget } from "./drawing-bindings";
 import { parseConnectorSchematic } from "../editor/model";
@@ -18,8 +44,19 @@ import { IMAGE_IMPORT_ACCEPT } from "./image-import";
 import { TemplateParametersPanelV2 } from "./TemplateParametersPanelV2";
 import { nodeLabel, setNodePosition } from "./library-node-editing";
 import { DrawingSelectionProperties } from "./DrawingSelectionProperties";
-import { styleDrawingSelection, useInternalDrawingClipboard, stretchDrawingSelection, rotateDrawingSelection } from "./drawing-selection";
-import { ViewAndLayerProperties, ContactPointProperties, BundlePortProperties, NodeProperties, NumericField } from "./LibraryEditorProperties";
+import {
+  styleDrawingSelection,
+  useInternalDrawingClipboard,
+  stretchDrawingSelection,
+  rotateDrawingSelection,
+} from "./drawing-selection";
+import {
+  ViewAndLayerProperties,
+  ContactPointProperties,
+  BundlePortProperties,
+  NodeProperties,
+  NumericField,
+} from "./LibraryEditorProperties";
 import { type Props } from "./library-editor-types";
 import { useComponentLibrary } from "./useComponentLibrary";
 import "./component-library.css";

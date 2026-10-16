@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { RouteAssemblyDrawing, type RouteAssemblyDrawingProps } from "./RouteAssemblyDrawing";
-import { HarnessDesignEditor, type HarnessDesignEditorProps } from "../editor/HarnessDesignEditor";
+import type { HarnessDesignEditorProps } from "../editor/HarnessDesignEditor";
+import { LazyHarnessDesignEditor as HarnessDesignEditor } from "../editor/lazy-harness-editor";
 import { createEmptyHarnessDesign } from "../editor/model";
 import { createRouteDrawingCopy } from "./route-drawing-copy";
 import { createConnector } from "../editor/commands";
@@ -44,9 +45,11 @@ it("retains editor identity during isolated edits and restores both unsaved draf
     onSave: save, onCancel: vi.fn(),
   };
   const render = () => { hooks.index = 0; return RouteAssemblyDrawing(props) as ReactElement; };
-  const localCopy = (tree: ReactElement) => (find(tree, node => node.type === HarnessDesignEditor).props as HarnessDesignEditorProps).localCopy!;
+  const editor = (tree: ReactElement) => find(tree, node => node.type === HarnessDesignEditor) as ReactElement<HarnessDesignEditorProps>;
+  const localCopy = (tree: ReactElement) => editor(tree).props.localCopy!;
   const switchTo = (tree: ReactElement, label: string) => find(tree, node => node.type === "button" && node.props.children === label).props.onClick();
   let tree = render();
+  const initialEditor = editor(tree);
   const initial = localCopy(tree).initialDocument;
   // A local snapshot can be saved even when the editor history is still
   // pristine. This is required for preserving the current view of a regular
@@ -58,8 +61,11 @@ it("retains editor identity during isolated edits and restores both unsaved draf
   localCopy(tree).onDraftChange!(isolatedDraft, ["hidden"], 0.2);
   tree = render();
   expect(localCopy(tree).initialDocument).toBe(initial);
+  expect(editor(tree).type).toBe(initialEditor.type);
+  expect(editor(tree).key).toBe(initialEditor.key);
   switchTo(tree, "Исходная копия");
   tree = render();
+  expect(editor(tree).key).not.toBe(initialEditor.key);
   const sourceDraft = { ...localCopy(tree).initialDocument, connectors: source.connectors.map(connector => ({ ...connector, designation: "EDITED SOURCE" })) };
   localCopy(tree).onDraftChange!(sourceDraft, [], 0.7);
   switchTo(tree, "Изолированный фрагмент");

@@ -1,5 +1,27 @@
-import { isJunctionEndpoint, type HarnessDesignDocument, createJunctionEndpoint, wireE4PathContainsPoint, isScreenEndpoint, wireEndpointE4Anchor } from "./model";
-import { validateWire, normalizeJunction, validateJunctionAgainstWires, normalizeJunctionCircuits, requireJunction, validateWireGroups, findWire, replaceRequired, updateJunctionMembership, pointsMatch, normalizeDiffPair, removeRequired, normalizeScreen, cleanupWireReferences } from "./editor-command-invariants";
+import {
+  isJunctionEndpoint,
+  type HarnessDesignDocument,
+  createJunctionEndpoint,
+  wireE4PathContainsPoint,
+  isScreenEndpoint,
+  wireEndpointE4Anchor,
+} from "./model";
+import {
+  validateWire,
+  normalizeJunction,
+  validateJunctionAgainstWires,
+  normalizeJunctionCircuits,
+  requireJunction,
+  validateWireGroups,
+  findWire,
+  replaceRequired,
+  updateJunctionMembership,
+  pointsMatch,
+  normalizeDiffPair,
+  removeRequired,
+  normalizeScreen,
+  cleanupWireReferences,
+} from "./editor-command-invariants";
 import { rerouteWireE4, rerouteE4WireBatch } from "./command-e4-routing";
 import { validateAllE4Wires } from "./command-e4-analysis";
 import { compactAutomaticDifferentialPairs } from "./command-e4-pair-planner";

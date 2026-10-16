@@ -1,6 +1,14 @@
-import { type TemplateNodeV3 as TemplateNodeV2, type NumericExpressionV3 as NumericExpressionV2, type TemplateContentV3 as TemplateContentV2 } from "./template-model-v3";
+import {
+  type TemplateNodeV3 as TemplateNodeV2,
+  type NumericExpressionV3 as NumericExpressionV2,
+  type TemplateContentV3 as TemplateContentV2,
+} from "./template-model-v3";
 import { type TemplateContentV2 as LegacyTemplateContentV2, type ImageNodeV2 } from "./template-model-v2";
-import { constantExpressionV3 as constantExpressionV2, moveNodeV3 as moveNodeV2, type NodeEditV3 as NodeEditV2 } from "./template-commands-v3";
+import {
+  constantExpressionV3 as constantExpressionV2,
+  moveNodeV3 as moveNodeV2,
+  type NodeEditV3 as NodeEditV2,
+} from "./template-commands-v3";
 
 export type EditableNode = Extract<TemplateNodeV2, { kind: "line" | "polyline" | "rectangle" | "ellipse" | "bezier" | "closedContour" | "text" | "image" }>;
 export const constantValue = (expression: NumericExpressionV2) => expression.kind === "constant" ? expression.value : null;

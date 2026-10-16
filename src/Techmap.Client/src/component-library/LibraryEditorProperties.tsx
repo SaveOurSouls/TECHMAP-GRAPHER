@@ -1,5 +1,22 @@
-import { type TemplateContentV3 as TemplateContentV2, type ViewContactPointV3 as ViewContactPointV2, type LogicalContactV3 as LogicalContactV2, type BundlePortV3 as BundlePortV2 } from "./template-model-v3";
-import { renameViewV3 as renameViewV2, addAdditionalViewV3, deleteAdditionalViewV3 as deleteAdditionalViewV2, renameLayerV3 as renameLayerV2, reorderLayerV3 as reorderLayerV2, deleteLayerV3 as deleteLayerV2, type LogicalContactEditV3 as LogicalContactEditV2, type ContactPointEditV3 as ContactPointEditV2, constantExpressionV3 as constantExpressionV2, type BundlePortEditV3 as BundlePortEditV2, type NodeEditV3 as NodeEditV2 } from "./template-commands-v3";
+import {
+  type TemplateContentV3 as TemplateContentV2,
+  type ViewContactPointV3 as ViewContactPointV2,
+  type LogicalContactV3 as LogicalContactV2,
+  type BundlePortV3 as BundlePortV2,
+} from "./template-model-v3";
+import {
+  renameViewV3 as renameViewV2,
+  addAdditionalViewV3,
+  deleteAdditionalViewV3 as deleteAdditionalViewV2,
+  renameLayerV3 as renameLayerV2,
+  reorderLayerV3 as reorderLayerV2,
+  deleteLayerV3 as deleteLayerV2,
+  type LogicalContactEditV3 as LogicalContactEditV2,
+  type ContactPointEditV3 as ContactPointEditV2,
+  constantExpressionV3 as constantExpressionV2,
+  type BundlePortEditV3 as BundlePortEditV2,
+  type NodeEditV3 as NodeEditV2,
+} from "./template-commands-v3";
 import { constantValue, type EditableNode, nodePosition, nodeDimensions, editDimension } from "./library-node-editing";
 import { InfoHint } from "../InfoHint";
 import { type ContactDirectionV2, type ImageNodeV2 } from "./template-model-v2";

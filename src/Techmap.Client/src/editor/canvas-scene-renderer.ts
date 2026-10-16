@@ -1,16 +1,57 @@
-import { type EditorCamera, type EditorPoint, type EditorSceneObject, type HarnessEditorView, type EditorLayer } from "./editor-types";
+import {
+  type EditorCamera,
+  type EditorPoint,
+  type EditorSceneObject,
+  type HarnessEditorView,
+  type EditorLayer,
+} from "./editor-types";
 import { drawingEndArtworkPlacement } from "./preparation-drawing";
-import { ComponentTemplateImageCache, type ComponentTemplateViewInstance, type ResolveComponentTemplateAssetUrl, projectE4DrawingCompanions, shortestDrawingLink, drawProjectedComponentTemplateView, projectComponentTemplateView, projectContactSideView } from "./component-template-view-renderer";
+import {
+  ComponentTemplateImageCache,
+  type ComponentTemplateViewInstance,
+  type ResolveComponentTemplateAssetUrl,
+  projectE4DrawingCompanions,
+  shortestDrawingLink,
+  drawProjectedComponentTemplateView,
+  projectComponentTemplateView,
+  projectContactSideView,
+} from "./component-template-view-renderer";
 import { renderPartSvg } from "../wire-blank-artwork.mjs";
 import { stripProfileStrokeWidth, stripProfileOutline, stripProfilePalette } from "./canvas-wire-strip-style";
-import { getDrawingWireStripProfileGeometries, getVisibleCableSheathScene, numberedPipeBendHandles, pipeMidpoints, e4Midpoints } from "./canvas-scene-hit-test";
+import {
+  getDrawingWireStripProfileGeometries,
+  getVisibleCableSheathScene,
+  numberedPipeBendHandles,
+  pipeMidpoints,
+  e4Midpoints,
+} from "./canvas-scene-hit-test";
 import { drawVolumeSurface, drawVolumeStroke } from "./drawing-volume";
 import { drawCoveringSurface } from "./covering-renderer";
 import { traceDrawingRoute } from "./drawing-route-path";
-import { strokeE4Wire, drawE4BridgeCrossings, drawE4DifferentialPairs, drawE4Junctions, drawE4Screens } from "./canvas-e4-renderer";
-import { getMaterializedConnectorContactPoints, getE4ConnectorLayout, legacyConnectorContactPoints } from "./canvas-connector-layout";
-import { drawConnectorContactOverrides, drawE4Connector, drawSelectedConnectorContacts } from "./canvas-connector-renderer";
-import { getE4WireRoute, type E4SceneOverlays, parseE4SceneOverlays, getVisibleE4SceneOverlays, getE4WireCrossings } from "./canvas-e4-scene";
+import {
+  strokeE4Wire,
+  drawE4BridgeCrossings,
+  drawE4DifferentialPairs,
+  drawE4Junctions,
+  drawE4Screens,
+} from "./canvas-e4-renderer";
+import {
+  getMaterializedConnectorContactPoints,
+  getE4ConnectorLayout,
+  legacyConnectorContactPoints,
+} from "./canvas-connector-layout";
+import {
+  drawConnectorContactOverrides,
+  drawE4Connector,
+  drawSelectedConnectorContacts,
+} from "./canvas-connector-renderer";
+import {
+  getE4WireRoute,
+  type E4SceneOverlays,
+  parseE4SceneOverlays,
+  getVisibleE4SceneOverlays,
+  getE4WireCrossings,
+} from "./canvas-e4-scene";
 import { getE4WireLabelLayout } from "./e4-wire-label";
 import { type CableInstance } from "./model";
 import { type E4ConnectorSnapGuides } from "./e4-connector-snap";

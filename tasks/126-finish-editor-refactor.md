@@ -23,6 +23,8 @@
 
 ## Журнал
 
+**Текущий проверенный результат:** все технические пункты 1–7 PASS; код этапов 1–5 опубликован, последний code commit и общий handoff оформляются. [Матрица аудита](../docs/editor-refactor-126-completion-audit.md). Full Vitest 220/2319, TypeScript/Vite, 362 объявления/75 ветвей/22 эталона/API/54-module acyclic graph PASS. Исторические записи ниже сохраняют порядок выполнения, а не текущие pending-статусы.
+
 - План зарегистрирован до реализации. Этап 1 проверен: CanvasViewport 2463 → 61 строка фасада, отдельные controller/surface/renderer/selection/types/helpers. AST-сверка 46 объявлений, тела controller и JSX PASS; 22 эталона неизменны. Baseline/профиль 10/162, полный Vitest 215/2313, TypeScript/Vite PASS. [Протокол](../docs/editor-refactor-126.md), [ADR-0031](../docs/decisions/0031-editor-refactor-completion.md).
 - Этапы 2–7 открыты. Итоговая готовность не выводится из завершённого CanvasViewport.
 - Этап 1 опубликован: d378d741af0d8cf4407cb13e48a03862009cffc9, ancestry PASS; [handoff](../docs/coordination/handoff-126-editor-refactor.md). Документальный handoff — коммит этой записи.
@@ -34,3 +36,4 @@
 - Этап 4 опубликован: 1205eeb7e13589e4a422cfa4beedd6708be26560, ancestry PASS; docs handoff — коммит этой записи. План продолжается с этапа 5.
 - Этап 5 проверен: ComponentLibrary 1600 → 6 строк фасада; draft/catalog/node editing/types/property panels/controller/JSX разделены. 45 объявлений, controller/JSX/hooks и trailing CSS import сохранены; все 22 runtime-экспорта прежние, внутренний граф ацикличен. Baseline 6/42, профиль 7/43, полный Vitest 219/2317, TypeScript/Vite PASS. Этапы 6–7 открыты.
 - Этап 5 опубликован: 408b563f28b6c15e56b0726007aaf9d581738a97, ancestry PASS; docs handoff — коммит этой записи. Открыты загрузка рабочих областей и итоговый аудит.
+- Этапы 6–7 проверены: lazy editor/route с retry/status, callbacks/guards и жизненный цикл копий сохранены; профиль 5/17, full 220/2319, TypeScript/Vite PASS. Транзитивный initial JS 1 701 779 → 893 229 байт, −47,512%, shared model включён. Форматирование import/export списков не меняло тела объявлений. Последняя публикация/handoff следуют после code commit; owner acceptance и ZIP отдельно.

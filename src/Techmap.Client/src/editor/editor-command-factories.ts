@@ -1,4 +1,14 @@
-import { type Point, type ConnectorInstance, type ConnectorContact, createDefaultConnectorBaseColumns, defaultLayerIds, type WireEndpoint, type WireColorSource, type WireInstance, calculateWireCutLength } from "./model";
+import {
+  type Point,
+  type ConnectorInstance,
+  type ConnectorContact,
+  createDefaultConnectorBaseColumns,
+  defaultLayerIds,
+  type WireEndpoint,
+  type WireColorSource,
+  type WireInstance,
+  calculateWireCutLength,
+} from "./model";
 import { requireConnectorText, requirePartNumberText } from "./editor-command-invariants";
 
 export function createConnector(

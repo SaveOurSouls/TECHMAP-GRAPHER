@@ -1,19 +1,82 @@
-import { type CanvasViewportProps, type CoveringPointerDrag, type PointerDrag, type ObjectPointerDrag, type DrawingPointerDrag, type WireRoutePointerDrag, type E4WireSegmentPointerDrag, type E4WireLabelPointerDrag, type E4ScreenPointerDrag, type PhysicalNodeConnectPointerDrag } from "./canvas-viewport-types";
+import {
+  type CanvasViewportProps,
+  type CoveringPointerDrag,
+  type PointerDrag,
+  type ObjectPointerDrag,
+  type DrawingPointerDrag,
+  type WireRoutePointerDrag,
+  type E4WireSegmentPointerDrag,
+  type E4WireLabelPointerDrag,
+  type E4ScreenPointerDrag,
+  type PhysicalNodeConnectPointerDrag,
+} from "./canvas-viewport-types";
 import { useRef, useEffect, useState, useMemo, type PointerEvent, type DragEvent, type MouseEvent } from "react";
-import { type FreeWireEndpointRef, type EditorSelectionRectangle, type EditorSelectionMode, freeWireEndpointRefs, freeWireEndAxes, selectionRectangleObjectIds, snapFreeWireEndpointX } from "./canvas-selection";
+import {
+  type FreeWireEndpointRef,
+  type EditorSelectionRectangle,
+  type EditorSelectionMode,
+  freeWireEndpointRefs,
+  freeWireEndAxes,
+  selectionRectangleObjectIds,
+  snapFreeWireEndpointX,
+} from "./canvas-selection";
 import { type EditorPoint, type EditorSceneObject } from "./editor-types";
-import { ComponentTemplateImageCache, projectComponentTemplateView, projectE4DrawingCompanions, projectContactSideView } from "./component-template-view-renderer";
+import {
+  ComponentTemplateImageCache,
+  projectComponentTemplateView,
+  projectE4DrawingCompanions,
+  projectContactSideView,
+} from "./component-template-view-renderer";
 import { type DrawingGraphic, type DrawingGraphicKind } from "./drawing-documents";
-import { type E4ConnectableEndpoint, parseE4SceneOverlays, hitTestE4ScreenConnection, hitTestWireSegment, hitTestE4Screen, hitTestE4DifferentialPair, hitTestE4WireLabel, hitTestE4WireSegment, getE4WireRoute, getE4ScreenLayout, getE4ScreenPositionForPoint } from "./canvas-e4-scene";
+import {
+  type E4ConnectableEndpoint,
+  parseE4SceneOverlays,
+  hitTestE4ScreenConnection,
+  hitTestWireSegment,
+  hitTestE4Screen,
+  hitTestE4DifferentialPair,
+  hitTestE4WireLabel,
+  hitTestE4WireSegment,
+  getE4WireRoute,
+  getE4ScreenLayout,
+  getE4ScreenPositionForPoint,
+} from "./canvas-e4-scene";
 import { type E4ConnectorSnapGuides, snapE4ConnectorPosition } from "./e4-connector-snap";
-import { getVisibleCableSheathScene, containsPoint, hitTestEditorScene, hitTestWireRoutePoint, pipeMidpoints, coveringDragBlockedByPhysicalNode, hitTestWireEnd, e4Midpoints, hitTestCableSheath, pointToSegmentDistance } from "./canvas-scene-hit-test";
+import {
+  getVisibleCableSheathScene,
+  containsPoint,
+  hitTestEditorScene,
+  hitTestWireRoutePoint,
+  pipeMidpoints,
+  coveringDragBlockedByPhysicalNode,
+  hitTestWireEnd,
+  e4Midpoints,
+  hitTestCableSheath,
+  pointToSegmentDistance,
+} from "./canvas-scene-hit-test";
 import { getE4ConnectorLayout, hitTestConnectorContact } from "./canvas-connector-layout";
 import { redrawCanvas, drawEditorSceneObject } from "./canvas-scene-renderer";
 import { placementSceneObject } from "./termination-placement-interaction";
 import { warmCoveringTextures, coveringHit, coveringGrips } from "./covering-renderer";
-import { handleEditorViewportWheel, e4ConnectorSnapTarget, inlineObjectDragMoved, inlineObjectDragDestination, containInlineEditorPointerEvent, isInlineEditorControlTarget, isInlineEditorReadonlyTarget } from "./canvas-interaction-helpers";
+import {
+  handleEditorViewportWheel,
+  e4ConnectorSnapTarget,
+  inlineObjectDragMoved,
+  inlineObjectDragDestination,
+  containInlineEditorPointerEvent,
+  isInlineEditorControlTarget,
+  isInlineEditorReadonlyTarget,
+} from "./canvas-interaction-helpers";
 import { type CanvasHintTarget } from "./CanvasObjectHint";
-import { snapBendPoint, snapPhysicalPoint, physicalObjectSnapAnchors, physicalObjectRouteAnchors, bendSnapAnchors, pipeBendSnapAnchors, joiningPipeEndpointSnapAnchors } from "./physical-editing";
+import {
+  snapBendPoint,
+  snapPhysicalPoint,
+  physicalObjectSnapAnchors,
+  physicalObjectRouteAnchors,
+  bendSnapAnchors,
+  pipeBendSnapAnchors,
+  joiningPipeEndpointSnapAnchors,
+} from "./physical-editing";
 import { type DrawingOutline, snapDrawingPoint } from "../component-library/drawing-geometry";
 import { screenToWorld, panEditorCamera } from "./editor-camera";
 import { terminationSceneContainsPoint } from "./termination-scene";

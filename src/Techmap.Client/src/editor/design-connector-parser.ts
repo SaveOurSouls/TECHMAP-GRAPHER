@@ -1,11 +1,44 @@
-import { type ConnectorInstance, type ConnectorDrawingPlacement, type ConnectorLibraryContactKind, type ConnectorLibraryBinding, type ConnectorTerminalCatalog, type ComponentTemplateArticleKeySnapshot, type ComponentTemplateMaterializedSnapshot, type ComponentTemplateAssetSnapshot, type ComponentTemplateContactSnapshot, type ComponentTemplateContactRepresentationSnapshot, type ConnectorLibraryContact, type ConnectorSchematicPresentation, type ConnectorBaseColumn, type ConnectorBaseColumnKey, type ConnectorCustomField, type ConnectorContactStatus, type ConnectorContact } from "./design-types";
-import { requireRecord, requireText, requireString, requireInteger, optionalString, requireBoundedText, parsePoint, parseSha256, requireNumber } from "./design-parse-primitives";
+import {
+  type ConnectorInstance,
+  type ConnectorDrawingPlacement,
+  type ConnectorLibraryContactKind,
+  type ConnectorLibraryBinding,
+  type ConnectorTerminalCatalog,
+  type ComponentTemplateArticleKeySnapshot,
+  type ComponentTemplateMaterializedSnapshot,
+  type ComponentTemplateAssetSnapshot,
+  type ComponentTemplateContactSnapshot,
+  type ComponentTemplateContactRepresentationSnapshot,
+  type ConnectorLibraryContact,
+  type ConnectorSchematicPresentation,
+  type ConnectorBaseColumn,
+  type ConnectorBaseColumnKey,
+  type ConnectorCustomField,
+  type ConnectorContactStatus,
+  type ConnectorContact,
+} from "./design-types";
+import {
+  requireRecord,
+  requireText,
+  requireString,
+  requireInteger,
+  optionalString,
+  requireBoundedText,
+  parsePoint,
+  parseSha256,
+  requireNumber,
+} from "./design-parse-primitives";
 import { parseOuterDiameter, optionalCorrection } from "./wire-measurements";
 import { parseWireMaterialBinding } from "./design-wire-parser";
 import { parseTerminationComponent } from "./termination-model";
 import { restoreTemplateContactNumbers, templateContactNumbers } from "./template-contact-numbering";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";
-import { connectorE4TableGeometry, templateTerminalChoices, createDefaultConnectorBaseColumns, connectorBaseColumnKeys } from "./connector-presentation";
+import {
+  connectorE4TableGeometry,
+  templateTerminalChoices,
+  createDefaultConnectorBaseColumns,
+  connectorBaseColumnKeys,
+} from "./connector-presentation";
 import { validDrawingScale } from "./drawing-scale";
 
 export function parseConnector(value: unknown): ConnectorInstance {

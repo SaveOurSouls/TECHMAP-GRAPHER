@@ -1,6 +1,17 @@
 import { type ArticleBinding } from "./component-template-api";
-import { type ReferenceCatalogSearchRequest, type ReferenceCatalogSearchRecord, ReferenceCatalogApiError, type ReferenceCatalogApi } from "../reference-catalog-api";
-import { CONNECTOR_ARTICLE_ENTITY_V3, type NewArticleVariantV3Input, CONNECTOR_REFERENCE_SOURCE_V3, TERMINAL_ARTICLE_ENTITY_V3, TERMINAL_REFERENCE_SOURCE_V3 } from "./TemplateSeriesPanelV3";
+import {
+  type ReferenceCatalogSearchRequest,
+  type ReferenceCatalogSearchRecord,
+  ReferenceCatalogApiError,
+  type ReferenceCatalogApi,
+} from "../reference-catalog-api";
+import {
+  CONNECTOR_ARTICLE_ENTITY_V3,
+  type NewArticleVariantV3Input,
+  CONNECTOR_REFERENCE_SOURCE_V3,
+  TERMINAL_ARTICLE_ENTITY_V3,
+  TERMINAL_REFERENCE_SOURCE_V3,
+} from "./TemplateSeriesPanelV3";
 
 export const articleIdentity = (value: Pick<ArticleBinding, "sourceId" | "entityType" | "articleKey">) =>
   `${value.sourceId}\0${value.entityType}\0${value.articleKey}`;

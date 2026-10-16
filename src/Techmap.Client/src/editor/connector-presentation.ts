@@ -1,4 +1,13 @@
-import { type ConnectorInstance, type ConnectorContact, type ConnectorBaseColumnKey, type ConnectorBaseColumn, type ConnectorE4TableGeometry, type ConnectorE4TableColumn, type EditorView, type Point } from "./design-types";
+import {
+  type ConnectorInstance,
+  type ConnectorContact,
+  type ConnectorBaseColumnKey,
+  type ConnectorBaseColumn,
+  type ConnectorE4TableGeometry,
+  type ConnectorE4TableColumn,
+  type EditorView,
+  type Point,
+} from "./design-types";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { drawingLocalPoint } from "./drawing-scale";
 import { materializedContactWorldRepresentation } from "./materialized-contact-representation";

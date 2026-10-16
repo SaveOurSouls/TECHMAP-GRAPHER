@@ -1,7 +1,11 @@
 import { screenToWorld } from "./editor-camera";
 import { hitTestEditorScene, e4Midpoints } from "./canvas-scene-hit-test";
 import { materialObjectGroup } from "./MaterialObjectsPanel";
-import { projectE4DrawingCompanions, projectComponentTemplateView, projectContactSideView } from "./component-template-view-renderer";
+import {
+  projectE4DrawingCompanions,
+  projectComponentTemplateView,
+  projectContactSideView,
+} from "./component-template-view-renderer";
 import { getE4ConnectorLayout } from "./canvas-connector-layout";
 import { DRAWING_VIEW_PLACEMENT_ID, CONTACT_SIDE_VIEW_PLACEMENT_ID, drawingScale } from "./drawing-scale";
 import { DrawingResizeGrip } from "./DrawingResizeGrip";

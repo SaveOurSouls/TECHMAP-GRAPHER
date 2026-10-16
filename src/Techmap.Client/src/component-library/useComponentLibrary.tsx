@@ -1,28 +1,127 @@
 import { type Props, type Draft, type LoadedTemplate } from "./library-editor-types";
 import { useWireDatabaseLookup } from "../editor/editor-reference-catalog";
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import { createComponentTemplateApi, type ComponentTemplateSummary, type ArticleBinding, type ComponentTemplate, type ComponentTemplateDraft, type TemplateAsset } from "./component-template-api";
+import {
+  createComponentTemplateApi,
+  type ComponentTemplateSummary,
+  type ArticleBinding,
+  type ComponentTemplate,
+  type ComponentTemplateDraft,
+  type TemplateAsset,
+} from "./component-template-api";
 import { createReferenceCatalogApi } from "../reference-catalog-api";
-import { loadLibraryRecovery, newDraft, firstLayerIds, errorText, TEMPLATE_UNDO_LIMIT, compatibleTerminalsFromV3, applySeriesTerminalsToEditor, addLegacyArticleBindingsToV3, v3CoreFromV4, reconcileE4ConnectorTable, articleBindingsFromTemplateV3, shouldAutoSaveTemplate } from "./library-draft-adapters";
-import { LibraryNavigationController, type LibraryNavigationChoice, librarySaveAcknowledgesCurrentEdit } from "./library-navigation-controller";
-import { type DrawingTarget, drawingContactContent, articleDrawingView, findArticleDrawing, separateLegacyDrawings, drawingSelection } from "./drawing-bindings";
+import {
+  loadLibraryRecovery,
+  newDraft,
+  firstLayerIds,
+  errorText,
+  TEMPLATE_UNDO_LIMIT,
+  compatibleTerminalsFromV3,
+  applySeriesTerminalsToEditor,
+  addLegacyArticleBindingsToV3,
+  v3CoreFromV4,
+  reconcileE4ConnectorTable,
+  articleBindingsFromTemplateV3,
+  shouldAutoSaveTemplate,
+} from "./library-draft-adapters";
+import {
+  LibraryNavigationController,
+  type LibraryNavigationChoice,
+  librarySaveAcknowledgesCurrentEdit,
+} from "./library-navigation-controller";
+import {
+  type DrawingTarget,
+  drawingContactContent,
+  articleDrawingView,
+  findArticleDrawing,
+  separateLegacyDrawings,
+  drawingSelection,
+} from "./drawing-bindings";
 import { type TemplateV2Diagnostic, type ParameterValueV2 } from "./template-model-v2";
 import { type TemplatePointAngleModeV2 } from "./TemplateCanvasV2";
-import { type DrawingClipboard, drawingKeyboardAction, copyDrawingSelection, pasteDrawingSelection, deleteDrawingSelection, moveDrawingSelection } from "./drawing-selection";
+import {
+  type DrawingClipboard,
+  drawingKeyboardAction,
+  copyDrawingSelection,
+  pasteDrawingSelection,
+  deleteDrawingSelection,
+  moveDrawingSelection,
+} from "./drawing-selection";
 import { defaultDrawingSnaps } from "./drawing-geometry";
-import { isEditableConstantNode, isTemplateUndoShortcut, createTemplateImageNodeV2, isTemplateAssetReferencedV2, nextTemplateSelectionV2 } from "./library-node-editing";
+import {
+  isEditableConstantNode,
+  isTemplateUndoShortcut,
+  createTemplateImageNodeV2,
+  isTemplateAssetReferencedV2,
+  nextTemplateSelectionV2,
+} from "./library-node-editing";
 import { drawingArrayContactRows } from "./drawing-array-contacts";
-import { projectTemplateContentV3CoreToV2, setArticleVariantContactGroupV3, removeArticleVariantContactGroupV3, addAdditionalViewV3, addNodeV3 as addNodeV2, type BasicNodeKindV3 as BasicNodeKindV2, addBasicNodeV3 as addBasicNodeV2, linkLogicalContactPointV3 as linkLogicalContactPointV2, addContactPointV3 as addContactPointV2, addBundlePortV3 as addBundlePortV2, editContactPointV3 as editContactPointV2, constantExpressionV3 as constantExpressionV2, editBundlePortV3 as editBundlePortV2, moveNodeV3 as moveNodeV2, groupRootNodesV3, ungroupRootNodeV3, reorderRootNodeStepV3, setRootNodeRotationAroundCenterV3, type NodeResizeHandleV3 as NodeResizeHandleV2, resizeNodeV3 as resizeNodeV2, moveNodePointV3, insertNodePointV3, deleteNodePointV3, addAdditionalViewV3 as addAdditionalViewV2, addLayerV3 as addLayerV2 } from "./template-commands-v3";
-import { materializeE4ConnectorArticle, type E4ConnectorSeriesTable, createE4ConnectorSeriesTableFromV3, setArticleContactGroupStandardTerminal } from "./e4-connector-series-table";
+import {
+  projectTemplateContentV3CoreToV2,
+  setArticleVariantContactGroupV3,
+  removeArticleVariantContactGroupV3,
+  addAdditionalViewV3,
+  addNodeV3 as addNodeV2,
+  type BasicNodeKindV3 as BasicNodeKindV2,
+  addBasicNodeV3 as addBasicNodeV2,
+  linkLogicalContactPointV3 as linkLogicalContactPointV2,
+  addContactPointV3 as addContactPointV2,
+  addBundlePortV3 as addBundlePortV2,
+  editContactPointV3 as editContactPointV2,
+  constantExpressionV3 as constantExpressionV2,
+  editBundlePortV3 as editBundlePortV2,
+  moveNodeV3 as moveNodeV2,
+  groupRootNodesV3,
+  ungroupRootNodeV3,
+  reorderRootNodeStepV3,
+  setRootNodeRotationAroundCenterV3,
+  type NodeResizeHandleV3 as NodeResizeHandleV2,
+  resizeNodeV3 as resizeNodeV2,
+  moveNodePointV3,
+  insertNodePointV3,
+  deleteNodePointV3,
+  addAdditionalViewV3 as addAdditionalViewV2,
+  addLayerV3 as addLayerV2,
+} from "./template-commands-v3";
+import {
+  materializeE4ConnectorArticle,
+  type E4ConnectorSeriesTable,
+  createE4ConnectorSeriesTableFromV3,
+  setArticleContactGroupStandardTerminal,
+} from "./e4-connector-series-table";
 import { withDrawingArticleCounts } from "./drawing-array-commands";
 import { materializeArticleVariantV3 } from "./template-article-materialization-v3";
 import { materializeArticleContactRowsV3 } from "./template-article-contact-rows-v3";
-import { createTemplateContentV5FromEditor, type TerminalContactTypeBindingV5, projectTemplateContentV5ToV3, projectTemplateContentV5TableToV1 } from "./template-model-v5";
+import {
+  createTemplateContentV5FromEditor,
+  type TerminalContactTypeBindingV5,
+  projectTemplateContentV5ToV3,
+  projectTemplateContentV5TableToV1,
+} from "./template-model-v5";
 import { standardTerminalKeyV3 } from "./TemplateSeriesPanelV3";
 import { articleIdentity, searchTerminalArticles } from "./library-catalog-adapters";
-import { materializeGenerator, newDrawingGenerator, generatorFromLegacyArray, type DrawingGenerator, validateDrawingGenerators, type GeneratorRole, assignGeneratorRole, reconcileDrawingGenerators, guardGeneratorArticleEdit } from "./drawing-generator";
+import {
+  materializeGenerator,
+  newDrawingGenerator,
+  generatorFromLegacyArray,
+  type DrawingGenerator,
+  validateDrawingGenerators,
+  type GeneratorRole,
+  assignGeneratorRole,
+  reconcileDrawingGenerators,
+  guardGeneratorArticleEdit,
+} from "./drawing-generator";
 import { type TemplateContentV3 as TemplateContentV2 } from "./template-model-v3";
-import { isTemplateContentV5, isTemplateContentV1, upgradeComponentTemplateContentV1ToV3, isTemplateContentV2, upgradeComponentTemplateContentV2, reconcileTemplateEnvelopeAssets, isTemplateContentV3, isTemplateContentV4 } from "./template-content";
+import {
+  isTemplateContentV5,
+  isTemplateContentV1,
+  upgradeComponentTemplateContentV1ToV3,
+  isTemplateContentV2,
+  upgradeComponentTemplateContentV2,
+  reconcileTemplateEnvelopeAssets,
+  isTemplateContentV3,
+  isTemplateContentV4,
+} from "./template-content";
 import { removeLibraryDraftRecovery, writeLibraryDraftRecovery } from "./library-draft-recovery";
 import { reconcileArticleDrawings, detachIncompleteGenerators, clearArticleDrawings } from "./drawing-reset";
 import { expandTemplateRepeatsV2 } from "./template-repeat-v2";

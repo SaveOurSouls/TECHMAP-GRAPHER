@@ -1,6 +1,33 @@
-import { type HarnessDesignDocument, type ConnectorInstance, connectorE4TableGeometry, wireEndpointE4Anchor, validateE4Polyline, isJunctionEndpoint, isScreenEndpoint, type Point, type WireInstance, wireE4PathContainsPoint } from "./model";
-import { updateConnector, isConnectorEndpoint, findWire, validateJunctionAgainstWires, validateWireGroups, requireJunction } from "./editor-command-invariants";
-import { screenJunctionEnds, validateE4WireIds, wireRouteTouchesConnector, createE4RoutingRequest, simplifyE4IntermediateRoute, e4RoutingScore, validateAllE4Wires, orthogonalPathProjectionDistance } from "./command-e4-analysis";
+import {
+  type HarnessDesignDocument,
+  type ConnectorInstance,
+  connectorE4TableGeometry,
+  wireEndpointE4Anchor,
+  validateE4Polyline,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  type Point,
+  type WireInstance,
+  wireE4PathContainsPoint,
+} from "./model";
+import {
+  updateConnector,
+  isConnectorEndpoint,
+  findWire,
+  validateJunctionAgainstWires,
+  validateWireGroups,
+  requireJunction,
+} from "./editor-command-invariants";
+import {
+  screenJunctionEnds,
+  validateE4WireIds,
+  wireRouteTouchesConnector,
+  createE4RoutingRequest,
+  simplifyE4IntermediateRoute,
+  e4RoutingScore,
+  validateAllE4Wires,
+  orthogonalPathProjectionDistance,
+} from "./command-e4-analysis";
 import { routeE4WireThroughWaypoints, validateE4Route, type E4RouterAnchor, routeE4Wire } from "./e4-router";
 import { compactAutomaticDifferentialPairs } from "./command-e4-pair-planner";
 

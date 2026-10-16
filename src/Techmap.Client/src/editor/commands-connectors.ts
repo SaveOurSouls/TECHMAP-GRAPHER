@@ -1,10 +1,65 @@
-import { validateConnectorLibraryMetadata, type Point, wireEndpointE4Anchor, wireE4PathContainsPoint, type ConnectorInstance, isJunctionEndpoint, isScreenEndpoint, parseOuterDiameter, connectorE4Contacts, connectorBaseColumnKeys, type HarnessDesignDocument } from "./model";
-import { rememberCustomWireColors, updateConnector, replaceRequired, findWire, validateJunctionAgainstWires, validateWireGroups, requireConnectorText, requirePartNumberText, normalizeContact, validateUniqueContacts, requireContactNumber, requireContactStatus, isContactConnected, normalizeCustomValues, normalizeValue, normalizeTemplateTerminalArticle, contactWireCount, syncDirectWireColors, contactAtEndpoint, sameConnectorEndpoint, syncContactWireMaterial, resetContactColorToAutomatic, isConnectorEndpoint, removeRequired, normalizeCustomField, cleanupWireReferences } from "./editor-command-invariants";
-import { rebuildConnectorE4Wires, spreadMovedE4Shoulders, repairE4JunctionBranches, rerouteE4WireBatch, screenAttachmentWireIds, rerouteWireE4ThroughJunctions, retainEditableE4Routes, updateConnectorE4Geometry } from "./command-e4-routing";
+import {
+  validateConnectorLibraryMetadata,
+  type Point,
+  wireEndpointE4Anchor,
+  wireE4PathContainsPoint,
+  type ConnectorInstance,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  parseOuterDiameter,
+  connectorE4Contacts,
+  connectorBaseColumnKeys,
+  type HarnessDesignDocument,
+} from "./model";
+import {
+  rememberCustomWireColors,
+  updateConnector,
+  replaceRequired,
+  findWire,
+  validateJunctionAgainstWires,
+  validateWireGroups,
+  requireConnectorText,
+  requirePartNumberText,
+  normalizeContact,
+  validateUniqueContacts,
+  requireContactNumber,
+  requireContactStatus,
+  isContactConnected,
+  normalizeCustomValues,
+  normalizeValue,
+  normalizeTemplateTerminalArticle,
+  contactWireCount,
+  syncDirectWireColors,
+  contactAtEndpoint,
+  sameConnectorEndpoint,
+  syncContactWireMaterial,
+  resetContactColorToAutomatic,
+  isConnectorEndpoint,
+  removeRequired,
+  normalizeCustomField,
+  cleanupWireReferences,
+} from "./editor-command-invariants";
+import {
+  rebuildConnectorE4Wires,
+  spreadMovedE4Shoulders,
+  repairE4JunctionBranches,
+  rerouteE4WireBatch,
+  screenAttachmentWireIds,
+  rerouteWireE4ThroughJunctions,
+  retainEditableE4Routes,
+  updateConnectorE4Geometry,
+} from "./command-e4-routing";
 import { CONTACT_SIDE_VIEW_PLACEMENT_ID, validDrawingScale } from "./drawing-scale";
 import { carryPhysicalExits } from "./physical-editing";
 import { screenJunctionEnds, wireRouteTouchesConnector, validateE4WireIds } from "./command-e4-analysis";
-import { moveE4Ends, orthogonalE4Deformation, movedE4Junctions, preserveE4Leads, resolveE4JunctionMoves, followE4Junctions } from "./e4-editing";
+import {
+  moveE4Ends,
+  orthogonalE4Deformation,
+  movedE4Junctions,
+  preserveE4Leads,
+  resolveE4JunctionMoves,
+  followE4Junctions,
+} from "./e4-editing";
 import { type EditorCommand } from "./editor-command-types";
 
 export function applyConnectorsCommand(document: HarnessDesignDocument, command: Extract<EditorCommand, { type: "add-connector" | "set-contact-side-view" | "move-connector" | "update-connector" | "apply-connector-article" | "flip-connector-orientation" | "update-contact" | "reset-contact-color-auto" | "add-contact" | "move-contact-row" | "remove-contact" | "set-name-column-visibility" | "toggle-base-column-visibility" | "add-custom-field" | "remove-custom-field" | "toggle-custom-field-visibility" | "remove-connector" }>): HarnessDesignDocument {

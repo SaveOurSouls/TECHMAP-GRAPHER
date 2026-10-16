@@ -1,9 +1,29 @@
-import { type HarnessDesignDocument, type WireEndpoint, wireEndpointE4Anchor, isJunctionEndpoint, isScreenEndpoint, findWireEndpoint, connectorContactPosition, connectorE4Contacts, connectorE4TableGeometry, connectorContactName, calculateWireCutLength } from "./model";
+import {
+  type HarnessDesignDocument,
+  type WireEndpoint,
+  wireEndpointE4Anchor,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  findWireEndpoint,
+  connectorContactPosition,
+  connectorE4Contacts,
+  connectorE4TableGeometry,
+  connectorContactName,
+  calculateWireCutLength,
+} from "./model";
 import { type HarnessEditorView, type EditorSceneObject } from "./editor-types";
 import { type DrawingPerimeters } from "./drawing-object-perimeter";
-import { materializedContactWorldRepresentation, selectMaterializedContactRepresentation } from "./materialized-contact-representation";
+import {
+  materializedContactWorldRepresentation,
+  selectMaterializedContactRepresentation,
+} from "./materialized-contact-representation";
 import { terminationSceneObject } from "./termination-scene";
-import { drawingLocalPoint, drawingLocalDirection, DRAWING_VIEW_PLACEMENT_ID, drawingLocalDirectionVector } from "./drawing-scale";
+import {
+  drawingLocalPoint,
+  drawingLocalDirection,
+  DRAWING_VIEW_PLACEMENT_ID,
+  drawingLocalDirectionVector,
+} from "./drawing-scale";
 import { builtInConnectorSeries } from "./connector-series-demo";
 import { terminalArticleLabel } from "./terminal-article-label";
 import { physicalWirePoints, physicalWireDisplay } from "./physical-wire-geometry";

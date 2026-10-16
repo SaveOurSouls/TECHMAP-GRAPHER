@@ -49,13 +49,42 @@ export {
 } from "./canvas-e4-scene";
 export { objectsInPaintOrder } from "./canvas-paint-order";
 export {
-  e4ContactMarker, getE4ConnectorLayout, getMaterializedConnectorContactPoints, hitTestConnectorContact,
-  type E4ConnectorColumnLayout, type E4ConnectorLayout, type E4ContactMarkerGeometry,
+  e4ContactMarker,
+  getE4ConnectorLayout,
+  getMaterializedConnectorContactPoints,
+  hitTestConnectorContact,
+  type E4ConnectorColumnLayout,
+  type E4ConnectorLayout,
+  type E4ContactMarkerGeometry,
   type MaterializedConnectorContactPoint,
 } from "./canvas-connector-layout";
 export { drawSelectedConnectorContacts } from "./canvas-connector-renderer";
 export { type CanvasViewportProps } from "./canvas-viewport-types";
-export { handleEditorViewportWheel, containInlineEditorPointerEvent, isInlineEditorReadonlyTarget, isInlineEditorControlTarget, inlineObjectDragMoved, inlineObjectDragDestination } from "./canvas-interaction-helpers";
-export { type WireDrawingEndArtworkPlacement, wireDrawingEndArtworkPlacement, drawEditorSceneObject, redrawCanvas, drawCableSheaths } from "./canvas-scene-renderer";
-export { type FreeWireEndpointRef, type EditorSelectionRectangle, objectIntersectsSelectionRectangle, selectionRectangleObjectIds, type EditorSelectionMode, type FreeWireEndAxis, freeWireEndpointRefs, freeWireEndAxes, freeWireEndpointAxis, snapFreeWireEndpointX } from "./canvas-selection";
+export {
+  handleEditorViewportWheel,
+  containInlineEditorPointerEvent,
+  isInlineEditorReadonlyTarget,
+  isInlineEditorControlTarget,
+  inlineObjectDragMoved,
+  inlineObjectDragDestination,
+} from "./canvas-interaction-helpers";
+export {
+  type WireDrawingEndArtworkPlacement,
+  wireDrawingEndArtworkPlacement,
+  drawEditorSceneObject,
+  redrawCanvas,
+  drawCableSheaths,
+} from "./canvas-scene-renderer";
+export {
+  type FreeWireEndpointRef,
+  type EditorSelectionRectangle,
+  objectIntersectsSelectionRectangle,
+  selectionRectangleObjectIds,
+  type EditorSelectionMode,
+  type FreeWireEndAxis,
+  freeWireEndpointRefs,
+  freeWireEndAxes,
+  freeWireEndpointAxis,
+  snapFreeWireEndpointX,
+} from "./canvas-selection";
 export { CanvasViewport } from "./CanvasViewportSurface";

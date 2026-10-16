@@ -1,7 +1,37 @@
-import { findWire, snapE4AngularBend, updateConnector, replaceRequired, requireWireIds, pointOnOrthogonalSegment, validateJunctionAgainstWires, validateWireGroups } from "./editor-command-invariants";
-import { screenJunctionEnds, createE4RoutingRequest, requireE4ModeGeometry, validateE4WireIds } from "./command-e4-analysis";
-import { editedE4Points, orthogonalE4Deformation, movedE4Junctions, preserveE4Leads, followE4Junctions } from "./e4-editing";
-import { repairE4JunctionBranches, setE4WireRoute, rebuildConnectorE4Wires, retainEditableE4Routes, reflowWiresAroundLabel, removeE4WireRoutePoint, rerouteE4WireBatch, screenAttachmentWireIds, rerouteWireE4ThroughJunctions } from "./command-e4-routing";
+import {
+  findWire,
+  snapE4AngularBend,
+  updateConnector,
+  replaceRequired,
+  requireWireIds,
+  pointOnOrthogonalSegment,
+  validateJunctionAgainstWires,
+  validateWireGroups,
+} from "./editor-command-invariants";
+import {
+  screenJunctionEnds,
+  createE4RoutingRequest,
+  requireE4ModeGeometry,
+  validateE4WireIds,
+} from "./command-e4-analysis";
+import {
+  editedE4Points,
+  orthogonalE4Deformation,
+  movedE4Junctions,
+  preserveE4Leads,
+  followE4Junctions,
+} from "./e4-editing";
+import {
+  repairE4JunctionBranches,
+  setE4WireRoute,
+  rebuildConnectorE4Wires,
+  retainEditableE4Routes,
+  reflowWiresAroundLabel,
+  removeE4WireRoutePoint,
+  rerouteE4WireBatch,
+  screenAttachmentWireIds,
+  rerouteWireE4ThroughJunctions,
+} from "./command-e4-routing";
 import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { wireEndpointE4Anchor, type HarnessDesignDocument, validateE4Polyline } from "./model";
 import { validateE4Route } from "./e4-router";

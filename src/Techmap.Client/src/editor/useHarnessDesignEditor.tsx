@@ -9,22 +9,52 @@ import { createGlobalCoveringPreparer, coveringMaterialChanged } from "./global-
 import { useEditorReferenceCatalog, useTerminalArticleLookup, useWireDatabaseLookup } from "./editor-reference-catalog";
 import { type HarnessEditorView, type EditorCatalogItem } from "./editor-types";
 import { type TerminationArtifact } from "./termination-model";
-import { type HarnessDesignDocument, isJunctionEndpoint, isScreenEndpoint, connectorE4TableGeometry, findWireEndpoint, type WireEndpoint } from "./model";
+import {
+  type HarnessDesignDocument,
+  isJunctionEndpoint,
+  isScreenEndpoint,
+  connectorE4TableGeometry,
+  findWireEndpoint,
+  type WireEndpoint,
+} from "./model";
 import { createTerminationPlacement } from "../termination-library";
-import { type EditorHistory, createEditorHistory, executeEditorCommand, undoEditorCommand, redoEditorCommand } from "./history";
+import {
+  type EditorHistory,
+  createEditorHistory,
+  executeEditorCommand,
+  undoEditorCommand,
+  redoEditorCommand,
+} from "./history";
 import { useCoveringAssets } from "./covering-assets";
 import { type DrawingSnaps, defaultDrawingSnaps } from "../component-library/drawing-geometry";
 import { type JoiningPipeDraft } from "./JoiningPipeEditor";
 import { buildHarnessSelectionIndex, resolveHarnessSelection } from "./harness-selection";
 import { type EditorSaveState } from "./HarnessEditorWorkspace";
-import { type ProjectComponentSnapshotLookup, acceptProjectComponentSnapshotLookup, loadComponentTemplateForLocalCopy, localTemplateSnapshot, buildComponentTemplateViewInstances, loadComponentTemplateForPlacement } from "./harness-component-snapshots";
+import {
+  type ProjectComponentSnapshotLookup,
+  acceptProjectComponentSnapshotLookup,
+  loadComponentTemplateForLocalCopy,
+  localTemplateSnapshot,
+  buildComponentTemplateViewInstances,
+  loadComponentTemplateForPlacement,
+} from "./harness-component-snapshots";
 import { DesignSaveCoordinator } from "./design-save-coordinator";
 import { resolveConnectedWireMaterials } from "./resolve-wire-materials";
 import { hydrateTerminalDetails, wireEndTerminalCorrections } from "./terminal-details";
-import { readHarnessDesignRecoveryDraft, browserRecoveryStorage, removeHarnessDesignRecoveryDraft, writeHarnessDesignRecoveryDraft } from "./design-recovery-draft";
+import {
+  readHarnessDesignRecoveryDraft,
+  browserRecoveryStorage,
+  removeHarnessDesignRecoveryDraft,
+  writeHarnessDesignRecoveryDraft,
+} from "./design-recovery-draft";
 import { reconcileDrawingDocuments, moveDrawingAnnotation } from "./drawing-documents";
 import { migrateJoiningPipes, joiningPipeEndpoint, joiningPipeExit } from "./physical-joining-pipes";
-import { normalizeEditorSelection, selectedEditorDeletionCommands, toUiLayers, snapRoutePoint } from "./harness-selection-adapters";
+import {
+  normalizeEditorSelection,
+  selectedEditorDeletionCommands,
+  toUiLayers,
+  snapRoutePoint,
+} from "./harness-selection-adapters";
 import { buildDrawingPerimeters } from "./drawing-object-perimeter";
 import { type PhysicalCovering, coveringMaterial } from "./physical-coverings";
 import { applyEditorCommand, e4RoutingIssues, type EditorCommand, createWire } from "./commands";
@@ -40,12 +70,21 @@ import { volumeShadingEligible } from "./volume-shading";
 import { ensureConnectorExits } from "./physical-topology";
 import { terminationSceneObject } from "./termination-scene";
 import { type TerminationLibraryRecord } from "../termination-library/catalog";
-import { materializePlacementRows, rematerializeComponentTemplateConnectorArticle, firstPlaceableArticleVariantId, createConnectorInstanceFromComponentTemplateV3 } from "./component-template-placement";
+import {
+  materializePlacementRows,
+  rematerializeComponentTemplateConnectorArticle,
+  firstPlaceableArticleVariantId,
+  createConnectorInstanceFromComponentTemplateV3,
+} from "./component-template-placement";
 import { builtInConnectorSeries, createBuiltInConnectorInstance } from "./connector-series-demo";
 import { isTemplateContentV3, isTemplateContentV4, isTemplateContentV5 } from "../component-library/template-content";
 import { refreshedTemplateTerminalCatalog } from "./template-terminal-catalog";
 import { builtInWireColors, createCustomWireColor, resolveWireColorHex } from "./wire-reference-catalog";
-import { wireStripProfileUpdateFromCatalogItem, cableMaterialUpdateFromCatalogItem, wireMaterialUpdateFromCatalogItem } from "./harness-catalog-adapters";
+import {
+  wireStripProfileUpdateFromCatalogItem,
+  cableMaterialUpdateFromCatalogItem,
+  wireMaterialUpdateFromCatalogItem,
+} from "./harness-catalog-adapters";
 import { detachedWireBendInsertionIndex } from "./detached-wire-editing";
 import { type E4DifferentialPairState, type E4ScreenState } from "./e4-wire-selection-state";
 
