@@ -79,6 +79,41 @@ it("moves the derived midpoint before the new shared exit instead of keeping the
  expect(projectOntoPolyline(drawingRouteHitPoints(scene.points!,scene.routeRadius),midpoint).distance).toBeLessThan(1e-6);
 });
 
+it.each([0,Math.PI/4,Math.PI/2,Math.PI])("keeps a positive clearance from the purple shared exit without folding near a connector (angle=%s)",angle=>{
+ for(const reverse of [false,true])for(const persisted of [false,true])for(const side of ["from","to"] as const){
+  const source=fixture(reverse,persisted,angle);
+  let history=createEditorHistory(source);
+  for(const length of [180,220,260,280,290,299,300,290,260,180]){
+   const op=history.present.physicalTopology!.joiningPipes![0]!,outward=joiningPipeExitVector(op,side),edge=side==="from"?op.start:op.end;
+   history=executeEditorCommand(history,{type:"update-joining-pipe-exit",pipeId:"op",side,position:{x:edge.x+outward.x*length,y:edge.y+outward.y*length}});
+   const document=history.present,controls=joiningPipeMemberControls(document,"p1")!;
+   const entering=side==="from"?!reverse:reverse;
+   const outer=controls.find(c=>c.boundary===(entering?"outerEnter":"outerExit"))!.point;
+   const lead=controls.find(c=>c.lead===(entering?"enter":"exit"))!.point;
+   const segment=document.physicalTopology!.segments.find(s=>s.id==="p1")!;
+   const endpoint=document.physicalTopology!.nodes.find(n=>n.id===(entering?segment.from:segment.to))!.position;
+   const available=(endpoint.x-lead.x)*outward.x+(endpoint.y-lead.y)*outward.y;
+   const expectedGap=Math.min(20,Math.max(0,available/2));
+   const gap=(outer.x-lead.x)*outward.x+(outer.y-lead.y)*outward.y;
+   expect(gap,`${side}, length=${length}, reverse=${reverse}, persisted=${persisted}`).toBeGreaterThanOrEqual(expectedGap-1e-7);
+   const samples=joiningPipeDisplaySamples(document,"p1")!.map(s=>s.point),direction=reverse?-1:1;
+   for(let index=1;index<samples.length;index++){
+    const a=samples[index-1]!,b=samples[index]!;
+    expect(((b.x-a.x)*Math.cos(angle)+(b.y-a.y)*Math.sin(angle))*direction).toBeGreaterThanOrEqual(-1e-7);
+   }
+   const restored=parseHarnessDesignDocument(JSON.parse(JSON.stringify(document)));
+   expect(joiningPipeMemberControls(restored,"p1")).toEqual(controls);
+  }
+  expect(redoEditorCommand(undoEditorCommand(history)).present).toEqual(history.present);
+ }
+});
+
+it("preserves outer stations which already leave enough clearance",()=>{
+ const source=fixture(),controls=joiningPipeMemberControls(source,"p1")!;
+ expect(controls.find(c=>c.boundary==="outerEnter")!.point).toEqual({x:150,y:80});
+ expect(controls.find(c=>c.boundary==="outerExit")!.point).toEqual({x:850,y:80});
+});
+
 it("keeps live wires, coverings and assigned lengths unchanged through shared exit moves",()=>{
  const d=parseHarnessDesignDocument(JSON.parse(JSON.stringify(physicalFixture())));
  const before={...d,wires:d.wires.map(wire=>({...wire,lengthMm:720}))};
