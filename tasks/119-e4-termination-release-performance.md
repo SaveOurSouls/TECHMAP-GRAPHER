@@ -34,10 +34,10 @@
 
 - Регистрация: `e2a255a0e810b1cc718a62297354f078e52e721b`, опубликована.
 - Коммит кода: `570a0f3d4bd7a89bef826cafc9145a34636343c1`, опубликован; документальный SHA передаётся после push этого среза.
-- Handoff сборщику: [точный протокол](../docs/coordination/handoff-118-e4-termination-release.md).
+- Handoff сборщику: [точный протокол](../docs/coordination/handoff-119-e4-termination-release.md).
 - Интеграционный commit/эквивалент: ожидает координатора.
 - ZIP / release coverage: следующий срез после M5-22-053, ZIP не заказан.
-- Проверки 16.10.2026: Vitest 219/2336, 17 новых регрессий, TypeScript/Vite, browser carry/Shift/Escape/autosave/Undo/Redo, benchmark и diff/staged-check PASS. [Приёмочный протокол](../docs/e4-termination-release-118-acceptance.md).
+- Проверки 16.10.2026: Vitest 219/2336, 17 новых регрессий, TypeScript/Vite, browser carry/Shift/Escape/autosave/Undo/Redo, benchmark и diff/staged-check PASS. [Приёмочный протокол](../docs/e4-termination-release-119-acceptance.md).
 - Замер команды с подготовкой сцены: обычный перенос 1108,297 → 1,107 мс; Shift 1209,689 → 1,061 мс (медианы одинакового benchmark). Глобальный пересчёт при отпускании заменён проверкой локальной деформации; поиск остаётся для реальных конфликтов.
 - Ограничения: исходный пользовательский жгут и packaged UI не проверены; для конфликтного общего контакта в браузере сохраняется локальный поиск (13–15 мс команды после прогрева). Таймаут конкурентного запуска теста и предупреждения завершения workers при успешном повторе зафиксированы в протоколе.
 - Решение владельца о приёмке: открыто.

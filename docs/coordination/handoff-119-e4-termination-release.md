@@ -1,7 +1,7 @@
-# Handoff 118 — задержка при отпускании оконцовки Э4
+# Handoff 119 — задержка при отпускании оконцовки Э4
 
 - Чат: `01a140c3-46d1-7f81-ac60-ad27761a2ca2`.
-- [Карточка 118](../../tasks/118-e4-termination-release-performance.md), REQ-153; ready-for-review.
+- [Карточка 119](../../tasks/119-e4-termination-release-performance.md), REQ-154; ready-for-review.
 - Ветка: `codex/e4-termination-release-performance`; worktree `tmp/e4-termination-release-performance`.
 - База: `f47d55e9078fc792cf30500592711f35b72b4000`.
 - Регистрация: `e2a255a0e810b1cc718a62297354f078e52e721b`.
@@ -20,7 +20,7 @@
 **1209,689 → 1,061 мс** (Shift), медианы. Для реального конфликта общего контакта
 локальный поиск в браузере остаётся: 13–15 мс прогретой команды, примерно 35–75 мс
 до первого кадра в повторных browser прогонах. Подробности:
-[приёмочный протокол](../e4-termination-release-118-acceptance.md).
+[приёмочный протокол](../e4-termination-release-119-acceptance.md).
 
 PASS: **219 файлов / 2336 тестов**, включая 17 новых регрессий, TypeScript/Vite,
 benchmark с проверкой результата, Chrome carry/Shift/Escape/autosave/Undo/Redo,

@@ -1,6 +1,6 @@
 # Очередь задач
 
-[118 — исключение Маршрута и Маршрута v2](118-retire-legacy-routes.md): in-progress; REQ-153, план и границы агентов зафиксированы. ZIP не заказан.
+[118 — исключение Маршрута, Маршрута v2 и UML](118-retire-legacy-routes.md): ready-for-review; REQ-153, код и handoff опубликованы, интеграция проверяется.
 
 
 Карточка [099 — дизайн многопроводных оконцовок](099-multi-wire-termination-design.md) принята владельцем. [104 — кодовая реализация](104-multi-wire-termination-implementation.md) внедряет REQ-135 в библиотеку, Э4, Чертёж и Маршрут V3; проверки и ограничения — в [протоколе](../docs/termination-104-acceptance.md).
@@ -139,5 +139,5 @@
 | 116 | [Учесть наконечники в Маршруте V3](116-route-v3-wire-terminals.md) | accepted | REQ-151: интегрировано `8267e3b`/`6df71de`; Vitest 218/2319, TypeScript/Vite PASS. |
 
 | 117 | [Заготовки проводов по схемам](117-wire-preparation-schemes.md) | ready-for-review | REQ-152: справочник, defaults, цепочки V3. |
-| 118 | [Исключить Маршрут и Маршрут v2](118-retire-legacy-routes.md) | in-progress | REQ-153: убрать старые страницы и UML, сохранить V3. |
-| 119 | [Убрать задержку фиксации оконцовки Э4](119-e4-termination-release-performance.md) | in-progress | REQ-154: ускорить финальную фиксацию после отпускания, сохранив валидацию и топологию. |
+| 118 | [Исключить Маршрут и Маршрут v2](118-retire-legacy-routes.md) | ready-for-review | REQ-153: убрать старые страницы и UML, сохранить V3. |
+| 119 | [Убрать задержку фиксации оконцовки Э4](119-e4-termination-release-performance.md) | ready-for-review | REQ-154: ускорить финальную фиксацию после отпускания, сохранив валидацию и топологию. |

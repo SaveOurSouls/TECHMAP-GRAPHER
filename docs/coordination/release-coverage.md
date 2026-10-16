@@ -1,11 +1,11 @@
 # Release coverage
 
-## Pending after M5-22-053 — карточка 119 / REQ-154
+## Подготовка следующего среза после M5-22-053, 16.10.2026
 
 - **Chat:** `01a140c3-46d1-7f81-ac60-ad27761a2ca2`; owner explicitly requested removal of the ~1.1 s release delay on 16.10.2026.
 - **Branch / worktree / base:** `codex/e4-termination-release-performance` / `tmp/e4-termination-release-performance` / `f47d55e9078fc792cf30500592711f35b72b4000`.
 - **Scope:** final E4 termination commit path, independent of card 117. Source and destination worktrees for cards 110/115 remain untouched.
-- **Status:** in-progress; no code/handoff commits yet. ZIP not ordered.
+- **Status:** ready-for-review; исходные code `570a0f3d4bd7a89bef826cafc9145a34636343c1` и handoff `a76cc1124c7e28a4aaf6090ebb88812cd9fb7abc` опубликованы. Интеграционные эквиваленты: код `f9fba74`, регистрация `e9fdcd5`, handoff `15cea57`; номер нормализован на 119 / REQ-154. Проверка общего HEAD и ZIP выполняется отдельно.
 
 ### m5-22-053 — 16.10.2026
 
