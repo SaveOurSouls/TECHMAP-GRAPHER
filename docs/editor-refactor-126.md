@@ -32,3 +32,15 @@ Surface вызывает useCanvasViewport, деструктурирует 68 и
 - AST-сверка объявлений/контроллера/JSX, отсутствие обратных facade-импортов, прежние canvas-эталоны, diff-check/review и новые ссылки PASS. Временные evidence в ignored tmp/refactor-126.
 
 Этапы commands/model/ComponentLibrary, загрузка и итоговый аудит остаются открыты.
+
+## Этап 3: команды
+
+commands.ts становится фасадом. 75 ветвей applyCommand разделены на commands-physical (14), commands-connectors (17), commands-wires (20), commands-e4 (10), commands-groups (11), commands-layers (3). Каждый handler принимает Extract<EditorCommand, {type: ...}>; общий dispatcher сохраняет исходные теги и вызывает ровно один handler. Прежний pipeline applyEditorCommand, включая termination bypass, snapshot общих свойств, physical route/topology, размеры, drawing documents и writer contract, скопирован без изменения.
+
+Отдельные модули: editor-command-types **87**, factories **78**, dispatcher **113**, invariants **591**, command-e4-routing **518**, analysis **249**, pair-planner **131** строка. Размеры handlers: 142/415/323/175/170/23 строки соответственно группам выше. Новые внутренние helpers не раскрываются фасадом.
+
+- AST-сверка: **86 объявлений**, все **75 исходных case-блоков**, точный pipeline и сгенерированный dispatcher PASS. После удаления type-only imports граф новых runtime-модулей ацикличен, обратных импортов commands-фасада нет.
+- Baseline **6 файлов / 136 тестов PASS**, 16,56 с. После переноса с новым тестом полного публичного API: **7/137 PASS**, 14,26 с. Первоначальный facade-тест сравнивал namespace с plain object; сравнение исправлено на spread namespace, без изменения production-кода.
+- Полный Vitest **217 файлов / 2315 тестов PASS**, 78,75 с; TypeScript/Vite PASS, Vite 1,25 с. Прежнее предупреждение размера chunk сохраняется. commands.ts **2897 → 5 строк** фасада. Прежние 22 canvas-эталона, diff-check/review и новые ссылки PASS.
+
+Этапы 4–7 остаются открыты.

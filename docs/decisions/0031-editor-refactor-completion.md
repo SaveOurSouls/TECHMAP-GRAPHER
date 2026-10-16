@@ -14,6 +14,8 @@ CanvasViewport разделён на canvas-selection (геометрия рам
 
 Этап HarnessDesignEditor реализован: projection, snapshots, catalog/selection adapters, types, error boundary, controller hook и JSX surface. Для единственного раннего return используется ready-discriminator, позволяющий surface вернуть прежнюю загрузочную разметку; порядок hooks и основной JSX не меняются. Фасад сохраняет API и приватность внутренних helpers.
 
+Команды разделены на шесть handlers по discriminant type. Ветви скопированы, Extract сохраняет точное сужение типов внутри каждой группы. Общий entry point и его последовательность нормализации остаются прежними; handlers и unchecked helpers не экспортируются публичным фасадом. Расчёты routing request/проверки и pair planner отделены от оркестрации маршрутизации, чтобы не создавать runtime-циклы.
+
 ## Доказательства
 
 Существующие эталоны остаются замороженными. Проверяется не только наличие экспортов, но и идентичность реализаций через прежний путь. Состояние цельной задачи остаётся in-progress до выполнения всех пунктов карточки 126; завершённый CanvasViewport не объявляется завершением всего плана. [Протокол](../editor-refactor-126.md).
