@@ -2,7 +2,7 @@
 
 ## 123 — renderer Э4, следующий срез после M5-22-054
 
-REQ-158, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 123](../../tasks/123-canvas-e4-renderer.md); in-progress, код/handoff pending, integration-ветка. В M5-22-054 не входит; до завершения handoff новая поставка блокируется. ZIP не заказан.
+REQ-158, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 123](../../tasks/123-canvas-e4-renderer.md); ready-for-review. Код **`568a16f747599927c6ab6fea4af39258dc905cd5`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-123-canvas-e4-renderer.md) — этот docs-коммит. PASS: профиль 9/134, 16 неизменных эталонов, полный Vitest 212/2292, TypeScript/Vite, diff-check/review. В M5-22-054 не входит; включить с 120–122 в следующий заказанный релиз, проверить code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.
 
 ## 122 — геометрия сцены Э4, следующий срез после M5-22-054
 

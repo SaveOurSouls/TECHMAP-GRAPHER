@@ -2,7 +2,7 @@
 
 ## 123 — renderer Э4 вне CanvasViewport, 16.10.2026
 
-Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-158, [карточка 123](../../tasks/123-canvas-e4-renderer.md); in-progress. Основная `codex/integration-m5-22`, база `8962aef`. Владелец: CanvasViewport, новый canvas-e4-renderer, свои тесты/эталоны и docs. Геометрия, команды, соединители и П/ОП исключены. Coverage: следующий срез после M5-22-054; ZIP не заказан.
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-158, [карточка 123](../../tasks/123-canvas-e4-renderer.md); ready-for-review. Основная `codex/integration-m5-22`, база `8962aef`. Владелец: CanvasViewport, новый canvas-e4-renderer, свои тесты/эталоны и docs. Геометрия, команды, соединители и П/ОП не менялись. Code SHA `568a16f747599927c6ab6fea4af39258dc905cd5` опубликован, ancestry PASS; [handoff](handoff-123-canvas-e4-renderer.md). PASS: Vitest 212/2292, TypeScript/Vite, 16 эталонов, diff-check/review. Coverage: следующий срез после M5-22-054; ZIP не заказан, owner acceptance открыта.
 
 ## 122 — геометрия сцены Э4 вне CanvasViewport, 16.10.2026
 

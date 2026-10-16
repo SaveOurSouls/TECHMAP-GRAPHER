@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — renderer Э4 CanvasViewport, карточка 123
+
+Code SHA `568a16f747599927c6ab6fea4af39258dc905cd5` опубликован прямо в `codex/integration-m5-22`, push `8962aef..568a16f`; ancestry PASS. REQ-158, ADR-0028, [handoff](handoff-123-canvas-e4-renderer.md). CanvasViewport 3151 → 2923 строки; renderer Э4 и общий stroke выделены без изменения остального viewport и порядка проходов. PASS: профиль 9/134, девять новых и семь прежних эталонов без обновления после переноса, полный Vitest 212/2292, TypeScript/Vite, diff-check/review. Сервер/форматы не менялись; .NET/browser/portable не запускались. M5-22-054 изменения не содержит, новый ZIP не заказан. Приёмка владельца открыта, документальный handoff — коммит этой записи.
+
 ## 16.10.2026 — геометрия сцены Э4 CanvasViewport, карточка 122
 
 Code SHA `df346dbc9b2e7e9261f6ce5b7029c53ec4460341` опубликован прямо в `codex/integration-m5-22`, push `2d5c1be..df346db`; ancestry PASS. REQ-157, ADR-0027, [handoff](handoff-122-canvas-e4-scene.md). CanvasViewport 3759 → 3151 строк; геометрия Э4 и общий порядок объектов выделены без изменения оставшегося кода viewport. PASS: профиль 8/124, новый геометрический и шесть прежних renderer-эталонов без обновления, полный Vitest 211/2283, TypeScript/Vite, diff-check/review. Сервер/форматы не менялись; .NET/browser/portable не запускались. M5-22-054 изменения не содержит; новый ZIP не заказан. Приёмка владельца открыта, документальный handoff — коммит этой записи.

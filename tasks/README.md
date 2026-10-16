@@ -1,6 +1,6 @@
 # Очередь задач
 
-[123 — renderer Э4 вне CanvasViewport](123-canvas-e4-renderer.md): in-progress; REQ-158, база `8962aef`, ZIP не заказан.
+[123 — renderer Э4 вне CanvasViewport](123-canvas-e4-renderer.md): ready-for-review; REQ-158, code `568a16f` опубликован в integration, handoff заполнен; ZIP не заказан.
 
 [122 — геометрия сцены Э4 вне CanvasViewport](122-canvas-e4-scene-geometry.md): ready-for-review; REQ-157, code `df346db` опубликован в integration, handoff заполнен; ZIP не заказан.
 

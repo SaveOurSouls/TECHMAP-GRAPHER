@@ -1,6 +1,6 @@
 # 123. Выделить рисование Э4 из CanvasViewport
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** `/root`, `01a14521-6a96-7152-b095-accc21abdda7`.
 - **Источник запроса:** продолжение владельца 16.10.2026: «Продолжи рефакторинг CanvasViewport: вынеси следующий самостоятельный блок, сохрани текущее поведение и проверь изменения тестами».
 - **Требования:** REQ-158; действующие правила цветов, слоёв, связей и длин сохраняются.
@@ -31,5 +31,6 @@ Baseline и повтор: новый renderer, editor-workspace, e4-parallel-spa
 - CanvasViewport: 3151 → 2923 строки, минус 228; renderer — 232. Прежний публичный drawE4DifferentialPairs и все вызовы/проходы сохранены.
 - Baseline и итоговый профиль: 9/134 PASS; девять новых и семь прежних эталонов побайтово неизменны. Перенесённый блок и оставшийся viewport совпадают с базой после нормализации import/export/EOL.
 - Итог 16.10.2026: полный Vitest 212/2292 (96,15 с), TypeScript/Vite production build, diff-check/review, зависимости и ссылки docs PASS. [Протокол](../docs/canvas-e4-renderer-123-refactor.md), [ADR-0028](../docs/decisions/0028-canvas-e4-renderer.md).
-- Код/документация — коммит этого среза; точный SHA и публикация вносятся в handoff после commit/push.
+- Код/тесты/протокол/ADR: `568a16f747599927c6ab6fea4af39258dc905cd5`, опубликован в origin/codex/integration-m5-22; ancestry PASS. Документальный handoff — коммит этой записи.
+- [Точный handoff сборщику](../docs/coordination/handoff-123-canvas-e4-renderer.md), coverage и integration-log обновлены; отдельный cherry-pick не нужен.
 - Ограничения: browser/portable, пиксельная приёмка и исходный жгут не проверены. Сервер/форматы не менялись, .NET не запускался; ZIP не заказан. Owner acceptance открыта.
