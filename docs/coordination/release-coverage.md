@@ -375,6 +375,6 @@ REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md
 REQ-152, in-progress; код/handoff pending до проверок. Последний ZIP не содержит изменение.
 # Открытая работа для следующего среза
 
-## Карточка 119 / REQ-154 — legacy-страницы «Маршрут» и «Маршрут v2»
+## Карточка 119 / REQ-154 — удаление Маршрута, Маршрута v2 и UML
 
-Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, статус in-progress. Код и handoff ещё не переданы. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Coverage pending: нельзя утверждать включение в ZIP до handoff и проверки интеграции. Route V3 сохраняется. Сборка ZIP для карточки не заказана.
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, ready-for-review. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2` опубликован; [handoff](handoff-119-remove-legacy-route-pages.md), документальный SHA — коммит этой записи. PASS: Vitest206/2223, TS/Vite, Chrome1440/390. UML включён по дополнительному прямому поручению. V3/данные/контракты сохранены; 117 не включена. Coverage **pending integration**: сборщик должен подтвердить code/doc SHA в своём HEAD, особенно точечные V3 imports при совмещении с 117. Последний ZIP не содержит этот срез; ZIP не заказан.

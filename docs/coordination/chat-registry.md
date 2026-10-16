@@ -1,8 +1,8 @@
 # Реестр чатов проекта
 
-## 119 — удалить legacy-страницы «Маршрут» и «Маршрут v2», 16.10.2026
+## 119 — удалить Маршрут, Маршрут v2 и UML, 16.10.2026
 
-Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, карточка [119](../../tasks/119-remove-legacy-route-pages.md), REQ-154; in-progress. Регистрация: `codex/remove-legacy-route-pages-work`, `tmp/remove-legacy-route-pages`, база `f47d55e9078fc792cf30500592711f35b72b4000` (`origin/codex/integration-m5-22`). Исполнитель владеет подтверждёнными legacy V1/V2 page-компонентами, исключительно их модулями/тестами и UI-навигацией; Route V3 и файлы карточки 117 исключены. Координатор владеет общими требованиями, индексом, реестром и coverage. Code/handoff SHA ожидаются. Release coverage: pending; ZIP не заказывался.
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, карточка [119](../../tasks/119-remove-legacy-route-pages.md), REQ-154; ready-for-review. Ветка `codex/remove-legacy-route-pages-work`, `tmp/remove-legacy-route-pages`, база `f47d55e9078fc792cf30500592711f35b72b4000`; регистрация `d24fd4c`. Код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2` опубликован. Navigation/shared/uml агенты с непересекающимися файлами описаны в [протоколе](../legacy-route-retirement-119.md). Дополнение владельца включает удаление UML; V3 и сохранённые данные остаются. Изменения 117 не переносились; в двух общих файлах V3 только import/type/class hunks. PASS: Vitest206/2223, TypeScript/Vite, Chrome1440/390, review/diff-check. [Handoff](handoff-119-remove-legacy-route-pages.md), документальный SHA — коммит этой записи. Coverage pending до интеграции координатором; ZIP не заказан, owner acceptance открыта.
 
 ## 117 — заготовки проводов по схемам, 16.10.2026
 
