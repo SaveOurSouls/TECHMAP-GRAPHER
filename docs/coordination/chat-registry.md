@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 126 — завершение плана рефакторинга, 16.10.2026
+
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-161, [карточка](../../tasks/126-finish-editor-refactor.md); in-progress. База 303df08, основная codex/integration-m5-22. Владелец: CanvasViewport, HarnessDesignEditor, commands/model, ComponentLibrary, выделяемые модули/тесты, границы загрузки рабочих областей и свои docs. Сервер/хранение не входят. Coverage: следующий срез после M5-22-054, публикация по проверенным этапам; ZIP не заказан.
+
 ## 125 — границы сцены вне CanvasViewport, 16.10.2026
 
 Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-160, [карточка 125](../../tasks/125-canvas-scene-bounds.md); ready-for-review. Основная `codex/integration-m5-22`, база `9f6343f`. Владелец: CanvasViewport, новые canvas-scene-bounds/canvas-wire-strip-style, свои тесты/docs; model/commands/physical-* и прежние geometry/renderers не менялись. Code SHA `440939f942b53bf09bbaf422829f9b696ff7bf52` опубликован, ancestry PASS; [handoff](handoff-125-canvas-scene-bounds.md). PASS: Vitest 214/2312, TypeScript/Vite, 22 эталона, diff-check/review. Coverage: следующий срез после M5-22-054; ZIP не заказан, owner acceptance открыта.

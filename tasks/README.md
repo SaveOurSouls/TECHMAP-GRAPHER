@@ -1,5 +1,7 @@
 # Очередь задач
 
+[126 — завершить план рефакторинга редакторов](126-finish-editor-refactor.md): in-progress; REQ-161, пять крупных модулей и загрузка рабочих областей; этапы проверяются/публикуются отдельно.
+
 [125 — границы сцены вне CanvasViewport](125-canvas-scene-bounds.md): ready-for-review; REQ-160, code `440939f` опубликован в integration, handoff заполнен; ZIP не заказан.
 
 [124 — hit-test сцены вне CanvasViewport](124-canvas-scene-hit-test.md): ready-for-review; REQ-159, code `a5873e8` опубликован в integration, handoff заполнен; ZIP не заказан.

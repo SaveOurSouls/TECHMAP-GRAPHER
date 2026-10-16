@@ -1,5 +1,9 @@
 # Восстановленная архитектура
 
+## Завершение разделения редакторов (REQ-161)
+
+CanvasViewport — фасад совместимости. CanvasViewportSurface возвращает JSX, useCanvasViewport координирует состояние и события, canvas-scene-renderer рисует, canvas-selection рассчитывает рамку/оси свободных концов, canvas-viewport-types и canvas-interaction-helpers содержат общие контракты и небольшие обработчики. Порядок hooks/проходов/событий сохранён. Границы остальных крупных модулей уточняются по этапам [карточки 126](../tasks/126-finish-editor-refactor.md); [ADR-0031](decisions/0031-editor-refactor-completion.md), [протокол](editor-refactor-126.md).
+
 ## Границы сцены (REQ-160)
 
 `editor/canvas-scene-bounds.ts` рассчитывает world-space bounds объектов, подписей, контактов, разделки, оболочек и overlays Э4 для вписывания в экран. CanvasViewport сохраняет публичные getEditorSceneBounds/drawingConnectorIndexLabel и использует ту же подпись при рисовании. Общие константы оформления разделки находятся в canvas-wire-strip-style.ts; толщина обводки едина для рисования и границ. Новые модули не зависят от React/CanvasViewport и глобального DOM. [ADR-0030](decisions/0030-canvas-scene-bounds.md), [протокол 125](canvas-scene-bounds-125-refactor.md).

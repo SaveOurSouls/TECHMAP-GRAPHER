@@ -1,5 +1,9 @@
 # Release coverage
 
+## 126 — завершение рефакторинга, следующий срез после M5-22-054
+
+REQ-161, [карточка 126](../../tasks/126-finish-editor-refactor.md), чат 01a14521-6a96-7152-b095-accc21abdda7, основная integration; in-progress. Проверенные этапы публикуются отдельно; общий handoff pending до завершения плана. M5-22-054 их не содержит; ZIP не заказан.
+
 ## 125 — границы сцены, следующий срез после M5-22-054
 
 REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 125](../../tasks/125-canvas-scene-bounds.md); ready-for-review. Код **`440939f942b53bf09bbaf422829f9b696ff7bf52`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-125-canvas-scene-bounds.md) — этот docs-коммит. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. В M5-22-054 не входит; включить вместе с 120–124 в следующий заказанный релиз с проверкой code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.
