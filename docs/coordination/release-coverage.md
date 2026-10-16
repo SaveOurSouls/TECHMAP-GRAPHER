@@ -9,6 +9,10 @@
 - **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
 - **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Карточки 110, 111, 113 и 116 приняты владельцем 16.10.2026; acceptance 112, 114–115, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
 
+## 112 follow-up — зазор у общего выхода ОП, 16.10.2026
+
+REQ-147, тот же чат/ветка/worktree, база `2e8664c`, регистрация `d5b5705`. Прямое уточнение владельца, ready-for-review: зазор 20 единиц чертежа с уменьшением у самого соединителя. Код `25d4ec8d0be10c148da4cb6a43a43b33ec869515` опубликован; docs-only handoff следует за ним. PASS: 7/122, полный 216/2290, TypeScript/Vite/diff-check и просмотр синтетической геометрии. Включение в следующий релиз после M5-22-053 требует отдельной проверки ancestry/equivalent и совместного прогона на integration HEAD. Код 117 не импортировался и не менялся; auto-review отказ обновления базы не обходился. ZIP здесь не заказан; поставка 053 новый зазор не включает.
+
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
 15.10.2026, чат `01a1410d-5bc6-7123-9e7a-f5b7b5dfef9a`, REQ-147, [карточка 112](../../tasks/112-op-bend-coordinate-integrity.md). Ready-for-review в прежнем `tmp/op-bend-coordinate-integrity`; база `96829c0`, регистрация `1170ee6`. Код `dc817dea78d89410e04a89b86ef1489209dbaaea` и docs-only handoff `2e8664c170afb69b255efe179eca360081fdbf6f` опубликованы и проверены как предки integration merge `98e91c08f3b477ab4df1abcf3b028351871b3eb5`; `git show --check` PASS. Worker: 216/2285, профильный 2/29; после интеграции общий Vitest 216/2283, TypeScript/Vite PASS. Первый код 112 вошёл в M5-22-052; follow-up включён в M5-22-053. Исходный документ, ручная C1–C4 и packaged UI не проверены.
