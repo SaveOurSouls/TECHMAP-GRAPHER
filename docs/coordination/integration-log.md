@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — этап 3 плана 126: команды
+
+Code ced0a52bd9c534f4c20b0bca99a1b5041e18933d опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). 75 ветвей в шести handlers, общий pipeline сохранён, внутренний runtime-граф ацикличен. Vitest 217/2315, TypeScript/Vite и структурная сверка PASS. Docs этапа — коммит этой записи; этапы 4–7 открыты.
+
 ## 16.10.2026 — этап 2 плана 126: HarnessDesignEditor
 
 Code 709aacce336a96e88c5faa1d21aa5e9db96deacd опубликован прямо в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Фасад/scene/snapshots/catalog/selection/controller/JSX разделены, полный Vitest 216/2314 и TypeScript/Vite PASS. Docs этапа — коммит этой записи; план in-progress, этапы 3–7 открыты.

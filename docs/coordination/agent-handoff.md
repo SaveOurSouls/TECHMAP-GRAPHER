@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 126 — этап 3, 16.10.2026
+
+Команды ready-for-review, code **ced0a52bd9c534f4c20b0bca99a1b5041e18933d** опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). PASS: Vitest 217/2315, TypeScript/Vite, 75 исходных ветвей/86 объявлений/pipeline и acyclic module graph. Общая задача in-progress, этапы 4–7 открыты; ZIP не заказан.
+
 ## 126 — этап 2, 16.10.2026
 
 HarnessDesignEditor ready-for-review, code **709aacce336a96e88c5faa1d21aa5e9db96deacd** опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). PASS: Vitest 216/2314, TypeScript/Vite, профиль 7/194, исходные объявления/JSX/эталоны, diff-check/review. Общая задача in-progress, этапы 3–7 открыты; ZIP не заказан.

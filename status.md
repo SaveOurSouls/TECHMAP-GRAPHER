@@ -1,3 +1,7 @@
+## Завершение рефакторинга — этап 3, 16.10.2026
+
+REQ-161 / карточка 126 in-progress. Команды опубликованы **ced0a52bd9c534f4c20b0bca99a1b5041e18933d**, ancestry PASS: фасад 2897 → 5 строк, шесть handlers, отдельные invariants/routing/analysis/pair planner. PASS: Vitest 217/2315, TypeScript/Vite, все 75 исходных ветвей/86 объявлений/pipeline и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 4–7 открыты; ручная приёмка и ZIP не выполнялись, сервер не менялся.
+
 ## Завершение рефакторинга — этап 2, 16.10.2026
 
 Карточка 126 / REQ-161 in-progress. HarnessDesignEditor опубликован **709aacce336a96e88c5faa1d21aa5e9db96deacd**, ancestry PASS: фасад 2653 → 8 строк, отдельно scene/snapshots/catalog/selection/types/boundary/controller/JSX. PASS: baseline 6/193, профиль 7/194, полный Vitest 216/2314, TypeScript/Vite и структурная сверка. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы commands/model/ComponentLibrary/загрузка/аудит открыты; сервер/форматы не менялись, ручной browser/portable/жгут не проверены, ZIP не заказан.

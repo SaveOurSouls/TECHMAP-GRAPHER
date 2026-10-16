@@ -18,3 +18,7 @@
 База ef17141; code **709aacce336a96e88c5faa1d21aa5e9db96deacd** опубликован прямо в integration, ancestry PASS. Фасад 2653 → 8 строк; сцена/снимки/каталоги/выделение/types/boundary/controller/JSX разделены. 33 объявления и основной JSX совпадают с исходником, controller изменён только передачей раннего return через ready-discriminator. Baseline 6/193, профиль с facade-тестом 7/194, полный Vitest **216/2314 PASS**, 79,70 с; TypeScript/Vite PASS, Vite 1,23 с; структурная сверка/эталоны/diff-check/review PASS. Source-тест трассировки читает controller + surface с прежними утверждениями.
 
 Документальный handoff этапа — коммит этого раздела. Этапы 3–7 открыты; ограничения ручной приёмки/сервера/ZIP прежние. Нужны code/docs обоих этапов в следующем заказанном релизе; общий план остаётся in-progress.
+
+## Этап 3 — команды, ready-for-review
+
+База 512d31b; code **ced0a52bd9c534f4c20b0bca99a1b5041e18933d** опубликован в integration, ancestry PASS. Фасад 2897 → 5 строк, 75 ветвей в шести typed handlers; 86 объявлений, pipeline и все ветви совпали с исходником. Новые runtime-модули ацикличны. Baseline 6/136, профиль с API-тестом 7/137, полный Vitest **217/2315 PASS**, 78,75 с; TypeScript/Vite PASS, Vite 1,25 с; эталоны/diff-check/review PASS. Docs handoff — коммит этого раздела. Этапы 4–7 открыты; ограничения прежние.
