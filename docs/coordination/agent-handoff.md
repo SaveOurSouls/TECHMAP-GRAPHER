@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 121 — геометрия и рисование соединителей CanvasViewport, 16.10.2026
+
+REQ-156, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`fc1865652f8067812b804f55b89b759ae1e7138a`** опубликован прямо в integration, ancestry PASS. [Точный handoff](handoff-121-canvas-connectors.md), [протокол](../canvas-viewport-121-refactor.md). CanvasViewport 4395 → 3759 строк; layout/renderer/metadata выделены с сохранением прежних экспортов и тел функций. PASS: baseline/профиль 6/116, шесть неизменённых snapshots, полный Vitest 210/2277, TypeScript/Vite, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и owner acceptance открыты. ZIP не заказан, следующий срез после M5-22-054. Документальный handoff — коммит этой записи.
+
 ## 120 — оценка системы и общий транспорт API, 16.10.2026
 
 REQ-155, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`2e1351fb50d33f2b2983dffd240901610e91fc8c`** опубликован прямо в `codex/integration-m5-22`; ancestry PASS. [Точный handoff](handoff-120-system-assessment.md), [оценка системы](../system-assessment-120.md). Общий транспорт четырёх API, 14 новых регрессий; PASS: Vitest 209/2271, TypeScript/Vite, Release build, .NET 1142/1142, отдельный performance 1/1, diff-check. Условия IPC/temp и предварительные ошибки раскрыты в отчёте. Этот docs-коммит завершает handoff; owner acceptance открыта. Следующий срез после M5-22-054, ZIP не заказан.

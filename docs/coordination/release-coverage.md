@@ -2,7 +2,7 @@
 
 ## 121 — декомпозиция CanvasViewport, следующий срез после M5-22-054
 
-REQ-156, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 121](../../tasks/121-canvas-connector-modules.md). In-progress, integration-ветка, code/handoff pending. В M5-22-054 не входит; до завершения handoff новая поставка блокируется. ZIP не заказан.
+REQ-156, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 121](../../tasks/121-canvas-connector-modules.md), ready-for-review. Код **`fc1865652f8067812b804f55b89b759ae1e7138a`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-121-canvas-connectors.md) — этот docs-коммит. PASS: профиль 6/116, шесть неизменённых snapshots, полный Vitest 210/2277, TypeScript/Vite, diff-check/review. В M5-22-054 не входит; включить вместе с 120 в следующий заказанный релиз с проверкой code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.
 
 ## 120 — оценка системы и транспорт API, следующий срез после M5-22-054
 

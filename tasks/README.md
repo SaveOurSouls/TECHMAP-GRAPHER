@@ -1,6 +1,6 @@
 # Очередь задач
 
-[121 — геометрия и отрисовка соединителей CanvasViewport](121-canvas-connector-modules.md): in-progress; REQ-156, сохранение поведения, ZIP не заказан.
+[121 — геометрия и отрисовка соединителей CanvasViewport](121-canvas-connector-modules.md): ready-for-review; REQ-156, code `fc18656` опубликован в integration, handoff заполнен; ZIP не заказан.
 
 [120 — оценка системы и общий транспорт API](120-system-assessment-and-api-refactor.md): ready-for-review; REQ-155, код `2e1351f` опубликован в integration, handoff заполнен; ZIP не заказан.
 

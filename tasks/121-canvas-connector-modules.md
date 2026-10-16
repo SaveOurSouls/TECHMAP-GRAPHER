@@ -1,6 +1,6 @@
 # 121. Выделить геометрию и отрисовку соединителей из CanvasViewport
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** `/root`, `01a14521-6a96-7152-b095-accc21abdda7`.
 - **Источник запроса:** прямое продолжение владельца 16.10.2026: «Продолжи рефакторинг крупных модулей редактора. Начни с CanvasViewport, сохрани текущее поведение и проверь изменения тестами».
 - **Требования:** REQ-156; сохраняются действующие требования к контактам, индексам соединителей, слоям и геометрии.
@@ -31,5 +31,6 @@ Baseline: editor-workspace, canvas-gestures, drawing-paint-order, e4-routing-int
 - CanvasViewport: 4395 → 3759 строк; выделены layout (370), renderer (276), metadata (12). Прежние публичные экспорты сохранены; три implementation-блока совпадают с исходными после нормализации import/export.
 - Baseline и итоговый профиль: 6 файлов / 116 тестов, PASS; шесть эталонов получены до переноса и не обновлялись после него.
 - Итоговые проверки 16.10.2026: полный Vitest 210/2277 (81,25 с), TypeScript/Vite production build, diff-check и review PASS. [Протокол](../docs/canvas-viewport-121-refactor.md), [ADR-0026](../docs/decisions/0026-canvas-connector-modules.md).
-- Код/документация — коммит этого среза; после commit/push точный SHA указывается в handoff.
+- Код/тесты/протокол/ADR: `fc1865652f8067812b804f55b89b759ae1e7138a`, опубликован в origin/codex/integration-m5-22; ancestry PASS. Документальный handoff — коммит этой записи.
+- [Точный handoff сборщику](../docs/coordination/handoff-121-canvas-connectors.md), coverage и integration-log обновлены; отдельный cherry-pick не нужен.
 - Ограничения: ручной browser/portable и исходный жгут не проверены; пиксельная идентичность зависит также от шрифтов/браузера, recorder фиксирует команды и детерминированные метрики. Сервер не менялся, .NET не запускался. ZIP не заказан; owner acceptance открыта.

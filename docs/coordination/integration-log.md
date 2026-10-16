@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — CanvasViewport: layout и renderer соединителей, карточка 121
+
+Code SHA `fc1865652f8067812b804f55b89b759ae1e7138a` опубликован прямо в `codex/integration-m5-22`, push `6b1e130..fc18656`; ancestry PASS. REQ-156, ADR-0026, [handoff](handoff-121-canvas-connectors.md). CanvasViewport уменьшен на 636 строк (4395 → 3759), сохранены публичные экспорты и исходные тела перенесённых функций. PASS: профиль 6/116, шесть исходных snapshots без обновления, полный Vitest 210/2277, TypeScript/Vite, diff-check/review. Сервер и форматы не менялись; .NET/browser/portable не запускались. Нового ZIP нет; M5-22-054 изменения не содержит. Приёмка владельца открыта, документальный handoff — коммит этой записи.
+
 ## 16.10.2026 — оценка системы и транспорт API, карточка 120
 
 Code SHA `2e1351fb50d33f2b2983dffd240901610e91fc8c` создан и опубликован прямо в `codex/integration-m5-22` (push `d4671ac..2e1351f`); ancestry PASS. [Handoff](handoff-120-system-assessment.md), REQ-155, ADR-0025. Общее поведение четырёх JSON API выделено в транспорт; контракты и предметные парсеры сохранены. PASS: Vitest 209/2271, TypeScript/Vite, .NET Release build/1142, отдельный performance 1/1 и diff-check. Подробные условия и предварительные ошибки — в [оценке](../system-assessment-120.md). Новый ZIP не заказан; M5-22-054 не содержит этот commit. Документальный handoff — коммит этой записи; приёмка владельца открыта.
