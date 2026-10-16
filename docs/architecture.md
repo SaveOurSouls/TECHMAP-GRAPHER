@@ -2,7 +2,7 @@
 
 ## Завершение разделения редакторов (REQ-161)
 
-CanvasViewport — фасад совместимости. CanvasViewportSurface возвращает JSX, useCanvasViewport координирует состояние и события, canvas-scene-renderer рисует, canvas-selection рассчитывает рамку/оси свободных концов, canvas-viewport-types и canvas-interaction-helpers содержат общие контракты и небольшие обработчики. Порядок hooks/проходов/событий сохранён. Границы остальных крупных модулей уточняются по этапам [карточки 126](../tasks/126-finish-editor-refactor.md); [ADR-0031](decisions/0031-editor-refactor-completion.md), [протокол](editor-refactor-126.md).
+CanvasViewport — фасад совместимости. CanvasViewportSurface возвращает JSX, useCanvasViewport координирует состояние и события, canvas-scene-renderer рисует, canvas-selection рассчитывает рамку/оси свободных концов, canvas-viewport-types и canvas-interaction-helpers содержат общие контракты и небольшие обработчики. Порядок hooks/проходов/событий сохранён. Границы пяти крупных модулей реализованы и проверены по [карточке 126](../tasks/126-finish-editor-refactor.md); [ADR-0031](decisions/0031-editor-refactor-completion.md), [протокол](editor-refactor-126.md).
 
 HarnessDesignEditor сохраняет публичный фасад. harness-scene-projection строит сцену из документа; harness-component-snapshots проверяет/загружает закреплённые снимки и копии; harness-catalog-adapters адаптирует каталог к командам; harness-selection-adapters обслуживает выделение/слои. useHarnessDesignEditor координирует состояние, HarnessDesignEditorSurface возвращает прежний JSX, HarnessEditorBoundary содержит границы ошибок. Единственное раннее состояние загрузки передаётся из hook в surface без изменения разметки.
 

@@ -1,3 +1,11 @@
+## План рефакторинга завершён — 16.10.2026
+
+Карточка 126 / REQ-161 **ready-for-review**, все пункты 1–7 выполнены. Финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в integration; все предыдущие code/docs этапы входят по ancestry. CanvasViewport, HarnessDesignEditor, commands, model и ComponentLibrary разделены по ответственностям с прежними фасадами; editor/route загружаются отдельно с status/retry.
+
+PASS: **220 файлов / 2319 тестов**, TypeScript/Vite, **362** исходных объявления/**75** ветвей, pipeline/controller/JSX/hooks/CSS, **22** неизменных эталона, все runtime/type-only имена API и ацикличный граф 54 затронутых модулей. Initial static/preload JS **1 701 779 → 893 229 байт**, −47,512%, shared model учтён; latency не измерялась, предупреждение shared chunk >500 kB сохраняется. [Итоговый аудит](docs/editor-refactor-126-completion-audit.md), [handoff со всеми SHA](docs/coordination/handoff-126-editor-refactor.md).
+
+Сервер, зависимости/lockfile, хранение, схема и VERSION не менялись. .NET, ручной browser/portable и исходный жгут не проверялись. Новый ZIP не заказан; M5-22-054 не содержит 120–126. Финальная документация — коммит этой записи, owner acceptance отдельно. История этапов ниже не задаёт текущие pending-статусы.
+
 ## Завершение рефакторинга — этап 5, 16.10.2026
 
 Карточка 126 / REQ-161 in-progress. ComponentLibrary опубликован **408b563f28b6c15e56b0726007aaf9d581738a97**, ancestry PASS: фасад 1600 → 6 строк, draft/catalog/editing/properties/controller/JSX разделены. PASS: Vitest 219/2317, TypeScript/Vite, исходные объявления/JSX/hooks/CSS, все 22 runtime-экспорта и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 6–7 открыты; сервер, ручная приёмка и ZIP не затронуты.

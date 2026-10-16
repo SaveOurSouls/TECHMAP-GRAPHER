@@ -1,6 +1,29 @@
 # Handoff 126 / REQ-161 — завершение плана
 
-Чат 01a14521-6a96-7152-b095-accc21abdda7, `/root`, основная codex/integration-m5-22. [Карточка](../../tasks/126-finish-editor-refactor.md), [протокол](../editor-refactor-126.md), [ADR-0031](../decisions/0031-editor-refactor-completion.md). Общая задача **in-progress**; owner acceptance открыта. ZIP не заказан.
+Чат 01a14521-6a96-7152-b095-accc21abdda7, `/root`, основная codex/integration-m5-22. [Карточка](../../tasks/126-finish-editor-refactor.md), [протокол](../editor-refactor-126.md), [ADR-0031](../decisions/0031-editor-refactor-completion.md), [итоговый аудит](../editor-refactor-126-completion-audit.md). **Все пункты 1–7 завершены, ready-for-review.** Owner acceptance отдельно. ZIP не заказан.
+
+## Финальная передача
+
+Финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован непосредственно в разрешённый origin/codex/integration-m5-22. Все приведённые code/docs SHA — предки этого HEAD, ancestry PASS; cherry-pick не требуется. Финальная документация — коммит этой записи, его точный SHA сообщается в финале чата.
+
+| Этап | Code SHA | Опубликованный docs SHA |
+| --- | --- | --- |
+| CanvasViewport | d378d741af0d8cf4407cb13e48a03862009cffc9 | ef171418b43b6bbdb48052e204068fbc797cc376 |
+| HarnessDesignEditor | 709aacce336a96e88c5faa1d21aa5e9db96deacd | 512d31ba49f6835b4d7bb731fed8907286199457 |
+| Commands | ced0a52bd9c534f4c20b0bca99a1b5041e18933d | 83d312f3736bd91e7c0e2d7826d0d62a0b8f94e7 |
+| Model | 1205eeb7e13589e4a422cfa4beedd6708be26560 | bf901a998b249ca8861af43e219f978f9a7f175b |
+| ComponentLibrary | 408b563f28b6c15e56b0726007aaf9d581738a97 | 7c68d3447557d73a1d941ce9c299e53efc437559 |
+| Lazy workspaces и финальный аудит | 45f75bb521e9a813b8053182239ad4a315ef505a | Коммит этой записи |
+
+Итоговые gates: Vitest **220 файлов / 2319 тестов PASS**, 99,43 с; TypeScript/Vite PASS, Vite 1,17 с. **362** исходных объявления, **75** case-блоков, pipeline/controller/JSX/hooks/CSS и **22** canvas-эталона сохранены. Все **140 runtime + 76 type-only** имён пяти фасадов совпадают с базой; static runtime-граф **54** затронутых модулей, включая фасады, ацикличен. Diff-check/review/ссылки PASS.
+
+Lazy-загрузка editor/route, status/отказ/повтор и forwarding callbacks проверены SSR; lifecycle копий/guards сохранён. Initial static/preload JS closure **1 701 779 → 893 229 байт**, −47,512%, общий model chunk включён. Это размер JS, не latency; предупреждение shared model >500 kB остаётся.
+
+Сервер, package dependencies/lockfile, схема, VERSION не менялись. AST/baseline evidence ignored, в Git не входят. .NET, ручной browser/portable, исходный жгут и startup latency не проверялись. M5-22-054 не содержит рефакторинги 120–126; включить все code/docs в следующую заказанную поставку с обычной проверкой ancestry/версии/portable. Активных незавершённых пунктов карточки 126 нет; чат не архивируется без owner acceptance.
+
+## История промежуточных передач
+
+Ниже сохранены статусы на момент каждого этапа. Их прежние pending-пункты закрыты финальным срезом выше.
 
 ## Этап 1 — CanvasViewport, ready-for-review
 

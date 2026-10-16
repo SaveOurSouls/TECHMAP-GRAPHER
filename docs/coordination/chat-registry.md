@@ -2,15 +2,9 @@
 
 ## 126 — завершение плана рефакторинга, 16.10.2026
 
-Этап 5 опубликован 408b563f28b6c15e56b0726007aaf9d581738a97, ancestry PASS; ComponentLibrary ready-for-review, Vitest 219/2317 и сборка PASS. Этапы 6–7 открыты.
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-161, [карточка](../../tasks/126-finish-editor-refactor.md); **ready-for-review**, все пункты 1–7 завершены. База 303df08, основная codex/integration-m5-22, отдельный worktree не создавался. Владелец: пять крупных модулей/выделяемые части, lazy entrypoints и их потребители, собственные тесты/docs; сервер/хранение исключены.
 
-Этап 4 опубликован 1205eeb7e13589e4a422cfa4beedd6708be26560, ancestry PASS; модель ready-for-review, Vitest 218/2316 и сборка PASS. Этапы 5–7 открыты.
-
-Этап 3 опубликован ced0a52bd9c534f4c20b0bca99a1b5041e18933d, ancestry PASS; команды ready-for-review, Vitest 217/2315 и сборка PASS. Этапы 4–7 открыты.
-
-Этап 2 опубликован 709aacce336a96e88c5faa1d21aa5e9db96deacd, ancestry PASS; HarnessDesignEditor ready-for-review, Vitest 216/2314, TypeScript/Vite PASS. Общая задача in-progress, этапы 3–7 открыты.
-
-Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-161, [карточка](../../tasks/126-finish-editor-refactor.md); in-progress. База 303df08, основная codex/integration-m5-22. Владелец: CanvasViewport, HarnessDesignEditor, commands/model, ComponentLibrary, выделяемые модули/тесты, границы загрузки рабочих областей и свои docs. Сервер/хранение не входят. Этап 1 опубликован d378d741af0d8cf4407cb13e48a03862009cffc9, ancestry PASS, [handoff](handoff-126-editor-refactor.md); Vitest 215/2313 и сборка PASS. Остальные этапы открыты. Coverage: следующий срез после M5-22-054; ZIP не заказан.
+Финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в разрешённый origin, все 11 code/docs milestone SHA — предки HEAD. [Handoff со всеми SHA](handoff-126-editor-refactor.md), [аудит](../editor-refactor-126-completion-audit.md). Vitest 220/2319, TypeScript/Vite, структурная сверка/API/22 эталона PASS. Финальный docs handoff — коммит этой записи; незавершённых пунктов карточки нет. Coverage: следующий заказанный релиз после M5-22-054 с 120–125. ZIP не заказан; owner acceptance отдельно, чат не архивируется.
 
 ## 125 — границы сцены вне CanvasViewport, 16.10.2026
 

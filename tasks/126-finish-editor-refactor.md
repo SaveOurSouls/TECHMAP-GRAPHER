@@ -1,6 +1,6 @@
 # 126. Завершить план рефакторинга редакторов
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Источник:** исходный запрос владельца: «Продолжи дальше рефакторинг согласно твоему плану. Закончи его».
 - **Требование:** REQ-161; поведение, формат документа, ID, связи и производственные длины сохраняются.
 - **Владелец/чат:** `/root`, `01a14521-6a96-7152-b095-accc21abdda7`.
@@ -23,7 +23,7 @@
 
 ## Журнал
 
-**Текущий проверенный результат:** все технические пункты 1–7 PASS; код этапов 1–5 опубликован, последний code commit и общий handoff оформляются. [Матрица аудита](../docs/editor-refactor-126-completion-audit.md). Full Vitest 220/2319, TypeScript/Vite, 362 объявления/75 ветвей/22 эталона/API/54-module acyclic graph PASS. Исторические записи ниже сохраняют порядок выполнения, а не текущие pending-статусы.
+**Текущий проверенный результат:** все пункты 1–7 завершены; финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в origin/integration. Все шесть code SHA и пять предшествующих docs SHA подтверждены ancestry. [Матрица аудита](../docs/editor-refactor-126-completion-audit.md), [общий handoff](../docs/coordination/handoff-126-editor-refactor.md). Full Vitest 220/2319, TypeScript/Vite, 362 объявления/75 ветвей/22 эталона/API/54-module acyclic graph PASS. Финальный docs handoff — коммит этой записи; owner acceptance отдельно. Исторические записи ниже сохраняют порядок выполнения, а не текущие pending-статусы.
 
 - План зарегистрирован до реализации. Этап 1 проверен: CanvasViewport 2463 → 61 строка фасада, отдельные controller/surface/renderer/selection/types/helpers. AST-сверка 46 объявлений, тела controller и JSX PASS; 22 эталона неизменны. Baseline/профиль 10/162, полный Vitest 215/2313, TypeScript/Vite PASS. [Протокол](../docs/editor-refactor-126.md), [ADR-0031](../docs/decisions/0031-editor-refactor-completion.md).
 - Этапы 2–7 открыты. Итоговая готовность не выводится из завершённого CanvasViewport.

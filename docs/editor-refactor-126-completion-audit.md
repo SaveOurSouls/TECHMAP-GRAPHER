@@ -2,6 +2,8 @@
 
 Исходная цель: «Продолжи дальше рефакторинг согласно твоему плану. Закончи его». Объём зафиксирован до реализации в [карточке 126](../tasks/126-finish-editor-refactor.md): пять крупных модулей оценки 120, загрузка рабочих областей, итоговые проверки/публикация. [Протокол всех этапов](editor-refactor-126.md), [ADR-0031](decisions/0031-editor-refactor-completion.md), [handoff](coordination/handoff-126-editor-refactor.md).
 
+**Результат: все семь пунктов PASS, ready-for-review.** Финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в origin/codex/integration-m5-22. Все шесть code SHA и пять предшествующих docs SHA подтверждены ancestry; финальная документация — коммит этой записи. Owner acceptance не подменяется техническим завершением.
+
 ## Матрица требований и проверенного состояния
 
 | Пункт | Авторитетное доказательство текущего состояния | Результат |
@@ -12,7 +14,7 @@
 | 4. Model | design-types/defaults, presentation/geometry/measurements, document/connector/wire parsers и parse primitives. 152 объявления совпали, contracts компилируются без runtime. Набор публичных имён и writer contract сохранены. | PASS |
 | 5. ComponentLibrary | draft/catalog/node editing/types/properties/controller/surface; 45 объявлений, controller prefix/hooks, исходный JSX и trailing CSS import совпали. Прежние undo/recovery/autosave/catalog/SSR-проверки проходят. | PASS |
 | 6. Lazy workspaces | App и route consumers используют lazy entrypoints; ожидание, отказ/повтор, общий успешный load, forwarding callbacks проверены настоящим React SSR с управляемым rerender. Сохранены guards и копии; Vite static/preload graph исключает editor/route/library chunks из initial closure. | PASS |
-| 7. Итоговые технические gates | Полный Vitest 220/2319, TypeScript/Vite; 362 объявления, 75 ветвей, pipeline/JSX/hooks/CSS; 22 эталона; 54-module static runtime graph acyclic; все 140 runtime и 76 type-only имён фасадов сохранены. Публикация SHA закрывается финальным docs handoff. | Технические gates PASS; публикация следует после code commit |
+| 7. Итоговые технические gates | Полный Vitest 220/2319, TypeScript/Vite; 362 объявления, 75 ветвей, pipeline/JSX/hooks/CSS; 22 эталона; 54-module static runtime graph acyclic; все 140 runtime и 76 type-only имён фасадов сохранены. Code 45f75bb опубликован, все milestone SHA проверены ancestry, общий handoff/coverage/status заполнены. | PASS |
 
 Проверки выполнены на текущей общей рабочей копии после всех изменений кода, последовательно с одним worker и TEMP/TMP в tmp/refactor-126/temp. Команды: `pnpm --filter @techmap/client exec vitest run --maxWorkers=1`, `pnpm --filter @techmap/client typecheck`, `pnpm --filter @techmap/client build`. Full Vitest 99,43 с; Vite 1,17 с. Diff-check/review и новые ссылки проверяются перед каждым коммитом.
 

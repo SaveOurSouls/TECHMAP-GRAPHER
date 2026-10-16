@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 126 — полный план завершён, 16.10.2026
+
+**Ready-for-review**, финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в integration. Все шесть code SHA и пять предшествующих docs SHA проверены ancestry; финальный docs handoff — коммит этой записи. [Handoff со всеми SHA](handoff-126-editor-refactor.md), [аудит пунктов 1–7](../editor-refactor-126-completion-audit.md). PASS: Vitest 220/2319, TypeScript/Vite, 362 объявления/75 ветвей/22 эталона, API и 54-module acyclic graph. Начальный JS −47,512% с учётом shared-кода. Сервер/зависимости/хранение не менялись; ручная приёмка и ZIP не выполнялись, owner acceptance отдельно.
+
 ## 126 — этап 5, 16.10.2026
 
 ComponentLibrary ready-for-review, code **408b563f28b6c15e56b0726007aaf9d581738a97** опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). PASS: Vitest 219/2317, TypeScript/Vite, AST/JSX/hooks/CSS/API и ацикличный граф. Этапы 6–7 открыты.

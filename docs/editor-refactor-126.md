@@ -1,6 +1,6 @@
 # Завершение рефакторинга — карточка 126
 
-REQ-161, исходный запрос владельца: продолжить и закончить план. База `303df08ead6530b5c78469995adb877f2e79f6d7`, чистая основная codex/integration-m5-22. [Карточка](../tasks/126-finish-editor-refactor.md), [ADR-0031](decisions/0031-editor-refactor-completion.md). Общая работа in-progress, готовые этапы публикуются отдельно. ZIP не заказан.
+REQ-161, исходный запрос владельца: продолжить и закончить план. База `303df08ead6530b5c78469995adb877f2e79f6d7`, чистая основная codex/integration-m5-22. [Карточка](../tasks/126-finish-editor-refactor.md), [ADR-0031](decisions/0031-editor-refactor-completion.md). **План завершён, ready-for-review**; финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован, ancestry всех этапов PASS. [Общий handoff](coordination/handoff-126-editor-refactor.md) — финальный docs-коммит. Разделы этапов ниже сохраняют состояние на момент соответствующего среза; текущий итог — семь завершённых пунктов. ZIP не заказан, owner acceptance отдельно.
 
 ## Этап 1: CanvasViewport
 
@@ -95,6 +95,6 @@ App открывает редактор жгута и Маршрут v3 чере
 
 ### Приёмка и ограничения
 
-Технические этапы 1–7 проверены; публикация последнего среза и финальный handoff следуют после фиксации кода. [Матрица итогового аудита](editor-refactor-126-completion-audit.md). Runtime/package dependencies, lockfile, сервер, схема документа, VERSION и ZIP не менялись. AST-инструмент и baseline archive находятся в ignored tmp.
+Этапы 1–7 проверены и опубликованы в code **45f75bb521e9a813b8053182239ad4a315ef505a**; общий handoff заполнен. [Матрица итогового аудита](editor-refactor-126-completion-audit.md). Runtime/package dependencies, lockfile, сервер, схема документа, VERSION и ZIP не менялись. AST-инструмент и baseline archive находятся в ignored tmp.
 
 Ручная browser/portable-приёмка, реальные пиксели/шрифты, исходный жгут и замер времени запуска не выполнялись. SSR использует настоящие lazy/Suspense и управляемые hooks для rerender; error boundary проверяется также напрямую. Это ограничения доказательства, а не незавершённые пункты технического плана. Owner acceptance остаётся отдельной.

@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — REQ-161 / карточка 126 завершена
+
+Финальный code **45f75bb521e9a813b8053182239ad4a315ef505a** опубликован в codex/integration-m5-22, push 7c68d34..45f75bb. Все code/docs этапов 1–5 и финальный code — предки HEAD; 11 проверок ancestry PASS. [Общий handoff со всеми SHA](handoff-126-editor-refactor.md), [матрица пунктов 1–7](../editor-refactor-126-completion-audit.md). Итог: Vitest 220/2319, TypeScript/Vite, исходные объявления/ветви/JSX/hooks/CSS/API/22 эталона и acyclic static runtime graph PASS. Initial JS closure 1 701 779 → 893 229 байт; shared model учтён. Все пункты закрыты технически, ready-for-review. Финальный docs handoff — коммит этой записи; ZIP не заказан, owner acceptance отдельно.
+
 ## 16.10.2026 — этап 5 плана 126: ComponentLibrary
 
 Code 408b563f28b6c15e56b0726007aaf9d581738a97 опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Vitest 219/2317, TypeScript/Vite, исходные объявления/controller/JSX/hooks/CSS и API PASS. Docs — коммит этой записи; этапы 6–7 открыты.

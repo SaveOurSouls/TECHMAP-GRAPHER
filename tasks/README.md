@@ -1,6 +1,6 @@
 # Очередь задач
 
-[126 — завершить план рефакторинга редакторов](126-finish-editor-refactor.md): in-progress; REQ-161, пять крупных модулей и загрузка рабочих областей; этапы проверяются/публикуются отдельно.
+[126 — завершить план рефакторинга редакторов](126-finish-editor-refactor.md): ready-for-review; REQ-161, все семь пунктов завершены, code `45f75bb` опубликован, общий handoff/аудит заполнены; Vitest 220/2319, TypeScript/Vite PASS, ZIP не заказан.
 
 [125 — границы сцены вне CanvasViewport](125-canvas-scene-bounds.md): ready-for-review; REQ-160, code `440939f` опубликован в integration, handoff заполнен; ZIP не заказан.
 
