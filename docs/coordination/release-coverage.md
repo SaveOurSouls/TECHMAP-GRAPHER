@@ -2,6 +2,8 @@
 
 ## 126 — завершение рефакторинга, следующий срез после M5-22-054
 
+Этап 5 опубликован **408b563f28b6c15e56b0726007aaf9d581738a97**, ancestry PASS; Vitest 219/2317 и сборка PASS. Docs handoff — коммит этой записи; этапы 6–7 pending.
+
 Этап 4 опубликован: **1205eeb7e13589e4a422cfa4beedd6708be26560**, ancestry PASS; Vitest 218/2316 и сборка PASS. Docs handoff — коммит этой записи; этапы 5–7 pending.
 
 Этап 3 опубликован: **ced0a52bd9c534f4c20b0bca99a1b5041e18933d**, ancestry PASS; Vitest 217/2315, TypeScript/Vite/структурная сверка PASS. Docs handoff — коммит этой записи; этапы 4–7 pending.

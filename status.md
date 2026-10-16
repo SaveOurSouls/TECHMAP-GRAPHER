@@ -1,3 +1,7 @@
+## Завершение рефакторинга — этап 5, 16.10.2026
+
+Карточка 126 / REQ-161 in-progress. ComponentLibrary опубликован **408b563f28b6c15e56b0726007aaf9d581738a97**, ancestry PASS: фасад 1600 → 6 строк, draft/catalog/editing/properties/controller/JSX разделены. PASS: Vitest 219/2317, TypeScript/Vite, исходные объявления/JSX/hooks/CSS, все 22 runtime-экспорта и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 6–7 открыты; сервер, ручная приёмка и ZIP не затронуты.
+
 ## Завершение рефакторинга — этап 4, 16.10.2026
 
 Карточка 126 / REQ-161 in-progress. Модель опубликована **1205eeb7e13589e4a422cfa4beedd6708be26560**, ancestry PASS: фасад 2211 → 9 строк, контракты/вычисления/парсеры разделены. PASS: Vitest 218/2316, TypeScript/Vite, 152 объявления/40 экспортов, pure type contracts и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 5–7 открыты; сервер/ручная приёмка/ZIP не затронуты.

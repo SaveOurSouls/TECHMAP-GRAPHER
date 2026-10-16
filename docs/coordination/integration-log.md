@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — этап 5 плана 126: ComponentLibrary
+
+Code 408b563f28b6c15e56b0726007aaf9d581738a97 опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Vitest 219/2317, TypeScript/Vite, исходные объявления/controller/JSX/hooks/CSS и API PASS. Docs — коммит этой записи; этапы 6–7 открыты.
+
 ## 16.10.2026 — этап 4 плана 126: модель
 
 Code 1205eeb7e13589e4a422cfa4beedd6708be26560 опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Контракты/вычисления/парсеры разделены, Vitest 218/2316 и TypeScript/Vite PASS; 152 объявления и API сохранены. Docs этапа — коммит этой записи, этапы 5–7 открыты.

@@ -26,3 +26,7 @@
 ## Этап 4 — модель, ready-for-review
 
 База 83d312f; code **1205eeb7e13589e4a422cfa4beedd6708be26560** опубликован в integration, ancestry PASS. Фасад 2211 → 9 строк, контракты/defaults/geometry/presentation/measurements и parser-слои разделены. 152 объявления и все 40 runtime-экспортов сохранены; pure type contracts и acyclic runtime graph PASS. Baseline 5/153, профиль 6/154, полный Vitest **218/2316 PASS**, 81,44 с; TypeScript/Vite PASS, Vite 1,27 с; эталоны/diff-check/review PASS. Docs handoff — коммит этого раздела. Этапы 5–7 открыты; ограничения прежние.
+
+## Этап 5 — ComponentLibrary, ready-for-review
+
+База bf901a9; code **408b563f28b6c15e56b0726007aaf9d581738a97** опубликован в integration, ancestry PASS. Фасад 1600 → 6 строк; draft/catalog/editing/types/properties/controller/JSX разделены. 45 объявлений, controller/JSX/hooks и trailing CSS import сохранены; 22 runtime-экспорта прежние, внутренний граф ацикличен. Baseline 6/42, профиль 7/43, полный Vitest **219/2317 PASS**, 101,36 с; TypeScript/Vite PASS, Vite 1,28 с; diff-check/review PASS. Docs handoff — коммит этого раздела. Этапы 6–7 открыты; ограничения прежние.
