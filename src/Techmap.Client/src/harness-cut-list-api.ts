@@ -1,5 +1,6 @@
 import type { LocalSession } from "./local-session";
-import { buildApiUrl, type RuntimeConfig } from "./runtime-config";
+import type { RuntimeConfig } from "./runtime-config";
+import { createJsonRequest, type ApiFetcher } from "./api-transport";
 
 export type HarnessCutListStatus = "limited" | "ready" | "incomplete";
 export type HarnessCutListItemStatus = "ready" | "incomplete";
@@ -45,8 +46,6 @@ export class HarnessCutListApiError extends Error {
   }
 }
 
-type CutListFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const itemStatuses = new Set<HarnessCutListItemStatus>(["ready", "incomplete"]);
 const cutListStatuses = new Set<HarnessCutListStatus>(["limited", "ready", "incomplete"]);
@@ -55,30 +54,20 @@ const warningCodes = new Set(["material-missing", "length-missing"] as const);
 export function createHarnessCutListApi(
   config: RuntimeConfig,
   _session: LocalSession,
-  fetcher: CutListFetcher = fetch,
+  fetcher: ApiFetcher = fetch,
 ): HarnessCutListApi {
+  const request = createJsonRequest(config, {
+    fetcher,
+    responseError,
+    networkError: () => new HarnessCutListApiError("Не удалось связаться с локальным сервером."),
+    invalidJsonError: () => new HarnessCutListApiError("Сервер вернул нечитаемую карту резки."),
+  });
   return Object.freeze({
     async get(projectId: string, harnessId: string): Promise<HarnessCutList> {
-      let response: Response;
-      try {
-        response = await fetcher(buildApiUrl(config,
-          `projects/${encodeURIComponent(projectId)}/harnesses/${encodeURIComponent(harnessId)}/cut-list`), {
-          method: "GET",
-          credentials: "same-origin",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
-      } catch {
-        throw new HarnessCutListApiError("Не удалось связаться с локальным сервером.");
-      }
-      if (!response.ok) throw await responseError(response);
-      let value: unknown;
-      try {
-        value = await response.json();
-      } catch {
-        throw new HarnessCutListApiError("Сервер вернул нечитаемую карту резки.");
-      }
-      return parseHarnessCutList(value, projectId, harnessId);
+      return request(`projects/${encodeURIComponent(projectId)}/harnesses/${encodeURIComponent(harnessId)}/cut-list`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      }, value => parseHarnessCutList(value, projectId, harnessId));
     },
   });
 }

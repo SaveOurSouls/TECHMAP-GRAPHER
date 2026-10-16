@@ -1,5 +1,6 @@
 import { createMutationHeaders, type LocalSession } from "./local-session";
-import { buildApiUrl, type RuntimeConfig } from "./runtime-config";
+import type { RuntimeConfig } from "./runtime-config";
+import { createJsonRequest, type ApiFetcher } from "./api-transport";
 
 export type ProjectStatus = "draft" | "active" | "completed";
 export type HarnessDocumentKind = "e4" | "drawing" | "route";
@@ -110,8 +111,6 @@ export class ProjectApiError extends Error {
     this.currentRevision = currentRevision;
   }
 }
-
-type ProjectFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const statuses = new Set<ProjectStatus>(["draft", "active", "completed"]);
 const documentKinds = new Set<HarnessDocumentKind>(["e4", "drawing", "route"]);
@@ -306,34 +305,11 @@ async function responseError(response: Response): Promise<ProjectApiError> {
 export function createProjectApi(
   config: RuntimeConfig,
   session: LocalSession,
-  fetcher: ProjectFetcher = fetch,
+  fetcher: ApiFetcher = fetch,
 ): ProjectApi {
   const mutationHeaders = createMutationHeaders(session);
 
-  async function request<T>(
-    resource: string,
-    init: RequestInit,
-    parse: (value: unknown) => T,
-  ): Promise<T> {
-    let response: Response;
-    try {
-      response = await fetcher(buildApiUrl(config, resource), {
-        credentials: "same-origin",
-        cache: "no-store",
-        ...init,
-      });
-    } catch {
-      throw new Error("Не удалось связаться с локальным сервером.");
-    }
-    if (!response.ok) throw await responseError(response);
-    let data: unknown;
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error("Сервер вернул нечитаемый ответ.");
-    }
-    return parse(data);
-  }
+  const request = createJsonRequest(config, { fetcher, responseError });
 
   const projectResource = (projectId: string): string => `projects/${encodeURIComponent(projectId)}`;
 

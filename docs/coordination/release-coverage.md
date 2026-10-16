@@ -1,5 +1,9 @@
 # Release coverage
 
+## 120 — оценка системы и транспорт API, следующий срез после M5-22-054
+
+REQ-155, [карточка 120](../../tasks/120-system-assessment-and-api-refactor.md), чат `01a14521-6a96-7152-b095-accc21abdda7`, основная ветка `codex/integration-m5-22`. In-progress, code/handoff SHA pending. Изменение не входит в ZIP M5-22-054; до завершения handoff новая поставка блокируется. ZIP не заказан.
+
 ### m5-22-054 — 16.10.2026
 
 - **Integration branch / code HEAD:** `codex/integration-m5-22` / `680717a6aba4423f7bd701c3d67f38141612f1b0`; чистое дерево, HEAD опубликован до сборки.

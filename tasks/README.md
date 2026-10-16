@@ -1,5 +1,7 @@
 # Очередь задач
 
+[120 — оценка системы и общий транспорт API](120-system-assessment-and-api-refactor.md): in-progress; REQ-155, базовый срез M5-22-054, ZIP не заказан.
+
 [118 — исключение Маршрута, Маршрута v2 и UML](118-retire-legacy-routes.md): ready-for-review; REQ-153, код и handoff опубликованы, интеграция проверяется.
 
 

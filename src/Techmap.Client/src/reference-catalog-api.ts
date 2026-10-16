@@ -1,5 +1,6 @@
 import { createMutationHeaders, type LocalSession } from "./local-session";
-import { buildApiUrl, type RuntimeConfig } from "./runtime-config";
+import type { RuntimeConfig } from "./runtime-config";
+import { createJsonRequest, type ApiFetcher } from "./api-transport";
 
 export const maximumXlsxBytes = 25 * 1024 * 1024;
 
@@ -251,8 +252,6 @@ export class ReferenceCatalogApiError extends Error {
     this.diagnostics = diagnostics;
   }
 }
-
-type ReferenceFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sha256Pattern = /^[0-9a-f]{64}$/i;
@@ -640,9 +639,17 @@ export async function xlsxFileToBase64(file: File): Promise<string> {
 export function createReferenceCatalogApi(
   config: RuntimeConfig,
   session: LocalSession,
-  fetcher: ReferenceFetcher = fetch,
+  fetcher: ApiFetcher = fetch,
 ): ReferenceCatalogApi {
   const mutationHeaders = createMutationHeaders(session);
+  const jsonRequest = createJsonRequest(config, {
+    fetcher,
+    responseError,
+    networkError: error => isAbortError(error)
+      ? error
+      : new ReferenceCatalogApiError("Не удалось связаться с локальным сервером."),
+    invalidJsonError: () => new ReferenceCatalogApiError("Сервер вернул нечитаемый ответ."),
+  });
 
   const resource = (sourceId: string, suffix: string): string =>
     `reference-sources/${encodeURIComponent(sourceId)}/${suffix}`;
@@ -686,29 +693,13 @@ export function createReferenceCatalogApi(
   }
 
   async function request<T>(path: string, init: RequestInit, parse: (input: unknown) => T): Promise<T> {
-    let response: Response;
-    try {
-      response = await fetcher(buildApiUrl(config, path), {
-        credentials: "same-origin",
-        cache: "no-store",
-        ...init,
-      });
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      throw new ReferenceCatalogApiError("Не удалось связаться с локальным сервером.");
-    }
-    if (!response.ok) throw await responseError(response);
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new ReferenceCatalogApiError("Сервер вернул нечитаемый ответ.");
-    }
-    try {
-      return parse(body);
-    } catch (error) {
-      throw new ReferenceCatalogApiError(error instanceof Error ? error.message : "Сервер вернул повреждённый ответ.");
-    }
+    return jsonRequest(path, init, body => {
+      try {
+        return parse(body);
+      } catch (error) {
+        throw new ReferenceCatalogApiError(error instanceof Error ? error.message : "Сервер вернул повреждённый ответ.");
+      }
+    });
   }
 
   return Object.freeze({

@@ -1,5 +1,6 @@
 import { createMutationHeaders, type LocalSession } from "../local-session";
-import { buildApiUrl, type RuntimeConfig } from "../runtime-config";
+import type { RuntimeConfig } from "../runtime-config";
+import { createJsonRequest, type ApiFetcher } from "../api-transport";
 import { normalizeE4RoutingDocument } from "./commands";
 import { parseHarnessDesignDocument, type HarnessDesignDocument } from "./model";
 
@@ -32,40 +33,22 @@ export class HarnessDesignApiError extends Error {
   }
 }
 
-type DesignFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
 export function createHarnessDesignApi(
   config: RuntimeConfig,
   session: LocalSession,
-  fetcher: DesignFetcher = fetch,
+  fetcher: ApiFetcher = fetch,
 ): HarnessDesignApi {
   const headers = createMutationHeaders(session);
   const resource = (projectId: string, harnessId: string) =>
     `projects/${encodeURIComponent(projectId)}/harnesses/${encodeURIComponent(harnessId)}/design`;
 
-  async function request(
-    path: string,
-    init: RequestInit,
-  ): Promise<HarnessDesignResource> {
-    let response: Response;
-    try {
-      response = await fetcher(buildApiUrl(config, path), {
-        credentials: "same-origin",
-        cache: "no-store",
-        ...init,
-      });
-    } catch {
-      throw new HarnessDesignApiError("Не удалось связаться с локальным сервером.", null, null);
-    }
-    if (!response.ok) throw await parseError(response);
-    let value: unknown;
-    try {
-      value = await response.json();
-    } catch {
-      throw new HarnessDesignApiError("Сервер вернул нечитаемый документ жгута.", null, null);
-    }
-    return parseResource(value);
-  }
+  const jsonRequest = createJsonRequest(config, {
+    fetcher,
+    responseError: parseError,
+    networkError: () => new HarnessDesignApiError("Не удалось связаться с локальным сервером.", null, null),
+    invalidJsonError: () => new HarnessDesignApiError("Сервер вернул нечитаемый документ жгута.", null, null),
+  });
+  const request = (path: string, init: RequestInit) => jsonRequest(path, init, parseResource);
 
   return {
     get: (projectId, harnessId) => request(resource(projectId, harnessId), {
