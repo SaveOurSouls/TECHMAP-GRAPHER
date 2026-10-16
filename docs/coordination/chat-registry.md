@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 121 — декомпозиция CanvasViewport, 16.10.2026
+
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-156, [карточка 121](../../tasks/121-canvas-connector-modules.md); in-progress. Основная `codex/integration-m5-22`, база `6b1e130`. Владелец: CanvasViewport, новые canvas-connector-layout/renderer, canvas-scene-metadata, свои тесты и docs. Код команд, HarnessDesignEditor и П/ОП исключён. Coverage: следующий срез после M5-22-054; ZIP не заказан.
+
 ## 120 — оценка системы и общий транспорт API, 16.10.2026
 
 Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, [карточка 120](../../tasks/120-system-assessment-and-api-refactor.md), REQ-155; ready-for-review. Ветка `codex/integration-m5-22`, основная рабочая копия, база `d4671ac`. Владелец файлов: `api-transport.ts` и тесты, четыре API (project/reference-catalog/design/cut-list), отчёт оценки, ADR-0025 и собственные записи общих документов. Код геометрии/команд и файлы соседних задач не менялись. Код `2e1351fb50d33f2b2983dffd240901610e91fc8c` опубликован и включён прямо в integration (ancestry PASS); [handoff](handoff-120-system-assessment.md). PASS: Vitest 209/2271, TS/Vite, .NET build/1142, performance 1/1. Coverage: следующий срез после M5-22-054; ZIP не заказан, owner acceptance открыта.
