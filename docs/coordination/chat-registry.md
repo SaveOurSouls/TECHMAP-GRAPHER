@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 119 — удалить legacy-страницы «Маршрут» и «Маршрут v2», 16.10.2026
+
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, карточка [119](../../tasks/119-remove-legacy-route-pages.md), REQ-154; in-progress. Регистрация: `codex/remove-legacy-route-pages-work`, `tmp/remove-legacy-route-pages`, база `f47d55e9078fc792cf30500592711f35b72b4000` (`origin/codex/integration-m5-22`). Исполнитель владеет подтверждёнными legacy V1/V2 page-компонентами, исключительно их модулями/тестами и UI-навигацией; Route V3 и файлы карточки 117 исключены. Координатор владеет общими требованиями, индексом, реестром и coverage. Code/handoff SHA ожидаются. Release coverage: pending; ZIP не заказывался.
+
 ## 117 — заготовки проводов по схемам, 16.10.2026
 
 Чат `01a144a5-6da7-7483-b2ef-7b048627a9bf`, `/root`, [карточка 117](../../tasks/117-wire-preparation-schemes.md), REQ-152; in-progress. Ветка `codex/integration-m5-22`, основной worktree. Владелец: WireBlank/WirePreparation, ReferenceImportPanel, серверные seed/validation/Program, V3 model/panel и модуль схем, профильные тесты, собственные разделы docs/tasks. Пересекающиеся работы завершены и интегрированы. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.

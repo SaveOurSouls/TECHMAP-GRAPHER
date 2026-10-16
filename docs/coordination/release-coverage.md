@@ -373,3 +373,8 @@ REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md
 ## 117 — следующий срез после M5-22-053
 
 REQ-152, in-progress; код/handoff pending до проверок. Последний ZIP не содержит изменение.
+# Открытая работа для следующего среза
+
+## Карточка 119 / REQ-154 — legacy-страницы «Маршрут» и «Маршрут v2»
+
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, статус in-progress. Код и handoff ещё не переданы. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Coverage pending: нельзя утверждать включение в ZIP до handoff и проверки интеграции. Route V3 сохраняется. Сборка ZIP для карточки не заказана.
