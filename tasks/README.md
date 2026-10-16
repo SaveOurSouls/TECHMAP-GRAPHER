@@ -1,6 +1,6 @@
 # Очередь задач
 
-[125 — границы сцены вне CanvasViewport](125-canvas-scene-bounds.md): in-progress; REQ-160, база `9f6343f`, ZIP не заказан.
+[125 — границы сцены вне CanvasViewport](125-canvas-scene-bounds.md): ready-for-review; REQ-160, code `440939f` опубликован в integration, handoff заполнен; ZIP не заказан.
 
 [124 — hit-test сцены вне CanvasViewport](124-canvas-scene-hit-test.md): ready-for-review; REQ-159, code `a5873e8` опубликован в integration, handoff заполнен; ZIP не заказан.
 

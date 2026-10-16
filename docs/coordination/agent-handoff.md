@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 125 — границы сцены вне CanvasViewport, 16.10.2026
+
+REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`440939f942b53bf09bbaf422829f9b696ff7bf52`** опубликован в integration, ancestry PASS. [Handoff](handoff-125-canvas-scene-bounds.md), [протокол](../canvas-scene-bounds-125-refactor.md). CanvasViewport 2679 → 2463 строки; границы/подписи выделены при прежнем API и общей толщине обводки разделки. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и исходный жгут не проверены. ZIP не заказан; owner acceptance открыта.
+
 ## 124 — hit-test сцены вне CanvasViewport, 16.10.2026
 
 REQ-159, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`a5873e8142ba79f7c0baec9a43ba638cbd46f798`** опубликован в integration, ancestry PASS. [Handoff](handoff-124-canvas-scene-hit-test.md), [протокол](../canvas-scene-hit-test-124-refactor.md). CanvasViewport 2923 → 2679 строк; геометрия мишеней и приоритеты выбора выделены с прежним API и неизменными телами функций/оставшимся кодом. PASS: baseline/профиль 11/177, полный Vitest 213/2303, TypeScript/Vite, 16 неизменных эталонов, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и исходный жгут не проверены. ZIP не заказан; owner acceptance открыта.

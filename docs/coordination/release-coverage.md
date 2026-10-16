@@ -2,7 +2,7 @@
 
 ## 125 — границы сцены, следующий срез после M5-22-054
 
-REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 125](../../tasks/125-canvas-scene-bounds.md); in-progress, code/handoff pending, integration-ветка. В M5-22-054 не входит; до завершения handoff новая поставка блокируется. ZIP не заказан.
+REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 125](../../tasks/125-canvas-scene-bounds.md); ready-for-review. Код **`440939f942b53bf09bbaf422829f9b696ff7bf52`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-125-canvas-scene-bounds.md) — этот docs-коммит. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. В M5-22-054 не входит; включить вместе с 120–124 в следующий заказанный релиз с проверкой code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.
 
 ## 124 — hit-test сцены, следующий срез после M5-22-054
 

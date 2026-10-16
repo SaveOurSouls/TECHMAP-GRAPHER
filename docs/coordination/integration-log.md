@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — границы сцены CanvasViewport, карточка 125
+
+Code SHA `440939f942b53bf09bbaf422829f9b696ff7bf52` опубликован прямо в codex/integration-m5-22, push `9f6343f..440939f`; ancestry PASS. REQ-160, ADR-0030, [handoff](handoff-125-canvas-scene-bounds.md). CanvasViewport 2679 → 2463 строки; границы и подписи выделены при единой толщине обводки разделки, неизменных телах функций и оставшемся коде. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. Сервер/форматы не менялись, .NET/browser/portable не запускались. M5-22-054 изменения не содержит, ZIP не заказан; документальный handoff — коммит этой записи, owner acceptance открыта.
+
 ## 16.10.2026 — hit-test сцены CanvasViewport, карточка 124
 
 Code SHA `a5873e8142ba79f7c0baec9a43ba638cbd46f798` опубликован прямо в `codex/integration-m5-22`, push `43c57e3..a5873e8`; ancestry PASS. REQ-159, ADR-0029, [handoff](handoff-124-canvas-scene-hit-test.md). CanvasViewport 2923 → 2679 строк; геометрия мишеней/приоритеты выбора выделены без изменения перенесённых функций и оставшегося viewport. PASS: baseline/профиль 11/177, полный Vitest 213/2303, TypeScript/Vite, 16 неизменных эталонов, diff-check/review. Сервер/форматы не менялись; .NET/browser/portable не запускались. M5-22-054 изменения не содержит; новый ZIP не заказан. Документальный handoff — коммит этой записи; owner acceptance открыта.
