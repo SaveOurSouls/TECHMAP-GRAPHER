@@ -672,7 +672,7 @@ export function HarnessEditorWorkspace({
             active={view}
             onNavigate={async section => {
               if (section === "e4" || section === "drawing") changeView(section);
-              else if (section === "route" && onRouteRequest) await onRouteRequest();
+              else if (section === "route-v3" && onRouteRequest) await onRouteRequest();
               else await onSectionChange?.(section);
             }}
             onHome={onClose}

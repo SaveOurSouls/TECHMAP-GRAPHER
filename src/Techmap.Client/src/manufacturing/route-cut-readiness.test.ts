@@ -5,17 +5,25 @@ import { createEmptyHarnessDesign, type HarnessDesignDocument } from "../editor/
 import { createConnector, createWire } from "../editor/commands";
 import { CutDiagramPanel } from "../editor/CutDiagramPanel";
 import { buildLiveCutList } from "../editor/live-cut-list";
-import { generateRoute, updateRouteRow } from "./route-commands";
+import { parseManufacturingRoute, type ManufacturingRoute, type RouteRow } from "./route-model";
 import { routeCutReadiness } from "./route-cut-readiness";
 import type { RouteOperation } from "./route-model";
+
+const updateRouteRow = (route: ManufacturingRoute, id: string, patch: Partial<RouteRow>): ManufacturingRoute => ({ ...route, rows: route.rows.map(row => row.id === id ? { ...row, ...patch } : row) });
 
 const sha = "a".repeat(64);
 const binding: NonNullable<RouteOperation["binding"]> = { sourceId: "ops", entityType: "operation", snapshotId: "11111111-1111-4111-8111-111111111111", snapshotSha256: sha, recordId: "b".repeat(64), sourceKey: "cut", displayName: "Резка" };
 function prepared(): HarnessDesignDocument {
   const a=createConnector("a","X1",1,{x:0,y:0}),b=createConnector("b","X2",1,{x:300,y:0});
   let doc:HarnessDesignDocument={...createEmptyHarnessDesign(),connectors:[a,b],wires:[{...createWire("w",{connectorId:"a",contactId:a.contacts[0]!.id},{connectorId:"b",contactId:b.contacts[0]!.id},null),lengthMm:100}],cables:[{id:"cable",memberWireIds:["w"],lengthMm:150,endCorrectionFromMm:0,endCorrectionToMm:0,cutRoundingStepMm:1}],physicalTopology:{snap:false,nodes:[],segments:[],routes:[],coverings:[{id:"cover",name:"Оплётка",spans:[{segmentId:"s",from:0,to:1,fromAnchor:0,toAnchor:2}],width:20,color:"#000000",lengthMode:"auto",lengthMm:null}]},drawingDocuments:{tables:[],leaders:[],bomOrder:[],dimensions:[{id:"d",segmentId:"s",from:0,to:2,pointCount:3,routeKey:"s",mode:"path",offset:20,lengthMm:120.125}]}};
-  let route=generateRoute(doc,sha);
-  for(const row of route.rows)if(row.sourceObjects[0]!.kind!=="wire")route=updateRouteRow(route,row.id,{prepared:true,operations:[{id:`cut-${row.id}`,binding,mode:"cut",note:""}]});
+  const route = parseManufacturingRoute({
+    contractVersion: 1, source: { fingerprintVersion: 1, sha256: sha }, status: "draft",
+    rows: [{ kind: "cable", id: "cable" }, { kind: "covering", id: "cover" }].map(ref => ({
+      id: ref.id, kind: "semiFinished", title: ref.id, sourceObjects: [ref], dependsOn: [], comment: "",
+      prepared: true, operations: [{ id: `cut-${ref.id}`, binding, mode: "cut", note: "" }],
+      presentation: { backgroundOpacity: .25, objects: [] },
+    })),
+  })!;
   return {...doc,manufacturingRoute:route};
 }
 describe("route cut readiness",()=>{

@@ -1,7 +1,22 @@
 import type { Point } from "../editor/model";
 import type { RouteSourceRef } from "./route-source";
-import type { RouteTerminalRequirement } from "./route-terminal-requirements";
 import { parseRouteDrawingCopy, type RouteDrawingCopy } from "./route-drawing-copy";
+
+export interface RouteTerminalRequirement {
+  readonly wireId: string;
+  readonly end: "from" | "to";
+  readonly terminalArticle: string;
+  readonly stripLengthMm: number | null;
+  readonly binding: null | {
+    readonly sourceId: string;
+    readonly entityType: "terminal";
+    readonly snapshotId: string;
+    readonly snapshotSha256: string;
+    readonly recordId: string;
+    readonly sourceKey: string;
+    readonly displayName: string;
+  };
+}
 
 export const routeOperationModes = ["cut", "cut-strip-from", "cut-strip-to", "cut-strip-both", "cut-crimp", "tin", "strip-from", "strip-to", "strip-both", "assembly"] as const;
 export interface RouteOperation {

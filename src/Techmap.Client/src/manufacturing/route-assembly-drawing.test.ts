@@ -3,11 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { createConnector, createWire } from "../editor/commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor } from "../editor/model";
-import { generateRoute } from "./route-commands";
+import type { RouteRow } from "./route-model";
 import { buildRouteSourceItems } from "./route-source";
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview, assemblyDrawingFragment, assemblyDrawingScene, createAssemblyDrawingDraft, moveAssemblyDrawingObject, setAssemblyDrawingLayerVisibility } from "./RouteAssemblyDrawing";
 import { designToScene } from "../editor/HarnessDesignEditor";
 import { physicalFixture } from "../editor/physical-topology-fixture";
+
+const assemblyRow = (): RouteRow => ({ id: "assembly", kind: "assembly", title: "Первая сборка", sourceObjects: [], dependsOn: [], comment: "", operations: [], prepared: false, presentation: { backgroundOpacity: .25, objects: [] } });
 
 const runtime = { config: { configVersion: 1 as const, basePath: "/", apiBasePath: "/api", appVersion: "test", apiVersion: "1", schemaVersion: "1" }, session: { csrfNonce: "test", instanceId: "test" }, projectId: "p", harnessId: "h" };
 function fixture() {
@@ -17,8 +19,7 @@ function fixture() {
   const document = { ...createEmptyHarnessDesign(), connectors: [a, b], wires: [wire] };
   document.wires = document.wires.map(w => ({ ...w, e4Route: createOrthogonalE4Route(wireEndpointE4Anchor(document, w.from)!, wireEndpointE4Anchor(document, w.to)!) }));
   const items = buildRouteSourceItems(document);
-  const generated = generateRoute(document, "a".repeat(64), 1);
-  const row = { ...generated.rows[0]!, kind: "assembly" as const, title: "Первая сборка" };
+  const row = assemblyRow();
   return { document, items, row };
 }
 
@@ -88,8 +89,7 @@ describe("assembly drawing copy", () => {
       joiningPipes: [{ id: "op", start: { x: 120, y: 80 }, end: { x: 360, y: 80 }, path: { kind: "polyline" as const, points: [] }, members: [{ segmentIds: ["S0"], from: 0, to: 1, reverse: false }], mode: "flat" as const }],
       coverings: [{ id: "shell", name: "Оболочка", width: 14, color: "#aebfc9", lengthMm: null, spans: [{ segmentId: "S0", from: 0, to: 1 }] }],
     } };
-    const generated = generateRoute(document, "a".repeat(64), 1);
-    const row = { ...generated.rows[0]!, kind: "assembly" as const };
+    const row = assemblyRow();
     const draft = createAssemblyDrawingDraft(row, document, []);
     const ids = draft.drawingObjects!.map(object => object.id);
     expect(ids).toContain("S0");
@@ -104,7 +104,7 @@ describe("assembly drawing copy", () => {
   it("persists layer visibility and moves a covering in the copy", () => {
     const base = physicalFixture();
     const document = { ...base, physicalTopology: { ...base.physicalTopology!, coverings: [{ id: "shell", name: "Оболочка", width: 14, color: "#aaa", lengthMm: null, spans: [{ segmentId: "S0", from: 0, to: 1 }] }] } };
-    const row = { ...generateRoute(document, "a".repeat(64), 1).rows[0]!, kind: "assembly" as const };
+    const row = assemblyRow();
     const draft = createAssemblyDrawingDraft(row, document, []);
     const shell = draft.drawingObjects!.find(object => object.id === "shell")!;
     const hidden = setAssemblyDrawingLayerVisibility(draft.drawingObjects!, shell.layerId, false);

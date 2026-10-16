@@ -7,7 +7,7 @@ import type { RouteV3Operation } from "./route-v3-operations";
 import { validRouteV3Operation } from "./route-v3-operations";
 import { routeV3TerminationOperationRefs } from './route-v3-operations';
 import { captureRouteV3SourceState, validRouteV3SourceState, validRouteV3SourceDivergence, type RouteV3SourceState, type RouteV3SourceDivergence } from "./route-v3-source-refresh";
-import type { RouteV2Drawing } from "../manufacturing-v2/route-v2-model";
+import type { RouteCardDrawing } from "../manufacturing/route-card-drawing";
 import { routeV3EmbeddedArtifactOwners } from './route-v3-wire-terminals';
 import { adoptRouteV3WireTerminals } from './route-v3-wire-terminals-adoption';
 
@@ -53,7 +53,7 @@ export interface RouteV3Node {
   readonly rawRefs?: readonly RouteSourceRef[];
   /** Stable production products exposed by this card. Cut cards have one per ref; assemblies have one. */
   readonly products?: readonly RouteV3Product[];
-  readonly drawing?: RouteV2Drawing;
+  readonly drawing?: RouteCardDrawing;
 }
 export interface RouteV3Product {
   readonly id: string;

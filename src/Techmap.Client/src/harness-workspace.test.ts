@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { canLeaveProject, HarnessDocumentTabs, rememberHarnessTab } from "./App";
-import { HarnessSectionNavigation, harnessSectionItems } from "./editor/HarnessSectionNavigation";
+import { HarnessSectionNavigation, harnessSectionItems, resolveHarnessSection } from "./editor/HarnessSectionNavigation";
 import type { HarnessSummary } from "./project-api";
 
 const harness: HarnessSummary = {
@@ -20,7 +20,7 @@ const harness: HarnessSummary = {
 };
 
 describe("harness workspace", () => {
-  it("renders the three persisted tabs and two isolated test editors", () => {
+  it("renders only the three current harness documents", () => {
     const markup = renderToStaticMarkup(createElement(HarnessDocumentTabs, {
       harness,
       activeTab: "drawing",
@@ -29,38 +29,49 @@ describe("harness workspace", () => {
 
     expect(markup).toContain("Схема Э4");
     expect(markup).toContain("Чертёж");
-    expect(markup).toContain("Маршрут");
-    expect(markup).toContain("Маршрут v2");
+    expect(markup).not.toContain("<strong>Маршрут</strong>");
+    expect(markup).not.toContain("Маршрут v2");
     expect(markup).toContain("Маршрут v3");
-    expect(markup).toContain("UML");
-    expect(markup).toContain("UML универсальный");
+    expect(markup).not.toContain("UML");
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Геометрия, размеры и технические требования");
     expect(markup).toContain("Открыть документ");
     expect(markup).toContain('class="harness-document-button active"');
     expect(markup).not.toContain(harness.documents[1]!.documentId);
+    expect(markup.match(/<button /g)).toHaveLength(3);
+    expect(markup).not.toContain("Тестовый режим");
   });
 
   it("remembers the active tab independently for each selected harness", () => {
     let state = rememberHarnessTab({}, "harness-a", "drawing");
-    state = rememberHarnessTab(state, "harness-b", "route");
+    state = rememberHarnessTab(state, "harness-b", "route-v3");
     state = rememberHarnessTab(state, "harness-a", "e4");
 
-    expect(state).toEqual({ "harness-a": "e4", "harness-b": "route" });
+    expect(state).toEqual({ "harness-a": "e4", "harness-b": "route-v3" });
   });
 
-  it("renders the five-way editor navigation and project return", () => {
+  it("restores current tabs and falls back safely for unavailable or malformed tabs", () => {
+    for (const item of harnessSectionItems) expect(resolveHarnessSection(item.id)).toBe(item.id);
+    for (const value of ["route", "route-v2", "uml", "unknown", null, undefined, 3, {}]) {
+      expect(resolveHarnessSection(value)).toBe("e4");
+    }
+  });
+
+  it("renders the three-way editor navigation and project return", () => {
     const markup = renderToStaticMarkup(createElement(HarnessSectionNavigation, {
-      active: "route-v2",
+      active: "route-v3",
       onNavigate: vi.fn(),
       onHome: vi.fn(),
     }));
 
-    expect(harnessSectionItems).toHaveLength(6);
+    expect(harnessSectionItems.map(item => item.id)).toEqual(["e4", "drawing", "route-v3"]);
     for (const item of harnessSectionItems) expect(markup).toContain(item.label);
     expect(markup).toContain("К проектам");
     expect(markup).toContain('aria-current="page"');
+    expect(markup).not.toContain(">Маршрут</button>");
+    expect(markup).not.toContain("Маршрут v2");
+    expect(markup).not.toContain("UML");
   });
 
   it("blocks project-menu return when the draft confirmation is declined", () => {

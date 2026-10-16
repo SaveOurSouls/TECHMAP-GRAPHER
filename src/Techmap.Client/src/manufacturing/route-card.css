@@ -1,0 +1,21 @@
+/* Shared card settings and local drawing editor layout. */
+.route-card-settings-section { margin:24px 0; }
+.route-card-settings-section h4 { display:flex; align-items:center; gap:8px; margin:0 0 12px; font-size:15px; color:#31556a; }
+.route-card-settings-section h4>span { font-size:11px; color:#6992a6; }
+.route-card-source-choices { max-height:270px; overflow:auto; border-top:1px solid #e2ebef; }
+.route-card-material-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.route-card-ref-choice { display:flex; align-items:center; gap:12px; padding:11px 10px; border-bottom:1px solid #e7eef1; cursor:pointer; }
+.route-card-ref-choice.checked { background:#f3f9fc; }
+.route-card-ref-choice>input { width:16px; height:16px; flex:none; accent-color:#267fa6; }
+.route-card-ref-choice>span { display:grid; gap:3px; }
+.route-card-ref-choice strong { font-size:12px; font-weight:650; }
+.route-card-ref-choice small { color:#738795; font-size:11px; }
+@media (min-width:651px) {
+  .route-card-drawing-host .harness-editor .he-header { grid-template-columns:minmax(0,1fr) auto auto; grid-template-rows:1fr; }
+  .route-card-drawing-host .harness-editor .he-header-identity { grid-column:1; grid-row:1; }
+  .route-card-drawing-host .harness-editor .he-header > .he-save-state { grid-column:2; grid-row:1; white-space:nowrap; }
+  .route-card-drawing-host .harness-editor .he-header > .he-back { grid-column:3; grid-row:1; width:auto; padding:0 12px; font-size:12px; }
+}
+@media (max-width:900px) {
+  .route-card-material-groups { grid-template-columns:1fr; }
+}

@@ -4,13 +4,15 @@ import "./harness-section-navigation.css";
 export const harnessSectionItems = [
   { id: "e4", label: "Схема Э4" },
   { id: "drawing", label: "Чертёж" },
-  { id: "route", label: "Маршрут" },
-  { id: "route-v2", label: "Маршрут v2" },
   { id: "route-v3", label: "Маршрут v3" },
-  { id: "uml", label: "UML универсальный" },
 ] as const;
 
 export type HarnessSectionId = typeof harnessSectionItems[number]["id"];
+
+/** Ignore unavailable sections when restoring the last document of a harness. */
+export function resolveHarnessSection(value: unknown): HarnessSectionId {
+  return harnessSectionItems.find(item => item.id === value)?.id ?? "e4";
+}
 
 interface HarnessSectionNavigationProps {
   readonly active: HarnessSectionId;

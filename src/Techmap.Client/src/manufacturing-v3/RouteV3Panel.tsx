@@ -14,13 +14,12 @@ import { type RouteSourceRef } from "../manufacturing/route-source";
 import { createIndependentIsolatedDocument, createRouteDrawingCopy } from "../manufacturing/route-drawing-copy";
 import { RouteAssemblyDrawing, RouteAssemblyDrawingPreview } from "../manufacturing/RouteAssemblyDrawing";
 import type { RouteRow } from "../manufacturing/route-model";
-import { RouteV2SourceArtwork } from "../manufacturing-v2/RouteV2Artwork";
 import { RouteV3WireArtworkPreview } from "./route-v3-wire-artwork";
 import { HarnessSectionNavigation, type HarnessSectionId } from "../editor/HarnessSectionNavigation";
 import { appendRouteV3Fragment, applyRouteV3SourceRefresh, captureRouteV3Selection, createInitialRouteV3, fragmentDrawingCopy, generateRouteV3, parseRouteV3, previewRouteV3SourceRefresh, refKey, removeRouteV3Fragment, resolveRouteV3SourceDivergence, revealedRouteV3Ids, routeV3StorageKey, routeV3WireArtworkOverride, type RouteV3Document, type RouteV3Fragment, type RouteV3Node } from "./route-v3-model";
 import { RouteV3Graph } from "./RouteV3Graph";
 import { editableRouteV3, refreshRouteV3 } from "./route-v3-graph";
-import "../manufacturing-v2/route-v2.css";
+import "../manufacturing/route-card.css";
 import "./route-v3.css";
 import { syncRouteV3TerminationOperations } from './route-v3-model';
 import { RouteV3SourceArtwork } from './route-v3-termination-artwork';
@@ -186,7 +185,7 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
       </div>}
     </div>
     {preparationOpen && preparation.data && <WirePreparationDialog route={board} source={source} schemes={preparation.data.schemes} blanks={preparation.data.blanks} onClose={() => setPreparationOpen(false)} onApply={(assignments, schemes) => { persist(applyWirePreparation(board, assignments, schemes)); setPreparationOpen(false); }} />}
-    {editing && <Dialog label={`Редактор слепка ${editing.title}`} editor onClose={() => setEditing(null)}><div className="route-v2-drawing-host"><RouteAssemblyDrawing key={editing.id} config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={fragmentRow(editing)} items={sources.filter(item => editing.refs.some(ref => refKey(ref) === refKey(item.ref)))} onCancel={() => setEditing(null)} onSave={presentation => { persist(appendRouteV3Fragment(current.current, { ...editing, drawingCopy: presentation.drawingCopy ?? editing.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy, mode: presentation.isolatedDrawingCopy ? "isolated" : "source", backgroundOpacity: presentation.backgroundOpacity })); setEditing(null); setTitle(""); }} /></div></Dialog>}
+    {editing && <Dialog label={`Редактор слепка ${editing.title}`} editor onClose={() => setEditing(null)}><div className="route-card-drawing-host"><RouteAssemblyDrawing key={editing.id} config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={fragmentRow(editing)} items={sources.filter(item => editing.refs.some(ref => refKey(ref) === refKey(item.ref)))} onCancel={() => setEditing(null)} onSave={presentation => { persist(appendRouteV3Fragment(current.current, { ...editing, drawingCopy: presentation.drawingCopy ?? editing.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy, mode: presentation.isolatedDrawingCopy ? "isolated" : "source", backgroundOpacity: presentation.backgroundOpacity })); setEditing(null); setTitle(""); }} /></div></Dialog>}
     {drawingNode && <Dialog label={`Рисунок карточки ${drawingNode.title}`} editor onClose={() => setDrawingNode(null)}><RouteAssemblyDrawing config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={{ ...finalRow, id: drawingNode.id, title: drawingNode.title, sourceObjects: drawingNode.refs, presentation: { objects: [], backgroundOpacity: 0, ...drawingNode.drawing } }} items={sources.filter(s => drawingNode.refs.some(r => refKey(r) === refKey(s.ref)))} onCancel={() => setDrawingNode(null)} onSave={presentation => { persist({ ...board, graphEdited: true, nodes: board.nodes.map(n => n.id === drawingNode.id ? { ...n, drawing: { backgroundOpacity: presentation.backgroundOpacity, drawingCopy: presentation.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy } } : n) }); setDrawingNode(null); }} /></Dialog>}
     {preview && <Dialog label={preview.title} onClose={() => setPreview(null)}><header className="route-v3-preview-heading"><h3>{preview.title}</h3><button className="secondary-action" onClick={() => setPreview(null)}>Закрыть</button></header><div className="route-v3-large-preview">{nodeArtwork(preview, true)}</div></Dialog>}
   </section>;
