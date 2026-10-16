@@ -1,5 +1,9 @@
 # Восстановленная архитектура
 
+## Hit-test сцены (REQ-159)
+
+`editor/canvas-scene-hit-test.ts` определяет попадание указателя в объекты, ручки, концы проводов и контуры кабельных оболочек, сохраняя приоритеты Э4/Чертежа и существующие допуски. CanvasViewport передаёт сцену/слои/масштаб и сохраняет прежние публичные экспорты. Модуль использует существующую геометрию без зависимости от React/CanvasViewport и глобального DOM. [ADR-0029](decisions/0029-canvas-scene-hit-test.md), [протокол 124](canvas-scene-hit-test-124-refactor.md).
+
 ## Рисование Э4 (REQ-158)
 
 `editor/canvas-e4-renderer.ts` рисует мостики, диффпары, узлы и экраны по расчётам canvas-e4-scene и содержит общий stroke с обводкой белого провода. CanvasViewport передаёт контекст/сцену и сохраняет порядок всех вызовов, включая использование stroke в Чертеже; прежний drawE4DifferentialPairs переэкспортирован. Новый модуль не зависит от React/CanvasViewport и глобального DOM. [ADR-0028](decisions/0028-canvas-e4-renderer.md), [протокол 123](canvas-e4-renderer-123-refactor.md).
