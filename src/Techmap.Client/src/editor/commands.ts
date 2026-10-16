@@ -62,6 +62,7 @@ import { normalizeE4WireLabelPosition } from "./e4-wire-label";
 import { resolveWireColorHex } from "./wire-reference-catalog";
 import { orthogonalE4Deformation, editedE4Points, preserveE4Leads, moveE4Ends, movedE4Junctions, followE4Junctions, resolveE4JunctionMoves } from "./e4-editing";
 import { commonHorizontalPairSpan } from "./e4-parallel-spans";
+import { segmentEntersRect } from "./segment-geometry";
 import { wireBlankEnds, type WireBlankEnd } from "../WireBlankCatalog";
 import { applyTerminationCommand, isTerminationCommand, reconcileTerminationReferences, type TerminationCommand } from './termination-commands';
 import { connectedTerminationWireIds, validateTerminationComponents, validateTerminationCircuits } from './termination-model';
@@ -467,16 +468,6 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           ? carryPhysicalExits(document,shifted,new Set(document.physicalTopology?.nodes.filter(n=>n.connectorId===command.connectorId).map(n=>n.id)),command.physicalDragMode)
           : shifted;
       }
-      const previousConnector = document.connectors.find(c => c.id === command.connectorId)!;
-      // Termination contacts have point-sized routing anchors. Carrying their
-      // attached automatic routes as manual polylines can leave diagonal or
-      // colliding traces after a small drag, so rebuild the affected routes
-      // around the moved component. Existing valid manual routes are preserved
-      // by rebuildConnectorE4Wires.
-      if (command.physicalDragMode && previousConnector.terminationComponent) {
-        if(document.views.e4.layers.some(l=>l.locked&&(l.id===previousConnector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===previousConnector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
-        return rebuildConnectorE4Wires(moved, command.connectorId, previousConnector);
-      }
       if(command.physicalDragMode){
         const connector=document.connectors.find(c=>c.id===command.connectorId)!;
         if(document.views.e4.layers.some(l=>l.locked&&(l.id===connector.layerIds.e4||document.wires.some(w=>[w.from,w.to].some(e=>e.connectorId===connector.id)&&w.layerIds.e4===l.id))))throw new Error("Слой соединителя или проводов заблокирован.");
@@ -495,7 +486,10 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
           proposals.set(wire.id,movedE4Junctions(document,wire.id,baseline,geometry?.vertices??raw,geometry?.segments,geometry?.points));
           owners.add(wire.id);
           const points=geometry?.points??preserveE4Leads(raw,start,end);
-          changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),e4RouteMode:"manual"}:w)};
+          // A termination drag uses the same validated local deformation as a
+          // table. Keep automatic wires automatic for later obstacle reflows.
+          changed={...changed,wires:changed.wires.map(w=>w.id===wire.id?{...w,e4Route:points.slice(1,-1),
+            e4RouteMode:connector.terminationComponent?(w.e4RouteMode??"auto"):"manual"}:w)};
         }
         const positions=resolveE4JunctionMoves(document,proposals);
         const branches=new Set(document.junctions.filter(j=>positions.has(j.id)).flatMap(j=>j.wireIds.filter(id=>{
@@ -505,10 +499,26 @@ function applyCommand(document: HarnessDesignDocument, command: EditorCommand): 
         changed=followE4Junctions(document,changed,positions,new Set([...owners].filter(id=>!branches.has(id))),command.physicalDragMode);
         if(changed.wires.some(w=>branches.has(w.id)&&changed.views.e4.layers.some(l=>l.id===w.layerIds.e4&&l.locked)))throw new Error("Слой присоединённой ветви заблокирован.");
         const affected=new Set([...owners,...branches]);
+        if (connector.terminationComponent) {
+          // Moving the symbol can obstruct an unrelated wire. Include only
+          // routes touching its new obstacle; distant automatic pairs keep
+          // their geometry and never enter the route-order search.
+          const current = moved.connectors.find(c => c.id === connector.id)!;
+          for (const wire of changed.wires) {
+            if (!affected.has(wire.id) && wireRouteTouchesConnector(changed, wire, current)) {
+              try { validateE4WireIds(changed, [wire.id]); }
+              catch { affected.add(wire.id); }
+            }
+          }
+          if (changed.wires.some(w => affected.has(w.id) &&
+              changed.views.e4.layers.some(l => l.id === w.layerIds.e4 && l.locked))) {
+            throw new Error("Слой присоединённой ветви заблокирован.");
+          }
+        }
         changed=spreadMovedE4Shoulders(document,changed,affected);
         try { changed=repairE4JunctionBranches(changed,affected); }
         catch { changed=rerouteE4WireBatch(changed,[...affected],true); }
-        for(const id of screenAttachmentWireIds(changed,changed.wires.filter(w=>[w.from,w.to].some(e=>e.connectorId===command.connectorId)).map(w=>w.id)))changed=rerouteWireE4ThroughJunctions(changed,id);
+        for(const id of screenAttachmentWireIds(changed,[...affected]))changed=rerouteWireE4ThroughJunctions(changed,id);
         for(const junction of changed.junctions)validateJunctionAgainstWires(changed,junction);
         validateWireGroups(changed);
         return changed;
@@ -2079,18 +2089,26 @@ function validateE4WireIds(document: HarnessDesignDocument, wireIds: readonly st
   }
 }
 
+function connectorE4RoutingObstacle(connector: ConnectorInstance) {
+  const position = connector.positions.e4;
+  if (connector.terminationComponent) return { id: connector.id,
+    x: position.x + 32, y: position.y + 15, width: 156, height: 70 };
+  const geometry = connectorE4TableGeometry(connector);
+  return { id: connector.id, x: position.x, y: position.y, width: geometry.width, height: geometry.height };
+}
+
 function wireRouteTouchesConnector(
   document: HarnessDesignDocument,
   wire: WireInstance,
   connector: ConnectorInstance,
 ): boolean {
-  const geometry = connectorE4TableGeometry(connector);
+  const geometry = connectorE4RoutingObstacle(connector);
   const padding = 4;
   const rect = {
-    left: connector.positions.e4.x - padding,
-    right: connector.positions.e4.x + geometry.width + padding,
-    top: connector.positions.e4.y - padding,
-    bottom: connector.positions.e4.y + geometry.height + padding,
+    left: geometry.x - padding,
+    right: geometry.x + geometry.width + padding,
+    top: geometry.y - padding,
+    bottom: geometry.y + geometry.height + padding,
   };
   const start = wireEndpointE4Anchor(document, wire.from)?.position;
   const end = wireEndpointE4Anchor(document, wire.to)?.position;
@@ -2104,6 +2122,7 @@ function wireRouteTouchesConnector(
           Math.max(Math.min(first.y, second.y), rect.top) <= Math.min(Math.max(first.y, second.y), rect.bottom)) return true;
     } else if (first.y === second.y && first.y >= rect.top && first.y <= rect.bottom &&
         Math.max(Math.min(first.x, second.x), rect.left) <= Math.min(Math.max(first.x, second.x), rect.right)) return true;
+    else if (segmentEntersRect({ start: first, end: second }, rect)) return true;
   }
   return false;
 }
@@ -2317,17 +2336,7 @@ function createE4RoutingRequest(
     start,
     end,
     obstacles: [
-      ...document.connectors.map((connector) => {
-        if(connector.terminationComponent)return {id:connector.id,x:connector.positions.e4.x+32,y:connector.positions.e4.y+15,width:156,height:70};
-        const geometry = connectorE4TableGeometry(connector);
-        return {
-          id: connector.id,
-          x: connector.positions.e4.x,
-          y: connector.positions.e4.y,
-          width: geometry.width,
-          height: geometry.height,
-        };
-      }),
+      ...document.connectors.map(connectorE4RoutingObstacle),
       // Wire strokes and labels are soft geometry. They are represented in
       // occupiedRoutes below so a rerouted wire may cross or move them; only
       // connector tables remain hard obstacles.
