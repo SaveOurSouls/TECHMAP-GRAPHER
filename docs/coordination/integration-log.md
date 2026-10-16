@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — этап 2 плана 126: HarnessDesignEditor
+
+Code 709aacce336a96e88c5faa1d21aa5e9db96deacd опубликован прямо в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Фасад/scene/snapshots/catalog/selection/controller/JSX разделены, полный Vitest 216/2314 и TypeScript/Vite PASS. Docs этапа — коммит этой записи; план in-progress, этапы 3–7 открыты.
+
 ## 16.10.2026 — этап 1 плана 126: CanvasViewport
 
 Code d378d741af0d8cf4407cb13e48a03862009cffc9 опубликован прямо в integration, ancestry PASS. [Handoff](handoff-126-editor-refactor.md), REQ-161/ADR-0031. CanvasViewport 2463 → 61 строка фасада, renderer/selection/types/helpers/controller/JSX разделены; профиль 10/162, полный Vitest 215/2313, TypeScript/Vite, 22 эталона и структурная сверка PASS. Docs handoff — коммит этой записи. Весь план in-progress, этапы 2–7 открыты; ZIP не заказан.

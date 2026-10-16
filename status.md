@@ -1,3 +1,7 @@
+## Завершение рефакторинга — этап 2, 16.10.2026
+
+Карточка 126 / REQ-161 in-progress. HarnessDesignEditor опубликован **709aacce336a96e88c5faa1d21aa5e9db96deacd**, ancestry PASS: фасад 2653 → 8 строк, отдельно scene/snapshots/catalog/selection/types/boundary/controller/JSX. PASS: baseline 6/193, профиль 7/194, полный Vitest 216/2314, TypeScript/Vite и структурная сверка. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы commands/model/ComponentLibrary/загрузка/аудит открыты; сервер/форматы не менялись, ручной browser/portable/жгут не проверены, ZIP не заказан.
+
 ## Завершение рефакторинга — этап 1, 16.10.2026
 
 Карточка 126 / REQ-161 **in-progress**, проверенный CanvasViewport опубликован: `d378d741af0d8cf4407cb13e48a03862009cffc9`. Фасад 2463 → 61 строка; renderer/selection/contracts/controller/JSX разделены без изменения исходных тел, hooks и дерева UI. PASS: профиль 10/162, полный Vitest 215/2313, TypeScript/Vite, 22 неизменных эталона и структурная сверка. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Остальные крупные модули/загрузка/итоговый аудит ещё открыты. Сервер не менялся; browser/portable/исходный жгут не проверены, ZIP не заказан.

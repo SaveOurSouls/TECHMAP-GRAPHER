@@ -2,6 +2,8 @@
 
 ## 126 — завершение рефакторинга, следующий срез после M5-22-054
 
+Этап 2 опубликован: **709aacce336a96e88c5faa1d21aa5e9db96deacd**, ancestry PASS; Vitest 216/2314, TypeScript/Vite и структурная сверка PASS. Документальный handoff — коммит этой записи. Этапы 3–7 pending, новая поставка должна дождаться полного handoff.
+
 REQ-161, [карточка 126](../../tasks/126-finish-editor-refactor.md), чат 01a14521-6a96-7152-b095-accc21abdda7, основная integration; in-progress. Этап 1 d378d741af0d8cf4407cb13e48a03862009cffc9 опубликован, ancestry PASS; [handoff](handoff-126-editor-refactor.md), Vitest 215/2313, TypeScript/Vite/22 эталона PASS. Docs этапа — коммит этой записи. Общий handoff pending до завершения плана; новая поставка должна дождаться этапов 2–7. M5-22-054 изменения не содержит; ZIP не заказан.
 
 ## 125 — границы сцены, следующий срез после M5-22-054

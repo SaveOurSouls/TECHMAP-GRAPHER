@@ -27,3 +27,4 @@
 - Этапы 2–7 открыты. Итоговая готовность не выводится из завершённого CanvasViewport.
 - Этап 1 опубликован: d378d741af0d8cf4407cb13e48a03862009cffc9, ancestry PASS; [handoff](../docs/coordination/handoff-126-editor-refactor.md). Документальный handoff — коммит этой записи.
 - Этап 2 проверен: HarnessDesignEditor 2653 → 8 строк фасада; projection/snapshots/catalog/selection/types/boundary/controller/surface разделены. 33 объявления и основной JSX совпали; ранний return загрузки передаётся через ready-discriminator. Baseline 6/193, профиль с facade-тестом 7/194, полный Vitest 216/2314, TypeScript/Vite PASS. Публикация следует отдельным кодовым срезом; этапы 3–7 открыты.
+- Этап 2 опубликован: 709aacce336a96e88c5faa1d21aa5e9db96deacd; ancestry PASS. Документальный handoff — коммит этой записи, этапы 3–7 остаются открытыми.

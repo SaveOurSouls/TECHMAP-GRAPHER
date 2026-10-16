@@ -2,6 +2,8 @@
 
 ## 126 — завершение плана рефакторинга, 16.10.2026
 
+Этап 2 опубликован 709aacce336a96e88c5faa1d21aa5e9db96deacd, ancestry PASS; HarnessDesignEditor ready-for-review, Vitest 216/2314, TypeScript/Vite PASS. Общая задача in-progress, этапы 3–7 открыты.
+
 Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-161, [карточка](../../tasks/126-finish-editor-refactor.md); in-progress. База 303df08, основная codex/integration-m5-22. Владелец: CanvasViewport, HarnessDesignEditor, commands/model, ComponentLibrary, выделяемые модули/тесты, границы загрузки рабочих областей и свои docs. Сервер/хранение не входят. Этап 1 опубликован d378d741af0d8cf4407cb13e48a03862009cffc9, ancestry PASS, [handoff](handoff-126-editor-refactor.md); Vitest 215/2313 и сборка PASS. Остальные этапы открыты. Coverage: следующий срез после M5-22-054; ZIP не заказан.
 
 ## 125 — границы сцены вне CanvasViewport, 16.10.2026
