@@ -3,12 +3,19 @@ import type { HarnessDesignDocument } from "../editor/model";
 import { type RouteSourceRef, type RouteSourceItem } from "../manufacturing/route-source";
 import type { RouteV3Node, RouteV3Product } from "./route-v3-model";
 import type { ReferenceCatalogRecord, ReferenceCatalogSnapshot } from "../reference-catalog-api";
-import type { UmlOperation } from "../uml/uml-model";
 import type { TerminationOperation } from '../editor/termination-model';
 import { routeV3EmbeddedArtifactOwners, routeV3WireEndArtifacts } from './route-v3-wire-terminals';
 
-/** Route v3 norms are seconds; legacy UML fields remain for old saved cards. */
-export interface RouteV3Operation extends UmlOperation {
+/** Norms use seconds; persisted rate fields remain compatible with saved V3 cards. */
+export interface RouteV3Operation {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: "running" | "static";
+  readonly lengthMm: number;
+  readonly speedMmPerMinute: number;
+  readonly employees: number;
+  readonly quantity: number;
+  readonly minutesEach: number;
   /** Canonical manufacturing feature; one recipe can cover both sleeve ports. */
   readonly terminationOperationId?: string;
   readonly terminationOperationSnapshot?: TerminationOperation;

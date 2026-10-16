@@ -93,17 +93,6 @@
   color: #fff;
 }
 
-.manufacturing-route-panel > .harness-section-navigation {
-  margin: -28px clamp(-52px, -3vw, -20px) 16px;
-  padding-inline: 14px;
-}
-
-.route-v2-panel > .harness-section-navigation,
-.uml-panel > .harness-section-navigation {
-  margin: -18px -22px 18px;
-  padding-inline: 14px;
-}
-
 .he-save-state-utility {
   align-self: flex-start;
   width: max-content;

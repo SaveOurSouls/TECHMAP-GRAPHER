@@ -4,7 +4,6 @@ import "../src/Techmap.Client/src/styles.css";
 import "../src/Techmap.Client/src/editor/harness-editor.css";
 import { createConnector, createWire } from "../src/Techmap.Client/src/editor/commands";
 import { createEmptyHarnessDesign, createOrthogonalE4Route, wireEndpointE4Anchor, type HarnessDesignDocument } from "../src/Techmap.Client/src/editor/model";
-import { generateRoute } from "../src/Techmap.Client/src/manufacturing/route-commands";
 import type { RouteRow } from "../src/Techmap.Client/src/manufacturing/route-model";
 import { RouteAssemblyDrawing } from "../src/Techmap.Client/src/manufacturing/RouteAssemblyDrawing";
 import { newTemplateContentV2, addBasicNodeV2, addContactPointV2 } from "../src/Techmap.Client/src/component-library/template-commands-v2";
@@ -37,7 +36,7 @@ const graph = parseComponentPlacementGraph({
   snapshots: [{ snapshotId, projectId: "p", sourceTemplateId: templateId, sourceVersion: 7, sourceVersionSha256: template.versionSha256, code: template.code, name: template.name, articleBindings: [article], assets: [], schemaVersion: 3, content, createdUtc: "2026-09-14T00:00:00Z", updatedUtc: "2026-09-14T00:00:00Z" }],
 }, "p", "h");
 if (buildComponentTemplateViewInstances(sourceDocument, buildProjectComponentSnapshotLookup(graph)).length !== 1) throw new Error("QA connector artwork must materialize");
-const route = generateRoute(sourceDocument, "a".repeat(64), 1).rows[0]!;
+const route: RouteRow = { id: "qa-fragment", kind: "assembly", title: "QA фрагмент", sourceObjects: [{ kind: "wire", id: wire.id }], dependsOn: [], comment: "", operations: [], prepared: false, presentation: { objects: [], backgroundOpacity: .71 } };
 const initialRow: RouteRow = { ...route, kind: "assembly", title: "QA фрагмент XS1", presentation: {
   objects: [], backgroundOpacity: .71,
   drawingCopy: { document: structuredClone(sourceDocument), hiddenObjectIds: [] },
