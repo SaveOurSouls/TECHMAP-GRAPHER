@@ -1,0 +1,14 @@
+# Handoff 126 / REQ-161 — завершение плана
+
+Чат 01a14521-6a96-7152-b095-accc21abdda7, `/root`, основная codex/integration-m5-22. [Карточка](../../tasks/126-finish-editor-refactor.md), [протокол](../editor-refactor-126.md), [ADR-0031](../decisions/0031-editor-refactor-completion.md). Общая задача **in-progress**; owner acceptance открыта. ZIP не заказан.
+
+## Этап 1 — CanvasViewport, ready-for-review
+
+- База `303df08ead6530b5c78469995adb877f2e79f6d7`.
+- Code SHA **`d378d741af0d8cf4407cb13e48a03862009cffc9`**, опубликован прямо в integration, ancestry PASS; push 303df08..d378d74.
+- Фасад 2463 → 61 строка; геометрия выделения/оси, renderer, types/helpers, controller и JSX разделены. Порядок hooks, тела обработчиков и JSX сохранены; публичный API прежний.
+- Baseline/профиль 10/162 PASS, 46 исходных объявлений и controller/JSX совпали, 22 snapshots неизменны. Полный Vitest 215/2313 PASS, 78,70 с; TypeScript/Vite PASS, Vite 1,66 с; diff-check/review/новые ссылки PASS.
+- Новые зависимости приложения отсутствуют, package/lockfile прежние. Временный AST-инструмент/логи ignored.
+- Ручной browser/portable и исходный жгут не проверены; сервер/форматы не менялись, .NET не запускался.
+
+Документальный handoff этапа — коммит этой записи. Этапы 2–7 (остальные крупные модули, загрузка и итоговый аудит) **открыты**; этот handoff не является завершением полного плана. Следующий заказанный ZIP должен проверять включение каждого code/docs SHA; M5-22-054 их не содержит.

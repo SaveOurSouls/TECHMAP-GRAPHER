@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 126 — план рефакторинга, этап 1, 16.10.2026
+
+Общая задача in-progress; CanvasViewport ready-for-review, code **d378d741af0d8cf4407cb13e48a03862009cffc9** опубликован в integration, ancestry PASS. [Handoff](handoff-126-editor-refactor.md), [протокол](../editor-refactor-126.md). PASS: профиль 10/162, полный Vitest 215/2313, TypeScript/Vite, 22 эталона, AST-сверка/JSX/hooks и diff-check/review. Остальные этапы открыты; ZIP не заказан, ручная приёмка не выполнена.
+
 ## 125 — границы сцены вне CanvasViewport, 16.10.2026
 
 REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`440939f942b53bf09bbaf422829f9b696ff7bf52`** опубликован в integration, ancestry PASS. [Handoff](handoff-125-canvas-scene-bounds.md), [протокол](../canvas-scene-bounds-125-refactor.md). CanvasViewport 2679 → 2463 строки; границы/подписи выделены при прежнем API и общей толщине обводки разделки. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и исходный жгут не проверены. ZIP не заказан; owner acceptance открыта.

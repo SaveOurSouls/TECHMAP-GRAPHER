@@ -1,3 +1,7 @@
+## Завершение рефакторинга — этап 1, 16.10.2026
+
+Карточка 126 / REQ-161 **in-progress**, проверенный CanvasViewport опубликован: `d378d741af0d8cf4407cb13e48a03862009cffc9`. Фасад 2463 → 61 строка; renderer/selection/contracts/controller/JSX разделены без изменения исходных тел, hooks и дерева UI. PASS: профиль 10/162, полный Vitest 215/2313, TypeScript/Vite, 22 неизменных эталона и структурная сверка. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Остальные крупные модули/загрузка/итоговый аудит ещё открыты. Сервер не менялся; browser/portable/исходный жгут не проверены, ZIP не заказан.
+
 ## Границы сцены вне CanvasViewport — 16.10.2026
 
 Карточка 125 / REQ-160, код `440939f942b53bf09bbaf422829f9b696ff7bf52` опубликован в integration; ready-for-review. Границы объектов/контактов/оболочек/overlays и размещение подписей вынесены в canvas-scene-bounds; общая толщина обводки разделки едина для рисования и fit. CanvasViewport **2679 → 2463 строки**, прежние экспорты и тела функций сохранены, оставшийся код совпал с базой. PASS: baseline/профиль **10/178**, полный Vitest **214/2312**, TypeScript/Vite, **22 неизменных эталона**, diff-check/review. [Протокол](docs/canvas-scene-bounds-125-refactor.md), [handoff](docs/coordination/handoff-125-canvas-scene-bounds.md), ADR-0030. Сервер/форматы не менялись, .NET не запускался; browser/portable и исходный жгут не проверены. M5-22-054 не содержит 120–125, новый ZIP не заказан; owner acceptance открыта.

@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — этап 1 плана 126: CanvasViewport
+
+Code d378d741af0d8cf4407cb13e48a03862009cffc9 опубликован прямо в integration, ancestry PASS. [Handoff](handoff-126-editor-refactor.md), REQ-161/ADR-0031. CanvasViewport 2463 → 61 строка фасада, renderer/selection/types/helpers/controller/JSX разделены; профиль 10/162, полный Vitest 215/2313, TypeScript/Vite, 22 эталона и структурная сверка PASS. Docs handoff — коммит этой записи. Весь план in-progress, этапы 2–7 открыты; ZIP не заказан.
+
 ## 16.10.2026 — границы сцены CanvasViewport, карточка 125
 
 Code SHA `440939f942b53bf09bbaf422829f9b696ff7bf52` опубликован прямо в codex/integration-m5-22, push `9f6343f..440939f`; ancestry PASS. REQ-160, ADR-0030, [handoff](handoff-125-canvas-scene-bounds.md). CanvasViewport 2679 → 2463 строки; границы и подписи выделены при единой толщине обводки разделки, неизменных телах функций и оставшемся коде. PASS: baseline/профиль 10/178, полный Vitest 214/2312, TypeScript/Vite, 22 неизменных эталона, diff-check/review. Сервер/форматы не менялись, .NET/browser/portable не запускались. M5-22-054 изменения не содержит, ZIP не заказан; документальный handoff — коммит этой записи, owner acceptance открыта.
