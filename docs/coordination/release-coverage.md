@@ -372,4 +372,4 @@ REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md
 
 ## 117 — следующий срез после M5-22-053
 
-REQ-152, in-progress; код/handoff pending до проверок. Последний ZIP не содержит изменение.
+REQ-152, ready-for-review. Код 600e0a81e5a63f82787ff3266b1587cd010bf69f опубликован и является предком текущего integration HEAD (проверено 16.10.2026). [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). Проверки: Vitest 219/2331, TypeScript/Vite, целевые серверные 5/5, browser QA двух независимых цепочек. Последний ZIP M5-22-053 не содержит изменение; ZIP не заказан.

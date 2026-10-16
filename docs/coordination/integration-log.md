@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — handoff 117 / REQ-152
+
+Код 600e0a81e5a63f82787ff3266b1587cd010bf69f выполнен непосредственно в codex/integration-m5-22, опубликован и проверен через git merge-base --is-ancestor. Отдельный merge не требуется. Справочник схем, defaults и независимые цепочки V3, исправление наложения C2. Vitest 219/2331, TypeScript/Vite, профильные серверные 5/5 и полный Web 1085/1085 и browser PASS. [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). В M5-22-053 не входит; следующий ZIP должен включать этот SHA и docs handoff после завершения остальных задач coverage.
+
 ## 16.10.2026 — проверенный ZIP M5-22-053
 
 После проверки release coverage 111–113 и эквивалентов cherry-pick 115/116 версия повышена до `0.63.53-m5-22-review` коммитом `2a9dd345cdd858847afcacd94e83fe29357337a3` и опубликована до сборки. Рабочая копия была чистой; новых неподтверждённых завершённых handoff нет. Штатный `scripts/build-package.ps1 -ArtifactSlice m5-22-053`: Vitest 218/2319, TypeScript/Vite, .NET Release 1140/1140, performance 1/1, self-contained win-x64 publish PASS. Манифест 534 файла, portable 7/7, включая путь с кириллицей и пробелами. ZIP `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`: 64 412 661 байт, SHA-256 `BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`. Исходный жгут, ручная packaged UI-проверка и отмеченные в coverage визуальные проверки остаются открытыми.
