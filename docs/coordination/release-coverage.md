@@ -1,6 +1,16 @@
 # Release coverage
 
-## Подготовка следующего среза после M5-22-053, 16.10.2026
+### m5-22-054 — 16.10.2026
+
+- **Integration branch / code HEAD:** `codex/integration-m5-22` / `680717a6aba4423f7bd701c3d67f38141612f1b0`; чистое дерево, HEAD опубликован до сборки.
+- **117 / REQ-152:** исходные code `600e0a81e5a63f82787ff3266b1587cd010bf69f` и handoff `8e561677ad955a1510388b9b9c1902807877e403` — предки HEAD.
+- **112 / REQ-147:** исходные code `25d4ec8d0be10c148da4cb6a43a43b33ec869515`, handoff `c94e0f6a11de28499ae61a63d50effa90f3aa59c`, регистрация `d5b5705` опубликованы; эквиваленты в integration `ae3ec27`/`3f5ac0f`. Три клиентских code/test blob исходного коммита совпадают с HEAD; карточка и handoff объединены с историческими записями.
+- **118 / REQ-153:** исходная регистрация `d24fd4c77b5647a48a45838ce222c4f79f6816ff`, code `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2`, handoff `dcb0ef6a9a6d65a9713018c50a83d89c0dcbf89e` опубликованы под историческим номером 119/REQ-154. Канонический план `ae4f497` уже был предком HEAD; код и handoff включены эквивалентами `bb60e9d`/`b1379fd`. Из 54 runtime-путей 52 совпадают побайтно; `RouteV3Panel.tsx` и `route-v3-model.ts` дополнены функцией карточки 117. Совместный Vitest и build PASS.
+- **119 / REQ-154:** исходные регистрация `e2a255a0e810b1cc718a62297354f078e52e721b`, code `570a0f3d4bd7a89bef826cafc9145a34636343c1`, handoff `a76cc1124c7e28a4aaf6090ebb88812cd9fb7abc` опубликованы под историческим номером 118/REQ-153. Эквиваленты `e9fdcd5`/`f9fba74`/`15cea57`; code patch-id совпадает. Канонические номера и файлы зафиксированы `47a2bd0`.
+- **Gate:** все названные integration-эквиваленты — предки code HEAD; `git show --check` и `git diff --check` PASS, неизвестных или ожидающих завершённых handoff `0`. Vitest 208/2257, TypeScript/Vite, .NET 1142/1142, performance 1/1 PASS.
+- **ZIP:** `artifacts/m5-22-054/TECHMAP-GRAPHER-0.63.54-m5-22-review-win-x64.zip`; **64 329 081 байт**, SHA-256 `E92FB48506FC005B704FDB29A348854282EC20CEE9FA22A3F675A24711F47BA9`; манифест 534 файла, portable 7/7. Ручная packaged UI-проверка, исходный жгут, совместный browser-сценарий 117/118 и owner acceptance открыты.
+
+## История подготовки среза после M5-22-053, 16.10.2026
 
 - **Chat:** `01a140c3-46d1-7f81-ac60-ad27761a2ca2`; owner explicitly requested removal of the ~1.1 s release delay on 16.10.2026.
 - **Branch / worktree / base:** `codex/e4-termination-release-performance` / `tmp/e4-termination-release-performance` / `f47d55e9078fc792cf30500592711f35b72b4000`.
@@ -18,7 +28,7 @@
 
 ## 112 follow-up — зазор у общего выхода ОП, 16.10.2026
 
-REQ-147, тот же чат/ветка/worktree, база `2e8664c`, регистрация `d5b5705`. Прямое уточнение владельца, ready-for-review: зазор 20 единиц чертежа с уменьшением у самого соединителя. Код `25d4ec8d0be10c148da4cb6a43a43b33ec869515` опубликован; docs-only handoff следует за ним. PASS: 7/122, полный 216/2290, TypeScript/Vite/diff-check и просмотр синтетической геометрии. Включение в следующий релиз после M5-22-053 требует отдельной проверки ancestry/equivalent и совместного прогона на integration HEAD. Код 117 не импортировался и не менялся; auto-review отказ обновления базы не обходился. ZIP здесь не заказан; поставка 053 новый зазор не включает.
+REQ-147, тот же чат/ветка/worktree, база `2e8664c`, регистрация `d5b5705`. Прямое уточнение владельца, ready-for-review: зазор 20 единиц чертежа с уменьшением у самого соединителя. Код `25d4ec8d0be10c148da4cb6a43a43b33ec869515` и docs-only handoff `c94e0f6a11de28499ae61a63d50effa90f3aa59c` опубликованы. Worker: 7/122, полный 216/2290, TypeScript/Vite/diff-check и просмотр синтетической геометрии. Integration и общий прогон подтверждены для M5-22-054 выше. Код 117 не импортировался в рабочую ветку 112; auto-review отказ обновления базы не обходился. M5-22-053 новый зазор не включает.
 
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
@@ -383,10 +393,10 @@ REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md
 
 ## 117 — следующий срез после M5-22-053
 
-REQ-152, ready-for-review. Код 600e0a81e5a63f82787ff3266b1587cd010bf69f опубликован и является предком текущего integration HEAD (проверено 16.10.2026). [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). Проверки: Vitest 219/2331, TypeScript/Vite, целевые серверные 5/5, browser QA двух независимых цепочек. Последний ZIP M5-22-053 не содержит изменение; ZIP не заказан.
+REQ-152, ready-for-review. Код 600e0a81e5a63f82787ff3266b1587cd010bf69f опубликован и является предком текущего integration HEAD (проверено 16.10.2026). [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). Проверки: Vitest 219/2331, TypeScript/Vite, целевые серверные 5/5, browser QA двух независимых цепочек. M5-22-053 не содержит изменение; включено в M5-22-054.
 
-# Открытая работа для следующего среза
+# История handoff для M5-22-054
 
 ## Карточка 118 / REQ-153 — удаление Маршрута, Маршрута v2 и UML
 
-Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, ready-for-review. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2` опубликован; [handoff](handoff-118-remove-legacy-route-pages.md), документальный SHA — коммит этой записи. PASS: Vitest206/2223, TS/Vite, Chrome1440/390. UML включён по дополнительному прямому поручению. V3/данные/контракты сохранены; 117 не включена. Coverage **pending integration**: сборщик должен подтвердить code/doc SHA в своём HEAD, особенно точечные V3 imports при совмещении с 117. Последний ZIP не содержит этот срез; ZIP не заказан.
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, ready-for-review. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2` опубликован; [handoff](handoff-118-remove-legacy-route-pages.md), документальный SHA — коммит этой записи. PASS: Vitest206/2223, TS/Vite, Chrome1440/390. UML включён по дополнительному прямому поручению. V3/данные/контракты сохранены; 117 не включена. Интеграция и совмещение с 117 подтверждены в M5-22-054 выше; исходный worker handoff сохраняет историю проверки.

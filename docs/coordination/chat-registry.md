@@ -1,11 +1,12 @@
 # Реестр чатов проекта
 
-## 118 — исключение Маршрута и Маршрута v2, 16.10.2026
+## 118 — исключение Маршрута, Маршрута v2 и UML, 16.10.2026
 
-Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, `/root`, [карточка 118](../../tasks/118-retire-legacy-routes.md), REQ-153, ADR-0023; in-progress. Ветка `codex/integration-m5-22`, основной worktree. Координатор владеет docs/интеграцией; агент navigation — App/навигация/редакторные переходы и тесты; shared — удаляемые страницы и выделение общих модулей V3; uml — `uml/**`. Точные границы в карточке. Активная 117 сохраняет владение своими dirty-файлами; координатор переносит лишь необходимые импорты отдельными hunks. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, `/root`, [карточка 118](../../tasks/118-retire-legacy-routes.md), REQ-153, ADR-0023; ready-for-review, включено в M5-22-054. Ветка `codex/integration-m5-22`, основной worktree. Координатор владеет docs/интеграцией; агент navigation — App/навигация/редакторные переходы и тесты; shared — удаляемые страницы и выделение общих модулей V3; uml — `uml/**`. Точные границы в карточке. Во время интеграции изменения 117 сохранены в двух пересекающихся V3-файлах. Coverage: код и handoff в M5-22-054, эквиваленты `bb60e9d`/`b1379fd`; приёмка владельцем открыта.
+
 ## 119 — фиксация оконцовки Э4 после отпускания, 16.10.2026
 
-Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, [карточка 119](../../tasks/119-e4-termination-release-performance.md), REQ-154; in-progress по прямому продолжению владельца. Ветка `codex/e4-termination-release-performance`, worktree `tmp/e4-termination-release-performance`, база опубликованный integration HEAD `f47d55e9078fc792cf30500592711f35b72b4000`. Владелец: финальная команда/фиксация в `commands.ts`, узко `e4-editing.ts`/`e4-move-preview.ts` при необходимости, профильные тесты и benchmark. Исключены файлы карточки 117 и любые общие release/status-файлы. Карточки 110 и 115 — предшествующие завершённые code handoff; их ветки/worktree не меняются. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
+Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, [карточка 119](../../tasks/119-e4-termination-release-performance.md), REQ-154; ready-for-review, включено в M5-22-054 по прямому продолжению владельца. Ветка `codex/e4-termination-release-performance`, worktree `tmp/e4-termination-release-performance`, база опубликованный integration HEAD `f47d55e9078fc792cf30500592711f35b72b4000`. Владелец: финальная команда/фиксация в `commands.ts`, узко `e4-editing.ts`/`e4-move-preview.ts` при необходимости, профильные тесты и benchmark. Исключены файлы карточки 117 и любые общие release/status-файлы. Карточки 110 и 115 — предшествующие завершённые code handoff; их ветки/worktree не меняются. Coverage: код и handoff в M5-22-054, эквиваленты `f9fba74`/`15cea57`; приёмка владельцем открыта.
 
 
 

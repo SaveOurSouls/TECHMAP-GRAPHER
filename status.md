@@ -1,6 +1,10 @@
-## 118 — удаление старых страниц и UML, 16.10.2026
+## Проверенный ZIP M5-22-054 — 16.10.2026
 
-Проверенная отдельная ветка `codex/remove-legacy-route-pages-work`, код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2`, ready-for-review. Удалены страницы Маршрут/V2/UML и исключительно их модули; навигация содержит Э4, Чертёж и V3. Общие функции выделены, сохранённые форматы и серверные контракты совместимы. PASS: Vitest **206 файлов / 2223 теста**, TypeScript/Vite production, Chrome 1440/390, diff-check и review. [Протокол](docs/legacy-route-retirement-118.md), [handoff](docs/coordination/handoff-118-remove-legacy-route-pages.md). Изменение ещё не заявляется интегрированным в основной HEAD или последний ZIP. 117 не включена; её незавершённые изменения в основной копии сохранены. .NET, исходный жгут и packaged UI не проверены; ZIP не заказан.
+Из code HEAD `680717a6aba4423f7bd701c3d67f38141612f1b0` опубликован Windows x64 ZIP `artifacts/m5-22-054/TECHMAP-GRAPHER-0.63.54-m5-22-review-win-x64.zip`. Включены follow-up 112, карточка 117/REQ-152, удаление legacy Route/V2/UML 118/REQ-153 и оптимизация финальной фиксации Э4 119/REQ-154; исходные SHA и эквиваленты подтверждены в [release coverage](docs/coordination/release-coverage.md). Штатная сборка: Vitest 208/2257, TypeScript/Vite, .NET 1142/1142, performance 1/1; манифест 534 файла, portable 7/7. Размер **64 329 081 байт**, SHA-256 `E92FB48506FC005B704FDB29A348854282EC20CEE9FA22A3F675A24711F47BA9`; [протокол](docs/m5-07-acceptance.md). Исходный жгут, ручная проверка packaged UI и совместный browser-сценарий 117/118 не проверены; owner acceptance остаётся открытой.
+
+## Исторический handoff 118 — удаление старых страниц и UML, 16.10.2026
+
+Проверенная отдельная ветка `codex/remove-legacy-route-pages-work`, код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2`, ready-for-review. Удалены страницы Маршрут/V2/UML и исключительно их модули; навигация содержит Э4, Чертёж и V3. Общие функции выделены, сохранённые форматы и серверные контракты совместимы. PASS: Vitest **206 файлов / 2223 теста**, TypeScript/Vite production, Chrome 1440/390, diff-check и review. [Протокол](docs/legacy-route-retirement-118.md), [handoff](docs/coordination/handoff-118-remove-legacy-route-pages.md). На момент рабочего handoff изменение ещё не входило в integration или ZIP; в ветке worker код 117 не присутствовал. Последующая интеграция и общий .NET/portable прогон для M5-22-054 подтверждены выше. Исходный жгут и ручная packaged UI-проверка открыты.
 
 ## Схемы заготовки провода — 16.10.2026
 

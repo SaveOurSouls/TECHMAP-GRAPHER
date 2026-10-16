@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — проверенный ZIP M5-22-054
+
+Интегрированы handoff 112 follow-up, 117, 118 и 119; историческое пересечение 118/REQ-153 и 119/REQ-154 нормализовано с сохранением исходных SHA. Code HEAD `680717a6aba4423f7bd701c3d67f38141612f1b0`, версия `0.63.54-m5-22-review`; рабочее дерево до сборки чистое, HEAD опубликован. Исходный code/handoff 117 — предки HEAD; 112, 118 и 119 включены проверенными cherry-pick/документальными эквивалентами (точные сопоставления в release coverage). Совместный Vitest 208/2257, TypeScript/Vite, .NET 1142/1142, performance 1/1 PASS. Манифест 534 файла, portable 7/7. ZIP `artifacts/m5-22-054/TECHMAP-GRAPHER-0.63.54-m5-22-review-win-x64.zip`: 64 329 081 байт, SHA-256 `E92FB48506FC005B704FDB29A348854282EC20CEE9FA22A3F675A24711F47BA9`. Ручная проверка исходного жгута и packaged UI остаётся открытой.
+
 ## 16.10.2026 — handoff 117 / REQ-152
 
 Код 600e0a81e5a63f82787ff3266b1587cd010bf69f выполнен непосредственно в codex/integration-m5-22, опубликован и проверен через git merge-base --is-ancestor. Отдельный merge не требуется. Справочник схем, defaults и независимые цепочки V3, исправление наложения C2. Vitest 219/2331, TypeScript/Vite, профильные серверные 5/5 и полный Web 1085/1085 и browser PASS. [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). В M5-22-053 не входит; следующий ZIP должен включать этот SHA и docs handoff после завершения остальных задач coverage.
