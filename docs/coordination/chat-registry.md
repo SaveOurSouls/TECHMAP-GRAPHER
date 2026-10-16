@@ -2,6 +2,8 @@
 
 ## 126 — завершение плана рефакторинга, 16.10.2026
 
+Этап 4 опубликован 1205eeb7e13589e4a422cfa4beedd6708be26560, ancestry PASS; модель ready-for-review, Vitest 218/2316 и сборка PASS. Этапы 5–7 открыты.
+
 Этап 3 опубликован ced0a52bd9c534f4c20b0bca99a1b5041e18933d, ancestry PASS; команды ready-for-review, Vitest 217/2315 и сборка PASS. Этапы 4–7 открыты.
 
 Этап 2 опубликован 709aacce336a96e88c5faa1d21aa5e9db96deacd, ancestry PASS; HarnessDesignEditor ready-for-review, Vitest 216/2314, TypeScript/Vite PASS. Общая задача in-progress, этапы 3–7 открыты.

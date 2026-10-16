@@ -1,3 +1,7 @@
+## Завершение рефакторинга — этап 4, 16.10.2026
+
+Карточка 126 / REQ-161 in-progress. Модель опубликована **1205eeb7e13589e4a422cfa4beedd6708be26560**, ancestry PASS: фасад 2211 → 9 строк, контракты/вычисления/парсеры разделены. PASS: Vitest 218/2316, TypeScript/Vite, 152 объявления/40 экспортов, pure type contracts и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 5–7 открыты; сервер/ручная приёмка/ZIP не затронуты.
+
 ## Завершение рефакторинга — этап 3, 16.10.2026
 
 REQ-161 / карточка 126 in-progress. Команды опубликованы **ced0a52bd9c534f4c20b0bca99a1b5041e18933d**, ancestry PASS: фасад 2897 → 5 строк, шесть handlers, отдельные invariants/routing/analysis/pair planner. PASS: Vitest 217/2315, TypeScript/Vite, все 75 исходных ветвей/86 объявлений/pipeline и ацикличный граф. [Протокол](docs/editor-refactor-126.md), [handoff](docs/coordination/handoff-126-editor-refactor.md). Этапы 4–7 открыты; ручная приёмка и ZIP не выполнялись, сервер не менялся.

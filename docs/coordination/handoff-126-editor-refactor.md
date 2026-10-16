@@ -22,3 +22,7 @@
 ## Этап 3 — команды, ready-for-review
 
 База 512d31b; code **ced0a52bd9c534f4c20b0bca99a1b5041e18933d** опубликован в integration, ancestry PASS. Фасад 2897 → 5 строк, 75 ветвей в шести typed handlers; 86 объявлений, pipeline и все ветви совпали с исходником. Новые runtime-модули ацикличны. Baseline 6/136, профиль с API-тестом 7/137, полный Vitest **217/2315 PASS**, 78,75 с; TypeScript/Vite PASS, Vite 1,25 с; эталоны/diff-check/review PASS. Docs handoff — коммит этого раздела. Этапы 4–7 открыты; ограничения прежние.
+
+## Этап 4 — модель, ready-for-review
+
+База 83d312f; code **1205eeb7e13589e4a422cfa4beedd6708be26560** опубликован в integration, ancestry PASS. Фасад 2211 → 9 строк, контракты/defaults/geometry/presentation/measurements и parser-слои разделены. 152 объявления и все 40 runtime-экспортов сохранены; pure type contracts и acyclic runtime graph PASS. Baseline 5/153, профиль 6/154, полный Vitest **218/2316 PASS**, 81,44 с; TypeScript/Vite PASS, Vite 1,27 с; эталоны/diff-check/review PASS. Docs handoff — коммит этого раздела. Этапы 5–7 открыты; ограничения прежние.

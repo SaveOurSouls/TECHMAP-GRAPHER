@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — этап 4 плана 126: модель
+
+Code 1205eeb7e13589e4a422cfa4beedd6708be26560 опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). Контракты/вычисления/парсеры разделены, Vitest 218/2316 и TypeScript/Vite PASS; 152 объявления и API сохранены. Docs этапа — коммит этой записи, этапы 5–7 открыты.
+
 ## 16.10.2026 — этап 3 плана 126: команды
 
 Code ced0a52bd9c534f4c20b0bca99a1b5041e18933d опубликован в integration, ancestry PASS; [handoff](handoff-126-editor-refactor.md). 75 ветвей в шести handlers, общий pipeline сохранён, внутренний runtime-граф ацикличен. Vitest 217/2315, TypeScript/Vite и структурная сверка PASS. Docs этапа — коммит этой записи; этапы 4–7 открыты.
