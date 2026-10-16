@@ -8,6 +8,7 @@
 Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, [карточка 119](../../tasks/119-e4-termination-release-performance.md), REQ-154; in-progress по прямому продолжению владельца. Ветка `codex/e4-termination-release-performance`, worktree `tmp/e4-termination-release-performance`, база опубликованный integration HEAD `f47d55e9078fc792cf30500592711f35b72b4000`. Владелец: финальная команда/фиксация в `commands.ts`, узко `e4-editing.ts`/`e4-move-preview.ts` при необходимости, профильные тесты и benchmark. Исключены файлы карточки 117 и любые общие release/status-файлы. Карточки 110 и 115 — предшествующие завершённые code handoff; их ветки/worktree не меняются. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
 
 
+
 ## 117 — заготовки проводов по схемам, 16.10.2026
 
 Чат `01a144a5-6da7-7483-b2ef-7b048627a9bf`, `/root`, [карточка 117](../../tasks/117-wire-preparation-schemes.md), REQ-152; ready-for-review. Ветка `codex/integration-m5-22`, основной worktree. Владелец: WireBlank/WirePreparation, ReferenceImportPanel, серверные seed/validation/Program, V3 model/panel и модуль схем, профильные тесты, собственные разделы docs/tasks. Код 117 опубликован; параллельная карточка 118 не включена в его коммит. Code SHA 600e0a81e5a63f82787ff3266b1587cd010bf69f; [handoff](handoff-117-wire-preparation.md). Coverage: код уже в integration HEAD, следующий срез после M5-22-053; ZIP не заказан.

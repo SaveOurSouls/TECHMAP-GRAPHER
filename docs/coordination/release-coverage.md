@@ -384,3 +384,9 @@ REQ-149, [карточка 114](../../tasks/114-dimension-termination-anchors.md
 ## 117 — следующий срез после M5-22-053
 
 REQ-152, ready-for-review. Код 600e0a81e5a63f82787ff3266b1587cd010bf69f опубликован и является предком текущего integration HEAD (проверено 16.10.2026). [Handoff](handoff-117-wire-preparation.md), [протокол](../wire-preparation-117-acceptance.md). Проверки: Vitest 219/2331, TypeScript/Vite, целевые серверные 5/5, browser QA двух независимых цепочек. Последний ZIP M5-22-053 не содержит изменение; ZIP не заказан.
+
+# Открытая работа для следующего среза
+
+## Карточка 118 / REQ-153 — удаление Маршрута, Маршрута v2 и UML
+
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, ready-for-review. Ветка `codex/remove-legacy-route-pages-work`, база `f47d55e9078fc792cf30500592711f35b72b4000`. Код `8587eb55b3e2366fffe1cb6026b10ff766a8b7b2` опубликован; [handoff](handoff-118-remove-legacy-route-pages.md), документальный SHA — коммит этой записи. PASS: Vitest206/2223, TS/Vite, Chrome1440/390. UML включён по дополнительному прямому поручению. V3/данные/контракты сохранены; 117 не включена. Coverage **pending integration**: сборщик должен подтвердить code/doc SHA в своём HEAD, особенно точечные V3 imports при совмещении с 117. Последний ZIP не содержит этот срез; ZIP не заказан.
