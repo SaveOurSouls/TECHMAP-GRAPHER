@@ -33,7 +33,10 @@ export interface RouteV3Fragment {
   readonly isolatedDrawingCopy?: RouteDrawingCopy;
   readonly createdAt: string;
 }
+import { buildWirePreparationStages, validWirePreparation, type RouteV3WirePreparation } from "./route-v3-wire-preparation";
+
 export interface RouteV3Node {
+  readonly wirePreparationStage?: { readonly schemeId: string; readonly step: number };
   readonly id: string;
   readonly kind: "semiFinished" | "assembly" | "final";
   readonly title: string;
@@ -65,6 +68,7 @@ export interface RouteV3WireArtworkOverride {
   readonly end?: import("../WireBlankCatalog").WireBlankEnd;
 }
 export interface RouteV3Document {
+  readonly wirePreparation?: RouteV3WirePreparation;
   readonly version: 1;
   readonly preparedRefs: readonly RouteSourceRef[];
   readonly fragments: readonly RouteV3Fragment[];
@@ -197,20 +201,39 @@ export function generateRouteV3(document: RouteV3Document, source?: HarnessDesig
   for (const kind of ["wire", "cable", "covering",'termination-artifact'] as const) {
     const refs = document.preparedRefs.filter(ref => ref.kind === kind && !(source && ref.kind === 'termination-artifact' && source.terminations?.artifacts.some(a=>a.id===ref.id&&a.kind==='sleeve')));
     if (!refs.length) continue;
+    if (kind === "wire" && document.wirePreparation) {
+      const stages = buildWirePreparationStages(document.wirePreparation, refs);
+      for (const node of stages.nodes) {
+        addNode(node, node.inputNodeIds ?? []);
+        nodes[nodes.length - 1] = node;
+        const depth = depths.get(node.id)!;
+        rows.set(depth, Math.max(rows.get(depth) ?? 0, Math.round((node.x - 32) / 304) + 1));
+      }
+      for (const [wireId, nodeId] of stages.owners) owner.set(`wire:${wireId}`, nodeId);
+      continue;
+    }
     const id = `prepared:${kind}`;
     addNode({ id, kind: "semiFinished", title: kind === 'termination-artifact'?'Оконцовки и уплотнители':kind === "wire" ? "Нарезанные провода" : kind === "covering" ? "Нарезанные оболочки" : "Нарезанные кабели", refs, fragmentIds: [] }, []);
     for (const ref of refs) owner.set(refKey(ref), id);
   }
   if(source){
     const done=new Set<string>();
+    const operationOwners = new Map<string, string>();
     const labels={strip:'Зачистка',tin:'Лужение',crimp:'Общий обжим','ultrasonic-weld':'УЗ сварка на гильзе',twist:'Свивка'};
     const addOperation=(id:string)=>{
       if(done.has(id))return;const o=source.terminations?.operations.find(o=>o.id===id);if(!o)return;
       for(const dep of o.dependsOn??[])addOperation(dep);done.add(id);
-      const refs=routeV3TerminationOperationRefs(source,id),parents=[...new Set([...refs.map(r=>owner.get(refKey(r))).filter((id):id is string=>!!id),...(o.dependsOn??[]).map(id=>'termination-operation:'+id)])];
+      const target = o.target;
+      if (target.kind === "wireEnd" && document.wirePreparation?.assignments.some(a => a.wireId === target.wireId && a.schemeId !== null)) {
+        const prepared = owner.get(`wire:${target.wireId}`);
+        if (prepared) operationOwners.set(id, prepared);
+        return;
+      }
+      const refs=routeV3TerminationOperationRefs(source,id),parents=[...new Set([...refs.map(r=>owner.get(refKey(r))).filter((id):id is string=>!!id),...(o.dependsOn??[]).map(id=>operationOwners.get(id)??'termination-operation:'+id)])];
       const sleeveCrimp = o.kind === 'crimp' && refs.some(r=>r.kind==='termination-artifact'&&source.terminations?.artifacts.some(a=>a.id===r.id&&a.kind==='sleeve'));
       const operation:RouteV3Operation={id:'termination:'+o.id,terminationOperationId:o.id,terminationOperationSnapshot:structuredClone(o),title:o.recipe?.displayName||(sleeveCrimp?'Опрессовка гильзы':labels[o.kind]),kind:'static',lengthMm:0,speedMmPerMinute:1,employees:1,quantity:1,minutesEach:0};
       const nodeId='termination-operation:'+id;
+      operationOwners.set(id, nodeId);
       addNode({id:nodeId,kind:'assembly',title:operation.title,refs,fragmentIds:[],operations:[operation]},parents);
       for(const ref of refs)owner.set(refKey(ref),nodeId);
     };
@@ -282,12 +305,13 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
   try {
     const v = value as RouteV3Document;
     if (!v || v.version !== 1 || !Array.isArray(v.fragments) || v.fragments.length > 500 || !Array.isArray(v.preparedRefs) || !Array.isArray(v.nodes) || !Array.isArray(v.edges) || typeof v.generated !== "boolean") return null;
+    if (v.wirePreparation !== undefined && !validWirePreparation(v.wirePreparation)) return null;
     if (v.graphEdited !== undefined && typeof v.graphEdited !== "boolean") return null;
     const opacity = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
     const text = (n: unknown): n is string => typeof n === "string" && n.trim().length > 0 && n.length <= 512;
     const refs = (items: readonly RouteSourceRef[]) => Array.isArray(items) && items.every(ref => ref && ["wire", "cable", "covering", "connector", "termination-artifact"].includes(ref.kind) && text(ref.id)) && new Set(items.map(refKey)).size === items.length;
     if (!opacity(v.backgroundOpacity) || !refs(v.preparedRefs)) return null;
-    if (v.wireArtwork !== undefined && (!Array.isArray(v.wireArtwork) || v.wireArtwork.some(value => !value || !text(value.wireId) || (value.color !== undefined && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.start !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.start)) || (value.end !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"].includes(value.end))) || new Set(v.wireArtwork.map(value => value.wireId)).size !== v.wireArtwork.length)) return null;
+    if (v.wireArtwork !== undefined && (!Array.isArray(v.wireArtwork) || v.wireArtwork.some(value => !value || !text(value.wireId) || (value.color !== undefined && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.start !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin", "terminal-pin", "lug-pin", "lug-socket"].includes(value.start)) || (value.end !== undefined && !["cut", "copper", "tin", "terminal", "sealed", "sealed-pin", "terminal-pin", "lug-pin", "lug-socket"].includes(value.end))) || new Set(v.wireArtwork.map(value => value.wireId)).size !== v.wireArtwork.length)) return null;
     const ids = new Set<string>();
     const fragments: RouteV3Fragment[] = [];
     for (const f of v.fragments) {
@@ -300,6 +324,7 @@ export function parseRouteV3(value: unknown): RouteV3Document | null {
     const nodeIds = new Set<string>();
     for (const node of v.nodes) {
       if (!node || !text(node.id) || nodeIds.has(node.id) || !text(node.title) || !["semiFinished", "assembly", "final"].includes(node.kind) || !refs(node.refs) || !Number.isFinite(node.x) || !Number.isFinite(node.y) || !Array.isArray(node.fragmentIds) || node.fragmentIds.some((id: unknown) => !ids.has(String(id)))) return null;
+      if (node.wirePreparationStage && (!text(node.wirePreparationStage.schemeId) || !Number.isSafeInteger(node.wirePreparationStage.step) || node.wirePreparationStage.step < 0)) return null;
       nodeIds.add(node.id);
       if (node.rawRefs !== undefined && !refs(node.rawRefs)) return null;
       if (node.products !== undefined && (!Array.isArray(node.products) || new Set(node.products.map((product: RouteV3Product) => product?.id)).size !== node.products.length || node.products.some((product: RouteV3Product) => !product || !text(product.id) || product.nodeId !== node.id || !["source", "assembly"].includes(product.kind) || product.kind === "source" && (!product.ref || !refs([product.ref])) || product.kind === "assembly" && product.ref !== undefined))) return null;

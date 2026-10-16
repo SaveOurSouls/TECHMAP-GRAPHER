@@ -17,6 +17,8 @@ import {
 } from "./reference-catalog-api";
 import type { RuntimeConfig } from "./runtime-config";
 import { EditableReferenceTable } from "./EditableReferenceTable";
+import { WirePreparationCatalogEditor } from "./WirePreparationCatalogEditor";
+import { wirePreparationSourceId, wirePreparationDraft } from "./WirePreparationCatalog";
 import { WireBlankCatalogEditor } from "./WireBlankCatalogEditor";
 import { wireBlankSourceId } from "./WireBlankCatalog";
 
@@ -261,6 +263,9 @@ export function XlsxProfilePicker({
 
 export function ReferenceImportPanel({ config, session }: ReferenceImportPanelProps) {
   const api = useMemo(() => createReferenceCatalogApi(config, session), [config, session]);
+  const [preparationSnapshot, setPreparationSnapshot] = useState<ReferenceCatalogSnapshot | null>(null);
+  const [operationCatalogs, setOperationCatalogs] = useState<ReferenceCatalogSnapshot[]>([]);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
   const [settings, setSettings] = useState<ImportSettings>(initialSettings);
   const [profiles, setProfiles] = useState<readonly XlsxImportProfile[] | undefined>(undefined);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -268,6 +273,13 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
   const [editableSourceId, setEditableSourceId] = useState("");
   const [newSourceId, setNewSourceId] = useState(connectorReferenceSourceId);
   const [sources, setSources] = useState<readonly ReferenceCatalogSourceSummary[] | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    setPreparationError(null);
+    void api.getActive(wirePreparationSourceId).then(value => { if (!cancelled) setPreparationSnapshot(value); }).catch(e => { if (!cancelled) setPreparationError(errorText(e)); });
+    void Promise.all((sources ?? []).filter(s => /опера|БД\.ОП|operation/i.test(s.sourceId + " " + s.displayName)).map(s => api.getActive(s.sourceId))).then(values => { if (!cancelled) setOperationCatalogs(values.filter((v): v is ReferenceCatalogSnapshot => !!v)); }).catch(e => { if (!cancelled) setPreparationError(errorText(e)); });
+    return () => { cancelled = true; };
+  }, [api, sources]);
   const [sourcesError, setSourcesError] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<ReferenceInputMode>("xlsx");
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
@@ -842,7 +854,7 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
               aria-pressed={source.sourceId === activeSourceId}
               disabled={busy !== null}
               onClick={() => setEditableSourceId(source.sourceId)}
-            ><strong>{source.sourceId === wireBlankSourceId ? "Полуфабрикаты провода" : profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
+            ><strong>{source.sourceId === wirePreparationSourceId ? "Схемы заготовки провода" : source.sourceId === wireBlankSourceId ? "Полуфабрикаты провода" : profiles?.find((profile) => profile.sourceId === source.sourceId)?.displayName ?? source.displayName}</strong>
               <em>{russianCountLabel(source.recordCount, ["строка", "строки", "строк"])}</em></button>)}
           </div>
           <form className="reference-new-source" onSubmit={(event) => {
@@ -873,7 +885,12 @@ export function ReferenceImportPanel({ config, session }: ReferenceImportPanelPr
           {activeSourceId && activeError && <p className="reference-state error">{activeError}</p>}
           {activeSourceId && active === undefined && <p className="reference-state" role="status">Загружаем таблицу…</p>}
           {activeSourceId && !activeError && active !== undefined && <>
-            {activeSourceId === wireBlankSourceId ? <WireBlankCatalogEditor snapshot={active} disabled={busy !== null} onSave={async (request) => {
+            {preparationError && <p role="alert">{preparationError}</p>}
+            {activeSourceId === wirePreparationSourceId ? <WirePreparationCatalogEditor snapshot={active} catalogs={operationCatalogs} disabled={busy !== null} onSave={async request => {
+              setBusy("publish");
+              try { const publication = await api.publishEditableTable(activeSourceId, request); setActive(publication.snapshot); setPreparationSnapshot(publication.snapshot); await loadSources(publication.snapshot.sourceId); }
+              finally { setBusy(null); }
+            }} /> : activeSourceId === wireBlankSourceId ? <WireBlankCatalogEditor schemes={wirePreparationDraft(preparationSnapshot)} snapshot={active} disabled={busy !== null} onSave={async (request) => {
               setBusy("publish");
               try {
                 const publication = await api.publishEditableTable(activeSourceId, request);

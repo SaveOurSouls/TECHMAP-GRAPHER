@@ -3,12 +3,13 @@ import type { PublishEditableReferenceTableRequest, ReferenceCatalogSnapshot } f
 
 export const wireBlankSourceId = "technology-wire-blanks";
 export const wireBlankEntityType = "wire-blank";
-export const wireBlankEnds = ["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"] as const;
+export const wireBlankEnds = ["cut", "copper", "tin", "terminal", "sealed", "sealed-pin", "terminal-pin", "lug-pin", "lug-socket"] as const;
 export type WireBlankEnd = typeof wireBlankEnds[number];
 export const wireBlankEndLabels: Readonly<Record<WireBlankEnd, string>> = {
   cut: "Без разделки", copper: "Зачищен · медь", tin: "Лужён",
   terminal: "Наконечник", sealed: "Наконечник с уплотнителем",
   "sealed-pin": "Штыревой наконечник с уплотнителем",
+  "terminal-pin": "Терминал pin", "lug-pin": "Оконцовка pin", "lug-socket": "Оконцовка socket",
 };
 
 export interface WireBlank {
@@ -18,6 +19,7 @@ export interface WireBlank {
   readonly color: string;
   readonly start: WireBlankEnd;
   readonly end: WireBlankEnd;
+  readonly defaultSchemeId?: string | null;
   readonly templateId: string;
   readonly photoDataUrl: string | null;
   readonly originalPayload: Readonly<Record<string, unknown>>;
@@ -55,6 +57,7 @@ export function wireBlankDraft(snapshot: ReferenceCatalogSnapshot | null): WireB
       end: wireBlankEnds.includes(end as WireBlankEnd) ? end as WireBlankEnd : "cut",
       templateId: String(payload.templateId ?? "01-cut"),
       photoDataUrl: typeof payload.photoDataUrl === "string" ? payload.photoDataUrl : null,
+      defaultSchemeId: typeof payload.defaultSchemeId === "string" ? payload.defaultSchemeId : payload.defaultSchemeId === null ? null : defaultWireBlankScheme(start, end),
       originalPayload: payload,
     };
   });
@@ -75,9 +78,16 @@ export function wireBlankRequest(rows: readonly WireBlank[], snapshot: Reference
     if (row.photoDataUrl && (row.photoDataUrl.length > 1_400_000 || !validPhoto.test(row.photoDataUrl))) throw new Error(`Фото в строке ${position + 1} повреждено или превышает 1 МиБ.`);
     return { entityType: wireBlankEntityType, sourceKey: index, sourceLocation: null, payload: {
       ...row.originalPayload, index, title, color: row.color, start: row.start, end: row.end,
-      templateId: row.templateId, photoDataUrl: row.photoDataUrl,
+      templateId: row.templateId, photoDataUrl: row.photoDataUrl, defaultSchemeId: row.defaultSchemeId ?? null,
     } };
   });
   return { expectedActiveSnapshotId: snapshot?.snapshotId ?? null, sourceKind: snapshot?.sourceKind ?? "editable-table",
     sourceUri: snapshot?.sourceUri ?? null, records };
 }
+
+import preparationSeed from "./wire-preparation-seed.json";
+export function defaultWireBlankScheme(start: string, end: string): string | null {
+  return preparationSeed.blanks.find(row => row.start === start && row.end === end || row.start === end && row.end === start)?.defaultSchemeId ?? null;
+}
+
+export const wireBlankCatalogEndLabels = { ...wireBlankEndLabels, terminal: "Терминал socket", sealed: "Терминал socket с уплотнителем", "sealed-pin": "Терминал pin с уплотнителем" };

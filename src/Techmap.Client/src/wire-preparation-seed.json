@@ -1,0 +1,715 @@
+{
+  "schemes": [
+    {
+      "id": "scheme-01",
+      "name": "Резка 2БР + ВР + ВР",
+      "description": "оба конца без разделки автомат, один терминал или наконечник вручную, другой терминал или наконечник вручную",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца без разделки автомат,",
+        "один терминал или наконечник вручную,",
+        "другой терминал или наконечник вручную"
+      ]
+    },
+    {
+      "id": "scheme-02",
+      "name": "Резка 2БР + ПАР +ВР",
+      "description": "оба конца без разделки автомат, один терминал или наконечник на полуавтомате с разделкой, другой терминал или наконечник вручную",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца без разделки автомат,",
+        "один терминал или наконечник на полуавтомате с разделкой,",
+        "другой терминал или наконечник вручную"
+      ]
+    },
+    {
+      "id": "scheme-03",
+      "name": "Резка 1БР1Р + ПА + ВР",
+      "description": "один конец без разделки / другой разделка до меди автомат, один терминал или наконечник на полуавтомате , другой терминал или наконечник вручную",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец без разделки / другой разделка до меди автомат,",
+        "один терминал или наконечник на полуавтомате ,",
+        "другой терминал или наконечник вручную"
+      ]
+    },
+    {
+      "id": "scheme-04",
+      "name": "Резка 1БР1Р + ПАР + ПА",
+      "description": "один конец без разделки и другой медный автомат, один терминал или наконечник на полуавтомате с разделкой, другой терминал или наконечник на полуавтомате",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец без разделки и другой медный автомат,",
+        "один терминал или наконечник на полуавтомате с разделкой,",
+        "другой терминал или наконечник на полуавтомате"
+      ]
+    },
+    {
+      "id": "scheme-05",
+      "name": "Резка 2БР + ПАР +ПАР",
+      "description": "оба конца без разделки автомат, один терминал или наконечник на полуавтомате с разделкой, другой терминал или наконечник на полуавтомате с разделкой",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца без разделки автомат,",
+        "один терминал или наконечник на полуавтомате с разделкой,",
+        "другой терминал или наконечник на полуавтомате с разделкой"
+      ]
+    },
+    {
+      "id": "scheme-06",
+      "name": "Резка 2Р+ ПА +ПА",
+      "description": "оба конца с разделкой автомат, один терминал или наконечник на полуавтомате, другой терминал или наконечник на полуавтомате",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с разделкой автомат,",
+        "один терминал или наконечник на полуавтомате,",
+        "другой терминал или наконечник на полуавтомате"
+      ]
+    },
+    {
+      "id": "scheme-07",
+      "name": "Резка 2БР + Л + М",
+      "description": "оба конца с разделкой автомат, один с разделкой и лужением вручную, другой разделка до меди вручную,",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с разделкой автомат,",
+        "один с разделкой и лужением вручную,",
+        "другой разделка до меди вручную,"
+      ]
+    },
+    {
+      "id": "scheme-08",
+      "name": "Резка 2БР + Л + Л",
+      "description": "оба конца с разделкой автомат, один с разделкой и лужением вручную, другой с разделкой и лужением вручную,",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с разделкой автомат,",
+        "один с разделкой и лужением вручную,",
+        "другой с разделкой и лужением вручную,"
+      ]
+    },
+    {
+      "id": "scheme-09",
+      "name": "Резка 2БР + М+М",
+      "description": "оба конца с разделкой автомат, один разделка до меди вручную, другой разделка до меди вручную,",
+      "operations": [
+        null,
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с разделкой автомат,",
+        "один разделка до меди вручную,",
+        "другой разделка до меди вручную,"
+      ]
+    },
+    {
+      "id": "scheme-10",
+      "name": "Авто с 2П",
+      "description": "оба конца с опрессовкой на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с опрессовкой на автомате"
+      ]
+    },
+    {
+      "id": "scheme-11",
+      "name": "Авто с 1П1Л",
+      "description": "один конец с опрессовкой, другой лужение на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой, другой лужение на автомате"
+      ]
+    },
+    {
+      "id": "scheme-12",
+      "name": "Авто с 1Л1М",
+      "description": "один конец с опрессовкой, другой разделка до меди на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой, другой разделка до меди на автомате"
+      ]
+    },
+    {
+      "id": "scheme-13",
+      "name": "Авто с 1Л1БР",
+      "description": "один конец с лужением другой без разделки на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с лужением другой без разделки на автомате"
+      ]
+    },
+    {
+      "id": "scheme-14",
+      "name": "Авто с 1М1БР",
+      "description": "один конец разделка до меди другой без разделки на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец разделка до меди другой без разделки на автомате"
+      ]
+    },
+    {
+      "id": "scheme-15",
+      "name": "Авто 2БР",
+      "description": "оба конца без разделки на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "оба конца без разделки на автомате"
+      ]
+    },
+    {
+      "id": "scheme-16",
+      "name": "Авто с 1П1М",
+      "description": "один конец с опрессовкой, другой разделка до меди на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой, другой разделка до меди на автомате"
+      ]
+    },
+    {
+      "id": "scheme-17",
+      "name": "Авто с 1П1М+ПА",
+      "description": "один конец с опрессовкой, другой разделка до меди на автомате с последующей опрессовкой на полуавтомате",
+      "operations": [
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой, другой разделка до меди на автомате с последующей опрессовкой на полуавтомате"
+      ]
+    },
+    {
+      "id": "scheme-18",
+      "name": "Авто с 1П1М+ВР",
+      "description": "один конец с опрессовкой, другой разделка до меди на автомате с последующей опрессовкой вручную",
+      "operations": [
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой, другой разделка до меди на автомате с последующей опрессовкой вручную"
+      ]
+    },
+    {
+      "id": "scheme-19",
+      "name": "Авто с 2П2У",
+      "description": "оба конца с опрессовкой с уплотнителем на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "оба конца с опрессовкой с уплотнителем на автомате"
+      ]
+    },
+    {
+      "id": "scheme-20",
+      "name": "Авто с 1ПУ1Л",
+      "description": "один конец с опрессовкой с уплотнителем, другой с лужением на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой с уплотнителем, другой с лужением на автомате"
+      ]
+    },
+    {
+      "id": "scheme-21",
+      "name": "Авто с 1ПУ1М",
+      "description": "один конец с опрессовкой с уплотнителем, другой разделка до меди на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой с уплотнителем, другой разделка до меди на автомате"
+      ]
+    },
+    {
+      "id": "scheme-22",
+      "name": "Авто с 1ПУ1БР",
+      "description": "один конец с опрессовкой с уплотнителем, другой без разделки на автомате",
+      "operations": [
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой с уплотнителем, другой без разделки на автомате"
+      ]
+    },
+    {
+      "id": "scheme-23",
+      "name": "Авто с 1ПУ1М+ПА",
+      "description": "один конец с опрессовкой с уплотнителем, другой без разделки на автомате с последующей опрессовкой на полуавтомате",
+      "operations": [
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой с уплотнителем, другой без разделки на автомате с последующей опрессовкой на полуавтомате"
+      ]
+    },
+    {
+      "id": "scheme-24",
+      "name": "Авто с 1ПУ1М+ВР",
+      "description": "один конец с опрессовкой с уплотнителем, другой без разделки на автомате с последующей опрессовкой вручную",
+      "operations": [
+        null,
+        null
+      ],
+      "descriptionLines": [
+        "один конец с опрессовкой с уплотнителем, другой без разделки на автомате с последующей опрессовкой вручную"
+      ]
+    }
+  ],
+  "blanks": [
+    {
+      "index": "ПФП-CUT-CUT",
+      "title": "Без разделки — Без разделки",
+      "start": "cut",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-15"
+    },
+    {
+      "index": "ПФП-COPPER-CUT",
+      "title": "Медь — Без разделки",
+      "start": "copper",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-14"
+    },
+    {
+      "index": "ПФП-TIN-CUT",
+      "title": "Лужение — Без разделки",
+      "start": "tin",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-13"
+    },
+    {
+      "index": "ПФП-COPPER-COPPER",
+      "title": "Медь — Медь",
+      "start": "copper",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-09"
+    },
+    {
+      "index": "ПФП-TIN-COPPER",
+      "title": "Лужение — Медь",
+      "start": "tin",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-07"
+    },
+    {
+      "index": "ПФП-TIN-TIN",
+      "title": "Лужение — Лужение",
+      "start": "tin",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-08"
+    },
+    {
+      "index": "ПФП-TERMINAL-CUT",
+      "title": "Терминал socket — Без разделки",
+      "start": "terminal",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-CUT",
+      "title": "Терминал pin — Без разделки",
+      "start": "terminal-pin",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-TERMINAL-COPPER",
+      "title": "Терминал socket — Медь",
+      "start": "terminal",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-16"
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-COPPER",
+      "title": "Терминал pin — Медь",
+      "start": "terminal-pin",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-16"
+    },
+    {
+      "index": "ПФП-TERMINAL-TIN",
+      "title": "Терминал socket — Лужение",
+      "start": "terminal",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-11"
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-TIN",
+      "title": "Терминал pin — Лужение",
+      "start": "terminal-pin",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-11"
+    },
+    {
+      "index": "ПФП-LUG-PIN-CUT",
+      "title": "Оконцовка pin — Без разделки",
+      "start": "lug-pin",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-LUG-SOCKET-CUT",
+      "title": "Оконцовка socket — Без разделки",
+      "start": "lug-socket",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-LUG-PIN-COPPER",
+      "title": "Оконцовка pin — Медь",
+      "start": "lug-pin",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-LUG-SOCKET-COPPER",
+      "title": "Оконцовка socket — Медь",
+      "start": "lug-socket",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-LUG-PIN-TIN",
+      "title": "Оконцовка pin — Лужение",
+      "start": "lug-pin",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-LUG-SOCKET-TIN",
+      "title": "Оконцовка socket — Лужение",
+      "start": "lug-socket",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": null
+    },
+    {
+      "index": "ПФП-TERMINAL-TERMINAL",
+      "title": "Терминал socket — Терминал socket",
+      "start": "terminal",
+      "end": "terminal",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-10"
+    },
+    {
+      "index": "ПФП-TERMINAL-TERMINAL-PIN",
+      "title": "Терминал socket — Терминал pin",
+      "start": "terminal",
+      "end": "terminal-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-10"
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-TERMINAL-PIN",
+      "title": "Терминал pin — Терминал pin",
+      "start": "terminal-pin",
+      "end": "terminal-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-10"
+    },
+    {
+      "index": "ПФП-TERMINAL-LUG-PIN",
+      "title": "Терминал socket — Оконцовка pin",
+      "start": "terminal",
+      "end": "lug-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-TERMINAL-LUG-SOCKET",
+      "title": "Терминал socket — Оконцовка socket",
+      "start": "terminal",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-LUG-PIN",
+      "title": "Терминал pin — Оконцовка pin",
+      "start": "terminal-pin",
+      "end": "lug-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-TERMINAL-PIN-LUG-SOCKET",
+      "title": "Терминал pin — Оконцовка socket",
+      "start": "terminal-pin",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-LUG-PIN-LUG-PIN",
+      "title": "Оконцовка pin — Оконцовка pin",
+      "start": "lug-pin",
+      "end": "lug-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-LUG-PIN-LUG-SOCKET",
+      "title": "Оконцовка pin — Оконцовка socket",
+      "start": "lug-pin",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-LUG-SOCKET-LUG-SOCKET",
+      "title": "Оконцовка socket — Оконцовка socket",
+      "start": "lug-socket",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-CUT",
+      "title": "Терминал socket с уплотнением — Без разделки",
+      "start": "sealed",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-22"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-CUT",
+      "title": "Терминал pin с уплотнением — Без разделки",
+      "start": "sealed-pin",
+      "end": "cut",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-22"
+    },
+    {
+      "index": "ПФП-SEALED-COPPER",
+      "title": "Терминал socket с уплотнением — Медь",
+      "start": "sealed",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-21"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-COPPER",
+      "title": "Терминал pin с уплотнением — Медь",
+      "start": "sealed-pin",
+      "end": "copper",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-21"
+    },
+    {
+      "index": "ПФП-SEALED-TIN",
+      "title": "Терминал socket с уплотнением — Лужение",
+      "start": "sealed",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-20"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-TIN",
+      "title": "Терминал pin с уплотнением — Лужение",
+      "start": "sealed-pin",
+      "end": "tin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-20"
+    },
+    {
+      "index": "ПФП-SEALED-TERMINAL",
+      "title": "Терминал socket с уплотнением — Терминал socket",
+      "start": "sealed",
+      "end": "terminal",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-TERMINAL-PIN",
+      "title": "Терминал socket с уплотнением — Терминал pin",
+      "start": "sealed",
+      "end": "terminal-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-TERMINAL",
+      "title": "Терминал pin с уплотнением — Терминал socket",
+      "start": "sealed-pin",
+      "end": "terminal",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-TERMINAL-PIN",
+      "title": "Терминал pin с уплотнением — Терминал pin",
+      "start": "sealed-pin",
+      "end": "terminal-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-LUG-PIN",
+      "title": "Терминал socket с уплотнением — Оконцовка pin",
+      "start": "sealed",
+      "end": "lug-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-LUG-SOCKET",
+      "title": "Терминал socket с уплотнением — Оконцовка socket",
+      "start": "sealed",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-LUG-PIN",
+      "title": "Терминал pin с уплотнением — Оконцовка pin",
+      "start": "sealed-pin",
+      "end": "lug-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-LUG-SOCKET",
+      "title": "Терминал pin с уплотнением — Оконцовка socket",
+      "start": "sealed-pin",
+      "end": "lug-socket",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-01"
+    },
+    {
+      "index": "ПФП-SEALED-SEALED",
+      "title": "Терминал socket с уплотнением — Терминал socket с уплотнением",
+      "start": "sealed",
+      "end": "sealed",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-19"
+    },
+    {
+      "index": "ПФП-SEALED-SEALED-PIN",
+      "title": "Терминал socket с уплотнением — Терминал pin с уплотнением",
+      "start": "sealed",
+      "end": "sealed-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-19"
+    },
+    {
+      "index": "ПФП-SEALED-PIN-SEALED-PIN",
+      "title": "Терминал pin с уплотнением — Терминал pin с уплотнением",
+      "start": "sealed-pin",
+      "end": "sealed-pin",
+      "color": "#26609e",
+      "templateId": "generated",
+      "defaultSchemeId": "scheme-19"
+    }
+  ]
+}

@@ -198,6 +198,7 @@ using var storage = SqliteStorage.Open(dataRoot);
 WireCatalogSeed.EnsurePublished(new SqliteReferenceCatalogSnapshotStore(storage));
 await TechnologyDatabaseSeed.EnsurePublishedAsync(new SqliteReferenceCatalogSnapshotStore(storage));
 WireBlankCatalogSeed.EnsurePublished(new SqliteReferenceCatalogSnapshotStore(storage));
+WirePreparationCatalogSeed.EnsurePublished(new SqliteReferenceCatalogSnapshotStore(storage));
 _ = SqliteAttachmentGarbageCollector.Prune(storage, TimeProvider.System);
 if (packagedSchemaVersion != storage.Diagnostics.SchemaVersion)
 {

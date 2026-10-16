@@ -1,7 +1,7 @@
 // Canonical vector drawing parts for catalog, routes and free drawing ends.
 // C1 supplies the side profile. Coordinates are symbolic, never manufacturing mm.
 export const artworkViewBox = "0 0 1200 240";
-export const artworkEnds = ["cut", "copper", "tin", "terminal", "sealed", "sealed-pin"];
+export const artworkEnds = ["cut", "copper", "tin", "terminal", "sealed", "sealed-pin", "terminal-pin", "lug-pin", "lug-socket"];
 export const artworkWireDiameter = 21.84;
 export const artworkJacketAnchor = 222;
 
@@ -71,6 +71,9 @@ export function endPart(kind, color = "#26609e") {
     case "copper": return conductor(false);
     case "tin": return conductor(true);
     case "terminal": return terminal(false, color);
+    case "terminal-pin": return `<g data-part="terminal-pin">${terminal(true, color)}</g>`;
+    case "lug-pin": return `<g data-part="lug-pin" data-view="side"><path d="M48 111H156V104H222V136H156V129H48Z" fill="#a1a6ab" stroke="#303438" stroke-width="2"/><path d="M161 106V134M171 106V134M210 106V134" stroke="#616b75" stroke-width="2"/></g>`;
+    case "lug-socket": return `<g data-part="lug-socket" data-view="side"><path d="M48 100H158V104H222V136H158V140H48Z" fill="#a1a6ab" stroke="#303438" stroke-width="2"/><path d="M48 108H139V132H48" fill="#59636c" stroke="#303438" stroke-width="2"/><path d="M168 106V134M210 106V134" stroke="#616b75" stroke-width="2"/></g>`;
     case "sealed": return terminal(false, color, true);
     case "sealed-pin": return terminal(true, color, true);
     default: throw new Error(`Unknown wire end: ${kind}`);

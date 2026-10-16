@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { PublishEditableReferenceTableRequest, ReferenceCatalogSnapshot } from "./reference-catalog-api";
-import { wireBlankDraft, wireBlankEndLabels, wireBlankEnds, wireBlankRequest, type WireBlank } from "./WireBlankCatalog";
+import { wireBlankDraft, wireBlankCatalogEndLabels as wireBlankEndLabels, wireBlankEnds, wireBlankRequest, type WireBlank } from "./WireBlankCatalog";
 import { renderWireSvg } from "./wire-blank-artwork.mjs";
 import "./wire-blank-catalog.css";
+import type { WirePreparationScheme } from "./WirePreparationCatalog";
 
 export function WireBlankPreview({ row, alt }: { row: WireBlank; alt?: string }) {
   if (row.photoDataUrl) return <img className="wire-blank-preview" src={row.photoDataUrl} alt={alt ?? `Фото полуфабриката ${row.title}`} />;
@@ -11,9 +12,10 @@ export function WireBlankPreview({ row, alt }: { row: WireBlank; alt?: string })
   return <img className="wire-blank-preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(artwork)}`} alt={title} />;
 }
 
-export function WireBlankCatalogEditor({ snapshot, disabled, onSave }: {
+export function WireBlankCatalogEditor({ snapshot, disabled, onSave, schemes = [] }: {
   snapshot: ReferenceCatalogSnapshot | null;
   disabled: boolean;
+  schemes?: readonly WirePreparationScheme[];
   onSave: (request: PublishEditableReferenceTableRequest) => Promise<void>;
 }) {
   const [rows, setRows] = useState(() => wireBlankDraft(snapshot));
@@ -54,6 +56,7 @@ export function WireBlankCatalogEditor({ snapshot, disabled, onSave }: {
         <label>Индекс<input aria-label={`Индекс полуфабриката ${position + 1}`} maxLength={128} value={row.index} disabled={blocked} onChange={event => change(row.id, { index: event.target.value })} /></label>
         <label>Уникальное название<input aria-label={`Название полуфабриката ${position + 1}`} maxLength={512} value={row.title} disabled={blocked} onChange={event => change(row.id, { title: event.target.value })} /></label>
         <label>Цвет провода<span className="wire-blank-color"><input type="color" aria-label={`Цвет полуфабриката ${position + 1}`} value={/^#[0-9a-fA-F]{6}$/.test(row.color) ? row.color : "#26609e"} disabled={blocked} onChange={event => change(row.id, { color: event.target.value })} /><input aria-label={`Код цвета полуфабриката ${position + 1}`} value={row.color} maxLength={7} disabled={blocked} onChange={event => change(row.id, { color: event.target.value })} /></span></label>
+        <label>Схема по умолчанию<select aria-label={`Схема полуфабриката ${position + 1}`} value={row.defaultSchemeId ?? ""} disabled={blocked} onChange={event => change(row.id, { defaultSchemeId: event.target.value || null })}><option value="">Не назначена</option>{row.defaultSchemeId && !schemes.some(s => s.id === row.defaultSchemeId) && <option value={row.defaultSchemeId}>Схема недоступна: {row.defaultSchemeId}</option>}{schemes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         <label>Исполнение начала<select aria-label={`Начало полуфабриката ${position + 1}`} value={row.start} disabled={blocked} onChange={event => change(row.id, { start: event.target.value as WireBlank["start"] })}>{wireBlankEnds.map(end => <option key={end} value={end}>{wireBlankEndLabels[end]}</option>)}</select></label>
         <label>Исполнение конца<select aria-label={`Конец полуфабриката ${position + 1}`} value={row.end} disabled={blocked} onChange={event => change(row.id, { end: event.target.value as WireBlank["end"] })}>{wireBlankEnds.map(end => <option key={end} value={end}>{wireBlankEndLabels[end]}</option>)}</select></label>
       </div>

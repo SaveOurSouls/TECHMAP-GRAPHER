@@ -1,0 +1,13 @@
+.wire-preparation-scroll { overflow: auto; max-height: 65vh; margin-block: 16px; }
+.wire-preparation-scroll table { width: 100%; border-collapse: collapse; }
+.wire-preparation-scroll th { position: sticky; top: 0; background: #edf5fb; color: #244760; z-index: 1; text-align: left; }
+.wire-preparation-scroll td, .wire-preparation-scroll th { padding: 10px; border: 1px solid #d7e5ef; vertical-align: top; }
+.wire-preparation-scroll input, .wire-preparation-scroll textarea, .wire-preparation-scroll select { width: 100%; min-width: 200px; box-sizing: border-box; }
+.wire-preparation-scroll textarea { min-height: 84px; }
+.wire-preparation-scroll small { display: block; color: #87591c; margin-top: 6px; }
+.wire-preparation-scroll button { margin: 4px 4px 0 0; }
+.wire-preparation-catalog details { margin-top: 20px; }
+.wire-preparation-catalog details > textarea { display: block; width: 100%; min-height: 120px; }
+.wire-preparation-dialog { width: min(1400px, 95vw); max-width: 95vw; }
+.wire-preparation-dialog footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.wire-preparation-dialog .wire-blank-preview { min-width: 160px; max-width: 240px; }

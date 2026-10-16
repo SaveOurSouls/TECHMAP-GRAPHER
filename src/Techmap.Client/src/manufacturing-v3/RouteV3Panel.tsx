@@ -1,3 +1,6 @@
+import { WirePreparationDialog, useWirePreparationCatalogs } from "./WirePreparationDialog";
+import { applyWirePreparation, wirePreparationAssignments } from "./route-v3-wire-preparation";
+import { wirePreparationReady } from "../WirePreparationCatalog";
 import { buildRouteV3SourceItems } from './route-v3-wire-terminals';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LocalSession } from "../local-session";
@@ -70,6 +73,9 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   const [editing, setEditing] = useState<RouteV3Fragment | null>(null);
   const [drawingNode, setDrawingNode] = useState<RouteV3Node | null>(null);
   const [preview, setPreview] = useState<RouteV3Node | null>(null);
+  const [preparationOpen, setPreparationOpen] = useState(false);
+  const preparation = useWirePreparationCatalogs(config, session);
+  const initializedPreparation = useRef(false);
   const [refreshOpen, setRefreshOpen] = useState(false);
   const sourceRefresh = useMemo(() => previewRouteV3SourceRefresh(route, source, harnessQuantity), [route, source, harnessQuantity]);
   const sources = useMemo(() => buildRouteV3SourceItems(source), [source]);
@@ -82,9 +88,21 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
     try { window.localStorage.setItem(routeV3StorageKey(projectId, harnessId), JSON.stringify(next)); current.current = next; setRoute(next); setError(null); }
     catch { const message = "Не удалось сохранить Маршрут v3 в браузере. Освободите место и повторите сохранение."; setError(message); throw new Error(message); }
   };
+  useEffect(() => {
+    if (!preparation.data || initializedPreparation.current) return;
+    initializedPreparation.current = true;
+    if (current.current.wirePreparation || current.current.graphEdited) return;
+    const assignments = wirePreparationAssignments(current.current, source, preparation.data.blanks);
+    // An incomplete default remains visible in the dialog; never invent its operations.
+    if (!assignments.some(a => a.schemeId) || assignments.some(a => a.schemeId && !preparation.data!.schemes.some(s => s.id === a.schemeId && wirePreparationReady(s)))) return;
+    try { persist(applyWirePreparation(current.current.nodes.length ? current.current : generateRouteV3(current.current, source), assignments, preparation.data.schemes)); }
+    catch (e) { setError(e instanceof Error ? e.message : "Не удалось создать заготовки."); }
+  }, [preparation.data, source]);
   const applySourceRefresh = () => {
     if (!window.confirm(`Обновить Маршрут v3 по сохранённому Чертежу/Э4? Изменятся исходное сырьё и количества; ${sourceRefresh.divergences.length} расхождений останутся для проверки оператором.`)) return;
-    try { persist(syncRouteV3TerminationOperations(applyRouteV3SourceRefresh(current.current, sourceRefresh),source)); setRefreshOpen(true); }
+    try { let next = syncRouteV3TerminationOperations(applyRouteV3SourceRefresh(current.current, sourceRefresh),source);
+      if (next.wirePreparation) next = applyWirePreparation(next, next.wirePreparation.assignments.filter(a => next.preparedRefs.some(r => r.kind === "wire" && r.id === a.wireId)), next.wirePreparation.schemes, true);
+      persist(next); setRefreshOpen(true); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось обновить маршрут."); }
   };
   const newFragment = (document: HarnessDesignDocument, ids: readonly string[], scene: readonly EditorSceneObject[], isolate: boolean): RouteV3Fragment => {
@@ -151,8 +169,9 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
   };
   return <section className="route-v3-panel" aria-label="Маршрут v3">
     <HarnessSectionNavigation active="route-v3" onHome={onClose} onNavigate={section => onSectionChange?.(section)} />
-    <header className="route-v3-header"><div><p className="eyebrow">{graphical ? "СЛЕПКИ ПОСЛЕДОВАТЕЛЬНОСТИ СБОРКИ" : "ПОСЛЕДОВАТЕЛЬНОСТЬ СБОРКИ"}</p><h2>{graphical ? "Графический маршрут" : "Маршрут v3"}</h2><p>{graphical ? `Раскрыто ${sourceScene.length - hidden.length} из ${sourceScene.length} объектов · слепков ${route.fragments.length}` : route.generated ? "Маршрут построен по составу сохранённых слепков." : "Нарезанные заготовки готовы. Соберите слепки в графическом маршруте."}</p></div><div className="route-v3-actions">{graphical ? <><button className="secondary-action" onClick={() => setGraphical(false)}>К маршруту</button><button className="primary-action" disabled={!route.fragments.length} onClick={generate}>Сгенерировать</button></> : <button className="primary-action" onClick={openGraphical}>Графический маршрут</button>}</div></header>
+    <header className="route-v3-header"><div><p className="eyebrow">{graphical ? "СЛЕПКИ ПОСЛЕДОВАТЕЛЬНОСТИ СБОРКИ" : "ПОСЛЕДОВАТЕЛЬНОСТЬ СБОРКИ"}</p><h2>{graphical ? "Графический маршрут" : "Маршрут v3"}</h2><p>{graphical ? `Раскрыто ${sourceScene.length - hidden.length} из ${sourceScene.length} объектов · слепков ${route.fragments.length}` : route.generated ? "Маршрут построен по составу сохранённых слепков." : "Нарезанные заготовки готовы. Соберите слепки в графическом маршруте."}</p></div><div className="route-v3-actions">{graphical ? <><button className="secondary-action" onClick={() => setGraphical(false)}>К маршруту</button><button className="primary-action" disabled={!route.fragments.length} onClick={generate}>Сгенерировать</button></> : <><button className="secondary-action" disabled={!preparation.data} onClick={() => setPreparationOpen(true)}>Заготовка провода</button><button className="primary-action" onClick={openGraphical}>Графический маршрут</button></>}</div></header>
     {error && <p className="route-v3-error" role="alert">{error}</p>}
+    {preparation.error && <p role="alert">{preparation.error}</p>}
     {textures.error && <p role="status">{textures.error}</p>}
     <div hidden={graphical}>
       {(!route.sourceState || sourceRefresh.changed || !!route.sourceDivergences?.length) && <div className="route-v3-refresh" role="status"><div><strong>{!route.sourceState ? "Свяжите маршрут с текущим Чертежом/Э4" : sourceRefresh.changed ? "Чертёж или Э4 изменились" : route.sourceDivergences?.some(issue => !issue.resolved) ? "Есть расхождения с источником" : "Изменения источника проверены"}</strong><span>{!route.sourceState ? "Для ранее созданного маршрута нет исходной ревизии. Сохраните текущий источник как точку сравнения." : sourceRefresh.changed ? sourceRefresh.divergences.length ? `${sourceRefresh.divergences.length} изменений требуют проверки перед обновлением маршрута.` : "Геометрия или количество изменились без расхождения состава и точек привязки. Карточки сохранятся." : `${route.sourceDivergences?.filter(issue => !issue.resolved).length ?? 0} расхождений ожидают исправления оператором.`}</span></div><div className="route-v3-refresh-actions">{(!route.sourceState || sourceRefresh.changed) && <button type="button" className="primary-action" onClick={applySourceRefresh}>{route.sourceState ? "Проверить и применить обновление" : "Привязать текущий источник"}</button>}<button type="button" className="secondary-action" onClick={() => setRefreshOpen(value => !value)}>{refreshOpen ? "Скрыть список" : "Показать расхождения"}</button></div></div>}
@@ -166,6 +185,7 @@ function Workspace({ source, initial, harnessQuantity, config, session, projectI
         <aside className="route-v3-gallery-panel" aria-label="Сохранённые слепки"><header><h3>Полуфабрикаты</h3><span>{route.fragments.length}</span></header>{route.fragments.map((fragment, index) => <article className="route-v3-fragment-card" key={fragment.id}><button className="route-v3-fragment-preview" aria-label={`Просмотреть слепок ${fragment.title}`} onClick={() => setPreview({ id: fragment.id, kind: "semiFinished", title: fragment.title, fragmentIds: [fragment.id], refs: fragment.refs, x: 0, y: 0 })}>{showFragment(fragment)}</button><strong>{index + 1}. {fragment.title}</strong><span className="route-v3-fragment-meta">{fragment.mode === "isolated" ? "Изолированный" : "Как на чертеже"} · {fragment.refs.length} комплектующих</span><div className="route-v3-fragment-actions"><button className="link-button" onClick={() => setEditing(fragment)}>Редактировать</button><button className="link-button" onClick={() => { try { persist(removeRouteV3Fragment(current.current, fragment.id)); } catch { /* error visible */ } }}>Удалить</button></div></article>)}{!route.fragments.length && <p className="route-v3-empty">Сохранённые фрагменты появятся здесь. Они станут полуфабрикатами маршрута.</p>}</aside>
       </div>}
     </div>
+    {preparationOpen && preparation.data && <WirePreparationDialog route={board} source={source} schemes={preparation.data.schemes} blanks={preparation.data.blanks} onClose={() => setPreparationOpen(false)} onApply={(assignments, schemes) => { persist(applyWirePreparation(board, assignments, schemes)); setPreparationOpen(false); }} />}
     {editing && <Dialog label={`Редактор слепка ${editing.title}`} editor onClose={() => setEditing(null)}><div className="route-v2-drawing-host"><RouteAssemblyDrawing key={editing.id} config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={fragmentRow(editing)} items={sources.filter(item => editing.refs.some(ref => refKey(ref) === refKey(item.ref)))} onCancel={() => setEditing(null)} onSave={presentation => { persist(appendRouteV3Fragment(current.current, { ...editing, drawingCopy: presentation.drawingCopy ?? editing.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy, mode: presentation.isolatedDrawingCopy ? "isolated" : "source", backgroundOpacity: presentation.backgroundOpacity })); setEditing(null); setTitle(""); }} /></div></Dialog>}
     {drawingNode && <Dialog label={`Рисунок карточки ${drawingNode.title}`} editor onClose={() => setDrawingNode(null)}><RouteAssemblyDrawing config={config} session={session} projectId={projectId} harnessId={harnessId} document={source} row={{ ...finalRow, id: drawingNode.id, title: drawingNode.title, sourceObjects: drawingNode.refs, presentation: { objects: [], backgroundOpacity: 0, ...drawingNode.drawing } }} items={sources.filter(s => drawingNode.refs.some(r => refKey(r) === refKey(s.ref)))} onCancel={() => setDrawingNode(null)} onSave={presentation => { persist({ ...board, graphEdited: true, nodes: board.nodes.map(n => n.id === drawingNode.id ? { ...n, drawing: { backgroundOpacity: presentation.backgroundOpacity, drawingCopy: presentation.drawingCopy, isolatedDrawingCopy: presentation.isolatedDrawingCopy } } : n) }); setDrawingNode(null); }} /></Dialog>}
     {preview && <Dialog label={preview.title} onClose={() => setPreview(null)}><header className="route-v3-preview-heading"><h3>{preview.title}</h3><button className="secondary-action" onClick={() => setPreview(null)}>Закрыть</button></header><div className="route-v3-large-preview">{nodeArtwork(preview, true)}</div></Dialog>}

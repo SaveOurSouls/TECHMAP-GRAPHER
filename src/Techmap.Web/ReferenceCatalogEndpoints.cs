@@ -312,6 +312,21 @@ public static class ReferenceCatalogEndpoints
 
     private static void ValidateWireBlankRecords(string sourceId, IReadOnlyList<ReferenceCatalogRecordInputRequest> records)
     {
+        if (sourceId == WirePreparationCatalogSeed.SourceId)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var record in records)
+            {
+                var p = record.Payload;
+                if (record.EntityType != "wire-preparation-scheme" || p.ValueKind != JsonValueKind.Object ||
+                    !p.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()) || !names.Add(name.GetString()!.Trim()) ||
+                    !p.TryGetProperty("description", out var description) || description.ValueKind != JsonValueKind.String ||
+                    !p.TryGetProperty("operations", out var operations) || operations.ValueKind != JsonValueKind.Array || operations.GetArrayLength() == 0 ||
+                    operations.EnumerateArray().Any(op => op.ValueKind != JsonValueKind.Null && (op.ValueKind != JsonValueKind.Object || !op.TryGetProperty("catalogBinding", out var binding) || binding.ValueKind != JsonValueKind.Object || !op.TryGetProperty("title", out var title) || title.ValueKind != JsonValueKind.String)))
+                    throw new ReferenceCatalogApiException("catalog_payload_invalid", "Проверьте название и последовательность операций схемы.");
+            }
+            return;
+        }
         if (!string.Equals(sourceId, WireBlankCatalogSeed.SourceId, StringComparison.Ordinal)) return;
         var indices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -332,9 +347,11 @@ public static class ReferenceCatalogEndpoints
             foreach (var field in new[] { "start", "end" })
             {
                 if (!payload.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String ||
-                    !new[] { "cut", "copper", "tin", "terminal", "sealed", "sealed-pin" }.Contains(value.GetString(), StringComparer.Ordinal))
+                    !new[] { "cut", "copper", "tin", "terminal", "sealed", "sealed-pin", "terminal-pin", "lug-pin", "lug-socket" }.Contains(value.GetString(), StringComparer.Ordinal))
                     throw new ReferenceCatalogApiException("catalog_payload_invalid", $"Исполнение «{field}» полуфабриката не поддерживается.");
             }
+            if (payload.TryGetProperty("defaultSchemeId", out var scheme) && scheme.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
+                throw new ReferenceCatalogApiException("catalog_payload_invalid", "Некорректная схема по умолчанию.");
             if (payload.TryGetProperty("photoDataUrl", out var photo) && photo.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
                 throw new ReferenceCatalogApiException("catalog_payload_invalid", "Фото полуфабриката должно быть PNG.");
             if (payload.TryGetProperty("photoDataUrl", out photo) && photo.ValueKind == JsonValueKind.String &&

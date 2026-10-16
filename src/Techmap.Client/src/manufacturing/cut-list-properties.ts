@@ -15,6 +15,7 @@ export interface WireSemiFinishedProperties {
 }
 
 const compactEndLabels: Readonly<Record<WireBlankEnd, string>> = {
+  "terminal-pin": "Терминал pin", "lug-pin": "Оконцовка pin", "lug-socket": "Оконцовка socket",
   cut: "Без разделки", copper: "медь", tin: "лужёная медь",
   terminal: "Наконечник", sealed: "Наконечник с уплотнителем",
   "sealed-pin": "Штыревой наконечник с уплотнителем",
