@@ -2,7 +2,7 @@
 
 ## 120 — оценка системы и транспорт API, следующий срез после M5-22-054
 
-REQ-155, [карточка 120](../../tasks/120-system-assessment-and-api-refactor.md), чат `01a14521-6a96-7152-b095-accc21abdda7`, основная ветка `codex/integration-m5-22`. In-progress, code/handoff SHA pending. Изменение не входит в ZIP M5-22-054; до завершения handoff новая поставка блокируется. ZIP не заказан.
+REQ-155, [карточка 120](../../tasks/120-system-assessment-and-api-refactor.md), чат `01a14521-6a96-7152-b095-accc21abdda7`, основная ветка `codex/integration-m5-22`. Ready-for-review; код **`2e1351fb50d33f2b2983dffd240901610e91fc8c`** опубликован, включение в integration подтверждено ancestry. [Handoff](handoff-120-system-assessment.md) — этот docs-коммит. PASS: Vitest 209/2271, TypeScript/Vite, .NET Release build/1142, отдельный performance 1/1, diff-check. Изменение не входит в ZIP M5-22-054; включить в следующий заказанный релиз с проверкой code/handoff ancestry. Нового ZIP нет, owner acceptance открыта; условия среды и ограничение длинных путей раскрыты в отчёте.
 
 ### m5-22-054 — 16.10.2026
 

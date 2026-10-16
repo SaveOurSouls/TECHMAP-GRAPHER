@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 120 — оценка системы и общий транспорт API, 16.10.2026
+
+REQ-155, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`2e1351fb50d33f2b2983dffd240901610e91fc8c`** опубликован прямо в `codex/integration-m5-22`; ancestry PASS. [Точный handoff](handoff-120-system-assessment.md), [оценка системы](../system-assessment-120.md). Общий транспорт четырёх API, 14 новых регрессий; PASS: Vitest 209/2271, TypeScript/Vite, Release build, .NET 1142/1142, отдельный performance 1/1, diff-check. Условия IPC/temp и предварительные ошибки раскрыты в отчёте. Этот docs-коммит завершает handoff; owner acceptance открыта. Следующий срез после M5-22-054, ZIP не заказан.
+
 ## 118 — удаление Маршрута, Маршрута v2 и UML, 16.10.2026
 
 Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, `codex/remove-legacy-route-pages-work`, `tmp/remove-legacy-route-pages`; REQ-153, ready-for-review. Код **`8587eb55b3e2366fffe1cb6026b10ff766a8b7b2`** опубликован в разрешённый origin. Удалены три страницы и их отдельные модули; оставлены Э4, Чертёж и V3. Общие рисунки/типы перенесены, старые данные и production-контракты сохранены. Дополнение по UML — прямой запрос владельца в ходе этой задачи.

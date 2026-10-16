@@ -1,5 +1,9 @@
 # Журнал интеграции
 
+## 16.10.2026 — оценка системы и транспорт API, карточка 120
+
+Code SHA `2e1351fb50d33f2b2983dffd240901610e91fc8c` создан и опубликован прямо в `codex/integration-m5-22` (push `d4671ac..2e1351f`); ancestry PASS. [Handoff](handoff-120-system-assessment.md), REQ-155, ADR-0025. Общее поведение четырёх JSON API выделено в транспорт; контракты и предметные парсеры сохранены. PASS: Vitest 209/2271, TypeScript/Vite, .NET Release build/1142, отдельный performance 1/1 и diff-check. Подробные условия и предварительные ошибки — в [оценке](../system-assessment-120.md). Новый ZIP не заказан; M5-22-054 не содержит этот commit. Документальный handoff — коммит этой записи; приёмка владельца открыта.
+
 ## 16.10.2026 — проверенный ZIP M5-22-054
 
 Интегрированы handoff 112 follow-up, 117, 118 и 119; историческое пересечение 118/REQ-153 и 119/REQ-154 нормализовано с сохранением исходных SHA. Code HEAD `680717a6aba4423f7bd701c3d67f38141612f1b0`, версия `0.63.54-m5-22-review`; рабочее дерево до сборки чистое, HEAD опубликован. Исходный code/handoff 117 — предки HEAD; 112, 118 и 119 включены проверенными cherry-pick/документальными эквивалентами (точные сопоставления в release coverage). Совместный Vitest 208/2257, TypeScript/Vite, .NET 1142/1142, performance 1/1 PASS. Манифест 534 файла, portable 7/7. ZIP `artifacts/m5-22-054/TECHMAP-GRAPHER-0.63.54-m5-22-review-win-x64.zip`: 64 329 081 байт, SHA-256 `E92FB48506FC005B704FDB29A348854282EC20CEE9FA22A3F675A24711F47BA9`. Ручная проверка исходного жгута и packaged UI остаётся открытой.
