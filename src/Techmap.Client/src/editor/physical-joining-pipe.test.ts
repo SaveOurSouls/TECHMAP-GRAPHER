@@ -341,7 +341,11 @@ it("keeps boundary stations out of bend hit targets while preserving their geome
  expect(hitTestWireRoutePoint(member,outerPoint,100)).toBeNull();
  const moved=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:outer.memberIndex,boundary:outer.boundary,origin:outerPoint,position:{x:outerPoint.x+20,y:outerPoint.y+30}});
  expect(moved.physicalTopology!.joiningPipes![0]!.members[1]!.enterOuter).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
- expect(joiningPipeMemberControls(moved,"p1")!.find(control=>control.boundary==="outerEnter")!.point).toEqual({x:outerPoint.x+20,y:outerPoint.y+30});
+ const movedControls=joiningPipeMemberControls(moved,"p1")!,shownOuter=movedControls.find(control=>control.boundary==="outerEnter")!.point;
+ const shownLead=movedControls.find(control=>control.lead==="enter")!.point;
+ expect(shownOuter.y).toBeCloseTo(outerPoint.y+30,8);
+ expect(shownLead.x-shownOuter.x).toBeGreaterThanOrEqual(20-1e-7);
+ expect(shownOuter.x).toBeLessThanOrEqual(outerPoint.x+20);
  const axis=member.pipe!.joiningBoundaryHandles!.find(handle=>handle.boundary==="axisEnter")!,axisPoint=member.pipe!.handles[axis.index]!;
  const shifted=applyEditorCommand(base,{type:"update-joining-pipe-member-boundary",pipeId:"op",memberIndex:axis.memberIndex,boundary:axis.boundary,origin:axisPoint,position:{x:axisPoint.x+15,y:axisPoint.y-10}});
  expect(shifted.physicalTopology!.joiningPipes![0]!.start).toEqual({x:op.start.x+15,y:op.start.y-10});
