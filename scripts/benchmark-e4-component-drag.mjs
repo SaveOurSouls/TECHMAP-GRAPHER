@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { existsSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const client = join(root, 'src/Techmap.Client');
 const require = createRequire(join(client, 'package.json'));
@@ -13,7 +14,8 @@ const vite = await createServer({ root: client, configFile: false,
 try {
   const load = name => vite.ssrLoadModule(`/src/${name}`);
   const { createEmptyHarnessDesign, wireEndpointE4Anchor, parseHarnessDesignDocument } = await load('editor/model.ts');
-  const { createConnector, createWire, applyEditorCommand } = await load('editor/commands.ts');
+  const { createConnector, createWire, applyEditorCommand, e4RoutingIssues } = await load('editor/commands.ts');
+  const { e4ConnectivityFingerprint } = await load('editor/e4-connectivity.ts');
   const { designToScene } = await load('editor/HarnessDesignEditor.tsx');
   const { BUILTIN_TERMINATION_RECORDS, createTerminationPlacement } = await load('termination-library/index.ts');
   const connectors = Array.from({ length: 6 }, (_, i) => {
@@ -68,6 +70,14 @@ try {
         const afterGeometry = performance.now();
         designToScene(next, 'e4');
         if (i >= 0) { geometry.push(afterGeometry - start); total.push(performance.now() - start); }
+        // Verify the result outside the timed section. A fast release must
+        // still commit valid routes and leave distant pairs untouched.
+        if (method === 'command') {
+          assert.deepEqual(e4RoutingIssues(next), []);
+          assert.equal(e4ConnectivityFingerprint(next), e4ConnectivityFingerprint(document));
+          assert.deepEqual(next.wires.map(w => [w.id, w.lengthMm]), document.wires.map(w => [w.id, w.lengthMm]));
+          if (id === 'T') assert.deepEqual(next.wires.slice(0, -1), document.wires.slice(0, -1));
+        }
       }
       const result = { id, mode, method, geometry: summary(geometry), withScene: summary(total) };
       results.push(result);
@@ -75,6 +85,6 @@ try {
     }
   }
   console.log(JSON.stringify({ node: process.version, connectors: connectors.length,
-    wires: wires.length, pairs: document.diffPairs.length, samples: 8, results }, null, 2));
+    wires: wires.length, pairs: document.diffPairs.length, samples: 8, validation: 'PASS', results }, null, 2));
   }
 } finally { await vite.close(); }
