@@ -19,3 +19,16 @@ Surface вызывает useCanvasViewport, деструктурирует 68 и
 - Для точного переноса использован временный TypeScript compiler API 5.9.3; проект использует прежний TypeScript 7.0.2. Временный importer удалён из lockfile, pnpm install --frozen-lockfile --ignore-scripts восстановил исходный набор зависимостей. В Git изменения package/lockfile и tmp не входят.
 
 Ручной браузер, portable и исходный жгут не проверялись; сервер/форматы не менялись, .NET не запускался. Остальные этапы карточки открыты. Измеренное ускорение UI не заявляется.
+
+## Этап 2: HarnessDesignEditor
+
+Главный путь стал фасадом из **8 строк** вместо 2653. Выделены harness-scene-projection **233**, harness-component-snapshots **185**, harness-catalog-adapters **138**, harness-selection-adapters **61**, harness-editor-types **51**, HarnessEditorBoundary **50**, useHarnessDesignEditor **1232** и HarnessDesignEditorSurface **701** строка.
+
+Сверка подтверждает **33** исходных объявления без изменения. Основной JSX сохранён целиком. Hook содержит прежнее состояние/эффекты/обработчики; единственный ранний return загрузки передаёт тот же JSX через discriminated union ready=false, представление сразу возвращает его. Основной return передаёт 138 типизированных через inference значений. Порядок/условия hooks и cleanup сохранены. Новых UI-обёрток нет.
+
+- Baseline до переноса: **6 файлов / 193 теста PASS**, 16,62 с. После переноса с новым facade-тестом: **7/194 PASS**, 17,14 с.
+- Тест запрета преждевременной трассировки читает два новых файла (controller + surface), сохраняя все прежние утверждения. Первоначальный повтор с одним controller-файлом упал на поиске JSX-handler; путь обновлён, production-алгоритмы не менялись.
+- Полный Vitest **216 файлов / 2314 тестов PASS**, 79,70 с. TypeScript/Vite PASS, Vite 1,23 с; прежнее предупреждение размера chunk сохраняется.
+- AST-сверка объявлений/контроллера/JSX, отсутствие обратных facade-импортов, прежние canvas-эталоны, diff-check/review и новые ссылки PASS. Временные evidence в ignored tmp/refactor-126.
+
+Этапы commands/model/ComponentLibrary, загрузка и итоговый аудит остаются открыты.

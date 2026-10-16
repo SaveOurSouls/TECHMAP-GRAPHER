@@ -55,7 +55,8 @@ function addFanout(
 
 describe("E4 routing to termination components", () => {
   it("keeps newly connected UI wires route-free until the command router runs", () => {
-    const source = readFileSync(resolve("src/editor/HarnessDesignEditor.tsx"), "utf8");
+    const source = readFileSync(resolve("src/editor/useHarnessDesignEditor.tsx"), "utf8") + "\n" +
+      readFileSync(resolve("src/editor/HarnessDesignEditorSurface.tsx"), "utf8");
     const start = source.indexOf("const createRoutedWire =");
     const end = source.indexOf("const selectedWireIds =", start);
     expect(start).toBeGreaterThanOrEqual(0);
