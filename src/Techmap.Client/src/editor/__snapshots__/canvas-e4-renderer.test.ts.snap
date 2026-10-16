@@ -1,0 +1,159 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves differential-pair variant 1, halos and alternating wire colours 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 18,
+  "commandSha256": "7bef8b377795a23b4b0e60bb450b208d76425e27a94f476f6269554f07287a6f",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#06c@3": 12,
+    "#53636c@5": 12,
+    "#f8fafb@7": 24,
+    "#fff@3": 12,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves differential-pair variant 2, halos and alternating wire colours 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "149e4d21a977ce06bd2643815ae27f59a07a404010c77686e8822676a1ea315c",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#06c@3": 12,
+    "#53636c@5": 12,
+    "#f8fafb@7": 24,
+    "#fff@3": 12,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves full redraw order with wires hidden=false 1`] = `
+{
+  "arcCount": 14,
+  "bezierCount": 1,
+  "commandSha256": "6a13ac759a240c8cb18120daa17e50525721a52c4d317345f5183ebef775a470",
+  "ellipses": [
+    [
+      120,
+      32,
+      9,
+      21,
+      0,
+      0,
+      6.283185307179586,
+    ],
+  ],
+  "lastArc": [
+    200,
+    56,
+    3.5,
+    0,
+    6.283185307179586,
+  ],
+  "strokeCounts": {
+    "#06c@3": 13,
+    "#1179ac@4": 3,
+    "#123456@2": 1,
+    "#506d7c@1.5": 1,
+    "#53636c@5": 13,
+    "#d42@3": 2,
+    "#d6e0e5@1": 1,
+    "#f8fafb@7": 26,
+    "#fff@3": 13,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves full redraw order with wires hidden=true 1`] = `
+{
+  "arcCount": 8,
+  "bezierCount": 0,
+  "commandSha256": "90f43a7abd034f9dc9c301987fff763ce2818afbdd9ed8bbfa0e8e6d9f7280e7",
+  "ellipses": [],
+  "lastArc": [
+    200,
+    56,
+    3.5,
+    0,
+    6.283185307179586,
+  ],
+  "strokeCounts": {
+    "#123456@2": 1,
+    "#d6e0e5@1": 1,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves the shared white stroke for drawing wire paths 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "501d6210459b95497a22ff4b1aacc98fa98ad4424819d5049b02bd7ddcb33ccb",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#53636c@5": 1,
+    "#fff@3": 1,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves the wire stroke and white outline for  white  1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "85103dbedf2597016a045d928d5040aa82b547612c54aeb1990f8fa4155a626e",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    " white @3": 1,
+    "#53636c@5": 1,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves the wire stroke and white outline for #d42 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "ff872bae442da76b213ddab4d4cae6c18b056ff83f586b3450f34a22afc34997",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#d42@3": 1,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves the wire stroke and white outline for #fff 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "4ad047eaec2db253b5656c0a04eca4de43ad3f5b175057f288dcd956f5f0ef0e",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#53636c@5": 1,
+    "#fff@3": 1,
+  },
+}
+`;
+
+exports[`E4 painting compatibility with the pre-extraction viewport > preserves the wire stroke and white outline for rgba(255,255,255,1) 1`] = `
+{
+  "arcCount": 0,
+  "bezierCount": 0,
+  "commandSha256": "f412b7532e46dbf45971be2cfe3fe08310a3637adcf8cf95a0a08c6124e9b2fa",
+  "ellipses": [],
+  "lastArc": undefined,
+  "strokeCounts": {
+    "#53636c@5": 1,
+    "rgba(255,255,255,1)@3": 1,
+  },
+}
+`;

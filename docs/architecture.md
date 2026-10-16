@@ -1,5 +1,9 @@
 # Восстановленная архитектура
 
+## Рисование Э4 (REQ-158)
+
+`editor/canvas-e4-renderer.ts` рисует мостики, диффпары, узлы и экраны по расчётам canvas-e4-scene и содержит общий stroke с обводкой белого провода. CanvasViewport передаёт контекст/сцену и сохраняет порядок всех вызовов, включая использование stroke в Чертеже; прежний drawE4DifferentialPairs переэкспортирован. Новый модуль не зависит от React/CanvasViewport и глобального DOM. [ADR-0028](decisions/0028-canvas-e4-renderer.md), [протокол 123](canvas-e4-renderer-123-refactor.md).
+
 ## Геометрия сцены Э4 (REQ-157)
 
 `editor/canvas-e4-scene.ts` рассчитывает сегменты, пересечения/мосты, metadata overlays, layout и hit-test диффпар/экранов и их видимость. `canvas-paint-order.ts` задаёт единый порядок объектов Э4/Чертежа без зависимости от UI. CanvasViewport использует эти расчёты и сохраняет прежние публичные экспорты; рисование и обработчики не менялись. Граница и доказательства — [ADR-0027](decisions/0027-canvas-e4-scene-geometry.md), [протокол 122](canvas-e4-scene-122-refactor.md).

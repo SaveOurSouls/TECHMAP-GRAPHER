@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 123 — renderer Э4 вне CanvasViewport, 16.10.2026
+
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-158, [карточка 123](../../tasks/123-canvas-e4-renderer.md); in-progress. Основная `codex/integration-m5-22`, база `8962aef`. Владелец: CanvasViewport, новый canvas-e4-renderer, свои тесты/эталоны и docs. Геометрия, команды, соединители и П/ОП исключены. Coverage: следующий срез после M5-22-054; ZIP не заказан.
+
 ## 122 — геометрия сцены Э4 вне CanvasViewport, 16.10.2026
 
 Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-157, [карточка 122](../../tasks/122-canvas-e4-scene-geometry.md); ready-for-review. Основная `codex/integration-m5-22`, база `2d5c1be`. Владелец: CanvasViewport, новые canvas-e4-scene/canvas-paint-order, свои тесты/эталоны и docs. Команды, document model, renderer соединителей и П/ОП не менялись. Code SHA `df346dbc9b2e7e9261f6ce5b7029c53ec4460341` опубликован, ancestry PASS; [handoff](handoff-122-canvas-e4-scene.md). PASS: Vitest 211/2283, TypeScript/Vite, эталоны, diff-check/review. Coverage: следующий срез после M5-22-054; ZIP не заказан, owner acceptance открыта.
