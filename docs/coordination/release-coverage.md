@@ -1,5 +1,9 @@
 # Release coverage
 
+## 125 — границы сцены, следующий срез после M5-22-054
+
+REQ-160, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 125](../../tasks/125-canvas-scene-bounds.md); in-progress, code/handoff pending, integration-ветка. В M5-22-054 не входит; до завершения handoff новая поставка блокируется. ZIP не заказан.
+
 ## 124 — hit-test сцены, следующий срез после M5-22-054
 
 REQ-159, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 124](../../tasks/124-canvas-scene-hit-test.md); ready-for-review. Код **`a5873e8142ba79f7c0baec9a43ba638cbd46f798`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-124-canvas-scene-hit-test.md) — этот docs-коммит. PASS: baseline/профиль 11/177, полный Vitest 213/2303, TypeScript/Vite, 16 прежних эталонов, diff-check/review. В M5-22-054 не входит; включить вместе с 120–123 в следующую заказанную поставку, проверить code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.

@@ -1,0 +1,187 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps junctions, pair spans, screen terminals and visibility filtering in E4 bounds 1`] = `
+{
+  "drawingIgnoresOverlays": {
+    "maxX": 180,
+    "maxY": 30,
+    "minX": 0,
+    "minY": 10,
+  },
+  "hiddenMember": {
+    "maxX": 180,
+    "maxY": 10,
+    "minX": 0,
+    "minY": 10,
+  },
+  "junction": {
+    "maxX": 255,
+    "maxY": 30,
+    "minX": 0,
+    "minY": -105,
+  },
+  "pair": {
+    "maxX": 180,
+    "maxY": 30,
+    "minX": 0,
+    "minY": 10,
+  },
+  "screen": {
+    "maxX": 180,
+    "maxY": 74,
+    "minX": 0,
+    "minY": -34,
+  },
+}
+`;
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps left table and materialized primary/secondary contact extents 1`] = `
+{
+  "legacyDrawing": {
+    "maxX": 54,
+    "maxY": 52,
+    "minX": 6,
+    "minY": -3,
+  },
+  "materializedDrawing": {
+    "maxX": 50,
+    "maxY": 163,
+    "minX": -85,
+    "minY": -3,
+  },
+  "materializedE4": {
+    "maxX": 473,
+    "maxY": 163,
+    "minX": -85,
+    "minY": 20,
+  },
+  "table": {
+    "maxX": 473,
+    "maxY": 144,
+    "minX": -11,
+    "minY": 20,
+  },
+}
+`;
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps right table and materialized primary/secondary contact extents 1`] = `
+{
+  "legacyDrawing": {
+    "maxX": 54,
+    "maxY": 52,
+    "minX": 6,
+    "minY": -3,
+  },
+  "materializedDrawing": {
+    "maxX": 50,
+    "maxY": 163,
+    "minX": -85,
+    "minY": -3,
+  },
+  "materializedE4": {
+    "maxX": 494,
+    "maxY": 163,
+    "minX": -85,
+    "minY": 20,
+  },
+  "table": {
+    "maxX": 494,
+    "maxY": 144,
+    "minX": 10,
+    "minY": 20,
+  },
+}
+`;
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps rotated library artwork, Drawing contact-side view and E4 companion extents 1`] = `
+{
+  "drawing": {
+    "maxX": 246,
+    "maxY": 73,
+    "minX": -16,
+    "minY": 1,
+  },
+  "e4": {
+    "maxX": 50,
+    "maxY": 50,
+    "minX": 10,
+    "minY": -10,
+  },
+  "hiddenCompanions": {
+    "maxX": 17,
+    "maxY": 52,
+    "minX": -16,
+    "minY": 1,
+  },
+}
+`;
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps rotated termination labels, badges and explicit-index suppression 1`] = `
+{
+  "drawing": {
+    "maxX": -9.999999999999975,
+    "maxY": 420,
+    "minX": -170,
+    "minY": 37,
+  },
+  "e4": {
+    "maxX": -8,
+    "maxY": 420,
+    "minX": -170,
+    "minY": 60,
+  },
+  "explicitHiddenIndex": {
+    "maxX": -9.999999999999975,
+    "maxY": 420,
+    "minX": -170,
+    "minY": 60,
+  },
+  "pointOnly": {
+    "maxX": -36,
+    "maxY": 127,
+    "minX": -94,
+    "minY": 80,
+  },
+}
+`;
+
+exports[`scene bounds compatibility with the pre-extraction viewport > keeps strip outlines and cable sheaths in Drawing bounds while E4 uses its labels 1`] = `
+{
+  "e4DefaultLabel": {
+    "maxX": 180,
+    "maxY": 10,
+    "minX": 0,
+    "minY": -13,
+  },
+  "e4Label": {
+    "maxX": 180,
+    "maxY": 10,
+    "minX": 0,
+    "minY": -13,
+  },
+  "e4Strip": {
+    "maxX": 180,
+    "maxY": 10,
+    "minX": 0,
+    "minY": 10,
+  },
+  "sheath": {
+    "maxX": 180,
+    "maxY": 36,
+    "minX": 0,
+    "minY": 4,
+  },
+  "strip": {
+    "maxX": 180,
+    "maxY": 17.75,
+    "minX": -0.75,
+    "minY": 2.25,
+  },
+  "strippedSheath": {
+    "maxX": 180,
+    "maxY": 30,
+    "minX": 0,
+    "minY": 10,
+  },
+}
+`;

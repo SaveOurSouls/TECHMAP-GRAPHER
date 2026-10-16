@@ -1,5 +1,9 @@
 # Восстановленная архитектура
 
+## Границы сцены (REQ-160)
+
+`editor/canvas-scene-bounds.ts` рассчитывает world-space bounds объектов, подписей, контактов, разделки, оболочек и overlays Э4 для вписывания в экран. CanvasViewport сохраняет публичные getEditorSceneBounds/drawingConnectorIndexLabel и использует ту же подпись при рисовании. Общие константы оформления разделки находятся в canvas-wire-strip-style.ts; толщина обводки едина для рисования и границ. Новые модули не зависят от React/CanvasViewport и глобального DOM. [ADR-0030](decisions/0030-canvas-scene-bounds.md), [протокол 125](canvas-scene-bounds-125-refactor.md).
+
 ## Hit-test сцены (REQ-159)
 
 `editor/canvas-scene-hit-test.ts` определяет попадание указателя в объекты, ручки, концы проводов и контуры кабельных оболочек, сохраняя приоритеты Э4/Чертежа и существующие допуски. CanvasViewport передаёт сцену/слои/масштаб и сохраняет прежние публичные экспорты. Модуль использует существующую геометрию без зависимости от React/CanvasViewport и глобального DOM. [ADR-0029](decisions/0029-canvas-scene-hit-test.md), [протокол 124](canvas-scene-hit-test-124-refactor.md).
