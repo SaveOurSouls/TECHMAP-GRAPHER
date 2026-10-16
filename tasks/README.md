@@ -138,3 +138,5 @@
 | 116 | [Учесть наконечники в Маршруте V3](116-route-v3-wire-terminals.md) | accepted | REQ-151: интегрировано `8267e3b`/`6df71de`; Vitest 218/2319, TypeScript/Vite PASS. |
 
 | 117 | [Заготовки проводов по схемам](117-wire-preparation-schemes.md) | ready-for-review | REQ-152: справочник, defaults, цепочки V3. |
+| 118 | [Исключить Маршрут и Маршрут v2](118-retire-legacy-routes.md) | in-progress | REQ-153: убрать старые страницы и UML, сохранить V3. |
+| 119 | [Убрать задержку фиксации оконцовки Э4](119-e4-termination-release-performance.md) | in-progress | REQ-154: ускорить финальную фиксацию после отпускания, сохранив валидацию и топологию. |

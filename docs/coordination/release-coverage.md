@@ -1,5 +1,12 @@
 # Release coverage
 
+## Pending after M5-22-053 — карточка 119 / REQ-154
+
+- **Chat:** `01a140c3-46d1-7f81-ac60-ad27761a2ca2`; owner explicitly requested removal of the ~1.1 s release delay on 16.10.2026.
+- **Branch / worktree / base:** `codex/e4-termination-release-performance` / `tmp/e4-termination-release-performance` / `f47d55e9078fc792cf30500592711f35b72b4000`.
+- **Scope:** final E4 termination commit path, independent of card 117. Source and destination worktrees for cards 110/115 remain untouched.
+- **Status:** in-progress; no code/handoff commits yet. ZIP not ordered.
+
 ### m5-22-053 — 16.10.2026
 
 - **Integration branch / code HEAD:** `codex/integration-m5-22` / `2a9dd345cdd858847afcacd94e83fe29357337a3`.
