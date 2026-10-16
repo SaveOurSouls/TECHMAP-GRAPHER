@@ -2,7 +2,7 @@
 
 ## 124 — hit-test сцены вне CanvasViewport, 16.10.2026
 
-Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-159, [карточка 124](../../tasks/124-canvas-scene-hit-test.md); in-progress. Основная `codex/integration-m5-22`, база `43c57e3`. Владелец: CanvasViewport, новый canvas-scene-hit-test, свои тесты и docs. Model/commands/physical-*/renderer исключены. Coverage: следующий срез после M5-22-054; ZIP не заказан.
+Чат `01a14521-6a96-7152-b095-accc21abdda7`, `/root`, REQ-159, [карточка 124](../../tasks/124-canvas-scene-hit-test.md); ready-for-review. Основная `codex/integration-m5-22`, база `43c57e3`. Владелец: CanvasViewport, новый canvas-scene-hit-test, свои тесты и docs; model/commands/physical-*/renderer не менялись. Code SHA `a5873e8142ba79f7c0baec9a43ba638cbd46f798` опубликован, ancestry PASS; [handoff](handoff-124-canvas-scene-hit-test.md). PASS: Vitest 213/2303, TypeScript/Vite, 16 прежних эталонов, diff-check/review. Coverage: следующий срез после M5-22-054; ZIP не заказан, owner acceptance открыта.
 
 ## 123 — renderer Э4 вне CanvasViewport, 16.10.2026
 

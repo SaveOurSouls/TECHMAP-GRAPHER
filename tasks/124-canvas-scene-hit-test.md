@@ -1,6 +1,6 @@
 # 124. Выделить hit-test сцены из CanvasViewport
 
-- **Статус:** in-progress
+- **Статус:** ready-for-review
 - **Владелец / чат:** `/root`, `01a14521-6a96-7152-b095-accc21abdda7`.
 - **Источник запроса:** продолжение владельца 16.10.2026: «Продолжи рефакторинг CanvasViewport: вынеси следующий самостоятельный блок, сохрани текущее поведение и проверь изменения тестами».
 - **Требования:** REQ-159; сохраняются существующие правила выбора, индексов, контактов и геометрии.
@@ -28,7 +28,7 @@ Baseline и повтор: новый hit-test, editor-workspace, canvas-gestures
 
 ## Журнал результата
 
-- Код/тесты/ADR и [протокол](../docs/canvas-scene-hit-test-124-refactor.md) подготовлены; публикация и handoff следуют отдельным документальным срезом.
+- Код/тесты/ADR и [протокол](../docs/canvas-scene-hit-test-124-refactor.md): **`a5873e8142ba79f7c0baec9a43ba638cbd46f798`**, опубликован в origin/integration. [Handoff](../docs/coordination/handoff-124-canvas-scene-hit-test.md) — коммит этой записи; ancestry PASS, cherry-pick не требуется.
 - CanvasViewport 2923 → 2679 строк, новый модуль 282. Тела перенесённых функций и весь оставшийся код от CanvasViewportProps совпали с базой после удаления блока и нормализации export/EOL; прежний API сохранён.
 - Baseline/повтор профиля: 11 файлов / 177 тестов PASS. Добавленная проверка API и прямые импорты проверены общим прогоном: **213/2303 PASS**, 96,75 с. TypeScript/Vite PASS, Vite 1,22 с; прежнее предупреждение размера chunk сохраняется.
 - 16 прежних эталонов неизменны; diff-check/review и ссылки PASS. Временные evidence в ignored tmp/canvas-124.

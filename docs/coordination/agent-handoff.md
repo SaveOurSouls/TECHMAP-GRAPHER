@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 124 — hit-test сцены вне CanvasViewport, 16.10.2026
+
+REQ-159, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`a5873e8142ba79f7c0baec9a43ba638cbd46f798`** опубликован в integration, ancestry PASS. [Handoff](handoff-124-canvas-scene-hit-test.md), [протокол](../canvas-scene-hit-test-124-refactor.md). CanvasViewport 2923 → 2679 строк; геометрия мишеней и приоритеты выбора выделены с прежним API и неизменными телами функций/оставшимся кодом. PASS: baseline/профиль 11/177, полный Vitest 213/2303, TypeScript/Vite, 16 неизменных эталонов, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и исходный жгут не проверены. ZIP не заказан; owner acceptance открыта.
+
 ## 123 — renderer Э4 вне CanvasViewport, 16.10.2026
 
 REQ-158, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`568a16f747599927c6ab6fea4af39258dc905cd5`** опубликован в integration, ancestry PASS. [Handoff](handoff-123-canvas-e4-renderer.md), [протокол](../canvas-e4-renderer-123-refactor.md). CanvasViewport 3151 → 2923 строки; рисование Э4 и общий stroke выделены без изменения функций и оставшихся проходов/обработчиков. PASS: профиль 9/134, 16 неизменных эталонов, полный Vitest 212/2292, TypeScript/Vite, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и owner acceptance открыты. ZIP не заказан; документальный handoff — коммит этой записи.
