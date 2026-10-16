@@ -1,5 +1,9 @@
 # Шаблон handoff от чата задачи
 
+## 122 — геометрия сцены Э4 вне CanvasViewport, 16.10.2026
+
+REQ-157, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`df346dbc9b2e7e9261f6ce5b7029c53ec4460341`** опубликован в integration; ancestry PASS. [Handoff](handoff-122-canvas-e4-scene.md), [протокол](../canvas-e4-scene-122-refactor.md). CanvasViewport 3759 → 3151 строк; расчёты Э4 и общий порядок объектов выделены без изменения тел функций, обработчиков и рисования. PASS: профиль 8/124, неизменные эталоны (новый geometry + шесть connector), полный Vitest 211/2283, TypeScript/Vite, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и owner acceptance открыты. ZIP не заказан; документальный handoff — коммит этой записи.
+
 ## 121 — геометрия и рисование соединителей CanvasViewport, 16.10.2026
 
 REQ-156, чат `01a14521-6a96-7152-b095-accc21abdda7`, ready-for-review. Код **`fc1865652f8067812b804f55b89b759ae1e7138a`** опубликован прямо в integration, ancestry PASS. [Точный handoff](handoff-121-canvas-connectors.md), [протокол](../canvas-viewport-121-refactor.md). CanvasViewport 4395 → 3759 строк; layout/renderer/metadata выделены с сохранением прежних экспортов и тел функций. PASS: baseline/профиль 6/116, шесть неизменённых snapshots, полный Vitest 210/2277, TypeScript/Vite, diff-check/review. Сервер не менялся, .NET не запускался; browser/portable и owner acceptance открыты. ZIP не заказан, следующий срез после M5-22-054. Документальный handoff — коммит этой записи.

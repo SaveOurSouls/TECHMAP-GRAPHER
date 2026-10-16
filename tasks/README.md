@@ -1,6 +1,6 @@
 # Очередь задач
 
-[122 — геометрия сцены Э4 вне CanvasViewport](122-canvas-e4-scene-geometry.md): in-progress; REQ-157, исходный срез `2d5c1be`, ZIP не заказан.
+[122 — геометрия сцены Э4 вне CanvasViewport](122-canvas-e4-scene-geometry.md): ready-for-review; REQ-157, code `df346db` опубликован в integration, handoff заполнен; ZIP не заказан.
 
 [121 — геометрия и отрисовка соединителей CanvasViewport](121-canvas-connector-modules.md): ready-for-review; REQ-156, code `fc18656` опубликован в integration, handoff заполнен; ZIP не заказан.
 

@@ -2,7 +2,7 @@
 
 ## 122 — геометрия сцены Э4, следующий срез после M5-22-054
 
-REQ-157, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 122](../../tasks/122-canvas-e4-scene-geometry.md); in-progress, код/handoff pending, integration-ветка. В M5-22-054 не входит; новая поставка до завершения handoff блокируется. ZIP не заказан.
+REQ-157, чат `01a14521-6a96-7152-b095-accc21abdda7`, [карточка 122](../../tasks/122-canvas-e4-scene-geometry.md); ready-for-review. Код **`df346dbc9b2e7e9261f6ce5b7029c53ec4460341`** опубликован непосредственно в integration, ancestry PASS. [Handoff](handoff-122-canvas-e4-scene.md) — этот docs-коммит. PASS: профиль 8/124, неизменные эталоны, полный Vitest 211/2283, TypeScript/Vite, diff-check/review. В M5-22-054 не входит; включить с 120/121 в следующий заказанный релиз, проверить code/handoff ancestry. ZIP не заказан; browser/portable и owner acceptance открыты, сервер не менялся.
 
 ## 121 — декомпозиция CanvasViewport, следующий срез после M5-22-054
 
