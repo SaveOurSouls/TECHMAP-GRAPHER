@@ -8,6 +8,8 @@ HarnessDesignEditor сохраняет публичный фасад. harness-sc
 
 commands сохраняет публичный фасад; editor-command-dispatcher оставляет общий конвейер нормализации и направляет команду в один из шести typed handlers (physical/connectors/wires/e4/groups/layers). Общие проверки/CRUD находятся в editor-command-invariants, маршрутизация — command-e4-routing, расчёт/валидация routing request — command-e4-analysis, уплотнение диффпар — command-e4-pair-planner. Новые runtime-модули образуют ацикличный граф; отдельный handler не обходит общий вход applyEditorCommand через публичный API.
 
+model — фасад прежнего API. design-types содержит только контракты; design-defaults — исходные значения; connector-presentation/design-e4-geometry — вычисления; wire-measurements — длины/разделку; design-document-parser координирует design-connector-parser/design-wire-parser и общие design-parse-primitives. Между новыми runtime-модулями нет циклов; writer contract и валидация сохранены.
+
 ## Границы сцены (REQ-160)
 
 `editor/canvas-scene-bounds.ts` рассчитывает world-space bounds объектов, подписей, контактов, разделки, оболочек и overlays Э4 для вписывания в экран. CanvasViewport сохраняет публичные getEditorSceneBounds/drawingConnectorIndexLabel и использует ту же подпись при рисовании. Общие константы оформления разделки находятся в canvas-wire-strip-style.ts; толщина обводки едина для рисования и границ. Новые модули не зависят от React/CanvasViewport и глобального DOM. [ADR-0030](decisions/0030-canvas-scene-bounds.md), [протокол 125](canvas-scene-bounds-125-refactor.md).

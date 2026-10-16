@@ -44,3 +44,16 @@ commands.ts становится фасадом. 75 ветвей applyCommand р
 - Полный Vitest **217 файлов / 2315 тестов PASS**, 78,75 с; TypeScript/Vite PASS, Vite 1,25 с. Прежнее предупреждение размера chunk сохраняется. commands.ts **2897 → 5 строк** фасада. Прежние 22 canvas-эталона, diff-check/review и новые ссылки PASS.
 
 Этапы 4–7 остаются открыты.
+
+## Этап 4: модель документа
+
+model.ts **2211 → 9 строк** фасада. Выделены design-types **376**, connector-presentation **220**, wire-measurements **170**, design-defaults **36**, design-document-parser **293**, design-e4-geometry **260**, design-connector-parser **467**, design-parse-primitives **60**, design-wire-parser **221** строка.
+
+Все **152 объявления** совпали с исходными после нормализации export/EOL. Контракты компилируются в пустой export: в них нет runtime-импортов. Внутренний граф runtime-модулей ацикличен, обратных импортов model-фасада нет. Проверка API закрепляет все **40** исходных runtime-экспортов и отсутствие дополнительных unchecked parser helpers в фасаде. Схема, writer contract, ошибки/порядок нормализации, числовые пределы и единицы измерения не менялись.
+
+- Baseline: **5 файлов / 153 теста PASS**, 13,47 с (cable-model, e4-documents, component-template-placement, commands, termination-routing).
+- После переноса с новым API-тестом: **6/154 PASS**, 14,16 с.
+- Полный Vitest **218 файлов / 2316 тестов PASS**, 81,44 с. TypeScript/Vite PASS, Vite 1,27 с; прежнее предупреждение размера chunk сохраняется.
+- AST/зависимости, прежние эталоны, diff-check/review и ссылки PASS. Временный инструмент/логи ignored.
+
+Этапы 5–7 остаются открыты.
