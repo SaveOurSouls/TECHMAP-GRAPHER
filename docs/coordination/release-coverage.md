@@ -7,7 +7,7 @@
 - **ZIP:** `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip`.
 - **Size / SHA-256:** `64 412 661 / BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`.
 - **Manifest / portable:** `PASS; 534 files; 7/7`, включая путь с кириллицей и пробелами.
-- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Карточки 110, 111 и 113 приняты владельцем 16.10.2026; acceptance 112, 114–116, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
+- **Gate:** Git/package PASS, Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1. Карточки 110, 111, 113 и 116 приняты владельцем 16.10.2026; acceptance 112, 114–115, исходный жгут, ручная packaged UI-проверка, C1–C4 карточки 112 и совместный browser/scene 113/114 остаются открытыми.
 
 ## 112 follow-up C1–C4 — перестроение опор общего выхода ОП
 
@@ -46,7 +46,7 @@ REQ-150, [карточка 115](../../tasks/115-e4-routing-interaction.md), ча
 
 ## 116 — наконечники в Маршруте V3, 15.10.2026
 
-REQ-151, [карточка 116](../../tasks/116-route-v3-wire-terminals.md), чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, ready-for-review. Code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` опубликованы; интегрированы точными cherry-pick `8267e3b`/`6df71de`. Полный integration Vitest 218/2319, TypeScript/Vite PASS. Не входит в M5-22-052; включён в M5-22-053. Worker browser 1440×1000/390×844 и 14 форм оконцовок PASS. Исходный документ и ручной package UI не проверены; серверные тесты и portable прошли в M5-22-053.
+REQ-151, [карточка 116](../../tasks/116-route-v3-wire-terminals.md), чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, accepted владельцем 16.10.2026. Code `8ce60474966d56da5e68a0d41d0b9f31bc03134c` и handoff `821a975b4a924c10ceb9771a83270ea5b01eaba9` опубликованы; интегрированы точными cherry-pick `8267e3b`/`6df71de`. Полный integration Vitest 218/2319, TypeScript/Vite PASS. Не входит в M5-22-052; включён в M5-22-053. Worker browser 1440×1000/390×844 и 14 форм оконцовок PASS. Исходный документ и ручной package UI не проверены; серверные тесты и portable прошли в M5-22-053.
 
 ### m5-22-052 — 15.10.2026
 

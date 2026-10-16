@@ -133,6 +133,6 @@
 | 113 | [Согласовать оконцовку P1 с масштабом провода](113-p1-termination-graphic-scale.md) | ready-for-review | REQ-148: первичный срез в M5-22-052; follow-up seal `18dee2b`/`db7c579` интегрирован, новый ZIP не заказан. |
 | 114 | [Исправить размеры P1 и точки соединения](114-p1-drawing-dimension-anchors.md) | ready-for-review | REQ-149: code `fb248e1`, handoff `d1b896b` включены в merge `d66f287`; общий клиент 215/2279, TS/Vite PASS. |
 | 115 | [Пересмотреть правила редактирования трасс Э4](115-e4-routing-interaction.md) | ready-for-review | REQ-150: интегрировано `258a04d`/`bae2185`; Vitest 217/2297, TypeScript/Vite PASS. |
-| 116 | [Учесть наконечники в Маршруте V3](116-route-v3-wire-terminals.md) | ready-for-review | REQ-151: интегрировано `8267e3b`/`6df71de`; Vitest 218/2319, TypeScript/Vite PASS. |
+| 116 | [Учесть наконечники в Маршруте V3](116-route-v3-wire-terminals.md) | accepted | REQ-151: интегрировано `8267e3b`/`6df71de`; Vitest 218/2319, TypeScript/Vite PASS. |
 
 | 117 | [Заготовки проводов по схемам](117-wire-preparation-schemes.md) | in-progress | REQ-152: справочник, defaults, цепочки V3. |

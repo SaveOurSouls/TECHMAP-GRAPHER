@@ -1,6 +1,6 @@
 # Handoff 116 — наконечники в полуфабрикатах проводов Route V3
 
-- **Статус:** ready-for-review, 16.10.2026. Приёмка владельцем открыта.
+- **Статус:** accepted владельцем 16.10.2026; прямое сообщение `accepted` в рабочем чате.
 - **Чат:** `01a1414d-f512-79f3-8f80-2823d4a9af50`.
 - **Требование / карточка:** REQ-151 / [116](../../tasks/116-route-v3-wire-terminals.md).
 - **Ветка / worktree:** `codex/route-v3-wire-terminals` / `tmp/route-v3-wire-terminals`.
@@ -8,7 +8,7 @@
 - **Регистрация:** `e86e071fed7efad7f06231733621361ad8d44dfb`; центральный реестр координатора также содержит 116.
 - **Код:** `8ce60474966d56da5e68a0d41d0b9f31bc03134c`, опубликован в разрешённый `origin/codex/route-v3-wire-terminals`.
 - **Handoff:** `821a975b4a924c10ceb9771a83270ea5b01eaba9`, опубликован в `origin/codex/route-v3-wire-terminals`.
-- **Coverage:** следующий релиз после M5-22-052; включение в integration HEAD и ZIP подтверждает сборщик. ZIP здесь не собирался.
+- **Coverage:** включён в проверенный ZIP M5-22-053 через integration code `8267e3bb51185f5c95959e218dbbc23099fb3d30` и handoff `6df71de6fc7b39a4b478ee7a514c3724976fb4f0`; code HEAD пакета `2a9dd345cdd858847afcacd94e83fe29357337a3`. ZIP рабочим чатом не собирался.
 
 ## Результат
 

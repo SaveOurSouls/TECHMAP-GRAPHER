@@ -1,3 +1,7 @@
+## Приёмка карточки 116 — 16.10.2026
+
+Владелец явно принял REQ-151 / карточку 116 сообщением `accepted` в рабочем чате. Код и handoff опубликованы и включены в проверенный M5-22-053 через `8267e3b`/`6df71de`. Это документальное закрытие; пакет не пересобирался, ограничения исходного жгута и ручного packaged UI сохраняются. Незавершённые изменения карточки 117 не входят в эту приёмку.
+
 ## Проверенный ZIP M5-22-053, 16.10.2026
 
 Кодовый HEAD `2a9dd345cdd858847afcacd94e83fe29357337a3`, версия `0.63.53-m5-22-review`. Follow-up 111–113 и handoff 115/REQ-150, 116/REQ-151 включены в integration HEAD; для 115/116 доказаны cherry-pick эквиваленты в [release coverage](docs/coordination/release-coverage.md). ZIP `artifacts/m5-22-053/TECHMAP-GRAPHER-0.63.53-m5-22-review-win-x64.zip` проверен: Vitest 218/2319, TypeScript/Vite, .NET 1140/1140, performance 1/1, манифест 534 файла, portable 7/7. Размер **64 412 661 байт**, SHA-256 `BF4F49B863E561CF1CFD8213E6C2239FCF4D1DAD560A05DEC0321C475B89DD64`. [Полный протокол](docs/m5-07-acceptance.md). Исходный жгут и ручная packaged UI-приёмка не проверены; дополнительные визуальные ограничения указаны в coverage. Owner acceptance открыта.
