@@ -10,6 +10,8 @@ commands сохраняет публичный фасад; editor-command-dispat
 
 model — фасад прежнего API. design-types содержит только контракты; design-defaults — исходные значения; connector-presentation/design-e4-geometry — вычисления; wire-measurements — длины/разделку; design-document-parser координирует design-connector-parser/design-wire-parser и общие design-parse-primitives. Между новыми runtime-модулями нет циклов; writer contract и валидация сохранены.
 
+ComponentLibrary сохраняет фасад. library-draft-adapters обслуживает черновик/undo/нормализацию, library-catalog-adapters — поиск/адаптацию артикулов, library-node-editing — геометрию/выделение. LibraryEditorProperties содержит панели свойств, useComponentLibrary — состояние/события, ComponentLibrarySurface — прежний JSX и завершающий CSS import; контракты — library-editor-types. Recovery/autosave и navigation guard сохраняются в прежнем порядке.
+
 ## Границы сцены (REQ-160)
 
 `editor/canvas-scene-bounds.ts` рассчитывает world-space bounds объектов, подписей, контактов, разделки, оболочек и overlays Э4 для вписывания в экран. CanvasViewport сохраняет публичные getEditorSceneBounds/drawingConnectorIndexLabel и использует ту же подпись при рисовании. Общие константы оформления разделки находятся в canvas-wire-strip-style.ts; толщина обводки едина для рисования и границ. Новые модули не зависят от React/CanvasViewport и глобального DOM. [ADR-0030](decisions/0030-canvas-scene-bounds.md), [протокол 125](canvas-scene-bounds-125-refactor.md).

@@ -57,3 +57,15 @@ model.ts **2211 → 9 строк** фасада. Выделены design-types *
 - AST/зависимости, прежние эталоны, diff-check/review и ссылки PASS. Временный инструмент/логи ignored.
 
 Этапы 5–7 остаются открыты.
+
+## Этап 5: ComponentLibrary
+
+ComponentLibrary.tsx **1600 → 6 строк** фасада. Выделены library-editor-types **13**, library-draft-adapters **159**, library-node-editing **68**, library-catalog-adapters **106**, LibraryEditorProperties **93**, useComponentLibrary **854** и ComponentLibrarySurface **289** строк.
+
+Все **45 объявлений**, префикс controller (с hooks/обработчиками) и исходный JSX совпали с базой. Между hook и surface передаются 136 значений с выведенными типами; DOM/React-обёртка не добавляется. CSS по-прежнему подключается после зависимостей представления: проверяется последним import. Public API-тест закрепляет все **22** прежних runtime-экспорта. Внутренний runtime-граф ацикличен, обратных facade-импортов нет.
+
+- Baseline **6 файлов / 42 теста PASS**, 6,80 с; после переноса с API-тестом **7/43 PASS**, 7,12 с. Профиль включает component-library, canvas-integration, drawing-size-fields, library-draft-recovery, series-authoring и TemplateSeriesPanelV3.
+- Полный Vitest **219 файлов / 2317 тестов PASS**, 101,36 с. TypeScript/Vite PASS, Vite 1,28 с; прежнее предупреждение размера chunk сохраняется.
+- AST/JSX/hooks/CSS/зависимости, прежние эталоны, diff-check/review и ссылки PASS. Recovery, autosave, undo, работа с каталогами и рисунками не переписывались.
+
+Этапы 6–7 остаются открыты.

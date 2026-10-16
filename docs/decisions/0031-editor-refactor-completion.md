@@ -18,6 +18,8 @@ CanvasViewport разделён на canvas-selection (геометрия рам
 
 Модель разделена на чистые type-контракты, defaults, presentation/геометрию, manufacturing-расчёты и document/connector/wire parsers с общими примитивами валидации. Все исходные объявления сохраняются; общий parseHarnessDesignDocument вызывает прежние шаги в прежнем порядке. Type-only зависимости контрактов явно отделены от runtime, внутренний runtime-граф ацикличен.
 
+ComponentLibrary разделён на draft/catalog/node-editing adapters, types, property panels, controller hook и JSX surface. Исходные handlers, hooks и JSX скопированы. CSS остаётся завершающим import представления, после зависимостей, чтобы перенос не менял приоритет стилей. Recovery/autosave/navigation guard не перерабатываются.
+
 ## Доказательства
 
 Существующие эталоны остаются замороженными. Проверяется не только наличие экспортов, но и идентичность реализаций через прежний путь. Состояние цельной задачи остаётся in-progress до выполнения всех пунктов карточки 126; завершённый CanvasViewport не объявляется завершением всего плана. [Протокол](../editor-refactor-126.md).
