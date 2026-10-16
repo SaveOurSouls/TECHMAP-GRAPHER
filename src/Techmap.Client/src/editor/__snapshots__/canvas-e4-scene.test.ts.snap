@@ -1,0 +1,277 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`E4 scene compatibility with the pre-extraction viewport > retains continuous parallel spans, motif placement and both screen terminals 1`] = `
+{
+  "pairs": [
+    {
+      "count": 7,
+      "first": {
+        "center": 12.857142857142858,
+        "coloredFrom": 6.857142857142858,
+        "coloredTo": 18.857142857142858,
+        "from": 8.857142857142858,
+        "to": 16.857142857142858,
+      },
+      "last": {
+        "center": 167.14285714285714,
+        "coloredFrom": 161.14285714285714,
+        "coloredTo": 173.14285714285714,
+        "from": 163.14285714285714,
+        "to": 171.14285714285714,
+      },
+      "span": {
+        "crossMaximum": 30,
+        "crossMinimum": 10,
+        "end": 180,
+        "firstWireDirection": 1,
+        "orientation": "horizontal",
+        "segmentByWireId": {
+          "A": {
+            "end": {
+              "x": 180,
+              "y": 10,
+            },
+            "endIndex": 2,
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 10,
+            },
+          },
+          "B": {
+            "end": {
+              "x": 180,
+              "y": 30,
+            },
+            "endIndex": 1,
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 30,
+            },
+          },
+        },
+        "start": 0,
+      },
+    },
+  ],
+  "screen": {
+    "center": {
+      "x": 90,
+      "y": 20,
+    },
+    "pathLength": 180,
+    "span": {
+      "crossMaximum": 30,
+      "crossMinimum": 10,
+      "crossings": [
+        {
+          "end": {
+            "x": 180,
+            "y": 10,
+          },
+          "index": 1,
+          "orientation": "horizontal",
+          "start": {
+            "x": 60,
+            "y": 10,
+          },
+        },
+        {
+          "end": {
+            "x": 180,
+            "y": 30,
+          },
+          "index": 0,
+          "orientation": "horizontal",
+          "start": {
+            "x": 0,
+            "y": 30,
+          },
+        },
+      ],
+      "end": 180,
+      "firstWireDirection": 1,
+      "orientation": "horizontal",
+      "routeIndex": 0,
+      "segmentByWireId": {
+        "A": {
+          "end": {
+            "x": 180,
+            "y": 10,
+          },
+          "index": 1,
+          "orientation": "horizontal",
+          "start": {
+            "x": 60,
+            "y": 10,
+          },
+        },
+        "B": {
+          "end": {
+            "x": 180,
+            "y": 30,
+          },
+          "index": 0,
+          "orientation": "horizontal",
+          "start": {
+            "x": 0,
+            "y": 30,
+          },
+        },
+      },
+      "start": 60,
+    },
+    "spans": [
+      {
+        "crossMaximum": 30,
+        "crossMinimum": 10,
+        "crossings": [
+          {
+            "end": {
+              "x": 60,
+              "y": 10,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 10,
+            },
+          },
+          {
+            "end": {
+              "x": 180,
+              "y": 30,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 30,
+            },
+          },
+        ],
+        "end": 60,
+        "firstWireDirection": 1,
+        "orientation": "horizontal",
+        "routeIndex": 0,
+        "segmentByWireId": {
+          "A": {
+            "end": {
+              "x": 60,
+              "y": 10,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 10,
+            },
+          },
+          "B": {
+            "end": {
+              "x": 180,
+              "y": 30,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 30,
+            },
+          },
+        },
+        "start": 0,
+      },
+      {
+        "crossMaximum": 30,
+        "crossMinimum": 10,
+        "crossings": [
+          {
+            "end": {
+              "x": 180,
+              "y": 10,
+            },
+            "index": 1,
+            "orientation": "horizontal",
+            "start": {
+              "x": 60,
+              "y": 10,
+            },
+          },
+          {
+            "end": {
+              "x": 180,
+              "y": 30,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 30,
+            },
+          },
+        ],
+        "end": 180,
+        "firstWireDirection": 1,
+        "orientation": "horizontal",
+        "routeIndex": 0,
+        "segmentByWireId": {
+          "A": {
+            "end": {
+              "x": 180,
+              "y": 10,
+            },
+            "index": 1,
+            "orientation": "horizontal",
+            "start": {
+              "x": 60,
+              "y": 10,
+            },
+          },
+          "B": {
+            "end": {
+              "x": 180,
+              "y": 30,
+            },
+            "index": 0,
+            "orientation": "horizontal",
+            "start": {
+              "x": 0,
+              "y": 30,
+            },
+          },
+        },
+        "start": 60,
+      },
+    ],
+    "terminals": [
+      {
+        "bodyConnectionPoint": {
+          "x": 90,
+          "y": 1,
+        },
+        "connectionPoint": {
+          "x": 90,
+          "y": 1,
+        },
+        "side": "above",
+      },
+      {
+        "bodyConnectionPoint": {
+          "x": 90,
+          "y": 39,
+        },
+        "connectionPoint": {
+          "x": 90,
+          "y": 39,
+        },
+        "side": "below",
+      },
+    ],
+  },
+}
+`;

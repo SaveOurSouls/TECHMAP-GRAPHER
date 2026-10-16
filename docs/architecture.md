@@ -1,5 +1,9 @@
 # Восстановленная архитектура
 
+## Геометрия сцены Э4 (REQ-157)
+
+`editor/canvas-e4-scene.ts` рассчитывает сегменты, пересечения/мосты, metadata overlays, layout и hit-test диффпар/экранов и их видимость. `canvas-paint-order.ts` задаёт единый порядок объектов Э4/Чертежа без зависимости от UI. CanvasViewport использует эти расчёты и сохраняет прежние публичные экспорты; рисование и обработчики не менялись. Граница и доказательства — [ADR-0027](decisions/0027-canvas-e4-scene-geometry.md), [протокол 122](canvas-e4-scene-122-refactor.md).
+
 ## Представление соединителей CanvasViewport (REQ-156)
 
 `editor/canvas-connector-layout.ts` рассчитывает таблицы Э4 и контактные точки, разбирает закреплённые/legacy-данные и выполняет контактный hit-test. `canvas-connector-renderer.ts` рисует по этому layout; `canvas-scene-metadata.ts` содержит общий безопасный разбор метаданных. React-состояние, жесты и порядок проходов остаются в CanvasViewport, который сохраняет прежние публичные экспорты. Тела перенесённых функций не менялись; граница и проверка — [ADR-0026](decisions/0026-canvas-connector-modules.md), [протокол 121](canvas-viewport-121-refactor.md).
