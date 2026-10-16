@@ -1,5 +1,9 @@
 # Реестр чатов проекта
 
+## 118 — исключение Маршрута и Маршрута v2, 16.10.2026
+
+Чат `01a144bf-a0ea-7e42-b8af-b3e4f3cd7711`, `/root`, [карточка 118](../../tasks/118-retire-legacy-routes.md), REQ-153, ADR-0023; in-progress. Ветка `codex/integration-m5-22`, основной worktree. Координатор владеет docs/интеграцией; агент navigation — App/навигация/редакторные переходы и тесты; shared — удаляемые страницы и выделение общих модулей V3; uml — `uml/**`. Точные границы в карточке. Активная 117 сохраняет владение своими dirty-файлами; координатор переносит лишь необходимые импорты отдельными hunks. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
+
 ## 117 — заготовки проводов по схемам, 16.10.2026
 
 Чат `01a144a5-6da7-7483-b2ef-7b048627a9bf`, `/root`, [карточка 117](../../tasks/117-wire-preparation-schemes.md), REQ-152; in-progress. Ветка `codex/integration-m5-22`, основной worktree. Владелец: WireBlank/WirePreparation, ReferenceImportPanel, серверные seed/validation/Program, V3 model/panel и модуль схем, профильные тесты, собственные разделы docs/tasks. Пересекающиеся работы завершены и интегрированы. Coverage: следующий срез после M5-22-053, pending; ZIP не заказан.
