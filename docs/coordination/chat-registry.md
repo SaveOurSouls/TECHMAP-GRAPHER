@@ -21,12 +21,6 @@ Follow-up C1–C4 от владельца: ready-for-review, прежний ча
 
 Чат `01a140c3-46d1-7f81-ac60-ad27761a2ca2`, карточка [115](../../tasks/115-e4-routing-interaction.md), REQ-150; статус ready-for-review. Ветка `codex/e4-routing-interaction`, worktree `tmp/e4-routing-interaction`, база `96829c0bf2d16606e67c3d2b59ce0a306d52e2e6`; регистрация `56e733fdc26042b1d4aa3f09712881b87af456fb`. Код `a712396092ea7f3eabf610c78499836f0523a527` и handoff `3b276e745880c6963cbe4383f01f1b5dbf464aa4` опубликованы; интеграционные эквиваленты — `258a04d` и `bae2185` (точные cherry-pick, `git show --check` PASS). Владелец: Э4 `e4-editing`, `e4-parallel-spans`, `commands`, `CanvasViewport`, `e4-move-preview`, `e4-router` и профильные тесты; собственные task/acceptance/handoff. C1–C4 закрыты. Совместный Vitest 217/2297, TypeScript/Vite PASS. Исходный пользовательский жгут и portable не проверены; ZIP не заказывался.
 
-## 116 — наконечники в Маршруте V3, 15.10.2026
-
-Чат `01a1414d-f512-79f3-8f80-2823d4a9af50`, карточка [116](../../tasks/116-route-v3-wire-terminals.md), REQ-151; accepted владельцем 16.10.2026. Ветка `codex/route-v3-wire-terminals`, worktree `tmp/route-v3-wire-terminals`, база `146a3d821d34bb2f277e2d39b57aaac4e4c7eb0a`; регистрация `e86e071`, код `8ce6047`, handoff `821a975`. Integration эквиваленты — cherry-pick `8267e3b`/`6df71de`; полный клиент 218/2319, TypeScript/Vite PASS. Координатор ведёт общие coordination docs. Исходный жгут, server tests и portable/package UI не проверены. ZIP поручен сборщику 16.10.2026.
-
-Приёмка подтверждена прямым сообщением `accepted`; code/handoff — опубликованные интегрированные эквиваленты, M5-22-053. Архивирование после удаления чистой отдельной worktree.
-
 ## 111 — охват проводов термотрубкой, 15.10.2026
 
 Первоначальная трактовка отменена; текущий статус follow-up — ready-for-review.
@@ -229,8 +223,10 @@ Follow-up 15.10.2026: тот же чат `01a13a64-e264-7a03-8198-49dae2c51bee`,
 
 ## Archived
 
+
 | Дата (МСК) | Роль / чат | Thread ID | Причина | Последний handoff / commit |
 | --- | --- | --- | --- | --- |
+| 16.10.2026 | Наконечники в ПФ проводов (карточка 116 / REQ-151) | `01a1414d-f512-79f3-8f80-2823d4a9af50` | accepted владельцем; опубликованные code/handoff включены эквивалентами в M5-22-053; чистая worktree удалена, QA evidence сохранены в `artifacts/archived-worktrees/116-wire-terminals/qa116/` | `8ce6047`, `821a975`, `8267e3b`, `6df71de`, acceptance `88f1d71` |
 | 07.10.2026 | «Маршрут» (карточка 083 / Route v2) | `01a0ee02-09d6-7790-98a3-d74947735e63` | accepted владельцем; handoff и интеграция подтверждены; отдельный worktree отсутствует | `bfb0906`, `97d4a56`, `ab801fc` |
 | 07.10.2026 | Исправить приоритет выбора точки (карточка 082) | `01a1119f-326d-7863-be97-7d30800b20db` | accepted владельцем; handoff и integration equivalent подтверждены; чат idle, worktree чист | `37a8d0a`, `e345f5f`, `7aaaf46` |
 | 07.10.2026 | Исправить трассировку проводов у X4 (карточка 081) | `01a1119a-83a3-7ad2-8b8f-bffd2668c411` | accepted владельцем; handoff и integration equivalent подтверждены; чат idle, worktree чист | `fdc5c7c`, `ca55a20`, `e918e18`, `5eeb02f` |
